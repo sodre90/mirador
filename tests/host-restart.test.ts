@@ -352,7 +352,7 @@ describe("SourceWatcher", () => {
     expect(isEdit(sourceDir, "acp")).toBe(false);
   });
 
-  test.if(toldOfAReplacedWatchedFolder)("replacing a watched folder, as a deploy can, makes the UI stale without failing the watcher", async () => {
+  test("replacing a watched folder, as a deploy can, makes the UI stale, and edits in the new folder are heard", async () => {
     const sourceDir = mkdtempSync(join(tmpdir(), "mirador-source-"));
     ["web", "shared", "host"].forEach((directory) => mkdirSync(join(sourceDir, directory)));
     await Bun.sleep(200);
@@ -363,6 +363,9 @@ describe("SourceWatcher", () => {
       renameSync(join(sourceDir, "web"), join(sourceDir, "web.old"));
       mkdirSync(join(sourceDir, "web"));
       writeFileSync(join(sourceDir, "web", "App.tsx"), "export {};\n");
+      expect(await toldOnceExpected(edited, ["ui"])).toEqual(["ui"]);
+      edited.length = 0;
+      writeFileSync(join(sourceDir, "web", "Other.tsx"), "export {};\n");
       expect(await toldOnceExpected(edited, ["ui"])).toEqual(["ui"]);
     } finally {
       watcher.stop();
