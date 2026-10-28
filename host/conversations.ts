@@ -52,10 +52,10 @@ import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
 import { hasBegun, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
 import { isUsageLimitError, usageLimitMessage, usageLimitResetIn } from "../shared/usage-limit.ts";
-import { awaitingDelivery, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
+import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
 import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.ts";
-import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
+import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { miradorCommandEnvironment } from "./acp/environment.ts";
 import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta } from "./acp/harnesses.ts";
@@ -707,9 +707,9 @@ export class ConversationService {
     this.retitleFromFirstMessage(conversationId, text);
     const notes = this.notesForAgent(conversationId);
     this.setStatus(conversationId, "starting");
-    const checkpoint = startsTurn ? await this.snapshotFiles(conversationId) : null;
     this.store.turnStarted(conversationId);
-    this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromPlugin && { fromPlugin }), ...(checkpoint && { checkpoint }) }, notes);
+    const turnSeq = this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromPlugin && { fromPlugin }) }, notes);
+    if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
     try {
       const sessionId = await this.ensureSession(conversationId);
@@ -903,7 +903,14 @@ export class ConversationService {
 
   private checkpointAt(conversationId: string, seq: number) {
     const event = this.store.findEvent(conversationId, seq)?.event;
-    return event?.type === "user-message" ? event.checkpoint : undefined;
+    if (event?.type !== "user-message") return undefined;
+    return event.checkpoint ?? this.store.filesKeptFor(conversationId, seq) ?? undefined;
+  }
+
+  /** After the turn's message shows, as it takes seconds in a large repository, but before the agent starts on the turn. */
+  private async keepFilesOfTurn(conversationId: string, turnSeq: number) {
+    const checkpoint = await this.snapshotFiles(conversationId);
+    if (checkpoint) this.append(conversationId, { type: "files-kept", turnSeq, checkpoint });
   }
 
   private workspaceOf(conversationId: string) {
@@ -1757,7 +1764,7 @@ export class ConversationService {
 
   /** What the user did since their last message that the agent should hear of with this one. */
   private notesForAgent(conversationId: string): NotesForAgent {
-    const events = this.store.listEvents(conversationId);
+    const events = this.store.listEventsOfTypes(conversationId, [...USER_COMMAND_EVENT_TYPES, ...REVERT_EVENT_TYPES]);
     return { commands: awaitingDelivery(userCommandsIn(events)), reverts: pendingReverts(events), canvas: this.canvasNotesOf(conversationId) };
   }
 
@@ -1957,7 +1964,7 @@ export class ConversationService {
 
   private appendUserMessage(
     conversationId: string,
-    { text, imageIds, fromScript, fromPlugin, checkpoint }: Omit<QueuedMessage, "id"> & { checkpoint?: string | null },
+    { text, imageIds, fromScript, fromPlugin }: Omit<QueuedMessage, "id">,
     { commands, reverts, canvas }: NotesForAgent,
   ) {
     canvas.forEach((note) => note.heard());
@@ -1971,7 +1978,6 @@ export class ConversationService {
       ...(imageIds.length > 0 && { imageIds }),
       ...(fromScript && { fromScript }),
       ...(fromPlugin && { fromPlugin }),
-      ...(checkpoint && { checkpoint }),
     });
   }
 

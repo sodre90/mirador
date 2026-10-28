@@ -80,6 +80,47 @@ describe("Store", () => {
     expect(store.listEvents("c1").map(({ seq }) => seq)).toEqual([1, 2]);
   });
 
+  test("lists only the events of the types asked for, of that conversation, in order", () => {
+    const { store, conversation } = seededStore();
+    store.insertConversation({ ...conversation, id: "c2" });
+    store.appendEvent("c1", { type: "user-message", text: "a" });
+    store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    store.appendEvent("c2", { type: "revert", revertId: "r0", toSeq: 1, restored: 0, removed: 0 });
+    store.appendEvent("c1", { type: "revert", revertId: "r1", toSeq: 1, restored: 1, removed: 0 });
+    store.appendEvent("c1", { type: "user-message", text: "b" });
+    expect(store.listEventsOfTypes("c1", ["user-message", "revert"]).map(({ seq, event }) => [seq, event.type])).toEqual([
+      [1, "user-message"],
+      [3, "revert"],
+      [4, "user-message"],
+    ]);
+  });
+
+  test("finds the files kept for a turn by the seq of the message that began it", () => {
+    const { store } = seededStore();
+    store.appendEvent("c1", { type: "user-message", text: "a" });
+    store.appendEvent("c1", { type: "files-kept", turnSeq: 1, checkpoint: "abc" });
+    store.appendEvent("c1", { type: "user-message", text: "b" });
+    expect(store.filesKeptFor("c1", 1)).toBe("abc");
+    expect(store.filesKeptFor("c1", 3)).toBeNull();
+  });
+
+  test("the latest turn starts at the latest message whose files were kept, in the message or after it", () => {
+    const { store } = seededStore();
+    store.appendEvent("c1", { type: "user-message", text: "old", checkpoint: "abc" });
+    expect(store.latestTurnStart("c1")).toMatchObject({ seq: 1, checkpoint: "abc" });
+    store.appendEvent("c1", { type: "user-message", text: "new" });
+    store.appendEvent("c1", { type: "files-kept", turnSeq: 2, checkpoint: "def" });
+    store.appendEvent("c1", { type: "user-message", text: "joined" });
+    expect(store.latestTurnStart("c1")).toMatchObject({ seq: 2, checkpoint: "def" });
+  });
+
+  test("with no files kept, the latest turn starts at the latest message", () => {
+    const { store } = seededStore();
+    store.appendEvent("c1", { type: "user-message", text: "a" });
+    store.appendEvent("c1", { type: "user-message", text: "b" });
+    expect(store.latestTurnStart("c1")).toMatchObject({ seq: 2, checkpoint: null });
+  });
+
   test("dropping the events from a point on leaves the ones before, and does not hand their numbers out again", () => {
     const { store } = seededStore();
     ["a", "b", "c"].forEach((text) => store.appendEvent("c1", { type: "user-message", text }));

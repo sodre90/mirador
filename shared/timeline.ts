@@ -402,6 +402,11 @@ class TimelineBuilder {
           ...(seq > 0 && { turnSeq: seq }),
           ...(event.checkpoint && { filesKept: true as const }),
         });
+      case "files-kept": {
+        const message = this.blocks.findLast((block) => block.kind === "user" && block.key === String(event.turnSeq));
+        if (message?.kind === "user") message.filesKept = true;
+        return;
+      }
       case "revert":
         return this.push({
           kind: "notice",

@@ -505,9 +505,11 @@ export type ConversationEvent =
       imageIds?: string[];
       fromScript?: true;
       fromPlugin?: string;
-      /** The workspace's files as they were when this turn started, so the turn can be undone. */
+      /** The workspace's files as they were when this turn started, so the turn can be undone. Older logs only: newer ones say it in files-kept. */
       checkpoint?: string;
     }
+  /** The workspace's files as they were when the turn that began with the message at `turnSeq` started, so it can be undone. */
+  | { type: "files-kept"; turnSeq: number; checkpoint: string }
   | { type: "user-command"; commandId: string; command: string }
   | { type: "user-command-output"; commandId: string; stream: CommandStream; text: string }
   | { type: "user-command-ended"; commandId: string; exitCode: number | null }

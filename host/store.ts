@@ -1033,6 +1033,31 @@ export class Store {
       .map((row: any) => ({ seq: row.seq, at: row.at, event: JSON.parse(row.event) }));
   }
 
+  /**
+   * The events of these types, in order. SQLite would rather walk the conversation's events by seq and read the type of
+   * each, which takes most of a second in a conversation of hundreds of thousands of events; the index by type is instant.
+   */
+  listEventsOfTypes(conversationId: string, types: readonly ConversationEvent["type"][]): StoredEvent[] {
+    return this.db
+      .query(
+        `SELECT seq, at, event FROM events INDEXED BY events_by_type
+         WHERE conversation_id = ? AND json_extract(event, '$.type') IN (${types.map(() => "?").join(", ")}) ORDER BY seq`,
+      )
+      .all(conversationId, ...types)
+      .map((row: any) => ({ seq: row.seq, at: row.at, event: JSON.parse(row.event) }));
+  }
+
+  /** The snapshot of the files kept for the turn that began with the message at `turnSeq`. */
+  filesKeptFor(conversationId: string, turnSeq: number): string | null {
+    const row = this.db
+      .query(
+        `SELECT json_extract(event, '$.checkpoint') AS checkpoint FROM events INDEXED BY events_by_type
+         WHERE conversation_id = ? AND json_extract(event, '$.type') = 'files-kept' AND json_extract(event, '$.turnSeq') = ?`,
+      )
+      .get(conversationId, turnSeq) as { checkpoint: string } | null;
+    return row?.checkpoint ?? null;
+  }
+
   /** The agent's tool calls from `fromSeq` on, with every update to them. */
   toolCallEventsFrom(conversationId: string, fromSeq: number): StoredEvent[] {
     return this.db
@@ -1060,14 +1085,24 @@ export class Store {
    * running turn keep none; in a workspace with no repository, where no message keeps them, the latest message.
    */
   latestTurnStart(conversationId: string): { seq: number; at: number; checkpoint: string | null } | null {
-    const latest = (condition: string) =>
+    const latestMessage = (condition: string) =>
       this.db
         .query(
-          `SELECT seq, at, json_extract(event, '$.checkpoint') AS checkpoint FROM events WHERE conversation_id = ?
+          `SELECT seq, at, json_extract(event, '$.checkpoint') AS checkpoint FROM events INDEXED BY events_by_type WHERE conversation_id = ?
            AND json_extract(event, '$.type') = 'user-message' ${condition} ORDER BY seq DESC LIMIT 1`,
         )
         .get(conversationId) as { seq: number; at: number; checkpoint: string | null } | null;
-    return latest("AND json_extract(event, '$.checkpoint') IS NOT NULL") ?? latest("");
+    const keptInMessage = latestMessage("AND json_extract(event, '$.checkpoint') IS NOT NULL");
+    const keptAfterMessage = this.db
+      .query(
+        `SELECT message.seq, message.at, json_extract(kept.event, '$.checkpoint') AS checkpoint
+         FROM events AS kept INDEXED BY events_by_type JOIN events AS message
+           ON message.conversation_id = kept.conversation_id AND message.seq = json_extract(kept.event, '$.turnSeq')
+         WHERE kept.conversation_id = ? AND json_extract(kept.event, '$.type') = 'files-kept' ORDER BY message.seq DESC LIMIT 1`,
+      )
+      .get(conversationId) as { seq: number; at: number; checkpoint: string } | null;
+    const kept = [keptInMessage, keptAfterMessage].filter((turn) => turn !== null).sort((a, b) => b.seq - a.seq)[0];
+    return kept ?? latestMessage("");
   }
 
   /** When each of the conversation's turns ended, oldest first. */

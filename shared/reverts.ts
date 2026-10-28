@@ -19,6 +19,9 @@ const messageOf = (events: StoredEvent[], seq: number) => {
   return event?.type === "user-message" ? event.text : "";
 };
 
+/** The events `pendingReverts` reads; it ignores any other. */
+export const REVERT_EVENT_TYPES = ["revert", "user-message", "steered-messages-returned"] as const satisfies readonly ConversationEvent["type"][];
+
 /** The reverts whose note has not gone to the agent with a message of the user's yet. */
 export function pendingReverts(events: StoredEvent[]): Revert[] {
   const returned = returnedSteerSeqs(events);
@@ -46,7 +49,8 @@ export interface Turn {
 
 /** The turns of the conversation whose files Mirador kept, so they can be put back, oldest first. */
 export function undoableTurns(events: StoredEvent[]): Turn[] {
-  return events.flatMap(({ seq, event }) => (event.type === "user-message" && event.checkpoint ? [{ seq, text: event.text }] : []));
+  const keptLater = new Set(events.flatMap(({ event }) => (event.type === "files-kept" ? [event.turnSeq] : [])));
+  return events.flatMap(({ seq, event }) => (event.type === "user-message" && (event.checkpoint || keptLater.has(seq)) ? [{ seq, text: event.text }] : []));
 }
 
 /** The turns from `seq` on: what a rewind to that point takes out of the conversation. */

@@ -7,6 +7,7 @@ import {
   listsAnyFile,
   pendingReverts,
   putsAnyFileBack,
+  REVERT_EVENT_TYPES,
   rewindPointBefore,
   turnTitle,
   turnsFrom,
@@ -18,6 +19,7 @@ import {
   whyNoRewindTo,
   withRevertNotes,
 } from "../shared/reverts.ts";
+import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn } from "../shared/user-commands.ts";
 
 const userMessage = (text: string, extra: Partial<Extract<ConversationEvent, { type: "user-message" }>> = {}) =>
   ({ type: "user-message", text, ...extra }) as ConversationEvent;
@@ -32,6 +34,11 @@ test("a turn is undoable when Mirador kept the files it began with", () => {
     { seq: 1, text: "first" },
     { seq: 3, text: "third" },
   ]);
+});
+
+test("a turn is undoable when the files it began with were kept after its message", () => {
+  const events = stored(userMessage("first"), userMessage("second"), { type: "files-kept", turnSeq: 1, checkpoint: "abc" });
+  expect(undoableTurns(events)).toEqual([{ seq: 1, text: "first" }]);
 });
 
 test("a revert note is pending until a message of the user's carries it", () => {
@@ -193,4 +200,27 @@ test("keeping the files and undoing a turn's files are offered only when going b
   const none = { paths: [], more: 0 };
   expect(listsAnyFile({ deleted: none, putBack: none, committed: { paths: ["pulled.txt"], more: 0 } })).toBe(true);
   expect(listsAnyFile({ deleted: none, putBack: none, committed: none })).toBe(false);
+});
+
+test("the notes for the agent come out the same from only the events their folds read as from the whole log", () => {
+  const events = stored(
+    userMessage("first"),
+    { type: "user-command", commandId: "k1", command: "ls" },
+    { type: "user-command-output", commandId: "k1", stream: "stdout", text: "a.txt" },
+    { type: "user-command-ended", commandId: "k1", exitCode: 0 },
+    { type: "user-command", commandId: "k2", command: "pwd" },
+    { type: "user-command-ended", commandId: "k2", exitCode: 0 },
+    { type: "user-command-dropped", commandIds: ["k2"] },
+    said("m1"),
+    revertEvent("r1", 1),
+    userMessage("joined", { attachedCommandIds: ["k1"], attachedRevertIds: ["r1"] }),
+    { type: "turn-end", stopReason: "cancelled" },
+    { type: "steered-messages-returned", seqs: [10], commandIds: ["k1"] },
+    { type: "files-kept", turnSeq: 1, checkpoint: "abc" },
+  );
+  const read = new Set<string>([...USER_COMMAND_EVENT_TYPES, ...REVERT_EVENT_TYPES]);
+  const notes = (log: StoredEvent[]) => ({ commands: awaitingDelivery(userCommandsIn(log)), reverts: pendingReverts(log) });
+  expect(notes(events).commands).toHaveLength(1);
+  expect(notes(events).reverts).toHaveLength(1);
+  expect(notes(events.filter(({ event }) => read.has(event.type)))).toEqual(notes(events));
 });

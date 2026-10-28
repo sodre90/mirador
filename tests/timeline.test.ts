@@ -25,6 +25,23 @@ describe("buildTimeline", () => {
     ]);
   });
 
+  test("a message offers to undo its turn's files once they are kept, whether that is said in the message or after it", () => {
+    const timeline = buildTimeline(
+      stored([
+        { type: "user-message", text: "old", checkpoint: "abc" },
+        { type: "user-message", text: "new" },
+        { type: "user-message", text: "joined" },
+        { type: "files-kept", turnSeq: 2, checkpoint: "def" },
+        { type: "files-kept", turnSeq: 99, checkpoint: "ghi" },
+      ]),
+    );
+    expect(timeline.map((block) => [block.kind === "user" && block.text, block.kind === "user" && block.filesKept])).toEqual([
+      ["old", true],
+      ["new", true],
+      ["joined", undefined],
+    ]);
+  });
+
   test("shows a message that joined a stopped turn but went out again after it only where it went out", () => {
     const timeline = buildTimeline(
       stored([

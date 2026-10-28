@@ -14,6 +14,16 @@ export interface UserCommand {
 const AGENT_HEAD_CHARACTERS = 10_000;
 const AGENT_TAIL_CHARACTERS = 20_000;
 
+/** The events `UserCommandLog` folds; it ignores any other. */
+export const USER_COMMAND_EVENT_TYPES = [
+  "user-command",
+  "user-command-output",
+  "user-command-ended",
+  "user-command-dropped",
+  "user-message",
+  "steered-messages-returned",
+] as const satisfies readonly ConversationEvent["type"][];
+
 /** Folds the command events of a conversation into its commands, in the order they were run. */
 export class UserCommandLog {
   private readonly commands = new Map<string, UserCommand>();
