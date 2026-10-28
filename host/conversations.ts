@@ -162,6 +162,8 @@ interface TurnInProgress {
   ended: boolean;
   /** The turn's own prompt, once handed to the agent, with the moment it went out. */
   promptSent?: { text: string; sentAt: number };
+  /** The user stopped the turn before its prompt went out, as while the turn's files are kept. */
+  stoppedBeforePrompt?: boolean;
   /** The reply whose chunks last streamed, so the late chunks of a turn a stop cancelled can be recognised. */
   lastReplyMessageId: string | null;
   /** The turn waits on the user, so no reply of its own can still be on its way. */
@@ -726,7 +728,9 @@ export class ConversationService {
       const prompt = await this.promptContent(conversationId, withNotes(notes, text), imageIds);
       const harness = this.harnessFor(this.get(conversationId));
       turn.promptSent = { text, sentAt: Date.now() };
-      response = await harness.prompt(sessionId, prompt);
+      const answered = harness.prompt(sessionId, prompt);
+      if (turn.stoppedBeforePrompt) this.cancel(conversationId).catch((error) => console.error(`stopping the turn of conversation ${conversationId} failed:`, error));
+      response = await answered;
       this.showHeldBackReply(conversationId);
       this.append(conversationId, { type: "turn-end", stopReason: response.stopReason });
       runtime.automaticContinues = 0;
@@ -1108,6 +1112,10 @@ export class ConversationService {
     const runtime = this.runtime(conversationId);
     runtime.pendingPermissions.forEach(({ settle }) => settle(null));
     const conversation = this.get(conversationId);
+    if (runtime.running && runtime.turn && !runtime.turn.promptSent) {
+      runtime.turn.stoppedBeforePrompt = true;
+      return;
+    }
     if (runtime.running && conversation.acpSessionId) {
       await this.awaitRecordedPrompt(conversation, runtime.turn);
       await this.harnessFor(conversation).cancel(conversation.acpSessionId);
