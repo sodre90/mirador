@@ -36,9 +36,12 @@ const tabView = (page: Page) => page.frameLocator(".checklist:visible .canvas-fr
 const delegatedTask = (page: Page, title: string) => page.locator(".delegated-tasks:visible li", { hasText: title });
 
 /** The report opens with room, so after a reload the canvas can cover the chat again; the user goes back to the message box. */
+/** Waits for the canvas first: a page loaded from a restarted host shows it, full screen again, only a moment later. */
 async function backToTheMessageBox(page: Page) {
+  const shownCanvas = canvasPane(page).filter({ visible: true });
+  await expect(shownCanvas).toHaveCount(1);
   await page.keyboard.press(`${await primaryModifier(page)}+Shift+ArrowLeft`);
-  await expect(canvasPane(page)).not.toHaveClass(/fullscreen/);
+  await expect(shownCanvas).not.toHaveClass(/fullscreen/);
 }
 
 /** The stub agent offers no model to pick, so this is `startConversation` without that wait. */
