@@ -1,7 +1,7 @@
 # The Mirador trailer
 
-A trailer of 2 minutes 16 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
-running the real Claude Code against a scripted stand-in for the model. Nothing in it is mocked up by hand, and no
+A trailer of 2 minutes 36 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
+running the real Claude Code and opencode against a scripted stand-in for the model. Nothing in it is mocked up by hand, and no
 account, conversation or setting of yours is used.
 
 ```bash
@@ -10,7 +10,7 @@ bun install
 bun run build      # narrates, films, encodes, scores and renders: out/mirador-trailer.mp4
 ```
 
-It needs Google Chrome, ffmpeg, [uv](https://docs.astral.sh/uv/), git and about 3 GB of free disk while it films. The
+It needs Google Chrome, [opencode](https://opencode.ai), ffmpeg, [uv](https://docs.astral.sh/uv/), git and about 3 GB of free disk while it films. The
 render alone takes about 20 minutes on an M-series Mac.
 
 ## The stages
@@ -18,7 +18,7 @@ render alone takes about 20 minutes on an M-series Mac.
 | Step | Command | What it does |
 | --- | --- | --- |
 | Narrate | `bun run narrate` | Speaks `narration/lines.ts` with [Kokoro](https://github.com/thewh1teagle/kokoro-onnx), on this machine, into `public/narration`. Only changed lines are spoken again. The model is downloaded once to `~/.cache/mirador-video` and checked against its hash. It comes first because the voice scene's microphone plays the spoken question. |
-| Film | `bun run capture` | `capture/trailer.spec.ts` starts Mirador on a free port with the demo projects in `capture/demo-world.ts`, and films each scene in a 4K Chrome window at 250% zoom. The agents' answers come from `capture/scenes.ts`, through the fake model in `capture/director.ts`. Each scene becomes `public/clips/<scene>.frames` and `<scene>.json`, with the moments and boxes the edit uses. `MIRADOR_VIDEO_SCENES=plugins,media` films only those scenes and keeps the other clips; a scene may need the one before it. |
+| Film | `bun run capture` | `capture/trailer.spec.ts` starts Mirador on a free port with the demo projects in `capture/demo-world.ts`, and films each scene in a 4K Chrome window at 250% zoom. The agents' answers come from `capture/scenes.ts`, through the fake model in `capture/director.ts`; in the delegate scene, Claude Code hands its task to opencode, and in the jobs scene an `ssh` stand-in reaches a build server on this machine (`/tmp/build-01`). Each scene becomes `public/clips/<scene>.frames` and `<scene>.json`, with the moments and boxes the edit uses. `MIRADOR_VIDEO_SCENES=plugins,media` films only those scenes and keeps the other clips; a scene may need the one before it. |
 | Encode | `bun run encode` | Turns the frames into 60 fps videos at the speed they were filmed, and deletes the frames. |
 | Score | `bun run music` | Synthesises the score into `public/music/score.wav` (`audio/compose.ts`), timed to the storyboard. |
 | Render | `bun run render` | Renders the [Remotion](https://www.remotion.dev) composition in `src` to `out/render.mp4`, then `audio/master.ts` brings its sound to YouTube's loudness (-14 LUFS) in `out/mirador-trailer.mp4`. |

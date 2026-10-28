@@ -54,6 +54,7 @@ function timeline() {
     plugins: starts.plugins!,
     media: starts.media!,
     delegate: starts.delegate!,
+    jobs: starts.jobs!,
     voice: starts.voice!,
     montage: starts.edit!,
     terminals: starts.terminals!,
@@ -291,7 +292,7 @@ class Score {
     roll(main, g, buildFrom * 4, g.beats, { from: 0.06, to: 0.32 });
     main.add(g.at(buildFrom * 4), tonalRiser([62, 69, 74], 2 * g.bar), 0.24, { verb: 0.2 });
     main.add(g.at(buildFrom * 4), riser(2 * g.bar), 0.24);
-    [at.media, at.delegate].forEach((time) => this.accent(g, time));
+    [at.media, at.delegate, at.jobs].forEach((time) => this.accent(g, time));
   }
 
   /** From the montage to the plugins, still four on the floor, with the whole hook doubled an octave up. */

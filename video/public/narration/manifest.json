@@ -113,10 +113,24 @@
       "voice": "am_fenrir",
       "speed": 1
     },
+    "agents": {
+      "text": "Mirador isn't another agent. It runs the ones you already have, Claude Code, opencode or pi, and lets them work together.",
+      "file": "agents.wav",
+      "seconds": 7.978666666666666,
+      "voice": "am_fenrir",
+      "speed": 1
+    },
     "delegate": {
-      "text": "Long reads go to a local model, and the answer comes back to your agent to check.",
+      "text": "Here, Claude Code hands a long read to a local model on opencode, then checks what comes back.",
       "file": "delegate.wav",
-      "seconds": 4.8213333333333335,
+      "seconds": 6.08,
+      "voice": "am_fenrir",
+      "speed": 1
+    },
+    "jobs": {
+      "text": "Leave the long jobs running, like the tests on your build server. Mirador keeps watch, and wakes your agent when they're done.",
+      "file": "jobs.wav",
+      "seconds": 7.402666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },

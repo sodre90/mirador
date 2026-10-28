@@ -19,18 +19,27 @@ export const prompts = {
   spinnerNote: "The spinner drags on here. Keep a second of it.",
   switchOverTime: "How long will the switch-over take, and what could go wrong?",
   deadFlags: "Which of our feature flags can we delete? Check every screen.",
+  e2eOnBuildServer: "Run the whole e2e suite on build-01, and tell me when it's green.",
 };
 
 /** What Mirador tells the agent once the user answers Install; the agent's next turn answers to it. */
 export const MEDIA_INSTALLED = "installed the Media plugin";
 export const MEDIA_INSTALLED_REPLY = "Media is installed. Once Mirador restarts, I'll open the video in it.";
 
+/** The profile the agent delegates to: a local model, on opencode rather than Claude Code. */
+export const LOCAL_PROFILE = "opencode · Qwen";
 /** The task the agent hands to the local model, whose first line titles the conversation it starts. */
 const DEAD_FLAGS_TASK = "Find the feature flags in src/flags.ts that nothing reads.";
 /** How Mirador starts the message that brings the local model's reply back to the agent. */
-const LOCAL_MODEL_REPLIED = "The task delegated to Local";
+const LOCAL_MODEL_REPLIED = `The task delegated to ${LOCAL_PROFILE}`;
 const DEAD_FLAGS = ["legacyPushTokens", "holidayBanner", "oldSettingsMenu"];
 export const DEAD_FLAGS_ANSWER = "Checked: three flags are dead";
+
+/** The build server the e2e suite runs on; the capture's ssh stand-in reaches it on this machine. */
+export const BUILD_SERVER = "build-01";
+/** What the agent asks Mirador to tell it once the e2e run ends; its next turn answers to it. */
+const E2E_ENDED = "The e2e run on build-01 ended. Read the end of shop-api/e2e.log there and tell the user the result.";
+export const E2E_ANSWER = "Green: all 214 e2e tests pass on build-01";
 
 export const LAYOUT_CHOICE = "Grouped list (recommended)";
 
@@ -284,29 +293,50 @@ export function scripts({ projects, assetsOrigin }: { projects: { shopApi: strin
       steps: [
         {
           thinkMs: 1200,
-          say: "That's a lot of reading for a short answer, so I'm handing the sweep to Local, the model on this machine.",
+          say: "That's a lot of reading for a short answer, so I'm handing the sweep to Qwen, the model on this machine, in opencode.",
           call: {
             tool: "canvas.delegate",
-            input: { profile: "Local", task: `${DEAD_FLAGS_TASK}\n\nRead src/flags.ts for the flags' names, then search src for where each is read. Answer with the flags nothing reads, one per line.` },
+            input: { profile: LOCAL_PROFILE, task: `${DEAD_FLAGS_TASK}\n\nRead src/flags.ts for the flags' names, then search src for where each is read. Answer with the flags nothing reads, one per line.` },
           },
         },
-        { thinkMs: 400, say: "Local is on it. I'll check what it finds." },
+        { thinkMs: 400, say: "Qwen is on it. I'll check what it finds." },
       ],
     },
     {
       prompt: DEAD_FLAGS_TASK,
-      title: "Unread feature flags in src/flags.ts",
       steps: [
-        { thinkMs: 1800, call: { tool: "Read", input: { file_path: join(mobileApp, "src/flags.ts") } } },
-        { thinkMs: 2400, call: { tool: "Bash", input: { command: 'grep -rn "flags\\." src --include=*.tsx', description: "Find where each flag is read" } } },
+        { thinkMs: 1800, call: { tool: "read", input: { path: join(mobileApp, "src/flags.ts") } } },
+        { thinkMs: 2400, call: { tool: "grep", input: { pattern: "flags\\.", path: join(mobileApp, "src"), include: "*.tsx" } } },
         { thinkMs: 2000, say: `Three flags are never read:\n\n${DEAD_FLAGS.map((flag) => `- ${flag}`).join("\n")}` },
       ],
     },
     {
       prompt: LOCAL_MODEL_REPLIED,
       steps: [
-        { thinkMs: 900, say: "Checking Local's list before we rely on it.", call: { tool: "Bash", input: { command: `grep -rn "${DEAD_FLAGS.join("\\|")}" src`, description: "Check that nothing reads them" } } },
+        { thinkMs: 900, say: "Checking Qwen's list before we rely on it.", call: { tool: "Bash", input: { command: `grep -rn "${DEAD_FLAGS.join("\\|")}" src`, description: "Check that nothing reads them" } } },
         { thinkMs: 700, say: `${DEAD_FLAGS_ANSWER}, as only \`src/flags.ts\` names them: ${new Intl.ListFormat("en").format(DEAD_FLAGS.map((flag) => `\`${flag}\``))}. Want me to delete them?` },
+      ],
+    },
+    {
+      prompt: prompts.e2eOnBuildServer,
+      steps: [
+        {
+          thinkMs: 1000,
+          say: "Starting the suite on build-01. It takes a few minutes, so Mirador will wait for it instead of me.",
+          call: {
+            tool: "Bash",
+            input: { command: `ssh ${BUILD_SERVER} 'cd shop-api; nohup bunx playwright test > e2e.log 2>&1 & echo $!'`, description: "Start the e2e suite on the build server" },
+          },
+        },
+        { thinkMs: 600, call: { tool: "canvas.when_done", input: (startedJob) => ({ pid: Number(startedJob.trim()), host: BUILD_SERVER, message: E2E_ENDED }) } },
+        { thinkMs: 400, say: "Mirador is watching the run on build-01, and wakes me when it ends. Get on with something else; I'll tell you the result." },
+      ],
+    },
+    {
+      prompt: E2E_ENDED,
+      steps: [
+        { thinkMs: 900, call: { tool: "Bash", input: { command: `ssh ${BUILD_SERVER} 'tail -n 4 shop-api/e2e.log'`, description: "Read the end of the e2e log" } } },
+        { thinkMs: 700, say: `${E2E_ANSWER}, the new double-charge test among them, in 3.4 minutes. The fix is ready for review.` },
       ],
     },
     {

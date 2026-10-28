@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { addWorkspaceFromSidebar, openSettings, signIn, useOwnVoiceServer, voiceSection, waitForTurnToEnd, walkthroughView, workspaceCard } from "../../e2e/helpers.ts";
@@ -15,7 +15,7 @@ import { CHECKOUT_TEST, checkoutTest, CLAUDE_SETTINGS, createWorld, git, REPLAY_
 import { Director } from "./director.ts";
 import { MEDIA_FROM_CACHE, setUpPlugins } from "./plugins.ts";
 import { ClipRecorder } from "./recorder.ts";
-import { DEAD_FLAGS_ANSWER, LAYOUT_CHOICE, MEDIA_INSTALLED, MEDIA_INSTALLED_REPLY, PULL_REQUEST, prompts, scripts } from "./scenes.ts";
+import { BUILD_SERVER, DEAD_FLAGS_ANSWER, E2E_ANSWER, LAYOUT_CHOICE, MEDIA_INSTALLED, MEDIA_INSTALLED_REPLY, PULL_REQUEST, prompts, scripts } from "./scenes.ts";
 import { expect, test } from "./studio.ts";
 import { typeLikeAPerson } from "./typing.ts";
 
@@ -69,6 +69,74 @@ esac
   writeFileSync(join(host.fakeProgramsDir, "gh"), gh, { mode: 0o755 });
 }
 
+/** The real opencode, which the host's PATH would not find in the fake home, for the profile the agent delegates to. */
+function linkOpencode() {
+  const onPath = [...(process.env.PATH ?? "").split(":"), join(homedir(), ".opencode", "bin")].map((folder) => join(folder, "opencode"));
+  const opencode = onPath.find((program) => existsSync(program));
+  if (!opencode) throw new Error("The trailer's delegate scene runs opencode: install it from https://opencode.ai");
+  symlinkSync(opencode, join(host.fakeProgramsDir, "opencode"));
+}
+
+/**
+ * The build server's home, on this machine. lsof names the real path of the run's log in the terminal that follows the
+ * job, so it is a short one.
+ */
+const buildServerHome = join("/tmp", BUILD_SERVER);
+
+/** An ssh that reaches only the build server, on this machine: the agent's, the host's checks and the terminal that follows the job. */
+function writeFakeSsh() {
+  const ssh = `#!/bin/bash
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --) shift; break ;;
+    -[BbcDEeFIiJLlmOopQRSWw]) shift 2 ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+[[ "$1" == "${BUILD_SERVER}" ]] || { echo "ssh: Could not resolve hostname $1" >&2; exit 255; }
+shift
+export HOME='${buildServerHome}' PATH='${join(buildServerHome, "bin")}':"$PATH"
+cd "$HOME"
+exec /bin/bash -c "$*"
+`;
+  writeFileSync(join(host.fakeProgramsDir, "ssh"), ssh, { mode: 0o755 });
+}
+
+/** The e2e run build-01 plays as its bunx: Playwright's list of passing tests, in about 15 seconds. */
+const e2eRun = (tests: string[]) => `const tests = ${JSON.stringify(tests)};
+console.log(\`\\nRunning \${tests.length} tests using 8 workers\\n\`);
+for (const [index, test] of tests.entries()) {
+  console.log(\`  ✓  \${index + 1} [chromium] › \${test} (\${(0.4 + ((index * 37) % 23) / 10).toFixed(1)}s)\`);
+  await Bun.sleep(70);
+}
+console.log(\`\\n  \${tests.length} passed (3.4m)\`);
+`;
+
+const E2E_SPECS: Record<string, string[]> = {
+  "checkout.spec.ts": ["pays with a saved card", "a capture that times out charges the card once", "releases the stock when the card is declined", "shows the order number", "applies a discount code"],
+  "cart.spec.ts": ["adds an item", "keeps the cart after sign-in", "updates the total when the quantity changes", "removes the last item"],
+  "login.spec.ts": ["signs in with a password", "signs in with a passkey", "locks the account after five tries"],
+  "orders.spec.ts": ["lists past orders", "cancels an order before it ships", "downloads an invoice"],
+  "search.spec.ts": ["finds a product by name", "filters by price", "suggests as you type"],
+  "account.spec.ts": ["changes the email address", "deletes the account", "exports the data"],
+};
+
+/** 214 tests, the specs taking turns as Playwright's workers do. */
+function e2eTests() {
+  const titles = Object.entries(E2E_SPECS).flatMap(([spec, names]) => names.map((name, index) => `${spec}:${12 + index * 9}:3 › ${name}`));
+  return Array.from({ length: 214 }, (_, index) => titles[(index * 5) % titles.length]!);
+}
+
+/** build-01's home: the project the suite runs in, and the bunx that plays the run. */
+function setUpBuildServer() {
+  rmSync(buildServerHome, { recursive: true, force: true });
+  mkdirSync(join(buildServerHome, "shop-api"), { recursive: true });
+  const run = join(root, "e2e-run.ts");
+  writeFileSync(run, e2eRun(e2eTests()));
+  execFileSync("bun", ["build", "--compile", run, "--outfile", join(buildServerHome, "bin", "bunx")], { stdio: "ignore" });
+}
+
 /**
  * The voice services the voice scene uses, all on this machine: speech recognition hears the user's question once and
  * "Thanks" after, the voice model sums the reply up in the line the agent is heard saying, and the reply voice is that
@@ -100,12 +168,15 @@ test.beforeAll(async () => {
   git(storefront, "commit", "-q", "-m", "Checkout demo video");
   await new Promise<void>((resolve) => voiceServer.listen(0, "127.0.0.1", resolve));
   writeFakeGh();
+  writeFakeSsh();
+  linkOpencode();
+  setUpBuildServer();
   await director.start();
   mkdirSync(host.dataDir, { recursive: true });
   mkdirSync(host.claudeConfigDir, { recursive: true });
   writeFileSync(join(host.claudeConfigDir, "settings.json"), CLAUDE_SETTINGS);
   setUpPlugins(host.dataDir, catalogFile);
-  execFileSync("bun", [join(import.meta.dirname, "seed-profile.ts"), join(host.dataDir, "state.sqlite"), director.environment]);
+  execFileSync("bun", [join(import.meta.dirname, "seed-profile.ts"), join(host.dataDir, "state.sqlite"), director.environment, director.opencodeEnvironment]);
   await host.start();
   director.scripts = scripts({ projects: world.projects, assetsOrigin: `http://127.0.0.1:${host.port + 1}` });
 });
@@ -116,6 +187,7 @@ test.afterAll(async () => {
   director.stop();
   voiceServer.close();
   rmSync(REPLAY_SCRIPT, { force: true });
+  rmSync(buildServerHome, { recursive: true, force: true });
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -656,6 +728,36 @@ test("the trailer's clips", async ({ page }) => {
       await scrollSmoothlyToTop(page.locator(".sidebar-scroll"));
       recorder.mark("movedInView");
       await page.waitForTimeout(1800);
+    });
+  });
+
+  await scene("jobs: the agent leaves the e2e suite running on the build server, and Mirador wakes it when the run ends", async () => {
+    await openConversation(page, ids.stopDoubleCharge);
+    const jobWait = page.locator('section[aria-label="Jobs waited for"]:visible');
+    await film("jobs", async () => {
+      await page.waitForTimeout(400);
+      await recorder.markRect("composer", page.locator(".composer:visible"));
+      await sendOnCamera(page, cursor, recorder, prompts.e2eOnBuildServer);
+      await expect(jobWait).toContainText(`on ${BUILD_SERVER}`, { timeout: 60_000 });
+      recorder.mark("waiting");
+      await recorder.markRect("timeline", page.locator(".timeline:visible"));
+      await recorder.markRect("jobWait", jobWait);
+      await waitForTurnToEnd(page);
+      recorder.mark("turnEnded");
+      await page.waitForTimeout(900);
+      await cursor.click(jobWait.locator(".job-wait-follow"));
+      const following = page.locator(".terminal-pane .terminal-splits.shown .xterm-rows").last();
+      await expect(following).toContainText("[chromium]", { timeout: 30_000 });
+      recorder.mark("following");
+      await recorder.markRect("terminals", page.locator('[data-pane="terminals"]'));
+      await expect(following).toContainText("214 passed", { timeout: 60_000 });
+      recorder.mark("passed");
+      await expect(jobWait).toBeHidden({ timeout: 60_000 });
+      recorder.mark("woken");
+      await expect(page.locator(".timeline:visible .message.agent").last()).toContainText(E2E_ANSWER, { timeout: 60_000 });
+      await waitForTurnToEnd(page);
+      recorder.mark("reported");
+      await page.waitForTimeout(2200);
     });
   });
 

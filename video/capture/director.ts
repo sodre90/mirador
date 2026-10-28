@@ -3,7 +3,7 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { seededRandom } from "./typing.ts";
 
-type Content = string | { type: string; text?: string }[];
+type Content = string | { type: string; text?: string; content?: Content }[];
 type MessagesRequest = {
   model: string;
   stream?: boolean;
@@ -12,8 +12,16 @@ type MessagesRequest = {
   output_config?: { format?: { schema?: { properties?: Record<string, unknown> } } };
 };
 
-/** A tool by Claude Code's own name, or one of the canvas's by its action, whatever the canvas server is called. */
-export type ToolCall = { tool: "Read" | "Bash" | "Edit" | "Write" | "canvas.show" | "canvas.ask" | "canvas.review" | "canvas.update_review" | "canvas.plugin_install" | "canvas.app_open" | "canvas.apply" | "canvas.app_run" | "canvas.delegate"; input: Record<string, unknown> };
+/** opencode's own tools, by its names. */
+type OpencodeTool = "read" | "grep" | "shell";
+
+/** A tool by Claude Code's or opencode's own name, or one of the canvas's by its action, whatever the canvas server is called. */
+export type ToolCall = { tool: "Read" | "Bash" | "Edit" | "Write" | OpencodeTool | "canvas.show" | "canvas.ask" | "canvas.review" | "canvas.update_review" | "canvas.plugin_install" | "canvas.app_open" | "canvas.apply" | "canvas.app_run" | "canvas.delegate" | "canvas.when_done";
+  /** A function of the last tool's output, for a call that names what the tool before it started. */
+  input: Record<string, unknown> | ((lastToolOutput: string) => Record<string, unknown>);
+};
+
+const LOCAL_MODEL = "qwen3-coder";
 
 /** One reply of the agent: a pause as if thinking, some text, and the tool it calls next, if any. */
 export type Step = { thinkMs?: number; say?: string; call?: ToolCall };
@@ -27,6 +35,11 @@ export type Script = { prompt: string; steps: Step[]; title?: string };
 const textOf = (content: Content) => (typeof content === "string" ? content : content.map(({ text }) => text ?? "").join(""));
 const typedText = (content: Content) => textOf(content).split(/<\/system-reminder>/).at(-1)!.trim();
 const isToolResult = (content: Content) => typeof content !== "string" && content.some(({ type }) => type === "tool_result");
+const lastToolOutput = (messages: MessagesRequest["messages"]) => {
+  const results = messages.flatMap(({ content }) => (typeof content === "string" ? [] : content.filter(({ type }) => type === "tool_result")));
+  const content = results.at(-1)?.content;
+  return content === undefined ? "" : textOf(content);
+};
 const sleep = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
 
 /** Text streams a few words at a time, the way a model's tokens arrive. */
@@ -91,6 +104,19 @@ export class Director {
     ].join("\n");
   }
 
+  /** opencode reaches the director through its built-in Anthropic provider, with a model named as a local one would be. */
+  get opencodeEnvironment() {
+    const config = {
+      model: `anthropic/${LOCAL_MODEL}`,
+      small_model: `anthropic/${LOCAL_MODEL}`,
+      autoupdate: false,
+      share: "disabled",
+      permission: { bash: "allow", edit: "allow" },
+      provider: { anthropic: { options: { baseURL: `${this.url}/v1`, apiKey: "video-api-key" }, models: { [LOCAL_MODEL]: { name: "Qwen3 Coder" } } } },
+    };
+    return [`OPENCODE_CONFIG_CONTENT='${JSON.stringify(config)}'`, "OPENCODE_DISABLE_MODELS_FETCH=1", "-u ANTHROPIC_API_KEY", "-u ANTHROPIC_BASE_URL"].join("\n");
+  }
+
   private async reply(body: MessagesRequest, response: ServerResponse) {
     const mainLoop = (body.tools ?? []).length > 0;
     // A message sent while a turn runs reaches the model in the same user message as a tool's result.
@@ -121,7 +147,8 @@ export class Director {
   private async send(body: MessagesRequest, response: ServerResponse, step: Step, paced: boolean) {
     const id = `msg_video_${this.requests.length}`;
     const usage = { input_tokens: 1200, output_tokens: 80 };
-    const call = step.call && { type: "tool_use", id: `toolu_video_${this.requests.length}`, name: this.toolName(body, step.call), input: step.call.input };
+    const input = typeof step.call?.input === "function" ? step.call.input(lastToolOutput(body.messages)) : step.call?.input;
+    const call = step.call && { type: "tool_use", id: `toolu_video_${this.requests.length}`, name: this.toolName(body, step.call), input };
     const stopReason = call ? "tool_use" : "end_turn";
     const content = [...(step.say ? [{ type: "text", text: step.say }] : []), ...(call ? [call] : [])];
     if (!body.stream) {
