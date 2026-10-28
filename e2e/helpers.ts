@@ -283,3 +283,7 @@ export const notificationsShown = (scope: Page | Frame) =>
   scope.evaluate(() => (window as unknown as WithRecordedNotifications).recordedNotifications.map(({ title, body, tag, closed }) => ({ title, body, tag, closed })));
 
 export const clickLatestNotification = (page: Page) => page.evaluate(() => (window as unknown as WithRecordedNotifications).recordedNotifications.at(-1)!.onclick!());
+
+/** Clicks the latest notification with this body, where other notifications may come after it. */
+export const clickNotification = (page: Page, body: string) =>
+  page.evaluate((body) => (window as unknown as WithRecordedNotifications).recordedNotifications.findLast((notification) => notification.body === body)!.onclick!(), body);

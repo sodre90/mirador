@@ -8,6 +8,7 @@ import {
   allowNotifications,
   callCanvasTool,
   clickLatestNotification,
+  clickNotification,
   notificationsShown,
   openSettings,
   signIn,
@@ -277,8 +278,9 @@ test("a machine left hidden for ten minutes lets go of its page, which comes bac
     const asking = conversationInFrame(page)!;
     await thisComputer.click();
     void callCanvasTool(host, asking, "ask", { question: "Keep going?", options: [{ label: "Yes" }, { label: "No" }] }).catch(() => {});
-    await expect.poll(() => notificationsShown(page)).toContainEqual(expect.objectContaining({ body: "Home server · server-only · Asks: Keep going?" }));
-    await clickLatestNotification(page);
+    const homeServerAsks = "Home server · server-only · Asks: Keep going?";
+    await expect.poll(() => notificationsShown(page)).toContainEqual(expect.objectContaining({ body: homeServerAsks }));
+    await clickNotification(page, homeServerAsks);
     await expect(serverButton).toHaveAttribute("aria-current", "true");
     await expect.poll(() => conversationInFrame(page)).toBe(asking);
     await serverOnly.getByRole("button", { name: "+ New conversation" }).click();
