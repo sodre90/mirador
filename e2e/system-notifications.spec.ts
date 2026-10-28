@@ -66,10 +66,10 @@ test("questions elsewhere notify, in the browser or else through the desktop app
   await test.step("while the desktop app listens, it alone is told", async () => {
     const desktopApp = startDesktopNotifier(host.origin, await browserToken());
     const lines = createInterface({ input: desktopApp.stdout! })[Symbol.asyncIterator]();
-    const isCount = (line: string) => /^(waiting|running-turns) \d+$/.test(line);
+    const isWaitingOrRunning = (line: string) => /^(waiting|running-turns) (\d+|in:)/.test(line);
     const nextLine = async (): Promise<string> => {
       const line = String((await lines.next()).value);
-      return isCount(line) ? nextLine() : line;
+      return isWaitingOrRunning(line) ? nextLine() : line;
     };
     try {
       expect(await nextLine()).toBe("connected");

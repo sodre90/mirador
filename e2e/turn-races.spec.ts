@@ -53,7 +53,7 @@ async function listenLikeTheDesktopApp() {
   const waiting: number[] = [];
   const runningTurns: number[] = [];
   createInterface({ input: desktopApp.stdout! }).on("line", (line) => {
-    const [, kind, count] = line.match(/^(waiting|running-turns) (\d+)$/) ?? [];
+    const [, kind, count] = line.match(/^(waiting|running-turns) (\d+)\b/) ?? [];
     if (kind === "waiting") waiting.push(Number(count));
     if (kind === "running-turns") runningTurns.push(Number(count));
   });
