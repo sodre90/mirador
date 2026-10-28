@@ -7,7 +7,6 @@ import {
   addWorkspaceFromSidebar,
   allowNotifications,
   callCanvasTool,
-  clickLatestNotification,
   clickNotification,
   notificationsShown,
   openSettings,
@@ -176,7 +175,7 @@ test("the laptop joins the server with an invite link and shows its own Mirador 
     await expect
       .poll(() => notificationsShown(page))
       .toEqual([{ title: "New conversation", body: "Home server · server-only · Asks: Ship it?", tag: serverConversation, closed: false }]);
-    await clickLatestNotification(page);
+    await clickNotification(page, "Home server · server-only · Asks: Ship it?");
     await expect(serverButton).toHaveAttribute("aria-current", "true");
     await expect(frame.locator(".ask")).toContainText("Ship it?");
   });

@@ -7,7 +7,7 @@ import {
   allowNotifications,
   answerCanvasQuestion,
   callCanvasTool,
-  clickLatestNotification,
+  clickNotification,
   notificationsShown,
   sendMessage,
   signIn,
@@ -49,7 +49,7 @@ test("questions elsewhere notify, in the browser or else through the desktop app
   await test.step("a question in another conversation notifies, and the notification opens it", async () => {
     askInBackground(first, "Which layout?");
     await expect.poll(() => notificationsShown(page)).toEqual([{ title: "New conversation", body: "project · Asks: Which layout?", tag: first, closed: false }]);
-    await clickLatestNotification(page);
+    await clickNotification(page, "project · Asks: Which layout?");
     await expect(page).toHaveURL(new RegExp(`#/c/${first}$`));
     expect((await notificationsShown(page))[0]!.closed).toBe(true);
     await answerCanvasQuestion(page, "Yes");
