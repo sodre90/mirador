@@ -289,7 +289,7 @@ export const hints = {
   changesScope: {
     turn: "The files that differ from how they were when this turn began, as the agent or anything else left them.",
     uncommitted: "git status: the files that differ from the last commit, and the files outside the project the agent edited in this conversation.",
-    session: "Every file the agent changed with its edit tools in this conversation, even where a later turn changed it back, and the files written while its commands ran, build output and its commits included. A file a command deleted, or a job it left running wrote later, is not listed.",
+    session: "Every file the agent changed with its edit tools in this conversation, even where a later turn changed it back, and the files written while its commands ran, build output and its commits included. A file a command deleted, or a job it left running wrote later, is not listed, nor one another conversation in this folder wrote, as told by its tool calls naming the file while it ran.",
   },
   changesView: {
     list: "Each changed file on its own row, with its whole path. Remembered in this browser.",
@@ -300,6 +300,8 @@ export const hints = {
   changesIgnored: "Show or hide the files git ignores that the agent's commands wrote, such as build output. Remembered in this browser.",
   changesEditedByAgent: "The project's files this conversation's agent changed with its edit tools in this turn.",
   changesChangedOtherwise: "The project's files changed in this turn without the agent's edit tools: by commands the agent ran, by you, or by another conversation or tool working in this folder.",
+  changesOthersMayHaveWritten:
+    "Written while this conversation's commands ran, but also while another conversation in this folder ran a command or an edit, and what the two ran doesn't tell which wrote it. Files only another conversation's tool calls name are left out.",
   changesFromCommit: "A commit since the turn began changed this file, such as a pull's or the agent's own.",
   changesRefresh: "Load the list again. It also loads after each tool call the agent finishes and when the turn ends.",
   changesByAgent: "This conversation's agent changed this file with its edit tools.",

@@ -18,6 +18,8 @@ export interface ChangedFile {
   byAgent: boolean;
   /** Whether git ignores it: the session scope lists these only where the agent's commands wrote them, so a view can leave them out. */
   ignored?: boolean;
+  /** In a session, whether another conversation in the workspace was running a command or edit then, so it may have written it instead. */
+  othersMayHaveWritten?: boolean;
 }
 
 /**

@@ -575,3 +575,29 @@ test("This session leaves out the git-ignored files its commands wrote while Git
   await expect(changes(page).getByRole("button", { name: "Git-ignored files", exact: true })).toHaveAttribute("aria-pressed", "false");
   await expectListed(page, "Project", ["src/app.ts"]);
 });
+
+test("This session leaves out a file another conversation's command named as it wrote it, and lists one either may have written apart", async ({ page }) => {
+  const theirs = join(host.projectDir, "src", "theirs.txt");
+  const both = join(host.projectDir, "src", "both.txt");
+  await signIn(page, host);
+  await page.goto(`${host.origin}/#/c/${conversationId}`);
+  const waiting = await startConversation(page);
+  await sendMessage(page, `TOOL UNTIL ${both}`);
+  await expect(page.locator(".timeline:visible")).toContainText(`wait for ${both}`);
+
+  await startConversation(page);
+  await writeFiles(page, [
+    { shell: theirs, content: "written by the second conversation alone\n" },
+    { shell: both, content: "written while both ran a command naming it\n" },
+  ]);
+  await waitForTurnToEnd(page);
+  await changes(page).getByRole("button", { name: "This session" }).click();
+  await changes(page).getByRole("button", { name: "Tree", exact: true }).click();
+  await expectListed(page, "Project", ["src/theirs.txt"]);
+  await expectListed(page, "Maybe written by another conversation", ["src/both.txt"]);
+
+  await page.goto(`${host.origin}/#/c/${waiting}`);
+  await waitForTurnToEnd(page);
+  await expectListed(page, "Maybe written by another conversation", ["src/both.txt"]);
+  await expect(fileRow(page, "src/theirs.txt"), "the other conversation's command named it").toHaveCount(0);
+});

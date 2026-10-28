@@ -311,8 +311,10 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
   const sections = useMemo(() => {
     if (!visible) return null;
     const splitByAgent = visible.scope === "turn" && !projectFiles;
+    const othersMayHaveWritten = projectFiles ? [] : visible.project.filter((file) => file.othersMayHaveWritten);
     return {
-      project: projectFiles ? projectFilesWithChanges(visible, projectFiles.paths) : splitByAgent ? [] : changedFiles(visible.project),
+      project: projectFiles ? projectFilesWithChanges(visible, projectFiles.paths) : splitByAgent ? [] : changedFiles(visible.project.filter((file) => !file.othersMayHaveWritten)),
+      othersMayHaveWritten: changedFiles(othersMayHaveWritten),
       editedByAgent: splitByAgent ? changedFiles(visible.project.filter(({ byAgent }) => byAgent)) : [],
       changedOtherwise: splitByAgent ? changedFiles(visible.project.filter(({ byAgent }) => !byAgent)) : [],
       committed: projectFiles ? [] : changedFiles(visible.committed),
@@ -404,6 +406,14 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
           <FileSection title="Project" files={sections.project} asTree={view !== "list"} rows={rows} folding={foldingOf("project")} />
           <FileSection title="Edited by the agent" hint={hints.changesEditedByAgent} files={sections.editedByAgent} asTree={view !== "list"} rows={rows} folding={foldingOf("edited-by-agent")} />
           <FileSection title="Changed some other way" hint={hints.changesChangedOtherwise} files={sections.changedOtherwise} asTree={view !== "list"} rows={rows} folding={foldingOf("changed-otherwise")} />
+          <FileSection
+            title="Maybe written by another conversation"
+            hint={hints.changesOthersMayHaveWritten}
+            files={sections.othersMayHaveWritten}
+            asTree={view !== "list"}
+            rows={rows}
+            folding={foldingOf("others-may-have-written")}
+          />
           <FileSection title="From commits since the turn began" files={sections.committed} asTree={view !== "list"} rows={rows} folding={foldingOf("committed")} />
           <FileSection title="Outside the project" files={sections.outside} asTree={view !== "list"} rows={rows} folding={foldingOf("outside")} />
         </>

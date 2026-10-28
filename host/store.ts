@@ -149,6 +149,15 @@ const addedColumns = [
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
+/** Another conversation's tool call reports, with what tells when an unfinished call stopped: its turns' ends, its last event, and whether a turn of it still runs. */
+export interface OtherConversationToolCalls {
+  events: StoredEvent[];
+  turnEnds: number[];
+  firstMessageAt: number;
+  lastEventAt: number;
+  running: boolean;
+}
+
 export type UnseenTurnEnd = "finished" | "error" | "unread";
 
 type WorkspaceRow = {
@@ -1105,12 +1114,34 @@ export class Store {
     return kept ?? latestMessage("");
   }
 
-  /** When each of the conversation's turns ended, oldest first. */
-  turnEndTimes(conversationId: string): number[] {
+  /** When each of the conversation's turns ended, oldest first, from `fromSeq` on. */
+  turnEndTimes(conversationId: string, fromSeq = 0): number[] {
     return this.db
-      .query("SELECT at FROM events WHERE conversation_id = ? AND json_extract(event, '$.type') IN ('turn-end', 'error') ORDER BY seq")
-      .all(conversationId)
+      .query("SELECT at FROM events WHERE conversation_id = ? AND seq >= ? AND json_extract(event, '$.type') IN ('turn-end', 'error') ORDER BY seq")
+      .all(conversationId, fromSeq)
       .map((row: any) => row.at);
+  }
+
+  /**
+   * The tool calls of the workspace's other conversations that were still at work at `since` or later, or whose turn still
+   * runs, each from the last message it was sent before then, so a call already running then comes whole. Only a
+   * conversation's own events are read, through its key, as the events of every conversation are too many to look
+   * through for their times.
+   */
+  othersToolCallsSince(conversationId: string, workspaceId: string, since: number): OtherConversationToolCalls[] {
+    const others = this.db.query("SELECT id FROM conversations WHERE workspace_id = ? AND id != ?").all(workspaceId, conversationId) as { id: string }[];
+    return others.flatMap(({ id }) => {
+      const last = this.db.query("SELECT at FROM events WHERE conversation_id = ? ORDER BY seq DESC LIMIT 1").get(id) as { at: number } | null;
+      const running = this.db.query("SELECT 1 FROM running_turns WHERE conversation_id = ?").get(id) !== null;
+      if (!last || (last.at < since && !running)) return [];
+      const firstMessageAt = this.firstMessageAt(id);
+      if (firstMessageAt === null) return [];
+      const messageBefore = this.db
+        .query("SELECT seq FROM events WHERE conversation_id = ? AND at < ? AND json_extract(event, '$.type') = 'user-message' ORDER BY seq DESC LIMIT 1")
+        .get(id, since) as { seq: number } | null;
+      const fromSeq = messageBefore?.seq ?? 0;
+      return [{ events: this.toolCallEventsFrom(id, fromSeq), turnEnds: this.turnEndTimes(id, fromSeq), firstMessageAt, lastEventAt: last.at, running }];
+    });
   }
 
   /** When the conversation's first message was sent; null before there is one. */

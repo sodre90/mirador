@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, posix, resolve, sep } from "node:path";
-import type { ToolCallContent, ToolKind } from "@agentclientprotocol/sdk";
+import type { ToolCallContent, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk";
 import type { ChangedFile, ChangeList, ChangeScope, ChangesBase, FileChanges, ProjectFiles } from "../shared/changes.ts";
 import type { StoredEvent, Workspace } from "../shared/model.ts";
 import type { Checkpoints } from "./checkpoints.ts";
@@ -23,6 +23,7 @@ import {
   MAX_SCANNED_FILES,
   projectFiles,
   uncommittedChanges,
+  writtenDuring,
   writtenWithin,
   type TimeWindow,
   type TreeChange,
@@ -89,38 +90,84 @@ export function agentEditsIn(events: StoredEvent[]): AgentFileEdits[] {
 /** The host stores a report when it reads it, which can be a little after the command it reports on wrote a file, or before. */
 export const COMMAND_WINDOW_SLACK_MS = 1000;
 
-interface CommandSoFar {
+interface WindowSoFar {
   kind: ToolKind | null;
   reportedAt: number;
   runningAt: number | null;
   endedAt: number | null;
+  mentions: Set<string>;
 }
 
+const FILE_WRITING_KINDS: ToolKind[] = ["execute", ...FILE_CHANGING_KINDS];
+
+/** When a tool call that can write files ran, and the text it was given: its titles, its input and the paths it named. */
+export interface ToolCallWindow extends TimeWindow {
+  kind: ToolKind;
+  mentions: string;
+}
+
+const mentionsOf = (update: ToolCallUpdate) => [
+  update.title,
+  update.rawInput === undefined ? undefined : JSON.stringify(update.rawInput),
+  ...(update.locations ?? []).map(({ path }) => path),
+  ...(update.content ?? []).flatMap((content) => (content.type === "diff" ? [content.path] : [])),
+];
+
+/** Claude Code also reports a long command as in progress while it runs, with the whole seconds it has run so far. */
+const runningForMs = (update: ToolCallUpdate) => {
+  const elapsedSeconds = (update._meta?.claudeCode as { toolResponse?: { elapsedTimeSeconds?: unknown } } | undefined)?.toolResponse?.elapsedTimeSeconds;
+  return typeof elapsedSeconds === "number" ? elapsedSeconds * 1000 : 0;
+};
+
 /**
- * When each of the agent's commands ran, from the conversation's first message on: from when it started running,
- * which Claude Code reports after a permission was answered, else its first report, to when it completed or failed;
- * a command with neither ended with its turn, or still runs.
+ * When each of the agent's tool calls that can write files ran, from the conversation's first message on: from when it
+ * started running, which Claude Code reports after a permission was answered, else its first report, to when it
+ * completed or failed; a call with neither ended with its turn, or runs until `now`.
  */
-export function commandWindows(events: StoredEvent[], turnEnds: number[], firstMessageAt: number, now: number): TimeWindow[] {
-  const calls = new Map<string, CommandSoFar>();
+export function toolCallWindows(events: StoredEvent[], turnEnds: number[], firstMessageAt: number, now: number): ToolCallWindow[] {
+  const calls = new Map<string, WindowSoFar>();
   events.forEach(({ at, event }) => {
     if (event.type !== "acp" || (event.update.sessionUpdate !== "tool_call" && event.update.sessionUpdate !== "tool_call_update")) return;
     const { toolCallId, kind, status } = event.update;
-    const call = calls.get(toolCallId) ?? { kind: null, reportedAt: at, runningAt: null, endedAt: null };
+    const call = calls.get(toolCallId) ?? { kind: null, reportedAt: at, runningAt: null, endedAt: null, mentions: new Set<string>() };
     calls.set(toolCallId, call);
     call.kind ??= kind ?? null;
-    if (status === "in_progress") call.runningAt ??= at;
+    if (status === "in_progress") call.runningAt ??= at - runningForMs(event.update);
     if (status === "completed" || status === "failed") call.endedAt ??= at;
+    mentionsOf(event.update).forEach((mention) => mention && call.mentions.add(mention));
   });
   return [...calls.values()]
-    .filter(({ kind }) => kind === "execute")
-    .map(({ reportedAt, runningAt, endedAt }) => {
+    .filter((call): call is WindowSoFar & { kind: ToolKind } => call.kind !== null && FILE_WRITING_KINDS.includes(call.kind))
+    .map(({ kind, reportedAt, runningAt, endedAt, mentions }) => {
       const from = runningAt ?? reportedAt;
       const to = endedAt ?? turnEnds.find((at) => at >= from) ?? now;
-      return { from, to: to + COMMAND_WINDOW_SLACK_MS };
+      return { kind, from, to: to + COMMAND_WINDOW_SLACK_MS, mentions: [...mentions].join("\n") };
     })
     .filter(({ from }) => from >= firstMessageAt)
-    .map(({ from, to }) => ({ from: Math.max(from - COMMAND_WINDOW_SLACK_MS, firstMessageAt), to }));
+    .map((window) => ({ ...window, from: Math.max(window.from - COMMAND_WINDOW_SLACK_MS, firstMessageAt) }));
+}
+
+/** When each of the agent's commands ran, as toolCallWindows tells it. */
+export const commandWindows = (events: StoredEvent[], turnEnds: number[], firstMessageAt: number, now: number): TimeWindow[] =>
+  toolCallWindows(events, turnEnds, firstMessageAt, now).filter(({ kind }) => kind === "execute");
+
+/** The windows with the project's folders taken off the paths they name, so a path names the project's file as git lists it. */
+const withProjectPaths = (windows: ToolCallWindow[], directories: string[]) =>
+  windows.map((window) => ({ ...window, mentions: directories.reduce((mentions, directory) => mentions.replaceAll(`${directory}${sep}`, ""), window.mentions) }));
+
+/**
+ * Which conversation wrote a file its time alone ties to this one's commands, from the tool calls of this one and of
+ * the workspace's others running then: the side whose calls name its path when the other's do not, or else, with
+ * another's call running then, either.
+ */
+export function writerOf(path: string, writtenAtMs: number, own: ToolCallWindow[], others: ToolCallWindow[]): "this" | "another" | "either" {
+  const othersThen = others.filter((window) => writtenDuring(window, writtenAtMs));
+  if (othersThen.length === 0) return "this";
+  const named = new RegExp(`(?<![\\w./-])${RegExp.escape(path)}(?![\\w.-])`);
+  const namesIt = (windows: ToolCallWindow[]) => windows.some(({ mentions }) => named.test(mentions));
+  const ownNamesIt = namesIt(own.filter((window) => writtenDuring(window, writtenAtMs)));
+  if (ownNamesIt === namesIt(othersThen)) return "either";
+  return ownNamesIt ? "this" : "another";
 }
 
 /** The folders that count as the workspace's, as edit approvals count them: its path, and that path with links resolved. */
@@ -201,6 +248,8 @@ interface ScopeStart {
   since?: number;
   /** In a session, when the agent's commands ran: a file written then is the agent's too. */
   commandWindows?: TimeWindow[];
+  /** In a session, when the agent's tool calls that can write files ran, to tell its writes from other conversations'. */
+  toolCalls?: ToolCallWindow[];
   base: ChangesBase;
 }
 
@@ -235,10 +284,11 @@ export class Changes {
     const edits = this.agentEdits(conversationId, workspace, start.fromSeq);
     const agentProjectFiles = new Map(edits.flatMap((edit) => (projectPathOf(edit.path, directories) === null ? [] : [[projectPathOf(edit.path, directories)!, edit] as const])));
     const outside = await Promise.all(edits.filter((edit) => projectPathOf(edit.path, directories) === null).map(outsideFile));
-    const { changes, committedPaths, truncated } = await this.treeChanges(workspace, scope, start);
+    const { changes: treeChanges, committedPaths, truncated } = await this.treeChanges(workspace, scope, start);
+    const changes = treeChanges && start.toolCalls ? this.withoutOtherConversations(conversationId, workspace, directories, start.toolCalls, treeChanges, agentProjectFiles) : treeChanges;
     const project = changes
       ? [
-          ...changes.map((change) => ({ ...change, byAgent: agentProjectFiles.has(change.path) })),
+          ...changes.map(({ writtenAtMs, ...change }) => ({ ...change, byAgent: agentProjectFiles.has(change.path) })),
           ...(scope !== "uncommitted" ? [...agentProjectFiles].filter(([path]) => !changes.some((change) => change.path === path)).map(([path, edit]) => agentOnly(path, edit)) : []),
         ]
       : [...agentProjectFiles].map(([path, edit]) => agentOnly(path, edit));
@@ -332,6 +382,34 @@ export class Changes {
     if (!(await this.openAsText(realFile))) throw new Error(`Mirador could not open ${path} as text.`);
   }
 
+  /**
+   * The changes, but for the files another conversation in the workspace wrote: of those only their write times tie to
+   * this conversation's commands, those another's tool calls then name are left out, and those written while another
+   * worked, with nothing to tell which wrote them, are marked.
+   */
+  private withoutOtherConversations(
+    conversationId: string,
+    workspace: Workspace,
+    directories: string[],
+    toolCalls: ToolCallWindow[],
+    changes: TreeChange[],
+    agentFiles: Map<string, unknown>,
+  ): TreeChange[] {
+    const timedByWrite = (change: TreeChange): change is TreeChange & { writtenAtMs: number } => change.writtenAtMs !== undefined && !agentFiles.has(change.path);
+    const timed = changes.filter(timedByWrite);
+    if (timed.length === 0) return changes;
+    const own = withProjectPaths(toolCalls, directories);
+    const others = this.store
+      .othersToolCallsSince(conversationId, workspace.id, timed.reduce((earliest, { writtenAtMs }) => Math.min(earliest, writtenAtMs), Infinity) - COMMAND_WINDOW_SLACK_MS)
+      .flatMap(({ events, turnEnds, firstMessageAt, lastEventAt, running }) => withProjectPaths(toolCallWindows(events, turnEnds, firstMessageAt, running ? Date.now() : lastEventAt), directories));
+    if (others.length === 0) return changes;
+    return changes.flatMap((change) => {
+      if (!timedByWrite(change)) return [change];
+      const writer = writerOf(change.path, change.writtenAtMs, own, others);
+      return writer === "another" ? [] : writer === "either" ? [{ ...change, othersMayHaveWritten: true }] : [change];
+    });
+  }
+
   /** The agent's edits from `fromSeq` on, each at its absolute path, a path the agent gave relative to the workspace resolved against it. */
   private agentEdits(conversationId: string, workspace: Workspace, fromSeq: number) {
     return agentEditsIn(this.store.toolCallEventsFrom(conversationId, fromSeq)).map((edit) => ({ ...edit, path: resolve(workspace.path, edit.path) }));
@@ -356,8 +434,9 @@ export class Changes {
   private sessionStart(conversationId: string): ScopeStart {
     const firstMessageAt = this.store.firstMessageAt(conversationId);
     if (firstMessageAt === null) return { fromSeq: 0, revision: null, base: "session" };
-    const windows = commandWindows(this.store.toolCallEventsFrom(conversationId, 0), this.store.turnEndTimes(conversationId), firstMessageAt, Date.now());
-    return { fromSeq: 0, revision: null, since: firstMessageAt, commandWindows: windows, base: "session" };
+    const toolCalls = toolCallWindows(this.store.toolCallEventsFrom(conversationId, 0), this.store.turnEndTimes(conversationId), firstMessageAt, Date.now());
+    const windows = toolCalls.filter(({ kind }) => kind === "execute");
+    return { fromSeq: 0, revision: null, since: firstMessageAt, commandWindows: windows, toolCalls, base: "session" };
   }
 
   /**

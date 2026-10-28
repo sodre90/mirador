@@ -13,6 +13,10 @@ export interface TreeChange {
   removed: number | null;
   /** Whether git ignores the file, which only the list of ignored files' writes has. */
   ignored?: boolean;
+  /** When the file was last written (epoch ms), or committed, for a change its time picked. */
+  writtenAtMs?: number;
+  /** Whether another conversation in the workspace may have written it instead, which only a session's list tells. */
+  othersMayHaveWritten?: boolean;
 }
 
 const SUBMODULE_MODE = "160000";
@@ -167,20 +171,23 @@ export interface TimeWindow {
   to: number;
 }
 
+export const writtenDuring = ({ from, to }: TimeWindow, writtenAtMs: number) => writtenAtMs >= from - FILE_TIME_TICK_MS && writtenAtMs <= to;
+
 export const writtenWithin =
   (windows: TimeWindow[]): CountsWrite =>
   (writtenAtMs) =>
-    windows.some(({ from, to }) => writtenAtMs >= from - FILE_TIME_TICK_MS && writtenAtMs <= to);
+    windows.some((window) => writtenDuring(window, writtenAtMs));
 
 /** The times of a file decide which of the two it is: made when a write counts, or made before and rewritten then. */
 async function writtenChangesOf(directory: string, paths: string[], counts: CountsWrite): Promise<TreeChange[]> {
   const written = await inLimitedParallel(paths, async (path) => {
     const stats = await lstat(join(directory, path)).catch(() => null);
-    return stats?.isFile() && counts(writtenAt(stats)) ? [{ path, createdSince: counts(stats.birthtimeMs) }] : [];
+    return stats?.isFile() && counts(writtenAt(stats)) ? [{ path, createdSince: counts(stats.birthtimeMs), writtenAtMs: writtenAt(stats) }] : [];
   });
-  return inLimitedParallel(written.flat(), async ({ path, createdSince }) =>
-    createdSince ? untrackedChange(directory, path) : { path, status: "modified" as const, added: null, removed: null },
-  );
+  return inLimitedParallel(written.flat(), async ({ path, createdSince, writtenAtMs }) => ({
+    ...(createdSince ? await untrackedChange(directory, path) : { path, status: "modified" as const, added: null, removed: null }),
+    writtenAtMs,
+  }));
 }
 
 /**
@@ -227,7 +234,7 @@ export async function ignoredFilesWritten(
 export async function changesWritten(directory: string, changes: TreeChange[], counts: CountsWrite): Promise<TreeChange[]> {
   const kept = await inLimitedParallel(changes, async (change) => {
     const stats = await lstat(join(directory, change.path)).catch(() => null);
-    return stats && !stats.isDirectory() && counts(writtenAt(stats)) ? [change] : [];
+    return stats && !stats.isDirectory() && counts(writtenAt(stats)) ? [{ ...change, writtenAtMs: writtenAt(stats) }] : [];
   });
   return kept.flat();
 }
@@ -266,14 +273,18 @@ export async function changesSinceCommitsWithin(directory: string, since: number
     .filter(({ parents }) => parents.length <= 1)
     .filter(({ committedAtMs }) => windows.some((window) => madeWithin(committedAtMs, window)));
   const baseOf = new Map<string, string>();
-  for (const { commit, parents } of made) {
+  const lastCommittedAt = new Map<string, number>();
+  for (const { commit, parents, committedAtMs } of made) {
     const base = parents[0] ?? (await emptyTree(directory));
     const paths = (await mustGit(directory, ["diff-tree", "-r", "-z", "--name-only", "--no-renames", "--relative", base, commit])).split("\0").filter(Boolean);
-    paths.forEach((path) => baseOf.set(path, base));
+    paths.forEach((path) => {
+      baseOf.set(path, base);
+      if (!lastCommittedAt.has(path)) lastCommittedAt.set(path, committedAtMs);
+    });
   }
   const byBase = Map.groupBy(baseOf, ([, base]) => base);
   const changes = await Promise.all([...byBase].map(async ([base, entries]) => changesAgainst(directory, base, entries.map(([path]) => path))));
-  return { changes: changes.flat(), baseOf };
+  return { changes: changes.flat().map((change) => ({ ...change, writtenAtMs: lastCommittedAt.get(change.path) })), baseOf };
 }
 
 const emptyTree = async (directory: string) => (await mustGit(directory, ["hash-object", "-t", "tree", "--stdin"])).trim();

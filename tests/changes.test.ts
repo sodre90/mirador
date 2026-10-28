@@ -4,7 +4,7 @@ import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, utimes, writeFile }
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { ToolKind } from "@agentclientprotocol/sdk";
-import { agentEditsIn, Changes, COMMAND_WINDOW_SLACK_MS, commandWindows, OutsideWorkspace } from "../host/changes.ts";
+import { agentEditsIn, Changes, COMMAND_WINDOW_SLACK_MS, commandWindows, OutsideWorkspace, toolCallWindows, writerOf } from "../host/changes.ts";
 import { Checkpoints } from "../host/checkpoints.ts";
 import { Store } from "../host/store.ts";
 import { createdSince, filesWrittenSince, ignoredFilesWritten, loggedCommitsIn, projectFiles, treeChangesIn, uncommittedChanges, writtenSince } from "../host/working-tree.ts";
@@ -112,6 +112,9 @@ async function agentRuns(toolCallId: string, work: () => Promise<unknown>) {
   await work();
   store.appendEvent("c1", { type: "acp", update: { sessionUpdate: "tool_call_update", toolCallId, status: "completed" } });
 }
+
+/** Git keeps a commit's time in whole seconds, so a commit reads as up to this much earlier than it was made. */
+const COMMIT_TIME_TICK_MS = 1000;
 
 /** Long enough after a command for a write not to count as its. */
 const pastTheCommand = () => Bun.sleep(COMMAND_WINDOW_SLACK_MS + 100);
@@ -444,7 +447,7 @@ test("ignored files written since a timestamp are found, while unignored and old
   const future = now + 60_000;
 
   const found = await ignoredFilesWritten(projectDir, writtenSince(past));
-  expect(found.changes).toEqual([{ path: "build/output.log", status: "added", added: 2, removed: 0, ignored: true }]);
+  expect(found.changes).toMatchObject([{ path: "build/output.log", status: "added", added: 2, removed: 0, ignored: true }]);
   expect(found.truncated).toBe(false);
 
   const none = await ignoredFilesWritten(projectDir, writtenSince(future));
@@ -529,7 +532,7 @@ test("a file written in the same clock tick as the turn's start still counts as 
   const stats = await stat(join(folder, "hook.js"));
   const written = Math.max(stats.mtimeMs, stats.birthtimeMs);
 
-  expect((await filesWrittenSince(folder, written + 10)).changes).toEqual([{ path: "hook.js", status: "added", added: 1, removed: 0 }]);
+  expect((await filesWrittenSince(folder, written + 10)).changes).toMatchObject([{ path: "hook.js", status: "added", added: 1, removed: 0 }]);
   expect((await filesWrittenSince(folder, written + 100)).changes).toEqual([]);
   expect(await createdSince(folder, "hook.js", written + 10)).toBe(true);
   expect(await createdSince(folder, "hook.js", written + 100)).toBe(false);
@@ -771,6 +774,66 @@ test("the session scope leaves out the files written before the conversation's f
   expect(session.project.map((file) => file.path)).toEqual(["build/new.js"]);
 });
 
+function insertOtherConversation(id: string) {
+  store.insertConversation({ ...store.listConversations().find((conversation) => conversation.id === "c1")!, id, title: "other" });
+  store.appendEvent(id, { type: "user-message", text: "go" });
+}
+
+const reportCall = (conversationId: string, toolCallId: string, title: string, status: "in_progress" | "completed") =>
+  store.appendEvent(conversationId, { type: "acp", update: { sessionUpdate: status === "in_progress" ? "tool_call" : "tool_call_update", toolCallId, title, kind: "execute", status } });
+
+test("the session scope leaves out a file another conversation's command named as it wrote it, and marks one either may have written", async () => {
+  insertOtherConversation("c2");
+  await startTurn();
+  reportCall("c1", "build", "bun run build", "in_progress");
+  reportCall("c2", "patch", "python3 patch.py src/theirs.ts && bun run build", "in_progress");
+  await mkdir(join(projectDir, "src"));
+  await write("src/theirs.ts", "patched by the other conversation\n");
+  await mkdir(join(projectDir, "build"));
+  await write("build/out.js", "built by either\n");
+  reportCall("c2", "patch", "", "completed");
+  await pastTheCommand();
+  await write("src/mine.ts", "written by this conversation's command alone\n");
+  reportCall("c1", "build", "", "completed");
+
+  const session = await changes.list("c1", "session");
+  expect(session.project.map(({ path, othersMayHaveWritten }) => ({ path, othersMayHaveWritten }))).toEqual([
+    { path: "build/out.js", othersMayHaveWritten: true },
+    { path: "src/mine.ts", othersMayHaveWritten: undefined },
+  ]);
+  const theirs = await changes.list("c2", "session");
+  expect(theirs.project.map(({ path, othersMayHaveWritten }) => ({ path, othersMayHaveWritten }))).toEqual([
+    { path: "build/out.js", othersMayHaveWritten: true },
+    { path: "src/theirs.ts", othersMayHaveWritten: undefined },
+  ]);
+});
+
+test("the session scope marks the files of a commit this conversation's command made while another conversation's command ran", async () => {
+  insertOtherConversation("c2");
+  await Bun.sleep(COMMIT_TIME_TICK_MS);
+  await startTurn();
+  reportCall("c2", "tests", "bun run test", "in_progress");
+  await agentRuns("commit", async () => {
+    await write("kept.txt", "one\nTWO\nthree\n");
+    await git(projectDir, ["commit", "-qam", "the agent's"]);
+  });
+  reportCall("c2", "tests", "", "completed");
+  expect((await changes.list("c1", "session")).project.map(({ path, othersMayHaveWritten }) => ({ path, othersMayHaveWritten }))).toEqual([
+    { path: "kept.txt", othersMayHaveWritten: true },
+  ]);
+});
+
+test("another conversation's command that never reported its end stops counting at that conversation's last event, unless its turn still runs", async () => {
+  insertOtherConversation("c2");
+  await startTurn();
+  reportCall("c2", "lost", "a command a host restart cut off", "in_progress");
+  await pastTheCommand();
+  await agentRuns("build", () => write("written.txt", "this conversation's\n"));
+  expect((await changes.list("c1", "session")).project.map(({ othersMayHaveWritten }) => othersMayHaveWritten)).toEqual([undefined]);
+  store.turnStarted("c2");
+  expect((await changes.list("c1", "session")).project.map(({ othersMayHaveWritten }) => othersMayHaveWritten)).toEqual([true]);
+});
+
 test("the session scope lists the files of the commits the agent's commands made, compared with before the first of them, and no merge's", async () => {
   await startTurn();
   await agentRuns("commit", async () => {
@@ -791,23 +854,51 @@ test("the session scope lists the files of the commits the agent's commands made
   expect(rows.filter(({ kind }) => kind === "removed").map(({ text }) => text)).toEqual(["two", "three"]);
 });
 
-test("a command window runs from when the command started running to when it ended, its turn's end, or now, and none from before the first message", () => {
+test("a tool call window runs from when the call started running to when it ended, its turn's end, or now, none from before the first message, and holds what the call named", () => {
   const at = (when: number, update: Record<string, unknown>): StoredEvent => ({ seq: when, at: when, event: { type: "acp", update: update as never } });
   const slack = COMMAND_WINDOW_SLACK_MS;
   const events = [
     at(5, { sessionUpdate: "tool_call", toolCallId: "replayed", kind: "execute", status: "completed" }),
-    at(100, { sessionUpdate: "tool_call", toolCallId: "asked", kind: "execute", status: "pending" }),
-    at(5_000, { sessionUpdate: "tool_call_update", toolCallId: "asked", status: "in_progress" }),
+    at(100, { sessionUpdate: "tool_call", toolCallId: "asked", title: "Terminal", kind: "execute", status: "pending" }),
+    at(5_000, { sessionUpdate: "tool_call_update", toolCallId: "asked", title: "sed -i s/a/b/ src/a.ts", status: "in_progress", rawInput: { command: "sed -i s/a/b/ src/a.ts" } }),
     at(6_000, { sessionUpdate: "tool_call_update", toolCallId: "asked", status: "completed" }),
     at(7_000, { sessionUpdate: "tool_call", toolCallId: "stopped", kind: "execute", status: "in_progress" }),
-    at(8_000, { sessionUpdate: "tool_call", toolCallId: "edit", kind: "edit", status: "in_progress" }),
+    at(15_000, { sessionUpdate: "tool_call", toolCallId: "long", kind: "execute", status: "pending" }),
+    at(19_000, { sessionUpdate: "tool_call_update", toolCallId: "long", status: "in_progress", _meta: { claudeCode: { toolResponse: { elapsedTimeSeconds: 3 } } } }),
+    at(19_000, { sessionUpdate: "tool_call_update", toolCallId: "long", status: "completed" }),
+    at(8_000, { sessionUpdate: "tool_call", toolCallId: "edit", kind: "edit", status: "in_progress", locations: [{ path: "/p/src/b.ts" }] }),
+    at(8_500, { sessionUpdate: "tool_call", toolCallId: "read", kind: "read", status: "completed", locations: [{ path: "/p/src/c.ts" }] }),
     at(20_000, { sessionUpdate: "tool_call", toolCallId: "running", kind: "execute", status: "pending" }),
   ];
-  expect(commandWindows(events, [9_000], 50, 30_000)).toEqual([
+  expect(toolCallWindows(events, [9_000], 50, 30_000)).toEqual([
+    { kind: "execute", from: 5_000 - slack, to: 6_000 + slack, mentions: 'Terminal\nsed -i s/a/b/ src/a.ts\n{"command":"sed -i s/a/b/ src/a.ts"}' },
+    { kind: "execute", from: 7_000 - slack, to: 9_000 + slack, mentions: "" },
+    { kind: "execute", from: 16_000 - slack, to: 19_000 + slack, mentions: "" },
+    { kind: "edit", from: 8_000 - slack, to: 9_000 + slack, mentions: "/p/src/b.ts" },
+    { kind: "execute", from: 20_000 - slack, to: 30_000 + slack, mentions: "" },
+  ]);
+  expect(commandWindows(events, [9_000], 50, 30_000).map(({ from, to }) => ({ from, to }))).toEqual([
     { from: 5_000 - slack, to: 6_000 + slack },
     { from: 7_000 - slack, to: 9_000 + slack },
+    { from: 16_000 - slack, to: 19_000 + slack },
     { from: 20_000 - slack, to: 30_000 + slack },
   ]);
+});
+
+test("a file written while another conversation's tool call ran is that one's when only it names the file, this one's when only this one's names it, and either's otherwise", () => {
+  const call = (from: number, to: number, mentions: string) => ({ kind: "execute" as const, from, to, mentions });
+  const own = [call(1_000, 5_000, "sed -i s/x/y/ src/mine.ts"), call(10_000, 12_000, "bun run build")];
+  const others = [call(2_000, 4_000, "python3 patch.py src/theirs.ts && grep -n x src/mine.ts"), call(11_000, 13_000, "bun run build")];
+  expect(writerOf("src/theirs.ts", 3_000, own, others)).toBe("another");
+  expect(writerOf("src/mine.ts", 3_000, own, others), "both name it").toBe("either");
+  expect(writerOf("src/only-mine.ts", 3_000, [call(1_000, 5_000, "touch src/only-mine.ts")], others)).toBe("this");
+  expect(writerOf("dist/app.js", 11_500, own, others), "neither names it").toBe("either");
+  expect(writerOf("dist/app.js", 10_500, own, others), "no other call ran then").toBe("this");
+  expect(writerOf("src/theirs.ts", 4_500, own, others), "the other's call had ended").toBe("this");
+  const nested = [call(2_000, 4_000, "vim desktop/package.json web/myapp.ts web/app.ts.bak")];
+  expect(writerOf("package.json", 3_000, own, nested), "a nested file of the same name").toBe("either");
+  expect(writerOf("web/app.ts", 3_000, own, nested), "a longer name ending in it, or one going on after it").toBe("either");
+  expect(writerOf("web/app.ts", 3_000, own, [call(2_000, 4_000, "p='web/app.ts'")])).toBe("another");
 });
 
 test("git log's commits give each one's time in ms and its parents", () => {
