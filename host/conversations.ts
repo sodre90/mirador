@@ -771,8 +771,14 @@ export class ConversationService {
       runtime.stallNudges = 0;
       return;
     }
-    if (this.stopping || runtime.running || runtime.queuedMessages.length > 0 || this.jobWaits.in(conversationId).length > 0) return;
-    if (runtime.stallNudges >= STALL_NUDGES_IN_A_ROW) return;
+    const carriedOnOtherwise = {
+      stopping: this.stopping,
+      running: runtime.running,
+      queued: runtime.queuedMessages.length,
+      steerInFlight: runtime.steerInFlight ?? false,
+      jobWaits: this.jobWaits.in(conversationId).length,
+    };
+    if (!nudgesAfterStall(runtime.stallNudges, carriedOnOtherwise)) return;
     runtime.stallNudges += 1;
     this.send(conversationId, CONTINUE_AFTER_STALL, [], { fromScript: true }).catch(() => {});
   }
@@ -2180,6 +2186,15 @@ export function unfinishedTurnRequest(events: StoredEvent[]): TurnRequest | null
   const open = turnRequestWithin(events.slice(events.findLastIndex(endsTurn) + 1), events);
   if (open) return open;
   return agentFinishedItsTurn(events) ? null : lastTurnRequest(events);
+}
+
+/** Whether a stalled turn gets a nudge: only when nothing else will carry the conversation on, and a couple of times in a row at most. */
+export function nudgesAfterStall(
+  nudgesInARow: number,
+  { stopping, running, queued, steerInFlight, jobWaits }: { stopping: boolean; running: boolean; queued: number; steerInFlight: boolean; jobWaits: number },
+): boolean {
+  const carriedOn = stopping || running || queued > 0 || steerInFlight || jobWaits > 0;
+  return !carriedOn && nudgesInARow < STALL_NUDGES_IN_A_ROW;
 }
 
 /** Whether a reply stops where it announces its next step: its last words end in a ":", past any closing emphasis. */
