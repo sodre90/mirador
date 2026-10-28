@@ -347,6 +347,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
 
     await handOverTo.selectOption({ label: "Profile's (Local)" });
     await expect.poll(() => callCanvasTool(host, conversationId, "hand_over", { task: "SAY Handed over again." })).toMatch(/^Handed over to [0-9a-f-]+\.$/);
+    await expect.poll(agentSaw, "the handed-over task ends before the switch, so its end isn't the prompt that tells of it").toContain("The handed-over task finished: Handed over again.\n");
 
     await handOverTo.selectOption({ label: "None" });
     await expect(handOverTo.locator("option:checked")).toHaveText("None");
