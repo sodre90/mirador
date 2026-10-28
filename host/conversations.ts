@@ -52,6 +52,7 @@ import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
 import { hasBegun, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
 import { isUsageLimitError, usageLimitMessage, usageLimitResetIn } from "../shared/usage-limit.ts";
+import { summarizeWaiting, type WaitingSummary } from "../shared/waiting.ts";
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
 import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.ts";
@@ -309,8 +310,8 @@ export class ConversationService {
     return this.store.listConversations().map((conversation) => this.withRuntimeStatus(conversation));
   }
 
-  waitingCount(): number {
-    return [...this.conversationsThatMayWait()].filter((conversationId) => this.waitingFor(conversationId) !== null).length;
+  waiting(): WaitingSummary {
+    return summarizeWaiting([...this.conversationsThatMayWait()].map((conversationId) => this.waitingFor(conversationId)).filter((waitingFor) => waitingFor !== null));
   }
 
   runningTurnsCount(): number {
@@ -544,7 +545,7 @@ export class ConversationService {
     this.images.deleteConversation(conversationId);
     this.droppedFiles.deleteConversation(conversationId);
     this.hub.broadcast({ type: "conversation.deleted", conversationId });
-    this.announceWaitingCount();
+    this.announceWaiting();
     if (wasRunning) this.announceRunningTurnsCount();
   }
 
@@ -2099,11 +2100,11 @@ export class ConversationService {
 
   private publish(conversation: Conversation) {
     this.hub.broadcast({ type: "conversation.upserted", conversation: this.withRuntimeStatus(conversation) });
-    this.announceWaitingCount();
+    this.announceWaiting();
   }
 
-  private announceWaitingCount() {
-    this.hub.announceWaitingCount(this.waitingCount());
+  private announceWaiting() {
+    this.hub.announceWaiting(this.waiting());
   }
 
   private announceRunningTurnsCount() {

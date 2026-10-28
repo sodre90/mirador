@@ -1,5 +1,6 @@
 import { newerVersionLabel, type NewerVersion } from "../../../shared/newer-version.ts";
 import { MIRADOR_VERSION } from "../../../shared/version.ts";
+import type { WaitingTone } from "../../../shared/waiting.ts";
 import type { HostStatus } from "./host-supervisor.ts";
 import type { UpdateOffer } from "./self-update.ts";
 
@@ -67,6 +68,23 @@ export function trayMenu(state: TrayState): TrayItem[] {
 }
 
 export const trayTitle = (waitingCount: number) => (waitingCount > 0 ? String(waitingCount) : "");
+
+export type TrayDot = "needs-you" | "done";
+
+/** A decision or a failed turn needs you, so the dot is red; a turn that ended unseen makes it green. Your own Unread marks get none. */
+export function trayDot(mostUrgent: WaitingTone | null): TrayDot | null {
+  if (mostUrgent === "decision" || mostUrgent === "failed") return "needs-you";
+  if (mostUrgent === "done") return "done";
+  return null;
+}
+
+const dotImages: Record<TrayDot, string> = {
+  "needs-you": "views://assets/tray-icon-needs-you.png",
+  done: "views://assets/tray-icon-done.png",
+};
+
+/** The colour icon of Linux and Windows panels, with the dot in its corner while there is one. */
+export const colourTrayImage = (dot: TrayDot | null) => (dot ? dotImages[dot] : "views://assets/app-icon.png");
 
 /** On macOS a tray title is text beside the icon, kept for the waiting count; Linux panels show it as the icon's tooltip. */
 export const firstTrayTitle = (platform: NodeJS.Platform, appName: string) => (platform === "darwin" ? "" : appName);

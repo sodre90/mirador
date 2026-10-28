@@ -1,8 +1,10 @@
 import type { NewerVersion } from "../../../shared/newer-version.ts";
 import { DESKTOP_APP_CODE_PARAMETER, TOKEN_COOKIE, type ServerMessage } from "../../../shared/protocol.ts";
 import { bodyWithWorkspace, type SystemNotification } from "../../../shared/system-notifications.ts";
+import type { WaitingSummary } from "../../../shared/waiting.ts";
 
 const RETRY_DELAY_MILLISECONDS = 2_000;
+const NOTHING_WAITING: WaitingSummary = { count: 0, mostUrgent: null };
 
 export interface NativeNotification {
   title: string;
@@ -40,8 +42,8 @@ export interface HostNotificationsOptions {
   /** Read again for every connection: the host writes it on its first start, which may come after the app's. */
   token: () => string | null;
   show: (notification: SystemNotification) => void;
-  /** The number of conversations waiting for you, which the host sends on connecting and whenever it may have changed. */
-  showWaitingCount?: (count: number) => void;
+  /** How many conversations wait for you and the most urgent one's tone, which the host sends on connecting and whenever they may have changed. */
+  showWaiting?: (waiting: WaitingSummary) => void;
   /** The number of running turns, which the host sends on connecting and whenever it changes. */
   showRunningTurnsCount?: (count: number) => void;
   /** A newer Mirador than the host, which the host sends on connecting while there is one, and whenever it finds another; null once the host goes away. */
@@ -72,7 +74,7 @@ export class HostNotifications {
   }
 
   private connect() {
-    const { origin, token, show, showWaitingCount = () => {}, showRunningTurnsCount = () => {}, showNewerVersion = () => {}, builtFromCode = null, open = openWebSocket } = this.options;
+    const { origin, token, show, showWaiting = () => {}, showRunningTurnsCount = () => {}, showNewerVersion = () => {}, builtFromCode = null, open = openWebSocket } = this.options;
     const currentToken = token();
     if (!currentToken) return this.connectLater();
     const socket = open(notificationSocketUrl(origin, builtFromCode), { Origin: origin, Cookie: `${TOKEN_COOKIE}=${currentToken}` });
@@ -80,12 +82,12 @@ export class HostNotifications {
     socket.onmessage = ({ data }) => {
       const message = JSON.parse(String(data)) as ServerMessage;
       if (message.type === "system-notification") show(message.notification);
-      if (message.type === "waiting.counted") showWaitingCount(message.count);
+      if (message.type === "waiting.counted") showWaiting({ count: message.count, mostUrgent: message.mostUrgent ?? null });
       if (message.type === "running-turns.counted") showRunningTurnsCount(message.count);
       if (message.type === "newer-version.found") showNewerVersion(message.newerVersion);
     };
     socket.onclose = () => {
-      showWaitingCount(0);
+      showWaiting(NOTHING_WAITING);
       showRunningTurnsCount(0);
       showNewerVersion(null);
       this.connectLater();

@@ -39,6 +39,7 @@ import type { MentionSuggestion } from "./mentions.ts";
 import type { NewerVersion } from "./newer-version.ts";
 import type { PromptHistoryEntry } from "./prompt-history.ts";
 import type { SlashCommand } from "./slash-commands.ts";
+import type { WaitingSummary } from "./waiting.ts";
 import type { SplitAxis } from "./terminal-layout.ts";
 import type { SystemNotification } from "./system-notifications.ts";
 import type { SubagentUsage } from "./subagent-usage.ts";
@@ -411,8 +412,8 @@ export type ServerMessage =
   | { type: "terminal.busy"; terminalId: string; command: string; tabId?: string }
   | { type: "terminal.cleared"; terminalId: string }
   | { type: "system-notification"; notification: SystemNotification }
-  /** Sent to the desktop app's notification socket, on connecting and whenever the number of conversations waiting for you may have changed. */
-  | { type: "waiting.counted"; count: number }
+  /** Sent to the desktop app's notification socket, on connecting and whenever the conversations waiting for you may have changed. */
+  | ({ type: "waiting.counted" } & WaitingSummary)
   /** Sent to the desktop app's notification socket, on connecting and whenever the number of running turns changes. */
   | { type: "running-turns.counted"; count: number }
   | { type: "host.code-changed" }

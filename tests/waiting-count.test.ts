@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
 import type { Conversation } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import { countWaiting, lastsUntilOpened, waitingByUrgency, waitingShowsOnDot } from "../shared/waiting.ts";
+import { countWaiting, lastsUntilOpened, summarizeWaiting, waitingByUrgency, waitingShowsOnDot } from "../shared/waiting.ts";
 import { tabTitle } from "../web/tab-title.ts";
 
 const c = (waitingFor: Conversation["waitingFor"]) => ({ waitingFor }) as Conversation;
@@ -36,20 +36,35 @@ function connect(hub: Hub, role: SocketData["role"]) {
   return received;
 }
 
-test("only the desktop app hears the count", () => {
+test("summarizes how many wait and the most urgent tone among them", () => {
+  expect(summarizeWaiting(["finished", "unread", "permission"])).toEqual({ count: 3, mostUrgent: "decision" });
+  expect(summarizeWaiting([])).toEqual({ count: 0, mostUrgent: null });
+});
+
+test("only the desktop app hears what waits", () => {
   const hub = new Hub();
   const page = connect(hub, "page");
   const notifier = connect(hub, "notifier");
-  hub.announceWaitingCount(3);
-  expect(notifier).toEqual([{ type: "waiting.counted", count: 3 }]);
+  hub.announceWaiting({ count: 3, mostUrgent: "decision" });
+  expect(notifier).toEqual([{ type: "waiting.counted", count: 3, mostUrgent: "decision" }]);
   expect(page).toEqual([]);
 });
 
-test("the desktop app hears the count only when it changed", () => {
+test("the desktop app hears what waits only when the count or the most urgent tone changed", () => {
   const hub = new Hub();
   const notifier = connect(hub, "notifier");
-  [0, 2, 2, 2, 1, 1, 0].forEach((count) => hub.announceWaitingCount(count));
-  expect(notifier.map((message) => message.type === "waiting.counted" && message.count)).toEqual([0, 2, 1, 0]);
+  hub.announceWaiting({ count: 2, mostUrgent: "done" });
+  hub.announceWaiting({ count: 2, mostUrgent: "done" });
+  hub.announceWaiting({ count: 2, mostUrgent: "decision" });
+  hub.announceWaiting({ count: 2, mostUrgent: "decision" });
+  hub.announceWaiting({ count: 1, mostUrgent: "decision" });
+  hub.announceWaiting({ count: 0, mostUrgent: null });
+  expect(notifier).toEqual([
+    { type: "waiting.counted", count: 2, mostUrgent: "done" },
+    { type: "waiting.counted", count: 2, mostUrgent: "decision" },
+    { type: "waiting.counted", count: 1, mostUrgent: "decision" },
+    { type: "waiting.counted", count: 0, mostUrgent: null },
+  ]);
 });
 
 test("only the desktop app hears the running turns count, and only when it changed", () => {

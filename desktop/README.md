@@ -98,7 +98,7 @@ Then start *Mirador* from your applications menu once, so *Open at login* regist
 
 | | macOS | Linux |
 | --- | --- | --- |
-| The app's menu | A menu bar item, with the number of conversations waiting for you next to it and as a badge on the Dock icon | A tray icon, and *Desktop app…* in Mirador's sidebar |
+| The app's menu | A menu bar item, with the number of conversations waiting for you next to it and as a badge on the Dock icon | A tray icon, with a red dot while a conversation needs you or failed and a green one while one is done, and *Desktop app…* in Mirador's sidebar |
 | Closing the window | The app stays in the menu bar; its Dock icon hides until the window comes back | The app keeps running; *Open* in the tray, or launching it again, brings the window back |
 | Launching it again | Brings the window back | Hands over to the running app (through `<data dir>/desktop-<port>.sock`) and quits |
 | Quit | The menu, or ⌘Q while the window is focused | The tray menu or *Desktop app…* |
@@ -256,7 +256,7 @@ Docker Desktop on a Mac runs only arm64 here, and not the release build: Electro
 
 ### Icons
 
-`assets/app-icon.svg` (the app icon) and `assets/tray-icon.svg` (the menu bar icon, drawn black and shown by macOS as a template image) are the sources. `scripts/render-icons.sh` renders `icon.iconset/` and `assets/tray-icon.png` from them; run it again after editing either. The page's favicon is `web/favicon.svg`.
+`assets/app-icon.svg` (the app icon) and `assets/tray-icon.svg` (the menu bar icon, drawn black and shown by macOS as a template image) are the sources. `scripts/render-icons.sh` renders `icon.iconset/`, `assets/tray-icon.png` and the tray icons with a waiting dot (`assets/tray-icon-needs-you.png`, `assets/tray-icon-done.png`) from them; run it again after editing either. The page's favicon is `web/favicon.svg`.
 
 ### Tests
 

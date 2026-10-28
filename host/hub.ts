@@ -6,6 +6,7 @@ import type { NewerVersion } from "../shared/newer-version.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { appKey, type AppDocumentState, type PluginUpdate } from "../shared/apps.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
+import type { WaitingSummary } from "../shared/waiting.ts";
 import { lowDataEvent, pageEvent } from "./low-data.ts";
 
 export interface Presence {
@@ -80,7 +81,7 @@ const once = (make: () => string) => {
 export class Hub {
   private readonly sockets = new Set<BrowserSocket>();
   private readonly notifiers = new Set<BrowserSocket>();
-  private announcedWaitingCount: number | null = null;
+  private announcedWaiting: WaitingSummary | null = null;
   private announcedRunningTurnsCount: number | null = null;
 
   add(socket: BrowserSocket) {
@@ -118,11 +119,11 @@ export class Hub {
     this.notifyEachDevice([...this.sockets, ...this.notifiers], notification);
   }
 
-  /** Only the desktop app's notification sockets hear it, and only when it changed; pages work the count out from the conversations they already hold. */
-  announceWaitingCount(count: number) {
-    if (count === this.announcedWaitingCount) return;
-    this.announcedWaitingCount = count;
-    const payload = JSON.stringify({ type: "waiting.counted", count } satisfies ServerMessage);
+  /** Only the desktop app's notification sockets hear it, and only when it changed; pages work it out from the conversations they already hold. */
+  announceWaiting(waiting: WaitingSummary) {
+    if (waiting.count === this.announcedWaiting?.count && waiting.mostUrgent === this.announcedWaiting.mostUrgent) return;
+    this.announcedWaiting = waiting;
+    const payload = JSON.stringify({ type: "waiting.counted", ...waiting } satisfies ServerMessage);
     this.notifiers.forEach((socket) => deliver(socket, payload));
   }
 

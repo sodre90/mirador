@@ -20,7 +20,7 @@ async function browserToken() {
   return signedIn.headers.get("set-cookie")!.split(";")[0]!.split("=")[1]!;
 }
 
-test("the waiting count shows in the browser tab title and travels to the desktop app", async ({ page }) => {
+test("the waiting count shows in the browser tab title and travels to the desktop app with the most urgent tone, which colours the tray icon's dot", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const first = await startConversation(page);
@@ -43,20 +43,20 @@ test("the waiting count shows in the browser tab title and travels to the deskto
     await test.step("a question in another conversation puts the count in the tab title and tells the desktop app", async () => {
       askInBackground(first, "Which layout?");
       await expect(page).toHaveTitle("(1) Mirador");
-      await untilLine("waiting 1");
+      await untilLine("waiting 1 decision");
     });
 
     await test.step("a second one raises it", async () => {
       askInBackground(second, "Which colour?");
       await expect(page).toHaveTitle("(2) Mirador");
-      await untilLine("waiting 2");
+      await untilLine("waiting 2 decision");
     });
 
     await test.step("answering lowers it, to nothing at the end", async () => {
       await page.locator(".workspace li").nth(0).click();
       await answerCanvasQuestion(page, "Yes");
       await expect(page).toHaveTitle("(1) Mirador");
-      await untilLine("waiting 1");
+      await untilLine("waiting 1 decision");
       await page.locator(".workspace li").nth(1).click();
       await answerCanvasQuestion(page, "Yes");
       await expect(page).toHaveTitle("Mirador");

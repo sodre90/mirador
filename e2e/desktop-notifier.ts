@@ -12,7 +12,7 @@ new HostNotifications({
   origin,
   token: () => token,
   show: (notification) => console.log(JSON.stringify(notification)),
-  showWaitingCount: (count) => console.log(`waiting ${count}`),
+  showWaiting: ({ count, mostUrgent }) => console.log(`waiting ${count}${mostUrgent ? ` ${mostUrgent}` : ""}`),
   showRunningTurnsCount: (count) => console.log(`running-turns ${count}`),
   showNewerVersion: (newerVersion) => newerVersion && console.log(`newer: ${newerVersionLabel(newerVersion)}`),
   builtFromCode,

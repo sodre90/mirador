@@ -30,6 +30,8 @@ export default {
     copy: {
       "assets/tray-icon.png": "views/assets/tray-icon.png",
       "icon.iconset/icon_32x32@2x.png": "views/assets/app-icon.png",
+      "assets/tray-icon-needs-you.png": "views/assets/tray-icon-needs-you.png",
+      "assets/tray-icon-done.png": "views/assets/tray-icon-done.png",
       ...(carriesMirador && { "release/mirador": "mirador" }),
     },
     mac: { createDmg: false, icons: "icon.iconset", codesign: true, entitlements: { "com.apple.security.device.audio-input": true } },

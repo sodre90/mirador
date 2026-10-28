@@ -3,6 +3,7 @@ import { HostNotifications, nativeNotification, notificationSocketUrl, type Noti
 import type { NewerVersion } from "../shared/newer-version.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
+import type { WaitingSummary } from "../shared/waiting.ts";
 
 const notification: SystemNotification = { kind: "question", conversationId: "c1", title: "Fix the tray menu", workspace: "mirador", body: "Asks: Which layout?" };
 
@@ -32,14 +33,14 @@ class FakeSocket implements NotificationSocket {
 function listen(token: () => string | null = () => "secret") {
   const sockets: FakeSocket[] = [];
   const shown: SystemNotification[] = [];
-  const counts: number[] = [];
+  const waitings: WaitingSummary[] = [];
   const runningTurnsCounts: number[] = [];
   const newerVersions: (NewerVersion | null)[] = [];
   const notifications = new HostNotifications({
     origin: "http://127.0.0.1:4600",
     token,
     show: (shownNotification) => void shown.push(shownNotification),
-    showWaitingCount: (count) => void counts.push(count),
+    showWaiting: (summary) => void waitings.push(summary),
     showRunningTurnsCount: (count) => void runningTurnsCounts.push(count),
     showNewerVersion: (newerVersion) => void newerVersions.push(newerVersion),
     open: (url, headers) => {
@@ -49,7 +50,7 @@ function listen(token: () => string | null = () => "secret") {
     },
     retryDelayMilliseconds: 1,
   });
-  return { notifications, sockets, shown, counts, runningTurnsCounts, newerVersions };
+  return { notifications, sockets, shown, waitings, runningTurnsCounts, newerVersions };
 }
 
 describe("host notifications in the desktop app", () => {
@@ -69,11 +70,19 @@ describe("host notifications in the desktop app", () => {
     notifications.stop();
   });
 
-  test("shows the number of conversations waiting that the host sends", () => {
-    const { notifications, sockets, counts } = listen();
+  test("shows the number of conversations waiting and the most urgent tone that the host sends", () => {
+    const { notifications, sockets, waitings } = listen();
     notifications.start();
-    sockets[0]!.receive({ type: "waiting.counted", count: 2 });
-    expect(counts).toEqual([2]);
+    sockets[0]!.receive({ type: "waiting.counted", count: 2, mostUrgent: "decision" });
+    expect(waitings).toEqual([{ count: 2, mostUrgent: "decision" }]);
+    notifications.stop();
+  });
+
+  test("takes no urgent tone from an older host that sends only the count", () => {
+    const { notifications, sockets, waitings } = listen();
+    notifications.start();
+    sockets[0]!.receive({ type: "waiting.counted", count: 2 } as unknown as ServerMessage);
+    expect(waitings).toEqual([{ count: 2, mostUrgent: null }]);
     notifications.stop();
   });
 
@@ -89,16 +98,16 @@ describe("host notifications in the desktop app", () => {
     notifications.stop();
   });
 
-  test("forgets the count when the host goes away, and takes the next one on reconnecting", async () => {
-    const { notifications, sockets, counts } = listen();
+  test("forgets what waits when the host goes away, and takes the next summary on reconnecting", async () => {
+    const { notifications, sockets, waitings } = listen();
     notifications.start();
-    sockets[0]!.receive({ type: "waiting.counted", count: 2 });
+    sockets[0]!.receive({ type: "waiting.counted", count: 2, mostUrgent: "done" });
     sockets[0]!.hostGoesAway();
-    expect(counts).toEqual([2, 0]);
+    expect(waitings).toEqual([{ count: 2, mostUrgent: "done" }, { count: 0, mostUrgent: null }]);
     await Bun.sleep(20);
     expect(sockets).toHaveLength(2);
-    sockets[1]!.receive({ type: "waiting.counted", count: 1 });
-    expect(counts).toEqual([2, 0, 1]);
+    sockets[1]!.receive({ type: "waiting.counted", count: 1, mostUrgent: "decision" });
+    expect(waitings.at(-1)).toEqual({ count: 1, mostUrgent: "decision" });
     notifications.stop();
   });
 
