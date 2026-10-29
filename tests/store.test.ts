@@ -58,19 +58,19 @@ function commitsInWriteAheadLog(databasePath: string) {
 }
 
 describe("Store", () => {
-  test("a new workspace goes first and a new conversation last, and they keep the order they are given", () => {
+  test("a new workspace and a new conversation go first, and they keep the order they are given", () => {
     const { store, conversation } = seededStore();
     store.insertWorkspace({ id: "w2", name: "second", path: "/tmp/second", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 2 });
     const later = store.insertConversation({ ...conversation, id: "c2", createdAt: 2 });
     const elsewhere = store.insertConversation({ ...conversation, id: "c3", workspaceId: "w2", createdAt: 3 });
     expect(store.listWorkspaces().map(({ id }) => id)).toEqual(["w2", "w1"]);
-    expect([later.position, elsewhere.position]).toEqual([1, 0]);
+    expect([later.position, elsewhere.position]).toEqual([-1, 0]);
 
     store.setSidebarOrder(["w1", "w2"]);
-    store.setConversationOrder(["c2", "c1"]);
+    store.setConversationOrder(["c1", "c2"]);
     expect(store.listWorkspaces().map(({ id }) => id)).toEqual(["w1", "w2"]);
-    expect(store.findConversation("c2")?.position).toBe(0);
-    expect(store.findConversation("c1")?.position).toBe(1);
+    expect(store.findConversation("c1")?.position).toBe(0);
+    expect(store.findConversation("c2")?.position).toBe(1);
   });
 
   test("numbers events per conversation from 1 in append order", () => {

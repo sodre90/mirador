@@ -16,7 +16,7 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-test("a workspace is a card: its folder under the name, new conversations at the bottom, the agent on a chip", async ({ page }) => {
+test("a workspace is a card: its folder under the name, new conversations on top, the agent on a chip", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const card = workspaceCard(page, host.projectDir);
@@ -26,9 +26,9 @@ test("a workspace is a card: its folder under the name, new conversations at the
   const second = await startConversation(page);
   const rows = card.locator("li");
   await expect(rows).toHaveCount(2);
-  await expect(rows.last()).toHaveClass(/selected/);
+  await expect(rows.first()).toHaveClass(/selected/);
   await expect(page).toHaveURL(new RegExp(`#/c/${second}$`));
-  await rows.first().click();
+  await rows.last().click();
   await expect(page).toHaveURL(new RegExp(`#/c/${first}$`));
 
   const chip = card.locator(".agent-chip-label");

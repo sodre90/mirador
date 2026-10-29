@@ -541,11 +541,11 @@ export class Store {
     return row ? toConversation(row) : undefined;
   }
 
-  /** Adds the conversation after the others of its workspace. */
+  /** Adds the conversation before the others of its workspace. */
   insertConversation(conversation: Omit<Conversation, "position">): Conversation {
-    const { next: position } = this.db
-      .query("SELECT COALESCE(MAX(position) + 1, 0) AS next FROM conversations WHERE workspace_id = ?")
-      .get(conversation.workspaceId) as { next: number };
+    const { first: position } = this.db
+      .query("SELECT COALESCE(MIN(position) - 1, 0) AS first FROM conversations WHERE workspace_id = ?")
+      .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
         `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, created_at, updated_at)

@@ -7,7 +7,7 @@ import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, createProfile, sendMessage, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, sendMessage, signIn, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -71,13 +71,17 @@ test("forking a terminal session replays its history into a new conversation and
   await reopened.getByRole("button", { name: "Close" }).click();
 });
 
-test("continuing a terminal session in place gives the agent its earlier context", async ({ page }) => {
+test("continuing a terminal session in place gives the agent its earlier context, on top of the workspace", async ({ page }) => {
   await signIn(page, host);
   const dialog = await openSessionsDialog(page);
   await terminalSessionRow(dialog).getByRole("button", { name: "Continue" }).click();
 
   await expect(page.locator(".chat-header h2")).toContainText(MARKER);
   await expect(page.locator(".chat-header h2")).not.toContainText("Fork: ");
+  const rows = workspaceCard(page, host.projectDir).locator("li .conversation-title");
+  await expect(rows).toHaveCount(2);
+  await expect(rows.first()).not.toContainText("Fork: ");
+  await expect(rows.last()).toContainText("Fork: ");
   await expect(page.locator(".timeline")).toContainText(MARKER, { timeout: 30_000 });
 
   const requestsBefore = gateway.messageRequests().length;

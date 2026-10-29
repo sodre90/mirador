@@ -65,14 +65,14 @@ test("conversations, workspaces, the canvas and the dialogs are all reachable fr
   await expect(page.locator(".workspace").nth(0).locator("li")).toHaveCount(2);
 
   await page.keyboard.press("Alt+ArrowDown");
-  await expectSelected(page, first);
-  await page.keyboard.press("Alt+ArrowDown");
   await expectSelected(page, second);
+  await page.keyboard.press("Alt+ArrowDown");
+  await expectSelected(page, first);
   await page.keyboard.press("Alt+Shift+ArrowDown");
   await expectSelected(page, inSecondProject);
   await page.keyboard.press("Alt+Shift+ArrowUp");
   await expectSelected(page, second);
-  await page.keyboard.press("Alt+Digit1");
+  await page.keyboard.press("Alt+Digit2");
   await expectSelected(page, first);
 
   await page.keyboard.press(`${primary}+KeyK`);

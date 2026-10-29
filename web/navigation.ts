@@ -8,9 +8,8 @@ export interface NavigationState {
 }
 
 /**
- * A workspace's conversations in the order the sidebar lists them: where the user put them, a new one last, next to the
- * button that made it, and one a plugin's tool started right under the conversation that started it, until the user
- * dismisses its task.
+ * A workspace's conversations in the order the sidebar lists them: where the user put them, a new one first, and one a
+ * plugin's tool started right under the conversation that started it, until the user dismisses its task.
  */
 export function conversationsIn(state: Pick<NavigationState, "conversations">, workspaceId: string): Conversation[] {
   const inOrder = state.conversations.filter((conversation) => conversation.workspaceId === workspaceId && !conversation.startedBy?.dismissed).sort(inSidebarOrder);
