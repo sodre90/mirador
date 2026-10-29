@@ -16,7 +16,7 @@ test.beforeAll(async ({ browser }) => {
   api.limited = false;
   await api.start();
   await host.start();
-  job = spawn("sleep", ["600"]);
+  job = spawn(process.execPath, ["-e", "setTimeout(() => {}, 600_000)"], { stdio: "ignore" });
   page = await browser.newPage();
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
