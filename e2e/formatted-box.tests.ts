@@ -266,6 +266,21 @@ export function formattedBoxTests() {
     await expectSent(`Look: ${code}`);
   });
 
+  test("Enter pressed before the page shows a paste still sends what was pasted", async () => {
+    await page.keyboard.type("Look: ");
+    const before = promptsSoFar().length;
+    await box().evaluate(async (element) => {
+      const transfer = new DataTransfer();
+      transfer.setData("text/plain", "pasted");
+      element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+    });
+    await expect.poll(() => promptsSoFar().slice(before)).toContain("Look: pasted");
+    await waitForTurnToEnd(page);
+    await expect(box()).toHaveText("");
+  });
+
   test("in a code block, Enter and Shift+Enter each add a line, however many are empty, and ↓ at its end steps out of it", async () => {
     await page.keyboard.type("```");
     await page.keyboard.type("abc");

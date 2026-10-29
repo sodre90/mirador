@@ -1691,6 +1691,7 @@ function Composer({
     images.clearAfterSending();
   };
   const send = (afterTurn = false, message = text) => {
+    const command = commandIn(message);
     if (!message.trim() || command === "" || attaching || stoppedEdit.goingBack) return;
     if (isLoginCommand(message)) {
       requestLogin(conversation.id);
@@ -1823,7 +1824,8 @@ function Composer({
     const lastQueued = queued.at(-1);
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && enterSends(event)) {
       event.preventDefault();
-      send(afterTurnFor(event));
+      // The formatted box tells its text as it changes, but this handler may be the last render's, from before.
+      send(afterTurnFor(event), event.currentTarget.value);
     } else if (event.key === "ArrowUp" && !text && lastQueued) {
       event.preventDefault();
       pullBack(lastQueued);
