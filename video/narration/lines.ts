@@ -1,7 +1,7 @@
 /** Whose voice a line is in: the narrator's, or one of the people heard in the voice scene. */
 export const VOICE = process.env.MIRADOR_VIDEO_VOICE ?? "am_fenrir";
-const USER_VOICE = "af_heart";
-const AGENT_VOICE = "am_puck";
+const USER_VOICE = "am_puck";
+const AGENT_VOICE = "af_heart";
 
 /** A line in a voice other than the narrator's. */
 type Voiced = { text: string; voice: string };

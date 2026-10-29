@@ -239,7 +239,7 @@ async function setUpVoice(page: Page) {
   await speaking.getByLabel("Send right away").check();
   await useOwnVoiceServer(voiceSection(settings, "Translating and summing up"), "Voice model", { url: voiceAddress(), model: "gemma" });
   const replies = voiceSection(settings, "When the agent replies");
-  await useOwnVoiceServer(replies, "Read aloud", { url: voiceAddress(), model: "kokoro", voice: "bm_george" });
+  await useOwnVoiceServer(replies, "Read aloud", { url: voiceAddress(), model: "kokoro", voice: "af_heart" });
   await replies.getByLabel("Keep talking").check();
   await expect(replies.getByRole("status")).toHaveText("Saved.");
   await settings.getByRole("button", { name: "Close" }).click();
