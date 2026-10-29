@@ -6,7 +6,7 @@
     "@agentclientprotocol/claude-agent-acp": "0.84.0",
     "@agentclientprotocol/sdk": "1.5.1",
     "@liuser/pi-acp": "0.2.0",
-    "@modelcontextprotocol/server": "2.2.0",
+    "@modelcontextprotocol/server": "2.3.1",
     "pi-acp": "0.0.34",
     "zod": "4"
   }
