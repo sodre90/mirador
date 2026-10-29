@@ -27,7 +27,7 @@ export const LINES = {
   point: "Point at anything it drew, and ask about it, or have it changed.",
   plugins: "Mirador grows with plugins. Your agent knows the official ones, and installs one when you say so.",
   media: "Like Media. Mark what's wrong on the frame, and the agent cuts the video and renders it.",
-  agents: "Mirador isn't another agent. It runs the ones you already have, Claude Code, opencode or pi, and lets them work together.",
+  agents: "Mirador isn't another agent. It runs the ones you already have, and lets them work together.",
   delegate: "Here, Claude Code hands a long read to a local model on opencode, then checks what comes back.",
   jobs: "Leave the long jobs running, like the tests on your build server. Mirador keeps watch, and wakes your agent when they're done.",
   voice: "Or just talk to it.",

@@ -262,11 +262,11 @@ export const STORYBOARD: Scene[] = [
     id: "delegate",
     clip: "delegate",
     shots: [
-      { from: ["typing", -0.3], to: "sent", speed: 1.8 },
-      { from: "sent", to: ["delegated", 0.4], speed: 1.4 },
-      { from: ["delegated", 0.4], to: ["unfolded", 0.6], speed: 1.1 },
-      { from: ["unfolded", 0.6], to: ["replied", -0.3], speed: 1.5 },
-      { from: ["replied", -0.3], to: ["checked", 2], speed: 1.2 },
+      { from: ["typing", -0.3], to: "sent", speed: 2 },
+      { from: "sent", to: ["delegated", 0.4], speed: 1.6 },
+      { from: ["delegated", 0.4], to: ["unfolded", 0.6], speed: 1.2 },
+      { from: ["unfolded", 0.6], to: ["replied", -0.3], speed: 2 },
+      { from: ["replied", -0.3], to: ["checked", 1.6], speed: 1.5 },
     ],
     camera: [
       { at: ["typing", -0.3], look: "composer", zoom: 1.6 },
@@ -277,7 +277,7 @@ export const STORYBOARD: Scene[] = [
     captions: [{ kicker: "Your agents, together", title: "Claude Code hands the reading to opencode.", at: 0.3, seconds: 3.4, side: "right" }],
     narration: [
       { line: "agents", at: 0.4 },
-      { line: "delegate", at: 8.6 },
+      { line: "delegate", at: 6.2 },
     ],
   },
   {

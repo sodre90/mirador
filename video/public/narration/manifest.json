@@ -114,9 +114,9 @@
       "speed": 1
     },
     "agents": {
-      "text": "Mirador isn't another agent. It runs the ones you already have, Claude Code, opencode or pi, and lets them work together.",
+      "text": "Mirador isn't another agent. It runs the ones you already have, and lets them work together.",
       "file": "agents.wav",
-      "seconds": 7.978666666666666,
+      "seconds": 5.546666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },
