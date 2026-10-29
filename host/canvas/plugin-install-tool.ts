@@ -4,8 +4,6 @@ import type { PluginCatalog } from "../plugin-catalog.ts";
 import { PLUGIN_INSTALL_TOOL } from "./guidance.ts";
 import { INSTALL_ANSWER, type CanvasService } from "./service.ts";
 
-const loadedUpFront = { "anthropic/alwaysLoad": true };
-
 const escaped = (text: string) => text.replace(/[&<>"]/g, (character) => `&#${character.charCodeAt(0)};`);
 
 /** The install question: what the plugin does and where its code comes from, for the user to decide on. */
@@ -23,7 +21,6 @@ export function registerPluginInstallTool(server: McpServer, catalog: PluginCata
         name: z.string().min(1).describe("The plugin's name, as the list of official plugins gives it, e.g. media."),
         reason: z.string().min(1).describe("One sentence on why it helps with what the user is doing now."),
       }),
-      _meta: loadedUpFront,
     },
     async ({ name, reason }, ctx) => {
       try {

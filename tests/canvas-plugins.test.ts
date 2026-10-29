@@ -3,6 +3,7 @@ import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { claudeSessionMeta } from "../host/acp/harnesses.ts";
+import type { AppDocuments } from "../host/apps/documents.ts";
 import { loadPlugins } from "../host/apps/plugins.ts";
 import { canvasInstructions, canvasUseGuidance } from "../host/canvas/guidance.ts";
 import type { PluginCanvasItem } from "../shared/model.ts";
@@ -39,6 +40,17 @@ describe("CanvasPlugins", () => {
     expect(JSON.stringify(properties.questions.items)).not.toMatch(/"description":"/);
   });
 
+  test("the app tools load on demand, and the instructions name the installed apps so the agent searches for them", async () => {
+    const apps = { installed: () => [{ name: "counter", title: "Counter" }] } as unknown as AppDocuments;
+    const { mcpRequest } = await canvasPluginHost(FIXTURES, undefined, {}, { apps });
+    const { tools } = await mcpRequest("tools/list", {});
+    const appTools = tools.filter(({ name }: { name: string }) => ["app_open", "apply", "app_run", "app_state"].includes(name));
+    expect(appTools).toHaveLength(4);
+    expect(appTools.filter(({ _meta }: { _meta?: Record<string, unknown> }) => _meta?.["anthropic/alwaysLoad"])).toEqual([]);
+    const { instructions } = await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
+    expect(instructions).toContain("\n- app_open: open an app the user installed (counter (Counter)) on a file of this workspace");
+  });
+
   test("official plugins not installed join the guidance, with the tool that installs one, pre-allowed since it asks the user first", async () => {
     const { plugins } = await setUp();
     const offered = [{ name: "media", title: "Media", description: "Edit a video.", recommendWhen: "the user edits a video", repo: "https://example.com/media.git" }];
@@ -50,6 +62,15 @@ describe("CanvasPlugins", () => {
 
     plugins.offersFrom({ notInstalled: () => [] } as unknown as PluginCatalog);
     expect(plugins.guidance.toolNames).not.toContain("plugin_install");
+  });
+
+  test("plugin_install loads on demand, since the instructions name it with the plugins it offers", async () => {
+    const offered = [{ name: "media", title: "Media", description: "Edit a video.", recommendWhen: "the user edits a video", repo: "https://example.com/media.git" }];
+    const { mcpRequest } = await canvasPluginHost(FIXTURES, undefined, {}, { catalog: { notInstalled: () => offered } as unknown as PluginCatalog });
+    const { tools } = await mcpRequest("tools/list", {});
+    const install = tools.find(({ name }: { name: string }) => name === "plugin_install");
+    expect(install).toBeDefined();
+    expect(install._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
   });
 
   test("a tool publishes an item, and another changes it in place as the agent's change", async () => {

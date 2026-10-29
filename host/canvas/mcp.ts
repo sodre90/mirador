@@ -3,13 +3,13 @@ import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
 import { JobWaitRefused, jobWaitToolDescription } from "../job-waits.ts";
-import { canvasInstructions, NO_CANVAS_PLUGINS } from "./guidance.ts";
+import { canvasInstructions, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./guidance.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { answerAsToolResult, type CanvasService, type RenderOutcome } from "./service.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import type { AppDocuments } from "../apps/documents.ts";
-import { registerAppTools } from "../apps/tools.ts";
+import { appToolsGuidance, registerAppTools } from "../apps/tools.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { registerPluginInstallTool } from "./plugin-install-tool.ts";
 
@@ -67,6 +67,11 @@ const toolError = (text: string) => ({ isError: true, content: [{ type: "text" a
 /** opencode 2 names the session that calls a tool, its subagents' included. */
 const OPENCODE_SESSION_META = "ai.opencode/sessionID";
 
+const hasApps = (apps: AppDocuments | null): apps is AppDocuments => apps !== null && apps.installed().length > 0;
+
+const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null): CanvasPluginGuidance =>
+  hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps)] } : guidance;
+
 function buildCanvasServer(
   conversationId: string,
   canvas: CanvasService,
@@ -78,7 +83,7 @@ function buildCanvasServer(
 ) {
   const server = new McpServer(
     { name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION },
-    { instructions: canvasInstructions(assetsOrigin, canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS) },
+    { instructions: canvasInstructions(assetsOrigin, withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps)) },
   );
 
   /**
@@ -199,7 +204,7 @@ function buildCanvasServer(
     },
   );
 
-  if (apps && apps.installed().length > 0) registerAppTools(server, apps, conversations, callingConversation);
+  if (hasApps(apps)) registerAppTools(server, apps, conversations, callingConversation);
   canvasPlugins?.registerTools(server, callingConversation);
   if (catalog && catalog.notInstalled().length > 0) registerPluginInstallTool(server, catalog, canvas, callingConversation);
 

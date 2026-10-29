@@ -8,10 +8,16 @@ import { AppProblem } from "./plugins.ts";
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 const toolText = (text: string) => ({ content: [{ type: "text" as const, text }] });
 
-/** With tool search on, Claude Code hides MCP tools until the agent searches for them; an agent asked to change an app's document should find these at once. */
-const loadedUpFront = { "anthropic/alwaysLoad": true };
-
 const appNameSchema = z.string().optional().describe("The app, when more than one is open in the workspace.");
+
+const installedNames = (apps: AppDocuments) => apps.installed().map(({ name, title }) => `${name} (${title})`).join(", ");
+
+/**
+ * The canvas instructions' line on the app tools. Few conversations open an app, so with tool search on, Claude Code
+ * leaves the tools out until the agent searches for them, and this line is how the agent knows they are there.
+ */
+export const appToolsGuidance = (apps: AppDocuments) =>
+  `- app_open: open an app the user installed (${installedNames(apps)}) on a file of this workspace, where the user sees it live; then app_state reads its document, apply changes it and app_run runs its tasks.`;
 
 /**
  * The same four tools in every workspace, whichever apps are open there: the tool list never changes, so agents
@@ -23,7 +29,7 @@ export function registerAppTools(
   conversations: ConversationService,
   callingConversation: (ctx: ServerContext) => Promise<string>,
 ) {
-  const names = apps.installed().map(({ name, title }) => `${name} (${title})`).join(", ");
+  const names = installedNames(apps);
   const answered = async (ctx: ServerContext, answer: (workspaceId: string, conversationId: string) => Promise<string> | string) => {
     try {
       const conversationId = await callingConversation(ctx);
@@ -42,7 +48,6 @@ export function registerAppTools(
         app: z.string().describe("The app's name, e.g. one of those installed."),
         file: z.string().min(1).describe("The document's path, or the path of a file the app edits, relative to the workspace."),
       }),
-      _meta: loadedUpFront,
     },
     ({ app, file }, ctx) =>
       answered(ctx, async (workspaceId, conversationId) => {
@@ -61,7 +66,6 @@ export function registerAppTools(
         op: z.record(z.string(), z.unknown()).describe('The operation, as the app defines it, e.g. { "op": "add", "by": 2 }.'),
         app: appNameSchema,
       }),
-      _meta: loadedUpFront,
     },
     ({ op, app }, ctx) =>
       answered(ctx, async (workspaceId, conversationId) => {
@@ -80,7 +84,6 @@ export function registerAppTools(
         task: z.string().describe("The task's name, as app_state lists it."),
         app: appNameSchema,
       }),
-      _meta: loadedUpFront,
     },
     ({ task, app }, ctx) =>
       answered(ctx, (workspaceId, conversationId) => {
@@ -95,7 +98,6 @@ export function registerAppTools(
     {
       description: "The document of the app open in this workspace, in words, with its latest changes, the user's included. Read it before changing the document, and again when an operation names something that isn't there.",
       inputSchema: z.object({ app: appNameSchema }),
-      _meta: loadedUpFront,
     },
     ({ app }, ctx) =>
       answered(ctx, (workspaceId, conversationId) => {
