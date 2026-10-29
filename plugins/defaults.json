@@ -1,6 +1,6 @@
 {
   "plugins": [
-    { "name": "checklist", "repo": "https://github.com/sodre90/mirador-checklist.git", "tag": "v1.0.2" },
+    { "name": "checklist", "repo": "https://github.com/sodre90/mirador-checklist.git", "tag": "v1.0.3" },
     { "name": "review", "repo": "https://github.com/sodre90/mirador-review.git", "tag": "v1.0.7" }
   ]
 }
