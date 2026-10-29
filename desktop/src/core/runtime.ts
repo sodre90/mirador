@@ -56,6 +56,7 @@ export interface DataPaths {
   browserToken: string;
   /** Written before the app hands over to the updater, and cleared by the next start: that start is running new files. */
   pendingUpdate: string;
+  windowFrame: string;
 }
 
 export const dataPaths = (dataDir: string): DataPaths => ({
@@ -68,6 +69,7 @@ export const dataPaths = (dataDir: string): DataPaths => ({
   desktopLog: join(dataDir, "logs", "desktop.log"),
   browserToken: join(dataDir, "browser-token"),
   pendingUpdate: join(dataDir, "desktop-update-pending"),
+  windowFrame: join(dataDir, "desktop-window.json"),
 });
 
 export const authUrl = (runtime: Runtime, token: string) => `${runtime.origin}/auth?token=${token}`;

@@ -62,6 +62,7 @@ describe("runtime", () => {
       desktopLog: join("/data", "logs", "desktop.log"),
       browserToken: join("/data", "browser-token"),
       pendingUpdate: join("/data", "desktop-update-pending"),
+      windowFrame: join("/data", "desktop-window.json"),
     });
   });
 

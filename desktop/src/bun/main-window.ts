@@ -1,6 +1,7 @@
-import Electrobun, { BrowserWindow, PATHS, Utils } from "electrobun/main";
+import Electrobun, { BrowserWindow, PATHS, Screen, Utils } from "electrobun/main";
 import { join } from "node:path";
 import { navigationRules } from "../core/navigation.ts";
+import { frameToOpenWith, readWindowFrame, WindowFrameKeeper } from "../core/window-frame.ts";
 import { giveWindowIcon } from "../core/window-icon.ts";
 import { setDockIconVisible } from "./dock.ts";
 
@@ -8,7 +9,7 @@ interface HostMessageEvent {
   data?: { detail?: unknown };
 }
 
-const WINDOW_SIZE = { width: 1280, height: 800 };
+const DEFAULT_WINDOW_SIZE = { width: 1280, height: 800 };
 
 /** Windows takes the icon of a window's title bar and taskbar button from the window, and Electrobun gives it none. */
 function showAppIcon(window: BrowserWindow) {
@@ -17,6 +18,7 @@ function showAppIcon(window: BrowserWindow) {
 
 export class MainWindow {
   private window: BrowserWindow | null = null;
+  private readonly frameKeeper: WindowFrameKeeper;
 
   constructor(
     private readonly title: string,
@@ -24,7 +26,11 @@ export class MainWindow {
     /** The canvas and the other machines, which the page shows in frames. */
     private readonly framedOrigins: string[],
     private readonly onPageMessage: (detail: unknown) => void,
-  ) {}
+    private readonly frameFile: string,
+  ) {
+    this.frameKeeper = new WindowFrameKeeper(frameFile);
+    Electrobun.events.on("before-quit", () => this.frameKeeper.flush());
+  }
 
   get isOpen() {
     return this.window !== null;
@@ -39,11 +45,15 @@ export class MainWindow {
     setDockIconVisible(true);
     if (this.window) return this.bringToFront();
     // sandbox keeps Electrobun's bridge secret out of every frame, including the agents' canvas iframes.
-    const window = new BrowserWindow({ title: this.title, url, frame: WINDOW_SIZE, sandbox: true });
+    const window = new BrowserWindow({ title: this.title, url, frame: this.openingFrame(), sandbox: true });
     showAppIcon(window);
     // The navigationRules constructor option is ignored by Electrobun 2.0.2; only this call takes effect.
     window.webview.setNavigationRules(navigationRules([this.appOrigin, ...this.framedOrigins]));
+    const rememberFrame = () => this.frameKeeper.remember(window.getFrame());
+    window.on("move", rememberFrame);
+    window.on("resize", rememberFrame);
     window.on("close", () => {
+      this.frameKeeper.flush();
       this.window = null;
       setDockIconVisible(false);
     });
@@ -51,6 +61,11 @@ export class MainWindow {
     // agents' canvas pages included. The app's own page asks for its links with the nonce instead (web/outside-links.ts).
     Electrobun.events.on(`host-message-${window.webview.id}`, (event: unknown) => this.onPageMessage((event as HostMessageEvent).data?.detail));
     this.window = window;
+  }
+
+  private openingFrame() {
+    const workAreas = Screen.getAllDisplays().map((display) => display.workArea);
+    return frameToOpenWith(readWindowFrame(this.frameFile), workAreas, DEFAULT_WINDOW_SIZE);
   }
 
   async closeAfterAsking() {
