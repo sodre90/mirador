@@ -349,7 +349,7 @@ test("rewinding a pi conversation to a turn keeps a message pi read in the turn 
   await expect(page.locator(".chat-header:visible .harness")).toHaveText("pi");
   const command = "RUN sleep 3; echo slept";
   await sendMessage(page, command);
-  await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress").first()).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress", { hasText: "sleep 3; echo slept" })).toBeVisible({ timeout: 60_000 });
   model.hold();
   await expect.poll(() => model.requests.findLast(({ tools }) => (tools ?? []).length > 0)?.messages.at(-1)?.role, { timeout: 60_000 }).toBe("tool");
   const composer = page.locator(".composer:visible textarea");
