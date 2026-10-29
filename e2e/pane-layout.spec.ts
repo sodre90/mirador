@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, openSettings, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseInSettings, openSettings, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -204,4 +204,32 @@ test("the sidebar resizes between its limits, keeps its width after a reload, an
   expect(await sidebarWidth()).toBe(180);
   await divider.dblclick();
   expect(await sidebarWidth()).toBe(256);
+});
+
+test("at its narrowest and the largest text size, the sidebar keeps its header buttons in view and never scrolls sideways", async ({ page }) => {
+  await signIn(page, host);
+  await chooseInSettings(page, "Text size", "200%");
+  const divider = page.getByRole("separator", { name: "Resize the sidebar" });
+  const box = (await divider.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + 200);
+  await page.mouse.down();
+  await page.mouse.move(0, box.y + 200, { steps: 10 });
+  await page.mouse.up();
+  expect((await page.locator(".sidebar").boundingBox())!.width).toBe(180);
+
+  const sidebarScroll = page.locator(".sidebar-scroll");
+  const scrollRight = await sidebarScroll.evaluate((element) => element.getBoundingClientRect().left + element.clientWidth);
+  const headerButtons = (await page.locator(".sidebar-header-buttons").boundingBox())!;
+  expect(headerButtons.x + headerButtons.width).toBeLessThanOrEqual(scrollRight);
+
+  await sidebarScroll.evaluate((element) => {
+    const tooWide = document.createElement("div");
+    tooWide.style.width = "400px";
+    tooWide.style.height = "1px";
+    element.prepend(tooWide);
+  });
+  await sidebarScroll.hover();
+  await page.mouse.wheel(200, 0);
+  await page.waitForTimeout(200);
+  expect(await sidebarScroll.evaluate((element) => element.scrollLeft)).toBe(0);
 });
