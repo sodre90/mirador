@@ -15,11 +15,12 @@ const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
 const setUp = () => canvasPluginHost(FIXTURES);
 
 describe("CanvasPlugins", () => {
-  test("a plugin's tools join the canvas server, pre-allowed, with its lines of guidance", async () => {
+  test("a plugin's tools join the canvas server, pre-allowed and loaded up front unless on demand, with its lines of guidance", async () => {
     const { plugins, mcpRequest } = await setUp();
     const { tools } = await mcpRequest("tools/list", {});
     expect(tools.map(({ name }: { name: string }) => name)).toEqual(expect.arrayContaining(["show", "show_card", "change_card", "show_report", "change_verdict", "track_steps", "finish_step"]));
     expect(tools.find(({ name }: { name: string }) => name === "show_card")).toMatchObject({ description: "Show a card the user can press.", _meta: { "anthropic/alwaysLoad": true } });
+    expect(tools.find(({ name }: { name: string }) => name === "change_card")._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
 
     const { guidance } = plugins;
     expect(guidance.toolNames).toEqual(["show_card", "change_card", "show_report", "change_verdict", "track_steps", "finish_step", "hand_over"]);

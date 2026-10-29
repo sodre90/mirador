@@ -37,6 +37,7 @@ const host: CanvasHost<BoardData> = {
     },
     change_card: {
       description: "Change the text of the newest card.",
+      onDemand: true,
       input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
       run(input, context) {
         const card = newest(context, "card");

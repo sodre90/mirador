@@ -118,6 +118,8 @@ export interface CanvasTool<Data = unknown> {
   input: Record<string, unknown>;
   /** Resolves to the text the agent gets. What it throws reaches the agent as a tool error, so its message should say what would work. */
   run(input: unknown, context: CanvasToolContext<Data>): string | Promise<string>;
+  /** Left out of every request until the agent searches for it, for a tool rarely called: Claude Code with tool search on. */
+  onDemand?: boolean;
 }
 
 /** What the agent hears with the user's next message; heard() runs once that message went. */

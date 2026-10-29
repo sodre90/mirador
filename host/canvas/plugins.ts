@@ -172,7 +172,8 @@ export class CanvasPlugins {
   registerTools(server: McpServer, callingConversation: (ctx: ServerContext) => Promise<string>) {
     for (const plugin of this.plugins) {
       for (const [name, tool] of Object.entries(plugin.host.tools)) {
-        server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), _meta: loadedUpFront }, async (input, ctx) => {
+        const loading = tool.onDemand ? {} : { _meta: loadedUpFront };
+        server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading }, async (input, ctx) => {
           try {
             const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx)));
             return { content: [{ type: "text" as const, text: String(text) }] };
