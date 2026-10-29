@@ -60,6 +60,7 @@ import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { miradorCommandEnvironment } from "./acp/environment.ts";
 import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta } from "./acp/harnesses.ts";
+import { canvasFollowUp, canvasUseOf, isCanvasFollowUp } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { agentLogsDirectory, type HostConfig } from "./config.ts";
@@ -110,8 +111,6 @@ const AUTOMATIC_CONTINUES_IN_A_ROW = 2;
 const STALL_NUDGES_IN_A_ROW = 2;
 /** What the nudge says: the agent ended its turn on a ":", meaning to go on. */
 const CONTINUE_AFTER_STALL = "Continue where you left off: your reply ended announcing a next step without taking it.";
-/** How much of the end of a turn's reply is kept, to tell whether it stopped at a ":". */
-const REPLY_END_KEPT = 200;
 /** setTimeout fires at once when asked to wait longer than this, about 24.8 days. */
 const LONGEST_TIMER_MS = 2 ** 31 - 1;
 /** How much of a started conversation's reply the caller's list of delegated tasks shows. */
@@ -170,8 +169,10 @@ interface TurnInProgress {
   awaitedUser: boolean;
   /** The turn began with a script's message (`mirador message`, or a job wait's resume): part of a run nobody may be watching. */
   fromScript: boolean;
-  /** The end of the turn's own reply since its last tool call, to tell a turn that stopped at a step it announced from one that finished. */
-  replyEnd: string;
+  /** The turn's own reply since its last tool call: whether it stopped at a step it announced, or asked in chat what ask should have. */
+  reply: string;
+  /** When each of the turn's own tool calls started, to tell whether a page it showed was its last step. */
+  toolCallsAt: number[];
   /** What kept queued messages out of the turn when the host last tried to steer them in, as the host log says it. */
   queuedMessagesKeptOutBy?: string | null;
 }
@@ -711,7 +712,7 @@ export class ConversationService {
     this.endUsageLimitWait(runtime);
     let endTurn = () => {};
     runtime.turnEnded = new Promise((resolve) => (endTurn = resolve));
-    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, replyEnd: "" };
+    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", toolCallsAt: [] };
     runtime.turn = turn;
     runtime.openToolCalls.clear();
     this.forgetUnseenTurnEnd(conversationId);
@@ -769,7 +770,7 @@ export class ConversationService {
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
     this.sendNextQueuedMessage(conversationId);
-    this.nudgeAfterStall(conversationId, turn, response);
+    if (!this.nudgeAfterStall(conversationId, turn, response)) this.followUpOnCanvasUse(conversationId, turn, response);
   }
 
   /**
@@ -780,10 +781,10 @@ export class ConversationService {
    */
   private nudgeAfterStall(conversationId: string, turn: TurnInProgress, response: acp.PromptResponse | undefined) {
     const runtime = this.runtime(conversationId);
-    const stalled = response?.stopReason === "end_turn" && turn.fromScript && !turn.awaitedUser && stopsAtAnnouncedStep(turn.replyEnd);
+    const stalled = response?.stopReason === "end_turn" && turn.fromScript && !turn.awaitedUser && stopsAtAnnouncedStep(turn.reply);
     if (!stalled) {
       runtime.stallNudges = 0;
-      return;
+      return false;
     }
     const carriedOnOtherwise = {
       stopping: this.stopping,
@@ -792,9 +793,39 @@ export class ConversationService {
       steerInFlight: runtime.steerInFlight ?? false,
       jobWaits: this.jobWaits.in(conversationId).length,
     };
-    if (!nudgesAfterStall(runtime.stallNudges, carriedOnOtherwise)) return;
+    if (!nudgesAfterStall(runtime.stallNudges, carriedOnOtherwise)) return false;
     runtime.stallNudges += 1;
     this.send(conversationId, CONTINUE_AFTER_STALL, [], { fromScript: true }).catch(() => {});
+    return true;
+  }
+
+  /**
+   * Late in a long turn, or rushing to end one, an agent told to use the canvas often still asks its question in chat,
+   * or repeats in chat the page it just showed. Mirador answers such a turn with one follow-up message saying what to do
+   * instead; the turn that follow-up starts goes through unchecked. A delegated conversation is left alone: its reply
+   * goes to the conversation that started it.
+   */
+  private followUpOnCanvasUse(conversationId: string, turn: TurnInProgress, response: acp.PromptResponse | undefined) {
+    const runtime = this.runtime(conversationId);
+    const { promptSent } = turn;
+    const checked =
+      response?.stopReason === "end_turn" &&
+      promptSent !== undefined &&
+      !isCanvasFollowUp(promptSent.text) &&
+      this.store.canvasUse() === "often" &&
+      !this.get(conversationId).startedBy;
+    const carriedOnOtherwise = this.stopping || runtime.running || runtime.queuedMessages.length > 0 || (runtime.steerInFlight ?? false);
+    if (!checked || carriedOnOtherwise) return;
+    const followUp = canvasFollowUp({
+      reply: turn.reply,
+      ...canvasUseOf({
+        startedAt: promptSent.sentAt,
+        toolCallsAt: turn.toolCallsAt,
+        items: this.store.listCanvasItems(conversationId),
+        jobWaitsSince: this.jobWaits.in(conversationId).map(({ since }) => since),
+      }),
+    });
+    if (followUp) this.send(conversationId, followUp, [], { fromScript: true }).catch(() => {});
   }
 
   /**
@@ -1674,12 +1705,15 @@ export class ConversationService {
   private trackReplyProgress(conversationId: string, update: acp.SessionUpdate) {
     const turn = this.runtime(conversationId).turn;
     if (!turn || turn.ended) return;
-    if (isTurnsOwnToolCall(update)) turn.replyEnd = "";
+    if (isTurnsOwnToolCall(update)) {
+      turn.reply = "";
+      turn.toolCallsAt.push(Date.now());
+    }
     if (!isAgentReplyChunk(update) || isSubagentReport(update)) return;
     turn.awaitedUser = false;
     if (typeof update.messageId === "string") turn.lastReplyMessageId = update.messageId;
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text" && !isInformational(update._meta)) {
-      turn.replyEnd = (turn.replyEnd + update.content.text).slice(-REPLY_END_KEPT);
+      turn.reply += update.content.text;
     }
   }
 
@@ -2229,8 +2263,8 @@ export function nudgesAfterStall(
 }
 
 /** Whether a reply stops where it announces its next step: its last words end in a ":", past any closing emphasis. */
-export function stopsAtAnnouncedStep(replyEnd: string): boolean {
-  return /:[*_\s]*$/.test(replyEnd);
+export function stopsAtAnnouncedStep(reply: string): boolean {
+  return /:[*_\s]*$/.test(reply);
 }
 
 /** Whether the last turn in the log is over because the agent finished it, and not because a stop cut it short, it failed, or it is still open. */

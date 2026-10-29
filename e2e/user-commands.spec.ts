@@ -43,9 +43,9 @@ test("! runs a command in the workspace folder, and its output goes to the agent
   const attached = page.locator(".command-outputs-attached");
   await expect(attached).toHaveText(/1 command output goes with your next message/);
 
-  await sendMessage(page, "check-1 what did it print?");
+  await sendMessage(page, "check-1 say what it printed");
   await waitForTurnToEnd(page);
-  await expect.poll(lastTextSent).toMatch(/^<bash-input>pwd; echo to-stderr >&2<\/bash-input>\n<bash-stdout>.*\/project\n<\/bash-stdout><bash-stderr>to-stderr\n<\/bash-stderr>\n\ncheck-1 what did it print\?$/);
+  await expect.poll(lastTextSent).toMatch(/^<bash-input>pwd; echo to-stderr >&2<\/bash-input>\n<bash-stdout>.*\/project\n<\/bash-stdout><bash-stderr>to-stderr\n<\/bash-stderr>\n\ncheck-1 say what it printed$/);
   await expect(first.locator(".shell-description")).toHaveText("Sent to the agent with your message");
   await expect(attached).toHaveCount(0);
 

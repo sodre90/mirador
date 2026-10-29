@@ -70,7 +70,8 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * starting with `SUBAGENT ` has a subagent do the rest, on the model Claude Code picks for it. A message starting with
  * `CALL ` calls the tool named after it with the JSON input that follows, such as `CALL mcp__canvas__ask {"question": …}`,
  * and each further line starting with `CALL ` calls one more in the same reply; the reply to their results is
- * `Result: ` and what they gave back. While `contextTokens` is
+ * `Result: ` and what they gave back, or the text after a last line starting with `THEN `. While `replySuffix` is set,
+ * every reply in text ends with it. While `contextTokens` is
  * set, answers report it as their input usage, so Claude Code compacts its context on the next request; a message equal
  * to `refuseAfterCompaction` is answered with a Bash call so the turn keeps going after the compaction, and every
  * request after it runs into the usage limit.
@@ -86,6 +87,8 @@ export class FakeClaudeApi {
   resetsAt = Math.floor(Date.now() / 1000) + 3 * 60 * 60;
   /** The plan's usage limits each answer reports, as shares of 0 to 1, and when they start over, in epoch seconds. */
   planUsage: { fiveHour: number; fiveHourResetsAt: number; sevenDay: number; sevenDayResetsAt: number } | null = null;
+  /** Ends every reply in text, e.g. with a question for the user. */
+  replySuffix = "";
   readonly answered: string[] = [];
   /** The settings folder of a profile built with `subscriptionEnvironment`: empty, so the user's own ~/.claude stays out of the run. */
   readonly claudeConfigDir = scratchPath("claude-config");
@@ -108,6 +111,8 @@ export class FakeClaudeApi {
   private heldReplies: (() => void)[] | null = null;
   private heldNotificationReplies: (() => void)[] = [];
   private replies = 0;
+  /** The `THEN ` reply of each reply of tool calls, by the id its calls' ids start with. */
+  private readonly repliesAfterCalls = new Map<string, string>();
 
   async start() {
     mkdirSync(this.claudeConfigDir, { recursive: true });
@@ -185,7 +190,7 @@ export class FakeClaudeApi {
     this.answered.push(typed);
     if (offersAgent(body) && typed.startsWith(SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(SUBAGENT.length))]);
     const results = resultsOfCalls(body);
-    if (results !== null) return this.send(body, response, [{ type: "text", text: `Result: ${results}` }]);
+    if (results !== null) return this.send(body, response, [{ type: "text", text: this.replyAfterCalls(body) ?? `Result: ${results}` }]);
     if (typed.startsWith(CALL)) return this.send(body, response, this.toolCalls(typed));
     this.send(body, response, this.answerTo(typed, offersBash(body)));
   }
@@ -198,8 +203,16 @@ export class FakeClaudeApi {
     return [{ type: "text", text: `Answered: ${typed}` }];
   }
 
+  private replyAfterCalls({ messages }: MessagesRequest) {
+    const content = messages.findLast(({ role }) => role === "user")?.content ?? "";
+    const callId = typeof content === "string" ? undefined : content.find(({ tool_use_id }) => tool_use_id?.startsWith(CALL_ID))?.tool_use_id;
+    return callId === undefined ? undefined : this.repliesAfterCalls.get(callId.slice(0, callId.lastIndexOf("_") + 1));
+  }
+
   private toolCalls(typed: string): Answer[] {
-    return typed.split(/^CALL /m).filter(Boolean).map((call, index) => {
+    const [calls, replyAfter] = typed.split(/^THEN /m);
+    if (replyAfter !== undefined) this.repliesAfterCalls.set(`${CALL_ID}${this.replies + 1}_`, replyAfter.trimEnd());
+    return calls!.split(/^CALL /m).filter(Boolean).map((call, index) => {
       const [, name, input] = /^(\S+)\s+([\s\S]*)$/.exec(call.trim())!;
       return { type: "tool_use", id: `${CALL_ID}${this.replies + 1}_${index}`, name: name!, input: JSON.parse(input!) };
     });
@@ -222,7 +235,8 @@ export class FakeClaudeApi {
     return { type: "server_tool_use", id: `srvtoolu_fake_${this.replies + 1}`, name: "advisor", input: {} };
   }
 
-  private send(body: MessagesRequest, response: ServerResponse, blocks: Answer[]) {
+  private send(body: MessagesRequest, response: ServerResponse, answers: Answer[]) {
+    const blocks = answers.map((answer) => (answer.type === "text" ? { ...answer, text: answer.text + this.replySuffix } : answer));
     const id = `msg_fake_${++this.replies}`;
     const usage = { input_tokens: this.contextTokens ?? 10, output_tokens: 5 };
     const stopReason = blocks.some(({ type }) => type === "tool_use") ? "tool_use" : "end_turn";

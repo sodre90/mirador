@@ -150,9 +150,9 @@ test("a second pi conversation on the same profile leaves the first one working"
   await waitForTurnToEnd(page);
 
   await page.locator(".workspace li", { hasText: "Hello pi" }).click();
-  await sendMessage(page, "Still there?");
+  await sendMessage(page, "Still there");
   await waitForTurnToEnd(page);
-  await expect(lastAgentMessage(page)).toContainText("Echo: Still there?");
+  await expect(lastAgentMessage(page)).toContainText("Echo: Still there");
 });
 
 test("deleting a pi conversation in the middle of a turn ends its pi process quietly, and the other one goes on", async () => {
@@ -222,7 +222,7 @@ test("after a host restart, a pi conversation goes on in its own session with th
   await sendMessage(page, "SHOW After restart");
   await expect(canvasHeading()).toHaveText("After restart", { timeout: 60_000 });
   await waitForTurnToEnd(page);
-  expect(model.userMessagesInContext()).toEqual(expect.arrayContaining(["Hello pi", "Still there?", "SHOW After restart"]));
+  expect(model.userMessagesInContext()).toEqual(expect.arrayContaining(["Hello pi", "Still there", "SHOW After restart"]));
   expect(model.systemPromptInContext()).toContain(CANVAS_RENDERING_RULES);
 });
 
@@ -265,7 +265,7 @@ test("↑ after stopping a pi turn edits its message, and Enter replaces the tur
   await expect.poll(piSessionProcesses).toHaveLength(1);
 
   await expect(page.locator(".timeline:visible .message.user", { hasText: "RUN sleep 30" })).toHaveCount(0);
-  expect(model.userMessagesInContext()).toEqual(expect.arrayContaining(["Hello pi", "Still there?", STEERED, "SHOW After going back"]));
+  expect(model.userMessagesInContext()).toEqual(expect.arrayContaining(["Hello pi", "Still there", STEERED, "SHOW After going back"]));
   expect(model.userMessagesInContext()).not.toContain("RUN sleep 30");
   expect(model.systemPromptInContext()).toContain(CANVAS_RENDERING_RULES);
 });

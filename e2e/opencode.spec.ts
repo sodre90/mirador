@@ -146,9 +146,9 @@ test("continuing an opencode session from a terminal gives the agent its earlier
   await terminalSession.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.locator(".timeline:visible")).toContainText(MARKER, { timeout: 30_000 });
-  await sendMessage(page, "What did I ask you to remember?");
+  await sendMessage(page, "Tell me what I asked you to remember");
   await waitForTurnToEnd(page);
-  await expect(lastAgentMessage(page)).toContainText("Echo: What did I ask you to remember?");
+  await expect(lastAgentMessage(page)).toContainText("Echo: Tell me what I asked you to remember");
   const lastRequest = model.requests.at(-1)!;
   expect(JSON.stringify(lastRequest.messages)).toContain(MARKER);
 });

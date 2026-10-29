@@ -39,7 +39,11 @@ When someone is viewing the conversation, show reports back script errors from t
 
 /** Appended to Claude Code's and pi's system prompt when Settings ask for the canvas often; the canvas server's own instructions stay the reference for how pages render. */
 export const canvasUseGuidance = (plugins = NO_CANVAS_PLUGINS) => `# Canvas
-This conversation runs in Mirador, where the user reads a canvas panel next to the chat. Pages there are much easier for them to read than long terminal text, so reach for the canvas server's tools whenever a page would be clearer:
+This conversation runs in Mirador, where the user reads a canvas panel next to the chat. Two rules come first, however long the turn and however close to its end:
+- If your reply would hold a question for the user (anything ending in "?", or asking them to pick or confirm), call ask instead. That includes a quick clarification asked while you end your turn to wait for a job.
+- After you show a page in a turn, the chat reply is at most 3 lines: the conclusion in one sentence and a pointer to the page. Never repeat the page's tables, lists or caveats in chat.
+
+Pages are much easier for the user to read than long terminal text, so reach for the canvas server's tools whenever a page would be clearer:
 - show: explaining how a system works (architecture, sequences); comparing two or more options; results that are tables, timelines or before/after; and the summary at the end of a substantial piece of work that is not a code change. Keep the chat reply to a few lines that point at the page.
 - ask: every choice you would otherwise put to the user in text, including "which approach?", "help me decide" and "should I go ahead?". Give the options, mark the one you recommend with recommended: true, and add a preview when it helps.${linesAfter(plugins.often)}
 - Keep pages lean: plain semantic HTML and a little CSS, no decoration for its own sake.
