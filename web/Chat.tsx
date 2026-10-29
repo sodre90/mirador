@@ -1389,17 +1389,17 @@ function AsyncTaskRow({ conversationId, task }: { conversationId: string; task: 
     <>
       <div className="async-task-text">
         <span className="async-task-status" data-hint={hints.asyncTask}>
-          {asyncTaskStateLabels[task.state]}:{" "}
+          <span>{asyncTaskStateLabels[task.state]}:</span>
           <button
             type="button"
-            className="link"
+            className="link async-task-description"
             data-hint={hints.asyncTaskOutput}
             aria-expanded={open}
             onClick={() => setOpen((wasOpen) => !wasOpen)}
           >
             {task.description}
-          </button>{" "}
-          for {formatDuration(now - task.since)}
+          </button>
+          <span>for {formatDuration(now - task.since)}</span>
         </span>
         {task.summary && task.summary !== task.description && <span className="async-task-summary">{task.summary}</span>}
         {open && <pre className="async-task-output">{output ?? "No output yet."}</pre>}

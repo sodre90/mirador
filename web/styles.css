@@ -4662,6 +4662,23 @@ button.shell-more:hover {
   overflow-wrap: anywhere;
 }
 
+.async-task-status {
+  display: flex;
+  gap: 0.3em;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.async-tasks button.async-task-description {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.async-tasks button.async-task-description[aria-expanded="true"] {
+  white-space: pre-wrap;
+}
+
 .async-task-summary {
   color: var(--muted);
 }

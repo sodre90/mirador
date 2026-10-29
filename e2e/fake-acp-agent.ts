@@ -32,7 +32,8 @@ import * as acp from "@agentclientprotocol/sdk";
  * at once, before a steer the command's end set off can reach the agent.
  * `ASYNC TASK` starts a background task the way claude-agent-acp does with its `asyncTasks` capability: a spawn update,
  * a progress beat shortly after, and output lines appended to a file under `FAKE_ACP_TASK_OUTPUT_DIR`; with ` DONE`
- * after it the task completes on its own too, and with ` STUCK` a Stop fails on it with an error. The
+ * after it the task completes on its own too, with ` STUCK` a Stop fails on it with an error, and with ` LONG` it
+ * completes with a many-line command as its description. The
  * `_session/async_task/stop` request stops one and says so, logging it.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
@@ -103,14 +104,16 @@ const taskUpdate = (client: acp.AgentContext, sessionId: string, update: object)
 /** The task updates one of these own background tasks carries: the spawn, a progress beat, and with `done` its end. */
 const tasksThatWillNotStop = new Set<string>();
 
-async function startAsyncTask(client: acp.AgentContext, sessionId: string, done: boolean, willNotStop = false) {
+const LONG_TASK_DESCRIPTION = `cd /work; cat > probe.ts <<'EOF'\n${"const probe = measureEverythingInTheSidebar(); ".repeat(40)}\nEOF\nbun probe.ts`;
+
+async function startAsyncTask(client: acp.AgentContext, sessionId: string, done: boolean, willNotStop = false, description = "sleep 30") {
   if (!asyncTasksAdvertised) return sayText(client, sessionId, "Nothing to run in the background here.");
   const asyncTaskId = `fake-task-${process.pid}-${++nextAsyncTask}`;
   const outputFilePath = `${taskOutputDir}/async-task-${asyncTaskId}.log`;
   writeFileSync(outputFilePath, "the task started\n");
   asyncTaskStates.set(asyncTaskId, "running");
   if (willNotStop) tasksThatWillNotStop.add(asyncTaskId);
-  await taskUpdate(client, sessionId, { sessionUpdate: "async_task_spawned", asyncTaskId, taskType: "shell", description: "sleep 30", canStop: true, outputFilePath });
+  await taskUpdate(client, sessionId, { sessionUpdate: "async_task_spawned", asyncTaskId, taskType: "shell", description, canStop: true, outputFilePath });
   setTimeout(() => {
     if (asyncTaskStates.get(asyncTaskId) !== "running") return;
     appendFileSync(outputFilePath, "still sleeping\n");
@@ -430,6 +433,7 @@ acp
     if (startsWith(ctx.params.prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
     if (startsWith(ctx.params.prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
+    if (startsWith(ctx.params.prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);
     if (startsWith(ctx.params.prompt, "ASYNC TASK STUCK")) return startAsyncTask(ctx.client, ctx.params.sessionId, false, true);
     if (startsWith(ctx.params.prompt, "ASYNC TASK")) return startAsyncTask(ctx.client, ctx.params.sessionId, false);
     if (startsWith(ctx.params.prompt, "FAIL ")) throw acp.RequestError.internalError(undefined, text.slice("FAIL ".length));

@@ -106,6 +106,23 @@ test("a background task the agent started shows with its output and Stop above t
     await expect(tasks).toHaveCount(0);
   });
 
+  await test.step("a long command shows on one line until it is opened", async () => {
+    await sendMessage(page, "ASYNC TASK LONG");
+    await waitForTurnToEnd(page);
+    const description = row.locator(".async-task-description");
+    await expect(row).toContainText("Completed:");
+    const lineHeight = await row.locator(".async-task-status > span").first().evaluate((label) => label.getBoundingClientRect().height);
+    const height = () => description.evaluate((button) => button.getBoundingClientRect().height);
+    expect(await height()).toBeLessThanOrEqual(lineHeight + 1);
+    const durationFitsTheRow = await row.evaluate((li) => li.querySelector(".async-task-status > span:last-child")!.getBoundingClientRect().right <= li.getBoundingClientRect().right);
+    expect(durationFitsTheRow, "the duration stays visible after the cut-off command").toBe(true);
+    await description.click();
+    await expect(row.locator(".async-task-output")).toBeVisible();
+    expect(await height()).toBeGreaterThan(lineHeight * 3);
+    await row.getByRole("button", { name: "Dismiss" }).click();
+    await expect(tasks).toHaveCount(0);
+  });
+
   await test.step("a Stop the agent fails on says why, and the task keeps running with its Stop", async () => {
     await sendMessage(page, "ASYNC TASK STUCK");
     await waitForTurnToEnd(page);
