@@ -56,8 +56,8 @@ test("Mirador runs the Claude Code installed on the computer, or the program set
     await expect(found).toHaveText(new RegExp(`^Runs ${literally(wrapper)}, \\d+\\.\\d+\\.\\d+ \\(Claude Code\\)$`));
     await settings.getByRole("button", { name: "Close" }).click();
     await startConversation(page);
-    await sendMessage(page, "Which program runs you?");
-    await expect(page.locator(".message.agent").last()).toHaveText("Answered: Which program runs you?", { timeout: 60_000 });
+    await sendMessage(page, "Say which program runs you");
+    await expect(page.locator(".message.agent").last()).toHaveText("Answered: Say which program runs you", { timeout: 60_000 });
     expect(existsSync(wrapperLog) && readFileSync(wrapperLog, "utf8")).toContain("--output-format stream-json");
   });
 

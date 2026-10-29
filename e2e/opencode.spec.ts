@@ -267,10 +267,10 @@ test("an image pasted into the message box goes to the agent with the message an
   await pasteImage(composer, { width: 300, height: 200 });
   await expect(composer).toHaveValue("what is in [Image #1] ");
   await expect(page.locator(".pasted-images img")).toHaveJSProperty("naturalWidth", 300);
-  await page.keyboard.type("this picture?");
+  await page.keyboard.type("this picture");
   await composer.press("Enter");
 
-  await expect(lastAgentMessage(page)).toContainText("Echo: what is in [Image #1] this picture?", { timeout: 60_000 });
+  await expect(lastAgentMessage(page)).toContainText("Echo: what is in [Image #1] this picture", { timeout: 60_000 });
   expect(JSON.stringify(model.requests.at(-1))).toContain("data:image/png;base64,");
   await expect(page.locator(".pasted-images")).toHaveCount(0);
   const sent = page.locator(".message.user .message-images img");

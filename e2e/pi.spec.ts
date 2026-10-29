@@ -292,13 +292,13 @@ test("a pi conversation moves to another pi profile, even one with its own PI_CO
 
 test("an image pasted into a pi conversation reaches the model with its message", async () => {
   const composer = page.locator(".composer:visible textarea");
-  await composer.fill("Which colour is this?");
+  await composer.fill("Say which colour this is");
   await pasteImage(composer, { width: 64, height: 64, color: "#e11d1d" });
   await expect(page.locator(".pasted-images img")).toHaveJSProperty("naturalWidth", 64);
   await composer.press("Enter");
-  await expect(lastAgentMessage(page)).toContainText("Echo: Which colour is this?", { timeout: 60_000 });
+  await expect(lastAgentMessage(page)).toContainText("Echo: Say which colour this is", { timeout: 60_000 });
   await waitForTurnToEnd(page);
-  const sent = page.locator(".timeline:visible .message.user", { hasText: "Which colour is this?" });
+  const sent = page.locator(".timeline:visible .message.user", { hasText: "Say which colour this is" });
   await expect(sent.locator(".message-images img")).toHaveJSProperty("naturalWidth", 64);
   const lastUserMessage = model.requests.at(-1)!.messages.findLast(({ role }) => role === "user");
   expect(JSON.stringify(lastUserMessage)).toContain("data:image/png;base64,");
