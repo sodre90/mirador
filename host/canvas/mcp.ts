@@ -15,18 +15,38 @@ import { registerPluginInstallTool } from "./plugin-install-tool.ts";
 
 const PROGRESS_HEARTBEAT_MS = 15_000;
 
-const optionSchema = z.object({
-  label: z.string().min(1).describe("Short name of the option; returned verbatim when chosen."),
-  description: z.string().optional().describe("One or two sentences on the trade-off."),
-  html: z.string().optional().describe("Optional HTML preview of this option (mockup, diagram drawn in HTML and CSS, inline SVG or Mermaid rather than ASCII art, code sample)."),
-  recommended: z.boolean().optional().describe("True on the one option you recommend, rather than a mark in its label. The user sees it marked, and in a spoken conversation it is read first."),
-});
+const optionShape = {
+  label: z.string().min(1),
+  description: z.string().optional(),
+  html: z.string().optional(),
+  recommended: z.boolean().optional(),
+};
 
 const askQuestionShape = {
-  html: z.string().optional().describe("Optional HTML shown above the options: the explanation or mockup the question is about, with any diagram drawn in HTML and CSS, inline SVG or Mermaid, not ASCII art. Put it here rather than in a show call just before."),
-  allowOther: z.boolean().optional().describe("Let the user type an answer that is not one of the options."),
-  optionWidth: z.number().int().positive().optional().describe("Optional least width of each answer box in CSS pixels, for options whose descriptions need more room. Boxes still sit side by side while they fit and never get wider than the canvas. Without it they are at least 200px, or as wide as the widest preview."),
+  html: z.string().optional(),
+  allowOther: z.boolean().optional(),
+  optionWidth: z.number().int().positive().optional(),
 };
+
+/** Ask's fields are described once, where the single question takes them, so the agent doesn't read each text twice. */
+const describedFields = <Shape extends Record<string, z.ZodType>>(shape: Shape, descriptions: Record<keyof Shape, string>): Shape =>
+  Object.fromEntries(Object.entries(shape).map(([field, schema]) => [field, schema.describe(descriptions[field as keyof Shape])])) as Shape;
+
+const describedOptionSchema = z.object(
+  describedFields(optionShape, {
+    label: "Short name of the option; returned verbatim when chosen.",
+    description: "One or two sentences on the trade-off.",
+    html: "Optional HTML preview of this option (mockup, diagram drawn in HTML and CSS, inline SVG or Mermaid rather than ASCII art, code sample).",
+    recommended: "True on the one option you recommend, rather than a mark in its label. The user sees it marked, and in a spoken conversation it is read first.",
+  }),
+);
+
+const describedAskQuestionShape = describedFields(askQuestionShape, {
+  html: "Optional HTML shown above the options: the explanation or mockup the question is about, with any diagram drawn in HTML and CSS, inline SVG or Mermaid, not ASCII art. Put it here rather than in a show call just before.",
+  allowOther: "Let the user type an answer that is not one of the options.",
+  optionWidth:
+    "Optional least width of each answer box in CSS pixels, for options whose descriptions need more room. Boxes still sit side by side while they fit and never get wider than the canvas. Without it they are at least 200px, or as wide as the widest preview.",
+});
 
 function describeRender(itemId: string, render: RenderOutcome) {
   if (render === "no-viewer") {
@@ -93,15 +113,17 @@ function buildCanvasServer(
       description:
         "Ask the user to choose between options in their browser, optionally with an HTML preview per option and a shared HTML context page. Use this instead of asking multiple-choice questions in plain text. Depending on the user's setting, the choice is returned as this tool's result or arrives as the user's next message (the result tells you which). When you have two or more things to ask, pass questions instead of question and options, one entry per question with its own options: the user answers them page by page, and all their answers come back together. Never fold several questions into one question, and never offer options such as \"Accept all\" or \"Change some answers\" that stand for several answers: the user then has no way to say which.",
       inputSchema: z.object({
-        ...askQuestionShape,
+        ...describedAskQuestionShape,
         question: z.string().min(1).optional().describe("The question, when you ask just one."),
-        options: z.array(optionSchema).min(2).max(8).optional().describe("The choices to the question, when you ask just one."),
+        options: z.array(describedOptionSchema).min(2).max(8).optional().describe("The choices to the question, when you ask just one."),
         questions: z
-          .array(z.object({ ...askQuestionShape, question: z.string().min(1), options: z.array(optionSchema).min(2).max(8) }))
+          .array(z.object({ ...askQuestionShape, question: z.string().min(1), options: z.array(z.object(optionShape)).min(2).max(8) }))
           .min(2)
           .max(10)
           .optional()
-          .describe("Two or more questions in the order to ask them, each with its own options; give these instead of question and options whenever you have more than one thing to ask."),
+          .describe(
+            "Two or more questions in the order to ask them, each with its own options; give these instead of question and options whenever you have more than one thing to ask. Their fields mean what the single question's do.",
+          ),
       }),
       _meta: loadedUpFront,
     },

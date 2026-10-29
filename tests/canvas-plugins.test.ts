@@ -29,6 +29,16 @@ describe("CanvasPlugins", () => {
     expect(claudeSessionMeta("often", { canvasPlugins: guidance }).claudeCode.options.allowedTools).toContain("mcp__canvas__show_card");
   });
 
+  test("ask describes the fields of a question once, where the single question takes them", async () => {
+    const { mcpRequest } = await setUp();
+    const { tools } = await mcpRequest("tools/list", {});
+    const { properties } = tools.find(({ name }: { name: string }) => name === "ask").inputSchema;
+    const optionLabel = "Short name of the option; returned verbatim when chosen.";
+    expect(properties.options.items.properties.label.description).toBe(optionLabel);
+    expect(properties.html.description).toStartWith("Optional HTML shown above the options");
+    expect(JSON.stringify(properties.questions.items)).not.toMatch(/"description":"/);
+  });
+
   test("official plugins not installed join the guidance, with the tool that installs one, pre-allowed since it asks the user first", async () => {
     const { plugins } = await setUp();
     const offered = [{ name: "media", title: "Media", description: "Edit a video.", recommendWhen: "the user edits a video", repo: "https://example.com/media.git" }];
