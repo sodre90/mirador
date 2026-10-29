@@ -19,6 +19,10 @@ export class OpenToolCalls {
     return [...this.titles.keys()].find((toolCallId) => !this.subagentCalls.has(toolCallId)) ?? null;
   }
 
+  ids() {
+    return [...this.titles.keys()];
+  }
+
   clear() {
     this.titles.clear();
     this.kinds.clear();

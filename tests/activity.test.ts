@@ -33,6 +33,15 @@ describe("OpenToolCalls", () => {
     expect(open.latest()).toBeNull();
   });
 
+  test("names the tool calls still open, its subagents' among them", () => {
+    const open = new OpenToolCalls();
+    open.follow(started("read", "Read a.ts"));
+    open.follow(started("run", "sleep 45"));
+    open.follow(started("explore", "Find the tests"), true);
+    open.follow(updated("read", { status: "completed" }));
+    expect(open.ids()).toEqual(["run", "explore"]);
+  });
+
   test("takes the title a later update gives, and ignores tool calls that start already finished", () => {
     const open = new OpenToolCalls();
     open.follow(started("run", "Terminal"));

@@ -736,6 +736,7 @@ export class ConversationService {
       runtime.automaticContinues = 0;
       this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
     } catch (error) {
+      this.failOpenToolCalls(conversationId);
       if (runtime.killedOnPurpose) {
         this.append(conversationId, { type: "turn-end", stopReason: "cancelled" });
         this.notifyTurnEnded(conversationId, { stopReason: "cancelled" });
@@ -1680,6 +1681,13 @@ export class ConversationService {
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text" && !isInformational(update._meta)) {
       turn.replyEnd = (turn.replyEnd + update.content.text).slice(-REPLY_END_KEPT);
     }
+  }
+
+  /** A turn that ends in an error or a kill leaves no agent to finish the tool calls it had running. */
+  private failOpenToolCalls(conversationId: string) {
+    const { openToolCalls } = this.runtime(conversationId);
+    openToolCalls.ids().forEach((toolCallId) => this.append(conversationId, { type: "acp", update: { sessionUpdate: "tool_call_update", toolCallId, status: "failed" } }));
+    openToolCalls.clear();
   }
 
   private followToolCalls(conversationId: string, update: acp.SessionUpdate) {

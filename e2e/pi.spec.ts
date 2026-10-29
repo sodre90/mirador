@@ -310,6 +310,8 @@ test("a pi that dies in the middle of a turn ends the turn with its error, and t
   await expect.poll(piSessionProcesses).toHaveLength(1);
   killPiSessionProcesses();
   await expect(page.locator(".timeline:visible .error-line").last()).toContainText("pi process exited", { timeout: 30_000 });
+  await expect(page.locator(".timeline:visible .tool-failed", { hasText: "sleep 45" })).toBeVisible();
+  await expect(page.locator(".timeline:visible .tool-in_progress, .timeline:visible .tool-pending")).toHaveCount(0);
   await waitForTurnToEnd(page);
 
   await sendMessage(page, "After pi died");
