@@ -899,6 +899,10 @@ test("a file written while another conversation's tool call ran is that one's wh
   expect(writerOf("package.json", 3_000, own, nested), "a nested file of the same name").toBe("either");
   expect(writerOf("web/app.ts", 3_000, own, nested), "a longer name ending in it, or one going on after it").toBe("either");
   expect(writerOf("web/app.ts", 3_000, own, [call(2_000, 4_000, "p='web/app.ts'")])).toBe("another");
+  const onWindows = [call(2_000, 4_000, 'echo > src\\theirs.ts\n{"command":"type src\\\\other.ts"}\ntype desktop\\package.json')];
+  expect(writerOf("src/theirs.ts", 3_000, own, onWindows), "named with a backslash").toBe("another");
+  expect(writerOf("src/other.ts", 3_000, own, onWindows), "named with a backslash its JSON input doubles").toBe("another");
+  expect(writerOf("package.json", 3_000, own, onWindows), "a nested file of the same name, on Windows").toBe("either");
 });
 
 test("git log's commits give each one's time in ms and its parents", () => {

@@ -155,6 +155,9 @@ export const commandWindows = (events: StoredEvent[], turnEnds: number[], firstM
 const withProjectPaths = (windows: ToolCallWindow[], directories: string[]) =>
   windows.map((window) => ({ ...window, mentions: directories.reduce((mentions, directory) => mentions.replaceAll(`${directory}${sep}`, ""), window.mentions) }));
 
+/** A command on Windows names a path with backslashes, doubled where its input is JSON, where git uses slashes. */
+const ANY_SEPARATOR = String.raw`(?:/|\\{1,2})`;
+
 /**
  * Which conversation wrote a file its time alone ties to this one's commands, from the tool calls of this one and of
  * the workspace's others running then: the side whose calls name its path when the other's do not, or else, with
@@ -163,7 +166,7 @@ const withProjectPaths = (windows: ToolCallWindow[], directories: string[]) =>
 export function writerOf(path: string, writtenAtMs: number, own: ToolCallWindow[], others: ToolCallWindow[]): "this" | "another" | "either" {
   const othersThen = others.filter((window) => writtenDuring(window, writtenAtMs));
   if (othersThen.length === 0) return "this";
-  const named = new RegExp(`(?<![\\w./-])${RegExp.escape(path)}(?![\\w.-])`);
+  const named = new RegExp(`(?<![\\w./\\\\-])${path.split("/").map(RegExp.escape).join(ANY_SEPARATOR)}(?![\\w.-])`);
   const namesIt = (windows: ToolCallWindow[]) => windows.some(({ mentions }) => named.test(mentions));
   const ownNamesIt = namesIt(own.filter((window) => writtenDuring(window, writtenAtMs)));
   if (ownNamesIt === namesIt(othersThen)) return "either";
