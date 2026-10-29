@@ -27,8 +27,8 @@ test("the sidebar marks the conversations waiting for you, in the look chosen in
   await addWorkspace(page, host.projectDir);
   const first = await startConversation(page);
   const second = await startConversation(page);
-  const firstRow = page.locator(".workspace li").nth(0);
-  const secondRow = page.locator(".workspace li").nth(1);
+  const firstRow = page.locator(`.workspace li[data-reorder-id="${first}"]`);
+  const secondRow = page.locator(`.workspace li[data-reorder-id="${second}"]`);
   const firstPill = firstRow.locator(".waiting-pill");
   const count = page.locator(".workspace .waiting-count");
   const waitingList = page.getByRole("region", { name: "Waiting for you" });

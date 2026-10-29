@@ -28,23 +28,23 @@ test("workspaces, and conversations within theirs, are dragged into an order eve
   const row = (id: string) => page.locator(`li[data-reorder-id="${id}"]`);
 
   await test.step("a conversation dragged below another lands there, selecting no text on the way, and the drag opens nothing", async () => {
-    expect(await conversationIds(page, host.projectDir)).toEqual([first, second, third]);
-    await dragOnto(page, row(first), row(third), "bottom");
-    await expect(row(third)).toHaveClass(/drop-after/);
-    await expect(row(first)).toHaveClass(/dragged/);
+    expect(await conversationIds(page, host.projectDir)).toEqual([third, second, first]);
+    await dragOnto(page, row(second), row(first), "bottom");
+    await expect(row(first)).toHaveClass(/drop-after/);
+    await expect(row(second)).toHaveClass(/dragged/);
     expect(await page.evaluate(() => window.getSelection()?.toString())).toBe("");
     await page.mouse.up();
-    await expect.poll(() => conversationIds(page, host.projectDir)).toEqual([second, third, first]);
+    await expect.poll(() => conversationIds(page, host.projectDir)).toEqual([third, first, second]);
     await expect(row(third)).toHaveClass(/selected/);
   });
 
   await test.step("another window shows the same order, and so does a reload", async () => {
     const otherWindow = await page.context().newPage();
     await otherWindow.goto(page.url());
-    await expect.poll(() => conversationIds(otherWindow, host.projectDir)).toEqual([second, third, first]);
+    await expect.poll(() => conversationIds(otherWindow, host.projectDir)).toEqual([third, first, second]);
     await otherWindow.close();
     await page.reload();
-    await expect.poll(() => conversationIds(page, host.projectDir)).toEqual([second, third, first]);
+    await expect.poll(() => conversationIds(page, host.projectDir)).toEqual([third, first, second]);
   });
 
   await test.step("a short drag that ends on its own row neither moves nor opens the conversation", async () => {
@@ -55,16 +55,16 @@ test("workspaces, and conversations within theirs, are dragged into an order eve
     await page.mouse.up();
     await expect(row(third)).toHaveClass(/selected/);
     await expect(row(second)).not.toHaveClass(/selected/);
-    expect(await conversationIds(page, host.projectDir)).toEqual([second, third, first]);
+    expect(await conversationIds(page, host.projectDir)).toEqual([third, first, second]);
   });
 
   await test.step("Esc cancels a drag", async () => {
-    await dragOnto(page, row(first), row(second), "top");
-    await expect(row(second)).toHaveClass(/drop-before/);
+    await dragOnto(page, row(second), row(first), "top");
+    await expect(row(first)).toHaveClass(/drop-before/);
     await page.keyboard.press("Escape");
     await page.mouse.up();
-    await expect(row(second)).not.toHaveClass(/drop-before/);
-    expect(await conversationIds(page, host.projectDir)).toEqual([second, third, first]);
+    await expect(row(first)).not.toHaveClass(/drop-before/);
+    expect(await conversationIds(page, host.projectDir)).toEqual([third, first, second]);
   });
 
   await page.getByRole("button", { name: "Add workspace" }).click();
@@ -79,7 +79,7 @@ test("workspaces, and conversations within theirs, are dragged into an order eve
   await test.step("a conversation dragged over another workspace, which a new one is above, stays in its own, first", async () => {
     await dragOnto(page, row(first), workspaceCard(page, secondDir), "bottom");
     await page.mouse.up();
-    await expect.poll(() => conversationIds(page, host.projectDir)).toEqual([first, second, third]);
+    await expect.poll(() => conversationIds(page, host.projectDir)).toEqual([first, third, second]);
     await expect(workspaceCard(page, secondDir).locator("li[data-reorder-id]")).toHaveCount(1);
   });
 
