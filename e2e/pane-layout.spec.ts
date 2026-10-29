@@ -109,7 +109,7 @@ test("panes resize, swap by their grips without reloading, go fullscreen, hide, 
   await expect(header.getByRole("button", { name: "Hide terminal" })).toBeVisible();
   await page.getByRole("button", { name: "Fullscreen conversation" }).click();
   await runFromPalette(page, "Show canvas");
-  expect(await placesOf(page)).toEqual({ conversation: "right bottom", canvas: "right top", terminals: "left" });
+  await expect.poll(() => placesOf(page)).toEqual({ conversation: "right bottom", canvas: "right top", terminals: "left" });
 
   await pane(page, "canvas").getByRole("button", { name: "Hide", exact: true }).click();
   expect(await placesOf(page)).toEqual({ conversation: "right", canvas: "hidden", terminals: "left" });
@@ -150,12 +150,12 @@ test("panes resize, swap by their grips without reloading, go fullscreen, hide, 
   expect(await placesOf(page)).toEqual({ conversation: "left", canvas: "right", terminals: "hidden" });
 
   await runFromPalette(page, "Reset layout to default");
-  expect(await placesOf(page)).toEqual({ conversation: "right top", canvas: "left", terminals: "right bottom" });
+  await expect.poll(() => placesOf(page)).toEqual({ conversation: "right top", canvas: "left", terminals: "right bottom" });
 
   await runFromPalette(page, "Swap conversation and canvas");
-  expect(await placesOf(page)).toEqual({ conversation: "left", canvas: "right top", terminals: "right bottom" });
+  await expect.poll(() => placesOf(page)).toEqual({ conversation: "left", canvas: "right top", terminals: "right bottom" });
   await runFromPalette(page, "Swap canvas and terminals");
-  expect(await placesOf(page)).toEqual({ conversation: "left", canvas: "right bottom", terminals: "right top" });
+  await expect.poll(() => placesOf(page)).toEqual({ conversation: "left", canvas: "right bottom", terminals: "right top" });
 });
 
 test("a canvas the user hid comes back when the agent shows something new on it", async ({ page }) => {

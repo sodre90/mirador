@@ -55,13 +55,14 @@ export const showKeysFollowingTheMouse = (ready: string) =>
   onWindows ? `${showKeys(ready)} --follow-mouse` : `${printRaw("\x1b[?1000h\x1b[?1006h")}; ${showKeys(ready)}`;
 
 /** The name the host gives the command keepShellBusy runs. */
-export const busyCommandName = onWindows ? "bun" : "sleep";
+export const busyCommandName = "bun";
 
 /**
- * Types a command that keeps the shell busy for 30 s. PowerShell's sleep runs inside the shell, where the host sees no
- * command running, so on Windows Bun waits instead, and as Bun takes a moment to start, this waits until it prints.
+ * Types a command that keeps the shell busy for 30 s, and waits until it prints, so it is running: a loaded machine can
+ * take a moment to start it. Bun waits rather than sleep, which PowerShell runs inside the shell, where the host sees
+ * no command running.
  */
 export async function keepShellBusy(page: Page, screen: Locator) {
-  await page.keyboard.type(`${onWindows ? "bun -e 'console.log(`busy-${6 * 7}`); setTimeout(() => {}, 30000)'" : "sleep 30"}\n`);
-  if (onWindows) await expect(screen).toContainText("busy-42");
+  await page.keyboard.type("bun -e 'console.log(`busy-${6 * 7}`); setTimeout(() => {}, 30000)'\n");
+  await expect(screen).toContainText("busy-42");
 }
