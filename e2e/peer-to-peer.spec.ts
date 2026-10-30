@@ -14,7 +14,7 @@ import { TestHost } from "./test-host.ts";
 const binary = process.env.MIRADOR_P2P_BINARY ?? join(homedir(), "prj", "mirador-p2p", "target", "debug", "mirador-p2p");
 const sidecarBuilt = existsSync(binary);
 
-const host = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `127.0.0.1:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
+const host = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
 const ends: ChildProcess[] = [];
 let brokerPort = 0;
 let brokerKey = "";
@@ -100,7 +100,7 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
 
   await test.step("with no public address, the invite link points at the host's own address in the tunnel", () => {
     expect(new URL(link).origin).toBe(`http://[${invite.hostAddress}]:4600`);
-    expect(invite.broker).toEqual({ address: `127.0.0.1:${brokerPort}`, key: brokerKey });
+    expect(invite.broker).toEqual({ address: `localhost:${brokerPort}`, key: brokerKey });
   });
 
   const joinKeyFile = join(host.root, "p2p-test", "join.key");
