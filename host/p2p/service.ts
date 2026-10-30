@@ -21,6 +21,10 @@ const LONGEST_SOCKET_PATH = 100;
 export interface PeerToPeerSettings {
   binary: string;
   broker: { address: string; key: string };
+  /** Where devices reach the broker, when it is not where this host does: a broker on this machine, say. */
+  deviceBroker?: string;
+  /** Addresses devices may reach the sidecar at besides this machine's own, such as a port forwarded on the router. */
+  candidates?: string[];
 }
 
 /** On only when the environment names the sidecar and the broker; anything else is a mistake worth saying. */
@@ -29,7 +33,9 @@ export function peerToPeerSettings(environment: Record<string, string | undefine
   if (!binary && !address && !key) return null;
   if (!binary || !address || !key) throw new Error("Peer to peer needs MIRADOR_P2P_BINARY, MIRADOR_P2P_BROKER and MIRADOR_P2P_BROKER_KEY together.");
   if (!isTunnelKey(key)) throw new Error("MIRADOR_P2P_BROKER_KEY is not a key: it is 32 bytes in base64.");
-  return { binary, broker: { address, key } };
+  const deviceBroker = environment.MIRADOR_P2P_DEVICE_BROKER || undefined;
+  const candidates = environment.MIRADOR_P2P_CANDIDATES?.split(",").map((candidate) => candidate.trim()).filter(Boolean);
+  return { binary, broker: { address, key }, ...(deviceBroker && { deviceBroker }), ...(candidates?.length && { candidates }) };
 }
 
 /** Who a tunnel listener's connections come from: a paired device, or anyone holding an invite's one-time key. */
@@ -100,7 +106,7 @@ export class PeerToPeer {
       `--port=${TUNNEL_PORT}`,
       `--broker=${settings.broker.address}`,
       `--broker-key=${settings.broker.key}`,
-      ...localCandidates(udpPort).map((candidate) => `--candidate=${candidate}`),
+      ...[...localCandidates(udpPort), ...(settings.candidates ?? [])].map((candidate) => `--candidate=${candidate}`),
     ]);
   }
 
@@ -122,7 +128,7 @@ export class PeerToPeer {
   }
 
   places(): TunnelPlaces {
-    return { hostKey: this.identity.publicKey, hostAddress: hostAddressIn(this.identity.prefix), port: TUNNEL_PORT, broker: this.settings.broker };
+    return { hostKey: this.identity.publicKey, hostAddress: hostAddressIn(this.identity.prefix), port: TUNNEL_PORT, broker: { ...this.settings.broker, address: this.settings.deviceBroker ?? this.settings.broker.address } };
   }
 
   /** Why `key` can't be a device's tunnel key, or null when it can. */

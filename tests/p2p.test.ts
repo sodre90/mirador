@@ -4,18 +4,20 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
-import { PeerToPeer, peerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
+import { PeerToPeer, peerToPeerSettings, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
 import { Store } from "../host/store.ts";
 
 const brokerKey = newKeyPair().publicKey;
 let folder: string;
 let commandsFile: string;
+let argumentsFile: string;
 let p2p: PeerToPeer | null = null;
 
 beforeEach(() => {
   folder = mkdtempSync(join(tmpdir(), "p2p-"));
   commandsFile = join(folder, "commands");
+  argumentsFile = join(folder, "arguments");
   writeFileSync(commandsFile, "");
 });
 
@@ -25,10 +27,10 @@ afterEach(() => {
   rmSync(folder, { recursive: true, force: true });
 });
 
-/** Stands in for mirador-p2p: it writes down the commands it reads, as the real one acts on them. */
+/** Stands in for mirador-p2p: it writes down its arguments and the commands it reads, as the real one acts on them. */
 function fakeSidecar() {
   const binary = join(folder, "fake-sidecar");
-  writeFileSync(binary, `#!/bin/sh\ncat >> '${commandsFile}'\n`);
+  writeFileSync(binary, `#!/bin/sh\nprintf '%s\\n' "$@" > '${argumentsFile}'\ncat >> '${commandsFile}'\n`);
   chmodSync(binary, 0o755);
   return binary;
 }
@@ -42,11 +44,11 @@ async function commandsRead(count: number) {
   }
 }
 
-function host() {
+function host(more: Partial<PeerToPeerSettings> = {}) {
   const store = new Store(":memory:");
   const devices = new DeviceService(store);
   const listening = new Map<string, TunnelEnd>();
-  const settings = { binary: fakeSidecar(), broker: { address: "203.0.113.7:47800", key: brokerKey } };
+  const settings = { binary: fakeSidecar(), broker: { address: "203.0.113.7:47800", key: brokerKey }, ...more };
   p2p = new PeerToPeer(settings, join(folder, "p2p"), store, Date.now, 50);
   p2p.start((socket, end) => {
     listening.set(socket, end);
@@ -63,6 +65,30 @@ test("peer to peer is off unless the environment names the sidecar and the broke
     binary: "/bin/mirador-p2p",
     broker: { address: "203.0.113.7:47800", key: brokerKey },
   });
+});
+
+test("the environment may hand devices another broker address and announce more places to reach the sidecar at", () => {
+  const environment = { MIRADOR_P2P_BINARY: "/bin/mirador-p2p", MIRADOR_P2P_BROKER: "127.0.0.1:47800", MIRADOR_P2P_BROKER_KEY: brokerKey };
+  expect(peerToPeerSettings({ ...environment, MIRADOR_P2P_DEVICE_BROKER: "", MIRADOR_P2P_CANDIDATES: " , " })).toEqual({
+    binary: "/bin/mirador-p2p",
+    broker: { address: "127.0.0.1:47800", key: brokerKey },
+  });
+  expect(peerToPeerSettings({ ...environment, MIRADOR_P2P_DEVICE_BROKER: "10.0.2.2:47800", MIRADOR_P2P_CANDIDATES: "203.0.113.7:41641, 10.0.2.2:41641" })).toEqual({
+    binary: "/bin/mirador-p2p",
+    broker: { address: "127.0.0.1:47800", key: brokerKey },
+    deviceBroker: "10.0.2.2:47800",
+    candidates: ["203.0.113.7:41641", "10.0.2.2:41641"],
+  });
+});
+
+test("the sidecar uses the host's broker and announces the extra places, while devices get the broker address meant for them", async () => {
+  const { p2p, devices } = host({ broker: { address: "127.0.0.1:47800", key: brokerKey }, deviceBroker: "10.0.2.2:47800", candidates: ["10.0.2.2:41641"] });
+  expect(p2p.invite("ABCDEFGHJK", Date.now() + 60_000).broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
+  expect(p2p.register(devices.admit("Phone").device.id, newKeyPair().publicKey).broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
+  await commandsRead(2);
+  const sidecarArguments = readFileSync(argumentsFile, "utf8").split("\n");
+  expect(sidecarArguments).toContain("--broker=127.0.0.1:47800");
+  expect(sidecarArguments.at(-2)).toBe("--candidate=10.0.2.2:41641");
 });
 
 test("the host's tunnel identity is made once, kept from other accounts, and the same after a restart", () => {
