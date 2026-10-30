@@ -15,6 +15,8 @@ export interface DeviceTunnel extends TunnelPlaces {
 export interface InviteTunnel extends TunnelPlaces {
   joinKey: string;
   joinAddress: string;
+  /** The host's own name, as a device lists it: its address in the tunnel says nothing to a person. */
+  name?: string;
 }
 
 /** The origin a device reaches its host at through the tunnel. */
@@ -29,7 +31,8 @@ export function decodedInviteTunnel(encoded: string): InviteTunnel | null {
   try {
     const tunnel = JSON.parse(fromBase64Url(encoded)) as Partial<InviteTunnel>;
     const texts = [tunnel.hostKey, tunnel.hostAddress, tunnel.joinKey, tunnel.joinAddress, tunnel.broker?.address, tunnel.broker?.key];
-    return texts.every((text) => typeof text === "string") && typeof tunnel.port === "number" ? (tunnel as InviteTunnel) : null;
+    const named = tunnel.name === undefined || typeof tunnel.name === "string";
+    return texts.every((text) => typeof text === "string") && typeof tunnel.port === "number" && named ? (tunnel as InviteTunnel) : null;
   } catch {
     return null;
   }

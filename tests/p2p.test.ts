@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
@@ -128,6 +128,7 @@ test("an invite's one-time key reaches only the joining socket, until shortly af
   const [pinned] = await commandsRead(1);
   expect(pinned.pin).toMatchObject({ address: tunnel.joinAddress, socket: joinSocket });
   expect(isTunnelKey(tunnel.joinKey)).toBe(true);
+  expect(tunnel.name).toBe(hostname().replace(/\.local$/, ""));
   expect(p2p.refusedKey(pinned.pin.key)).not.toBeNull();
   p2p.inviteUsed(code.toLowerCase());
   expect((await commandsRead(2))[1]).toEqual({ unpin: { key: pinned.pin.key } });

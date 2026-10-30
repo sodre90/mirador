@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, rmSync } from "node:fs";
-import { networkInterfaces } from "node:os";
+import { hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
 import type { DeviceTunnel, InviteTunnel, TunnelPlaces } from "../../shared/tunnel.ts";
 import { inviteKey } from "../devices.ts";
@@ -165,7 +165,7 @@ export class PeerToPeer {
     const expires = setTimeout(() => this.letJoinKeyGo(forInvite), Math.max(0, expiresAt - this.now()));
     this.joinKeys.set(forInvite, { publicKey, expires });
     this.sidecar.pin({ key: publicKey, address: joinAddress, socket: this.joinSocket() });
-    return { ...this.places(), joinKey: privateKey, joinAddress };
+    return { ...this.places(), joinKey: privateKey, joinAddress, name: hostname().replace(/\.local$/, "") };
   }
 
   inviteUsed(code: string) {

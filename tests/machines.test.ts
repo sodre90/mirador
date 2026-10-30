@@ -37,6 +37,7 @@ const tunnel: InviteTunnel = {
   broker: { address: "203.0.113.7:47800", key: "3Q85Sl/Vr65bJz+OyEhIQtyAeBRDJQqqkVWJgryS2WE=" },
   joinKey: "tne9fR0CU9toO26+5x2ggHdtuq+Z0kfmk/nqAnFmkyg=",
   joinAddress: "fd12:3456:789a:1:8f1e:22c4:aa01:93b7",
+  name: "studio",
 };
 
 test("an invite link from a machine that connects peer to peer carries how to reach it after the code, and still gives the code", () => {
@@ -50,6 +51,8 @@ test("an invite link from a machine that connects peer to peer carries how to re
   expect(tunnelIn(new URL(inviteLink("https://box.local", "ABCD-EFGH-JKLM", null, tunnel)).hash)).toEqual(tunnel);
   expect(tunnelIn("#/join/ABCD-EFGH-JKLM?tunnel=bm90LWEtdHVubmVs")).toBeNull();
   expect(tunnelIn("#/join/ABCD-EFGH-JKLM")).toBeNull();
+  const misnamed = btoa(JSON.stringify({ ...tunnel, name: 7 })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  expect(tunnelIn(`#/join/ABCD-EFGH-JKLM?tunnel=${misnamed}`)).toBeNull();
 });
 
 test("what is not a web address is not a machine", () => {
