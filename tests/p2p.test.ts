@@ -9,6 +9,8 @@ import { Sidecar } from "../host/p2p/sidecar.ts";
 import { Store } from "../host/store.ts";
 
 const brokerKey = newKeyPair().publicKey;
+/** The fake sidecar is a shell script, and the identity's files are kept by Unix permissions; peer to peer is Unix-only on the host anyway. */
+const unixOnlyTest = test.skipIf(process.platform === "win32");
 let folder: string;
 let commandsFile: string;
 let argumentsFile: string;
@@ -81,7 +83,7 @@ test("the environment may hand devices another broker address and announce more 
   });
 });
 
-test("the sidecar uses the host's broker and announces the extra places, while devices get the broker address meant for them", async () => {
+unixOnlyTest("the sidecar uses the host's broker and announces the extra places, while devices get the broker address meant for them", async () => {
   const { p2p, devices } = host({ broker: { address: "127.0.0.1:47800", key: brokerKey }, deviceBroker: "10.0.2.2:47800", candidates: ["10.0.2.2:41641"] });
   expect(p2p.invite("ABCDEFGHJK", Date.now() + 60_000).broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
   expect(p2p.register(devices.admit("Phone").device.id, newKeyPair().publicKey).broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
@@ -91,7 +93,7 @@ test("the sidecar uses the host's broker and announces the extra places, while d
   expect(sidecarArguments.at(-2)).toBe("--candidate=10.0.2.2:41641");
 });
 
-test("the host's tunnel identity is made once, kept from other accounts, and the same after a restart", () => {
+unixOnlyTest("the host's tunnel identity is made once, kept from other accounts, and the same after a restart", () => {
   const identity = tunnelIdentity(join(folder, "identity"));
   expect(statSync(join(folder, "identity")).mode & 0o777).toBe(0o700);
   expect(statSync(identity.keyFile).mode & 0o777).toBe(0o600);
@@ -111,7 +113,7 @@ test("devices get addresses of their own in the host's tunnel network", () => {
   });
 });
 
-test("a device that sends its key is let in on a socket of its own, and keeps its address when its key changes", async () => {
+unixOnlyTest("a device that sends its key is let in on a socket of its own, and keeps its address when its key changes", async () => {
   const { p2p, devices, listening } = host();
   const { device } = devices.admit("Phone");
   const firstKey = newKeyPair().publicKey;
@@ -135,7 +137,7 @@ test("a key is refused when it is not one, or when another device already uses i
   expect(p2p.refusedKey(newKeyPair().publicKey)).toBeNull();
 });
 
-test("a revoked device is let in no more, and its listener closes", async () => {
+unixOnlyTest("a revoked device is let in no more, and its listener closes", async () => {
   const { p2p, devices, listening } = host();
   const { device } = devices.admit("Phone");
   const key = newKeyPair().publicKey;
@@ -146,7 +148,7 @@ test("a revoked device is let in no more, and its listener closes", async () => 
   expect((await commandsRead(2)).at(-1)).toEqual({ unpin: { key } });
 });
 
-test("an invite's one-time key reaches only the joining socket, until shortly after the invite is used", async () => {
+unixOnlyTest("an invite's one-time key reaches only the joining socket, until shortly after the invite is used", async () => {
   const { p2p, devices, listening } = host();
   const { code, expiresAt } = devices.invite();
   const tunnel = p2p.invite(code, expiresAt);
@@ -160,7 +162,7 @@ test("an invite's one-time key reaches only the joining socket, until shortly af
   expect((await commandsRead(2))[1]).toEqual({ unpin: { key: pinned.pin.key } });
 });
 
-test("an invite's one-time key is let in no more once the invite expires", async () => {
+unixOnlyTest("an invite's one-time key is let in no more once the invite expires", async () => {
   const { p2p, devices } = host();
   const { code } = devices.invite();
   p2p.invite(code, Date.now() + 50);
@@ -178,7 +180,7 @@ test("a sidecar that can't start is tried again later, and the host keeps runnin
   expect(logged[1]).toBe("starting the sidecar again in 1 s");
 });
 
-test("paired devices are let in again when the host starts", async () => {
+unixOnlyTest("paired devices are let in again when the host starts", async () => {
   const first = host();
   const { device } = first.devices.admit("Phone");
   const key = newKeyPair().publicKey;
