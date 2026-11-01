@@ -47,7 +47,7 @@ test("Cmd+R serves the UI as it is now; Cmd+Shift+R restarts the host in place, 
   const hostCodeChanged = page.locator(".banner.host-code-changed");
 
   await test.step("an edit to the UI shows after Cmd+R, and the host keeps running its code", async () => {
-    editSource("web/App.tsx", "<h2>No conversation selected</h2>", "<h2>No conversation selected, edited</h2>");
+    editSource("web/i18n/en/shell.ts", `noConversation: "No conversation selected"`, `noConversation: "No conversation selected, edited"`);
     const primary = await primaryModifier(page);
     await expect(async () => {
       await page.keyboard.press(`${primary}+R`);
