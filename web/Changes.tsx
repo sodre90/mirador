@@ -9,6 +9,7 @@ import { hints } from "./hints.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { storedChoice } from "./stored-choice.ts";
 import { withHomeAsTilde } from "./workspace-folder.ts";
+import { hostErrorText } from "./host-error.ts";
 
 const words = t.canvas.changes;
 const scopeLabels: Record<ChangeScope, string> = words.scope;
@@ -26,7 +27,7 @@ const nothingChanged = (list: ChangeList) =>
 
 function changesRequest<T>(send: (requestId: string) => ClientMessage, picked: (message: ServerMessage) => T | undefined) {
   return connection.sendAndAwait(send, (message, requestId) => {
-    if (message.type === "changes.failed" && message.requestId === requestId) throw new Error(message.message);
+    if (message.type === "changes.failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
     return "requestId" in message && message.requestId === requestId ? picked(message) : undefined;
   });
 }

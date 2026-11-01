@@ -5,6 +5,7 @@ import type { ServerMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { currentPageLibraries } from "./page-libraries.ts";
+import { hostErrorText } from "./host-error.ts";
 
 const words = t.canvas.pageExport;
 
@@ -14,7 +15,7 @@ export class AlreadyThere extends Error {}
 const savedPath = (message: ServerMessage, requestId: string) => {
   if (message.type === "canvas.saved-to-project" && message.requestId === requestId) return message.path;
   if (message.type === "canvas.export-failed" && message.requestId === requestId) {
-    throw message.alreadyThere ? new AlreadyThere(message.message) : new Error(message.message);
+    throw message.alreadyThere ? new AlreadyThere(hostErrorText(message)) : new Error(hostErrorText(message));
   }
   return undefined;
 };
@@ -24,7 +25,7 @@ const exportedPage = (itemId: string) =>
     (requestId) => ({ type: "canvas.export", requestId, itemId, libraries: currentPageLibraries() }),
     (message, requestId) => {
       if (message.type === "canvas.exported" && message.requestId === requestId) return message.html;
-      if (message.type === "canvas.export-failed" && message.requestId === requestId) throw new Error(message.message);
+      if (message.type === "canvas.export-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;
     },
   );

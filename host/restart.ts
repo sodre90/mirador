@@ -3,6 +3,7 @@ import { dirname, join, relative } from "node:path";
 import { HOST_RELAUNCH } from "../shared/host-relaunch.ts";
 import type { ConversationService } from "./conversations.ts";
 import type { Hub } from "./hub.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const STOPPED_TURNS_FILE = "turns-stopped-for-restart.json";
 const SERVICES_STOP_TIMEOUT_MS = 5_000;
@@ -104,7 +105,7 @@ export class HostRestart {
    */
   async restart() {
     const relaunchHost = this.relaunchHost;
-    if (!relaunchHost) throw new Error("This host cannot restart itself here; restart it from the tray or the terminal instead.");
+    if (!relaunchHost) throw new HostProblemError({ code: "host-cannot-restart" });
     if (this.restarting) return;
     this.restarting = true;
     console.log(`restarting the host in place`);

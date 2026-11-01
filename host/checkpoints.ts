@@ -5,6 +5,7 @@ import { CheckpointGit, changesIn, NO_FILE_MODE, type Location } from "./checkpo
 import { OwnBytesStaging, type Staged } from "./checkpoints/own-bytes.ts";
 import { PutBack, type PutBackPlan } from "./checkpoints/put-back.ts";
 import { treeChangesIn, type TreeChange } from "./working-tree.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 /** Where snapshots hung, one after another, before each got a ref of its own. */
 const chainRefOf = (workspaceId: string) => `refs/mirador/${workspaceId}`;
@@ -141,7 +142,7 @@ export class Checkpoints {
   restore(workspace: Workspace, commit: string): Promise<RestorePlan> {
     return this.inOrder(workspace.id, async () => {
       const location = await this.locate(workspace);
-      if (!location) throw new Error(`${workspace.path} is not in a git repository`);
+      if (!location) throw new HostProblemError({ code: "not-in-git-repository", directory: workspace.path });
       const keptAs = await this.keptAs(workspace, commit);
       const plan = await this.diffToNow(workspace, location, commit, keptAs);
       if (keptAs.ownBytes) await this.putBack.ownBytes(workspace, location, plan, keptAs.cleaned);

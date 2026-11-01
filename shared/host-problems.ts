@@ -1,3 +1,6 @@
+import { problems as englishWords } from "../web/i18n/en/problems.ts";
+import { goneText, problemText, type ProblemWords } from "../web/problem-text.ts";
+
 /** Why an agent process went away, as the host saw it. */
 export type AgentGone =
   | { kind: "not-running" }
@@ -17,107 +20,71 @@ export type PrelaunchFailure = { kind: "timed-out"; seconds: number } | { kind: 
  * git or the system said, which stays as it came.
  */
 export type HostProblem =
+  | { code: keyof ProblemWords["fixed"] }
   | { code: "could-not-resume"; cause: string; causeProblem?: HostProblem }
   | { code: "could-not-set-option"; option: string; value: string; cause: string; causeProblem?: HostProblem }
   | { code: "option-change-unanswered"; option: string; current: string; value: string; seconds: number }
-  | { code: "usage-limit-reached" }
-  | { code: "conversation-has-no-profile" }
-  | { code: "workspace-gone" }
-  | { code: "conversation-deleted-while-opening" }
   | { code: "agent-cannot-load-sessions"; agent: string }
   | { code: "agent-cannot-fork-sessions"; agent: string }
-  | { code: "opencode-not-installed" }
-  | { code: "pi-not-installed" }
   | { code: "claude-program-missing"; program: string }
   | { code: "claude-not-installed"; installFolders: string; installCommand: string }
   | { code: "profile-environment-invalid"; profile: string; errors: string }
   | { code: "agent-not-running"; agent: string }
+  | { code: "no-such-conversation"; id: string }
+  | { code: "agent-cannot-search-sessions"; agent: string }
+  | { code: "agent-cannot-list-sessions"; agent: string }
+  | { code: "conversation-runs-on-other-agent"; agent: string; profile: string; profileAgent: string }
+  | { code: "files-no-longer-kept"; turns: number }
+  | { code: "agent-cannot-leave-session-behind"; agent: string }
+  | { code: "not-a-slash-command"; line: string }
+  | { code: "agent-has-no-such-command"; agent: string; line: string }
+  | { code: "unknown-agent"; agent: string }
+  | { code: "profile-is-for-other-agent"; profile: string; profileAgent: string; agent: string }
+  | { code: "unknown-questions-setting"; value: string }
+  | { code: "unknown-colour"; value: string }
+  | { code: "not-a-directory"; path: string }
+  | { code: "unknown-canvas-use"; value: string }
+  | { code: "unknown-keep-awake"; value: string }
+  | { code: "unknown-workspace-colour"; value: string }
+  | { code: "not-a-machine-address"; address: string }
+  | { code: "machine-already-added"; origin: string }
+  | { code: "unknown-machine-colour"; value: string }
+  | { code: "answer-all-questions"; count: number }
+  | { code: "tab-terminal-limit"; count: number }
+  | { code: "unknown-workspace"; id: string }
+  | { code: "plugin-has-no-setting"; plugin: string; setting: string }
+  | { code: "not-a-setting-choice"; value: string; setting: string }
+  | { code: "app-not-installed"; app: string }
+  | { code: "app-storage-keeps-text"; app: string }
+  | { code: "app-storage-full"; app: string; characters: number; key: string }
+  | { code: "file-leads-outside-workspace"; path: string }
+  | { code: "agent-did-not-change-file"; path: string }
+  | { code: "not-a-workspace-file"; path: string }
+  | { code: "not-a-line-number"; line: string }
+  | { code: "file-does-not-exist"; path: string }
+  | { code: "file-does-not-exist-in"; path: string; workspace: string }
+  | { code: "file-would-run"; path: string }
+  | { code: "no-program-for-file"; path: string }
+  | { code: "file-cannot-open-as-text"; path: string }
+  | { code: "executable-not-opened"; file: string }
+  | { code: "script-program-not-found"; program: string }
+  | { code: "script-program-through-cmd"; program: string }
+  | { code: "git-failed"; command: string; directory: string; output: string }
+  | { code: "snapshot-blob-unreadable"; blob: string; directory: string }
+  | { code: "not-in-git-repository"; directory: string }
+  | { code: "save-path-absolute"; name: string }
+  | { code: "save-path-outside"; name: string }
+  | { code: "save-path-is-folder"; name: string }
+  | { code: "save-already-there"; path: string }
+  | { code: "save-path-part-is-file"; name: string }
   | { code: "agent-gone"; agent: string; gone: AgentGone }
-  | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string }
-  | { code: "image-missing" }
-  | { code: "not-an-image-of-conversation" }
-  | { code: "unknown-conversation" }
-  | { code: "agent-still-working" };
+  | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string };
 
-export function englishAgentGone(gone: AgentGone) {
-  switch (gone.kind) {
-    case "not-running":
-      return "is not running";
-    case "stopped":
-      return "was stopped";
-    case "force-stopped":
-      return "was force stopped";
-    case "restarted-for-profile":
-      return "was restarted because its profile changed";
-    case "restarted-for-claude-program":
-      return "was restarted because the Claude Code program changed";
-    case "no-answer":
-      return `did not answer within ${gone.seconds} s of starting`;
-    case "exited":
-      return `exited with ${gone.how}`;
-    case "could-not-start":
-      return `could not start: ${gone.cause}`;
-  }
-}
-
-function englishPrelaunchFailure(failure: PrelaunchFailure) {
-  switch (failure.kind) {
-    case "timed-out":
-      return `timed out after ${failure.seconds} s`;
-    case "exited":
-      return `exited with ${failure.how}`;
-    case "could-not-run":
-      return failure.cause;
-  }
-}
+/** Why the agent process went away, in English. */
+export const englishAgentGone = (gone: AgentGone) => goneText(gone, englishWords);
 
 /** The problem in English, as logs, agents, the CLI and the phone app get it. */
-export function englishProblem(problem: HostProblem): string {
-  switch (problem.code) {
-    case "could-not-resume":
-      return `Could not resume the previous agent session (${problem.cause}); starting a fresh one.`;
-    case "could-not-set-option":
-      return `Could not set ${problem.option} to ${problem.value}: ${problem.cause}`;
-    case "option-change-unanswered":
-      return `${problem.option} is still ${problem.current}: the agent has not answered the change to ${problem.value} for ${problem.seconds} seconds. It changes once the agent answers.`;
-    case "usage-limit-reached":
-      return "Claude's usage limit is reached.";
-    case "conversation-has-no-profile":
-      return "This conversation has no profile, or its profile was deleted. Pick a profile at the top of the conversation.";
-    case "workspace-gone":
-      return "The workspace no longer exists.";
-    case "conversation-deleted-while-opening":
-      return "The conversation was deleted while its agent session opened.";
-    case "agent-cannot-load-sessions":
-      return `${problem.agent} cannot load existing sessions.`;
-    case "agent-cannot-fork-sessions":
-      return `${problem.agent} cannot fork sessions.`;
-    case "opencode-not-installed":
-      return "opencode is not installed: no opencode executable on PATH or in its usual install directories.";
-    case "pi-not-installed":
-      return "pi is not installed: no pi executable on PATH. Install it with npm install -g @earendil-works/pi-coding-agent.";
-    case "claude-program-missing":
-      return `The Claude Code program set in Settings › Agents, ${problem.program}, does not exist or cannot run.`;
-    case "claude-not-installed":
-      return `Claude Code is not installed: no claude on PATH or in ${problem.installFolders}. Install it with \`${problem.installCommand}\`, or set its path in Settings › Agents.`;
-    case "profile-environment-invalid":
-      return `Profile "${problem.profile}" has an invalid environment: ${problem.errors}`;
-    case "agent-not-running":
-      return `The ${problem.agent} agent is not running`;
-    case "agent-gone":
-      return `The ${problem.agent} agent process ${englishAgentGone(problem.gone)}.`;
-    case "prelaunch-failed":
-      return `The pre-launch command of ${problem.agent} ${englishPrelaunchFailure(problem.failure)}${problem.output ? `: ${problem.output}` : ""}`;
-    case "image-missing":
-      return "An image of this message is missing; paste it again.";
-    case "not-an-image-of-conversation":
-      return "That is not an image of this conversation.";
-    case "unknown-conversation":
-      return "Unknown conversation.";
-    case "agent-still-working":
-      return "The agent is still working on the previous message.";
-  }
-}
+export const englishProblem = (problem: HostProblem) => problemText(problem, englishWords);
 
 /** An error the host throws about a problem of its own: its message is the problem in English. */
 export class HostProblemError extends Error {

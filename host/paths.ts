@@ -1,6 +1,7 @@
 import { mkdir, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const MAX_COMPLETIONS = 30;
 
@@ -39,7 +40,7 @@ export async function directoryToAdd(path: string): Promise<string> {
 export async function existingDirectory(path: string): Promise<string> {
   const absolute = absolutePath(path);
   const info = await statOrNull(absolute);
-  if (!info?.isDirectory()) throw new Error(`${absolute} is not a directory.`);
+  if (!info?.isDirectory()) throw new HostProblemError({ code: "not-a-directory", path: absolute });
   return absolute.replace(/\/+$/, "") || "/";
 }
 

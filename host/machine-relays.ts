@@ -5,6 +5,7 @@ import { authorityFingerprint } from "./certificates.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { offeredAuthority, trusting } from "./machine-trust.ts";
 import type { Store } from "./store.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const UPSTREAM_OPEN_TIMEOUT_MS = 10_000;
 /** About the hop to the relay, or this host's own sign-in, rather than what the page asks the machine for. */
@@ -121,7 +122,7 @@ export class MachineRelays {
    */
   async join(machineId: string, code: string, linkFingerprint: string | null = null) {
     const machine = this.store.findMachine(machineId);
-    if (!machine) throw new Error("That machine is no longer among your machines.");
+    if (!machine) throw new HostProblemError({ code: "machine-gone" });
     const authority = await this.authorityToTrust(machine, linkFingerprint);
     const response = await fetch(`${machine.origin}/join`, {
       method: "POST",
@@ -144,7 +145,7 @@ export class MachineRelays {
    */
   async askToJoin(machineId: string, asked: (number: string) => void) {
     const machine = this.store.findMachine(machineId);
-    if (!machine) throw new Error("That machine is no longer among your machines.");
+    if (!machine) throw new HostProblemError({ code: "machine-gone" });
     const offered = await offeredAuthority(machine);
     const authority = offered?.authority ?? null;
     const send = (path: string, body: object) =>

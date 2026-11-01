@@ -3,6 +3,7 @@ import { commitmentTo, matchingNumber, newNonce, typedNumber, type JoinRequestAn
 import type { JoinRequest } from "../shared/model.ts";
 import { deviceName, hashed, type DeviceService } from "./devices.ts";
 import type { Store, StoredJoinRequest } from "./store.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const LIFETIME_MILLISECONDS = 5 * 60_000;
 const MOST_UNANSWERED = 3;
@@ -101,7 +102,7 @@ export class JoinRequestService {
   async approve(id: string, typed: string) {
     const request = this.waitingRequest(id);
     const approved = typedNumber(typed) === (await matchingNumber(request.authorityFingerprint, request.requesterNonce!, request.machineNonce));
-    if (!this.store.answerJoinRequest(id, approved ? "approved" : "denied")) throw new Error("That request to join is no longer waiting.");
+    if (!this.store.answerJoinRequest(id, approved ? "approved" : "denied")) throw new HostProblemError({ code: "join-request-no-longer-waiting" });
     return approved;
   }
 
@@ -120,7 +121,7 @@ export class JoinRequestService {
 
   private waitingRequest(id: string) {
     const request = this.store.findJoinRequest(id, this.now());
-    if (!request || request.requesterNonce === null || request.answer !== null) throw new Error("That request to join is no longer waiting.");
+    if (!request || request.requesterNonce === null || request.answer !== null) throw new HostProblemError({ code: "join-request-no-longer-waiting" });
     return request;
   }
 }

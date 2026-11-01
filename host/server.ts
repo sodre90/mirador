@@ -78,6 +78,7 @@ import type { KeepAwakeHold } from "./keep-awake.ts";
 import { computerName } from "./machine-name.ts";
 import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } from "./p2p/service.ts";
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
+import { englishProblem, HostProblemError, problemOf, type HostProblem } from "../shared/host-problems.ts";
 
 export interface HostServices {
   config: HostConfig;
@@ -117,8 +118,12 @@ export interface HostServices {
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
-const ONLY_OWN_PAGES_SET_UP_VOICE: ServerMessage = { type: "error", message: "Only Mirador's own pages set up voice on this Mac." };
-const MODEL_IN_USE: ServerMessage = { type: "error", message: "The voice settings use this model. Choose another one and save before removing it." };
+const problemReply = (problem: HostProblem): ServerMessage => ({ type: "error", message: englishProblem(problem), problem });
+const ONLY_OWN_PAGES_SET_UP_VOICE = problemReply({ code: "only-own-pages-set-up-voice" });
+const MODEL_IN_USE = problemReply({ code: "voice-model-in-use" });
+/** What a failed request gets back: the error in English, and the problem it was about when the host described it. */
+const failure = (error: unknown) => ({ message: errorMessage(error), ...problemOf(error) });
+const appFailure = (error: unknown) => ({ message: messageOf(error), ...problemOf(error) });
 /** What OpenAI's speech API takes at most: over 13 minutes of 16 kHz mono WAV. */
 const MAX_SPOKEN_CLIP_BYTES = 25 * 1024 * 1024;
 const MAX_REPLY_BYTES = 1024 * 1024;
@@ -462,10 +467,10 @@ export function startServer(services: HostServices) {
   /** With an invite link, this host joins the machine right away; otherwise its place in the window asks for a code. */
   async function addMachine(name: string, address: string) {
     const parsed = machineAddress(address);
-    if (!parsed) throw new Error(`"${address}" is not a machine's address.`);
+    if (!parsed) throw new HostProblemError({ code: "not-a-machine-address", address });
     const { origin, joinCode, authorityFingerprint } = parsed;
-    if (pageOrigins.includes(origin)) throw new Error("That is this machine.");
-    if (store.findMachineByOrigin(origin)) throw new Error(`${origin} is already among your machines.`);
+    if (pageOrigins.includes(origin)) throw new HostProblemError({ code: "that-is-this-machine" });
+    if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const id = crypto.randomUUID();
     store.insertMachine({ id, name: name.trim() || new URL(origin).hostname, origin, createdAt: Date.now() });
     relays.start(store.findMachine(id)!);
@@ -474,7 +479,7 @@ export function startServer(services: HostServices) {
   }
 
   function colorMachine(machineId: string, color: Pastel | null) {
-    if (color !== null && !isPastel(color)) throw new Error(`Unknown machine colour ${color}`);
+    if (color !== null && !isPastel(color)) throw new HostProblemError({ code: "unknown-machine-colour", value: color });
     store.setMachineColor(machineId, color);
     broadcastMachines();
   }
@@ -781,18 +786,18 @@ export function startServer(services: HostServices) {
   /** Something lands in a group just before a workspace of it, or among the groups and the workspaces in none before either; or last. */
   function checkLanding({ workspaces, groups }: ReturnType<typeof sidebarNow>, groupId: string | null, beforeWorkspaceId: string | null, beforeGroupId: string | null) {
     const groupExists = (id: string) => groups.some((group) => group.id === id);
-    if (groupId !== null && !groupExists(groupId)) throw new Error("That group is gone");
-    if (beforeGroupId !== null && groupId !== null) throw new Error("Only something in no group can land before a group");
-    if (beforeGroupId !== null && !groupExists(beforeGroupId)) throw new Error("That group is gone");
+    if (groupId !== null && !groupExists(groupId)) throw new HostProblemError({ code: "group-gone" });
+    if (beforeGroupId !== null && groupId !== null) throw new HostProblemError({ code: "only-ungrouped-before-group" });
+    if (beforeGroupId !== null && !groupExists(beforeGroupId)) throw new HostProblemError({ code: "group-gone" });
     const landsBefore = workspaces.find(({ id }) => id === beforeWorkspaceId);
-    if (landsBefore && landsBefore.groupId !== groupId) throw new Error("A workspace can only land before another of the same group");
+    if (landsBefore && landsBefore.groupId !== groupId) throw new HostProblemError({ code: "workspace-lands-in-same-group" });
   }
 
   /** Without a group, as the phone app moves it, a workspace keeps its own, and lands near the workspace named if that is in another. */
   function moveWorkspace(workspaceId: string, groupId: string | null | undefined, beforeWorkspaceId: string | null, beforeGroupId: string | null) {
     const before = sidebarNow();
     const moving = before.workspaces.find(({ id }) => id === workspaceId);
-    if (!moving) throw new Error("That workspace is gone");
+    if (!moving) throw new HostProblemError({ code: "moving-workspace-gone" });
     const landsIn = groupId === undefined ? moving.groupId : groupId;
     if (groupId !== undefined) {
       checkLanding(before, groupId, beforeWorkspaceId, beforeGroupId);
@@ -805,7 +810,7 @@ export function startServer(services: HostServices) {
 
   function groupName(name: string) {
     const trimmed = name.trim();
-    if (!trimmed) throw new Error("A group needs a name");
+    if (!trimmed) throw new HostProblemError({ code: "group-needs-name" });
     return trimmed;
   }
 
@@ -822,7 +827,7 @@ export function startServer(services: HostServices) {
 
   function moveWorkspaceGroup(groupId: string, beforeGroupId: string | null, beforeWorkspaceId: string | null) {
     const before = sidebarNow();
-    if (!before.groups.some(({ id }) => id === groupId)) throw new Error("That group is gone");
+    if (!before.groups.some(({ id }) => id === groupId)) throw new HostProblemError({ code: "group-gone" });
     checkLanding(before, null, beforeWorkspaceId, beforeGroupId);
     store.setSidebarOrder(sidebarIdsAfterMove(before.workspaces, before.groups, groupId, beforeGroupId ?? beforeWorkspaceId));
     broadcastSidebarChanges(before);
@@ -887,13 +892,13 @@ export function startServer(services: HostServices) {
 
   /** Conversations pick it up when their session next starts or resumes. */
   function setCanvasUse(canvasUse: CanvasUse) {
-    if (!isCanvasUse(canvasUse)) throw new Error(`Unknown canvas use ${canvasUse}`);
+    if (!isCanvasUse(canvasUse)) throw new HostProblemError({ code: "unknown-canvas-use", value: String(canvasUse) });
     store.setCanvasUse(canvasUse);
     hub.broadcast({ type: "settings.canvas-use", canvasUse });
   }
 
   function setKeepAwake(setting: KeepAwake) {
-    if (!isKeepAwake(setting)) throw new Error(`Unknown keep awake setting ${setting}`);
+    if (!isKeepAwake(setting)) throw new HostProblemError({ code: "unknown-keep-awake", value: String(setting) });
     store.setKeepAwake(setting);
     keepAwake.setKeepAwake(setting);
     hub.broadcast({ type: "settings.keep-awake", keepAwake: setting });
@@ -905,7 +910,7 @@ export function startServer(services: HostServices) {
   }
 
   function colorWorkspace(workspaceId: string, color: Pastel | null) {
-    if (color !== null && !isPastel(color)) throw new Error(`Unknown workspace colour ${color}`);
+    if (color !== null && !isPastel(color)) throw new HostProblemError({ code: "unknown-workspace-colour", value: color });
     store.setWorkspaceColor(workspaceId, color);
     const workspace = store.findWorkspace(workspaceId);
     if (workspace) hub.broadcast({ type: "workspace.upserted", workspace });
@@ -993,13 +998,13 @@ export function startServer(services: HostServices) {
         conversations
           .listSessionsInWorkspace(message.workspaceId, message.launch)
           .then((sessions) => reply({ type: "sessions.listed", requestId: message.requestId, sessions }))
-          .catch((error) => reply({ type: "sessions.failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "sessions.failed", requestId: message.requestId, ...failure(error) }));
         return;
       case "sessions.search":
         conversations
           .searchSessionsInWorkspace(message.workspaceId, message.launch, message.query, newestSessionSearch(socket))
           .then((sessions) => reply({ type: "sessions.searched", requestId: message.requestId, sessions }))
-          .catch((error) => reply({ type: "sessions.failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "sessions.failed", requestId: message.requestId, ...failure(error) }));
         return;
       case "mentions.suggest":
         return reply({ type: "mentions.suggested", requestId: message.requestId, suggestions: await conversations.mentionSuggestions(message.conversationId, message.query) });
@@ -1055,7 +1060,7 @@ export function startServer(services: HostServices) {
         return reply({ type: "tool-output.got", requestId: message.requestId, content: stored ? wholeToolOutput(message.conversationId, stored) : [] });
       }
       case "conversation.prompt":
-        conversations.send(message.conversationId, message.text, message.imageIds, { afterTurn: message.afterTurn }).catch((error) => reply({ type: "error", message: errorMessage(error) }));
+        conversations.send(message.conversationId, message.text, message.imageIds, { afterTurn: message.afterTurn }).catch((error) => reply({ type: "error", ...failure(error) }));
         return;
       case "conversation.run-command":
         return conversations.runCommand(message.conversationId, message.command);
@@ -1083,7 +1088,7 @@ export function startServer(services: HostServices) {
         return conversations.stopWaitingForJob(message.conversationId, message.waitId);
       case "conversation.async-task.stop":
         return conversations.stopAsyncTask(message.conversationId, message.asyncTaskId).catch((error) =>
-          reply({ type: "error", message: errorMessage(error) }),
+          reply({ type: "error", ...failure(error) }),
         );
       case "conversation.async-task.dismiss":
         return conversations.dismissAsyncTask(message.conversationId, message.asyncTaskId);
@@ -1104,24 +1109,24 @@ export function startServer(services: HostServices) {
         return conversations
           .previewRevert(message.conversationId, message.seq)
           .then(({ plan, files, cannotUndo }) => reply({ type: "conversation.revert-previewed", requestId: message.requestId, plan, ...(files && { files }), ...(cannotUndo && { cannotUndo }) }))
-          .catch((error) => reply({ type: "conversation.revert-failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "conversation.revert-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.revert":
         return conversations
           .revert(message.conversationId, message.seq)
           .then((plan) => reply({ type: "conversation.reverted", requestId: message.requestId, plan }))
-          .catch((error) => reply({ type: "conversation.revert-failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "conversation.revert-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.rewind-preview":
         return conversations
           .previewRewind(message.conversationId, message.seq)
           .then(({ turnsLeaving, keptFrom, plan, files, cannotRewind, filesNote }) =>
             reply({ type: "conversation.rewind-previewed", requestId: message.requestId, turnsLeaving, keptFrom, plan, ...(files && { files }), ...(cannotRewind && { cannotRewind }), ...(filesNote && { filesNote }) }),
           )
-          .catch((error) => reply({ type: "conversation.rewind-failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "conversation.rewind-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.rewind":
         return conversations
           .rewind(message.conversationId, message.seq, { keepFiles: message.keepFiles === true })
           .then(({ fromSeq }) => reply({ type: "conversation.rewind-done", requestId: message.requestId, conversationId: message.conversationId, fromSeq }))
-          .catch((error) => reply({ type: "conversation.rewind-failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "conversation.rewind-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.set-ask-mode":
         return conversations.setAskMode(message.conversationId, message.askMode);
       case "conversation.set-plugin-setting":
@@ -1150,25 +1155,25 @@ export function startServer(services: HostServices) {
           .apply(message.workspaceId, message.app, message.op, { kind: "you" })
           .catch((error) => {
             console.warn(`${message.app}'s view applied an operation that failed: ${messageOf(error)}`);
-            hub.send(socket, { type: "error", message: messageOf(error) });
+            hub.send(socket, { type: "error", ...appFailure(error) });
           });
       case "app.use-in":
         try {
           return apps.useIn(message.workspaceId, message.app, message.conversationId);
         } catch (error) {
-          return hub.send(socket, { type: "error", message: messageOf(error) });
+          return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       case "app.run":
         try {
           return void apps.runFromView(message.workspaceId, message.app, message.task);
         } catch (error) {
-          return hub.send(socket, { type: "error", message: messageOf(error) });
+          return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       case "app.stop-task":
         try {
           return apps.stopTask(message.workspaceId, message.app);
         } catch (error) {
-          return hub.send(socket, { type: "error", message: messageOf(error) });
+          return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       case "app.storage-set": {
         const { workspaceId, app } = message;
@@ -1176,7 +1181,7 @@ export function startServer(services: HostServices) {
           const items = appStorage.set(workspaceId, app, message.key, message.value);
           return hub.publishWhere((each) => each.data.appSubscriptions.has(appKey(message)), { type: "app.storage", workspaceId, app, items });
         } catch (error) {
-          return hub.send(socket, { type: "error", message: messageOf(error) });
+          return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       }
       case "canvas.report":
@@ -1192,7 +1197,7 @@ export function startServer(services: HostServices) {
         canvas
           .exportPage(message.itemId, message.libraries)
           .then(({ html }) => reply({ type: "canvas.exported", requestId: message.requestId, html }))
-          .catch((error) => reply({ type: "canvas.export-failed", requestId: message.requestId, message: errorMessage(error), alreadyThere: false }));
+          .catch((error) => reply({ type: "canvas.export-failed", requestId: message.requestId, ...failure(error), alreadyThere: false }));
         return;
       case "canvas.save-to-project":
       case "canvas.save-image-to-project":
@@ -1200,26 +1205,26 @@ export function startServer(services: HostServices) {
           .saveIntoProject(message.itemId, message.path, message.replace, message.type === "canvas.save-to-project" ? message.libraries : Buffer.from(message.image, "base64"))
           .then((path) => reply({ type: "canvas.saved-to-project", requestId: message.requestId, path }))
           .catch((error) =>
-            reply({ type: "canvas.export-failed", requestId: message.requestId, message: errorMessage(error), alreadyThere: error instanceof FileAlreadyThere }),
+            reply({ type: "canvas.export-failed", requestId: message.requestId, ...failure(error), alreadyThere: error instanceof FileAlreadyThere }),
           );
         return;
       case "changes.list":
         conversations.changes
           .list(message.conversationId, message.scope)
           .then((list) => reply({ type: "changes.listed", requestId: message.requestId, list }))
-          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
         return;
       case "changes.diff":
         conversations.changes
           .diff(message.conversationId, message.scope, message.path)
           .then((changes) => reply({ type: "changes.diffed", requestId: message.requestId, changes }))
-          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
         return;
       case "changes.files":
         conversations.changes
           .files(message.conversationId)
           .then((files) => reply({ type: "changes.files-listed", requestId: message.requestId, files }))
-          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, message: errorMessage(error) }));
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
         return;
       case "changes.open-in-editor":
         return conversations.changes.openInEditor(message.conversationId, message.path, message.line);
@@ -1227,7 +1232,7 @@ export function startServer(services: HostServices) {
         return conversations.changes
           .openFile(message.conversationId, message.path, message.ownerAgreed === true)
           .catch((error) =>
-            reply(error instanceof OutsideWorkspace ? { type: "files.ask-to-open", conversationId: message.conversationId, file: error.file } : { type: "error", message: errorMessage(error) }),
+            reply(error instanceof OutsideWorkspace ? { type: "files.ask-to-open", conversationId: message.conversationId, file: error.file } : { type: "error", ...failure(error) }),
           );
       case "fs.complete":
         return reply({
@@ -1242,14 +1247,14 @@ export function startServer(services: HostServices) {
         return statusline
           .render(message.conversationId, message.columns, message.runCommand)
           .then((render) => reply({ type: "statusline.rendered", requestId: message.requestId, statusline: render }))
-          .catch((error) => reply({ type: "error", message: errorMessage(error) }));
+          .catch((error) => reply({ type: "error", ...failure(error) }));
       case "subagent-usage.get":
         // A page asks every few seconds while subagents show, so the conversation may have been deleted meanwhile.
         if (!store.findConversation(message.conversationId)) return;
         return conversations
           .subagentUsage(message.conversationId, message.toolCallIds)
           .then((usage) => reply({ type: "subagent-usage.got", requestId: message.requestId, usage }))
-          .catch((error) => reply({ type: "error", message: errorMessage(error) }));
+          .catch((error) => reply({ type: "error", ...failure(error) }));
       case "terminals.attach":
         return terminals.attach(socket, message.conversationId);
       case "terminal.open":
@@ -1295,7 +1300,7 @@ export function startServer(services: HostServices) {
           pluginSettings.choose(message.plugin, message.setting, message.value);
           return hub.broadcast({ type: "plugins.settings", pluginSettings: pluginSettings.all() });
         } catch (error) {
-          return hub.send(socket, { type: "error", message: messageOf(error) });
+          return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       case "plugins.list":
         return void pluginsListed()
@@ -1507,7 +1512,7 @@ export function startServer(services: HostServices) {
       try {
         await dispatch(socket, JSON.parse(String(raw)) as ClientMessage);
       } catch (error) {
-        hub.send(socket, { type: "error", message: errorMessage(error) });
+        hub.send(socket, { type: "error", ...failure(error) });
       }
     },
   };

@@ -17,6 +17,7 @@ import type { PageLibraries } from "../../shared/canvas-export.ts";
 import { standalonePage } from "./export.ts";
 import { saveIntoWorkspace } from "./save-to-project.ts";
 import { noteOfPageErrors, type CanvasNote } from "./notes.ts";
+import { HostProblemError } from "../../shared/host-problems.ts";
 
 const RENDER_REPORT_TIMEOUT_MS = 6000;
 
@@ -112,8 +113,8 @@ export class CanvasService {
 
   answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[]) {
     const item = this.store.findCanvasItem(itemId);
-    if (!item || item.kind !== "ask") throw new Error("Unknown question.");
-    if (item.status !== "waiting") throw new Error("This question was already answered or withdrawn.");
+    if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
+    if (item.status !== "waiting") throw new HostProblemError({ code: "question-already-answered" });
     const given = answersFor(item, label, note, answers);
     const waiter = this.answerWaiters.get(itemId);
     this.answerWaiters.delete(itemId);
@@ -153,17 +154,17 @@ export class CanvasService {
   /** A page the agent showed, as a file of its own that draws outside Mirador. */
   async exportPage(itemId: string, libraries: PageLibraries) {
     const page = this.store.findCanvasItem(itemId);
-    if (page?.kind !== "show" || page.html === undefined) throw new Error("Only a page the agent showed can be copied or saved.");
+    if (page?.kind !== "show" || page.html === undefined) throw new HostProblemError({ code: "only-shown-pages-saved" });
     return { page, html: await standalonePage({ title: page.title, html: page.html }, this.assetsOrigins, libraries) };
   }
 
   /** Writes the page into the conversation's workspace, at a path inside it; the path it was saved at comes back. The page is built here from its HTML, or comes as a PNG its viewer's frame drew. */
   async saveIntoProject(itemId: string, path: string, replace: boolean, content: PageLibraries | Uint8Array) {
     const page = this.store.findCanvasItem(itemId);
-    if (page?.kind !== "show" || page.html === undefined) throw new Error("Only a page the agent showed can be copied or saved.");
+    if (page?.kind !== "show" || page.html === undefined) throw new HostProblemError({ code: "only-shown-pages-saved" });
     const file = typeof content === "string" ? (await this.exportPage(itemId, content)).html : content;
     const workspace = this.store.findWorkspace(this.conversations.get(page.conversationId).workspaceId);
-    if (!workspace) throw new Error("The workspace no longer exists.");
+    if (!workspace) throw new HostProblemError({ code: "workspace-gone" });
     return saveIntoWorkspace(workspace.path, path, file, { replace });
   }
 
@@ -265,11 +266,11 @@ type GivenAnswer = Pick<CanvasAnswer, "label" | "note" | "answers">;
 function answersFor(item: AskItem, label: string, note: string | undefined, answers: AskAnswerEntry[] | undefined): GivenAnswer {
   const questions = questionsOf(item);
   if (!item.questions) {
-    if (answers) throw new Error("This question takes one answer.");
+    if (answers) throw new HostProblemError({ code: "question-takes-one-answer" });
     return { label, note: note?.trim() || undefined };
   }
   if (!answers || answers.length !== questions.length || answers.some((entry) => !entry.label.trim())) {
-    throw new Error(`Answer all ${questions.length} questions.`);
+    throw new HostProblemError({ code: "answer-all-questions", count: questions.length });
   }
   const entries = answers.map(({ label, note }, index) => ({ question: questions[index]!.question, label, note: note?.trim() || undefined }));
   return { label: answersSummary(entries), note: note?.trim() || undefined, answers: entries };

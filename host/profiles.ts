@@ -4,15 +4,16 @@ import type { ProfileDraft } from "../shared/protocol.ts";
 import type { ConversationService } from "./conversations.ts";
 import type { BrowserSocket, Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 /** Every conversation runs on a profile, and a profile only on the agent it was made for; the picker sends both, and the host checks they agree. */
 export function profileToLaunch(store: Store, launch: Launch): Profile {
-  if (!harnessIds.includes(launch.harness)) throw new Error(`Unknown agent ${launch.harness}.`);
-  if (launch.profileId === null) throw new Error("Every conversation runs on a profile: pick one, or set one up in Profiles.");
+  if (!harnessIds.includes(launch.harness)) throw new HostProblemError({ code: "unknown-agent", agent: launch.harness });
+  if (launch.profileId === null) throw new HostProblemError({ code: "profile-required" });
   const profile = store.findProfile(launch.profileId);
-  if (!profile) throw new Error("That profile no longer exists.");
+  if (!profile) throw new HostProblemError({ code: "profile-gone" });
   if (profile.harness !== launch.harness) {
-    throw new Error(`Profile "${profile.name}" is for ${harnessLabels[profile.harness]}, not ${harnessLabels[launch.harness]}.`);
+    throw new HostProblemError({ code: "profile-is-for-other-agent", profile: profile.name, profileAgent: harnessLabels[profile.harness], agent: harnessLabels[launch.harness] });
   }
   return profile;
 }
@@ -39,9 +40,9 @@ export function giveEveryWorkspaceAProfile(store: Store): Workspace[] {
 /** A new workspace starts its conversations on the profile it was added with; with no profile yet, on none. */
 export function launchForNewWorkspace(store: Store, profileId: string | null): Launch {
   if (store.listProfiles().length === 0) return { harness: "claude", profileId: null };
-  if (!profileId) throw new Error("Pick the profile the workspace's conversations start on.");
+  if (!profileId) throw new HostProblemError({ code: "pick-workspace-profile" });
   const profile = store.findProfile(profileId);
-  if (!profile) throw new Error("That profile no longer exists.");
+  if (!profile) throw new HostProblemError({ code: "profile-gone" });
   return launchOn(profile);
 }
 
@@ -83,14 +84,14 @@ export class ProfileService {
 
   save(draft: ProfileDraft): Profile {
     const name = draft.name.trim();
-    if (!name) throw new Error("A profile needs a name.");
+    if (!name) throw new HostProblemError({ code: "profile-needs-name" });
     const { errors } = parseEnvironment(draft.environment);
     if (errors.length > 0) throw new Error(errors.join("\n"));
     const existing = draft.id ? this.store.findProfile(draft.id) : undefined;
-    if (draft.id && !existing) throw new Error("That profile no longer exists.");
-    if (!harnessIds.includes(draft.harness)) throw new Error(`Unknown agent ${draft.harness}.`);
-    if (!(draft.askMode in askModeLabels)) throw new Error(`Unknown Questions setting ${draft.askMode}.`);
-    if (draft.color !== null && !isPastel(draft.color)) throw new Error(`Unknown colour ${draft.color}.`);
+    if (draft.id && !existing) throw new HostProblemError({ code: "profile-gone" });
+    if (!harnessIds.includes(draft.harness)) throw new HostProblemError({ code: "unknown-agent", agent: draft.harness });
+    if (!(draft.askMode in askModeLabels)) throw new HostProblemError({ code: "unknown-questions-setting", value: draft.askMode });
+    if (draft.color !== null && !isPastel(draft.color)) throw new HostProblemError({ code: "unknown-colour", value: draft.color });
     const profile: Profile = {
       id: existing?.id ?? crypto.randomUUID(),
       name,
@@ -116,7 +117,7 @@ export class ProfileService {
   /** The last profile stays: without one, no conversation could start. Workspaces that used a deleted one move to another. */
   delete(profileId: string) {
     if (this.store.listProfiles().every(({ id }) => id === profileId)) {
-      throw new Error("Mirador needs a profile to start conversations with: create another before deleting this one.");
+      throw new HostProblemError({ code: "last-profile" });
     }
     this.store.deleteProfile(profileId);
     this.conversations.restartProfile(profileId);

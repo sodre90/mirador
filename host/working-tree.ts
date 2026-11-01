@@ -3,6 +3,7 @@ import { join, posix } from "node:path";
 import type { ChangeStatus } from "../shared/changes.ts";
 import type { FileBefore } from "./edit-diff.ts";
 import { LineCountCache } from "./line-count-cache.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 /** A file that differs between two of git's trees, or between a tree and the working tree. */
 export interface TreeChange {
@@ -64,7 +65,7 @@ async function git(directory: string, args: string[], input = "") {
 
 async function mustGit(directory: string, args: string[], input?: string) {
   const result = await git(directory, args, input);
-  if (result.exitCode !== 0) throw new Error(`git ${args[0]} failed in ${directory}: ${result.stderr}`);
+  if (result.exitCode !== 0) throw new HostProblemError({ code: "git-failed", command: args[0], directory, output: result.stderr });
   return result.stdout;
 }
 

@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import type { Workspace } from "../../shared/model.ts";
+import { HostProblemError } from "../../shared/host-problems.ts";
 
 /** Mirador's own commits need no identity or signing setup from the user's git config. */
 export const IDENTITY = ["-c", "user.name=mirador", "-c", "user.email=mirador@localhost", "-c", "commit.gpgsign=false"];
@@ -59,14 +60,14 @@ export class CheckpointGit {
   /** git for the calls whose failure the user has to hear about, rather than one that only answers a question. */
   async mustRun(workspace: Workspace, args: string[], options: GitOptions = {}) {
     const result = await this.run(workspace, args, options);
-    if (result.exitCode !== 0) throw new Error(`git ${args[0]} failed in ${workspace.path}: ${result.stderr || result.stdout}`);
+    if (result.exitCode !== 0) throw new HostProblemError({ code: "git-failed", command: args[0], directory: workspace.path, output: result.stderr || result.stdout });
     return result;
   }
 
   /** Like `mustRun`, with git's output as the bytes it wrote. */
   async mustRunForBytes(workspace: Workspace, args: string[], options: GitOptions = {}) {
     const result = await this.runForBytes(workspace, args, options);
-    if (result.exitCode !== 0) throw new Error(`git ${args[0]} failed in ${workspace.path}: ${result.stderr}`);
+    if (result.exitCode !== 0) throw new HostProblemError({ code: "git-failed", command: args[0], directory: workspace.path, output: result.stderr });
     return result;
   }
 

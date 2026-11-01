@@ -9,6 +9,7 @@ import type { Store } from "./store.ts";
 import { claudeConfigDir } from "./terminal-sessions.ts";
 import { commandLine, commandShell } from "./command-shell.ts";
 import { killProcessTree } from "./windows-processes.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const COMMAND_TIMEOUT_MS = 5_000;
 /** A command may leave a background job holding its output open; what it printed before exiting is what counts. */
@@ -156,7 +157,7 @@ export class StatuslineService {
   async render(conversationId: string, columns: number, runCommand: boolean): Promise<StatuslineRender> {
     const conversation = this.conversations.get(conversationId);
     const directory = this.store.findWorkspace(conversation.workspaceId)?.path;
-    if (!directory) throw new Error(`Unknown workspace ${conversation.workspaceId}`);
+    if (!directory) throw new HostProblemError({ code: "unknown-workspace", id: conversation.workspaceId });
     const now = Date.now();
     const quotas = this.conversations.planQuotasOf(conversationId, now);
     const environment = this.environmentOf(conversation);

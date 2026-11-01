@@ -28,6 +28,7 @@ import {
   type TimeWindow,
   type TreeChange,
 } from "./working-tree.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const FILE_CHANGING_KINDS: ToolKind[] = ["edit", "delete", "move"];
 
@@ -220,7 +221,7 @@ async function workspaceFileAt(workspace: Workspace, path: string): Promise<File
   if (stats === null) return { kind: "missing" };
   const realPlace = join(realPathOf(dirname(file)) ?? dirname(file), basename(file));
   if (shownPath(realPlace, [realPathOf(workspace.path) ?? workspace.path]) === realPlace)
-    throw new Error(`${path} leads outside this workspace, so Mirador does not show it.`);
+    throw new HostProblemError({ code: "file-leads-outside-workspace", path });
   if (stats.isSymbolicLink()) return { kind: "text", text: await readlink(file) };
   return textFileAt(file);
 }
@@ -319,10 +320,10 @@ export class Changes {
     const agentEdits = edits.find((edit) => (isAbsolute(path) ? edit.path === path : projectPathOf(edit.path, directories) === path));
     const agentDiffs = (): FileChanges => ({ path, source: "agent", diffs: (agentEdits?.snippets ?? []).map(({ oldText, newText }) => snippetDiff(path, oldText, newText)) });
     if (isAbsolute(path)) {
-      if (!agentEdits) throw new Error(`The agent did not change ${path} in this conversation.`);
+      if (!agentEdits) throw new HostProblemError({ code: "agent-did-not-change-file", path });
       return agentDiffs();
     }
-    if (!withinWorkspace(workspace, path)) throw new Error(`${path} is not a file of this workspace.`);
+    if (!withinWorkspace(workspace, path)) throw new HostProblemError({ code: "not-a-workspace-file", path });
     if (start.commandWindows && !agentEdits && (await this.isTrackedOrUntracked(workspace, path))) {
       const { baseOf } = await changesSinceCommitsWithin(workspace.path, start.since!, start.commandWindows);
       return this.filesDiff(workspace, path, baseOf.get(path) ?? (await headOrEmptyTree(workspace.path)), null);
@@ -356,13 +357,13 @@ export class Changes {
   /** Opens a file of the project, or one the agent changed anywhere in this conversation, in IntelliJ IDEA. */
   async openInEditor(conversationId: string, path: string, line: number) {
     const workspace = this.workspaceOf(conversationId);
-    if (!Number.isInteger(line) || line < 1) throw new Error(`${line} is not a line number.`);
+    if (!Number.isInteger(line) || line < 1) throw new HostProblemError({ code: "not-a-line-number", line: String(line) });
     if (isAbsolute(path)) {
       const changedByAgent = this.agentEdits(conversationId, workspace, 0).some((edit) => edit.path === normalize(path));
-      if (!changedByAgent) throw new Error(`The agent did not change ${path} in this conversation.`);
+      if (!changedByAgent) throw new HostProblemError({ code: "agent-did-not-change-file", path });
       return this.openInIdea(normalize(path), line);
     }
-    if (!withinWorkspace(workspace, path)) throw new Error(`${path} is not a file of this workspace.`);
+    if (!withinWorkspace(workspace, path)) throw new HostProblemError({ code: "not-a-workspace-file", path });
     this.openInIdea(join(resolve(workspace.path), path), line);
   }
 
@@ -374,15 +375,15 @@ export class Changes {
   async openFile(conversationId: string, path: string, ownerAgreed = false) {
     const workspace = this.workspaceOf(conversationId);
     const realFile = realPathOf(isAbsolute(path) ? normalize(path) : resolve(workspace.path, path));
-    if (realFile === null) throw new Error(isAbsolute(path) ? `${path} does not exist.` : `${path} does not exist in ${workspace.path}.`);
+    if (realFile === null) throw new HostProblemError(isAbsolute(path) ? { code: "file-does-not-exist", path } : { code: "file-does-not-exist-in", path, workspace: workspace.path });
     if (!ownerAgreed && !isWorkspaceOrAgentFile(realFile, workspace, this.agentEdits(conversationId, workspace, 0))) throw new OutsideWorkspace(realFile);
     const opening = openingOf(realFile);
-    if (opening === "refused") throw new Error(`${path} would run as a program, so Mirador does not open it.`);
+    if (opening === "refused") throw new HostProblemError({ code: "file-would-run", path });
     if (opening === "default") {
       if (await this.openWithDefault(realFile)) return;
-      if (!(await looksLikeText(realFile))) throw new Error(`No program is set to open ${path}, and it is not text, so Mirador cannot open it.`);
+      if (!(await looksLikeText(realFile))) throw new HostProblemError({ code: "no-program-for-file", path });
     }
-    if (!(await this.openAsText(realFile))) throw new Error(`Mirador could not open ${path} as text.`);
+    if (!(await this.openAsText(realFile))) throw new HostProblemError({ code: "file-cannot-open-as-text", path });
   }
 
   /**

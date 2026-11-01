@@ -115,6 +115,22 @@ test("a page the agent showed can be copied as an image or HTML, downloaded, and
     await expect(saveForm(page)).toHaveCount(0);
   });
 
+  await test.step("in Hungarian, the host's refusal shows in Hungarian", async () => {
+    const viewport = page.viewportSize()!;
+    await page.setViewportSize({ width: 1920, height: viewport.height });
+    await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+    await page.reload();
+    await exportToggle(page).click();
+    await page.getByRole("menuitem", { name: "Mentés a projektbe…" }).click();
+    await saveForm(page).getByLabel("Mentés a projektbe ezen a néven").fill("../outside.html");
+    await saveForm(page).getByRole("button", { name: "Mentés", exact: true }).click();
+    await expect(saveForm(page).getByRole("alert")).toHaveText("Ez nem a projektmappán belüli fájl: „../outside.html”.");
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => localStorage.removeItem("mirador-language"));
+    await page.setViewportSize(viewport);
+    await page.reload();
+  });
+
   await test.step("with libraries inside the file, saving over the earlier file asks first, then puts D3 in it", async () => {
     await chooseLibraries(page, "Inside the file: works offline, but Mermaid adds about 3 MB");
     await saveToProject(page);

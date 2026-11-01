@@ -7,6 +7,7 @@ import { hints } from "./hints.ts";
 import { locale, t } from "./i18n/index.ts";
 import { launchLabel } from "./launch-label.ts";
 import type { AppAction } from "./state.ts";
+import { hostErrorText } from "./host-error.ts";
 
 const words = t.shell.sessions;
 
@@ -21,7 +22,7 @@ function useWorkspaceSessions(workspace: Workspace) {
     const requestId = crypto.randomUUID();
     const unsubscribe = connection.onMessage((message) => {
       if (message.type === "sessions.listed" && message.requestId === requestId) setListing({ state: "listed", sessions: message.sessions });
-      if (message.type === "sessions.failed" && message.requestId === requestId) setListing({ state: "failed", message: message.message });
+      if (message.type === "sessions.failed" && message.requestId === requestId) setListing({ state: "failed", message: hostErrorText(message) });
     });
     connection.send({ type: "sessions.list", requestId, workspaceId: workspace.id, launch: workspace.defaultLaunch });
     return unsubscribe;
@@ -39,7 +40,7 @@ function useSessionSearch(workspace: Workspace, query: string, enabled: boolean)
     const requestId = crypto.randomUUID();
     const unsubscribe = connection.onMessage((message) => {
       if (message.type === "sessions.searched" && message.requestId === requestId) setAnswered({ query: trimmed, sessions: message.sessions });
-      if (message.type === "sessions.failed" && message.requestId === requestId) setAnswered({ query: trimmed, failed: message.message });
+      if (message.type === "sessions.failed" && message.requestId === requestId) setAnswered({ query: trimmed, failed: hostErrorText(message) });
     });
     const timer = setTimeout(
       () => connection.send({ type: "sessions.search", requestId, workspaceId: workspace.id, launch: workspace.defaultLaunch, query: trimmed }),

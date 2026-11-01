@@ -1,3 +1,4 @@
+import type { HostProblem } from "./host-problems.ts";
 import { harnessLabels, harnessRewinds, type CommittedFiles, type ConversationEvent, type HarnessId, type RestoreFiles, type RestorePlan, type StoredEvent } from "./model.ts";
 import { returnedSteerSeqs } from "./steered-messages.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
@@ -85,16 +86,14 @@ export function joinedRunningTurn(events: StoredEvent[], seq: number): boolean {
   return before.slice(turnBegan).some(({ event }) => event.type === "user-message");
 }
 
-const cannotLeaveSessionBehind = (harness: HarnessId) => `Taking a conversation back needs the agent to leave part of its own session behind, which ${harnessLabels[harness]} can't do.`;
-const NO_MARK_TO_GO_BACK_TO = "The agent's replies before this turn carry no mark of where its session should go back to, so it can't be taken back there.";
 
 /**
  * Why the agent's session can't go back to before the turn at `seq`, if it can't. With nothing marked to go back to, a
  * fresh session stands in only for a first turn: after earlier turns it would silently forget them.
  */
-export function whyNoRewindTo(harness: HarnessId, events: StoredEvent[], seq: number): string | undefined {
-  if (rewindPointBefore(events, seq) === null) return events.some(({ seq: at, event }) => at < seq && event.type === "user-message") ? NO_MARK_TO_GO_BACK_TO : undefined;
-  return harnessRewinds[harness] ? undefined : cannotLeaveSessionBehind(harness);
+export function whyNoRewindTo(harness: HarnessId, events: StoredEvent[], seq: number): HostProblem | undefined {
+  if (rewindPointBefore(events, seq) === null) return events.some(({ seq: at, event }) => at < seq && event.type === "user-message") ? { code: "no-mark-to-go-back-to" } : undefined;
+  return harnessRewinds[harness] ? undefined : { code: "agent-cannot-leave-session-behind", agent: harnessLabels[harness] };
 }
 
 /** The agent's latest message in the conversation, where turns taken elsewhere since pick up. */

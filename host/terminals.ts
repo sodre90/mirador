@@ -11,6 +11,7 @@ import type { BrowserSocket, Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
 import { TrimmedOutput } from "./trimmed-output.ts";
 import { childProgramNames, killProcessTree } from "./windows-processes.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const SCROLLBACK_CHARACTERS = 256 * 1024;
 const SCROLLBACK_SAVE_DELAY_MS = 15_000;
@@ -273,7 +274,7 @@ export class TerminalService {
 
   private existingFolderOf(conversationId: string) {
     const folder = this.folderOf(conversationId);
-    if (!folder) throw new Error("This conversation no longer exists.");
+    if (!folder) throw new HostProblemError({ code: "conversation-gone" });
     return folder;
   }
 
@@ -328,8 +329,8 @@ export class TerminalService {
 
   private splittableTabOf(terminalId: string) {
     const tab = this.tabs.get(this.shells.get(terminalId)?.tabId ?? "");
-    if (!tab) throw new Error("That terminal is closed.");
-    if (terminalIdsOf(tab).length >= MAX_TERMINALS_PER_TAB) throw new Error(`A tab holds at most ${MAX_TERMINALS_PER_TAB} terminals.`);
+    if (!tab) throw new HostProblemError({ code: "terminal-closed" });
+    if (terminalIdsOf(tab).length >= MAX_TERMINALS_PER_TAB) throw new HostProblemError({ code: "tab-terminal-limit", count: MAX_TERMINALS_PER_TAB });
     return tab;
   }
 

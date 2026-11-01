@@ -9,6 +9,7 @@ import { withStreamedEvent } from "../shared/timeline.ts";
 import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
+import { hostErrorText } from "./host-error.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -322,7 +323,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "prompt-template.deleted":
       return { ...state, promptTemplates: state.promptTemplates.filter(({ id }) => id !== message.templateId) };
     case "error":
-      return withNotice(state, message.message);
+      return withNotice(state, hostErrorText(message));
     case "files.ask-to-open":
       return { ...state, fileToOpen: { conversationId: message.conversationId, file: message.file } };
     case "fs.completions":

@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { extname } from "node:path";
 import { currentPath } from "./current-path.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 /** What each system's default action runs rather than shows, beyond what Windows lists in PATHEXT and what is executable elsewhere. */
 const programExtensions = {
@@ -72,18 +73,16 @@ export function scriptOpeningCommand(file: string, scriptProgram: string, platfo
   if (platform === "darwin") return { command: ["open", "-t", file], environment: {} };
   if (platform === "win32") return { command: ["notepad.exe", file], environment: {} };
   if (isExecutable(file))
-    throw new Error(`${file} is executable, and xdg-open could run it, so Mirador does not open it. Settings › Conversations can name a program to open scripts in.`);
+    throw new HostProblemError({ code: "executable-not-opened", file });
   return { command: ["xdg-open", file], environment: {} };
 }
 
 /** The program exactly as found is what runs, with the file as an argument of its own: no shell, and on Windows no cmd.exe, reads its name. */
 function namedProgramCommand(file: string, scriptProgram: string, platform: NodeJS.Platform, findProgram: (name: string) => string | null): OpeningCommand {
   const program = findProgram(scriptProgram);
-  if (!program) throw new Error(`Mirador cannot find ${scriptProgram}, the program Settings › Conversations name to open scripts in, on the host's PATH.`);
+  if (!program) throw new HostProblemError({ code: "script-program-not-found", program: scriptProgram });
   if (platform === "win32" && !programsWindowsStartsItself.includes(extname(program).toLowerCase()))
-    throw new Error(
-      `${program} runs through cmd.exe, which could take part of a file's name for a command, so Mirador does not open scripts with it. Name the program's .exe in Settings › Conversations instead, such as Code.exe for VS Code.`,
-    );
+    throw new HostProblemError({ code: "script-program-through-cmd", program });
   return { command: [program, file], environment: {} };
 }
 

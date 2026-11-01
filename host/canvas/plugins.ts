@@ -17,6 +17,7 @@ import type { Store } from "../store.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
 import type { CanvasNote } from "./notes.ts";
+import { HostProblemError } from "../../shared/host-problems.ts";
 
 /** With tool search on, Claude Code hides MCP tools until the agent searches for them; a plugin's tools are offered as the canvas's own are. */
 const loadedUpFront = { "anthropic/alwaysLoad": true };
@@ -197,7 +198,7 @@ export class CanvasPlugins {
   /** The user takes an item out of the tab; only a new item brings one back. */
   dismiss(itemId: string) {
     const item = this.pluginItem(itemId);
-    if (item.placement !== "tab") throw new Error("Only an item in the tab can be dismissed.");
+    if (item.placement !== "tab") throw new HostProblemError({ code: "only-tab-items-dismissed" });
     this.save({ ...item, dismissed: true });
   }
 
@@ -317,7 +318,7 @@ export class CanvasPlugins {
 
   private pluginItem(itemId: string) {
     const item = this.store.findCanvasItem(itemId);
-    if (item?.kind !== "plugin") throw new Error("Unknown item.");
+    if (item?.kind !== "plugin") throw new HostProblemError({ code: "unknown-item" });
     return item;
   }
 

@@ -33,6 +33,7 @@ import type {
   Pastel,
 } from "./model.ts";
 import type { ChangeList, ChangeScope, FileChanges, ProjectFiles } from "./changes.ts";
+import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
 import type { AppDocumentState, AppStorageItems, CatalogPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginOffer, PluginSettings, PluginUpdate } from "./apps.ts";
@@ -393,7 +394,7 @@ export type ServerMessage =
   /** `cannotUndo` says why a turn cannot be undone, when it cannot; `plan` is absent then too. */
   | { type: "conversation.revert-previewed"; requestId: string; plan: RestorePlan | null; files?: RestoreFiles; cannotUndo?: string }
   | { type: "conversation.reverted"; requestId: string; plan: RestorePlan }
-  | { type: "conversation.revert-failed"; requestId: string; message: string }
+  | { type: "conversation.revert-failed"; requestId: string; message: string; problem?: HostProblem }
   /**
    * `turnsLeaving` and `keptFrom` say what the conversation loses: how many turns, and the turn it goes back to (null
    * keptFrom: all of them). `cannotRewind` says why it cannot go back at all, `filesNote` why the files stay as they are.
@@ -412,26 +413,26 @@ export type ServerMessage =
   | { type: "conversation.rewind-done"; requestId: string; conversationId: string; fromSeq: number }
   /** The conversation was taken back to before `fromSeq`, which every page showing it drops its events from. */
   | { type: "conversation.rewound"; conversationId: string; fromSeq: number }
-  | { type: "conversation.rewind-failed"; requestId: string; message: string }
+  | { type: "conversation.rewind-failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "canvas.upserted"; item: CanvasItem }
   | { type: "canvas.exported"; requestId: string; html: string }
   | { type: "canvas.saved-to-project"; requestId: string; path: string }
   /** `alreadyThere` when the path names a file that is there already, which the user may choose to replace. */
-  | { type: "canvas.export-failed"; requestId: string; message: string; alreadyThere: boolean }
+  | { type: "canvas.export-failed"; requestId: string; message: string; problem?: HostProblem; alreadyThere: boolean }
   /** `createsDirectory`: nothing is at the typed path yet and its parent is a folder, so adding it makes that folder. */
   | { type: "fs.completions"; requestId: string; directories: string[]; createsDirectory: boolean }
   | { type: "statusline.rendered"; requestId: string; statusline: StatuslineRender }
   | { type: "subagent-usage.got"; requestId: string; usage: Record<string, SubagentUsage> }
   | { type: "sessions.listed"; requestId: string; sessions: ExternalSession[] }
   | { type: "sessions.searched"; requestId: string; sessions: SessionSearchHit[] }
-  | { type: "sessions.failed"; requestId: string; message: string }
+  | { type: "sessions.failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "slash-commands.listed"; requestId: string; commands: SlashCommand[] }
   | { type: "prompt-history.listed"; requestId: string; prompts: string[]; ownEarlier?: PromptHistoryEntry[] }
   | { type: "mentions.suggested"; requestId: string; suggestions: MentionSuggestion[] }
   | { type: "changes.listed"; requestId: string; list: ChangeList }
   | { type: "changes.diffed"; requestId: string; changes: FileChanges }
   | { type: "changes.files-listed"; requestId: string; files: ProjectFiles }
-  | { type: "changes.failed"; requestId: string; message: string }
+  | { type: "changes.failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "terminals.listed"; conversationId: string; tabs: TerminalTab[] }
   | { type: "terminal.opened"; requestId: string; tabId: string; terminalId: string }
   | { type: "terminal.replayed"; terminalId: string; data: string }
@@ -455,7 +456,7 @@ export type ServerMessage =
   | { type: "plugin-updates.found"; pluginUpdates: PluginUpdate[] }
   /** The host is stopping to start again in place; pages reload once they reconnect. */
   | { type: "host.restarting" }
-  | { type: "error"; message: string }
+  | { type: "error"; message: string; problem?: HostProblem }
   /** A file link leads to a file outside the workspace that the agent did not change: the page asks before it opens `file`, the real file. */
   | { type: "files.ask-to-open"; conversationId: string; file: string }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */

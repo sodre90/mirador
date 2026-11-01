@@ -2,6 +2,7 @@ import { copyFile, lstat, readFile, rename, rm, stat, writeFile } from "node:fs/
 import { join } from "node:path";
 import type { Workspace } from "../../shared/model.ts";
 import { changesIn, EXECUTABLE_MODE, WITHOUT_SAFECRLF, type Change, type CheckpointGit, type Entry, type Location } from "./git.ts";
+import { HostProblemError } from "../../shared/host-problems.ts";
 
 const FILE_MODES = new Set(["100644", EXECUTABLE_MODE]);
 const CONVERTING_ATTRIBUTES = ["text", "eol", "crlf", "ident", "working-tree-encoding"];
@@ -84,7 +85,7 @@ export class OwnBytesStaging {
     const [statChanged, added] = await Promise.all([upToDate ? this.statChangedIn(workspace, beforeAdd) : Promise.resolve([]), this.addEverything(workspace)]);
     if (added.exitCode !== 0) {
       if (state) await this.putOwnBytesState(workspace, state);
-      throw new Error(`git add failed in ${workspace.path}: ${added.stderr || added.stdout}`);
+      throw new HostProblemError({ code: "git-failed", command: "add", directory: workspace.path, output: added.stderr || added.stdout });
     }
     const converted = (await this.git.mustRun(workspace, ["write-tree"])).stdout;
     const staged = upToDate ? await this.followChanges(workspace, location, state, converted, statChanged) : await this.ownBytesFromScratch(workspace, location, converted);

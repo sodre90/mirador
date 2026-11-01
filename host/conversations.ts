@@ -96,12 +96,8 @@ const LISTED_SESSIONS = 30;
 const SEARCHED_SESSIONS = 50;
 const TITLE_LENGTH = 60;
 const CONTINUE_AFTER_INTERRUPTION = "Continue where you left off.";
-const NO_FILES_KEPT = "Mirador kept no files for that turn, so there is nothing to undo it to.";
-const AGENT_IS_WORKING = "The agent is still working. Stop its turn before going back.";
-const NOT_A_TURN = "A conversation can be taken back only to one of your own messages.";
-const AGENT_CANNOT_FORK = "The agent cannot be sent back to an earlier point in its session.";
-const ONLY_GIT_REPOSITORIES = "Mirador keeps a turn's files only in a workspace that is a git repository.";
-const FILES_NO_LONGER_KEPT = `Mirador no longer keeps the files of that turn: it keeps those of a workspace's newest ${SNAPSHOTS_KEPT} turns.`;
+const NO_FILES_KEPT: HostProblem = { code: "no-files-kept" };
+const FILES_NO_LONGER_KEPT: HostProblem = { code: "files-no-longer-kept", turns: SNAPSHOTS_KEPT };
 const TURN_STOP_TIMEOUT_MS = 10_000;
 /** How long a Stop waits for Claude Code to record the prompt it is stopping, bounded so a wedged agent can't hang it. */
 const PROMPT_RECORD_WAIT_MS = 3_000;
@@ -343,7 +339,7 @@ export class ConversationService {
 
   get(conversationId: string): Conversation {
     const conversation = this.store.findConversation(conversationId);
-    if (!conversation) throw new Error(`Unknown conversation ${conversationId}`);
+    if (!conversation) throw new HostProblemError({ code: "no-such-conversation", id: conversationId });
     return this.withRuntimeStatus(conversation);
   }
 
@@ -441,7 +437,7 @@ export class ConversationService {
     if (lowerQuery.length < MIN_SEARCH_LENGTH) return [];
     const { profile, sessions, conversationIdBySession } = await this.harnessSessions(workspaceId, launch);
     const harness = this.harnessFor(launch);
-    if (harness.spec.id !== "claude" && harness.spec.id !== "opencode") throw new Error(`${harness.spec.label} cannot search its sessions.`);
+    if (harness.spec.id !== "claude" && harness.spec.id !== "opencode") throw new HostProblemError({ code: "agent-cannot-search-sessions", agent: harness.spec.label });
     const environment = profileEnvironment(profile);
     const transcriptPaths =
       harness.spec.id === "claude"
@@ -469,7 +465,7 @@ export class ConversationService {
     const profile = profileToLaunch(this.store, launch);
     const harness = this.harnessFor(launch);
     const capabilities = await harness.start();
-    if (!capabilities.agentCapabilities?.sessionCapabilities?.list) throw new Error(`${harness.spec.label} cannot list its sessions.`);
+    if (!capabilities.agentCapabilities?.sessionCapabilities?.list) throw new HostProblemError({ code: "agent-cannot-list-sessions", agent: harness.spec.label });
     const { sessions } = await harness.listSessions(directory);
     const conversationIdBySession = new Map(this.store.listConversations().map(({ acpSessionId, id }) => [acpSessionId, id]));
     return { profile, sessions: sessions.filter(({ cwd }) => cwd === directory), conversationIdBySession };
@@ -478,7 +474,7 @@ export class ConversationService {
   /** Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation. */
   adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title">, mode: AdoptMode): Conversation {
     if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
-      throw new Error("That session is already open in the app.");
+      throw new HostProblemError({ code: "session-already-open" });
     }
     const title = session.title || UNTITLED;
     const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? `Fork: ${title}` : title);
@@ -576,7 +572,7 @@ export class ConversationService {
 
   rename(conversationId: string, title: string) {
     const name = firstGraphemes(title.trim(), MAX_TITLE_LENGTH);
-    if (!name) throw new Error("A conversation needs a name.");
+    if (!name) throw new HostProblemError({ code: "conversation-needs-name" });
     this.save({ ...this.get(conversationId), title: name, titleSetByUser: true });
   }
 
@@ -650,7 +646,7 @@ export class ConversationService {
     const { harness } = this.get(conversationId);
     const target = this.store.findProfile(profileId);
     if (!target || target.harness === harness || !hasBegun(this.store.listEvents(conversationId))) return target?.harness ?? harness;
-    throw new Error(`This conversation already runs on ${harnessLabels[harness]}. Start a new conversation to use “${target.name}” on ${harnessLabels[target.harness]}.`);
+    throw new HostProblemError({ code: "conversation-runs-on-other-agent", agent: harnessLabels[harness], profile: target.name, profileAgent: harnessLabels[target.harness] });
   }
 
   /** The context its report measured is gone, so the meter starts empty again — in the store, so a restart does not bring it back. */
@@ -872,10 +868,10 @@ export class ConversationService {
   /** What undoing the turn that began with this message would do to the files, and to which, or why it cannot be undone. */
   async previewRevert(conversationId: string, seq: number): Promise<{ plan: RestorePlan | null; files?: RestoreFiles; cannotUndo?: string }> {
     const checkpoint = this.checkpointAt(conversationId, seq);
-    if (!checkpoint) return { plan: null, cannotUndo: NO_FILES_KEPT };
+    if (!checkpoint) return { plan: null, cannotUndo: englishProblem(NO_FILES_KEPT) };
     const preview = await this.checkpoints.preview(this.workspaceOf(conversationId), checkpoint);
-    if (!preview) return { plan: null, cannotUndo: ONLY_GIT_REPOSITORIES };
-    return (await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint)) ? preview : { plan: null, cannotUndo: FILES_NO_LONGER_KEPT };
+    if (!preview) return { plan: null, cannotUndo: englishProblem({ code: "only-git-repositories" }) };
+    return (await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint)) ? preview : { plan: null, cannotUndo: englishProblem(FILES_NO_LONGER_KEPT) };
   }
 
   /**
@@ -884,10 +880,10 @@ export class ConversationService {
    * saying what happened goes out with the user's next message.
    */
   async revert(conversationId: string, seq: number): Promise<RestorePlan> {
-    if (this.runtime(conversationId).running) throw new Error("The agent is still working. Stop its turn before undoing one.");
+    if (this.runtime(conversationId).running) throw new HostProblemError({ code: "stop-turn-before-undo" });
     const checkpoint = this.checkpointAt(conversationId, seq);
-    if (!checkpoint) throw new Error(NO_FILES_KEPT);
-    if (!(await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint))) throw new Error(FILES_NO_LONGER_KEPT);
+    if (!checkpoint) throw new HostProblemError(NO_FILES_KEPT);
+    if (!(await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint))) throw new HostProblemError(FILES_NO_LONGER_KEPT);
     const plan = await this.checkpoints.restore(this.workspaceOf(conversationId), checkpoint);
     this.append(conversationId, { type: "revert", revertId: crypto.randomUUID(), toSeq: seq, ...plan });
     return plan;
@@ -907,7 +903,7 @@ export class ConversationService {
     const kept = before.at(-1)?.event;
     const keptFrom = kept?.type === "user-message" ? turnTitle(kept.text) : null;
     const cannotRewind = this.rewindProblem(conversationId, seq);
-    if (cannotRewind) return { turnsLeaving, keptFrom, plan: null, cannotRewind };
+    if (cannotRewind) return { turnsLeaving, keptFrom, plan: null, cannotRewind: englishProblem(cannotRewind) };
     const { plan, files, cannotUndo } = await this.previewRevert(conversationId, seq);
     return { turnsLeaving, keptFrom, plan, ...(files && { files }), ...(cannotUndo && { filesNote: cannotUndo }) };
   }
@@ -921,7 +917,7 @@ export class ConversationService {
    */
   async rewind(conversationId: string, seq: number, { keepFiles = false } = {}): Promise<{ fromSeq: number }> {
     const cannotRewind = this.rewindProblem(conversationId, seq);
-    if (cannotRewind) throw new Error(cannotRewind);
+    if (cannotRewind) throw new HostProblemError(cannotRewind);
     const runtime = this.runtime(conversationId);
     const conversation = this.get(conversationId);
     const events = this.store.listEvents(conversationId);
@@ -954,7 +950,7 @@ export class ConversationService {
     const harness = this.harnessFor(conversation);
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
-    if (!capabilities.agentCapabilities?.sessionCapabilities?.fork) throw new Error(AGENT_CANNOT_FORK);
+    if (!capabilities.agentCapabilities?.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-go-back-in-session" });
     const { sessionId } = await harness.forkSession({
       sessionId: conversation.acpSessionId!,
       cwd: await recordedDirectory(this.existingWorkspace(conversation.workspaceId)),
@@ -964,9 +960,9 @@ export class ConversationService {
   }
 
   /** Why the conversation cannot go back to this turn, if it cannot. */
-  private rewindProblem(conversationId: string, seq: number) {
-    if (this.runtime(conversationId).running) return AGENT_IS_WORKING;
-    if (this.store.findEvent(conversationId, seq)?.event.type !== "user-message") return NOT_A_TURN;
+  private rewindProblem(conversationId: string, seq: number): HostProblem | undefined {
+    if (this.runtime(conversationId).running) return { code: "stop-turn-before-going-back" };
+    if (this.store.findEvent(conversationId, seq)?.event.type !== "user-message") return { code: "rewind-only-to-own-message" };
     return whyNoRewindTo(this.get(conversationId).harness, this.store.listEvents(conversationId), seq);
   }
 
@@ -1055,7 +1051,7 @@ export class ConversationService {
   /** A terminal tab that shows what the job runs and follows its output. */
   jobFollowProgram(conversationId: string, waitId: string): TerminalProgram {
     const wait = this.jobWaits.in(conversationId).find(({ id }) => id === waitId);
-    if (!wait) throw new Error("Mirador no longer waits for that job.");
+    if (!wait) throw new HostProblemError({ code: "job-wait-gone" });
     return followJobProgram(wait);
   }
 
@@ -1092,7 +1088,7 @@ export class ConversationService {
   runCommand(conversationId: string, command: string) {
     const conversation = this.get(conversationId);
     const directory = this.store.findWorkspace(conversation.workspaceId)?.path;
-    if (!directory) throw new Error("This conversation's workspace no longer exists.");
+    if (!directory) throw new HostProblemError({ code: "conversation-workspace-gone" });
     const environment = profileEnvironment(this.profileOf(conversation));
     void this.commands.run(command, directory, environment, (event) => this.append(conversationId, event));
   }
@@ -1129,9 +1125,9 @@ export class ConversationService {
   /** A command Claude Code shows a panel for only in its own terminal, run in a tab of the conversation's terminals. */
   panelCommandProgram(conversationId: string, line: string): TerminalProgram {
     const command = panelCommandRun(line);
-    if (command === null) throw new Error(`${line} is not a slash command.`);
+    if (command === null) throw new HostProblemError({ code: "not-a-slash-command", line });
     const conversation = this.get(conversationId);
-    if (conversation.harness !== "claude") throw new Error(`${harnessLabels[conversation.harness]} has no command like ${line}.`);
+    if (conversation.harness !== "claude") throw new HostProblemError({ code: "agent-has-no-such-command", agent: harnessLabels[conversation.harness], line });
     const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
     return { tabName: command, command: [environment.CLAUDE_CODE_EXECUTABLE!, command], environment, key: `panel ${command}` };
   }
@@ -1243,7 +1239,7 @@ export class ConversationService {
 
   respondToPermission(conversationId: string, permissionId: string, optionId: string | null) {
     const pending = this.runtime(conversationId).pendingPermissions.get(permissionId);
-    if (!pending) throw new Error("This permission request is no longer pending.");
+    if (!pending) throw new HostProblemError({ code: "permission-no-longer-pending" });
     pending.settle(optionId);
   }
 
@@ -2031,7 +2027,7 @@ export class ConversationService {
 
   private replaceQueue(conversationId: string, change: (queue: QueuedMessage[]) => QueuedMessage[], messageId: string) {
     const runtime = this.runtime(conversationId);
-    if (!runtime.queuedMessages.some(({ id }) => id === messageId)) throw new Error("That message was already sent.");
+    if (!runtime.queuedMessages.some(({ id }) => id === messageId)) throw new HostProblemError({ code: "queued-message-already-sent" });
     this.setQueue(conversationId, runtime, change(runtime.queuedMessages));
     this.publish(this.get(conversationId));
   }

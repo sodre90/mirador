@@ -6,6 +6,7 @@ import { whatFiles, whatLeaves } from "./revert-text.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { Modal } from "./Palette.tsx";
+import { hostErrorText } from "./host-error.ts";
 
 const words = t.revert;
 
@@ -28,7 +29,7 @@ const previewFiles = (conversationId: string, seq: number) =>
       if (message.type === "conversation.revert-previewed" && message.requestId === requestId) {
         return { plan: message.plan, ...(message.files && { files: message.files }), ...(message.cannotUndo && { filesNote: message.cannotUndo }) };
       }
-      if (message.type === "conversation.revert-failed" && message.requestId === requestId) throw new Error(message.message);
+      if (message.type === "conversation.revert-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;
     },
   );
@@ -41,7 +42,7 @@ const previewRewind = (conversationId: string, seq: number) =>
         const { plan, files, cannotRewind, filesNote, turnsLeaving, keptFrom } = message;
         return { plan, ...(files && { files }), ...(cannotRewind && { cannotRewind }), ...(filesNote && { filesNote }), ...(turnsLeaving !== undefined && { turnsLeaving }), keptFrom };
       }
-      if (message.type === "conversation.rewind-failed" && message.requestId === requestId) throw new Error(message.message);
+      if (message.type === "conversation.rewind-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;
     },
   );
@@ -51,7 +52,7 @@ const putFilesBack = (conversationId: string, seq: number) =>
     (requestId) => ({ type: "conversation.revert", requestId, conversationId, seq }),
     (message, requestId) => {
       if (message.type === "conversation.reverted" && message.requestId === requestId) return message.plan;
-      if (message.type === "conversation.revert-failed" && message.requestId === requestId) throw new Error(message.message);
+      if (message.type === "conversation.revert-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;
     },
   );
@@ -61,7 +62,7 @@ export const rewindTo = (conversationId: string, seq: number, keepFiles = false)
     (requestId) => ({ type: "conversation.rewind", requestId, conversationId, seq, ...(keepFiles && { keepFiles }) }),
     (message, requestId) => {
       if (message.type === "conversation.rewind-done" && message.requestId === requestId) return message.fromSeq;
-      if (message.type === "conversation.rewind-failed" && message.requestId === requestId) throw new Error(message.message);
+      if (message.type === "conversation.rewind-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;
     },
   );

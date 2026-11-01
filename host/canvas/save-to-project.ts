@@ -1,8 +1,9 @@
 import { lstat, mkdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { toPosix } from "../paths.ts";
+import { HostProblemError } from "../../shared/host-problems.ts";
 
-export class SaveRefused extends Error {}
+export class SaveRefused extends HostProblemError {}
 
 export class FileAlreadyThere extends SaveRefused {}
 
@@ -15,7 +16,7 @@ const isWithin = (root: string, path: string) => !escapes(relative(root, path));
 
 const isInside = (root: string, path: string) => relative(root, path) !== "" && isWithin(root, path);
 
-const outsideWorkspace = (name: string) => new SaveRefused(`"${name}" is not a file inside the project folder.`);
+const outsideWorkspace = (name: string) => new SaveRefused({ code: "save-path-outside", name });
 
 const statOf = (path: string) => stat(path).catch(() => undefined);
 
@@ -33,22 +34,22 @@ async function assertNotLeadingOut(root: string, target: string, name: string) {
 export async function saveIntoWorkspace(workspaceRoot: string, path: string, content: string | Uint8Array, { replace = false } = {}): Promise<string> {
   const savesHtml = typeof content === "string";
   const name = path.trim();
-  if (name === "") throw new SaveRefused("Name the file to save the page as.");
-  if (isAbsolute(name)) throw new SaveRefused(`"${name}" is an absolute path. Give a path inside the project folder.`);
+  if (name === "") throw new SaveRefused({ code: "save-needs-name" });
+  if (isAbsolute(name)) throw new SaveRefused({ code: "save-path-absolute", name });
 
   const root = await realpath(workspaceRoot);
   const target = resolve(root, name);
   if (!isInside(root, target)) throw outsideWorkspace(name);
   await assertNotLeadingOut(root, target, name);
-  if (!(savesHtml ? HTML_NAME : IMAGE_NAME).test(name)) throw new SaveRefused(savesHtml ? "Save the page as an .html file." : "Save the image as a .png file.");
+  if (!(savesHtml ? HTML_NAME : IMAGE_NAME).test(name)) throw new SaveRefused({ code: savesHtml ? "save-as-html" : "save-as-png" });
 
   const existing = await statOf(target);
-  if (existing?.isDirectory()) throw new SaveRefused(`"${name}" is a folder. Name the page differently.`);
+  if (existing?.isDirectory()) throw new SaveRefused({ code: "save-path-is-folder", name });
   const saved = toPosix(relative(root, target));
-  if (existing && !replace) throw new FileAlreadyThere(`${saved} is already there.`);
+  if (existing && !replace) throw new FileAlreadyThere({ code: "save-already-there", path: saved });
 
   await mkdir(dirname(target), { recursive: true }).catch(() => {
-    throw new SaveRefused(`Part of "${name}" is a file, not a folder.`);
+    throw new SaveRefused({ code: "save-path-part-is-file", name });
   });
   await writeFile(target, content);
   return saved;

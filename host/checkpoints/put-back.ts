@@ -2,6 +2,7 @@ import { lstat, mkdir, readdir, rm, rmdir, symlink, writeFile } from "node:fs/pr
 import { dirname, join, relative, resolve, sep } from "node:path";
 import type { Workspace } from "../../shared/model.ts";
 import { EXECUTABLE_MODE, SYMLINK_MODE, type CheckpointGit, type Entry, type Location } from "./git.ts";
+import { HostProblemError } from "../../shared/host-problems.ts";
 
 /** The files a restore deletes, by their paths, and the snapshot's entries for those it writes back. */
 export type PutBackPlan = { added: string[]; kept: Entry[] };
@@ -97,7 +98,7 @@ export class PutBack {
     for (const blob of blobs) {
       const headerEnd = stdout.indexOf(0x0a, at);
       const [, type = "", size = ""] = decoder.decode(stdout.subarray(at, headerEnd === -1 ? stdout.byteLength : headerEnd)).split(" ");
-      if (headerEnd === -1 || type !== "blob") throw new Error(`git can no longer read the snapshot's copy of ${blob} in ${workspace.path}`);
+      if (headerEnd === -1 || type !== "blob") throw new HostProblemError({ code: "snapshot-blob-unreadable", blob, directory: workspace.path });
       contents.set(blob, stdout.subarray(headerEnd + 1, headerEnd + 1 + Number(size)));
       at = headerEnd + 1 + Number(size) + 1;
     }

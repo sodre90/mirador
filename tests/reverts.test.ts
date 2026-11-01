@@ -143,13 +143,13 @@ test("a rewind to the first turn has nothing of the agent's to go back to", () =
 test("an agent that can go back to a marked reply can take a conversation back there; one that can't is refused", () => {
   const events = stored(userMessage("first"), said("msg_1"), userMessage("second"));
   expect(whyNoRewindTo("claude", events, 3)).toBeUndefined();
-  expect(whyNoRewindTo("opencode", events, 3)).toContain("which opencode can't do");
+  expect(whyNoRewindTo("opencode", events, 3)).toEqual({ code: "agent-cannot-leave-session-behind", agent: "opencode" });
 });
 
 test("with no reply marked, only a first turn can be taken back, by starting the agent afresh", () => {
   expect(whyNoRewindTo("opencode", stored(said(), userMessage("first"), said()), 2)).toBeUndefined();
   const unmarkedTurns = stored(userMessage("first"), said(), userMessage("second"), said());
-  for (const harness of ["claude", "opencode", "pi"] as const) expect(whyNoRewindTo(harness, unmarkedTurns, 3)).toContain("no mark");
+  for (const harness of ["claude", "opencode", "pi"] as const) expect(whyNoRewindTo(harness, unmarkedTurns, 3)).toEqual({ code: "no-mark-to-go-back-to" });
 });
 
 test("a message sent while a turn ran joined it, and the next one after the turn ended or failed starts its own", () => {
