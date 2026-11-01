@@ -103,8 +103,11 @@ export function writeCompiledBunProgram(directory: string, name: string, script:
 /** Windows names it Path; a second key named PATH beside it would leave which one the host gets to chance. */
 const pathVariableOf = (environment: NodeJS.ProcessEnv) => Object.keys(environment).find((name) => name.toUpperCase() === "PATH") ?? "PATH";
 
-const withoutPeerToPeer = (environment: NodeJS.ProcessEnv) =>
-  Object.fromEntries(Object.entries(environment).filter(([variable]) => !variable.startsWith("MIRADOR_P2P_")));
+/** Set by some of the owner's profiles, so an agent on one hands it to the specs it runs, where Claude Code then offers no background Bash. */
+const OWNERS_AGENT_SETTINGS = ["CLAUDE_CODE_DISABLE_BACKGROUND_TASKS"];
+
+const withoutOwnersSettings = (environment: NodeJS.ProcessEnv) =>
+  Object.fromEntries(Object.entries(environment).filter(([variable]) => !variable.startsWith("MIRADOR_P2P_") && !OWNERS_AGENT_SETTINGS.includes(variable)));
 
 /** A host environment whose PATH is just `folders`, under the name the system gives PATH. */
 export const pathOf = (folders: string[]) => ({ [pathVariableOf(process.env)]: folders.join(delimiter) });
@@ -225,10 +228,11 @@ export class TestHost {
 
   /**
    * MIRADOR_E2E_MINIMAL_ENV=1 starts the host like a bare terminal would: no inherited agent or shell variables. The
-   * owner's own peer-to-peer settings never reach it: a spec that wants a tunnel sets its own.
+   * owner's own peer-to-peer settings never reach it, nor the agent settings of the profile running the specs: a spec
+   * that wants a tunnel sets its own.
    */
   private baseEnvironment(): NodeJS.ProcessEnv {
-    if (!process.env.MIRADOR_E2E_MINIMAL_ENV) return withoutPeerToPeer(process.env);
+    if (!process.env.MIRADOR_E2E_MINIMAL_ENV) return withoutOwnersSettings(process.env);
     const bunDir = dirname(programOnPath("bun"));
     return {
       HOME: homedir(),
