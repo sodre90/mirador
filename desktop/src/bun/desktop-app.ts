@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import type { Language } from "../../../shared/i18n/languages.ts";
 import type { NewerVersion } from "../../../shared/newer-version.ts";
 import type { WaitingConversation } from "../../../shared/waiting.ts";
+import { inLanguage } from "../../../web/notification-text.ts";
 import { HostNotifications, nativeNotification } from "../core/host-notifications.ts";
 import { hostAnswers, spawnOwnedHost } from "../core/host-process.ts";
 import { HostSupervisor, type HostStatus } from "../core/host-supervisor.ts";
@@ -107,7 +108,7 @@ export class DesktopApp {
     this.notifications = new HostNotifications({
       origin: runtime.origin,
       token: () => this.browserTokenOnceWritten(),
-      show: (notification) => Utils.showNotification(nativeNotification(notification, process.platform)),
+      show: (notification) => Utils.showNotification(nativeNotification(inLanguage(notification, this.words()), process.platform)),
       showWaiting: (waiting) => {
         this.tray.showWaiting(waiting);
         this.waiting = waiting.conversations;

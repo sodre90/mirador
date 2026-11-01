@@ -18,6 +18,10 @@ function texts(entry: Entry, path: string): [string, string][] {
 }
 
 describe("languages", () => {
+  test.each([en, hu, es, zh])("the page and the desktop app name an untitled conversation alike", (messages) => {
+    expect(messages.desktop.untitled).toBe(messages.shell.conversationTitle.untitled);
+  });
+
   test("only the listed languages are languages", () => {
     expect(LANGUAGES.every(isLanguage)).toBe(true);
     expect(isLanguage("de")).toBe(false);

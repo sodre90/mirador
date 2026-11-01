@@ -74,7 +74,15 @@ test("questions elsewhere notify, in the browser or else through the desktop app
     try {
       expect(await nextLine()).toBe("connected");
       askInBackground(second, "Desktop?");
-      expect(JSON.parse(await nextLine()) as SystemNotification).toEqual({ id: expect.any(String), kind: "question", conversationId: second, title: "New conversation", workspace: "project", body: "Asks: Desktop?" });
+      expect(JSON.parse(await nextLine()) as SystemNotification).toEqual({
+        id: expect.any(String),
+        kind: "question",
+        conversationId: second,
+        title: "New conversation",
+        workspace: "project",
+        body: "Asks: Desktop?",
+        about: { kind: "conversation", reason: { kind: "question", question: "Desktop?" }, untitled: true },
+      });
       await page.waitForTimeout(1_000);
       expect(await notificationsShown(page)).toHaveLength(1);
     } finally {
@@ -91,5 +99,16 @@ test("questions elsewhere notify, in the browser or else through the desktop app
     api.answerHeld();
     const bodiesAbout = async (conversationId: string) => (await notificationsShown(page)).filter(({ tag }) => tag === conversationId).map(({ body }) => body);
     await expect.poll(() => bodiesAbout(first)).toContain("project · Finished, waiting for you");
+  });
+
+  await test.step("in Hungarian, the notification speaks Hungarian, naming an untitled conversation by the Hungarian default", async () => {
+    await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("lang", "hu");
+    await page.locator(".workspace li:not(.selected) .conversation-title").click();
+    await expect(page).toHaveURL(new RegExp(`#/c/${first}$`));
+    askInBackground(second, "Magyarul?");
+    await expect.poll(() => notificationsShown(page)).toContainEqual({ title: "Új beszélgetés", body: "project · Kérdezi: Magyarul?", tag: second, closed: false });
+    await page.evaluate(() => localStorage.removeItem("mirador-language"));
   });
 });

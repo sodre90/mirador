@@ -16,6 +16,17 @@ export const desktop: Messages["desktop"] = {
   download: (newer) => `${newer} – letöltés`,
   waitingForYou: "Rád várnak",
   waiting: { decision: "Rád vár", failed: "Sikertelen", done: "Kész", unread: "Olvasatlan" },
+  untitled: "Új beszélgetés",
+  notifications: {
+    asks: (question) => `Kérdezi: ${question}`,
+    wantsPermission: (tool) => `Engedélyt kér: ${tool}`,
+    aTool: "egy eszköz",
+    finished: "Kész, rád vár",
+    stoppedWithError: (message) => `Hibával leállt: ${message}`,
+    joinRequest: (name) => `Csatlakozni szeretne a Miradorhoz: ${name}`,
+    joinRequestBody: (address, tailscaleUser) =>
+      `Innen: ${address}${tailscaleUser ? `, Tailscale-fiók: ${tailscaleUser}` : ""}. Nyisd meg a Miradort, és hagyd jóvá a kijelzett szám begépelésével.`,
+  },
   more: (count) => `még ${count}…`,
   open: "Megnyitás",
   restartHost: "A host újraindítása",

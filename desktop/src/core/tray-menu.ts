@@ -84,9 +84,9 @@ export function menuLabel(text: string, platform: NodeJS.Platform) {
   return platform === "win32" ? short.replaceAll("&", "&&") : short;
 }
 
-function waitingItem({ conversationId, title, workspace, tone }: WaitingConversation, platform: NodeJS.Platform, words: DesktopWords): TrayItem {
+function waitingItem({ conversationId, title, untitled, workspace, tone }: WaitingConversation, platform: NodeJS.Platform, words: DesktopWords): TrayItem {
   const where = workspace ? ` · ${menuLabel(workspace, platform)}` : "";
-  return { type: "normal", label: `${words.waiting[tone]}: ${menuLabel(title, platform)}${where}`, action: "open-conversation", data: { conversationId } };
+  return { type: "normal", label: `${words.waiting[tone]}: ${menuLabel(untitled ? words.untitled : title, platform)}${where}`, action: "open-conversation", data: { conversationId } };
 }
 
 function waitingItems(waiting: readonly WaitingConversation[], platform: NodeJS.Platform, words: DesktopWords): TrayItem[] {

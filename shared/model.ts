@@ -441,6 +441,9 @@ export const busyTexts: Record<BusyWith, string> = {
 /** The title a conversation has until its first message, the agent or the user names it. */
 export const UNTITLED = "New conversation";
 
+/** Still called by the default name, which the page shows in its own language. */
+export const isUntitled = ({ title, titleSetByUser }: Pick<Conversation, "title" | "titleSetByUser">) => title === UNTITLED && !titleSetByUser;
+
 export interface Conversation {
   id: string;
   workspaceId: string;

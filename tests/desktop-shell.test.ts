@@ -141,6 +141,11 @@ describe("conversations waiting for you in the tray menu", () => {
   test("leave out the workspace when it has no name", () => {
     expect(labels(trayMenu({ ...state, waiting: [{ ...waitingConversation(1, "unread"), workspace: "" }] }))[1]).toBe("Unread: Conversation 1");
   });
+
+  test("name one still called by the default name in the app's language", () => {
+    const untitled = { ...waitingConversation(1), title: "New conversation", untitled: true as const };
+    expect(labels(trayMenu({ ...state, language: "hu", waiting: [untitled] }))[1]).toBe("Rád vár: Új beszélgetés · mirador");
+  });
 });
 
 describe("a click on a waiting conversation in the tray", () => {

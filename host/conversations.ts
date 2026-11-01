@@ -4,6 +4,7 @@ import type * as acp from "@agentclientprotocol/sdk";
 import {
   busyTexts,
   harnessLabels,
+  isUntitled,
   UNTITLED,
   type Activity,
   type AdoptMode,
@@ -327,7 +328,7 @@ export class ConversationService {
     const conversation = waitingFor && this.store.findConversation(conversationId);
     if (!waitingFor || !conversation) return null;
     const workspace = this.store.findWorkspace(conversation.workspaceId)?.name ?? "";
-    return { conversationId, title: conversation.title, workspace, tone: waitingTones[waitingFor] };
+    return { conversationId, title: conversation.title, ...(isUntitled(conversation) && { untitled: true as const }), workspace, tone: waitingTones[waitingFor] };
   }
 
   runningTurnsCount(): number {

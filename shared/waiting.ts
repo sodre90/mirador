@@ -28,6 +28,8 @@ export const waitingShowsOnDot = ({ waitingFor, status }: Conversation) => waiti
 export interface WaitingConversation {
   conversationId: string;
   title: string;
+  /** Still called by the default name, which the desktop app shows in its own language. */
+  untitled?: true;
   workspace: string;
   tone: WaitingTone;
 }

@@ -1,6 +1,8 @@
 import { useEffect, useSyncExternalStore } from "react";
 import { bodyWithWorkspace, type SystemNotification } from "../shared/system-notifications.ts";
 import { connection } from "./connection.ts";
+import { t } from "./i18n/index.ts";
+import { inLanguage } from "./notification-text.ts";
 
 /** This browser notifies only while you want it to and have allowed the page to; either alone is not enough. */
 export interface NotificationSetting {
@@ -47,9 +49,10 @@ export async function setNotificationsWanted(wanted: boolean) {
   refresh();
 }
 
-function show(notification: SystemNotification, open: OpenConversation) {
+function show(received: SystemNotification, open: OpenConversation) {
   refresh();
   if (!notifies(setting)) return;
+  const notification = inLanguage(received, t.desktop);
   const shown = new Notification(notification.title, { body: bodyWithWorkspace(notification), tag: notification.conversationId ?? "about-this-machine" });
   shown.onclick = () => {
     window.focus();

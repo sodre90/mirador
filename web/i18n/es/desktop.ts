@@ -18,6 +18,17 @@ export const desktop: Messages["desktop"] = {
   download: (newer) => `${newer}: descargar`,
   waitingForYou: "Te esperan",
   waiting: { decision: "Esperándote", failed: "Falló", done: "Listo", unread: "No leída" },
+  untitled: "Nueva conversación",
+  notifications: {
+    asks: (question) => `Pregunta: ${question}`,
+    wantsPermission: (tool) => `Pide permiso: ${tool}`,
+    aTool: "una herramienta",
+    finished: "Terminó, te espera",
+    stoppedWithError: (message) => `Se detuvo con un error: ${message}`,
+    joinRequest: (name) => `${name} pide unirse a Mirador`,
+    joinRequestBody: (address, tailscaleUser) =>
+      `Desde ${address}${tailscaleUser ? `, con sesión iniciada en Tailscale como ${tailscaleUser}` : ""}. Abre Mirador para aprobarlo escribiendo el número que muestra.`,
+  },
   more: (count) => `${count} más…`,
   open: "Abrir",
   restartHost: "Reiniciar el host",

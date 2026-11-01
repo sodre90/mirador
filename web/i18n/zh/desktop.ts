@@ -16,6 +16,17 @@ export const desktop: Messages["desktop"] = {
   download: (newer) => `${newer}：下载`,
   waitingForYou: "等你处理",
   waiting: { decision: "需要你", failed: "失败", done: "完成", unread: "未读" },
+  untitled: "新对话",
+  notifications: {
+    asks: (question) => `提问：${question}`,
+    wantsPermission: (tool) => `请求权限：${tool}`,
+    aTool: "某个工具",
+    finished: "已完成，等你处理",
+    stoppedWithError: (message) => `因错误停止：${message}`,
+    joinRequest: (name) => `${name} 请求加入 Mirador`,
+    joinRequestBody: (address, tailscaleUser) =>
+      `来自 ${address}${tailscaleUser ? `，已登录 Tailscale 账号 ${tailscaleUser}` : ""}。打开 Mirador，输入它显示的数字即可批准。`,
+  },
   more: (count) => `还有 ${count} 个…`,
   open: "打开",
   restartHost: "重启 host",

@@ -1,4 +1,4 @@
-import type { Conversation, JoinRequest } from "./model.ts";
+import { isUntitled, type Conversation, type JoinRequest } from "./model.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 
 /** Why a conversation needs you: everything that makes it your move. */
@@ -9,6 +9,11 @@ export type NotificationReason =
   | { kind: "error"; message: string }
   /** A job the agent left running ended, and its message is for you rather than the agent. */
   | { kind: "job-ended"; message: string };
+
+/** What a notification says, for a page or the desktop app to put in its own language; title and body say it in English. */
+export type NotificationAbout =
+  | { kind: "conversation"; reason: NotificationReason; untitled?: true }
+  | { kind: "join-request"; request: Pick<JoinRequest, "name" | "fromAddress" | "tailscaleUser"> };
 
 /** What a notification is about, so a device can let through only the kinds its owner wants. */
 export type NotificationKind = NotificationReason["kind"] | "join-request";
@@ -24,6 +29,7 @@ export interface SystemNotification {
   title: string;
   workspace: string;
   body: string;
+  about?: NotificationAbout;
 }
 
 const BODY_LENGTH = 200;
@@ -44,14 +50,21 @@ function reasonText(reason: NotificationReason) {
 }
 
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
-const shortened = (text: string) => cutWithEllipsis(text, BODY_LENGTH - 1, BODY_LENGTH);
 
-export const systemNotification = (conversation: Pick<Conversation, "id" | "title">, workspace: string, reason: NotificationReason): SystemNotification => ({
+/** On one line, and short enough for a notification to show it whole. */
+export const notificationBody = (text: string) => cutWithEllipsis(oneLine(text), BODY_LENGTH - 1, BODY_LENGTH);
+
+export const systemNotification = (
+  conversation: Pick<Conversation, "id" | "title" | "titleSetByUser">,
+  workspace: string,
+  reason: NotificationReason,
+): SystemNotification => ({
   kind: reason.kind,
   conversationId: conversation.id,
   title: conversation.title,
   workspace,
-  body: shortened(oneLine(reasonText(reason))),
+  body: notificationBody(reasonText(reason)),
+  about: { kind: "conversation", reason, ...(isUntitled(conversation) && { untitled: true as const }) },
 });
 
 export type TurnOutcome = { stopReason: string } | { error: string };
@@ -75,6 +88,7 @@ export const joinRequestNotification = ({ name, fromAddress, tailscaleUser }: Jo
   title: `${name} asks to join Mirador`,
   workspace: "",
   body: `From ${fromAddress}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows.`,
+  about: { kind: "join-request", request: { name, fromAddress, tailscaleUser } },
 });
 
 /** Where a notification has no subtitle line (browsers, Linux), the workspace leads the body. */

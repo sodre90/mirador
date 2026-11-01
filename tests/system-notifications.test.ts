@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { desktopWords } from "../desktop/src/core/desktop-words.ts";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import { bodyWithWorkspace, joinRequestNotification, systemNotification, turnEndReason, type SystemNotification } from "../shared/system-notifications.ts";
+import { bodyWithWorkspace, joinRequestNotification, systemNotification, turnEndReason, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
+import { inLanguage } from "../web/notification-text.ts";
 
-const conversation = { id: "c1", title: "Fix the tray menu" };
+const conversation = { id: "c1", title: "Fix the tray menu", titleSetByUser: false };
 
 describe("system notification text", () => {
   test("names the conversation and its workspace, and says why and what kind it is", () => {
@@ -13,6 +15,7 @@ describe("system notification text", () => {
       title: "Fix the tray menu",
       workspace: "mirador",
       body: "Asks: Which layout?",
+      about: { kind: "conversation", reason: { kind: "question", question: "Which layout?" } },
     });
     expect(systemNotification(conversation, "mirador", { kind: "permission", tool: "bun run test" }).body).toBe("Wants permission: bun run test");
     expect(systemNotification(conversation, "mirador", { kind: "permission", tool: null }).body).toBe("Wants permission: a tool");
@@ -132,8 +135,43 @@ test("a device asking to join says where it asks from, and who it is signed in t
     title: "Phone asks to join Mirador",
     workspace: "",
     body: "From 100.64.0.7. Open Mirador to approve it by typing the number it shows.",
+    about: { kind: "join-request", request: { name: "Phone", fromAddress: "100.64.0.7", tailscaleUser: null } },
   });
   expect(joinRequestNotification({ ...request, tailscaleUser: "me@example.com" }).body).toBe(
     "From 100.64.0.7, signed in to Tailscale as me@example.com. Open Mirador to approve it by typing the number it shows.",
   );
+});
+
+describe("a notification in the page's or the desktop app's language", () => {
+  const hungarian = desktopWords("hu");
+  test("says why the conversation needs you, and names an untitled one by the default name", () => {
+    const untitled = systemNotification({ ...conversation, title: "New conversation" }, "mirador", { kind: "permission", tool: null });
+    expect(inLanguage(untitled, hungarian)).toMatchObject({ title: "Új beszélgetés", workspace: "mirador", body: "Engedélyt kér: egy eszköz" });
+    expect(inLanguage(systemNotification(conversation, "mirador", { kind: "finished" }), hungarian)).toMatchObject({ title: "Fix the tray menu", body: "Kész, rád vár" });
+  });
+
+  test("in English, it says what the host wrote", () => {
+    const english = desktopWords("en");
+    const reasons: NotificationReason[] = [
+      { kind: "question", question: `Line one\n${"x".repeat(300)}` },
+      { kind: "permission", tool: "bun run test" },
+      { kind: "permission", tool: null },
+      { kind: "finished" },
+      { kind: "error", message: "exited" },
+      { kind: "job-ended", message: "The build ended" },
+    ];
+    for (const reason of reasons) {
+      const notification = systemNotification({ ...conversation, title: "New conversation" }, "mirador", reason);
+      expect(inLanguage(notification, english)).toEqual(notification);
+    }
+    for (const tailscaleUser of [null, "me@example.com"]) {
+      const notification = joinRequestNotification({ id: "r", name: "Phone", fromAddress: "100.64.0.7", tailscaleUser, expiresAt: 0 });
+      expect(inLanguage(notification, english)).toEqual(notification);
+    }
+  });
+
+  test("one from a host that doesn't say what it is about stays as it came", () => {
+    const { about: _, ...older } = systemNotification(conversation, "mirador", { kind: "finished" });
+    expect(inLanguage(older, hungarian)).toEqual(older);
+  });
 });

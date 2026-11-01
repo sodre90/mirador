@@ -19,6 +19,17 @@ export const desktop = {
   download: (newer: string) => `${newer}: download`,
   waitingForYou: "Waiting for you",
   waiting: { decision: "Needs you", failed: "Failed", done: "Done", unread: "Unread" } satisfies Record<WaitingTone, string>,
+  untitled: "New conversation",
+  notifications: {
+    asks: (question: string) => `Asks: ${question}`,
+    wantsPermission: (tool: string) => `Wants permission: ${tool}`,
+    aTool: "a tool",
+    finished: "Finished, waiting for you",
+    stoppedWithError: (message: string) => `Stopped with an error: ${message}`,
+    joinRequest: (name: string) => `${name} asks to join Mirador`,
+    joinRequestBody: (address: string, tailscaleUser: string | null) =>
+      `From ${address}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows.`,
+  },
   more: (count: number) => `${count} more…`,
   open: "Open",
   restartHost: "Restart host",
