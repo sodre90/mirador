@@ -30,6 +30,16 @@ test("the catalog keeps the entries it can read: each with a repo to clone", () 
   expect(catalogPluginsOf(null)).toBeNull();
 });
 
+test("the catalog keeps an entry's icon and pictures when it can show them, and the entry without them when it can't", () => {
+  const icon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"/>';
+  const screenshot = { url: "https://raw.githubusercontent.com/sodre90/mirador-media/v1.2.0/screenshots/marking.png", caption: "Marking a frame" };
+  expect(catalogPluginsOf({ plugins: [{ ...media, icon, screenshots: [screenshot] }] })).toEqual([{ ...media, icon, screenshots: [screenshot] }]);
+  expect(
+    catalogPluginsOf({ plugins: [{ ...media, icon: "<script>alert(1)</script>", screenshots: [{ url: "http://example.com/a.png", caption: "Plain http" }, { url: screenshot.url }, screenshot] }] }),
+  ).toEqual([{ ...media, screenshots: [screenshot] }]);
+  expect(catalogPluginsOf({ plugins: [{ ...media, icon: `<svg>${"x".repeat(70_000)}</svg>`, screenshots: "none" }] })).toEqual([media]);
+});
+
 test("offers the plugins not installed yet, keeps the last catalog fetched when the next fetch fails, and across restarts", async () => {
   const store = new Store(":memory:");
   const installed = new Set<string>();

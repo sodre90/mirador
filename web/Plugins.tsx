@@ -8,6 +8,7 @@ import {
   type PluginNews,
   type PluginOffer,
   type PluginSettings as SettingsOfPlugin,
+  type PluginScreenshot,
   type PluginSource,
   type PluginTool,
   type PluginUpdate as FoundUpdate,
@@ -288,11 +289,32 @@ const MONOGRAM_HUES = [262, 145, 220, 355, 30, 190, 300, 95];
 
 const hueOf = (key: string) => MONOGRAM_HUES[[...key].reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0) % MONOGRAM_HUES.length]!;
 
-function Monogram({ plugin }: { plugin: GalleryPlugin }) {
+const svgDataUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+
+/** The plugin's own icon, drawn as an image so its SVG runs no script; its monogram while it has none or the icon fails. */
+function PluginIcon({ plugin }: { plugin: GalleryPlugin }) {
+  const icon = plugin.installed?.icon ?? plugin.official?.icon;
+  const [failed, setFailed] = useState(false);
+  if (icon && !failed) return <img className="plugin-icon" src={svgDataUrl(icon)} alt="" onError={() => setFailed(true)} />;
   return (
     <span className="plugin-monogram" aria-hidden style={{ "--monogram-hue": hueOf(plugin.key) } as CSSProperties}>
       {plugin.title.trim().charAt(0).toUpperCase()}
     </span>
+  );
+}
+
+function Screenshots({ title, screenshots }: { title: string; screenshots: PluginScreenshot[] }) {
+  return (
+    <ul className="plugin-screenshots" aria-label={words.screenshotsOf(title)}>
+      {screenshots.map(({ url, caption }) => (
+        <li key={url}>
+          <a href={url} target="_blank" rel="noreferrer">
+            <img src={url} alt={caption} loading="lazy" />
+          </a>
+          <span>{caption}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -324,7 +346,7 @@ function PluginTile({ plugin, news, onOpen }: { plugin: GalleryPlugin; news: Plu
   return (
     <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
       <span className="plugin-tile-top">
-        <Monogram plugin={plugin} />
+        <PluginIcon plugin={plugin} />
         <span className="plugin-title">{plugin.title}</span>
       </span>
       <span className="plugin-tagline">{plugin.official?.description}</span>
@@ -450,11 +472,12 @@ function PluginDetail({ plugin, news, start, onBack }: { plugin: GalleryPlugin; 
         {words.allPlugins}
       </button>
       <header className="plugin-detail-head">
-        <Monogram plugin={plugin} />
+        <PluginIcon plugin={plugin} />
         <h3>{plugin.title}</h3>
       </header>
       <PluginBadges plugin={plugin} news={news} />
       {plugin.official && <p className="plugin-description">{plugin.official.description}</p>}
+      {plugin.official?.screenshots && <Screenshots title={plugin.title} screenshots={plugin.official.screenshots} />}
       {plugin.installed ? (
         <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} startUpdating={start === "update"} />
       ) : (

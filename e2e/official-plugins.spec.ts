@@ -23,12 +23,15 @@ function counterRepoNamed(folder: string, name: string, title: string) {
   git(folder, "commit", "--quiet", "-m", "Count by one");
 }
 
+const TALLY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="teal"/></svg>';
+const TALLY_SCREENSHOT = { url: "https://example.invalid/tally/screenshots/tallying.png", caption: "Tallying votes" };
+
 /** A catalog of two plugins, each with a repo of its own. */
 function publishCatalog() {
   counterRepoNamed(counterRepo(), "counter", "Counter");
   counterRepoNamed(tallyRepo(), "tally", "Tally");
   const counter = { name: "counter", title: "Counter", description: "Counts by one.", recommendWhen: "the user wants to count", repo: counterRepo(), branch: "main" };
-  const tally = { name: "tally", title: "Tally", description: "Keeps a tally.", recommendWhen: "the user keeps a tally", repo: tallyRepo() };
+  const tally = { name: "tally", title: "Tally", description: "Keeps a tally.", recommendWhen: "the user keeps a tally", repo: tallyRepo(), icon: TALLY_ICON, screenshots: [TALLY_SCREENSHOT] };
   writeFileSync(catalogFile(), JSON.stringify({ plugins: [counter, tally] }));
 }
 
@@ -76,7 +79,9 @@ test("the agent recommends an official plugin, and Mirador installs it only once
   await test.step("Plugins lists each plugin once: an official one installed with its tag and description, and those to install under Discover", async () => {
     await openPlugins(page);
     await expect(pluginTile(plugins(page), "Installed", "Counter")).toHaveText("CCounterCounts by one.AppOfficialused from the next startOpen");
-    await expect(plugins(page).getByRole("list", { name: "Discover" }).getByRole("listitem")).toHaveText(["TTallyKeeps a tally.OfficialInstall"]);
+    await expect(plugins(page).getByRole("list", { name: "Discover" }).getByRole("listitem")).toHaveText(["TallyKeeps a tally.OfficialInstall"]);
+    await expect(pluginTile(plugins(page), "Discover", "Tally").locator("img.plugin-icon")).toHaveAttribute("src", `data:image/svg+xml;charset=utf-8,${encodeURIComponent(TALLY_ICON)}`);
+    await expect(pluginTile(plugins(page), "Installed", "Counter").locator(".plugin-monogram")).toHaveText("C");
     await expect(plugins(page).locator(".restart-needed")).toBeVisible();
   });
 
@@ -84,6 +89,8 @@ test("the agent recommends an official plugin, and Mirador installs it only once
     await pluginTile(plugins(page), "Discover", "Tally").getByRole("button", { name: "Install Tally" }).click();
     const tally = plugins(page).getByRole("region", { name: "Tally" });
     await expect(tally.locator(".plugin-description")).toHaveText("Keeps a tally.");
+    await expect(tally.getByRole("list", { name: "Pictures of Tally" }).getByRole("img", { name: "Tallying votes" })).toHaveAttribute("src", TALLY_SCREENSHOT.url);
+    await expect(tally.getByRole("list", { name: "Pictures of Tally" })).toContainText("Tallying votes");
     await tally.getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Don't install" }).click();
     await expect(tally.getByRole("group", { name: "Install Tally?" })).toHaveCount(0);
     await tally.getByRole("button", { name: "Install", exact: true }).click();

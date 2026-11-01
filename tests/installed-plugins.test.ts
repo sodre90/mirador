@@ -71,7 +71,7 @@ describe("InstalledPlugins", () => {
     const listed = await new InstalledPlugins(plugins, loaded.problems).list();
 
     expect(listed).toEqual([
-      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", waitsForRestart: false, kinds: ["app"], tools: [] },
+      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", waitsForRestart: false, kinds: ["app"], tools: [], icon: null },
       {
         folder: "cloned",
         name: "counter",
@@ -82,9 +82,30 @@ describe("InstalledPlugins", () => {
         waitsForRestart: false,
         kinds: ["app"],
         tools: [],
+        icon: null,
       },
-      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [] },
+      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null },
     ]);
+  });
+
+  test("lists the icon a plugin's plugin.json names, only when it is an SVG inside the plugin's folder", async () => {
+    const plugins = join(root, "with-icons");
+    const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8"/></svg>';
+    writeFileSync(join(root, "outside.svg"), svg);
+    const pluginWithIcon = (folder: string, icon: string) => {
+      cpSync(COUNTER, join(plugins, folder), { recursive: true });
+      writeFileSync(join(plugins, folder, "icon.svg"), svg);
+      writeFileSync(join(plugins, folder, "not-svg.svg"), "<script>alert(1)</script>");
+      writeFileSync(join(plugins, folder, "plugin.json"), JSON.stringify({ name: folder, title: folder, version: "1.0.0", api: 1, app: { host: "host.ts", view: "view.js" }, icon }));
+    };
+    pluginWithIcon("a-own", "icon.svg");
+    pluginWithIcon("b-outside", "../../outside.svg");
+    pluginWithIcon("c-not-svg", "not-svg.svg");
+    pluginWithIcon("d-missing", "nowhere.svg");
+    pluginWithIcon("e-linked-out", "linked.svg");
+    symlinkSync(join(root, "outside.svg"), join(plugins, "e-linked-out", "linked.svg"));
+    const icons = (await new InstalledPlugins(plugins, []).list()).map(({ folder, icon }) => [folder, icon]);
+    expect(icons).toEqual([["a-own", svg], ["b-outside", null], ["c-not-svg", null], ["d-missing", null], ["e-linked-out", null]]);
   });
 
   test("lists the canvas tools each plugin gave the agent when Mirador started", async () => {
@@ -146,6 +167,7 @@ describe("adding, updating and removing plugins", () => {
         waitsForRestart: true,
         kinds: ["app"],
         tools: [],
+        icon: null,
       },
     ]);
     expect(leftInStaging(plugins)).toEqual([]);

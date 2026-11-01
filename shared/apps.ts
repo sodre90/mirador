@@ -46,6 +46,8 @@ export interface PluginManifest {
   settings?: PluginSetting[];
   /** What the user can set for the plugin per profile, in the Profiles dialog; plugin API 5 brought them. */
   profileSettings?: PluginProfileSetting[];
+  /** An SVG file, relative to the plugin's folder, that stands for the plugin in Plugins…; a bad one leaves its monogram. */
+  icon?: string;
 }
 
 /**
@@ -190,6 +192,8 @@ export interface PluginInfo {
   kinds?: PluginKind[];
   /** The canvas tools it gave the agent when Mirador started; none while it waits for a restart. Missing from a host older than it. */
   tools?: PluginTool[];
+  /** The SVG its plugin.json names as its icon, when that is a small SVG file inside its folder. */
+  icon?: string | null;
 }
 
 export type PluginKind = "app" | "canvas";
@@ -209,6 +213,32 @@ export interface CatalogPlugin {
   /** What git clones, which the catalog's README asks to be an https URL anyone can clone. */
   repo: string;
   branch?: string;
+  /** The plugin's icon, as SVG text. */
+  icon?: string;
+  /** Pictures of the plugin at work, shown on its page in Plugins…. */
+  screenshots?: PluginScreenshot[];
+}
+
+export interface PluginScreenshot {
+  /** An https URL, as a raw file of the plugin's repo at a release tag. */
+  url: string;
+  caption: string;
+}
+
+/** The most of an icon's SVG Mirador takes, from a plugin's folder or the catalog. */
+export const MAX_PLUGIN_ICON_BYTES = 64 * 1024;
+
+export const isPluginIcon = (svg: unknown): svg is string => typeof svg === "string" && svg.length <= MAX_PLUGIN_ICON_BYTES && /^\s*(<\?xml[^>]*>\s*)?<svg[\s>]/.test(svg);
+
+const isScreenshot = (value: unknown): value is PluginScreenshot => {
+  const { url, caption } = (typeof value === "object" && value !== null ? value : {}) as Partial<PluginScreenshot>;
+  return typeof url === "string" && url.startsWith("https://") && typeof caption === "string";
+};
+
+/** A catalog entry with only the images this Mirador can show: a bad icon or picture is left out, not the plugin. */
+function withShowableImages({ icon, screenshots, ...plugin }: CatalogPlugin): CatalogPlugin {
+  const showable = Array.isArray(screenshots) ? screenshots.filter(isScreenshot) : [];
+  return { ...plugin, ...(isPluginIcon(icon) ? { icon } : {}), ...(showable.length > 0 ? { screenshots: showable } : {}) };
 }
 
 function isCatalogPlugin(value: unknown): value is CatalogPlugin {
@@ -227,7 +257,7 @@ function isCatalogPlugin(value: unknown): value is CatalogPlugin {
 /** The catalog's plugins, leaving out entries this Mirador can't read, as a newer catalog may have. */
 export function catalogPluginsOf(catalog: unknown): CatalogPlugin[] | null {
   const plugins = (catalog as { plugins?: unknown } | null)?.plugins;
-  return Array.isArray(plugins) ? plugins.filter(isCatalogPlugin) : null;
+  return Array.isArray(plugins) ? plugins.filter(isCatalogPlugin).map(withShowableImages) : null;
 }
 
 /** A commit an update would bring. */

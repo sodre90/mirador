@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, mkdirSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { openPluginDetail, openPlugins, openSettings, pluginTile, signIn } from "./helpers.ts";
@@ -22,7 +22,12 @@ function installPlugins() {
   git(plugins, "clone", "--quiet", counterRepo(), "counter");
   writeFileSync(join(plugins, "unbuilt", "plugin.json"), JSON.stringify({ name: "unbuilt", title: "Unbuilt", version: "1.0.0", api: 1, app: { host: "host.ts", view: "dist/view.js" } }));
   cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "canvas-plugins", "board"), join(plugins, "board"), { recursive: true });
+  writeFileSync(join(plugins, "board", "icon.svg"), BOARD_ICON);
+  const boardManifest = join(plugins, "board", "plugin.json");
+  writeFileSync(boardManifest, JSON.stringify({ ...JSON.parse(readFileSync(boardManifest, "utf8")), icon: "icon.svg" }));
 }
+
+const BOARD_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="purple"/></svg>';
 
 test.beforeAll(async () => {
   installPlugins();
@@ -36,7 +41,8 @@ test.afterAll(async () => {
 test("Plugins… shows the installed plugins as tiles, and a tile opens the tools it gives the agent, where it came from, and why it didn't load", async ({ page }) => {
   await signIn(page, host);
   const plugins = await openPlugins(page);
-  await expect(plugins.getByRole("list", { name: "Installed" }).getByRole("listitem")).toHaveText(["BBoardCanvas toolsOpen", "CCounterAppOpen", "UUnbuiltAppDidn't loadOpen"]);
+  await expect(plugins.getByRole("list", { name: "Installed" }).getByRole("listitem")).toHaveText(["BoardCanvas toolsOpen", "CCounterAppOpen", "UUnbuiltAppDidn't loadOpen"]);
+  await expect(pluginTile(plugins, "Installed", "Board").locator("img.plugin-icon")).toHaveAttribute("src", `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BOARD_ICON)}`);
   await expect(plugins.getByText(join(host.dataDir, "plugins"), { exact: true })).toBeVisible();
 
   const board = await openPluginDetail(plugins, "Board");

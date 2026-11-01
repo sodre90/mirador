@@ -72,4 +72,5 @@ export const plugins: Messages["plugins"] = {
   discover: "Descubrir",
   movedHint: "Los complementos tienen su propio lugar: Complementos… al pie de la barra lateral.",
   openPlugins: "Abrir Complementos…",
+  screenshotsOf: (plugin: string) => `Imágenes de ${plugin}`,
 };

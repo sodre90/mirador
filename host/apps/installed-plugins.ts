@@ -1,7 +1,7 @@
-import { existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, unlinkSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, delimiter, dirname, join, resolve } from "node:path";
-import { isPluginVersion, type PluginKind, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate } from "../../shared/apps.ts";
+import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
+import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, type PluginKind, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate } from "../../shared/apps.ts";
 import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
@@ -92,14 +92,27 @@ async function sourceOf(folder: string): Promise<PluginSource> {
 }
 
 /** What plugin.json says, as far as it can be read, for a plugin that may not load. */
-async function manifestFields(folder: string): Promise<{ name: string | null; title: string | null; version: string | null; kinds: PluginKind[] }> {
+async function manifestFields(folder: string): Promise<{ name: string | null; title: string | null; version: string | null; kinds: PluginKind[]; icon: string | null }> {
   const textOrNull = (value: unknown) => (typeof value === "string" ? value : null);
   try {
-    const { name, title, version, app, canvas } = await Bun.file(join(folder, "plugin.json")).json();
+    const { name, title, version, app, canvas, icon } = await Bun.file(join(folder, "plugin.json")).json();
     const kinds = (["app", "canvas"] as const).filter((kind) => ({ app, canvas })[kind] !== undefined);
-    return { name: textOrNull(name), title: textOrNull(title), version: textOrNull(version), kinds };
+    return { name: textOrNull(name), title: textOrNull(title), version: textOrNull(version), kinds, icon: await iconIn(folder, icon) };
   } catch {
-    return { name: null, title: null, version: null, kinds: [] };
+    return { name: null, title: null, version: null, kinds: [], icon: null };
+  }
+}
+
+/** The SVG at `path` in the plugin's folder; null for anything else, such as a path that leads out of the folder. */
+async function iconIn(folder: string, path: unknown): Promise<string | null> {
+  if (typeof path !== "string" || !path.endsWith(".svg")) return null;
+  try {
+    const [inside, file] = [realpathSync(folder), realpathSync(resolve(folder, path))];
+    if (!file.startsWith(inside + sep) || statSync(file).size > MAX_PLUGIN_ICON_BYTES) return null;
+    const svg = await Bun.file(file).text();
+    return isPluginIcon(svg) ? svg : null;
+  } catch {
+    return null;
   }
 }
 

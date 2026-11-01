@@ -70,4 +70,5 @@ export const plugins: Messages["plugins"] = {
   discover: "Felfedezés",
   movedHint: "A bővítményeknek saját helyük van: Bővítmények… az oldalsáv alján.",
   openPlugins: "Bővítmények megnyitása…",
+  screenshotsOf: (plugin: string) => `Képek: ${plugin}`,
 };

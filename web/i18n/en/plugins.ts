@@ -68,4 +68,5 @@ export const plugins = {
   discover: "Discover",
   movedHint: "Plugins have a place of their own: Plugins… at the bottom of the sidebar.",
   openPlugins: "Open Plugins…",
+  screenshotsOf: (plugin: string) => `Pictures of ${plugin}`,
 };

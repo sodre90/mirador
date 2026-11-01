@@ -6650,6 +6650,46 @@ body.reordering * {
   font-weight: 700;
 }
 
+.plugin-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+}
+
+.plugin-screenshots {
+  display: flex;
+  gap: 10px;
+  max-width: 100%;
+  margin: 4px 0;
+  padding: 0 0 6px;
+  overflow-x: auto;
+  list-style: none;
+}
+
+.plugin-screenshots li {
+  display: grid;
+  flex: none;
+  gap: 4px;
+  width: min(420px, 80%);
+}
+
+.plugin-screenshots img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.plugin-screenshots span {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .plugin-tagline {
   display: -webkit-box;
   flex: 1;
