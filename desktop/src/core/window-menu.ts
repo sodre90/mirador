@@ -10,7 +10,7 @@ import {
   type DesktopUpdate,
 } from "../../../shared/desktop-menu.ts";
 import { isLanguage, type Language } from "../../../shared/i18n/languages.ts";
-import type { ItemWindowRoute } from "../../../shared/item-window.ts";
+import { isPluginName, type ItemWindowRoute } from "../../../shared/item-window.ts";
 import { webUrl } from "./navigation.ts";
 import type { UpdateOffer } from "./self-update.ts";
 import { isTrayAction, trayMenu, type TrayAction, type TrayState } from "./tray-menu.ts";
@@ -55,6 +55,7 @@ export type PageRequest =
   | { type: "appearance"; appearance: DesktopAppearance }
   | { type: "language"; language: Language }
   | { type: "open-item-window"; route: ItemWindowRoute; title: string }
+  | { type: "open-plugin-window"; plugin: string }
   | { type: "window-title"; title: string };
 
 /**
@@ -74,6 +75,7 @@ export function pageRequest(detail: unknown, nonce: string): PageRequest | null 
   if (message.type === "desktop-open-item-window" && isId(message.conversationId) && isId(message.itemId) && typeof message.title === "string") {
     return { type: "open-item-window", route: { conversationId: message.conversationId, itemId: message.itemId }, title: message.title };
   }
+  if (message.type === "desktop-open-plugin-window" && isPluginName(message.plugin)) return { type: "open-plugin-window", plugin: message.plugin };
   if (message.type === "desktop-window-title" && typeof message.title === "string") return { type: "window-title", title: message.title };
   const url = message.type === "desktop-open-link" ? webUrl(message.url) : null;
   return url ? { type: "open-link", url } : null;

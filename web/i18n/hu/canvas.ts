@@ -62,6 +62,9 @@ export const canvas: Messages["canvas"] = {
     loading: "Betöltés…",
     gone: "Ez az elem már nincs a vásznon: elvetették, vagy törölték a beszélgetését.",
   },
+  pluginWindow: {
+    missing: (plugin) => `Nincs telepítve ${plugin} nevű bővítmény saját ablakkal.`,
+  },
   checklist: {
     agentsPlan: "Az ágens terve",
     inProgress: "folyamatban",

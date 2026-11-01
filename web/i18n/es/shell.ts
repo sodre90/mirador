@@ -114,6 +114,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "Enfocar la terminal",
     renameConversation: "Renombrar conversación…",
     openMachine: (machine) => `Abrir máquina: ${machine}`,
+    openPluginWindow: (plugin) => `Abrir la ventana de ${plugin}`,
     searchAll: "Buscar en todos los espacios de trabajo…",
     everyConversation: "todas las conversaciones",
     addWorkspace: "Agregar espacio de trabajo…",

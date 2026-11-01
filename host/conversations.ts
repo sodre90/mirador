@@ -1,4 +1,6 @@
 import { realpath } from "node:fs/promises";
+import type { PluginActivity } from "../shared/canvas-plugins.ts";
+import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
 import { isDeepStrictEqual } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk";
 import {
@@ -281,6 +283,7 @@ export class ConversationService {
   private stopping = false;
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
   private hearReply: HearReply = () => {};
+  private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
   private readonly turnsCutShortByCrash: Set<string>;
 
@@ -397,6 +400,11 @@ export class ConversationService {
 
   hearRepliesWith(hearReply: HearReply) {
     this.hearReply = hearReply;
+  }
+
+  /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
+  hearActivityWith(hearActivity: (conversationId: string, activity: PluginActivity) => void) {
+    this.hearActivity = hearActivity;
   }
 
   /** The user takes a started conversation off its caller's list of delegated tasks. */
@@ -730,6 +738,7 @@ export class ConversationService {
     const notes = this.notesForAgent(conversationId);
     this.setStatus(conversationId, "starting");
     this.store.turnStarted(conversationId);
+    this.hearActivity(conversationId, { kind: "turn-started" });
     const turnSeq = this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) }, notes);
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
@@ -774,6 +783,7 @@ export class ConversationService {
       }
       runtime.running = false;
       this.announceRunningTurnsCount();
+      this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(response?.stopReason, runtime.killedOnPurpose === true) });
       runtime.killedOnPurpose = false;
       this.store.turnEnded(conversationId);
       this.setStatus(conversationId, "idle");
@@ -2084,6 +2094,8 @@ export class ConversationService {
     if (!this.store.hasConversation(conversationId)) return;
     const stored = this.store.appendEvent(conversationId, event);
     this.hub.publishEvent(conversationId, stored);
+    const activity = activityOf(event);
+    if (activity) this.hearActivity(conversationId, activity);
     return stored.seq;
   }
 

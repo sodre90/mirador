@@ -1,3 +1,20 @@
+function drawWindow() {
+  const page = document.createElement("main");
+  page.innerHTML = `<h1>Board window</h1><p id="place"></p><p id="heard"></p><p id="last"></p><p id="ended"></p>
+<button id="forget">Forget</button><p id="reply"></p><button id="ask">Ask the agent</button><p id="asked"></p>`;
+  document.body.append(page);
+  const show = (id, text) => (document.getElementById(id).textContent = text);
+  show("place", `Drawn in the ${window.mirador.place}`);
+  window.mirador.onState(({ counts, lastConversation, lastEnded }) => {
+    show("heard", ["user-message", "turn-started", "turn-ended", "tool-started", "tool-ended"].map((kind) => `${kind}: ${counts[kind] ?? 0}`).join(", "));
+    show("last", `Last heard from: ${lastConversation ?? "nobody"}`);
+    show("ended", `Last turn ${lastEnded ?? "none"}`);
+  });
+  document.getElementById("forget").addEventListener("click", () => window.mirador.send({ kind: "forget" }).then(({ forgotten }) => show("reply", forgotten ? "Forgot" : "Kept")));
+  document.getElementById("ask").addEventListener("click", () => window.mirador.prompt("Hello").then(() => show("asked", "Asked"), (error) => show("asked", error.message)));
+}
+
+function drawItem() {
 const page = document.createElement("main");
 page.innerHTML = `<h1 id="title"></h1><p id="text"></p><p id="type"></p><p id="unseen"></p>
 <button id="press">Press</button><p id="reply"></p><button id="refused">Do what cards don't</button>
@@ -43,3 +60,7 @@ document.getElementById("press").addEventListener("click", () =>
   window.mirador.send({ kind: "press" }).then(({ presses }) => show("reply", `Pressed ${presses} times`), (error) => show("reply", error.message)),
 );
 document.getElementById("refused").addEventListener("click", () => window.mirador.send({ kind: "fold" }).catch((error) => show("reply", error.message)));
+}
+
+if (window.mirador.place === "window") drawWindow();
+else drawItem();

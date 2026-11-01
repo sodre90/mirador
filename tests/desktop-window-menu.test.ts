@@ -108,6 +108,12 @@ describe("menu in the window", () => {
     expect(pageRequest({ type: "desktop-window-title", nonce: "n-1" }, "n-1")).toBeNull();
   });
 
+  test("opens a plugin's own window only when asked with the nonce, for a plugin's name", () => {
+    expect(pageRequest({ type: "desktop-open-plugin-window", nonce: "n-1", plugin: "mirador-pet" }, "n-1")).toEqual({ type: "open-plugin-window", plugin: "mirador-pet" });
+    expect(pageRequest({ type: "desktop-open-plugin-window", nonce: "guess", plugin: "mirador-pet" }, "n-1")).toBeNull();
+    for (const plugin of ["../etc", "Pet", "", 7]) expect(pageRequest({ type: "desktop-open-plugin-window", nonce: "n-1", plugin }, "n-1")).toBeNull();
+  });
+
   test("opens a link only when the request carries the nonce and the link is a web address", () => {
     const link = { type: "desktop-open-link", nonce: "n-1", url: "https://example.com/a" };
     expect(pageRequest(link, "n-1")).toEqual({ type: "open-link", url: "https://example.com/a" });

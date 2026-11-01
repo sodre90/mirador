@@ -109,6 +109,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "Fókusz a terminálra",
     renameConversation: "Beszélgetés átnevezése…",
     openMachine: (machine) => `Gép megnyitása: ${machine}`,
+    openPluginWindow: (plugin) => `A(z) ${plugin} ablakának megnyitása`,
     searchAll: "Keresés minden munkaterületen…",
     everyConversation: "minden beszélgetésben",
     addWorkspace: "Munkaterület hozzáadása…",

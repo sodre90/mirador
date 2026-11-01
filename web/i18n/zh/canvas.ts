@@ -62,6 +62,9 @@ export const canvas: Messages["canvas"] = {
     loading: "正在加载…",
     gone: "此项目已不在画布上：它已被忽略，或其对话已被删除。",
   },
+  pluginWindow: {
+    missing: (plugin) => `没有安装名为 ${plugin} 且带有自己窗口的插件。`,
+  },
   checklist: {
     agentsPlan: "智能体的计划",
     inProgress: "进行中",

@@ -310,11 +310,26 @@ export function pluginThemeMessage(variables: Record<string, string>) {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "item-theme", variables };
 }
 
+/** A plugin's own window's state, posted by the window on every change. */
+export function pluginWindowStateMessage(state: unknown) {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "window-state", state };
+}
+
+/** Where a plugin's canvas view draws: an item on the canvas, or the plugin's own window. */
+export type PluginViewPlace = "canvas" | "window";
+
 /** `window.mirador` in a plugin's canvas view, as its bridge makes it. */
-export interface PluginViewBridge<Data = unknown> {
+export interface PluginViewBridge<Data = unknown, State = unknown> {
+  place: PluginViewPlace;
+  /** On the canvas: the item the view draws. Never called in the plugin's window. */
   onItem(listener: (item: PluginItem<Data>, context: PluginItemContext) => void): () => void;
+  /** In the plugin's window: what its `window.state` returns. Never called on the canvas. */
+  onState(listener: (state: State) => void): () => void;
+  /** On the canvas, reaches the plugin's `action` with the item; in its window, `window.action`. */
   send(action: unknown): Promise<unknown>;
+  /** Rejects in the plugin's window, which belongs to no conversation. */
   prompt(text: string): Promise<void>;
+  /** Does nothing in the plugin's window. */
   setFullscreen(on: boolean): void;
   /** Only where files open: Mirador's canvas has it, the phone doesn't. */
   openFile?(path: string): void;
@@ -339,14 +354,17 @@ export function pluginItemReplyFailedMessage(requestId: string, message: string)
  * or absolute.
  * Mirador's look arrives as CSS variables on the page's root, and `data-hint` shows as Mirador's own hints.
  */
-function pluginItemBridge(frameId: string, opensFiles: boolean) {
+function pluginItemBridge(frameId: string, opensFiles: boolean, place: PluginViewPlace) {
   return `(() => {
   const source = ${JSON.stringify(CANVAS_MESSAGE_SOURCE)};
   const itemId = ${JSON.stringify(frameId)};
+  const place = ${JSON.stringify(place)};
   const post = (message) => parent.postMessage({ source, itemId, ...message }, "*");
   const listeners = new Set();
+  const stateListeners = new Set();
   const replies = new Map();
   let latest;
+  let latestState;
   const theme = document.createElement("style");
   document.head.append(theme);
   addEventListener("message", (event) => {
@@ -356,6 +374,10 @@ function pluginItemBridge(frameId: string, opensFiles: boolean) {
     if (data.kind === "item-state") {
       latest = { item: data.item, context: data.context };
       listeners.forEach((listener) => listener(latest.item, latest.context));
+    }
+    if (data.kind === "window-state") {
+      latestState = { state: data.state };
+      stateListeners.forEach((listener) => listener(latestState.state));
     }
     if (data.kind === "item-reply") replies.get(data.requestId)?.resolve(data.reply);
     if (data.kind === "item-reply-failed") replies.get(data.requestId)?.reject(new Error(data.message));
@@ -398,6 +420,12 @@ function pluginItemBridge(frameId: string, opensFiles: boolean) {
     });
   };
   window.mirador = Object.freeze({
+    place,
+    onState(listener) {
+      stateListeners.add(listener);
+      if (latestState !== undefined) listener(latestState.state);
+      return () => stateListeners.delete(listener);
+    },
     onItem(listener) {
       listeners.add(listener);
       if (latest !== undefined) listener(latest.item, latest.context);
@@ -407,10 +435,11 @@ function pluginItemBridge(frameId: string, opensFiles: boolean) {
       return request({ kind: "item-send", action });
     },
     prompt(text) {
+      if (place === "window") return Promise.reject(new Error("The plugin's own window belongs to no conversation, so it has no agent to send to."));
       return request({ kind: "item-prompt", text }).then(() => undefined);
     },
     setFullscreen(on) {
-      post({ kind: "item-fullscreen", on: Boolean(on) });
+      if (place === "canvas") post({ kind: "item-fullscreen", on: Boolean(on) });
     },
     ${
       opensFiles
@@ -429,7 +458,12 @@ const IN_TAB_PAGE_STYLE = "<style>html{padding:3px}body{margin:0}</style>";
 
 /** The page of a plugin item's view: the bridge first, then the plugin's canvas view, which the canvas assets serve. */
 export function pluginItemPage(viewUrl: string, frameId: string, { inTab = false, opensFiles = false } = {}) {
-  return [`<script>${pluginItemBridge(frameId, opensFiles)}</script>`, ...(inTab ? [IN_TAB_PAGE_STYLE] : []), `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+  return [`<script>${pluginItemBridge(frameId, opensFiles, "canvas")}</script>`, ...(inTab ? [IN_TAB_PAGE_STYLE] : []), `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+}
+
+/** The page of a plugin's own window: its canvas view, with the bridge for a window, which has no item and opens no files. */
+export function pluginWindowPage(viewUrl: string, frameId: string) {
+  return [`<script>${pluginItemBridge(frameId, false, "window")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
 }
 
 /** The page of an app's view: the bridge first, then the view's code, which the canvas assets serve. */

@@ -65,6 +65,9 @@ export const canvas = {
     loading: "Loading…",
     gone: "This item is no longer on the canvas: it was dismissed, or its conversation was deleted.",
   },
+  pluginWindow: {
+    missing: (plugin: string) => `No plugin named ${plugin} with a window of its own is installed.`,
+  },
   checklist: {
     agentsPlan: "Agent's plan",
     inProgress: "in progress",

@@ -1193,6 +1193,14 @@ export function startServer(services: HostServices) {
         );
       case "canvas.dismiss":
         return canvasPlugins.dismiss(message.itemId);
+      case "plugin-window.subscribe":
+        socket.data.pluginWindowSubscriptions.add(message.plugin);
+        return reply(canvasPlugins.windowStateMessage(message.plugin));
+      case "plugin-window.action":
+        return void canvasPlugins.actInWindow(message.plugin, message.action).then(
+          (answer) => reply({ type: "plugin-window.acted", requestId: message.requestId, reply: answer, problem: null }),
+          (error) => reply({ type: "plugin-window.acted", requestId: message.requestId, reply: null, problem: messageOf(error) }),
+        );
       case "canvas.export":
         canvas
           .exportPage(message.itemId, message.libraries)
@@ -1459,6 +1467,7 @@ export function startServer(services: HostServices) {
       openApps: apps.openApps(),
       canvasViews: canvasPlugins.viewPaths(),
       pluginToolTitles: canvasPlugins.toolTitles(),
+      pluginWindows: canvasPlugins.windowTitles(),
       pluginSettings: pluginSettings.all(),
     });
     hub.send(socket, { type: "join-requests.listed", joinRequests: joinRequests.waiting() });

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, watch } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PROFILE_SETTINGS_PLUGIN_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
+import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
 import { itemRooms, pluginItemPlacements, type CanvasHost } from "../../shared/canvas-plugins.ts";
 import { BUILT_IN_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 
@@ -132,7 +132,7 @@ async function loadPlugin(folder: string): Promise<{ app: AppPlugin | null; canv
   const loaded = { manifest, folder };
   return {
     app: files.app ? { ...loaded, host: hostFrom(await import(files.app.hostFile)), view: await viewCode(files.app.viewFile) } : null,
-    canvas: files.canvas ? { ...loaded, host: canvasHostFrom(await import(files.canvas.hostFile), manifest.settings ?? []), view: await viewCode(files.canvas.viewFile) } : null,
+    canvas: files.canvas ? { ...loaded, host: canvasHostFrom(await import(files.canvas.hostFile), manifest), view: await viewCode(files.canvas.viewFile) } : null,
   };
 }
 
@@ -212,7 +212,7 @@ const isRoomSetting = (settings: PluginSetting[], id: unknown) => {
   return values !== undefined && values.length === itemRooms.length && itemRooms.every((room) => values.includes(room));
 };
 
-function canvasHostFrom(module: Record<string, unknown>, settings: PluginSetting[]): CanvasHost {
+function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }: PluginManifest): CanvasHost {
   const host = exportsOf(module);
   const problems: string[] = [];
   if (!isObject(host.items)) problems.push("items, by name");
@@ -237,6 +237,14 @@ function canvasHostFrom(module: Record<string, unknown>, settings: PluginSetting
   }
   if (host.action !== undefined && !isFunction(host.action)) problems.push("action only as a function");
   if (host.note !== undefined && !isFunction(host.note)) problems.push("note only as a function");
+  if (host.activity !== undefined && !isFunction(host.activity)) problems.push("activity only as a function");
+  const window = host.window as Record<string, unknown> | undefined;
+  if (window !== undefined && !(isObject(window) && isFunction(window.state) && (window.action === undefined || isFunction(window.action)))) {
+    problems.push("window only as { state, action } with state a function and action, if any, one too");
+  }
+  if ((host.activity !== undefined || window !== undefined) && api < PLUGIN_WINDOW_API) {
+    throw new Error(`the canvas host module has a window or hears activity, which plugin API ${PLUGIN_WINDOW_API} brought; plugin.json names API ${api}`);
+  }
   if (problems.length > 0) throw new Error(`the canvas host module needs ${problems.join("; ")}`);
   return host as unknown as CanvasHost;
 }

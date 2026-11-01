@@ -34,7 +34,7 @@ async function replyTo(itemId: string, action: unknown): Promise<unknown> {
 const THEME_COLOURS = ["bg", "panel", "panel-2", "border", "text", "muted", "faint", "accent", "accent-text", "accent-soft", "danger", "ok", "warn", "code-bg"];
 
 /** The panel's colours resolved where the frame sits, as a theme scope there may differ from the page's. */
-function themeVariables(where: HTMLElement): Record<string, string> {
+export function themeVariables(where: HTMLElement): Record<string, string> {
   const probe = document.createElement("span");
   where.append(probe);
   const colours = THEME_COLOURS.map((name) => {
@@ -52,7 +52,7 @@ function themeVariables(where: HTMLElement): Record<string, string> {
 }
 
 /** A rectangle the frame's page measured, where it shows on the panel's page, the frame scaled down to fit included. */
-function onPage(frame: HTMLIFrameElement, anchor: unknown): DOMRect | null {
+export function onPage(frame: HTMLIFrameElement, anchor: unknown): DOMRect | null {
   const { left, top, width, height } = (anchor ?? {}) as Record<string, unknown>;
   if (![left, top, width, height].every((value) => typeof value === "number")) return null;
   const shown = frame.getBoundingClientRect();

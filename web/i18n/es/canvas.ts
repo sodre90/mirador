@@ -64,6 +64,9 @@ export const canvas: Messages["canvas"] = {
     loading: "Cargando…",
     gone: "Este elemento ya no está en el lienzo: se descartó o se eliminó su conversación.",
   },
+  pluginWindow: {
+    missing: (plugin) => `No hay instalado ningún complemento llamado ${plugin} con una ventana propia.`,
+  },
   checklist: {
     agentsPlan: "Plan del agente",
     inProgress: "en curso",

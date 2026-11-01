@@ -1,5 +1,5 @@
 import { DESKTOP_NONCE_EVENT } from "../shared/desktop-menu.ts";
-import { itemWindowName, itemWindowRoute, itemWindowTitle, type ItemWindowRoute } from "../shared/item-window.ts";
+import { itemWindowName, itemWindowRoute, itemWindowTitle, pluginWindowName, pluginWindowRoute, pluginWindowTitle, type ItemWindowRoute } from "../shared/item-window.ts";
 import { desktopNonce, inDesktopApp, sendToDesktopApp } from "./desktop-bridge.ts";
 
 const ITEM_WINDOW_FEATURES = "popup,width=720,height=820";
@@ -14,8 +14,18 @@ export function openItemWindow(route: ItemWindowRoute, itemTitle: string) {
     if (nonce) sendToDesktopApp({ type: "desktop-open-item-window", nonce, ...route, title: itemTitle });
     return;
   }
-  const url = `${location.origin}${location.pathname}${itemWindowRoute(route)}`;
-  window.open(url, itemWindowName(route.itemId), ITEM_WINDOW_FEATURES)?.focus();
+  openInBrowser(itemWindowRoute(route), itemWindowName(route.itemId));
+}
+
+/** Opens a plugin's own window, or brings it forward. */
+export function openPluginWindow(plugin: string) {
+  if (!inDesktopApp()) return openInBrowser(pluginWindowRoute(plugin), pluginWindowName(plugin));
+  const nonce = desktopNonce();
+  if (nonce) sendToDesktopApp({ type: "desktop-open-plugin-window", nonce, plugin });
+}
+
+function openInBrowser(route: string, name: string) {
+  window.open(`${location.origin}${location.pathname}${route}`, name, ITEM_WINDOW_FEATURES)?.focus();
 }
 
 let shownTitle: string | null = null;
@@ -30,8 +40,12 @@ export function followTitleInDesktopApp() {
   window.addEventListener(DESKTOP_NONCE_EVENT, (event) => giveTitleToDesktopApp((event as CustomEvent<string>).detail));
 }
 
-export function showItemWindowTitle(itemTitle: string) {
-  shownTitle = itemWindowTitle(itemTitle);
-  document.title = shownTitle;
+function showWindowTitle(title: string) {
+  shownTitle = title;
+  document.title = title;
   if (inDesktopApp()) giveTitleToDesktopApp(desktopNonce());
 }
+
+export const showItemWindowTitle = (itemTitle: string) => showWindowTitle(itemWindowTitle(itemTitle));
+
+export const showPluginWindowTitle = (plugin: string) => showWindowTitle(pluginWindowTitle(plugin));

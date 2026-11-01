@@ -354,7 +354,8 @@ export class DesktopApp {
     if (request?.type === "language") this.takeLanguage(request.language);
     if (request?.type === "action" && pageMayRun(request.action, showsMenuInWindow)) void this.handle(request.action);
     if (request?.type === "menu") this.showMenuInWindow();
-    if (request?.type === "open-item-window") this.itemWindows.open(request.route, request.title);
+    if (request?.type === "open-item-window") this.itemWindows.openItem(request.route, request.title);
+    if (request?.type === "open-plugin-window") this.itemWindows.openPlugin(request.plugin);
   }
 
   private async report(error: unknown) {

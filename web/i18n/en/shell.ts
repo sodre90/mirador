@@ -114,6 +114,7 @@ export const shell = {
     focusTerminal: "Focus the terminal",
     renameConversation: "Rename conversation…",
     openMachine: (machine: string) => `Open machine ${machine}`,
+    openPluginWindow: (plugin: string) => `Open the ${plugin} window`,
     searchAll: "Search all workspaces…",
     everyConversation: "every conversation",
     addWorkspace: "Add workspace…",

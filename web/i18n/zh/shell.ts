@@ -109,6 +109,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "聚焦终端",
     renameConversation: "重命名对话…",
     openMachine: (machine) => `打开机器 ${machine}`,
+    openPluginWindow: (plugin) => `打开 ${plugin} 窗口`,
     searchAll: "搜索所有工作区…",
     everyConversation: "每个对话",
     addWorkspace: "添加工作区…",

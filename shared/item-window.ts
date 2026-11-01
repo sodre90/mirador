@@ -28,3 +28,19 @@ export const itemWindowName = (itemId: string) => `mirador-item-${itemId}`;
 
 /** Window managers match item windows by this title in their rules, so it stays English whatever Mirador's language. */
 export const itemWindowTitle = (itemTitle: string) => `Mirador: ${itemTitle}`;
+
+/** A plugin's name as plugin.json gives it: lower case, digits and dashes. */
+export const isPluginName = (value: unknown): value is string => typeof value === "string" && /^[a-z0-9][a-z0-9-]*$/.test(value);
+
+/** A canvas plugin's own window, which belongs to no conversation. */
+export const pluginWindowRoute = (plugin: string) => `#/plugin/${plugin}`;
+
+export function pluginWindowRouteOf(hash: string): string | null {
+  const plugin = hash.match(/^#\/plugin\/([^/]+)$/)?.[1];
+  return isPluginName(plugin) ? plugin : null;
+}
+
+export const pluginWindowName = (plugin: string) => `mirador-plugin-${plugin}`;
+
+/** Named by the plugin's name, not its title, so window rules keep matching whatever its title becomes. */
+export const pluginWindowTitle = (plugin: string) => `Mirador: ${plugin}`;

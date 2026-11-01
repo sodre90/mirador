@@ -111,6 +111,43 @@ export interface ConversationReply {
   ended: "finished" | "stopped" | "failed";
 }
 
+/**
+ * Something that happened in a conversation, for a plugin's `activity`: the user sent a message, the agent's turn began
+ * or ended, or one of its tool calls began or ended. It carries no message text and no tool arguments.
+ */
+export type PluginActivity =
+  | { kind: "user-message" }
+  | { kind: "turn-started" }
+  | { kind: "turn-ended"; ended: ConversationReply["ended"] }
+  | { kind: "tool-started"; toolCallId: string; toolKind: string | null }
+  | { kind: "tool-ended"; toolCallId: string; failed: boolean };
+
+export type PluginActivityKind = PluginActivity["kind"];
+
+export type PluginActivityEvent = PluginActivity & { conversationId: string; conversationTitle: string; at: number };
+
+/** What a plugin's own window and its activity hook reach: its storage, and its window's state. */
+export interface PluginWindowContext {
+  /** What the plugin keeps across conversations and restarts; values are JSON. */
+  storage: CanvasPluginStorage;
+  /** Mirador asks `window.state` again soon after, and hands what it returns to the plugin's open windows. */
+  windowChanged(): void;
+}
+
+export interface PluginActivityContext extends PluginWindowContext {
+  /** One of the plugin's profile settings as the event's conversation has it, as `profileSetting` reads it in a tool. */
+  profileSetting(id: string): string | null;
+}
+
+/**
+ * A window of the plugin's own, belonging to no conversation, which its canvas view draws with `mirador.place` set to
+ * "window": the view gets `state` through `mirador.onState`, and `mirador.send` reaches `action`.
+ */
+export interface PluginWindow<State = unknown> {
+  state(context: PluginWindowContext): State;
+  action?(action: unknown, context: PluginWindowContext): unknown;
+}
+
 /** A tool the agent calls on the canvas server, next to show, ask and the rest. */
 export interface CanvasTool<Data = unknown> {
   description: string;
@@ -157,4 +194,8 @@ export interface CanvasHost<Data = unknown> {
    * a plugin's tool started gets none.
    */
   guidanceFor?(profileSetting: (id: string) => string | null): { instructions?: string; often?: string } | null;
+  /** Every conversation's activity, as it happens. It runs after the event, never holding up the agent. */
+  activity?(event: PluginActivityEvent, context: PluginActivityContext): void | Promise<void>;
+  /** A window of the plugin's own, which the user opens from the palette. */
+  window?: PluginWindow;
 }

@@ -14,7 +14,25 @@ const held = new Set<string>();
 
 const newest = (context: CanvasPluginContext<BoardData>, type: string) => context.items().findLast((item) => item.type === type && !item.dismissed);
 
+/** What the board's own window shows: how many of each kind of activity it heard, and in which conversation last. */
+const heard: { counts: Record<string, number>; lastConversation: string | null; lastEnded: string | null } = { counts: {}, lastConversation: null, lastEnded: null };
+
 const host: CanvasHost<BoardData> = {
+  activity(event, context) {
+    heard.counts[event.kind] = (heard.counts[event.kind] ?? 0) + 1;
+    heard.lastConversation = event.conversationTitle;
+    if (event.kind === "turn-ended") heard.lastEnded = event.ended;
+    context.windowChanged();
+  },
+  window: {
+    state: () => heard,
+    action(action, context) {
+      if ((action as { kind?: unknown }).kind !== "forget") throw new Error("The board's window can only forget what it heard.");
+      heard.counts = {};
+      context.windowChanged();
+      return { forgotten: true };
+    },
+  },
   items: {
     card: { icon: "▤", placement: "page" },
     report: {
