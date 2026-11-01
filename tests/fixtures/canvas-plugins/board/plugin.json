@@ -1,8 +1,0 @@
-{
-  "name": "board",
-  "title": "Board",
-  "version": "1.0.0",
-  "api": 6,
-  "canvas": { "host": "host.ts", "view": "canvas.js" },
-  "profileSettings": [{ "id": "hand-over-to", "label": "Hand over to", "hint": "The profile hand_over gives tasks to when the agent names none.", "choices": "profiles", "default": "" }]
-}

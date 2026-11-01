@@ -1,7 +1,0 @@
-node_modules/
-.pi-agent/
-.pi-acp-state/
-results/
-*.log
-*.out
-*.pid
