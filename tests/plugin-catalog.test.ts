@@ -75,3 +75,27 @@ test("the agent hears of the plugins not installed, a line each, and of the tool
   expect(tool).toContain("call plugin_install, which asks them before installing anything");
   expect(line).toBe("  - media (Media): Edit a video with the agent. Recommend it when the user wants to edit a video.");
 });
+
+test("fetches a picture the catalog lists once, for the page, and nothing it doesn't list or that isn't an image", async () => {
+  const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 1, 2, 3]);
+  const picture = { url: "https://raw.githubusercontent.com/sodre90/mirador-media/v1.1.3/screenshots/marks.png", caption: "Marks" };
+  const notAnImage = { url: "https://raw.githubusercontent.com/sodre90/mirador-media/v1.1.3/README.md", caption: "Readme" };
+  const store = new Store(":memory:");
+  store.savePluginCatalog({ plugins: [{ ...media, screenshots: [picture, notAnImage] }] });
+  const catalog = new PluginCatalog(store, null, () => false);
+  const fetched: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    fetched.push(String(input));
+    return new Response(String(input) === picture.url ? png : "# Media");
+  }) as typeof fetch;
+  try {
+    expect(await catalog.screenshot(picture.url)).toEqual({ bytes: png, mimeType: "image/png" });
+    expect(await catalog.screenshot(picture.url)).toEqual({ bytes: png, mimeType: "image/png" });
+    expect(await catalog.screenshot(notAnImage.url)).toBeNull();
+    expect(await catalog.screenshot("https://example.com/elsewhere.png")).toBeNull();
+    expect(fetched).toEqual([picture.url, notAnImage.url]);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

@@ -89,7 +89,7 @@ test("the agent recommends an official plugin, and Mirador installs it only once
     await pluginTile(plugins(page), "Discover", "Tally").getByRole("button", { name: "Install Tally" }).click();
     const tally = plugins(page).getByRole("region", { name: "Tally" });
     await expect(tally.locator(".plugin-description")).toHaveText("Keeps a tally.");
-    await expect(tally.getByRole("list", { name: "Pictures of Tally" }).getByRole("img", { name: "Tallying votes" })).toHaveAttribute("src", TALLY_SCREENSHOT.url);
+    await expect(tally.getByRole("list", { name: "Pictures of Tally" }).getByRole("img", { name: "Tallying votes" })).toHaveAttribute("src", `/plugin-screenshot?url=${encodeURIComponent(TALLY_SCREENSHOT.url)}`);
     await expect(tally.getByRole("list", { name: "Pictures of Tally" })).toContainText("Tallying votes");
     await tally.getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Don't install" }).click();
     await expect(tally.getByRole("group", { name: "Install Tally?" })).toHaveCount(0);

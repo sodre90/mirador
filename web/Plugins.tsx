@@ -303,13 +303,16 @@ function PluginIcon({ plugin }: { plugin: GalleryPlugin }) {
   );
 }
 
+/** The catalog's pictures load through the host, since the page may block images from other sites. */
+const throughTheHost = (url: string) => `/plugin-screenshot?url=${encodeURIComponent(url)}`;
+
 function Screenshots({ title, screenshots }: { title: string; screenshots: PluginScreenshot[] }) {
   return (
     <ul className="plugin-screenshots" aria-label={words.screenshotsOf(title)}>
       {screenshots.map(({ url, caption }) => (
         <li key={url}>
-          <a href={url} target="_blank" rel="noreferrer">
-            <img src={url} alt={caption} loading="lazy" />
+          <a href={throughTheHost(url)} target="_blank" rel="noreferrer">
+            <img src={throughTheHost(url)} alt={caption} loading="lazy" />
           </a>
           <span>{caption}</span>
         </li>

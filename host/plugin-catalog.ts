@@ -2,14 +2,23 @@ import { catalogPluginsOf, type CatalogPlugin } from "../shared/apps.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { withoutCredentials, type InstalledPlugins } from "./apps/installed-plugins.ts";
 import { messageOf } from "./apps/plugins.ts";
+import { MAX_IMAGE_BYTES } from "./images.ts";
+import { imageTypeOf } from "./local-images.ts";
 import type { PluginInstaller } from "./canvas/service.ts";
 import type { Store } from "./store.ts";
 
 const GIVE_UP_AFTER_MILLISECONDS = 20_000;
 
+export interface PluginScreenshotImage {
+  bytes: Uint8Array<ArrayBuffer>;
+  mimeType: string;
+}
+
 /** The official plugins, as the catalog lists them; the last one fetched stands while Mirador can't fetch it. */
 export class PluginCatalog {
   private plugins: CatalogPlugin[];
+  /** Pictures fetched once and kept while the host runs, so the page loads them from the host however it blocks other sites' images. */
+  private readonly screenshots = new Map<string, Promise<PluginScreenshotImage | null>>();
 
   constructor(
     private readonly store: Store,
@@ -36,6 +45,17 @@ export class PluginCatalog {
     return plugin;
   }
 
+  /** A picture the catalog lists, fetched for the page; null for a URL it doesn't list, or one that isn't an image. */
+  screenshot(url: string): Promise<PluginScreenshotImage | null> {
+    if (!this.plugins.some(({ screenshots }) => screenshots?.some((listed) => listed.url === url))) return Promise.resolve(null);
+    const known = this.screenshots.get(url);
+    if (known) return known;
+    const fetched = fetchImage(url);
+    this.screenshots.set(url, fetched);
+    fetched.then((image) => image ?? this.screenshots.delete(url));
+    return fetched;
+  }
+
   /** Fetches the catalog; a failure keeps the last one and is only logged. */
   async refresh() {
     if (!this.url) return;
@@ -50,6 +70,19 @@ export class PluginCatalog {
     } catch (error) {
       console.warn(`the catalog of official plugins at ${this.url} couldn't be fetched: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+}
+
+async function fetchImage(url: string): Promise<PluginScreenshotImage | null> {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(GIVE_UP_AFTER_MILLISECONDS) });
+    if (!response.ok || Number(response.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    const mimeType = bytes.length <= MAX_IMAGE_BYTES ? imageTypeOf(bytes.slice(0, 12)) : null;
+    return mimeType ? { bytes, mimeType } : null;
+  } catch (error) {
+    console.warn(`the plugin picture at ${url} couldn't be fetched: ${messageOf(error)}`);
+    return null;
   }
 }
 

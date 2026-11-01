@@ -6671,14 +6671,14 @@ body.reordering * {
   display: grid;
   flex: none;
   gap: 4px;
-  width: min(420px, 80%);
+  width: min-content;
 }
 
 .plugin-screenshots img {
   display: block;
-  width: 100%;
-  aspect-ratio: 16 / 10;
-  object-fit: cover;
+  height: 280px;
+  max-width: 100%;
+  object-fit: contain;
   object-position: top left;
   border: 1px solid var(--border);
   border-radius: 8px;
