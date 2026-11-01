@@ -1,5 +1,5 @@
-import { describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { describe, expect, spyOn, test } from "bun:test";
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppDocuments, AppFileRefused, type AppPublisher } from "../host/apps/documents.ts";
@@ -240,6 +240,58 @@ describe("AppDocuments", () => {
     expect(apps.describe("w1", undefined)).toBe(`Counter on counter.json\n\nThe count is 0.\n\nNo changes yet since Mirador started.\n\n${COUNTER_TASKS}`);
     await apps.apply("w1", undefined, { op: "add", by: 3 }, { kind: "agent", conversationId: "c1", turnSeq: null });
     expect(apps.describe("w1", "counter")).toBe(`Counter on counter.json\n\nThe count is 3.\n\nLatest changes:\n1. agent: Added 3; the count is 3.\n\n${COUNTER_TASKS}`);
+    apps.stop();
+  });
+
+  test("opens no file through a link that leads out of the workspace, nor makes one there", async () => {
+    const { apps, workspacePath } = await setUp();
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "secret.json"), JSON.stringify({ count: 41 }));
+    symlinkSync(outside, join(workspacePath, "linked"));
+    symlinkSync(join(outside, "secret.json"), join(workspacePath, "alias.json"));
+    symlinkSync(join(outside, "not-made-yet"), join(workspacePath, "dangling"));
+    await expect(apps.open("w1", "counter", "linked/secret.json")).rejects.toThrow("linked/secret.json is outside the workspace");
+    await expect(apps.open("w1", "counter", "linked/new.json")).rejects.toThrow("linked/new.json is outside the workspace");
+    await expect(apps.open("w1", "counter", "linked/deeper/new.json")).rejects.toThrow("is outside the workspace");
+    await expect(apps.open("w1", "counter", "alias.json")).rejects.toThrow("alias.json is outside the workspace");
+    await expect(apps.open("w1", "counter", "dangling/new.json")).rejects.toThrow();
+    expect(readdirSync(outside)).toEqual(["secret.json"]);
+    apps.stop();
+  });
+
+  test("opens a file through a link that stays in the workspace, and makes a new one in folders not made yet", async () => {
+    const { apps, workspacePath } = await setUp();
+    mkdirSync(join(workspacePath, "plans"));
+    writeFileSync(join(workspacePath, "plans", "week.json"), JSON.stringify({ count: 7 }));
+    symlinkSync(join(workspacePath, "plans"), join(workspacePath, "shortcut"));
+    expect(await apps.open("w1", "counter", "shortcut/week.json")).toMatchObject({ file: "shortcut/week.json" });
+    expect(await apps.open("w1", "counter", "new/folder/tally.json")).toMatchObject({ file: "new/folder/tally.json" });
+    expect(JSON.parse(readFileSync(join(workspacePath, "new", "folder", "tally.json"), "utf8"))).toEqual({ count: 0 });
+    apps.stop();
+  });
+
+  test("an edit still being written when the app opens another file leaves the pages on the new file", async () => {
+    const { apps, workspacePath, states } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 50 }));
+    await apps.open("w1", "counter", "counter.json");
+    let finishWrite = () => {};
+    const writing = new Promise<void>((resolve) => (finishWrite = resolve));
+    const realWrite = Bun.write;
+    const slowWrite = spyOn(Bun, "write").mockImplementation((async (...args: Parameters<typeof Bun.write>) => {
+      await writing;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    let applying: Promise<unknown>;
+    try {
+      applying = apps.apply("w1", "counter", { op: "add", by: 1 }, { kind: "you" });
+      await eventually(() => expect(slowWrite).toHaveBeenCalled());
+    } finally {
+      slowWrite.mockRestore();
+    }
+    await apps.open("w1", "counter", "other.json");
+    finishWrite();
+    await applying;
+    expect(states.at(-1)?.document).toEqual({ count: 50 });
     apps.stop();
   });
 });

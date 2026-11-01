@@ -1,4 +1,5 @@
-import { appendFileSync, cpSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, createProfile, reloadFromRestartedHost, sendMessage, signIn } from "./helpers.ts";
@@ -441,6 +442,16 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     expect(opened).toContain("Counter is open on week.json, the document for week.tally; the user sees it in the canvas.");
     expect(opened).toContain("The count is 0. Started for week.tally.");
     expect(JSON.parse(readFileSync(join(host.projectDir, "week.json"), "utf8"))).toEqual({ count: 0, startedFor: "week.tally" });
+    await expect(view(page).locator("#count")).toHaveText("0");
+  });
+
+  await test.step("app_open refuses a file through a link that leads out of the workspace, and the view stays where it was", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "app-tab-outside-"));
+    writeFileSync(join(outside, "secret.json"), '{ "count": 41 }\n');
+    symlinkSync(outside, join(host.projectDir, "linked"));
+    expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "linked/secret.json" })).toContain("linked/secret.json is outside the workspace");
+    expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "linked/new.json" })).toContain("linked/new.json is outside the workspace");
+    expect(readdirSync(outside)).toEqual(["secret.json"]);
     await expect(view(page).locator("#count")).toHaveText("0");
   });
 });

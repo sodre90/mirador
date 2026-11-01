@@ -83,13 +83,6 @@ const stateOf = (opened: AppDocument): AppDocumentState => ({
 
 const authorWords = (author: AppAuthor) => ({ agent: "agent", you: "user", outside: "edited outside Mirador" })[author.kind];
 
-function fileInWorkspace(workspacePath: string, file: string) {
-  const root = resolve(workspacePath);
-  const path = resolve(root, file);
-  if (!path.startsWith(root + sep)) throw new AppProblem(`${file} is outside the workspace; give a path inside ${root}.`);
-  return { path, file: toPosix(relative(root, path)) };
-}
-
 const realPathOrNull = (path: string) => {
   try {
     return realpathSync.native(path);
@@ -99,6 +92,23 @@ const realPathOrNull = (path: string) => {
 };
 
 const isInside = (folder: string, path: string) => path.startsWith(folder + sep);
+
+/** Where a path really leads, as far as it exists: the folders a new file will be made in may not be there yet. */
+function realPathOfExistingPart(path: string): string {
+  return realPathOrNull(path) ?? realPathOfExistingPart(dirname(path));
+}
+
+/** A file in the workspace, named from it: neither its name nor a link on the way may lead out of the workspace. */
+function fileInWorkspace(workspacePath: string, file: string) {
+  const root = resolve(workspacePath);
+  const path = resolve(root, file);
+  const realRoot = realPathOrNull(root) ?? root;
+  const leadsTo = realPathOfExistingPart(path);
+  if (!isInside(root, path) || (leadsTo !== realRoot && !isInside(realRoot, leadsTo))) {
+    throw new AppProblem(`${file} is outside the workspace; give a path inside ${root}.`);
+  }
+  return { path, file: toPosix(relative(root, path)) };
+}
 
 /** The real folder of a document, and a path in it or below it: links that lead out of the folder are refused, and so is a file that doesn't exist unless `mayBeNew`. */
 function pathInFolder(documentPath: string, path: unknown, { mayBeNew }: { mayBeNew: boolean }) {
@@ -333,7 +343,7 @@ export class AppDocuments {
       await this.write(opened, this.guarded(() => host.serialize(applied.document)));
       opened.document = applied.document;
       const change = this.logged(opened, author, applied.summary, applied.touched ?? [], operation, applied.inverse);
-      this.publisher.stateChanged(stateOf(opened));
+      this.publishWhileOpen(opened);
       return publicChange(change);
     });
   }
@@ -394,6 +404,11 @@ export class AppDocuments {
 
   private showTask(opened: AppDocument, task: AppTaskState) {
     opened.task = task;
+    this.publishWhileOpen(opened);
+  }
+
+  /** A document the app has since closed, or left for another file, has nothing more to show the pages. */
+  private publishWhileOpen(opened: AppDocument) {
     if (this.documents.get(keyOf(opened)) === opened) this.publisher.stateChanged(stateOf(opened));
   }
 
@@ -486,7 +501,7 @@ export class AppDocuments {
       } catch (error) {
         opened.problem = messageOf(error);
       }
-      this.publisher.stateChanged(stateOf(opened));
+      this.publishWhileOpen(opened);
     });
   }
 
