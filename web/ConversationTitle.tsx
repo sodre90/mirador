@@ -2,6 +2,7 @@ import { useState, type KeyboardEvent } from "react";
 import type { Conversation } from "../shared/model.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
+import { shownTitle } from "./shown-title.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
 /** A conversation's title that turns into a text field for renaming: Enter or leaving the field saves, Esc cancels. */
@@ -16,11 +17,12 @@ export function ConversationTitle({
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const typingAidAttributes = useTypingAidAttributes();
+  const shown = shownTitle(conversation);
 
   const save = () => {
     const title = draft?.trim();
     setDraft(null);
-    if (title && title !== conversation.title) connection.send({ type: "conversation.rename", conversationId: conversation.id, title });
+    if (title && title !== shown) connection.send({ type: "conversation.rename", conversationId: conversation.id, title });
   };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") save();
@@ -46,16 +48,16 @@ export function ConversationTitle({
       />
     );
   }
-  const startEditing = () => setDraft(conversation.title);
+  const startEditing = () => setDraft(shown);
   return (
     <span
       className={`${className} renamable`}
-      title={startEditingOn === "click" ? t.shell.conversationTitle.clickToRename(conversation.title) : t.shell.conversationTitle.doubleClickToRename(conversation.title)}
+      title={startEditingOn === "click" ? t.shell.conversationTitle.clickToRename(shown) : t.shell.conversationTitle.doubleClickToRename(shown)}
       data-rename-trigger={startEditingOn}
       onClick={startEditingOn === "click" ? startEditing : undefined}
       onDoubleClick={startEditingOn === "double-click" ? startEditing : undefined}
     >
-      {conversation.title}
+      {shown}
     </span>
   );
 }

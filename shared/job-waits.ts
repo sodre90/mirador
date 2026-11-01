@@ -35,7 +35,7 @@ export const checkInterval = ({ job, sshHost }: Pick<JobWait, "job" | "sshHost">
 /** A failed check over ssh cannot tell an ended job from a dropped connection, so only one that sees the job gone ends the wait. */
 export const FAILED_CHECKS_BEFORE_GIVING_UP = 30;
 
-const minutesOfFailedChecks = (wait: Pick<JobWait, "job" | "sshHost">) => Math.round((FAILED_CHECKS_BEFORE_GIVING_UP * checkInterval(wait)) / 60_000);
+export const minutesOfFailedChecks = (wait: Pick<JobWait, "job" | "sshHost">) => Math.round((FAILED_CHECKS_BEFORE_GIVING_UP * checkInterval(wait)) / 60_000);
 
 export const describeJob = ({ job, sshHost }: Pick<JobWait, "job" | "sshHost">) =>
   `${job.kind === "process" ? `process ${job.pid}` : `container ${job.name}`}${sshHost ? ` on ${sshHost}` : ""}`;

@@ -83,4 +83,11 @@ test("/clear starts the agent afresh while the conversation stays on screen, als
     expect(context()).not.toContain("remember-");
     await expect(page.locator(".timeline")).not.toContainText("Could not resume");
   });
+
+  await test.step("in Hungarian, the line that marks a /clear speaks Hungarian", async () => {
+    await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+    await page.reload();
+    await expect(page.locator(".notice-line:visible", { hasText: "Kontextus törölve: az ágens tiszta lappal indul" })).toHaveCount(2);
+    await page.evaluate(() => localStorage.removeItem("mirador-language"));
+  });
 });

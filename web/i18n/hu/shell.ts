@@ -211,6 +211,7 @@ export const shell: Messages["shell"] = {
   },
   conversationTitle: {
     label: "A beszélgetés neve",
+    untitled: "Új beszélgetés",
     clickToRename: (title) => `${title} (kattints az átnevezéshez)`,
     doubleClickToRename: (title) => `${title} (kattints duplán az átnevezéshez)`,
   },

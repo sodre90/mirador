@@ -13,17 +13,12 @@ import type {
   ToolKind,
 } from "@agentclientprotocol/sdk";
 import { hookNoticeIn } from "./hook-message.ts";
-import { jobWaitEndedNotice } from "./job-waits.ts";
-import { harnessLabels, type HarnessId, type StoredEvent } from "./model.ts";
+import type { StoredEvent } from "./model.ts";
+import { englishNoticeText, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
-import { turnTitle, whatWasLeft } from "./reverts.ts";
+import { turnTitle } from "./reverts.ts";
 import { leavesFailedTurnBehind, offersTryAgain } from "./try-again.ts";
 import { UserCommandLog, type UserCommand } from "./user-commands.ts";
-
-function profileChangedNotice(profileName: string | null, agent: HarnessId | undefined) {
-  if (!profileName) return "Now using the agent's own setup, without a profile";
-  return agent ? `Now using ${harnessLabels[agent]}, with the profile “${profileName}”` : `Now using the profile “${profileName}”`;
-}
 
 /** The stored event a block starts with: its sequence number keys the block, and its time is the block's time. */
 export interface Origin {
@@ -168,8 +163,13 @@ export interface AgentNoticeBlock extends Origin {
 /** The word a screen reader says before a notice that stands out, which the page shows by its colour alone. */
 export const spokenSeverity = ({ severity }: Pick<AgentNoticeBlock, "severity">) => (severity === "error" ? "Error" : severity === "warning" ? "Warning" : null);
 
+export type NoticeBlock = Origin & { kind: "notice"; text: string; about: NoticeAbout };
+
+const noticeBlock = (origin: Origin, about: NoticeAbout): NoticeBlock => ({ kind: "notice", ...origin, text: englishNoticeText(about), about });
+
 export type TimelineBlock =
-  | (Origin & { kind: "agent" | "thought" | "notice" | "info"; text: string } & CarriedImages)
+  | (Origin & { kind: "agent" | "thought" | "info"; text: string } & CarriedImages)
+  | NoticeBlock
   | (Origin & { kind: "user"; text: string; imageIds?: string[]; fromScript?: true; fromMirador?: true; fromPlugin?: string; turnSeq?: number; filesKept?: true } & CarriedImages)
   | AgentNoticeBlock
   | ToolBlock
@@ -410,15 +410,17 @@ class TimelineBuilder {
         return;
       }
       case "revert":
-        return this.push({
-          kind: "notice",
-          ...origin,
-          text: [`Files put back to how they were before the turn of “${this.messageAt(event.toSeq)}”.`, whatWasLeft(event)].filter(Boolean).join(" "),
-        });
+        return this.push(
+          noticeBlock(origin, {
+            kind: "files-put-back",
+            message: this.messageAt(event.toSeq),
+            revert: { submodulesLeft: event.submodulesLeft, committed: event.committed },
+          }),
+        );
       case "turn-end":
         this.endTurn(event.stopReason);
         if (event.stopReason === "end_turn") return;
-        return this.push({ kind: "notice", ...origin, text: `Turn ended: ${event.stopReason.replaceAll("_", " ")}` });
+        return this.push(noticeBlock(origin, { kind: "turn-ended", stopReason: event.stopReason }));
       case "error": {
         this.endTurn("cancelled");
         this.dropAgentEchoOf(event.message);
@@ -439,15 +441,15 @@ class TimelineBuilder {
       }
       case "login-ended":
         if (event.signedIn) this.errorsAwaitingSignIn.splice(0).forEach((block) => (block.signedInSince = true));
-        return this.push({ kind: "notice", ...origin, text: event.signedIn ? "Signed in. Send your message again." : "Signing in did not finish." });
+        return this.push(noticeBlock(origin, { kind: event.signedIn ? "signed-in" : "sign-in-unfinished" }));
       case "usage-limit-wait-stopped":
-        return this.push({ kind: "notice", ...origin, text: "Stopped waiting for the usage limit to reset" });
+        return this.push(noticeBlock(origin, { kind: "usage-limit-wait-stopped" }));
       case "job-wait-ended":
-        return this.push({ kind: "notice", ...origin, text: jobWaitEndedNotice(event.wait, event.end) });
+        return this.push(noticeBlock(origin, { kind: "job-wait-ended", wait: event.wait, end: event.end }));
       case "context-cleared":
-        return this.push({ kind: "notice", ...origin, text: "Context cleared: the agent starts afresh" });
+        return this.push(noticeBlock(origin, { kind: "context-cleared" }));
       case "profile-changed":
-        return this.push({ kind: "notice", ...origin, text: profileChangedNotice(event.profileName, event.agent) });
+        return this.push(noticeBlock(origin, { kind: "profile-changed", profileName: event.profileName, agent: event.agent }));
       case "permission": {
         const block: PermissionBlock = {
           kind: "permission",
@@ -504,7 +506,7 @@ class TimelineBuilder {
         this.currentPlan = { kind: "plan", ...origin, entries: update.entries };
         return this.push(this.currentPlan);
       case "current_mode_update":
-        return this.push({ kind: "notice", ...origin, text: `Mode: ${update.currentModeId}` });
+        return this.push(noticeBlock(origin, { kind: "mode", modeId: update.currentModeId }));
       case "notice":
         return this.push(agentNoticeBlock(origin, update), into);
       default:

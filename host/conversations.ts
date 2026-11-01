@@ -2,11 +2,14 @@ import { realpath } from "node:fs/promises";
 import { isDeepStrictEqual } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk";
 import {
+  busyTexts,
   harnessLabels,
+  UNTITLED,
   type Activity,
   type AdoptMode,
   type AskItem,
   type AskMode,
+  type BusyWith,
   type ContextUsage,
   type Conversation,
   type ConversationEvent,
@@ -86,7 +89,6 @@ import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
 import { UnknownSessionUpdates } from "./unknown-session-updates.ts";
 
-const UNTITLED = "New conversation";
 const MAX_TITLE_LENGTH = 200;
 const LISTED_SESSIONS = 30;
 const SEARCHED_SESSIONS = 50;
@@ -260,7 +262,7 @@ export class ConversationService {
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
   private readonly sessionsSlowToAnswer = new Set<string>();
   private readonly updatesForUnknownSessions = new UnknownSessionUpdates();
-  private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail">>();
+  private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail" | "busyWith">>();
   private readonly terminalActivity = new Map<string, TerminalActivity>();
   private readonly terminalWork = new TerminalWork();
   private readonly catchingUpWithTerminal = new Set<string>();
@@ -625,7 +627,7 @@ export class ConversationService {
       from: { profileId: conversation.profileId, profileName: left?.name ?? null, harness: conversation.harness },
     });
     this.ensureSession(conversationId, async () => {
-      this.setStatus(conversationId, "starting", "Switching profile…");
+      this.setBusy(conversationId, "switching-profile");
       await released;
       const sessionId = await this.openSession(conversationId);
       await this.applyProfileChoices(conversationId, sessionId);
@@ -664,7 +666,7 @@ export class ConversationService {
     this.save({ ...this.get(conversationId), acpSessionId: null });
     this.append(conversationId, { type: "context-cleared" });
     await this.ensureSession(conversationId, async () => {
-      this.setStatus(conversationId, "starting", "Clearing the context…");
+      this.setBusy(conversationId, "clearing-context");
       await released;
       const sessionId = await this.openSession(conversationId);
       this.setStatus(conversationId, "idle");
@@ -922,7 +924,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     const events = this.store.listEvents(conversationId);
     const point = rewindPointBefore(events, seq);
-    this.setStatus(conversationId, "starting", "Going back…");
+    this.setBusy(conversationId, "going-back");
     try {
       const forked = point && conversation.acpSessionId ? await this.forkSessionAt(conversationId, point, joinedRunningTurn(events, seq)) : null;
       const checkpoint = this.checkpointAt(conversationId, seq);
@@ -1461,7 +1463,7 @@ export class ConversationService {
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.loadSession) throw new Error(`${harness.spec.label} cannot load existing sessions.`);
     if (mode === "fork" && !capabilities.agentCapabilities.sessionCapabilities?.fork) throw new Error(`${harness.spec.label} cannot fork sessions.`);
-    this.setStatus(conversationId, "starting", "Loading the session's history…");
+    this.setBusy(conversationId, "loading-history");
     const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
     const loadedId = mode === "fork" ? (await harness.forkSession({ sessionId, cwd: sessionRequest.cwd })).sessionId : sessionId;
     this.muteNotifier(conversation, loadedId);
@@ -1485,7 +1487,7 @@ export class ConversationService {
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.loadSession) throw new Error(`${harness.spec.label} cannot load existing sessions.`);
-    this.setStatus(conversationId, "starting", "Reading the turns taken in the terminal…");
+    this.setBusy(conversationId, "reading-terminal-turns");
     const workspace = this.existingWorkspace(conversation.workspaceId);
     const replay: acp.SessionNotification[] = [];
     this.replaysBeingRead.set(sessionId, replay);
@@ -2143,6 +2145,12 @@ export class ConversationService {
   private setStatus(conversationId: string, status: ConversationStatus, statusDetail: string | null = null) {
     if (!this.store.hasConversation(conversationId)) return;
     this.statusOverrides.set(conversationId, { status, statusDetail });
+    this.publish(this.get(conversationId));
+  }
+
+  private setBusy(conversationId: string, busyWith: BusyWith) {
+    if (!this.store.hasConversation(conversationId)) return;
+    this.statusOverrides.set(conversationId, { status: "starting", statusDetail: busyTexts[busyWith], busyWith });
     this.publish(this.get(conversationId));
   }
 

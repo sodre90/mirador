@@ -220,6 +220,7 @@ export const shell: Messages["shell"] = {
   },
   conversationTitle: {
     label: "Nombre de la conversación",
+    untitled: "Nueva conversación",
     clickToRename: (title) => `${title} (haz clic para renombrar)`,
     doubleClickToRename: (title) => `${title} (haz doble clic para renombrar)`,
   },

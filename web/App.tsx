@@ -22,6 +22,7 @@ import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { launchLabel } from "./launch-label.ts";
 import { useProgramRequest } from "./program-request.ts";
+import { shownTitle } from "./shown-title.ts";
 import { requestOfTerminalPane, type TerminalPaneRequest } from "./terminal-pane-request.ts";
 import { adjacentConversation, adjacentWorkspaceConversation, currentWorkspace, numberedConversation } from "./navigation.ts";
 import { Palette, ShortcutHelp, type PaletteEntry } from "./Palette.tsx";
@@ -124,7 +125,7 @@ function paletteEntries(
   const conversations = recentConversations(state).map(
     (conversation): PaletteEntry => ({
       id: `conversation-${conversation.id}`,
-      label: conversation.title,
+      label: shownTitle(conversation),
       detail: workspaceName(conversation.workspaceId),
       kind: "conversation",
       run: () => dispatch({ type: "select", conversationId: conversation.id }),
@@ -181,7 +182,7 @@ function paletteEntries(
     [...turns].reverse().slice(0, TURNS_IN_PALETTE).map((turn) => ({
       id: `${rewind ? "rewind" : "undo"}-${turn.seq}`,
       label: rewind ? t.revert.rewindBefore(turnTitle(turn.text)) : t.revert.undoTheFilesOf(turnTitle(turn.text)),
-      detail: openConversation?.title,
+      detail: openConversation && shownTitle(openConversation),
       kind: "action",
       run: () => openHistory && dispatch({ type: "open-overlay", overlay: { kind: "revert", conversationId: openHistory.conversationId, turn, rewind } }),
     }));
@@ -215,13 +216,13 @@ function paletteEntries(
       ? [
           { id: "rename", label: words.renameConversation, kind: "action", run: startRenamingOpenConversation },
           ...(canMarkUnread(openConversation)
-            ? [{ id: "mark-unread", label: t.shell.sidebar.markUnread, detail: openConversation.title, kind: "action" as const, run: () => markUnread(openConversation.id, dispatch) }]
+            ? [{ id: "mark-unread", label: t.shell.sidebar.markUnread, detail: shownTitle(openConversation), kind: "action" as const, run: () => markUnread(openConversation.id, dispatch) }]
             : []),
           { id: "toggle-canvas", label: canvas.visible ? t.chat.header.hideCanvas : t.chat.header.showCanvas, kind: "action", run: canvas.toggle },
           ...terminalActions,
           ...fullscreenActions,
           ...swapActions,
-          { id: "reset-layout", label: t.settings.layout.resetCommand, detail: openConversation.title, kind: "action", run: panes.resetLayout },
+          { id: "reset-layout", label: t.settings.layout.resetCommand, detail: shownTitle(openConversation), kind: "action", run: panes.resetLayout },
           ...rewindable,
           ...undoable,
         ]

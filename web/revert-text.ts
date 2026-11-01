@@ -17,7 +17,7 @@ function whatCommitsLeft({ files, editedSince, commits }: CommittedFiles) {
   return `${left} ${files === 1 ? words.theFileWasEdited : words.someWereEdited(editedSince)}`;
 }
 
-const whatWasLeft = ({ submodulesLeft = 0, committed }: Pick<Revert, "submodulesLeft" | "committed">) =>
+export const whatWasLeft = ({ submodulesLeft = 0, committed }: Pick<Revert, "submodulesLeft" | "committed">) =>
   [committed && whatCommitsLeft(committed), submodulesLeft > 0 && words.submodulesLeft(submodulesLeft)].filter(Boolean).join(" ");
 
 /** What the conversation loses: the turns from this one on, and the agent's own history with them. */

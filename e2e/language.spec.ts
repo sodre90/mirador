@@ -80,6 +80,8 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   await expect(profilok).toBeHidden();
 
   const header = page.locator(".chat-header:visible");
+  await expect(header.locator("h2")).toHaveText("Új beszélgetés");
+  await expect(sidebar.locator(".conversation-title").first()).toHaveText("Új beszélgetés");
   await expect(header.getByRole("button", { name: "Vászon elrejtése" }).or(header.getByRole("button", { name: "Vászon mutatása" }))).toBeVisible();
   await expect(header.getByLabel("Kérdések").locator("option")).toHaveText(["Az ágens vár a válaszomra", "A válaszom a következő üzenetként megy el"]);
 

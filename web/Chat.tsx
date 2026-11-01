@@ -99,6 +99,8 @@ import {
   type ToolBlock,
 } from "../shared/timeline.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
+import { noticeText } from "./notice-text.ts";
+import { statusDetailOf } from "./status-detail.ts";
 import { formatClockTime, formatDuration, formatFullTime } from "./timestamps.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
@@ -277,6 +279,7 @@ function ChatHeader({
   onFind: () => void;
   begun: boolean;
 }) {
+  const statusDetail = statusDetailOf(conversation);
   return (
     <header className="chat-header" data-pane-bar>
       <div className="title-row">
@@ -309,7 +312,7 @@ function ChatHeader({
         </button>
         <FullscreenToggle pane="conversation" />
       </div>
-      {conversation.statusDetail && <div className="status-detail">{conversation.statusDetail}</div>}
+      {statusDetail && <div className="status-detail">{statusDetail}</div>}
       <div className="controls">
         <ProfilePicker conversation={conversation} profiles={profiles} begun={begun} />
         {conversation.configOptions.map((option) => (
@@ -983,7 +986,7 @@ function TimelineEntry({ block, conversationId, harness, canRewind }: { block: T
     case "permission":
       return <PermissionCard block={block} conversationId={conversationId} />;
     case "notice":
-      return <div className="notice-line">{block.text}</div>;
+      return <div className="notice-line">{noticeText(block.about)}</div>;
     case "info":
       return <InfoLine text={block.text} />;
     case "agent-notice":

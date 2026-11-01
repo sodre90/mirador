@@ -207,6 +207,7 @@ export const shell: Messages["shell"] = {
   },
   conversationTitle: {
     label: "对话名称",
+    untitled: "新对话",
     clickToRename: (title) => `${title}（点击重命名）`,
     doubleClickToRename: (title) => `${title}（双击重命名）`,
   },

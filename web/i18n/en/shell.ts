@@ -212,6 +212,7 @@ export const shell = {
   },
   conversationTitle: {
     label: "Conversation name",
+    untitled: "New conversation",
     clickToRename: (title: string) => `${title} (click to rename)`,
     doubleClickToRename: (title: string) => `${title} (double-click to rename)`,
   },

@@ -26,6 +26,8 @@ import { UpdatesWaiting } from "./PluginSettings.tsx";
 import { ProfileDot, ProfileEdge } from "./ProfileDot.tsx";
 import { highlightedCompletion } from "./path-completion.ts";
 import { shortcutKeys } from "./shortcuts.ts";
+import { shownTitle } from "./shown-title.ts";
+import { statusDetailOf } from "./status-detail.ts";
 import type { AppAction, AppState, DevicesListed, Overlay } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { canMarkUnread, markRead, markUnread } from "./unread.ts";
@@ -188,7 +190,7 @@ function statusDot(conversation: Conversation) {
   if (inTerminal && conversation.status === "idle") {
     return <span className={`dot terminal-${inTerminal}`} data-hint={words.openInTerminal(t.chat.terminalActivity[inTerminal])} />;
   }
-  return <span className={`dot status-${conversation.status}`} data-hint={conversation.statusDetail ?? statusHints[conversation.status]} />;
+  return <span className={`dot status-${conversation.status}`} data-hint={statusDetailOf(conversation) ?? statusHints[conversation.status]} />;
 }
 
 function WaitingPill({ waitingFor }: { waitingFor: WaitingFor }) {
@@ -229,7 +231,7 @@ function WaitingList({ state, dispatch }: { state: AppState; dispatch: Dispatch<
           >
             <ProfileEdge profile={profileOf(state.profiles, conversation)} />
             {statusDot(conversation)}
-            <span className="waiting-title">{conversation.title}</span>
+            <span className="waiting-title">{shownTitle(conversation)}</span>
             <span className="waiting-workspace">{workspaceName(conversation.workspaceId)}</span>
           </li>
         ))}
@@ -243,7 +245,7 @@ function ConversationMenu({ conversation, at, dispatch, onClose }: { conversatio
   const entry = lastsUntilOpened(conversation.waitingFor)
     ? { label: words.markRead, onChoose: () => markRead(conversation.id) }
     : { label: words.markUnread, onChoose: () => markUnread(conversation.id, dispatch), disabled: !canMarkUnread(conversation) };
-  return <ContextMenu name={conversation.title} at={at} entries={[entry]} onClose={onClose} />;
+  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[entry]} onClose={onClose} />;
 }
 
 const rowClasses = (conversation: Conversation, listed: Conversation[], selectedConversationId: string | null) =>

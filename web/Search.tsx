@@ -6,6 +6,7 @@ import { requestFind } from "./FindBar.tsx";
 import { formatNumber, locale, t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import { relativeTimeOf } from "../shared/relative-time.ts";
+import { shownTitle } from "./shown-title.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const TYPING_PAUSE_MS = 150;
@@ -137,7 +138,7 @@ export function SearchDialog({
             {conversations.map(({ conversation, matches, hits }) => (
               <div key={conversation.id} className="search-conversation">
                 <div className="search-conversation-title">
-                  {conversation.title}
+                  {shownTitle(conversation)}
                   <span className="search-count">{matchCount(matches)}</span>
                 </div>
                 {hits.map((hit) => {

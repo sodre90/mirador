@@ -428,6 +428,19 @@ export interface Activity {
   title: string;
 }
 
+export type BusyWith = "switching-profile" | "clearing-context" | "going-back" | "loading-history" | "reading-terminal-turns";
+
+export const busyTexts: Record<BusyWith, string> = {
+  "switching-profile": "Switching profile…",
+  "clearing-context": "Clearing the context…",
+  "going-back": "Going back…",
+  "loading-history": "Loading the session's history…",
+  "reading-terminal-turns": "Reading the turns taken in the terminal…",
+};
+
+/** The title a conversation has until its first message, the agent or the user names it. */
+export const UNTITLED = "New conversation";
+
 export interface Conversation {
   id: string;
   workspaceId: string;
@@ -442,6 +455,8 @@ export interface Conversation {
   bypassPermissions: boolean;
   status: ConversationStatus;
   statusDetail: string | null;
+  /** What the host is busy with while the conversation starts, for the page to say in its own language; statusDetail says it in English. */
+  busyWith?: BusyWith;
   openInTerminal: TerminalActivity | null;
   /** The agent's latest report of its context window; kept with the conversation, so it survives a host restart and empties when its context does. */
   contextUsage: ContextUsage | null;

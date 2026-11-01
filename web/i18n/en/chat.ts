@@ -1,5 +1,8 @@
-import type { AskMode, AsyncTaskState, ConversationStatus, DelegatedReply, TerminalActivity } from "../../../shared/model.ts";
+import type { AskMode, AsyncTaskState, BusyWith, ConversationStatus, DelegatedReply, TerminalActivity } from "../../../shared/model.ts";
+import type { StopReason } from "@agentclientprotocol/sdk";
 import type { SubagentState } from "../../../shared/timeline.ts";
+
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
@@ -67,10 +70,37 @@ export const chat = {
     shownInCanvas: "Shown in the canvas",
     cancelled: "Cancelled",
   },
+  busyWith: {
+    "switching-profile": "Switching profile…",
+    "clearing-context": "Clearing the context…",
+    "going-back": "Going back…",
+    "loading-history": "Loading the session's history…",
+    "reading-terminal-turns": "Reading the turns taken in the terminal…",
+  } satisfies Record<BusyWith, string>,
   notice: {
     lines: (count: number) => `${count} lines`,
     error: "Error",
     warning: "Warning",
+    filesPutBack: (message: string) => `Files put back to how they were before the turn of “${message}”.`,
+    turnEnded: (reason: string) => `Turn ended: ${reason}`,
+    stopReasons: {
+      max_tokens: "max tokens",
+      max_turn_requests: "max turn requests",
+      refusal: "refusal",
+      cancelled: "cancelled",
+    } satisfies Record<Exclude<StopReason, "end_turn">, string>,
+    signedIn: "Signed in. Send your message again.",
+    signInUnfinished: "Signing in did not finish.",
+    usageLimitWaitStopped: "Stopped waiting for the usage limit to reset",
+    jobEnded: (job: string) => `${capitalized(job)} ended`,
+    jobEndedSaying: (job: string, message: string) => `${capitalized(job)} ended: ${message}`,
+    gaveUpOnJob: (job: string, minutes: number) => `Stopped waiting for ${job}: it could not be checked for ${minutes} minutes, so it may still run`,
+    stoppedWaitingForJob: (job: string) => `Stopped waiting for ${job}`,
+    contextCleared: "Context cleared: the agent starts afresh",
+    agentsOwnSetup: "Now using the agent's own setup, without a profile",
+    agentWithProfile: (agent: string, profile: string) => `Now using ${agent}, with the profile “${profile}”`,
+    profile: (profile: string) => `Now using the profile “${profile}”`,
+    mode: (mode: string) => `Mode: ${mode}`,
   },
   author: {
     fromPlugin: (plugin: string) => `From ${plugin}`,

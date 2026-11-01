@@ -120,7 +120,7 @@ describe("buildTimeline", () => {
 
   test("shows abnormal turn endings only", () => {
     const timeline = buildTimeline(stored([{ type: "turn-end", stopReason: "end_turn" }, { type: "turn-end", stopReason: "cancelled" }]));
-    expect(timeline).toEqual([{ kind: "notice", key: "2", at: 2000, text: "Turn ended: cancelled" }]);
+    expect(timeline).toEqual([{ kind: "notice", key: "2", at: 2000, text: "Turn ended: cancelled", about: { kind: "turn-ended", stopReason: "cancelled" } }]);
   });
 
   test("the calls at work in the conversation are those of the turn still open", () => {
