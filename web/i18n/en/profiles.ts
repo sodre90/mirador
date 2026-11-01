@@ -46,7 +46,7 @@ export const profiles = {
   restartHint: "Saving a changed environment or pre-launch command restarts this profile's agent; a turn in progress stops.",
   onlyProfile: "This is your only profile, and every conversation needs one, so it stays until you create another.",
   installAgentTitle: "Install an agent to start",
-  installAgentText: "Mirador runs Claude Code, opencode or pi, and this machine has none of them. Install one, then reload this page.",
+  installAgentText: "Mirador runs Claude Code, opencode, pi or Codex, and this machine has none of them. Install one, then reload this page.",
   firstProfileTitle: "Set up a profile to start",
   firstProfileText:
     "Every conversation runs on a profile: an agent and the environment it starts with. With nothing more set, it runs the agent as it is set up on this machine. You can add profiles for other accounts, gateways or local models later in Profiles.",

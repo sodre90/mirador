@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.88.0",
+    "@agentclientprotocol/codex-acp": "2.5.0",
     "@agentclientprotocol/sdk": "1.5.1",
     "@anthropic-ai/sdk": "0.129.0",
     "@lexical/code": "0.52.0",

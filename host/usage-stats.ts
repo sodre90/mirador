@@ -1,5 +1,6 @@
 import type { PermissionOptionKind, StopReason, ToolCallUpdate } from "@agentclientprotocol/sdk";
 import { askModeLabels, harnessLabels, type ConversationEvent, type HarnessId, type StoredEvent, type TurnUsage } from "../shared/model.ts";
+import { codexMcpToolName } from "../shared/tool-title.ts";
 import { PLUGIN_INSTALL_TOOL } from "./canvas/guidance.ts";
 import { BUILT_IN_CANVAS_TOOLS } from "./canvas/tool-names.ts";
 import type { UsageConversation, UsageData, UsageWorkspace } from "./usage-data.ts";
@@ -410,6 +411,8 @@ const errorReason = ({ message, usageLimit, authRequired }: ConversationError) =
 const toolNameOf = (update: ToolCallUpdate & { name?: unknown }) => {
   const claudeName = ((update._meta?.claudeCode ?? {}) as { toolName?: unknown }).toolName;
   if (typeof claudeName === "string") return claudeName;
+  const codexMcp = codexMcpToolName(update);
+  if (codexMcp) return codexMcp;
   if (typeof update.name === "string" && update.name) return update.name;
   return update.title || update.kind || "unknown";
 };

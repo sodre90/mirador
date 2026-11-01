@@ -66,7 +66,7 @@ import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.
 import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { miradorCommandEnvironment } from "./acp/environment.ts";
-import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta } from "./acp/harnesses.ts";
+import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { withReportedToolCall } from "./acp/reported-tool-call.ts";
@@ -1513,7 +1513,15 @@ export class ConversationService {
   private async sessionRequest(conversationId: string, workspace: Workspace) {
     const conversation = this.get(conversationId);
     const withoutUserSettings = this.config.testSkipsUserSettings && this.onUsersOwnSetup(conversation);
-    return { cwd: await recordedDirectory(workspace), mcpServers: [this.canvasServerFor(conversationId)], _meta: sessionMeta(conversation.harness, this.store.canvasUse(), { canvasAssetsOrigin: this.config.canvasAssetsOrigin, withoutUserSettings, canvasPlugins: this.canvasPlugins(conversationId) }) };
+    const canvasUse = this.store.canvasUse();
+    const canvasPlugins = this.canvasPlugins(conversationId);
+    const systemPrompt = sessionSystemPrompt(conversation.harness, canvasUse, canvasPlugins);
+    return {
+      cwd: await recordedDirectory(workspace),
+      mcpServers: [this.canvasServerFor(conversationId)],
+      _meta: sessionMeta(conversation.harness, canvasUse, { canvasAssetsOrigin: this.config.canvasAssetsOrigin, withoutUserSettings, canvasPlugins }),
+      ...(systemPrompt && { systemPrompt }),
+    };
   }
 
   /** claude-notifier hooks into Claude Code only. */

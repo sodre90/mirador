@@ -27,6 +27,7 @@ const sessionScopedNames = new Set([
   "MIRADOR_SCRIPT_TOKEN",
   "PI_SESSION_ID",
   "PI_SESSION_FILE",
+  "CODEX_SESSION_ID",
 ]);
 
 const isSessionScoped = (name: string) =>

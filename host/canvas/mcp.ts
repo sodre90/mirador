@@ -8,6 +8,7 @@ import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { answerAsToolResult, type CanvasService, type RenderOutcome } from "./service.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
+import type { HarnessId } from "../../shared/model.ts";
 import type { AppDocuments } from "../apps/documents.ts";
 import { appToolsGuidance, registerAppTools } from "../apps/tools.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
@@ -64,6 +65,14 @@ function describeRender(itemId: string, render: RenderOutcome) {
  */
 const loadedUpFront = { "anthropic/alwaysLoad": true };
 
+/**
+ * Codex's auto review spends a model call on each tool call that may change the user's machine, before running it. The
+ * canvas tools only show things in Mirador, so Codex conversations hear so and skip that review.
+ */
+const SHOWS_ONLY_IN_MIRADOR = { annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false } };
+
+const reviewFreeFor = (harness: HarnessId | undefined) => (harness === "codex" ? SHOWS_ONLY_IN_MIRADOR : {});
+
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
 /** opencode 2 names the session that calls a tool, its subagents' included. */
@@ -84,6 +93,7 @@ function buildCanvasServer(
   catalog: PluginCatalog | null,
   store: Store | null,
 ) {
+  const reviewFree = reviewFreeFor(store?.findConversation(conversationId)?.harness);
   const server = new McpServer(
     { name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION },
     { instructions: canvasInstructions(assetsOrigin, withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps)) },
@@ -108,6 +118,7 @@ function buildCanvasServer(
         html: z.string().min(1).describe("A complete HTML document or an HTML fragment with inline CSS/JS."),
       }),
       _meta: loadedUpFront,
+      ...reviewFree,
     },
     async ({ title, html }, ctx) => {
       const { item, render } = await canvas.show(await callingConversation(ctx), { title, html });
@@ -134,6 +145,7 @@ function buildCanvasServer(
           ),
       }),
       _meta: loadedUpFront,
+      ...reviewFree,
     },
     async ({ questions, question, options, ...rest }, ctx) => {
       if (questions && (question || options)) return toolError("Give either question and options, or questions, not both.");
@@ -192,6 +204,7 @@ function buildCanvasServer(
           .describe("false when the user should decide what happens next: Mirador then only tells them, and you get nothing. True by default."),
       }),
       _meta: loadedUpFront,
+      ...reviewFree,
     },
     async ({ pid, container, host, message, resume }, ctx) => {
       if ((pid === undefined) === (container === undefined)) return toolError("Name the job: either its pid or its container.");
@@ -208,9 +221,9 @@ function buildCanvasServer(
   );
 
   if (hasApps(apps)) registerAppTools(server, apps, conversations, callingConversation);
-  canvasPlugins?.registerTools(server, callingConversation);
+  canvasPlugins?.registerTools(server, callingConversation, reviewFree);
   if (catalog && catalog.notInstalled().length > 0) registerPluginInstallTool(server, catalog, canvas, callingConversation);
-  if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {});
+  if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {}, reviewFree);
 
   return server;
 }

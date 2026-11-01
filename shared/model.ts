@@ -11,12 +11,13 @@ import type { HostProblem } from "./host-problems.ts";
 import type { EditDiff } from "./review.ts";
 import type { TerminalLayout } from "./terminal-layout.ts";
 
-export type HarnessId = "claude" | "opencode" | "pi";
+export type HarnessId = "claude" | "opencode" | "pi" | "codex";
 
 export const harnessLabels: Record<HarnessId, string> = {
   claude: "Claude Code",
   opencode: "opencode",
   pi: "pi",
+  codex: "Codex",
 };
 
 export const harnessIds = Object.keys(harnessLabels) as HarnessId[];
@@ -24,9 +25,10 @@ export const harnessIds = Object.keys(harnessLabels) as HarnessId[];
 /**
  * Whether the agent can be sent back to a point in its own session, which is what takes a conversation back to an
  * earlier turn. Claude Code and pi answer the fork point Mirador names; opencode takes `session/fork` but ignores the
- * point, so it would copy the whole session rather than leave anything behind.
+ * point, so it would copy the whole session rather than leave anything behind. Codex takes the point too, but Mirador has
+ * yet to try it.
  */
-export const harnessRewinds: Record<HarnessId, boolean> = { claude: true, opencode: false, pi: true };
+export const harnessRewinds: Record<HarnessId, boolean> = { claude: true, opencode: false, pi: true, codex: false };
 
 export type AskMode = "wait" | "next-message";
 

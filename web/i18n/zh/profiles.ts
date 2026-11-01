@@ -48,7 +48,7 @@ export const profiles: Messages["profiles"] = {
   restartHint: "保存修改后的环境变量或启动前命令会重启这个配置的智能体，正在进行的轮次会停止。",
   onlyProfile: "这是你唯一的配置，而每个对话都需要一个配置，所以在你创建另一个之前它会保留。",
   installAgentTitle: "先安装一个智能体",
-  installAgentText: "Mirador 运行 Claude Code、opencode 或 pi，而这台机器一个都没有。请安装其中一个，然后重新加载此页面。",
+  installAgentText: "Mirador 运行 Claude Code、opencode、pi 或 Codex，而这台机器一个都没有。请安装其中一个，然后重新加载此页面。",
   firstProfileTitle: "先设置一个配置",
   firstProfileText:
     "每个对话都在一个配置上运行：一个智能体加上它启动时的环境变量。不做其他设置时，它会按这台机器上的设置运行智能体。以后可以在“配置”中为其他账号、网关或本地模型添加配置。",

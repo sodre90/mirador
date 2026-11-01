@@ -1,4 +1,4 @@
-import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
+import type { McpServer, ServerContext, ToolAnnotations } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { Store } from "../store.ts";
 import { toolReportApart, usageReportApart } from "../usage-reports.ts";
@@ -10,7 +10,13 @@ import { USAGE_STATS_TOOL } from "./tool-names.ts";
  * so it takes no room in the agent's context until it searches for it. A report on other workspaces than the caller's
  * leaves out what quotes their work.
  */
-export function registerUsageStatsTool(server: McpServer, store: Store, callingConversation: (ctx: ServerContext) => Promise<string>, pluginTools: () => PluginToolTitles) {
+export function registerUsageStatsTool(
+  server: McpServer,
+  store: Store,
+  callingConversation: (ctx: ServerContext) => Promise<string>,
+  pluginTools: () => PluginToolTitles,
+  reviewFree: { annotations?: ToolAnnotations } = {},
+) {
   server.registerTool(
     USAGE_STATS_TOOL,
     {
@@ -24,6 +30,7 @@ export function registerUsageStatsTool(server: McpServer, store: Store, callingC
         tool: z.string().optional().describe("One tool to look into, e.g. Bash: its calls by profile, more of its failed calls, and its slowest."),
         compare: z.boolean().optional().describe("Also give the numbers of the same length of time before, to tell what got better or worse."),
       }),
+      ...reviewFree,
     },
     async ({ since, until, workspace = "this", profile, tool, compare }, ctx) => {
       try {

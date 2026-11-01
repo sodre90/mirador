@@ -29,6 +29,9 @@ OPENCODE_CONFIG_CONTENT='{"model":"llama.cpp/qwen3"}'`,
   pi: `PI_CODING_AGENT_DIR=/Users/you/.pi/work
 # or another pi than the one on PATH:
 PI_ACP_PI_COMMAND=/opt/homebrew/bin/pi`,
+  codex: `CODEX_HOME=/Users/you/.codex-work
+# or settings over your Codex config, as JSON:
+CODEX_CONFIG='{"model":"gpt-5.6-luna"}'`,
 };
 
 function useSaveProfile(onSaved: (profileId: string) => void) {

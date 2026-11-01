@@ -18,6 +18,7 @@ import type { StoredEvent } from "./model.ts";
 import { englishNoticeText, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
 import { turnTitle } from "./reverts.ts";
+import { codexMcpToolName } from "./tool-title.ts";
 import { leavesFailedTurnBehind, offersTryAgain } from "./try-again.ts";
 import { UserCommandLog, type UserCommand } from "./user-commands.ts";
 
@@ -320,7 +321,12 @@ function opencodeChildMeta(update: { _meta?: { [key: string]: unknown } | null }
 }
 
 /** opencode puts the title of the child session that made a call before the call's own title. */
+/** codex-acp calls an MCP tool's call a command; it shows as the MCP call it is. */
+const kindOf = (update: ToolUpdate) => (codexMcpToolName(update) ? "other" : update.kind);
+
 function ownTitle(update: ToolUpdate) {
+  const codexMcp = codexMcpToolName(update);
+  if (codexMcp) return codexMcp;
   const childTitle = opencodeChildMeta(update)?.title;
   return childTitle && update.title?.startsWith(`${childTitle}: `) ? update.title.slice(childTitle.length + 2) : update.title;
 }
@@ -614,7 +620,7 @@ class TimelineBuilder {
       if (name) this.name(existing, name, origin.at);
       if (background) existing.launchedInBackground = true;
       if (title) existing.title = title;
-      if (update.kind) existing.toolKind = update.kind;
+      if (update.kind) existing.toolKind = kindOf(update);
       if (update.status) existing.status = update.status;
       if (ends) existing.endedAt = origin.at;
       if (update.content) existing.content = update.content;
@@ -631,7 +637,7 @@ class TimelineBuilder {
       ...origin,
       toolCallId: update.toolCallId,
       title: title ?? "Tool call",
-      toolKind: update.kind,
+      toolKind: kindOf(update),
       status: update.status,
       content: update.content ?? [],
       locations: update.locations ?? [],

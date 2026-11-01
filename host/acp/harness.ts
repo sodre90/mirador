@@ -67,6 +67,12 @@ const spawnAgent = (program: string, args: string[], environment: Record<string,
     ? spawn(`"${program}"`, args, { stdio: ["pipe", "pipe", "pipe"], env: environment, shell: true })
     : spawn(program, args, { stdio: ["pipe", "pipe", "pipe"], env: environment });
 
+/**
+ * codex-acp sends an AIR client a command's output only to one that takes Zed's `terminal_output` chunks, which pi-acp
+ * sends anyway. opencode knows the key too, so the others are left as they were.
+ */
+const commandOutputCapability = (harness: HarnessId) => (harness === "codex" ? { terminal_output: true } : {});
+
 export interface HarnessSpec {
   id: HarnessId;
   /** Names the agent process in messages, e.g. "Claude Code (work)". */
@@ -294,7 +300,7 @@ export class HarnessProcess {
             session: { notices: {} },
             // Claude Code's background tasks come as session updates only to a client that claims the AIR asyncTasks
             // capability; an agent that knows no `_meta` ignores it.
-            _meta: { jetbrains: { air: { version: 1, capabilities: ["asyncTasks"] } } },
+            _meta: { jetbrains: { air: { version: 1, capabilities: ["asyncTasks"] } }, ...commandOutputCapability(this.spec.id) },
           },
           clientInfo: { name: "mirador", version: MIRADOR_VERSION },
         }),

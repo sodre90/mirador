@@ -8,6 +8,41 @@ import { foldersOnPath, programIn } from "./test-host.ts";
 type ChatMessage = { role: string; content?: string | { type: string; text?: string }[] | null };
 type ChatRequest = { model?: string; messages: ChatMessage[]; tools?: { function: { name: string; description?: string } }[] };
 type ToolCall = { name: string; arguments: Record<string, unknown> };
+type Reply = { text: string } | { call: ToolCall };
+
+type ResponsesContent = string | { type: string; text?: string }[];
+type ResponsesItem =
+  | { type: "message"; role: string; content: ResponsesContent }
+  | { type: "function_call"; name: string; namespace?: string }
+  | { type: "function_call_output"; output: ResponsesContent }
+  | { type: string };
+type ResponsesTool = { type: string; name?: string; description?: string; tools?: { name: string; description?: string }[] };
+type ResponsesRequest = { input: ResponsesItem[]; tools?: ResponsesTool[] };
+
+const responsesText = (content: ResponsesContent) => (typeof content === "string" ? content : content.map(({ text }) => text ?? "").join(""));
+
+/** Codex's Responses API request, as the chat request the script reads: a namespace's tools go by `<namespace>__<tool>`, as Claude Code names MCP tools. */
+function asChatRequest({ input, tools = [] }: ResponsesRequest): ChatRequest {
+  const messages = input.flatMap((item): ChatMessage[] => {
+    if (item.type === "message" && "content" in item) return [{ role: item.role, content: responsesText(item.content) }];
+    if (item.type === "function_call_output" && "output" in item) return [{ role: "tool", content: responsesText(item.output) }];
+    if (item.type === "function_call") return [{ role: "assistant", content: null }];
+    return [];
+  });
+  const functions = tools.flatMap((tool) =>
+    tool.type === "namespace"
+      ? (tool.tools ?? []).map(({ name, description }) => ({ function: { name: `${tool.name}__${name}`, description } }))
+      : tool.type === "function"
+        ? [{ function: { name: tool.name!, description: tool.description } }]
+        : [],
+  );
+  return { messages, tools: isCodexSideTask(messages) ? [] : functions };
+}
+
+/** Codex asks its model for a title and a guess at the user's next message with tools offered; they read as title requests do. */
+const isCodexSideTask = (messages: ChatMessage[]) => textOf(messages.at(-1)).startsWith("Your task is to");
+
+const responsesEvent = (type: string, data: object) => `event: ${type}\ndata: ${JSON.stringify({ type, ...data })}\n\n`;
 
 const textOf = (message: ChatMessage | undefined) =>
   typeof message?.content === "string" ? message.content : (message?.content ?? []).map(({ text }) => text ?? "").join("");
@@ -45,6 +80,7 @@ const finish = (finishReason: string) => ({
  */
 export class ScriptedModel {
   readonly requests: ChatRequest[] = [];
+  private readonly responsesRequests: ResponsesRequest[] = [];
   /** While set, every request for a reply gets this error response instead, as from a provider that is down. */
   failure: { status: number; body: object } | null = null;
   private server?: Server;
@@ -55,10 +91,14 @@ export class ScriptedModel {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
-        const body = JSON.parse(Buffer.concat(chunks).toString() || "{}") as ChatRequest;
+        const parsed = JSON.parse(Buffer.concat(chunks).toString() || "{}") as ChatRequest | ResponsesRequest;
+        const viaResponses = request.url?.endsWith("/responses") ?? false;
+        if (viaResponses) this.responsesRequests.push(parsed as ResponsesRequest);
+        const body = viaResponses ? asChatRequest(parsed as ResponsesRequest) : (parsed as ChatRequest);
         this.requests.push(body);
-        if (this.heldReplies && (body.tools ?? []).length > 0) return void this.heldReplies.push(() => this.reply(body, response));
-        this.reply(body, response);
+        const answer = () => this.reply(body, response, viaResponses);
+        if (this.heldReplies && (body.tools ?? []).length > 0) return void this.heldReplies.push(answer);
+        answer();
       });
     });
     await new Promise<void>((resolve) => this.server!.listen(0, "127.0.0.1", resolve));
@@ -104,52 +144,86 @@ export class ScriptedModel {
     return (this.latestReplyRequest().tools ?? []).find(({ function: tool }) => tool.name.endsWith(name))?.function.description;
   }
 
+  /** The description Codex gave the model of a namespace of tools, such as an MCP server's, in the latest request with it. */
+  namespaceDescription(name: string) {
+    const namespaceIn = (request: ResponsesRequest) => request.tools?.find((tool) => tool.type === "namespace" && tool.name === name);
+    return this.responsesRequests.map(namespaceIn).findLast((namespace) => namespace !== undefined)?.description;
+  }
+
   private latestReplyRequest() {
     return this.requests.findLast(({ tools }) => (tools ?? []).length > 0) ?? { messages: [] };
   }
 
-  private reply(request: ChatRequest, response: ServerResponse) {
+  private reply(request: ChatRequest, response: ServerResponse, viaResponses: boolean) {
+    if ((request.tools ?? []).length > 0 && this.failure) {
+      return response.writeHead(this.failure.status, { "content-type": "application/json" }).end(JSON.stringify(this.failure.body));
+    }
+    const reply = this.scriptedReply(request);
+    if (viaResponses) return this.streamResponse(response, reply);
+    if ("text" in reply) return this.stream(response, [chunk({ role: "assistant", content: reply.text }), finish("stop")]);
+    const toolCall = { index: 0, id: `call_${this.requests.length}`, type: "function", function: { name: reply.call.name, arguments: JSON.stringify(reply.call.arguments) } };
+    this.stream(response, [chunk({ role: "assistant", tool_calls: [toolCall] }), finish("tool_calls")]);
+  }
+
+  private scriptedReply(request: ChatRequest): Reply {
     const tools = (request.tools ?? []).map(({ function: { name } }) => name);
     const last = request.messages.at(-1);
-    if (tools.length === 0) return this.stream(response, [chunk({ role: "assistant", content: "Scripted title" }), finish("stop")]);
-    if (this.failure) return response.writeHead(this.failure.status, { "content-type": "application/json" }).end(JSON.stringify(this.failure.body));
-    if (last?.role === "tool") return this.say(response, `Tool result: ${toolResultOf(last)}`);
+    if (tools.length === 0) return { text: "Scripted title" };
+    if (last?.role === "tool") return { text: `Tool result: ${toolResultOf(last)}` };
     const text = textOf(last).trim();
     const canvasTool = (action: string) => tools.find((name) => name.includes("canvas") && name.endsWith(action))!;
-    const shellTool = tools.includes("shell") ? "shell" : "bash";
     const script = text.split("\n").at(-1)!.trim(); // opencode 2 puts its own lines before a subagent's prompt
     const [directive, ...rest] = script.split(" ");
     const argument = rest.join(" ");
-    if (directive === "RUN") return this.call(response, { name: shellTool, arguments: { command: argument, description: "Run the scripted command" } });
-    if (directive === "DELEGATE") return this.call(response, { name: "subagent", arguments: { agent: "general", description: "Scripted subagent", prompt: argument } });
+    if (directive === "RUN") return { call: shellCall(tools, argument) };
+    if (directive === "DELEGATE") return { call: { name: "subagent", arguments: { agent: "general", description: "Scripted subagent", prompt: argument } } };
     if (directive === "CALL") {
       const [tool, ...json] = rest;
-      return this.call(response, { name: canvasTool(tool!), arguments: JSON.parse(json.join(" ")) });
+      return { call: { name: canvasTool(tool!), arguments: JSON.parse(json.join(" ")) } };
     }
-    if (directive === "SHOW") {
-      return this.call(response, { name: canvasTool("show"), arguments: { title: argument, html: `<h1>${argument}</h1>` } });
-    }
+    if (directive === "SHOW") return { call: { name: canvasTool("show"), arguments: { title: argument, html: `<h1>${argument}</h1>` } } };
     if (directive === "ASK") {
       const context = `<h2>Why this matters</h2><div style="height:600px">Taller than the frame's starting height</div>`;
       const options = [{ label: "Red", html: `<div style="height:100px">Red swatch</div>` }, { label: "Blue" }];
-      return this.call(response, { name: canvasTool("ask"), arguments: { question: argument, html: context, options } });
+      return { call: { name: canvasTool("ask"), arguments: { question: argument, html: context, options } } };
     }
-    return this.say(response, `Echo: ${text}`);
+    return { text: `Echo: ${text}` };
   }
 
-  private say(response: ServerResponse, text: string) {
-    this.stream(response, [chunk({ role: "assistant", content: text }), finish("stop")]);
-  }
-
-  private call(response: ServerResponse, { name, arguments: args }: ToolCall) {
-    const toolCall = { index: 0, id: `call_${this.requests.length}`, type: "function", function: { name, arguments: JSON.stringify(args) } };
-    this.stream(response, [chunk({ role: "assistant", tool_calls: [toolCall] }), finish("tool_calls")]);
+  /** A Responses API stream: the text comes as a delta of an item announced first, as codex-acp shows only the deltas. */
+  private streamResponse(response: ServerResponse, reply: Reply) {
+    const id = `resp_${this.requests.length}`;
+    const item = "text" in reply ? { type: "message", role: "assistant", id: `msg_${this.requests.length}`, content: [{ type: "output_text", text: reply.text }] } : functionCallItem(reply.call, this.requests.length);
+    const usage = { input_tokens: SCRIPTED_PROMPT_TOKENS, output_tokens: 500, total_tokens: SCRIPTED_PROMPT_TOKENS + 500 };
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end(
+      [
+        responsesEvent("response.created", { response: { id } }),
+        responsesEvent("response.output_item.added", { item: "text" in reply ? { ...item, content: [] } : item }),
+        ...("text" in reply ? [responsesEvent("response.output_text.delta", { item_id: item.id, delta: reply.text })] : []),
+        responsesEvent("response.output_item.done", { item }),
+        responsesEvent("response.completed", { response: { id, usage } }),
+      ].join(""),
+    );
   }
 
   private stream(response: ServerResponse, chunks: object[]) {
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.end(`${chunks.map((part) => `data: ${JSON.stringify(part)}\n\n`).join("")}data: [DONE]\n\n`);
   }
+}
+
+/** The shell tool each agent offers: Codex's exec_command takes `cmd`, the others' `command`. */
+function shellCall(tools: string[], command: string): ToolCall {
+  if (tools.includes("exec_command")) return { name: "exec_command", arguments: { cmd: command } };
+  return { name: tools.includes("shell") ? "shell" : "bash", arguments: { command, description: "Run the scripted command" } };
+}
+
+/** Codex offers an MCP server's tools in a namespace, and the model names both in its call. */
+function functionCallItem({ name, arguments: args }: ToolCall, index: number) {
+  const namespaceEnd = name.lastIndexOf("__");
+  const naming = namespaceEnd > 0 ? { namespace: name.slice(0, namespaceEnd), name: name.slice(namespaceEnd + 2) } : { name };
+  return { type: "function_call", id: `fc_${index}`, call_id: `call_${index}`, ...naming, arguments: JSON.stringify(args) };
 }
 
 /** Enough models that the app offers its searchable model picker, as it does for a real opencode with many providers. */
@@ -240,4 +314,47 @@ export function forgetPiAcpSessionsUnder(root: string) {
   const map = JSON.parse(readFileSync(sessionMap, "utf8")) as { sessions: Record<string, { cwd: string; sessionFile: string }> };
   const kept = Object.entries(map.sessions).filter(([, { cwd, sessionFile }]) => !cwd.startsWith(root) && !sessionFile.startsWith(root));
   writeFileSync(sessionMap, `${JSON.stringify({ ...map, sessions: Object.fromEntries(kept) }, null, 2)}\n`);
+}
+
+/**
+ * Codex's own models call their tools through code; the scripted model, which Codex knows from this catalog, gets them as
+ * functions it calls directly. Without an entry Codex says in the conversation that it knows nothing of the model.
+ */
+const scriptedCodexModel = {
+  slug: "scripted",
+  display_name: "Scripted",
+  description: "The e2e tests' scripted model",
+  base_instructions: "You are a scripted model.",
+  shell_type: "unified_exec",
+  visibility: "list",
+  supported_in_api: true,
+  priority: 1,
+  tool_mode: "direct_model_only",
+  context_window: 258_400,
+  supported_reasoning_levels: [],
+  input_modalities: ["text", "image"],
+  support_verbosity: true,
+  truncation_policy: { mode: "tokens", limit: 10_000 },
+  experimental_supported_tools: [],
+};
+
+/**
+ * A profile environment that points Codex at the scripted model and keeps it away from the user's own Codex setup:
+ * config, sign-in, skills and sessions all live under `root`. Full access, so commands run with neither a sandbox nor
+ * Codex's own review.
+ */
+export function scriptedCodexEnvironment(model: ScriptedModel, root: string) {
+  const codexHome = join(root, "codex-home");
+  mkdirSync(codexHome, { recursive: true });
+  const catalog = join(codexHome, "models.json");
+  writeFileSync(catalog, JSON.stringify({ models: [scriptedCodexModel] }));
+  const config = ['model = "scripted"', 'model_provider = "e2e"', `model_catalog_json = ${JSON.stringify(catalog)}`, "", "[model_providers.e2e]", 'name = "E2E"', `base_url = "${model.url}"`, 'wire_api = "responses"'];
+  writeFileSync(join(codexHome, "config.toml"), `${config.join("\n")}\n`);
+  return [`CODEX_HOME=${codexHome}`, "INITIAL_AGENT_MODE=agent-full-access"].join("\n");
+}
+
+/** The user's own Codex, which Mirador needs to offer Codex at all; null where it is not installed. */
+export function codexProgram() {
+  const candidates = [...(process.env.PATH ?? "").split(delimiter), join(homedir(), ".local", "bin")].map((directory) => join(directory, process.platform === "win32" ? "codex.cmd" : "codex"));
+  return candidates.find((candidate) => existsSync(candidate)) ?? null;
 }

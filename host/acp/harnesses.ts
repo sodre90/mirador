@@ -31,6 +31,17 @@ const piAcpEntry = () => join(dirname(Bun.resolveSync("pi-acp/package.json", imp
 
 const findPi = (path = currentPath()) => Bun.which("pi", { PATH: path });
 
+/**
+ * codex-acp runs the Codex its package brings, so Mirador offers Codex only where the user installed it themselves: their
+ * sign-in in ~/.codex is what it runs on.
+ */
+const codexInstallDirectories = ["/opt/homebrew/bin", "/usr/local/bin", join(homedir(), ".local", "bin")];
+
+const findCodex = () => Bun.which("codex", { PATH: currentPath() }) ?? Bun.which("codex", { PATH: codexInstallDirectories.join(delimiter) });
+
+/** Looked up when Codex starts, as pi-acp is. */
+const codexAcpEntry = () => join(dirname(Bun.resolveSync("@agentclientprotocol/codex-acp/package.json", import.meta.dir)), "dist/index.js");
+
 function opencodeCommand(): string[] {
   const executable = findOpencode();
   if (!executable) throw new HostProblemError({ code: "opencode-not-installed" });
@@ -43,6 +54,7 @@ export function installedHarnesses(claudeProgramSetting: string): HarnessId[] {
     claude: () => findClaudeProgram(claudeProgramSetting),
     opencode: findOpencode,
     pi: () => findPi(),
+    codex: findCodex,
   };
   return harnessIds.filter((harness) => programOf[harness]() !== null);
 }
@@ -51,6 +63,7 @@ const commandFor: Record<HarnessId, () => string[]> = {
   claude: () => [process.execPath, claudeAgentEntry],
   opencode: opencodeCommand,
   pi: () => [process.execPath, piAcpEntry()],
+  codex: () => [process.execPath, codexAcpEntry()],
 };
 
 const AUTH_REQUIRED_CODE = RequestError.authRequired().code;
@@ -64,6 +77,7 @@ const loginCommandFor: Record<HarnessId, (environment: Record<string, string>) =
   claude: (environment) => [environment.CLAUDE_CODE_EXECUTABLE!, "auth", "login"],
   opencode: () => [opencodeCommand()[0]!, "auth", "login"],
   pi: (environment) => [environment.PI_ACP_PI_COMMAND!],
+  codex: () => [process.execPath, codexAcpEntry(), "login"],
 };
 
 const powershellKeepOpenOnFailure = (command: string[]) =>
@@ -138,6 +152,7 @@ export function launchEnvironment(harness: HarnessId, profile: Profile | null, c
   const environment = profileEnvironment(profile);
   if (harness === "opencode") return withCanvasToolsPlugin(environment);
   if (harness === "pi") return piAcpEnvironment(environment);
+  if (harness === "codex") return environment;
   if (environment.CLAUDE_CODE_EXECUTABLE) return environment;
   const program = findClaudeProgram(claudeProgramSetting, environment.PATH);
   if (!program) throw new HostProblemError(claudeProgramMissing(claudeProgramSetting));
@@ -177,6 +192,15 @@ export function sessionMeta(
   if (harness === "claude") return claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins });
   if (harness === "pi") return piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   return undefined;
+}
+
+/**
+ * ACP's own appended system prompt, which Codex takes; the others get theirs through `_meta`. The canvas server's
+ * instructions reach Codex as the description of the canvas tools, and its job waits go through the when_done tool.
+ */
+export function sessionSystemPrompt(harness: HarnessId, canvasUse: CanvasUse, canvasPlugins = NO_CANVAS_PLUGINS) {
+  if (harness !== "codex" || canvasUse !== "often") return undefined;
+  return { mode: "append", content: [{ type: "text", text: canvasUseGuidance(canvasPlugins) }] };
 }
 
 /**

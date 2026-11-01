@@ -1,4 +1,4 @@
-import { fromJsonSchema, type McpServer, type ServerContext } from "@modelcontextprotocol/server";
+import { fromJsonSchema, type McpServer, type ServerContext, type ToolAnnotations } from "@modelcontextprotocol/server";
 import {
   pluginItemOf,
   type CanvasActionContext,
@@ -238,11 +238,11 @@ export class CanvasPlugins {
   }
 
   /** Puts every plugin's tools on a conversation's canvas server; what a tool throws reaches the agent as a tool error. */
-  registerTools(server: McpServer, callingConversation: (ctx: ServerContext) => Promise<string>) {
+  registerTools(server: McpServer, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
     for (const plugin of this.plugins) {
       for (const [name, tool] of Object.entries(plugin.host.tools)) {
         const loading = tool.onDemand ? {} : { _meta: loadedUpFront };
-        server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading }, async (input, ctx) => {
+        server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading, ...reviewFree }, async (input, ctx) => {
           try {
             const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx)));
             return { content: [{ type: "text" as const, text: String(text) }] };

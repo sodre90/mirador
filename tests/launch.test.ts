@@ -84,7 +84,7 @@ describe("profileToLaunch", () => {
     expect(() => profileToLaunch(store, { harness: "claude", profileId: null })).toThrow("Every conversation runs on a profile: pick one, or set one up in Profiles.");
     expect(() => profileToLaunch(store, { harness: "claude", profileId: "p1" })).toThrow('Profile "home llama" is for opencode, not Claude Code.');
     expect(() => profileToLaunch(store, { harness: "opencode", profileId: "gone" })).toThrow("That profile no longer exists.");
-    expect(() => profileToLaunch(store, { harness: "codex" as never, profileId: "p1" })).toThrow("Unknown agent codex.");
+    expect(() => profileToLaunch(store, { harness: "gemini" as never, profileId: "p1" })).toThrow("Unknown agent gemini.");
   });
 });
 

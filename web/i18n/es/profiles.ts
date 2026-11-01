@@ -48,7 +48,7 @@ export const profiles: Messages["profiles"] = {
   restartHint: "Guardar un cambio en el entorno o en el comando previo al inicio reinicia el agente de este perfil; un turno en curso se detiene.",
   onlyProfile: "Este es tu único perfil y toda conversación necesita uno, así que se queda hasta que crees otro.",
   installAgentTitle: "Instala un agente para empezar",
-  installAgentText: "Mirador ejecuta Claude Code, opencode o pi, y esta máquina no tiene ninguno. Instala uno y vuelve a cargar esta página.",
+  installAgentText: "Mirador ejecuta Claude Code, opencode, pi o Codex, y esta máquina no tiene ninguno. Instala uno y vuelve a cargar esta página.",
   firstProfileTitle: "Configura un perfil para empezar",
   firstProfileText:
     "Toda conversación se ejecuta con un perfil: un agente y el entorno con el que se inicia. Sin nada más definido, ejecuta el agente tal como está configurado en esta máquina. Más adelante puedes agregar perfiles para otras cuentas, gateways o modelos locales en Perfiles.",
