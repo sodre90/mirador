@@ -28,7 +28,7 @@ import { installedHarnesses } from "./acp/harnesses.ts";
 import type { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import type { CanvasService } from "./canvas/service.ts";
 import { AppFileRefused, type AppDocuments } from "./apps/documents.ts";
-import { withoutCredentials, type InstalledPlugins } from "./apps/installed-plugins.ts";
+import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
 import { messageOf } from "./apps/plugins.ts";
@@ -42,7 +42,7 @@ import { canvasChangedSince, DEFLATED_MESSAGES_HEADER, type LowDataSubscription 
 import { sidebarIdsAfterMove } from "../shared/sidebar-order.ts";
 import { withChunksCoalesced } from "../shared/timeline.ts";
 import { authorityFingerprint as fingerprintOf, type ServingCertificate } from "./certificates.ts";
-import { publicAddressOf, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
+import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
 import { HERE_PATH, addressesThatAnswer, addressesUsed, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
 import { servePortOnTailnet, tailnetName, tailscaleCommand } from "./tailscale.ts";
 import { errorMessage, type ConversationService } from "./conversations.ts";
@@ -78,7 +78,7 @@ import type { KeepAwakeHold } from "./keep-awake.ts";
 import { computerName } from "./machine-name.ts";
 import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } from "./p2p/service.ts";
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
-import { englishProblem, HostProblemError, problemOf, type HostProblem } from "../shared/host-problems.ts";
+import { described, englishProblem, HostProblemError, problemFieldsOf, problemOf, type DescribedProblem, type HostProblem } from "../shared/host-problems.ts";
 
 export interface HostServices {
   config: HostConfig;
@@ -395,7 +395,7 @@ export function startServer(services: HostServices) {
   async function foundAddresses(serve: boolean) {
     const command = tailscaleCommand();
     const name = command && (await tailnetName(command));
-    let problem: string | null = null;
+    let problem: DescribedProblem | null = null;
     if (serve && command && name) {
       for (const port of [config.port, config.canvasAssetsPort]) {
         problem ??= await servePortOnTailnet(command, port);
@@ -405,7 +405,7 @@ export function startServer(services: HostServices) {
       ...(name ? [{ origin: `https://${name}:${config.port}`, how: "tailnet" as const }] : []),
       ...addressesUsed().map((host) => ({ origin: `https://${host}`, how: "devices" as const })),
     ];
-    return { addresses: await addressesThatAnswer(candidates, config.canvasAssetsPort), tailscale: command ? ("present" as const) : ("absent" as const), problem };
+    return { addresses: await addressesThatAnswer(candidates, config.canvasAssetsPort), tailscale: command ? ("present" as const) : ("absent" as const), ...(problem ?? { problem: null }) };
   }
 
   const listedDevices = (): ListedDevice[] => {
@@ -423,35 +423,31 @@ export function startServer(services: HostServices) {
 
   /** Answers whoever asked for the change, then shows the plugins as they are now on every page. */
   async function changePlugins(socket: BrowserSocket, requestId: string, change: () => Promise<unknown>) {
-    const problem = await change().then(
-      () => null,
-      (error) => withoutCredentials(messageOf(error)),
-    );
-    hub.send(socket, { type: "plugins.changed", requestId, problem });
+    const problem = await change().then(() => null, shownProblemOf);
+    hub.send(socket, { type: "plugins.changed", requestId, ...(problem ?? { problem: null }) });
     if (problem !== null) return;
     hub.broadcast(await pluginsListed());
     pluginUpdates.recount();
   }
 
   /** Saves a setting from Settings for the next start, or says what is wrong with it. */
-  function problemSaving(save: () => void) {
+  function problemSaving(save: () => void): DescribedProblem | { problem: null } {
     try {
       save();
     } catch (error) {
-      return errorMessage(error);
+      return problemFieldsOf(error, errorMessage(error));
     }
     sendDevicesToEveryPage();
-    return null;
+    return { problem: null };
   }
 
   function savePublicAddressFromSettings(address: PublicAddress | null) {
-    if (config.reachability.publicAddressSetByEnvironment) throw new Error("The host's environment sets its address, so Settings can't change it.");
-    const names = { origin: "Address", canvasOrigin: "Canvas address" };
-    savePublicAddress(config.dataDir, address && publicAddressOf(address.origin.trim(), address.canvasOrigin.trim(), names));
+    if (config.reachability.publicAddressSetByEnvironment) throw new HostProblemError({ code: "address-set-by-environment" });
+    savePublicAddress(config.dataDir, address && publicAddressOf(address.origin.trim(), address.canvasOrigin.trim(), SETTINGS_ADDRESS_NAMES));
   }
 
   function saveNetworkFromSettings(on: boolean) {
-    if (config.reachability.networkSetByEnvironment) throw new Error("The host's environment sets whether it listens on the network, so Settings can't change it.");
+    if (config.reachability.networkSetByEnvironment) throw new HostProblemError({ code: "network-set-by-environment" });
     saveNetwork(config.dataDir, on);
   }
 
@@ -879,9 +875,9 @@ export function startServer(services: HostServices) {
   function setPushRelay(address: string, token: string | null) {
     const trimmed = address.trim();
     const problem = trimmed ? pushRelayAddressProblem(trimmed) : null;
-    if (problem) throw new Error(problem);
+    if (problem) throw new HostProblemError(problem);
     const keepsToken = trimmed === store.pushRelaySetting().address && store.pushRelaySetting().tokenSet;
-    if (trimmed && !token?.trim() && !keepsToken) throw new Error("The push relay needs this Mac's token.");
+    if (trimmed && !token?.trim() && !keepsToken) throw new HostProblemError({ code: "push-relay-needs-token" });
     store.setPushRelay(trimmed || null, token?.trim() || null);
     hub.broadcast({ type: "settings.push-relay", pushRelay: store.pushRelaySetting() });
   }
@@ -982,13 +978,15 @@ export function startServer(services: HostServices) {
       case "settings.set-claude-program":
         return setClaudeProgram(message.path);
       case "newer-version.check":
-        return void newerVersion.lookNow().then((failure) => reply({ type: "newer-version.checked", requestId: message.requestId, failure }));
+        return void newerVersion
+          .lookNow()
+          .then((failed) => reply({ type: "newer-version.checked", requestId: message.requestId, failure: failed?.problem ?? null, ...(failed?.problemAbout && { failureAbout: failed.problemAbout }) }));
       case "settings.set-script-program":
         return setScriptProgram(message.program);
       case "settings.set-machine-name":
         return setMachineName(message.machineName);
       case "settings.set-push-relay":
-        return reply({ type: "settings.saved", requestId: message.requestId, problem: problemSaving(() => setPushRelay(message.address, message.token)) });
+        return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => setPushRelay(message.address, message.token)) });
       case "push.register":
         if (socket.data.deviceId) pushes.register(socket.data.deviceId, message);
         return;
@@ -1117,7 +1115,9 @@ export function startServer(services: HostServices) {
       case "conversation.revert-preview":
         return conversations
           .previewRevert(message.conversationId, message.seq)
-          .then(({ plan, files, cannotUndo }) => reply({ type: "conversation.revert-previewed", requestId: message.requestId, plan, ...(files && { files }), ...(cannotUndo && { cannotUndo }) }))
+          .then(({ plan, files, cannotUndo }) =>
+            reply({ type: "conversation.revert-previewed", requestId: message.requestId, plan, ...(files && { files }), ...(cannotUndo && { cannotUndo: englishProblem(cannotUndo), cannotUndoAbout: cannotUndo }) }),
+          )
           .catch((error) => reply({ type: "conversation.revert-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.revert":
         return conversations
@@ -1128,7 +1128,16 @@ export function startServer(services: HostServices) {
         return conversations
           .previewRewind(message.conversationId, message.seq)
           .then(({ turnsLeaving, keptFrom, plan, files, cannotRewind, filesNote }) =>
-            reply({ type: "conversation.rewind-previewed", requestId: message.requestId, turnsLeaving, keptFrom, plan, ...(files && { files }), ...(cannotRewind && { cannotRewind }), ...(filesNote && { filesNote }) }),
+            reply({
+              type: "conversation.rewind-previewed",
+              requestId: message.requestId,
+              turnsLeaving,
+              keptFrom,
+              plan,
+              ...(files && { files }),
+              ...(cannotRewind && { cannotRewind: englishProblem(cannotRewind), cannotRewindAbout: cannotRewind }),
+              ...(filesNote && { filesNote: englishProblem(filesNote), filesNoteAbout: filesNote }),
+            }),
           )
           .catch((error) => reply({ type: "conversation.rewind-failed", requestId: message.requestId, ...failure(error) }));
       case "conversation.rewind":
@@ -1198,7 +1207,7 @@ export function startServer(services: HostServices) {
       case "canvas.item-action":
         return void canvasPlugins.act(message.itemId, message.action).then(
           (answer) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: answer, problem: null }),
-          (error) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: null, problem: messageOf(error) }),
+          (error) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: null, ...problemFieldsOf(error, messageOf(error)) }),
         );
       case "canvas.dismiss":
         return canvasPlugins.dismiss(message.itemId);
@@ -1330,7 +1339,7 @@ export function startServer(services: HostServices) {
       case "plugins.offer-update":
         return void (message.type === "plugins.offer" ? plugins.offer(message.url, message.branch) : plugins.offerUpdate(message.folder)).then(
           (offer) => reply({ type: "plugins.offered", requestId: message.requestId, offer, problem: null }),
-          (error) => reply({ type: "plugins.offered", requestId: message.requestId, offer: null, problem: withoutCredentials(messageOf(error)) }),
+          (error) => reply({ type: "plugins.offered", requestId: message.requestId, offer: null, ...shownProblemOf(error) }),
         );
       case "plugins.install":
         return void changePlugins(socket, message.requestId, () => plugins.install(message.offerId));
@@ -1347,7 +1356,7 @@ export function startServer(services: HostServices) {
             reply({ type: "plugins.commits-found", requestId: message.requestId, ...news, problem: null });
             pluginUpdates.recount();
           },
-          (error) => reply({ type: "plugins.commits-found", requestId: message.requestId, release: null, commits: [], problem: withoutCredentials(messageOf(error)) }),
+          (error) => reply({ type: "plugins.commits-found", requestId: message.requestId, release: null, commits: [], ...shownProblemOf(error) }),
         );
       case "devices.invite": {
         const invite = devices.invite();
@@ -1362,9 +1371,9 @@ export function startServer(services: HostServices) {
       case "device.revoke":
         return revokeDevice(message.deviceId);
       case "settings.set-public-address":
-        return reply({ type: "settings.saved", requestId: message.requestId, problem: problemSaving(() => savePublicAddressFromSettings(message.address)) });
+        return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => savePublicAddressFromSettings(message.address)) });
       case "settings.set-network":
-        return reply({ type: "settings.saved", requestId: message.requestId, problem: problemSaving(() => saveNetworkFromSettings(message.on)) });
+        return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => saveNetworkFromSettings(message.on)) });
       case "voice.set-settings":
         return reply({ type: "settings.saved", requestId: message.requestId, problem: saveVoiceSettings(socket, message.settings) });
       case "voice.engine.set-up":
@@ -1388,11 +1397,11 @@ export function startServer(services: HostServices) {
         return colorMachine(message.machineId, message.color);
       case "join-request.approve": {
         const problem = await joinRequests.approve(message.joinRequestId, message.number).then(
-          (approved) => (approved ? null : "That is not the number the device shows, so its request was denied. It can ask again."),
-          errorMessage,
+          (approved) => (approved ? null : described({ code: "join-number-wrong" })),
+          (error) => problemFieldsOf(error, errorMessage(error)),
         );
         sendJoinRequestsToEveryPage();
-        return reply({ type: "join-request.answered", requestId: message.requestId, problem });
+        return reply({ type: "join-request.answered", requestId: message.requestId, ...(problem ?? { problem: null }) });
       }
       case "join-request.deny":
         joinRequests.deny(message.joinRequestId);
@@ -1400,11 +1409,17 @@ export function startServer(services: HostServices) {
       case "machine.ask-to-join":
         return void relays
           .askToJoin(message.machineId, (number) => reply({ type: "machine.join-asked", requestId: message.requestId, number }))
-          .then(() => null, errorMessage)
-          .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, problem }));
+          .then(
+            () => null,
+            (error) => problemFieldsOf(error, errorMessage(error)),
+          )
+          .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, ...(problem ?? { problem: null }) }));
       case "machine.join": {
-        const problem = await relays.join(message.machineId, message.code, message.authorityFingerprint).then(() => null, errorMessage);
-        return reply({ type: "machine.join-answered", requestId: message.requestId, problem });
+        const problem = await relays.join(message.machineId, message.code, message.authorityFingerprint).then(
+          () => null,
+          (error) => problemFieldsOf(error, errorMessage(error)),
+        );
+        return reply({ type: "machine.join-answered", requestId: message.requestId, ...(problem ?? { problem: null }) });
       }
       case "search":
         return reply({ type: "search.results", requestId: message.requestId, conversations: search.find(message.query) });

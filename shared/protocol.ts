@@ -398,7 +398,7 @@ export type ServerMessage =
   | { type: "async-task.output.got"; requestId: string; text: string | null }
   | { type: "conversation.event"; conversationId: string; event: StoredEvent }
   /** `cannotUndo` says why a turn cannot be undone, when it cannot; `plan` is absent then too. */
-  | { type: "conversation.revert-previewed"; requestId: string; plan: RestorePlan | null; files?: RestoreFiles; cannotUndo?: string }
+  | { type: "conversation.revert-previewed"; requestId: string; plan: RestorePlan | null; files?: RestoreFiles; cannotUndo?: string; cannotUndoAbout?: HostProblem }
   | { type: "conversation.reverted"; requestId: string; plan: RestorePlan }
   | { type: "conversation.revert-failed"; requestId: string; message: string; problem?: HostProblem }
   /**
@@ -413,7 +413,9 @@ export type ServerMessage =
       plan: RestorePlan | null;
       files?: RestoreFiles;
       cannotRewind?: string;
+      cannotRewindAbout?: HostProblem;
       filesNote?: string;
+      filesNoteAbout?: HostProblem;
     }
   /** The rewind this page asked for is done: the events from `fromSeq` on are gone. */
   | { type: "conversation.rewind-done"; requestId: string; conversationId: string; fromSeq: number }
@@ -457,7 +459,7 @@ export type ServerMessage =
   /** To pages, and to this machine's desktop app: also on connecting, while there is a newer version. */
   | { type: "newer-version.found"; newerVersion: NewerVersion | null }
   /** Why the check asked for failed, or null when it didn't. */
-  | { type: "newer-version.checked"; requestId: string; failure: string | null }
+  | { type: "newer-version.checked"; requestId: string; failure: string | null; failureAbout?: HostProblem }
   /** To pages, whenever what the host found by itself of the plugins' new commits changes. */
   | { type: "plugin-updates.found"; pluginUpdates: PluginUpdate[] }
   /** The host is stopping to start again in place; pages reload once they reconnect. */
@@ -475,26 +477,26 @@ export type ServerMessage =
   /** Every plugin's settings, whenever the user chooses one. */
   | { type: "plugins.settings"; pluginSettings: PluginSettings[] }
   /** The answer to plugins.install and plugins.remove. */
-  | { type: "plugins.changed"; requestId: string; problem: string | null }
-  | { type: "plugins.offered"; requestId: string; offer: PluginOffer | null; problem: string | null }
+  | { type: "plugins.changed"; requestId: string; problem: string | null; problemAbout?: HostProblem }
+  | { type: "plugins.offered"; requestId: string; offer: PluginOffer | null; problem: string | null; problemAbout?: HostProblem }
   /** The plugin's reply to an item's action, or why there is none. */
-  | { type: "canvas.item-acted"; requestId: string; reply: unknown; problem: string | null }
+  | { type: "canvas.item-acted"; requestId: string; reply: unknown; problem: string | null; problemAbout?: HostProblem }
   /** A plugin window's state, or why there is none, such as a plugin with no window. */
   | { type: "plugin-window.state"; plugin: string; state: unknown; problem: string | null }
   | { type: "plugin-window.acted"; requestId: string; reply: unknown; problem: string | null }
   /** What updating the plugin would bring: a newer release and its commits, or the commits on its branch it lacks, newest first. */
-  | { type: "plugins.commits-found"; requestId: string; release: string | null; commits: PluginCommit[]; problem: string | null }
+  | { type: "plugins.commits-found"; requestId: string; release: string | null; commits: PluginCommit[]; problem: string | null; problemAbout?: HostProblem }
   | { type: "devices.invited"; requestId: string; code: string; expiresAt: number; tunnel: InviteTunnel | null }
   /** The addresses that answered as this Mirador, and whether this machine has Tailscale to put its ports on the tailnet. */
-  | { type: "address.found"; requestId: string; addresses: FoundAddress[]; tailscale: "absent" | "present"; problem: string | null }
+  | { type: "address.found"; requestId: string; addresses: FoundAddress[]; tailscale: "absent" | "present"; problem: string | null; problemAbout?: HostProblem }
   | { type: "machines.changed"; machines: Machine[] }
   | { type: "machine.status"; status: MachineStatus }
   /** The machine has the request; it waits there until someone types the number this host shows. */
   | { type: "machine.join-asked"; requestId: string; number: string }
-  | { type: "machine.join-answered"; requestId: string; problem: string | null }
+  | { type: "machine.join-answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   | { type: "join-requests.listed"; joinRequests: JoinRequest[] }
   /** problem says why it was not approved, e.g. a wrong number, which denies it. */
-  | { type: "join-request.answered"; requestId: string; problem: string | null }
-  | { type: "settings.saved"; requestId: string; problem: string | null }
+  | { type: "join-request.answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }
+  | { type: "settings.saved"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   /** The conversation with the newest hit first. */
   | { type: "search.results"; requestId: string; conversations: ConversationMatches[] };

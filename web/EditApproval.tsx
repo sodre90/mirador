@@ -5,6 +5,7 @@ import { connection } from "./connection.ts";
 import { splitRows, type EditRequest } from "./edit-approval.ts";
 import { highlightRows, type CodeSpan } from "./highlight.ts";
 import { hints } from "./hints.ts";
+import { describedText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { CodeText } from "./CodeText.tsx";
 import { gapsOf, type Gap } from "./review-context.ts";
@@ -118,7 +119,7 @@ export function EditedFile({ edit, style, unlocatedHint = UNLOCATED_EDIT }: { ed
         <EditCounts edits={[edit]} />
       </header>
       {!edit.located && unlocatedHint && <p className="hint">{unlocatedHint}</p>}
-      {edit.hiddenBecause && <p className="review-empty">{t.chat.edits.notShown(edit.hiddenBecause)}</p>}
+      {edit.hiddenBecause && <p className="review-empty">{t.chat.edits.notShown(describedText(edit.hiddenBecause, edit.hiddenBecauseAbout))}</p>}
       {!edit.hiddenBecause && edit.hunks.length === 0 && <p className="review-empty">{t.chat.edits.noLines}</p>}
       {edit.hunks.map((hunk, index) => (
         <Fragment key={index}>

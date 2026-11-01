@@ -1,3 +1,4 @@
+import { problemFieldsOf, type DescribedProblem } from "../shared/host-problems.ts";
 const CHECK_EVERY_MILLISECONDS = 6 * 60 * 60 * 1000;
 
 /** Looks when started and every few hours, and says when the answer changes; when it can't tell, offline for one, the last answer stands. */
@@ -46,12 +47,12 @@ export class Lookout<T> {
   }
 
   /** Why the look failed, or null when it didn't. */
-  private async lookOnce(fetching: boolean): Promise<string | null> {
+  private async lookOnce(fetching: boolean): Promise<DescribedProblem | null> {
     try {
       this.take(await this.lookup(fetching, this.current));
       return null;
     } catch (error) {
-      return error instanceof Error ? error.message : String(error);
+      return problemFieldsOf(error, error instanceof Error ? error.message : String(error));
     }
   }
 

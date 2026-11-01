@@ -4,6 +4,7 @@ import { isNewerVersion, releasePage, type NewerVersion } from "../shared/newer-
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { environmentWithoutPrompts } from "./git-environment.ts";
 import { Lookout } from "./lookout.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const GIVE_UP_AFTER_MILLISECONDS = 60_000;
 
@@ -16,7 +17,7 @@ async function git(directory: string, args: string[]) {
     timeout: GIVE_UP_AFTER_MILLISECONDS,
   });
   const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
-  if (exitCode !== 0) throw new Error(`git ${args[0]} exited with ${exitCode}`);
+  if (exitCode !== 0) throw new HostProblemError({ code: "newer-version-git-failed", command: args[0]!, exitCode });
   return output.trim();
 }
 
@@ -27,7 +28,7 @@ export async function newerCommits(checkout: string, fetching: boolean): Promise
   if (!remote || !remoteBranch || !upstream) return null;
   if (fetching)
     await git(checkout, ["fetch", "--quiet", "--no-tags", remote, remoteBranch]).catch(() => {
-      throw new Error(`Couldn't fetch ${upstream}`);
+      throw new HostProblemError({ code: "newer-version-fetch-failed", upstream });
     });
   const commits = Number(await git(checkout, ["rev-list", "--count", "HEAD..@{upstream}"]));
   if (commits === 0) return null;
@@ -37,10 +38,10 @@ export async function newerCommits(checkout: string, fetching: boolean): Promise
 /** GitHub answers 404 while the repository is private or nothing is published yet, which leaves nothing to show. */
 export async function newerRelease(latestReleaseUrl: string, current = MIRADOR_VERSION): Promise<NewerVersion | null> {
   const response = await fetch(latestReleaseUrl, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(GIVE_UP_AFTER_MILLISECONDS) }).catch(() => {
-    throw new Error("Couldn't reach GitHub");
+    throw new HostProblemError({ code: "newer-version-github-unreachable" });
   });
   if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`GitHub answered ${response.status}`);
+  if (!response.ok) throw new HostProblemError({ code: "newer-version-github-answered", status: response.status });
   const { tag_name: tag } = (await response.json()) as { tag_name?: unknown };
   if (typeof tag !== "string") return null;
   const version = tag.replace(/^v/, "");

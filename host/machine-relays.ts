@@ -130,11 +130,11 @@ export class MachineRelays {
       body: JSON.stringify({ code, name: thisHostAsDevice(this.store) }),
       ...trusting(authority),
     }).catch(() => null);
-    if (!response && authority) throw new Error(`${machine.name}'s certificate is not from its own certificate authority, or does not name ${new URL(machine.origin).hostname}.`);
-    if (!response) throw new Error(`${machine.name} did not answer. Is its Mirador running?`);
+    if (!response && authority) throw new HostProblemError({ code: "machine-certificate-not-its-own", machine: machine.name, hostname: new URL(machine.origin).hostname });
+    if (!response) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
     if (!response.ok) throw new Error(await response.text());
     const { token } = (await response.json()) as { token?: unknown };
-    if (typeof token !== "string") throw new Error(`${machine.name} let this computer in without a token.`);
+    if (typeof token !== "string") throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
     this.signInFromNowOn(machine, authority, token);
   }
 
@@ -175,11 +175,7 @@ export class MachineRelays {
     const trustedBefore = this.store.machineAuthority(machine.id);
     const expected = linkFingerprint ?? (trustedBefore && authorityFingerprint(trustedBefore));
     if (expected && offered.fingerprint !== expected) {
-      throw new Error(
-        linkFingerprint
-          ? `${machine.name}'s certificate authority is not the one in the invite link, so the code was not sent. Something on the network may be posing as ${machine.name}.`
-          : `${machine.name}'s certificate authority changed since this computer joined it, so the code was not sent. If its Mirador was set up again, join with an invite link from it.`,
-      );
+      throw new HostProblemError({ code: linkFingerprint ? "machine-authority-not-in-link" : "machine-authority-changed", machine: machine.name });
     }
     return offered.authority;
   }

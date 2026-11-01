@@ -1,3 +1,4 @@
+import type { HostProblem } from "./host-problems.ts";
 export type FindingSeverity = "blocker" | "issue" | "question" | "nit";
 export type FindingCheck = "confirmed" | "plausible";
 export type FindingDecision = "keep" | "drop";
@@ -117,6 +118,7 @@ export interface EditDiff {
   hunks: DiffHunk[];
   /** Why the diff is left out; its counts still show. */
   hiddenBecause: string | null;
+  hiddenBecauseAbout?: HostProblem;
   /** Whether the edit was found in the file; when it was not, the rows are the agent's snippet, without line numbers. */
   located: boolean;
   /** How many lines the file has after the edit, when it was found. */

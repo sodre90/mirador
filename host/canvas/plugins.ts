@@ -258,8 +258,8 @@ export class CanvasPlugins {
   async act(itemId: string, action: unknown): Promise<unknown> {
     const item = this.pluginItem(itemId);
     const plugin = this.plugins.find(({ manifest }) => manifest.name === item.plugin);
-    if (!plugin) throw new Error(`The plugin that drew this item, ${item.plugin}, isn't installed.`);
-    if (!plugin.host.action) throw new Error(`${plugin.manifest.title} takes no actions from its items.`);
+    if (!plugin) throw new HostProblemError({ code: "item-plugin-not-installed", plugin: item.plugin });
+    if (!plugin.host.action) throw new HostProblemError({ code: "plugin-takes-no-actions", plugin: plugin.manifest.title });
     return (await plugin.host.action(pluginItemOf(item), action, this.actionContext(plugin, item.conversationId))) ?? null;
   }
 

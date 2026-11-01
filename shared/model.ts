@@ -334,6 +334,7 @@ export interface StatuslineRender {
   /** What the command printed, ANSI colours and all; null when it was not run or did not succeed. */
   output: string | null;
   error: string | null;
+  errorAbout?: HostProblem;
   /** The plan's usage limits as the agent last reported them for the conversation's profile; null until it has. */
   quotas: PlanQuotas | null;
 }

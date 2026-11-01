@@ -4,6 +4,7 @@ import type { ContextUsage, Conversation, PlanQuotas, Profile, QuotaWindow, Stat
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
+import { describedText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { readableOn } from "./readable-color.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
@@ -243,7 +244,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
         )}
       </div>
       {prefersCommand && render?.error && (
-        <span className="statusline-error" role="img" aria-label={words.commandFailed} data-hint={render.error}>
+        <span className="statusline-error" role="img" aria-label={words.commandFailed} data-hint={describedText(render.error, render.errorAbout)}>
           ⚠
         </span>
       )}

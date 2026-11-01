@@ -1,3 +1,4 @@
+import { HostProblemError } from "./host-problems.ts";
 /** Long enough that something posing as the machine matches the number by chance once in a million tries. */
 const NUMBER_DIGITS = 6;
 const POLL_INTERVAL_MS = 2_000;
@@ -51,7 +52,7 @@ export interface Asking {
 export async function askToJoin(send: (path: string, body: object) => Promise<Response | null>, asking: Asking, shown: (number: string) => void) {
   const { machineName } = asking;
   const answered = async (response: Response | null) => {
-    if (!response) throw new Error(`${machineName} did not answer. Is its Mirador running?`);
+    if (!response) throw new HostProblemError({ code: "machine-did-not-answer", machine: machineName });
     if (!response.ok) throw new Error(await response.text());
     return response;
   };
@@ -68,8 +69,8 @@ export async function askToJoin(send: (path: string, body: object) => Promise<Re
     const response = await sendAbout("poll");
     if (!response) continue;
     const answer = (await (await answered(response)).json()) as JoinRequestAnswer;
-    if (answer.answer === "denied") throw new Error(`${machineName} denied the request. If the number was typed there wrongly, ask again.`);
+    if (answer.answer === "denied") throw new HostProblemError({ code: "join-request-denied", machine: machineName });
     if (answer.answer === "approved") return answer.token;
   }
-  throw new Error(`Nobody approved the request on ${machineName} in time. Ask again.`);
+  throw new HostProblemError({ code: "join-request-timed-out", machine: machineName });
 }

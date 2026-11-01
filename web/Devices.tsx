@@ -11,6 +11,7 @@ import { setConnectedDevicesInSidebar, useConnectedDevicesInSidebar } from "./co
 import { connection } from "./connection.ts";
 import { inDesktopApp } from "./desktop-bridge.ts";
 import { hints } from "./hints.ts";
+import { describedText } from "./host-error.ts";
 import { locale, t } from "./i18n/index.ts";
 import { QrCode } from "./QrCode.tsx";
 import { saveSetting } from "./saved-setting.ts";
@@ -323,7 +324,7 @@ function AddressFinder({ onUse, onProblem }: { onUse: (address: PublicAddress) =
         (message, requestId) => (message.type === "address.found" && message.requestId === requestId ? message : undefined),
       );
       setSearch(found);
-      if (found.problem) onProblem(found.problem);
+      if (found.problem) onProblem(describedText(found.problem, found.problemAbout));
     } catch (error) {
       onProblem(error instanceof Error ? error.message : String(error));
     } finally {

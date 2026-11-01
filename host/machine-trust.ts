@@ -1,5 +1,6 @@
 import type { Machine } from "../shared/model.ts";
 import { authorityFingerprint } from "./certificates.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 /** Checks a machine's certificate against the certificate authority this host trusts it by, or the computer's own ones when there is none. */
 export const trusting = (authority: string | null) => (authority ? { tls: { ca: authority } } : {});
@@ -22,9 +23,9 @@ function fingerprintOf(certificate: string) {
 export async function offeredAuthority(machine: Machine): Promise<{ authority: string; fingerprint: string } | null> {
   if (new URL(machine.origin).protocol !== "https:" || (await answersTrusted(machine.origin))) return null;
   const response = await fetch(`${machine.origin}/mirador-ca.pem`, { tls: { rejectUnauthorized: false } }).catch(() => null);
-  if (!response) throw new Error(`${machine.name} did not answer. Is its Mirador running?`);
+  if (!response) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
   const authority = response.ok ? await response.text() : "";
   const fingerprint = fingerprintOf(authority);
-  if (!fingerprint) throw new Error(`This computer doesn't trust ${machine.name}'s certificate, and ${machine.name} offers no certificate authority of its own.`);
+  if (!fingerprint) throw new HostProblemError({ code: "machine-certificate-untrusted", machine: machine.name });
   return { authority, fingerprint };
 }

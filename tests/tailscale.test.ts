@@ -46,7 +46,7 @@ test("a port is served on the tailnet under its own number, so the address is pr
 
 test("what Tailscale said about a failed serve is handed back, so Settings can show it", async () => {
   const command = tailscaleSaying("serve: access denied: cannot serve on port 4601", 1);
-  expect(await servePortOnTailnet(command, 4601)).toBe("serve: access denied: cannot serve on port 4601");
+  expect(await servePortOnTailnet(command, 4601)).toEqual({ problem: "serve: access denied: cannot serve on port 4601" });
 });
 
 test("the command Mirador runs is the one the environment names, and no other", () => {

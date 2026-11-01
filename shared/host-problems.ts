@@ -77,6 +77,48 @@ export type HostProblem =
   | { code: "save-path-is-folder"; name: string }
   | { code: "save-already-there"; path: string }
   | { code: "save-path-part-is-file"; name: string }
+  | { code: "config-file-must-be-object"; path: string }
+  | { code: "tailscale-serve-exited"; exitCode: number }
+  | { code: "machine-certificate-not-its-own"; machine: string; hostname: string }
+  | { code: "machine-did-not-answer"; machine: string }
+  | { code: "machine-certificate-untrusted"; machine: string }
+  | { code: "machine-gave-no-token"; machine: string }
+  | { code: "machine-authority-not-in-link"; machine: string }
+  | { code: "machine-authority-changed"; machine: string }
+  | { code: "join-request-denied"; machine: string }
+  | { code: "join-request-timed-out"; machine: string }
+  | { code: "git-ls-remote-failed"; output: string }
+  | { code: "plugin-renamed"; name: string; installedName: string; folder: string }
+  | { code: "git-fetch-failed"; output: string }
+  | { code: "git-clone-failed"; output: string }
+  | { code: "repo-is-not-a-plugin"; cause: string; causeProblem?: HostProblem }
+  | { code: "plugin-tag-version-mismatch"; tag: string; release: string; version: string }
+  | { code: "plugin-build-failed"; command: string; output: string }
+  | { code: "plugin-invalid-after-build"; cause: string; causeProblem?: HostProblem }
+  | { code: "plugin-invalid-after-cloning"; cause: string; causeProblem?: HostProblem }
+  | { code: "plugin-folder-taken"; name: string }
+  | { code: "plugin-name-taken"; folder: string; name: string }
+  | { code: "plugin-not-installed"; folder: string }
+  | { code: "plugin-not-from-git"; folder: string }
+  | { code: "plugin-has-nothing-to-update-from"; folder: string }
+  | { code: "plugin-name-already-used"; name: string }
+  | { code: "plugin-tool-name-reserved"; tool: string }
+  | { code: "plugin-tool-name-taken"; tool: string; plugin: string }
+  | { code: "plugin-api-too-new"; api: number; newest: number }
+  | { code: "plugin-canvas-needs-newer-api"; brought: number; named: number }
+  | { code: "plugin-profile-settings-needs-newer-api"; brought: number; named: number }
+  | { code: "plugin-file-outside-folder"; path: string }
+  | { code: "plugin-file-missing"; path: string }
+  | { code: "plugin-host-module-missing-exports"; names: string }
+  | { code: "plugin-tasks-unusable"; tasks: string }
+  | { code: "item-plugin-not-installed"; plugin: string }
+  | { code: "plugin-takes-no-actions"; plugin: string }
+  | { code: "newer-version-git-failed"; command: string; exitCode: number }
+  | { code: "newer-version-fetch-failed"; upstream: string }
+  | { code: "newer-version-github-answered"; status: number }
+  | { code: "diff-too-many-lines"; lines: number }
+  | { code: "statusline-timed-out"; seconds: number }
+  | { code: "statusline-exited"; exitCode: number; firstError: string }
   | { code: "agent-gone"; agent: string; gone: AgentGone }
   | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string };
 
@@ -95,6 +137,21 @@ export class HostProblemError extends Error {
 
 /** The cause of a problem: what the error said in English, and the problem it was about when the host described it. */
 export const causeOf = (error: unknown, message: string) => ({ cause: message, ...(error instanceof HostProblemError && { causeProblem: error.problem }) });
+
+/** A reply's problem as the page shows it: in English, and as the problem it was about when the host described it. */
+export interface DescribedProblem {
+  problem: string;
+  problemAbout?: HostProblem;
+}
+
+/** Why a diff is hidden, in English and as the problem it was about. */
+export const hiddenBecause = (problem: HostProblem) => ({ hiddenBecause: englishProblem(problem), hiddenBecauseAbout: problem });
+
+/** A problem the host describes, as a reply's problem. */
+export const described = (problem: HostProblem): DescribedProblem => ({ problem: englishProblem(problem), problemAbout: problem });
+
+/** What an error says as a reply's problem: `problem` is its English, the way the reply showed it before. */
+export const problemFieldsOf = (error: unknown, problem: string): DescribedProblem => ({ problem, ...(error instanceof HostProblemError && { problemAbout: error.problem }) });
 
 /** The problem an error is about, when the host described it, to send along with the error's English message. */
 export const problemOf = (error: unknown): { problem: HostProblem } | Record<string, never> => (error instanceof HostProblemError ? { problem: error.problem } : {});

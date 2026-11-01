@@ -1,6 +1,7 @@
 import { DEVICE_TOKEN_PATTERNS, isPushKey, sealedPushBlob, type ClearMessage, type PushKind, type PushMessage, type PushOutcome, type PushRegistration, type PushRequest } from "../shared/push.ts";
 import type { NotificationKind, SystemNotification } from "../shared/system-notifications.ts";
 import type { Store } from "./store.ts";
+import type { HostProblem } from "../shared/host-problems.ts";
 
 /** How long a phone with a connection gets to say it showed a notification before the Mac pushes it too. */
 export const SHOWN_WAIT_MS = 5_000;
@@ -15,17 +16,17 @@ export interface PushNotificationsOptions {
 }
 
 /** A relay is reached over HTTPS; plain HTTP only on this machine, for trying one out. */
-export function pushRelayAddressProblem(address: string): string | null {
+export function pushRelayAddressProblem(address: string): HostProblem | null {
   let url: URL;
   try {
     url = new URL(address);
   } catch {
-    return "The push relay's address isn't a web address.";
+    return { code: "push-relay-not-web-address" };
   }
   const onThisMachine = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && onThisMachine)) return "The push relay's address must start with https://.";
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && onThisMachine)) return { code: "push-relay-needs-https" };
   const justOrigin = url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password;
-  return justOrigin ? null : "The push relay's address is just its origin, like https://push.example.com.";
+  return justOrigin ? null : { code: "push-relay-is-origin" };
 }
 
 export function pushRegistrationProblem(registration: PushRegistration): string | null {

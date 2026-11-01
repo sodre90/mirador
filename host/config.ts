@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 import type { PublicAddress } from "../shared/model.ts";
 import { RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { relayPorts } from "../shared/relay-ports.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 
 const PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/sodre90/mirador-plugins/main/index.json";
 const DEFAULT_PLUGINS_FILE = join(dirname(import.meta.dir), "plugins", "defaults.json");
@@ -82,16 +83,29 @@ function notifierDirIfInstalled() {
   return existsSync(dir) ? dir : null;
 }
 
+type AddressNames = { origin: string; canvasOrigin: string };
+
+/** The names Settings shows the two addresses by; their problems are for the page to say in its own language. */
+export const SETTINGS_ADDRESS_NAMES: AddressNames = { origin: "Address", canvasOrigin: "Canvas address" };
+
+function notWebAddress(name: string) {
+  if (name === SETTINGS_ADDRESS_NAMES.origin) return new HostProblemError({ code: "address-must-be-web-address" });
+  if (name === SETTINGS_ADDRESS_NAMES.canvasOrigin) return new HostProblemError({ code: "canvas-address-must-be-web-address" });
+  return new Error(`${name} must be a web address, like https://box.example.ts.net.`);
+}
+
 function webOrigin(address: unknown, name: string) {
   const url = typeof address === "string" ? URL.parse(address) : null;
-  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) throw new Error(`${name} must be a web address, like https://box.example.ts.net.`);
+  if (!url || (url.protocol !== "https:" && url.protocol !== "http:")) throw notWebAddress(name);
   return url.origin;
 }
 
 /** Both addresses or neither, each cut down to its origin. */
-export function publicAddressOf(origin: unknown, canvasOrigin: unknown, names: { origin: string; canvasOrigin: string }): PublicAddress | null {
+export function publicAddressOf(origin: unknown, canvasOrigin: unknown, names: AddressNames): PublicAddress | null {
   if (!origin && !canvasOrigin) return null;
-  if (!origin || !canvasOrigin) throw new Error(`Set both ${names.origin} and ${names.canvasOrigin}, or neither.`);
+  if (!origin || !canvasOrigin) {
+    throw names === SETTINGS_ADDRESS_NAMES ? new HostProblemError({ code: "set-both-addresses-or-neither" }) : new Error(`Set both ${names.origin} and ${names.canvasOrigin}, or neither.`);
+  }
   return { origin: webOrigin(origin, names.origin), canvasOrigin: webOrigin(canvasOrigin, names.canvasOrigin) };
 }
 
@@ -107,7 +121,7 @@ function readConfigFile(dataDir: string): Record<string, unknown> {
     const settings: unknown = JSON.parse(readFileSync(path, "utf8"));
     if (typeof settings === "object" && settings !== null && !Array.isArray(settings)) return settings as Record<string, unknown>;
   } catch {}
-  throw new Error(`${path} must hold a JSON object, like {"publicOrigin": "https://…", "publicCanvasOrigin": "https://…"}.`);
+  throw new HostProblemError({ code: "config-file-must-be-object", path });
 }
 
 /** The public address saved in config.json, by hand or from Settings. */

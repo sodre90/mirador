@@ -157,7 +157,7 @@ describe("watching for a newer version", () => {
   test("a look asked for now says why it failed, keeping the last answer, and says nothing when it didn't", async () => {
     const { watcher, fetched } = watcherAnswering(release("0.4.0"), new Error("Couldn't reach GitHub"), null);
     expect(await watcher.lookNow()).toBeNull();
-    expect(await watcher.lookNow()).toBe("Couldn't reach GitHub");
+    expect(await watcher.lookNow()).toEqual({ problem: "Couldn't reach GitHub" });
     expect(watcher.current).toEqual(release("0.4.0"));
     expect(await watcher.lookNow()).toBeNull();
     expect(watcher.current).toBeNull();

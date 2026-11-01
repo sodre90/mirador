@@ -4,6 +4,7 @@ import type { ToolCallContent, ToolCallUpdate } from "@agentclientprotocol/sdk";
 import { structuredPatch } from "diff";
 import type { DiffHunk, DiffRow, EditDiff } from "../shared/review.ts";
 import { MAX_ROWS_PER_FILE } from "./review/diff.ts";
+import { hiddenBecause } from "../shared/host-problems.ts";
 
 const MAX_FILE_BYTES = 1024 * 1024;
 const CONTEXT_LINES = 3;
@@ -91,7 +92,7 @@ export function editDiff(change: ProposedChange, file: FileBefore, replaceAll: b
     added: rows.filter((row) => row.kind === "added").length,
     removed: rows.filter((row) => row.kind === "removed").length,
     hunks: tooLong ? [] : hunks,
-    hiddenBecause: tooLong ? `more than ${MAX_ROWS_PER_FILE.toLocaleString("en")} diff lines` : null,
+    ...(tooLong ? hiddenBecause({ code: "diff-too-many-lines", lines: MAX_ROWS_PER_FILE }) : { hiddenBecause: null }),
     located: located !== null,
     lineCount: located ? linesOf(whole.after).length : null,
   };
@@ -122,10 +123,10 @@ export function fileChangeDiff(path: string, before: FileBefore, after: FileBefo
 function diffBetweenVersions(path: string, before: FileBefore, after: FileBefore): EditDiff {
   const change = before.kind === "missing" ? "added" : after.kind === "missing" ? "deleted" : "modified";
   const unchanged: Omit<EditDiff, "hiddenBecause"> = { path, change, added: 0, removed: 0, hunks: [], located: true, lineCount: null };
-  if (before.kind === "unreadable" || after.kind === "unreadable") return { ...unchanged, hiddenBecause: "a binary or very large file" };
+  if (before.kind === "unreadable" || after.kind === "unreadable") return { ...unchanged, ...hiddenBecause({ code: "diff-binary-or-large" }) };
   const [beforeText, afterText] = [before, after].map((file) => (file.kind === "text" ? file.text : ""));
   const hunks = hunksBetween(beforeText!, afterText!, CONTEXT_LINES, FILE_DIFF_TIMEOUT_MS);
-  if (!hunks) return { ...unchanged, hiddenBecause: "the diff took too long" };
+  if (!hunks) return { ...unchanged, ...hiddenBecause({ code: "diff-timed-out" }) };
   const rows = hunks.flatMap((hunk) => hunk.rows);
   const tooLong = rows.length > MAX_ROWS_PER_FILE;
   return {
@@ -133,7 +134,7 @@ function diffBetweenVersions(path: string, before: FileBefore, after: FileBefore
     added: rows.filter((row) => row.kind === "added").length,
     removed: rows.filter((row) => row.kind === "removed").length,
     hunks: tooLong ? [] : hunks,
-    hiddenBecause: tooLong ? `more than ${MAX_ROWS_PER_FILE.toLocaleString("en")} diff lines` : null,
+    ...(tooLong ? hiddenBecause({ code: "diff-too-many-lines", lines: MAX_ROWS_PER_FILE }) : { hiddenBecause: null }),
     lineCount: linesOf(afterText!).length,
   };
 }

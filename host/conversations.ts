@@ -876,12 +876,12 @@ export class ConversationService {
   }
 
   /** What undoing the turn that began with this message would do to the files, and to which, or why it cannot be undone. */
-  async previewRevert(conversationId: string, seq: number): Promise<{ plan: RestorePlan | null; files?: RestoreFiles; cannotUndo?: string }> {
+  async previewRevert(conversationId: string, seq: number): Promise<{ plan: RestorePlan | null; files?: RestoreFiles; cannotUndo?: HostProblem }> {
     const checkpoint = this.checkpointAt(conversationId, seq);
-    if (!checkpoint) return { plan: null, cannotUndo: englishProblem(NO_FILES_KEPT) };
+    if (!checkpoint) return { plan: null, cannotUndo: NO_FILES_KEPT };
     const preview = await this.checkpoints.preview(this.workspaceOf(conversationId), checkpoint);
-    if (!preview) return { plan: null, cannotUndo: englishProblem({ code: "only-git-repositories" }) };
-    return (await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint)) ? preview : { plan: null, cannotUndo: englishProblem(FILES_NO_LONGER_KEPT) };
+    if (!preview) return { plan: null, cannotUndo: { code: "only-git-repositories" } };
+    return (await this.checkpoints.keeps(this.workspaceOf(conversationId), checkpoint)) ? preview : { plan: null, cannotUndo: FILES_NO_LONGER_KEPT };
   }
 
   /**
@@ -906,14 +906,14 @@ export class ConversationService {
   async previewRewind(
     conversationId: string,
     seq: number,
-  ): Promise<{ turnsLeaving: number; keptFrom: string | null; plan: RestorePlan | null; files?: RestoreFiles; cannotRewind?: string; filesNote?: string }> {
+  ): Promise<{ turnsLeaving: number; keptFrom: string | null; plan: RestorePlan | null; files?: RestoreFiles; cannotRewind?: HostProblem; filesNote?: HostProblem }> {
     const events = this.store.listEvents(conversationId);
     const turnsLeaving = turnsFrom(events, seq).length;
     const before = events.filter(({ seq: at, event }) => at < seq && event.type === "user-message");
     const kept = before.at(-1)?.event;
     const keptFrom = kept?.type === "user-message" ? turnTitle(kept.text) : null;
     const cannotRewind = this.rewindProblem(conversationId, seq);
-    if (cannotRewind) return { turnsLeaving, keptFrom, plan: null, cannotRewind: englishProblem(cannotRewind) };
+    if (cannotRewind) return { turnsLeaving, keptFrom, plan: null, cannotRewind };
     const { plan, files, cannotUndo } = await this.previewRevert(conversationId, seq);
     return { turnsLeaving, keptFrom, plan, ...(files && { files }), ...(cannotUndo && { filesNote: cannotUndo }) };
   }

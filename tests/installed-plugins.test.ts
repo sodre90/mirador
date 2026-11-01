@@ -71,7 +71,7 @@ describe("InstalledPlugins", () => {
     const listed = await new InstalledPlugins(plugins, loaded.problems).list();
 
     expect(listed).toEqual([
-      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", waitsForRestart: false, kinds: ["app"], tools: [], icon: null },
+      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null },
       {
         folder: "cloned",
         name: "counter",
@@ -363,7 +363,7 @@ describe("adding, updating and removing plugins", () => {
 
     cpSync(COUNTER, join(plugins, "copied"), { recursive: true });
     writeFileSync(join(plugins, "copied", "plugin.json"), JSON.stringify(unversioned));
-    expect((await loadPlugins(plugins)).problems).toEqual([{ folder: join(plugins, "copied"), message: "plugin.json needs a version, its release as x.y.z, such as 1.0.0" }]);
+    expect((await loadPlugins(plugins)).problems).toEqual([{ folder: join(plugins, "copied"), message: "plugin.json needs a version, its release as x.y.z, such as 1.0.0", messageAbout: { code: "plugin-needs-version" } }]);
   });
 
   test("a plugin's files install as committed where the user's git checks text out with CRLF, as Git for Windows does", async () => {

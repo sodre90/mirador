@@ -6,6 +6,7 @@ import type { Machine, MachineStatus, Pastel } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
+import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
 import { placeIn } from "./machine-place.ts";
@@ -196,7 +197,7 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
       if (message.type === "machine.join-asked" && message.requestId === requestId) return setAskedNumber(message.number);
       if (message.type !== "machine.join-answered" || message.requestId !== requestId) return;
       stopListening();
-      setProblem(message.problem);
+      setProblem(replyProblemText(message));
       setJoining(false);
       setAskedNumber(null);
     });

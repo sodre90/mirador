@@ -1,3 +1,4 @@
+import type { HostProblem } from "./host-problems.ts";
 /**
  * The plugin API version this Mirador speaks; a plugin.json names the one it was written for, and Mirador loads every
  * version up to its own. API 2 brought host tasks, streamed files and images in a view's message; API 3 brought canvas
@@ -190,6 +191,7 @@ export interface PluginInfo {
   source: PluginSource;
   /** Why it didn't load when Mirador started; null when it did. */
   problem: string | null;
+  problemAbout?: HostProblem;
   /** Added or updated since Mirador started, which loads it as it is now only at its next start. */
   waitsForRestart: boolean;
   /** What its plugin.json brings; missing from a host older than it. */

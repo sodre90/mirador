@@ -512,6 +512,17 @@ test("This session lists the git-ignored files the agent's commands wrote, and s
   await expect(fileRow(page, "build/out.txt").locator(".change-status")).toHaveText("A");
   await fileRow(page, "build/cache.txt").click();
   await expect(changes(page).locator(".changes-diff")).toContainText("Not shown: git ignores this file, so there is no earlier version to compare with.");
+
+  await test.step("in Hungarian, why the diff is not shown is in Hungarian", async () => {
+    await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+    await page.reload();
+    await changes(page).getByRole("button", { name: "Ez a munkamenet" }).click();
+    await fileRow(page, "build/cache.txt").click();
+    await expect(changes(page).locator(".changes-diff")).toContainText(
+      "Nem látható: a git figyelmen kívül hagyja ezt a fájlt, így nincs korábbi változat, amellyel össze lehetne vetni.",
+    );
+    await page.evaluate(() => localStorage.removeItem("mirador-language"));
+  });
 });
 
 test("This turn lists the files commits since the turn began changed in a section of their own, the agent's still marked", async ({ page }) => {

@@ -12,6 +12,7 @@ import {
 import type { PluginCanvasItem } from "../shared/model.ts";
 import { CanvasFrame } from "./Canvas.tsx";
 import { connection } from "./connection.ts";
+import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useEnterWhileBusy } from "./busy-sending.ts";
 import { useExternalImagesBlocked } from "./external-images.ts";
@@ -23,12 +24,13 @@ import { usePaneFullscreen } from "./Workspace.tsx";
 
 /** Hands the user's action to the item's plugin on the host and waits for its reply. */
 async function replyTo(itemId: string, action: unknown): Promise<unknown> {
-  const { reply, problem } = await connection.sendAndAwait(
+  const acted = await connection.sendAndAwait(
     (requestId) => ({ type: "canvas.item-action", requestId, itemId, action }),
     (message, requestId) => (message.type === "canvas.item-acted" && message.requestId === requestId ? message : undefined),
   );
+  const problem = replyProblemText(acted);
   if (problem !== null) throw new Error(problem);
-  return reply;
+  return acted.reply;
 }
 
 const THEME_COLOURS = ["bg", "panel", "panel-2", "border", "text", "muted", "faint", "accent", "accent-text", "accent-soft", "danger", "ok", "warn", "code-bg"];

@@ -4,6 +4,7 @@ import { basename, dirname, join, resolve, sep } from "node:path";
 import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
 import { itemRooms, pluginItemPlacements, type CanvasHost } from "../../shared/canvas-plugins.ts";
 import { BUILT_IN_CANVAS_TOOLS } from "../canvas/tool-names.ts";
+import { HostProblemError, type HostProblem } from "../../shared/host-problems.ts";
 
 /** Held in memory, so the code served under a hash is always the code that hash was made from. */
 export interface ViewCode {
@@ -31,6 +32,7 @@ export interface CanvasPlugin extends LoadedPlugin {
 export interface PluginLoadProblem {
   folder: string;
   message: string;
+  messageAbout?: HostProblem;
 }
 
 /** Thrown with a message for whoever asked: the agent as a tool error, or the user. */
@@ -76,13 +78,13 @@ export async function loadPlugins(pluginsFolder: string): Promise<LoadedPlugins>
     try {
       const { app, canvas } = await loadPlugin(folder);
       const { name } = (app ?? canvas)!.manifest;
-      if (names.has(name)) throw new Error(`another plugin is already named ${name}`);
+      if (names.has(name)) throw new HostProblemError({ code: "plugin-name-already-used", name });
       if (canvas) refuseTakenToolNames(canvas, loaded.canvases);
       names.set(name, (app ?? canvas)!);
       if (app) loaded.apps.push(app);
       if (canvas) loaded.canvases.push(canvas);
     } catch (error) {
-      loaded.problems.push({ folder, message: messageOf(error) });
+      loaded.problems.push({ folder, message: messageOf(error), ...(error instanceof HostProblemError && { messageAbout: error.problem }) });
     }
   }
   return loaded;
@@ -90,26 +92,26 @@ export async function loadPlugins(pluginsFolder: string): Promise<LoadedPlugins>
 
 function refuseTakenToolNames(plugin: CanvasPlugin, loadedBefore: CanvasPlugin[]) {
   for (const tool of Object.keys(plugin.host.tools)) {
-    if (BUILT_IN_CANVAS_TOOLS.includes(tool)) throw new Error(`its tool ${tool} has the name of one of Mirador's own canvas tools`);
+    if (BUILT_IN_CANVAS_TOOLS.includes(tool)) throw new HostProblemError({ code: "plugin-tool-name-reserved", tool });
     const other = loadedBefore.find(({ host }) => Object.hasOwn(host.tools, tool));
-    if (other) throw new Error(`its tool ${tool} has the name of a tool of ${other.manifest.name}`);
+    if (other) throw new HostProblemError({ code: "plugin-tool-name-taken", tool, plugin: other.manifest.name });
   }
 }
 
 /** The folder's plugin.json, held to what this Mirador loads; throws what is wrong with it. */
 export async function readManifest(folder: string): Promise<PluginManifest> {
   const file = join(folder, "plugin.json");
-  if (!existsSync(file)) throw new Error("there's no plugin.json at the top of its folder");
+  if (!existsSync(file)) throw new HostProblemError({ code: "plugin-json-missing" });
   const manifest: unknown = await Bun.file(file).json();
   if (!isPluginManifest(manifest)) {
-    throw new Error("plugin.json needs a name (lower case, digits and dashes), a title, a version as x.y.z if any, an api number, and app.host and app.view, canvas.host and canvas.view, or both; each of its settings, if any, an id of its own (lower case, digits and dashes), a label, choices with a value and a label each, and one of them as its default; and each of its profile settings, if any, the same, or choices of profiles with an empty default");
+    throw new HostProblemError({ code: "plugin-json-invalid" });
   }
   if (!Number.isInteger(manifest.api) || manifest.api < 1 || manifest.api > APP_PLUGIN_API) {
-    throw new Error(`plugin.json is for plugin API ${manifest.api}; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so the plugin needs a newer Mirador`);
+    throw new HostProblemError({ code: "plugin-api-too-new", api: manifest.api, newest: APP_PLUGIN_API });
   }
-  if (manifest.canvas && manifest.api < CANVAS_PLUGIN_API) throw new Error(`plugin.json has a canvas part, which plugin API ${CANVAS_PLUGIN_API} brought; it names API ${manifest.api}`);
+  if (manifest.canvas && manifest.api < CANVAS_PLUGIN_API) throw new HostProblemError({ code: "plugin-canvas-needs-newer-api", brought: CANVAS_PLUGIN_API, named: manifest.api });
   if (manifest.profileSettings && manifest.api < PROFILE_SETTINGS_PLUGIN_API) {
-    throw new Error(`plugin.json has profile settings, which plugin API ${PROFILE_SETTINGS_PLUGIN_API} brought; it names API ${manifest.api}`);
+    throw new HostProblemError({ code: "plugin-profile-settings-needs-newer-api", brought: PROFILE_SETTINGS_PLUGIN_API, named: manifest.api });
   }
   return manifest;
 }
@@ -122,7 +124,7 @@ export function pluginFiles(folder: string, { app, canvas }: PluginManifest) {
 
 /** Every plugin gives its release. */
 export function refuseUnversioned(manifest: PluginManifest) {
-  if (manifest.version === undefined) throw new Error("plugin.json needs a version, its release as x.y.z, such as 1.0.0");
+  if (manifest.version === undefined) throw new HostProblemError({ code: "plugin-needs-version" });
 }
 
 async function loadPlugin(folder: string): Promise<{ app: AppPlugin | null; canvas: CanvasPlugin | null }> {
@@ -185,8 +187,8 @@ async function viewCode(viewFile: string): Promise<ViewCode> {
 
 function insideFolder(folder: string, relativePath: string) {
   const file = resolve(folder, relativePath);
-  if (!file.startsWith(resolve(folder) + sep)) throw new Error(`${relativePath} is outside the plugin's folder`);
-  if (!existsSync(file)) throw new Error(`${relativePath} doesn't exist; build the plugin first?`);
+  if (!file.startsWith(resolve(folder) + sep)) throw new HostProblemError({ code: "plugin-file-outside-folder", path: relativePath });
+  if (!existsSync(file)) throw new HostProblemError({ code: "plugin-file-missing", path: relativePath });
   return file;
 }
 
@@ -195,11 +197,11 @@ const exportsOf = (module: Record<string, unknown>) => (typeof module.default ==
 function hostFrom(module: Record<string, unknown>): AppHost {
   const host = exportsOf(module);
   const missing = HOST_FUNCTIONS.filter((name) => typeof host[name] !== "function");
-  if (missing.length > 0) throw new Error(`the host module doesn't export ${missing.join(", ")}`);
+  if (missing.length > 0) throw new HostProblemError({ code: "plugin-host-module-missing-exports", names: missing.join(", ") });
   const unusableTasks = Object.entries((host.tasks ?? {}) as Record<string, Partial<AppTask> | null>)
     .filter(([, task]) => typeof task?.title !== "string" || typeof task.run !== "function")
     .map(([name]) => name);
-  if (unusableTasks.length > 0) throw new Error(`the host module's tasks ${unusableTasks.join(", ")} need a title and a run function`);
+  if (unusableTasks.length > 0) throw new HostProblemError({ code: "plugin-tasks-unusable", tasks: unusableTasks.join(", ") });
   return host as unknown as AppHost;
 }
 

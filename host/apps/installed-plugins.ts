@@ -6,6 +6,7 @@ import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import { AppProblem, messageOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
+import { causeOf, HostProblemError, problemFieldsOf, type HostProblem } from "../../shared/host-problems.ts";
 
 const GIT_GIVES_UP_AFTER_MS = 5 * 60_000;
 const BUILD_GIVES_UP_AFTER_MS = 10 * 60_000;
@@ -73,7 +74,7 @@ async function releaseCheckedOut(folder: string) {
 /** The newest release the repo has tagged; null when it tags none. */
 async function newestRelease(url: string): Promise<string | null> {
   const listed = await run(["git", "ls-remote", "--tags", "--refs", "--", url, `${RELEASE_TAG_PREFIX}*`], process.cwd(), environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
-  if (!listed.ok) throw new AppProblem(`git ls-remote failed:\n${listed.output}`);
+  if (!listed.ok) throw new HostProblemError({ code: "git-ls-remote-failed", output: listed.output });
   return newestOf(listed.output.split("\n").map((line) => line.split("refs/tags/")[1] ?? ""));
 }
 
@@ -128,7 +129,20 @@ const commitsOfLog = (log: string) =>
       return { commit, subject: subject.join("\t") };
     });
 
-const shownWithoutCredentials = (error: unknown) => new AppProblem(withoutCredentials(messageOf(error)));
+/** Every text in a problem, without credentials, as the page may show any of them. */
+const problemWithoutCredentials = (problem: HostProblem): HostProblem =>
+  Object.fromEntries(
+    Object.entries(problem).map(([key, value]) => [key, typeof value === "string" ? withoutCredentials(value) : key === "causeProblem" ? problemWithoutCredentials(value as HostProblem) : value]),
+  ) as HostProblem;
+
+const shownWithoutCredentials = (error: unknown) =>
+  error instanceof HostProblemError ? new HostProblemError(problemWithoutCredentials(error.problem)) : new AppProblem(withoutCredentials(messageOf(error)));
+
+/** What a failed change to the plugins says, without credentials, for the page to show. */
+export const shownProblemOf = (error: unknown) => {
+  const shown = shownWithoutCredentials(error);
+  return problemFieldsOf(shown, shown.message);
+};
 
 const isLink = (folder: string) => lstatSync(folder).isSymbolicLink();
 
@@ -182,10 +196,15 @@ export class InstalledPlugins {
       folder: basename(folder),
       ...(await manifestFields(folder)),
       source,
-      problem: this.loadProblems.find((problem) => problem.folder === folder)?.message ?? null,
+      ...this.loadProblemOf(folder),
       waitsForRestart,
       tools: loadedCanvas && !waitsForRestart ? toolsOf(loadedCanvas) : [],
     };
+  }
+
+  private loadProblemOf(folder: string): Pick<PluginInfo, "problem" | "problemAbout"> {
+    const loadProblem = this.loadProblems.find((problem) => problem.folder === folder);
+    return { problem: loadProblem?.message ?? null, ...(loadProblem?.messageAbout && { problemAbout: loadProblem.messageAbout }) };
   }
 
   /**
@@ -218,7 +237,7 @@ export class InstalledPlugins {
       const { staged, manifest } = await this.cloned(followed.remote, newest ? releaseTag(newest) : followed.branch);
       try {
         if (installed && manifest.name !== installed.name) {
-          throw new AppProblem(`The repo's plugin is named ${manifest.name} now, not ${installed.name}; remove ${folderName} and add the repo again.`);
+          throw new HostProblemError({ code: "plugin-renamed", name: manifest.name, installedName: installed.name, folder: folderName });
         }
         const commits = await this.commitsSince(staged, (await gitOutput(folder, ["rev-parse", "HEAD"])) ?? "HEAD");
         return this.offered(staged, manifest, { remote: followed.remote, branch: followed.branch, release: newest }, { folder: folderName, commits });
@@ -236,7 +255,7 @@ export class InstalledPlugins {
   install(offerId: string): Promise<PluginOffer> {
     return this.oneAtATime(async () => {
       const staging = this.offers.get(offerId);
-      if (!staging) throw new AppProblem("Mirador no longer has that plugin's clone, as after a restart; add it again to see what it brings.");
+      if (!staging) throw new HostProblemError({ code: "plugin-clone-gone" });
       this.offers.delete(offerId);
       const { staged, manifest, offer } = staging;
       try {
@@ -324,7 +343,7 @@ export class InstalledPlugins {
   /** The commits the ref brings that the checkout doesn't have, newest first. */
   private async commitsOf(folder: string, ref: string) {
     const fetched = await run(["git", "fetch", "--quiet", "--no-tags", "origin", ref], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
-    if (!fetched.ok) throw new AppProblem(`git fetch failed:\n${fetched.output}`);
+    if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
     return commitsOfLog((await gitOutput(folder, ["log", "--format=%h%x09%s", "HEAD..FETCH_HEAD"])) ?? "");
   }
 
@@ -372,7 +391,7 @@ export class InstalledPlugins {
 
   /** Clones the repo at the branch or tag, or its default branch, into the staging folder, and reads its plugin.json; runs none of its code. */
   private async cloned(url: string, branchOrTag: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
-    if (!url) throw new AppProblem("Give the git URL or the path of the plugin's repo.");
+    if (!url) throw new HostProblemError({ code: "plugin-needs-repo-address" });
     mkdirSync(this.staging, { recursive: true });
     const staged = join(this.staging, crypto.randomUUID());
     try {
@@ -382,14 +401,14 @@ export class InstalledPlugins {
         environmentWithoutPrompts(),
         GIT_GIVES_UP_AFTER_MS,
       );
-      if (!cloned.ok) throw new AppProblem(`git clone failed:\n${cloned.output}`);
+      if (!cloned.ok) throw new HostProblemError({ code: "git-clone-failed", output: cloned.output });
       const manifest = await readManifest(staged)
         .then((read) => (refuseUnversioned(read), read))
         .catch((error) => {
-          throw new AppProblem(`The repo isn't a plugin Mirador can load: ${messageOf(error)}.`);
+          throw new HostProblemError({ code: "repo-is-not-a-plugin", ...causeOf(error, messageOf(error)) });
         });
       const tagged = releaseOfTag(branchOrTag);
-      if (tagged && manifest.version !== tagged) throw new AppProblem(`Its tag ${branchOrTag} is release ${tagged}, but its plugin.json says version ${manifest.version}.`);
+      if (tagged && manifest.version !== tagged) throw new HostProblemError({ code: "plugin-tag-version-mismatch", tag: String(branchOrTag), release: tagged, version: String(manifest.version) });
       return { staged, manifest };
     } catch (error) {
       rmSync(staged, { recursive: true, force: true });
@@ -402,12 +421,12 @@ export class InstalledPlugins {
     try {
       if (manifest.build) {
         const built = await run(shellCommand(manifest.build), staged, buildEnvironment(), BUILD_GIVES_UP_AFTER_MS);
-        if (!built.ok) throw new AppProblem(`Its build command, ${manifest.build}, failed:\n${lastPart(built.output)}`);
+        if (!built.ok) throw new HostProblemError({ code: "plugin-build-failed", command: manifest.build, output: lastPart(built.output) });
       }
       try {
         pluginFiles(staged, manifest);
       } catch (error) {
-        throw new AppProblem(`After ${manifest.build ? "its build" : "cloning"}, ${messageOf(error)}.`);
+        throw new HostProblemError({ code: manifest.build ? "plugin-invalid-after-build" : "plugin-invalid-after-cloning", ...causeOf(error, messageOf(error)) });
       }
     } catch (error) {
       throw shownWithoutCredentials(error);
@@ -415,21 +434,21 @@ export class InstalledPlugins {
   }
 
   private async refuseTakenName(name: string) {
-    if (existsSync(join(this.folder, name))) throw new AppProblem(`The plugins folder already has a ${name} folder; update or remove that plugin first.`);
+    if (existsSync(join(this.folder, name))) throw new HostProblemError({ code: "plugin-folder-taken", name });
     for (const folder of pluginFolders(this.folder)) {
-      if ((await manifestFields(folder)).name === name) throw new AppProblem(`The plugin in ${basename(folder)} is already named ${name}; remove it first.`);
+      if ((await manifestFields(folder)).name === name) throw new HostProblemError({ code: "plugin-name-taken", folder: basename(folder), name });
     }
   }
 
   private installedFolder(folderName: string) {
     const folder = pluginFolders(this.folder).find((each) => basename(each) === folderName);
-    if (!folder) throw new AppProblem(`No plugin is installed in ${folderName}.`);
+    if (!folder) throw new HostProblemError({ code: "plugin-not-installed", folder: folderName });
     return folder;
   }
 
   private clonedPlugin(folderName: string) {
     const folder = this.installedFolder(folderName);
-    if (isLink(folder) || !existsSync(join(folder, ".git"))) throw new AppProblem(`${folderName} wasn't installed from a git repo, so there's nothing to update it from.`);
+    if (isLink(folder) || !existsSync(join(folder, ".git"))) throw new HostProblemError({ code: "plugin-not-from-git", folder: folderName });
     return folder;
   }
 
@@ -438,7 +457,7 @@ export class InstalledPlugins {
     const [remote, branch] = await Promise.all([gitOutput(folder, ["remote", "get-url", "origin"]), gitOutput(folder, ["symbolic-ref", "--quiet", "--short", "HEAD"])]);
     if (remote && branch) return { remote, branch, release: null };
     const release = remote && (await releaseCheckedOut(folder));
-    if (!remote || !release) throw new AppProblem(`${basename(folder)} has no remote branch or release to update from.`);
+    if (!remote || !release) throw new HostProblemError({ code: "plugin-has-nothing-to-update-from", folder: basename(folder) });
     return { remote, branch: null, release };
   }
 }

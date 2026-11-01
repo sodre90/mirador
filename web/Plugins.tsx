@@ -17,6 +17,7 @@ import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection, type ConnectionStatus } from "./connection.ts";
 import { hints } from "./hints.ts";
+import { describedText, replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { choosePluginSetting, usePluginSettings } from "./plugin-settings.ts";
 
@@ -27,7 +28,7 @@ type PluginsListed = Extract<ServerMessage, { type: "plugins.listed" }>;
 /** Sends a change to the plugins and waits for it: null once done, else what went wrong, git's or the build's output included. */
 async function changePlugins(send: (requestId: string) => ClientMessage): Promise<string | null> {
   try {
-    return await connection.sendAndAwait(send, (message, requestId) => (message.type === "plugins.changed" && message.requestId === requestId ? message.problem : undefined));
+    return await connection.sendAndAwait(send, (message, requestId) => (message.type === "plugins.changed" && message.requestId === requestId ? replyProblemText(message) : undefined));
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }
@@ -39,7 +40,7 @@ type Offered = { offer: PluginOffer; problem: null } | { offer: null; problem: s
 async function offerPlugin(send: (requestId: string) => ClientMessage): Promise<Offered> {
   try {
     return await connection.sendAndAwait(send, (message, requestId) =>
-      message.type === "plugins.offered" && message.requestId === requestId ? (message.offer ? { offer: message.offer, problem: null } : { offer: null, problem: message.problem ?? "" }) : undefined,
+      message.type === "plugins.offered" && message.requestId === requestId ? (message.offer ? { offer: message.offer, problem: null } : { offer: null, problem: replyProblemText(message) ?? "" }) : undefined,
     );
   } catch (error) {
     return { offer: null, problem: error instanceof Error ? error.message : String(error) };
@@ -128,7 +129,7 @@ async function findNews(folder: string): Promise<PluginNews & { problem: string 
   try {
     return await connection.sendAndAwait(
       (requestId) => ({ type: "plugins.find-commits", requestId, folder }),
-      (message, requestId) => (message.type === "plugins.commits-found" && message.requestId === requestId ? message : undefined),
+      (message, requestId) => (message.type === "plugins.commits-found" && message.requestId === requestId ? { ...message, problem: replyProblemText(message) } : undefined),
     );
   } catch (error) {
     return { release: null, commits: [], problem: error instanceof Error ? error.message : String(error) };
@@ -424,7 +425,7 @@ function InstalledDetail({ plugin, title, news, startUpdating }: { plugin: Plugi
   const remove = async () => setProblem(await changePlugins((requestId) => ({ type: "plugins.remove", requestId, folder: plugin.folder })));
   return (
     <>
-      {plugin.problem && <p className="plugin-problem">{words.didntLoad(plugin.problem)}</p>}
+      {plugin.problem && <p className="plugin-problem">{words.didntLoad(describedText(plugin.problem, plugin.problemAbout))}</p>}
       {plugin.tools && plugin.tools.length > 0 && <ToolList title={title} tools={plugin.tools} />}
       {settings && settings.settings.length > 0 && (
         <>

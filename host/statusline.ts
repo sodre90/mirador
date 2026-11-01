@@ -9,7 +9,7 @@ import type { Store } from "./store.ts";
 import { claudeConfigDir } from "./terminal-sessions.ts";
 import { commandLine, commandShell } from "./command-shell.ts";
 import { killProcessTree } from "./windows-processes.ts";
-import { HostProblemError } from "../shared/host-problems.ts";
+import { englishProblem, HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 
 const COMMAND_TIMEOUT_MS = 5_000;
 /** A command may leave a background job holding its output open; what it printed before exiting is what counts. */
@@ -97,7 +97,7 @@ function killProcessGroup(pid: number) {
   } catch {}
 }
 
-export type CommandResult = { output: string } | { error: string };
+export type CommandResult = { output: string } | { error: string; errorAbout: HostProblem };
 
 export async function runStatusLineCommand(
   command: string,
@@ -124,10 +124,10 @@ export async function runStatusLineCommand(
   await Promise.race([Promise.all([output.finished, errors.finished]), Bun.sleep(LATE_OUTPUT_GRACE_MS)]);
   output.stop();
   errors.stop();
-  if (!exitedInTime) return { error: `The statusline command took longer than ${timeoutMs / 1000} s and was stopped.` };
+  if (!exitedInTime) return commandError({ code: "statusline-timed-out", seconds: timeoutMs / 1000 });
   if (child.exitCode !== 0) {
     const firstError = errors.text().trim().split("\n")[0];
-    return { error: `The statusline command exited with ${child.exitCode}${firstError ? `: ${firstError}` : "."}` };
+    return commandError({ code: "statusline-exited", exitCode: child.exitCode ?? -1, firstError: firstError ?? "" });
   }
   return { output: output.text().replace(/\n+$/, "") };
 }
@@ -143,6 +143,8 @@ export async function currentGitBranch(directory: string): Promise<string | null
     return null;
   }
 }
+
+const commandError = (problem: HostProblem): CommandResult => ({ error: englishProblem(problem), errorAbout: problem });
 
 const clampColumns = (columns: number) => Math.min(MAX_COLUMNS, Math.max(MIN_COLUMNS, Math.floor(columns) || MIN_COLUMNS));
 
@@ -177,7 +179,7 @@ export class StatuslineService {
     });
     return "output" in result
       ? { gitBranch, command, output: result.output, error: null, quotas }
-      : { gitBranch, command, output: null, error: result.error, quotas };
+      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas };
   }
 
   /** A profile whose environment does not parse cannot run anything; its conversation says why elsewhere. */

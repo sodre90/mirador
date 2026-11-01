@@ -1,5 +1,6 @@
 import { delimiter } from "node:path";
 import { currentPath } from "./current-path.ts";
+import { described, type DescribedProblem } from "../shared/host-problems.ts";
 
 /** Where the Tailscale command sits when it is not on PATH, the app's own binary included. */
 const TAILSCALE_DIRECTORIES = ["/Applications/Tailscale.app/Contents/MacOS", "/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"];
@@ -32,9 +33,9 @@ export async function tailnetName(command: string): Promise<string | null> {
 }
 
 /** Puts a port of this machine on the tailnet over HTTPS, mirroring the port, so the address is https://<name>:<port>. Says what went wrong, or null. */
-export async function servePortOnTailnet(command: string, port: number): Promise<string | null> {
+export async function servePortOnTailnet(command: string, port: number): Promise<DescribedProblem | null> {
   const { stderr, stdout, exitCode } = await tailscale(command, ["serve", "--bg", `--https=${port}`, `http://127.0.0.1:${port}`], SERVE_TIMEOUT_MS);
   if (exitCode === 0) return null;
   const said = (stderr.trim() || stdout.trim()).split("\n").at(-1);
-  return said || `tailscale serve exited with ${exitCode}`;
+  return said ? { problem: said } : described({ code: "tailscale-serve-exited", exitCode });
 }

@@ -28,7 +28,7 @@ import {
   type TimeWindow,
   type TreeChange,
 } from "./working-tree.ts";
-import { HostProblemError } from "../shared/host-problems.ts";
+import { hiddenBecause, HostProblemError } from "../shared/host-problems.ts";
 
 const FILE_CHANGING_KINDS: ToolKind[] = ["edit", "delete", "move"];
 
@@ -350,8 +350,8 @@ export class Changes {
     if (await createdSince(workspace.path, path, since)) {
       return { path, source: "files", diffs: [fileChangeDiff(path, { kind: "missing" }, await workspaceFileAt(workspace, path))] };
     }
-    const noEarlierVersion = (await isRepository(workspace.path)) ? "git ignores this file, so there is no earlier version to compare with" : "this folder is not a git repository, so there is no earlier version to compare with";
-    return { path, source: "files", diffs: [{ ...fileChangeDiff(path, { kind: "missing" }, { kind: "missing" }), change: "modified", hiddenBecause: noEarlierVersion }] };
+    const noEarlierVersion = hiddenBecause({ code: (await isRepository(workspace.path)) ? "diff-git-ignored" : "diff-not-a-repository" });
+    return { path, source: "files", diffs: [{ ...fileChangeDiff(path, { kind: "missing" }, { kind: "missing" }), change: "modified", ...noEarlierVersion }] };
   }
 
   /** Opens a file of the project, or one the agent changed anywhere in this conversation, in IntelliJ IDEA. */

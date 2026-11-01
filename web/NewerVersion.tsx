@@ -4,6 +4,7 @@ import { newerVersionKey, type NewerVersion } from "../shared/newer-version.ts";
 import { connection } from "./connection.ts";
 import { checkForUpdate, restartToUpdate, useDesktopUpdate } from "./desktop-bridge.ts";
 import { hints } from "./hints.ts";
+import { describedText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 
 const DISMISSED_KEY = "mirador-newer-version-dismissed";
@@ -137,11 +138,11 @@ type UpdateCheck = { step: "idle" } | { step: "checking" } | { step: "checked"; 
 
 async function checkForNewerVersion(): Promise<string | null> {
   try {
-    const { failure } = await connection.sendAndAwait(
+    const { failure, failureAbout } = await connection.sendAndAwait(
       (requestId) => ({ type: "newer-version.check", requestId }),
       (message, requestId) => (message.type === "newer-version.checked" && message.requestId === requestId ? message : undefined),
     );
-    return failure;
+    return failure && describedText(failure, failureAbout);
   } catch (error) {
     return error instanceof Error ? error.message : String(error);
   }

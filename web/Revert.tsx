@@ -6,7 +6,7 @@ import { whatFiles, whatLeaves } from "./revert-text.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { Modal } from "./Palette.tsx";
-import { hostErrorText } from "./host-error.ts";
+import { describedText, hostErrorText } from "./host-error.ts";
 
 const words = t.revert;
 
@@ -27,7 +27,7 @@ const previewFiles = (conversationId: string, seq: number) =>
     (requestId) => ({ type: "conversation.revert-preview", requestId, conversationId, seq }),
     (message, requestId) => {
       if (message.type === "conversation.revert-previewed" && message.requestId === requestId) {
-        return { plan: message.plan, ...(message.files && { files: message.files }), ...(message.cannotUndo && { filesNote: message.cannotUndo }) };
+        return { plan: message.plan, ...(message.files && { files: message.files }), ...(message.cannotUndo && { filesNote: describedText(message.cannotUndo, message.cannotUndoAbout) }) };
       }
       if (message.type === "conversation.revert-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;
@@ -39,8 +39,15 @@ const previewRewind = (conversationId: string, seq: number) =>
     (requestId) => ({ type: "conversation.rewind-preview", requestId, conversationId, seq }),
     (message, requestId) => {
       if (message.type === "conversation.rewind-previewed" && message.requestId === requestId) {
-        const { plan, files, cannotRewind, filesNote, turnsLeaving, keptFrom } = message;
-        return { plan, ...(files && { files }), ...(cannotRewind && { cannotRewind }), ...(filesNote && { filesNote }), ...(turnsLeaving !== undefined && { turnsLeaving }), keptFrom };
+        const { plan, files, cannotRewind, cannotRewindAbout, filesNote, filesNoteAbout, turnsLeaving, keptFrom } = message;
+        return {
+          plan,
+          ...(files && { files }),
+          ...(cannotRewind && { cannotRewind: describedText(cannotRewind, cannotRewindAbout) }),
+          ...(filesNote && { filesNote: describedText(filesNote, filesNoteAbout) }),
+          ...(turnsLeaving !== undefined && { turnsLeaving }),
+          keptFrom,
+        };
       }
       if (message.type === "conversation.rewind-failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
       return undefined;

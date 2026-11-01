@@ -104,7 +104,10 @@ describe("statusline", () => {
   });
 
   test("a failing command reports its exit code and first error line", async () => {
-    expect(await run("echo 'no jq here' >&2; exit 3")).toEqual({ error: "The statusline command exited with 3: no jq here" });
+    expect(await run("echo 'no jq here' >&2; exit 3")).toEqual({
+      error: "The statusline command exited with 3: no jq here",
+      errorAbout: { code: "statusline-exited", exitCode: 3, firstError: "no jq here" },
+    });
   });
 
   test("a background job left holding the output does not hold up the statusline", async () => {
@@ -118,7 +121,7 @@ describe("statusline", () => {
     const slowProgram = `"${process.execPath}" -e "require('fs').writeFileSync('pid', String(process.pid)); setTimeout(() => {}, 30000)"`;
     const environment = { PATH: process.env.PATH! };
     const result = await runStatusLineCommand(`${slowProgram}; echo after`, { input: {}, directory, environment, columns: 42, timeoutMs: 3_000 });
-    expect(result).toEqual({ error: "The statusline command took longer than 3 s and was stopped." });
+    expect(result).toEqual({ error: "The statusline command took longer than 3 s and was stopped.", errorAbout: { code: "statusline-timed-out", seconds: 3 } });
     const program = Number(readFileSync(join(directory, "pid"), "utf8"));
     const deadline = Date.now() + 2_000;
     while (isRunning(program) && Date.now() < deadline) await Bun.sleep(20);

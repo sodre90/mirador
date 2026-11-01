@@ -145,6 +145,90 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.saveAlreadyThere(problem.path);
     case "save-path-part-is-file":
       return words.savePathPartIsFile(problem.name);
+    case "config-file-must-be-object":
+      return words.configFileMustBeObject(problem.path);
+    case "tailscale-serve-exited":
+      return words.tailscaleServeExited(problem.exitCode);
+    case "machine-certificate-not-its-own":
+      return words.machineCertificateNotItsOwn(problem.machine, problem.hostname);
+    case "machine-did-not-answer":
+      return words.machineDidNotAnswer(problem.machine);
+    case "machine-certificate-untrusted":
+      return words.machineCertificateUntrusted(problem.machine);
+    case "machine-gave-no-token":
+      return words.machineGaveNoToken(problem.machine);
+    case "machine-authority-not-in-link":
+      return words.machineAuthorityNotInLink(problem.machine);
+    case "machine-authority-changed":
+      return words.machineAuthorityChanged(problem.machine);
+    case "join-request-denied":
+      return words.joinRequestDenied(problem.machine);
+    case "join-request-timed-out":
+      return words.joinRequestTimedOut(problem.machine);
+    case "git-ls-remote-failed":
+      return words.gitLsRemoteFailed(problem.output);
+    case "plugin-renamed":
+      return words.pluginRenamed(problem.name, problem.installedName, problem.folder);
+    case "git-fetch-failed":
+      return words.gitFetchFailed(problem.output);
+    case "git-clone-failed":
+      return words.gitCloneFailed(problem.output);
+    case "repo-is-not-a-plugin":
+      return words.repoIsNotAPlugin(causeText(problem, words));
+    case "plugin-tag-version-mismatch":
+      return words.pluginTagVersionMismatch(problem.tag, problem.release, problem.version);
+    case "plugin-build-failed":
+      return words.pluginBuildFailed(problem.command, problem.output);
+    case "plugin-invalid-after-build":
+      return words.pluginInvalidAfterBuild(causeText(problem, words));
+    case "plugin-invalid-after-cloning":
+      return words.pluginInvalidAfterCloning(causeText(problem, words));
+    case "plugin-folder-taken":
+      return words.pluginFolderTaken(problem.name);
+    case "plugin-name-taken":
+      return words.pluginNameTaken(problem.folder, problem.name);
+    case "plugin-not-installed":
+      return words.pluginNotInstalled(problem.folder);
+    case "plugin-not-from-git":
+      return words.pluginNotFromGit(problem.folder);
+    case "plugin-has-nothing-to-update-from":
+      return words.pluginHasNothingToUpdateFrom(problem.folder);
+    case "plugin-name-already-used":
+      return words.pluginNameAlreadyUsed(problem.name);
+    case "plugin-tool-name-reserved":
+      return words.pluginToolNameReserved(problem.tool);
+    case "plugin-tool-name-taken":
+      return words.pluginToolNameTaken(problem.tool, problem.plugin);
+    case "plugin-api-too-new":
+      return words.pluginApiTooNew(problem.api, problem.newest);
+    case "plugin-canvas-needs-newer-api":
+      return words.pluginCanvasNeedsNewerApi(problem.brought, problem.named);
+    case "plugin-profile-settings-needs-newer-api":
+      return words.pluginProfileSettingsNeedsNewerApi(problem.brought, problem.named);
+    case "plugin-file-outside-folder":
+      return words.pluginFileOutsideFolder(problem.path);
+    case "plugin-file-missing":
+      return words.pluginFileMissing(problem.path);
+    case "plugin-host-module-missing-exports":
+      return words.pluginHostModuleMissingExports(problem.names);
+    case "plugin-tasks-unusable":
+      return words.pluginTasksUnusable(problem.tasks);
+    case "item-plugin-not-installed":
+      return words.itemPluginNotInstalled(problem.plugin);
+    case "plugin-takes-no-actions":
+      return words.pluginTakesNoActions(problem.plugin);
+    case "newer-version-git-failed":
+      return words.newerVersionGitFailed(problem.command, problem.exitCode);
+    case "newer-version-fetch-failed":
+      return words.newerVersionFetchFailed(problem.upstream);
+    case "newer-version-github-answered":
+      return words.newerVersionGithubAnswered(problem.status);
+    case "diff-too-many-lines":
+      return words.diffTooManyLines(problem.lines);
+    case "statusline-timed-out":
+      return words.statuslineTimedOut(problem.seconds);
+    case "statusline-exited":
+      return words.statuslineExited(problem.exitCode, problem.firstError);
     case "agent-gone":
       return words.agentGone(problem.agent, goneText(problem.gone, words));
     case "prelaunch-failed":

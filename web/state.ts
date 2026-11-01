@@ -9,7 +9,7 @@ import { withStreamedEvent } from "../shared/timeline.ts";
 import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
-import { hostErrorText } from "./host-error.ts";
+import { describedText, hostErrorText } from "./host-error.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -384,7 +384,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "conversation.rewind-failed":
       return state;
     case "join-request.answered":
-      return message.problem ? withNotice(state, message.problem) : state;
+      return message.problem ? withNotice(state, describedText(message.problem, message.problemAbout)) : state;
     case "join-requests.listed":
       return { ...state, joinRequests: message.joinRequests };
     case "devices.listed":
