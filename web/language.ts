@@ -1,4 +1,4 @@
-import { languageFor, type Language } from "../shared/i18n/languages.ts";
+import { languageFor, languageTags, type Language } from "../shared/i18n/languages.ts";
 
 const STORAGE_KEY = "mirador-language";
 
@@ -24,5 +24,5 @@ export function chooseLanguage(next: Language) {
 }
 
 export const applyLanguage = () => {
-  document.documentElement.lang = language;
+  document.documentElement.lang = languageTags[language];
 };

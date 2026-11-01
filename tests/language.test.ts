@@ -3,6 +3,7 @@ import { isLanguage, languageFor, LANGUAGES } from "../shared/i18n/languages.ts"
 import { en } from "../web/i18n/en/index.ts";
 import { es } from "../web/i18n/es/index.ts";
 import { hu } from "../web/i18n/hu/index.ts";
+import { zh } from "../web/i18n/zh/index.ts";
 
 type Entry = string | ((...values: string[]) => string) | { [key: string]: Entry } | Entry[];
 
@@ -29,11 +30,14 @@ describe("languages", () => {
     expect(languageFor("klingon", ["es-MX"])).toBe("es");
     expect(languageFor(null, ["de-DE", "fr"])).toBe("en");
     expect(languageFor(null, [])).toBe("en");
+    expect(["zh", "zh-CN", "zh-SG", "zh-Hans", "zh-Hans-CN"].map((tag) => languageFor(null, [tag]))).toEqual(["zh", "zh", "zh", "zh", "zh"]);
+    expect(["zh-TW", "zh-HK", "zh-Hant", "zh-Hant-TW"].map((tag) => languageFor(null, [tag]))).toEqual(["en", "en", "en", "en"]);
   });
 
   test.each([
     ["Hungarian", hu],
     ["Spanish", es],
+    ["Chinese", zh],
   ])("%s has every text English has, in the same order, none of them empty, and fills in every value it is given", (_, translated) => {
     const english = new Map(texts(en as unknown as Entry, ""));
     const translatedTexts = texts(translated as unknown as Entry, "");
@@ -49,6 +53,7 @@ describe("languages", () => {
     ["English", en],
     ["Hungarian", hu],
     ["Spanish", es],
+    ["Chinese", zh],
   ])("%s desktop texts keep out what trays misread: quotes and brackets on Linux, & on Windows", (_, messages) => {
     for (const [path, text] of texts(messages.desktop as unknown as Entry, "desktop")) expect(text, path).not.toMatch(/["\\{}[\]&]/);
   });

@@ -152,3 +152,28 @@ test.describe("with a Hungarian browser", () => {
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
   });
 });
+
+test("简体中文 in Settings shows Mirador in Simplified Chinese, and a Traditional Chinese browser stays in English", async ({ page }) => {
+  await signIn(page, host);
+  await Promise.all([page.waitForEvent("load"), (await openSettings(page)).getByLabel("Language").selectOption("zh")]);
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "zh-Hans");
+  const sidebar = page.locator("nav.sidebar");
+  await expect(sidebar.getByRole("heading", { name: "工作区" })).toBeVisible();
+  await sidebar.getByRole("button", { name: "设置…" }).click();
+  const settings = page.getByRole("dialog", { name: "设置" });
+  await expect(settings.getByRole("tab")).toHaveText(["外观", "对话", "智能体", "语音", "终端", "画布", "插件", "布局", "设备", "通知", "关于"]);
+  await expect(settings.getByRole("radiogroup", { name: "主题" }).getByRole("radio")).toHaveText(["浅色", "深色", "跟随系统"]);
+
+  await Promise.all([page.waitForEvent("load"), settings.getByLabel("语言").selectOption("en")]);
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+});
+
+test.describe("with a Traditional Chinese browser", () => {
+  test.use({ locale: "zh-TW" });
+
+  test("Mirador stays in English rather than show Simplified Chinese", async ({ page }) => {
+    await signIn(page, host);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  });
+});
