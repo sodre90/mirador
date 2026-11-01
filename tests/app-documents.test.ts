@@ -294,6 +294,32 @@ describe("AppDocuments", () => {
     expect(states.at(-1)?.document).toEqual({ count: 50 });
     apps.stop();
   });
+
+  test("of two new files opened at once, the app ends on the one opened last, though the first takes longer to make", async () => {
+    const { apps, openAppLists } = await setUp();
+    let finishFirstWrite = () => {};
+    const firstWriting = new Promise<void>((resolve) => (finishFirstWrite = resolve));
+    const realWrite = Bun.write;
+    const slowFirstWrite = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
+      await firstWriting;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    let openingFirst: Promise<unknown>;
+    let openingSecond: Promise<unknown>;
+    try {
+      openingFirst = apps.open("w1", "counter", "first.json");
+      await eventually(() => expect(slowFirstWrite).toHaveBeenCalled());
+      openingSecond = apps.open("w1", "counter", "second.json");
+      await Bun.sleep(50);
+    } finally {
+      slowFirstWrite.mockRestore();
+    }
+    finishFirstWrite();
+    await Promise.all([openingFirst, openingSecond]);
+    expect(apps.openApps().map(({ file }) => file)).toEqual(["second.json"]);
+    expect(openAppLists.at(-1)!.map(({ file }) => file)).toEqual(["second.json"]);
+    apps.stop();
+  });
 });
 
 describe("AppDocuments.fileNextToDocument", () => {

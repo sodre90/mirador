@@ -136,6 +136,8 @@ const taskNamesOf = (plugin: AppPlugin) => Object.keys(plugin.host.tasks ?? {});
 export class AppDocuments {
   private readonly documents = new Map<string, AppDocument>();
   private readonly media = new AppMediaGrants();
+  /** By app key: the open under way, which the next open of the app waits for, so each ends on the file asked for last. */
+  private readonly openings = new Map<string, Promise<unknown>>();
   private taskRuns = 0;
   /** By app key; kept while the app opens other files, as the store keeps it across restarts. */
   private readonly usedIn = new Map<string, Set<string>>();
@@ -238,6 +240,17 @@ export class AppDocuments {
 
   /** Opens the app on the file, shown in the conversation that opens it, if any. */
   async open(workspaceId: string, appName: string, file: string, conversationId?: string): Promise<OpenApp> {
+    const key = appKey({ workspaceId, app: appName });
+    const opening = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.openNow(workspaceId, appName, file, conversationId));
+    this.openings.set(key, opening);
+    try {
+      return await opening;
+    } finally {
+      if (this.openings.get(key) === opening) this.openings.delete(key);
+    }
+  }
+
+  private async openNow(workspaceId: string, appName: string, file: string, conversationId?: string): Promise<OpenApp> {
     const plugin = this.plugin(appName);
     const workspace = this.store.findWorkspace(workspaceId);
     if (!workspace) throw new AppProblem("That workspace no longer exists.");
