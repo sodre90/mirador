@@ -12,6 +12,8 @@ import type { AppDocuments } from "../apps/documents.ts";
 import { appToolsGuidance, registerAppTools } from "../apps/tools.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { registerPluginInstallTool } from "./plugin-install-tool.ts";
+import type { Store } from "../store.ts";
+import { registerUsageStatsTool } from "./usage-stats-tool.ts";
 
 const PROGRESS_HEARTBEAT_MS = 15_000;
 
@@ -80,6 +82,7 @@ function buildCanvasServer(
   apps: AppDocuments | null,
   canvasPlugins: CanvasPlugins | null,
   catalog: PluginCatalog | null,
+  store: Store | null,
 ) {
   const server = new McpServer(
     { name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION },
@@ -207,6 +210,7 @@ function buildCanvasServer(
   if (hasApps(apps)) registerAppTools(server, apps, conversations, callingConversation);
   canvasPlugins?.registerTools(server, callingConversation);
   if (catalog && catalog.notInstalled().length > 0) registerPluginInstallTool(server, catalog, canvas, callingConversation);
+  if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {});
 
   return server;
 }
@@ -221,6 +225,7 @@ export class CanvasMcpEndpoints {
     private readonly apps: AppDocuments | null = null,
     private readonly canvasPlugins: CanvasPlugins | null = null,
     private readonly catalog: PluginCatalog | null = null,
+    private readonly store: Store | null = null,
   ) {}
 
   handle(conversationId: string, request: Request) {
@@ -235,7 +240,7 @@ export class CanvasMcpEndpoints {
     let handler = this.handlers.get(conversationId);
     if (!handler) {
       handler = createMcpHandler(() =>
-        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog),
+        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog, this.store),
       );
       this.handlers.set(conversationId, handler);
     }

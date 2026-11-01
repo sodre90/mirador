@@ -90,6 +90,8 @@ export class FakeClaudeApi {
   /** Ends every reply in text, e.g. with a question for the user. */
   replySuffix = "";
   readonly answered: string[] = [];
+  /** What the tools called with `CALL` gave back, one entry per request that carried their results. */
+  readonly callResults: string[] = [];
   /** The settings folder of a profile built with `subscriptionEnvironment`: empty, so the user's own ~/.claude stays out of the run. */
   readonly claudeConfigDir = scratchPath("claude-config");
   /** The system prompt each request carried, by the text the user typed last. */
@@ -190,7 +192,10 @@ export class FakeClaudeApi {
     this.answered.push(typed);
     if (offersAgent(body) && typed.startsWith(SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(SUBAGENT.length))]);
     const results = resultsOfCalls(body);
-    if (results !== null) return this.send(body, response, [{ type: "text", text: this.replyAfterCalls(body) ?? `Result: ${results}` }]);
+    if (results !== null) {
+      this.callResults.push(results);
+      return this.send(body, response, [{ type: "text", text: this.replyAfterCalls(body) ?? `Result: ${results}` }]);
+    }
     if (typed.startsWith(CALL)) return this.send(body, response, this.toolCalls(typed));
     this.send(body, response, this.answerTo(typed, offersBash(body)));
   }
@@ -219,7 +224,7 @@ export class FakeClaudeApi {
   }
 
   private bashCall(command: string, inBackground: boolean): Answer {
-    return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Bash", input: { command, description: `Run ${command}`, run_in_background: inBackground } };
+    return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Bash", input: { command, description: `Run ${command}`, ...(inBackground && { run_in_background: true }) } };
   }
 
   private writeCall(pathAndText: string): Answer {

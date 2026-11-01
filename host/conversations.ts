@@ -30,7 +30,7 @@ import {
   type WaitingFor,
   type Workspace,
 } from "../shared/model.ts";
-import { offersValue } from "../shared/config-options.ts";
+import { chosenModel, offersValue } from "../shared/config-options.ts";
 import { MIN_SEARCH_LENGTH } from "../shared/find.ts";
 import { messageAtEnd, type JobWaitRequest } from "../shared/job-waits.ts";
 import { panelCommandRun } from "../shared/panel-commands.ts";
@@ -240,6 +240,8 @@ interface Runtime {
   stallNudges: number;
   /** The host kills the agent process this turn runs on on purpose, so the turn ends as a stop, not as a failure. */
   killedOnPurpose?: boolean;
+  /** The model the agent last said its answers came from, in its usage updates. */
+  reportedModel?: string;
   /** The reply the last stopped turn still owes: its late chunks are dropped, or held back until another reply's id or the next turn's end tells whether they were the orphan or that turn's answer. */
   cancelledReply?: CancelledReplyChunks;
 }
@@ -604,6 +606,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     const released = this.releaseSession(conversationId, runtime, conversation.acpSessionId);
     if (changesAgent) this.forgetContextUsage(conversationId);
+    runtime.reportedModel = undefined;
     this.save({
       ...conversation,
       harness,
@@ -614,7 +617,13 @@ export class ConversationService {
       acpSessionId: !changesAgent && this.agentHasRecorded(conversationId) ? conversation.acpSessionId : null,
       configOptions: changesAgent ? [] : conversation.configOptions.filter(({ id }) => id !== "model"),
     });
-    this.append(conversationId, { type: "profile-changed", profileName: profile.name, ...(changesAgent && { agent: harness }) });
+    const left = conversation.profileId === null ? null : this.store.findProfile(conversation.profileId);
+    this.append(conversationId, {
+      type: "profile-changed",
+      profileName: profile.name,
+      ...(changesAgent && { agent: harness }),
+      from: { profileId: conversation.profileId, profileName: left?.name ?? null, harness: conversation.harness },
+    });
     this.ensureSession(conversationId, async () => {
       this.setStatus(conversationId, "starting", "Switching profile…");
       await released;
@@ -734,7 +743,8 @@ export class ConversationService {
       if (turn.stoppedBeforePrompt) this.cancel(conversationId).catch((error) => console.error(`stopping the turn of conversation ${conversationId} failed:`, error));
       response = await answered;
       this.showHeldBackReply(conversationId);
-      this.append(conversationId, { type: "turn-end", stopReason: response.stopReason });
+      const model = runtime.reportedModel ?? chosenModel(this.get(conversationId).configOptions)?.id;
+      this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...turnUsageOf(response), ...(model && { model }) });
       runtime.automaticContinues = 0;
       this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
     } catch (error) {
@@ -1663,6 +1673,8 @@ export class ConversationService {
       const usage: ContextUsage = { used: update.used, size: update.size, cost: update.cost ? { amount: update.cost.amount, currency: update.cost.currency } : null };
       this.contextUsage.set(conversationId, usage);
       this.store.setContextUsage(conversationId, usage);
+      const model = update._meta?.["_claude/model"];
+      if (typeof model === "string") this.runtime(conversationId).reportedModel = model;
       const quotas = reportedQuotas(update._meta);
       if (quotas) this.planQuotas.record(this.get(conversationId).profileId, quotas);
       this.publish(this.get(conversationId));
@@ -1971,12 +1983,12 @@ export class ConversationService {
     const continuable = promptSent && { continuable: true as const };
     const conversation = this.store.findConversation(conversationId);
     if (!conversation || !isUsageLimitError(error, conversation.harness)) {
-      this.append(conversationId, { type: "error", message: errorMessage(error), ...continuable, ...(isAuthRequiredError(error) && { authRequired: true as const }) });
+      this.append(conversationId, { type: "error", message: errorMessage(error), ...continuable, ...(isAuthRequiredError(error) && { authRequired: true as const }), endsTurn: true });
       return errorMessage(error);
     }
     const message = usageLimitMessage(error);
     const resetsAt = usageLimitResetIn(message);
-    this.append(conversationId, { type: "error", message, usageLimit: { resetsAt }, ...continuable });
+    this.append(conversationId, { type: "error", message, usageLimit: { resetsAt }, ...continuable, endsTurn: true });
     this.waitForUsageLimitReset(conversationId, resetsAt);
     return message;
   }
@@ -2213,6 +2225,18 @@ const isAgentReplyChunk = (update: acp.SessionUpdate) =>
 const isSubagentReport = (update: acp.SessionUpdate) =>
   opencodeSubagentSessionOf(update) !== null ||
   ((update._meta?.claudeCode ?? {}) as { parentToolUseId?: unknown }).parentToolUseId !== undefined;
+
+const turnUsageOf = ({ usage }: acp.PromptResponse) =>
+  usage
+    ? {
+        usage: {
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          cachedReadTokens: usage.cachedReadTokens ?? 0,
+          cachedWriteTokens: usage.cachedWriteTokens ?? 0,
+        },
+      }
+    : {};
 
 /**
  * A turn left open: it began, the agent worked on it, and nothing ended it. A turn the agent never worked on is not one,

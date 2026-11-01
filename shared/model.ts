@@ -303,6 +303,14 @@ export interface ContextUsage {
   cost: { amount: number; currency: string } | null;
 }
 
+/** The tokens one turn took, as the agent reported them when it ended. */
+export interface TurnUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedWriteTokens: number;
+}
+
 /** How much of a plan usage limit's window is used, 0 to 100, and when the window starts over, in epoch milliseconds. */
 export interface QuotaWindow {
   usedPercent: number;
@@ -525,17 +533,22 @@ export type ConversationEvent =
   /** `edits`: the files the tool would change, as the host found the change in each, for a request that changes files. */
   | { type: "permission"; permissionId: string; toolCall: ToolCallUpdate; options: PermissionOption[]; edits?: EditDiff[] }
   | { type: "permission-resolved"; permissionId: string; optionId: string | null }
-  | { type: "turn-end"; stopReason: StopReason }
-  /** `agent`: the conversation moved to another agent, which it may do before it has begun. */
-  | { type: "profile-changed"; profileName: string | null; agent?: HarnessId }
+  /** `usage` and `model`: what the turn took and the model it ran on, when the agent says (opencode and pi may not, and a killed turn has neither). */
+  | { type: "turn-end"; stopReason: StopReason; usage?: TurnUsage; model?: string }
+  /**
+   * `agent`: the conversation moved to another agent, which it may do before it has begun.
+   * `from`: the profile it left; a profile id without a name is one deleted by then.
+   */
+  | { type: "profile-changed"; profileName: string | null; agent?: HarnessId; from?: { profileId: string | null; profileName: string | null; harness: HarnessId } }
   /** From here on the agent works in a fresh session, with nothing of the conversation before in its context. */
   | { type: "context-cleared" }
   /**
    * `usageLimit`: Claude's usage limit stopped the turn; it resets at `resetsAt`, when the message names a time.
    * `authRequired`: the agent refused the prompt until the user signs in again.
    * `continuable`: the error ended a turn after its message went to the agent, so the agent can continue from it.
+   * `endsTurn`: the turn failed with it, where other errors come before a turn starts or beside one.
    */
-  | { type: "error"; message: string; usageLimit?: { resetsAt: number | null }; authRequired?: true; continuable?: true }
+  | { type: "error"; message: string; usageLimit?: { resetsAt: number | null }; authRequired?: true; continuable?: true; endsTurn?: true }
   /** The agent's sign-in, started from the conversation in a terminal tab, ended. */
   | { type: "login-ended"; signedIn: boolean }
   | { type: "usage-limit-wait-stopped" }

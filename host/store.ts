@@ -311,7 +311,7 @@ export class Store {
   private readonly db: Database;
   private readonly nextSeq = new Map<string, number>();
 
-  constructor(path: string) {
+  constructor(readonly path: string) {
     this.db = new Database(path, { create: true, strict: true });
     this.db.run("PRAGMA journal_mode = WAL");
     this.db.run("PRAGMA foreign_keys = ON");

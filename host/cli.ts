@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { windowsPidOf } from "./command-shell.ts";
 import { loadConfig } from "./config.ts";
@@ -9,6 +10,8 @@ import { connectedFrom, deviceStatus, joinedOn } from "../shared/devices.ts";
 import type { JoinRequest, ListedDevice } from "../shared/model.ts";
 import { isContainerName, isPid, isSshHost, waitSetUpReply, type JobWaitRequest } from "../shared/job-waits.ts";
 import { inviteLink } from "../shared/machines.ts";
+import { UsageData } from "./usage-data.ts";
+import { toolReport, usageReport, UsageQueryError, type Finding, type ToolReport, type Totals, type UsageReport } from "./usage-stats.ts";
 
 const usage = `usage: mirador <command>
 
@@ -17,7 +20,17 @@ const usage = `usage: mirador <command>
   approve    Let in the devices that ask to join this Mirador, by typing the number each shows
   devices    List the devices that joined this Mirador, and which are connected now
   when-done  Have Mirador wait for a job an agent left running, then send the agent a message (run it from the agent)
-  message    Send the agent's conversation a message as your next one (run it from the agent, or a script it started)`;
+  message    Send the agent's conversation a message as your next one (run it from the agent, or a script it started)
+  usage      Show how you work with Mirador's agents: their tools and how often each succeeds, permissions, turns, tokens`;
+
+const usageUsage = `usage: mirador usage [--since <12h|7d|2w|date>] [--until <date>] [--workspace <name or folder>] [--profile <name>] [--tool <name>] [--compare] [--json]
+
+  How you worked with Mirador's agents over a period, the last 30 days unless told otherwise, in every workspace and
+  profile or one: what to improve, each profile's numbers, the tools agents call most and how often each succeeds, why
+  calls fail, where tools come from, permission prompts, how long you take to reply, turns, tokens and speed per model,
+  and the busiest conversations and those left untouched longest. --tool looks into one tool. --compare adds the numbers
+  of the period before. --json prints the report as JSON, with the definitions of its numbers and samples of what you
+  ask and what agents ask you, for agents and scripts.`;
 
 const whenDoneUsage = `usage: mirador when-done (--pid <pid> | --container <name>) [--host <user@host>] [--no-resume] [--session <agent session id>] ["<message>"]
 
@@ -183,6 +196,170 @@ async function message(args: string[]) {
   if (!response?.ok) return fail("message", response ? await response.text() : conversation.unreachable, 1);
 }
 
+/** Reads the database directly, so it works with Mirador stopped too, read-only, so it never holds up Mirador's writes. */
+function showUsage(args: string[]) {
+  let values: { since?: string; until?: string; workspace?: string; profile?: string; tool?: string; compare?: boolean; json?: boolean };
+  try {
+    ({ values } = parseArgs({
+      args,
+      options: {
+        since: { type: "string" },
+        until: { type: "string" },
+        workspace: { type: "string" },
+        profile: { type: "string" },
+        tool: { type: "string" },
+        compare: { type: "boolean" },
+        json: { type: "boolean" },
+      },
+    }));
+  } catch (error) {
+    return fail("usage", problemWithUsage(error, usageUsage), 2);
+  }
+  const { databasePath } = loadConfig();
+  if (!existsSync(databasePath)) return fail("usage", `there is no Mirador database at ${databasePath} yet`, 1);
+  const data = UsageData.open(databasePath);
+  try {
+    const { tool } = values;
+    const report = tool ? toolReport(data, { ...values, tool }) : usageReport(data, values);
+    if (values.json) console.log(JSON.stringify(report, null, 2));
+    else if ("tool" in report) printToolUsage(report);
+    else printUsage(report);
+  } catch (error) {
+    if (!(error instanceof UsageQueryError)) throw error;
+    fail("usage", error.message, 2);
+  } finally {
+    data.close();
+  }
+}
+
+const count = (value: number) => value.toLocaleString("en-US");
+const counted = (value: number, thing: string) => `${count(value)} ${thing}${value === 1 ? "" : "s"}`;
+const share = (value: number | null) => (value === null ? "-" : `${value}%`);
+
+function duration(seconds: number | null) {
+  if (seconds === null) return "-";
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+function totalsLine(totals: Totals) {
+  return `${counted(totals.conversations, "conversation")}, ${counted(totals.turns, "turn")}, ${counted(totals.toolCalls, "tool call")}, ${share(totals.successPercent)} of them succeeded`;
+}
+
+function printFindings(findings: Finding[]) {
+  if (findings.length === 0) return;
+  console.log("\nWhat to improve");
+  for (const { seen, suggestion } of findings) console.log(`- ${seen}\n  ${suggestion}`);
+}
+
+function printUsage(report: UsageReport) {
+  const { period, workspace, profile, totals, previousPeriod, findings, profiles, tools, otherTools, sources, permissions, responses, turns, models, conversations } = report;
+  console.log(`Mirador usage from ${period.from} to ${period.to}, ${workspace}, ${profile}`);
+  console.log(totalsLine(totals));
+  if (previousPeriod) console.log(`Before, from ${previousPeriod.from}: ${previousPeriod.totals ? totalsLine(previousPeriod.totals) : "nothing"}`);
+  const before = <T>(column: T[]) => (previousPeriod ? column : []);
+  printFindings(findings);
+  if (profiles.length > 0) {
+    console.log("");
+    printColumns([
+      ["Profile", "Agent", "Turns", "Calls", "Success", ...before(["Before"]), "Turn", "Your reply", "Output/s"],
+      ...profiles.map((each) => [
+        each.profile,
+        each.agent,
+        count(each.totals.turns),
+        count(each.totals.toolCalls),
+        share(each.totals.successPercent),
+        ...before([share(each.before?.successPercent ?? null)]),
+        duration(each.totals.medianTurnSeconds),
+        duration(each.totals.medianReplySeconds),
+        each.totals.outputTokensPerSecond === null ? "-" : String(each.totals.outputTokensPerSecond),
+      ]),
+    ]);
+  }
+  if (tools.length > 0) {
+    console.log("");
+    printColumns([
+      ["Tool", "Calls", "Succeeded", "Failed", "Denied", "Cancelled", "Success", ...before(["Before"]), "Median", "90%"],
+      ...tools.map((tool) => [
+        tool.tool,
+        count(tool.calls),
+        count(tool.succeeded),
+        count(tool.failed),
+        count(tool.denied),
+        count(tool.cancelled),
+        share(tool.successPercent),
+        ...before([share(tool.before?.successPercent ?? null)]),
+        duration(tool.medianSeconds),
+        duration(tool.p90Seconds),
+      ]),
+    ]);
+    if (otherTools) console.log(`and ${counted(otherTools.tools, "more tool")}, with ${counted(otherTools.calls, "call")}`);
+  }
+  const failing = tools.filter(({ failureReasons }) => failureReasons.length > 0);
+  if (failing.length > 0) {
+    console.log("\nWhy calls failed");
+    printColumns(failing.map(({ tool, failureReasons }) => [tool, failureReasons.map(({ reason, calls }) => `${reason} (${calls})`).join(", ")]));
+  }
+  if (sources.length > 0) console.log(`\nWhere tools come from: ${sources.map(({ source, sharePercent }) => `${source} ${share(sharePercent)}`).join(", ")}`);
+  console.log(
+    `\nPermissions: asked ${counted(permissions.asked, "time")}; allowed once ${count(permissions.allowedOnce)}, always ${count(permissions.allowedAlways)}, rejected ${count(permissions.rejected)}, unanswered ${count(permissions.unanswered)}; answered in ${duration(permissions.medianSecondsToAnswer)} (median)`,
+  );
+  const { afterTurns, toQuestions } = responses;
+  console.log(
+    `You: replied ${counted(afterTurns.replies, "time")} within an hour of a turn's end, in ${duration(afterTurns.medianSeconds)} (median), ${duration(afterTurns.p90Seconds)} at 90%, and came back later ${counted(afterTurns.cameBackLater, "time")}; answered ${count(toQuestions.answered)} of ${counted(toQuestions.asked, "question")} in ${duration(toQuestions.medianSeconds)} (median)${toQuestions.timedOut > 0 ? `, ${count(toQuestions.timedOut)} timed out` : ""}`,
+  );
+  const endedBy = Object.entries(turns.endedBy).map(([reason, times]) => `${reason} ${times}`);
+  console.log(
+    `Turns: ${count(turns.count)}, ${duration(turns.medianSeconds)} median, ${duration(turns.p90Seconds)} at 90%, ${turns.medianToolCalls ?? "-"} tool calls median${endedBy.length > 0 ? `; ended by ${endedBy.join(", ")}` : ""}`,
+  );
+  if (models.length > 0) {
+    console.log("");
+    printColumns([
+      ["Model", "Turns", "Input", "Output", "Cache read", "Cache write", "Cache hits", "Output/s"],
+      ...models.map((model) => [
+        model.model,
+        count(model.turns),
+        count(model.inputTokens),
+        count(model.outputTokens),
+        count(model.cachedReadTokens),
+        count(model.cachedWriteTokens),
+        share(model.cacheHitPercent),
+        model.outputTokensPerSecond === null ? "-" : String(model.outputTokensPerSecond),
+      ]),
+    ]);
+  }
+  if (conversations && conversations.busiest.length > 0) {
+    console.log("\nBusiest conversations");
+    printColumns(conversations.busiest.map(({ title, workspace, profile, turns, toolCalls }) => [title, workspace, profile, counted(turns, "turn"), counted(toolCalls, "tool call")]));
+  }
+  if (conversations && conversations.untouchedLongest.length > 0) {
+    console.log("\nUntouched longest");
+    printColumns(conversations.untouchedLongest.map(({ title, workspace, profile, lastActivity, idleDays }) => [title, workspace, profile, `${counted(idleDays, "day")}, since ${lastActivity}`]));
+  }
+  console.log("\nFor agents and scripts: mirador usage --json, which adds samples of what you ask and what agents ask you");
+}
+
+function printToolUsage({ period, workspace, profile, tool, findings }: ToolReport) {
+  console.log(`${tool.tool} from ${period.from} to ${period.to}, ${workspace}, ${profile}`);
+  console.log(
+    `${counted(tool.calls, "call")}: ${count(tool.succeeded)} succeeded, ${count(tool.failed)} failed, ${count(tool.denied)} denied, ${count(tool.cancelled)} cancelled; ${share(tool.successPercent)} success${tool.before ? `, ${share(tool.before.successPercent)} before` : ""}; ${duration(tool.medianSeconds)} median, ${duration(tool.p90Seconds)} at 90%`,
+  );
+  console.log("");
+  printColumns([["Profile", "Calls", "Failed", "Success"], ...tool.byProfile.map((each) => [each.profile, count(each.calls), count(each.failed), share(each.successPercent)])]);
+  if (tool.failureReasons.length > 0) console.log(`\nWhy calls failed: ${tool.failureReasons.map(({ reason, calls }) => `${reason} (${calls})`).join(", ")}`);
+  if (tool.failureExamples.length > 0) {
+    console.log("\nFailed calls");
+    printColumns(tool.failureExamples.map(({ at, input, result }) => [at, input, result]));
+  }
+  if (tool.slowestCalls.length > 0) {
+    console.log("\nSlowest calls");
+    printColumns(tool.slowestCalls.map(({ input, seconds, at }) => [duration(seconds), at, input]));
+  }
+  printFindings(findings);
+}
+
 const commands = new Map<string, (args: string[]) => void | Promise<void>>([
   ["sign-in", signIn],
   ["invite", invite],
@@ -190,6 +367,7 @@ const commands = new Map<string, (args: string[]) => void | Promise<void>>([
   ["devices", listDevices],
   ["when-done", whenDone],
   ["message", message],
+  ["usage", showUsage],
 ]);
 const asksForHelp = (command: string | undefined) => command === undefined || ["help", "--help", "-h"].includes(command);
 
