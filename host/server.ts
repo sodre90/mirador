@@ -33,7 +33,7 @@ import { AppFileRefused, type AppDocuments } from "./apps/documents.ts";
 import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
-import { messageOf } from "./apps/plugins.ts";
+import { AppProblem, messageOf } from "./apps/plugins.ts";
 import { appKey, type PluginUpdate } from "../shared/apps.ts";
 import type { PluginSettingsStore } from "./plugin-settings.ts";
 import { pluginsListed as listedPlugins, type PluginCatalog } from "./plugin-catalog.ts";
@@ -663,20 +663,24 @@ export function startServer(services: HostServices) {
     return new Response(file, { headers: { "Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff" } });
   }
 
-  /** A file next to an open app's document, for the app's view in the signed-in page. */
+  /** Why an app's view can't have what it asked for, with the status that says so: a plugin's or Mirador's reason is the view's to show. */
+  const appRefusal = (error: unknown) =>
+    new Response(errorMessage(error), { status: error instanceof AppFileRefused ? error.status : error instanceof AppProblem ? 400 : 500 });
+
+  /** A file of the workspace an open app is in, for the app's view in the signed-in page. */
   function serveAppFile(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/file">) {
     const refused = refusedPageRequest(request);
     if (refused) return refused;
     const { workspaceId, app } = request.params;
     try {
-      const file = Bun.file(apps.fileNextToDocument(workspaceId, app, new URL(request.url).searchParams.get("path")));
+      const file = Bun.file(apps.fileForView(workspaceId, app, new URL(request.url).searchParams.get("path")));
       return new Response(file, { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
     } catch (error) {
-      return new Response(errorMessage(error), { status: error instanceof AppFileRefused ? error.status : 500 });
+      return appRefusal(error);
     }
   }
 
-  /** An address the app's view streams a file next to its document from, on the canvas assets, where its sandboxed page may load media. */
+  /** An address the app's view streams a file of its workspace from, on the canvas assets, where its sandboxed page may load media. */
   function grantAppMedia(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/media">) {
     const refused = refusedPageRequest(request);
     if (refused) return refused;
@@ -684,7 +688,32 @@ export function startServer(services: HostServices) {
     try {
       return Response.json(apps.mediaGrant(workspaceId, app, new URL(request.url).searchParams.get("path")));
     } catch (error) {
-      return new Response(errorMessage(error), { status: error instanceof AppFileRefused ? error.status : 500 });
+      return appRefusal(error);
+    }
+  }
+
+  /** The files of the workspace an open app is in, for the app's view to list. */
+  async function listAppFiles(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/files">) {
+    const refused = refusedPageRequest(request);
+    if (refused) return refused;
+    const { workspaceId, app } = request.params;
+    try {
+      return Response.json(await apps.workspaceFiles(workspaceId, app), { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return appRefusal(error);
+    }
+  }
+
+  /** Opens an app on another file of its workspace, as its view asks; the pages then get its new document as they get every change. */
+  async function openAppFromView(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/open">) {
+    const refused = refusedPageRequest(request);
+    if (refused) return refused;
+    const { workspaceId, app } = request.params;
+    try {
+      await apps.openFromView(workspaceId, app, new URL(request.url).searchParams.get("file"));
+      return new Response(null, { status: 204 });
+    } catch (error) {
+      return appRefusal(error);
     }
   }
 
@@ -1468,6 +1497,8 @@ export function startServer(services: HostServices) {
     "/plugin-screenshot": { GET: servePluginScreenshot },
     "/workspaces/:workspaceId/apps/:app/file": { GET: serveAppFile },
     "/workspaces/:workspaceId/apps/:app/media": { POST: grantAppMedia },
+    "/workspaces/:workspaceId/apps/:app/files": { GET: listAppFiles },
+    "/workspaces/:workspaceId/apps/:app/open": { POST: openAppFromView },
     "/mirador-ca.pem": serveAuthority,
     "/mirador-here": here,
     "/tunnel": { POST: registerTunnel },

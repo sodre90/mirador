@@ -1,4 +1,4 @@
-import { appendFileSync, cpSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -162,7 +162,7 @@ test("the agent opens an app that its changes, your clicks and outside edits all
   });
 
   await test.step("the agent's operation reaches the view without reloading it", async () => {
-    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 2 } })).toBe("Added 2; the count is 2.");
+    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 2 } })).toBe("counter.json: Added 2; the count is 2.");
     await expect(view(page).locator("#count")).toHaveText("2");
     await expect(view(page).locator("#last-change")).toHaveText("agent: Added 2; the count is 2.");
     await expect(view(page).locator("#page-load")).toHaveText(pageLoad);
@@ -201,7 +201,7 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await view(page).getByRole("button", { name: "Read the note" }).click();
     await expect(view(page).locator("#file-text")).toHaveText("Remember the milk");
     await view(page).getByRole("button", { name: "Read the file outside" }).click();
-    await expect(view(page).locator("#file-text")).toHaveText("../outside.txt is outside the document's folder.");
+    await expect(view(page).locator("#file-text")).toHaveText("../outside.txt is outside the workspace.");
   });
 
   await test.step("another conversation of the workspace shows the app once its agent uses it, and reads every change", async () => {
@@ -403,7 +403,7 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await expect(view(page).locator("#count")).toHaveText("0");
     await appToggle(page).click();
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
-    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 5 } })).toBe("Added 5; the count is 5.");
+    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 5 } })).toBe("fourth.json: Added 5; the count is 5.");
     await page.evaluate((back) => (location.hash = back), hash);
     await expect(view(page).locator("#count")).toHaveText("5");
     await expect(view(page).locator("#page-load")).toHaveText(loaded);
@@ -453,5 +453,64 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "linked/new.json" })).toContain("linked/new.json is outside the workspace");
     expect(readdirSync(outside)).toEqual(["secret.json"]);
     await expect(view(page).locator("#count")).toHaveText("0");
+  });
+
+  await test.step("the view lists the workspace's files and opens another of them, which brings the tab forward in no other conversation", async () => {
+    const { hash } = new URL(page.url());
+    const elsewhere = hash.endsWith(first) ? second : first;
+    await page.evaluate((other) => (location.hash = other), `#/c/${elsewhere}`);
+    await showApp(page);
+    await appToggle(page).click();
+    await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
+    await page.evaluate((back) => (location.hash = back), hash);
+    await expect(view(page).locator("#document-file")).toHaveText("week.json");
+    mkdirSync(join(host.projectDir, "plans"), { recursive: true });
+    writeFileSync(join(host.projectDir, "plans", "week.json"), '{ "count": 7 }\n');
+    await view(page).getByRole("button", { name: "List files" }).click();
+    await expect(view(page).locator("#file-list")).toContainText("plans/week.json");
+    await expect(view(page).locator("#file-list")).toContainText("counter.json");
+    const filesHeard = Number(await view(page).locator("#files-heard").textContent());
+    await view(page).getByLabel("File to open").fill("plans/week.json");
+    await view(page).getByRole("button", { name: "Open", exact: true }).click();
+    await expect(view(page).locator("#open-result")).toHaveText("opened");
+    await expect(view(page).locator("#count")).toHaveText("7");
+    await expect(view(page).locator("#document-file")).toHaveText("plans/week.json");
+    await expect(view(page).locator("#files-heard")).toHaveText(String(filesHeard + 1));
+    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 1 } })).toBe("plans/week.json: Added 1; the count is 8.");
+    await page.evaluate((other) => (location.hash = other), `#/c/${elsewhere}`);
+    await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
+    await page.evaluate((back) => (location.hash = back), hash);
+  });
+
+  await test.step("the view may not open a file outside the workspace, or one that doesn't exist, or another file while a task runs", async () => {
+    const opening = async (file: string) => {
+      await view(page).getByLabel("File to open").fill(file);
+      await view(page).getByRole("button", { name: "Open", exact: true }).click();
+      return view(page).locator("#open-result");
+    };
+    await expect(await opening("../outside.json")).toHaveText(/^\.\.\/outside\.json is outside the workspace/);
+    await expect(await opening("plans/missing.json")).toHaveText("plans/missing.json doesn't exist.");
+    expect(existsSync(join(host.projectDir, "plans", "missing.json"))).toBe(false);
+    await view(page).getByRole("button", { name: "Wait" }).click();
+    await expect(view(page).locator("#task")).toHaveText(/^wait running/);
+    await expect(await opening("counter.json")).toHaveText("Wait until stopped is still running; wait for it to end, or stop it, before opening another file.");
+    await expect(view(page).locator("#task")).toHaveText(/^wait running/);
+    const filesHeard = Number(await view(page).locator("#files-heard").textContent());
+    await view(page).getByRole("button", { name: "Stop the task" }).click();
+    await expect(view(page).locator("#task")).toHaveText("wait stopped (waiting)");
+    await expect(view(page).locator("#files-heard")).toHaveText(String(filesHeard + 1));
+    await expect(view(page).locator("#document-file")).toHaveText("plans/week.json");
+  });
+
+  await test.step("from a document in a subfolder, the view reads a file up in the workspace", async () => {
+    writeFileSync(join(host.projectDir, "root-note.txt"), "Kept at the root\n");
+    await view(page).getByRole("button", { name: "Read up from the document" }).click();
+    await expect(view(page).locator("#file-text")).toHaveText("Kept at the root");
+  });
+
+  await test.step("an agent's turn tells the view that the workspace's files may have changed", async () => {
+    const filesHeard = Number(await view(page).locator("#files-heard").textContent());
+    await sendAndWait(page, "Start");
+    await expect(view(page).locator("#files-heard")).toHaveText(String(filesHeard + 1));
   });
 });

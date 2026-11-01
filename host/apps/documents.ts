@@ -1,10 +1,22 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { appKey, type AppAuthor, type AppChange, type AppDocumentState, type AppMediaGrant, type AppShownBy, type AppTaskContext, type AppTaskState, type OpenApp } from "../../shared/apps.ts";
+import {
+  appKey,
+  type AppAuthor,
+  type AppChange,
+  type AppDocumentState,
+  type AppMediaGrant,
+  type AppShownBy,
+  type AppTaskContext,
+  type AppTaskState,
+  type AppWorkspaceFiles,
+  type OpenApp,
+} from "../../shared/apps.ts";
 import { toPosix } from "../paths.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import type { Store } from "../store.ts";
+import { projectFiles } from "../working-tree.ts";
 import { AppMediaGrants } from "./media.ts";
 import { AppProblem, appViewPath, installedApp, messageOf, type AppPlugin } from "./plugins.ts";
 
@@ -18,7 +30,7 @@ const TASK_PROGRESS_INTERVAL_MS = 250;
 /** Why a view can't have the file it asked for, with the HTTP status that says so. */
 export class AppFileRefused extends AppProblem {
   constructor(
-    readonly status: 400 | 403 | 404 | 413,
+    readonly status: 400 | 403 | 404 | 409 | 413,
     message: string,
   ) {
     super(message);
@@ -64,6 +76,7 @@ interface AppDocument {
   /** The latest task run on it, under way or ended. */
   task: AppTaskState | null;
   shownBy: AppShownBy | null;
+  openedInView: boolean;
 }
 
 const hashOf = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -72,9 +85,11 @@ const keyOf = (opened: AppDocument) => appKey({ workspaceId: opened.workspaceId,
 
 const publicChange = ({ operation: _, inverse: __, ...change }: LoggedChange): AppChange => change;
 
-const stateOf = (opened: AppDocument): AppDocumentState => ({
+const documentStateOf = (opened: AppDocument, filesChange: number): AppDocumentState => ({
   workspaceId: opened.workspaceId,
   app: opened.plugin.manifest.name,
+  file: opened.file,
+  filesChange,
   document: opened.document,
   lastChange: opened.changes.length > 0 ? publicChange(opened.changes.at(-1)!) : null,
   problem: opened.problem,
@@ -130,6 +145,23 @@ function pathInFolder(documentPath: string, path: unknown, { mayBeNew }: { mayBe
   return join(parent, basename(wanted));
 }
 
+const isInGitFolder = (file: string) => file.split(/[\\/]/).includes(".git");
+
+/** The real path of an existing file a view names from its document's folder: it may lead anywhere in the workspace but its .git folder, and no link on the way may lead out. */
+function viewedFile(opened: AppDocument, path: unknown) {
+  if (typeof path !== "string" || path === "" || isAbsolute(path)) throw new AppFileRefused(400, "Give the file's path relative to the document's folder.");
+  const root = realPathOrNull(opened.workspacePath);
+  if (!root) throw new AppFileRefused(404, "The workspace's folder doesn't exist.");
+  const refusedAsOutside = new AppFileRefused(403, `${path} is outside the workspace.`);
+  const wanted = resolve(dirname(opened.path), path);
+  if (!isInside(resolve(opened.workspacePath), wanted)) throw refusedAsOutside;
+  const real = realPathOrNull(wanted);
+  if (!real) throw new AppFileRefused(404, `${path} doesn't exist.`);
+  if (!isInside(root, real)) throw refusedAsOutside;
+  if (isInGitFolder(relative(root, real))) throw new AppFileRefused(403, `${path} is in the repository's .git folder.`);
+  return real;
+}
+
 const taskNamesOf = (plugin: AppPlugin) => Object.keys(plugin.host.tasks ?? {});
 
 /** The document each workspace has open in each app: operations from the agent and the user change it one at a time, and the file stores it. */
@@ -141,6 +173,8 @@ export class AppDocuments {
   private taskRuns = 0;
   /** By app key; kept while the app opens other files, as the store keeps it across restarts. */
   private readonly usedIn = new Map<string, Set<string>>();
+  /** By workspace: see AppDocumentState.filesChange. */
+  private readonly filesChanges = new Map<string, number>();
 
   constructor(
     private readonly store: Store,
@@ -165,6 +199,7 @@ export class AppDocuments {
       file: opened.file,
       conversationIds: [...(this.usedIn.get(keyOf(opened)) ?? [])],
       ...(opened.shownBy && { shownBy: opened.shownBy }),
+      ...(opened.openedInView && { openedInView: true as const }),
     };
   }
 
@@ -177,6 +212,7 @@ export class AppDocuments {
   private showIn(opened: AppDocument, conversationId: string) {
     this.noteUsedIn(opened, conversationId);
     opened.shownBy = { conversationId, at: Date.now() };
+    opened.openedInView = false;
     this.publisher.openAppsChanged(this.openApps());
   }
 
@@ -198,20 +234,43 @@ export class AppDocuments {
     return this.plugins.find((plugin) => appViewPath(plugin) === pathname)?.view.code ?? null;
   }
 
-  /** The real path of a file in the folder of the app's open document, or below it: links that lead out of the folder are refused. */
-  fileNextToDocument(workspaceId: string, appName: string, path: unknown, maxBytes = this.maxFileBytes): string {
-    const opened = this.documents.get(appKey({ workspaceId, app: appName }));
-    if (!opened) throw new AppFileRefused(404, `${appName} isn't open in this workspace.`);
-    const file = pathInFolder(opened.path, path, { mayBeNew: false });
+  /** The real path of a file for the app's view, named from the folder of the app's open document and anywhere in the workspace. */
+  fileForView(workspaceId: string, appName: string, path: unknown, maxBytes = this.maxFileBytes): string {
+    const file = viewedFile(this.openForView(workspaceId, appName), path);
     const stats = statSync(file);
     if (!stats.isFile()) throw new AppFileRefused(400, `${path} isn't a file.`);
     if (stats.size > maxBytes) throw new AppFileRefused(413, `${path} is larger than ${maxBytes / 1024 / 1024} MB.`);
     return file;
   }
 
-  /** An address on the canvas assets that streams a file next to the app's document, of any size, while the app stays open. */
+  /** An address on the canvas assets that streams a file for the app's view, of any size, while the app stays open. */
   mediaGrant(workspaceId: string, appName: string, path: unknown): AppMediaGrant {
-    return this.media.grant(appKey({ workspaceId, app: appName }), this.fileNextToDocument(workspaceId, appName, path, Infinity));
+    return this.media.grant(appKey({ workspaceId, app: appName }), this.fileForView(workspaceId, appName, path, Infinity));
+  }
+
+  /** The files of the workspace the app is open in, for its view to show. */
+  async workspaceFiles(workspaceId: string, appName: string): Promise<AppWorkspaceFiles> {
+    return projectFiles(this.openForView(workspaceId, appName).workspacePath);
+  }
+
+  /**
+   * Opens the app on another existing file of its workspace, as its view asks: as app_open does, but brought forward in
+   * no conversation. A task under way would stop, so it is refused until the task ends.
+   */
+  async openFromView(workspaceId: string, appName: string, file: unknown): Promise<OpenApp> {
+    const opened = this.openForView(workspaceId, appName);
+    if (typeof file !== "string" || file === "" || isAbsolute(file)) throw new AppFileRefused(400, "Give the file's path relative to the workspace.");
+    if (opened.running) throw new AppFileRefused(409, `${opened.running.state.title} is still running; wait for it to end, or stop it, before opening another file.`);
+    const { path, file: named } = fileInWorkspace(opened.workspacePath, file);
+    if (isInGitFolder(named)) throw new AppFileRefused(403, `${file} is in the repository's .git folder.`);
+    if (!statSync(path, { throwIfNoEntry: false })?.isFile()) throw new AppFileRefused(404, `${file} doesn't exist.`);
+    return this.open(workspaceId, appName, file, undefined, { inView: true });
+  }
+
+  private openForView(workspaceId: string, appName: string) {
+    const opened = this.documents.get(appKey({ workspaceId, app: appName }));
+    if (!opened) throw new AppFileRefused(404, `${appName} isn't open in this workspace.`);
+    return opened;
   }
 
   /** The file a path on the canvas assets streams, while its app is open. */
@@ -225,7 +284,7 @@ export class AppDocuments {
 
   state(workspaceId: string, app: string): AppDocumentState | null {
     const opened = this.documents.get(appKey({ workspaceId, app }));
-    return opened ? stateOf(opened) : null;
+    return opened ? this.stateOf(opened) : null;
   }
 
   async reopenAll() {
@@ -239,9 +298,9 @@ export class AppDocuments {
   }
 
   /** Opens the app on the file, shown in the conversation that opens it, if any. */
-  async open(workspaceId: string, appName: string, file: string, conversationId?: string): Promise<OpenApp> {
+  async open(workspaceId: string, appName: string, file: string, conversationId?: string, { inView = false } = {}): Promise<OpenApp> {
     const key = appKey({ workspaceId, app: appName });
-    const opening = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.openNow(workspaceId, appName, file, conversationId));
+    const opening = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.openNow(workspaceId, appName, file, conversationId, inView));
     this.openings.set(key, opening);
     try {
       return await opening;
@@ -250,7 +309,7 @@ export class AppDocuments {
     }
   }
 
-  private async openNow(workspaceId: string, appName: string, file: string, conversationId?: string): Promise<OpenApp> {
+  private async openNow(workspaceId: string, appName: string, file: string, conversationId: string | undefined, inView: boolean): Promise<OpenApp> {
     const plugin = this.plugin(appName);
     const workspace = this.store.findWorkspace(workspaceId);
     if (!workspace) throw new AppProblem("That workspace no longer exists.");
@@ -280,6 +339,7 @@ export class AppDocuments {
       running: null,
       task: null,
       shownBy: conversationId ? { conversationId, at: Date.now() } : null,
+      openedInView: inView,
     };
     if (text === null) await this.write(opened, this.guarded(() => plugin.host.serialize(document)));
     this.documents.set(keyOf(opened), opened);
@@ -287,12 +347,14 @@ export class AppDocuments {
     if (conversationId) this.noteUsedIn(opened, conversationId);
     this.watch(opened);
     this.publisher.openAppsChanged(this.openApps());
-    this.publisher.stateChanged(stateOf(opened));
+    this.filesMayHaveChanged(workspaceId);
     return this.openAppOf(opened);
   }
 
-  apply(workspaceId: string, appName: string | undefined, operation: unknown, author: AppAuthor): Promise<AppChange> {
-    return this.applyTo(this.openIn(workspaceId, appName), operation, author);
+  /** Changes the document, and says which file it was, as a view may have switched it since the agent looked. */
+  async apply(workspaceId: string, appName: string | undefined, operation: unknown, author: AppAuthor): Promise<AppChange & { file: string }> {
+    const opened = this.openIn(workspaceId, appName);
+    return { ...(await this.applyTo(opened, operation, author)), file: opened.file };
   }
 
   /**
@@ -412,7 +474,8 @@ export class AppDocuments {
     running.progressFlush = undefined;
     running.state = { ...running.state, ...ending, endedAt: Date.now() };
     if (opened.running === running) opened.running = null;
-    this.showTask(opened, running.state);
+    opened.task = running.state;
+    this.filesMayHaveChanged(opened.workspaceId);
   }
 
   private showTask(opened: AppDocument, task: AppTaskState) {
@@ -422,7 +485,17 @@ export class AppDocuments {
 
   /** A document the app has since closed, or left for another file, has nothing more to show the pages. */
   private publishWhileOpen(opened: AppDocument) {
-    if (this.documents.get(keyOf(opened)) === opened) this.publisher.stateChanged(stateOf(opened));
+    if (this.documents.get(keyOf(opened)) === opened) this.publisher.stateChanged(this.stateOf(opened));
+  }
+
+  private stateOf(opened: AppDocument) {
+    return documentStateOf(opened, this.filesChanges.get(opened.workspaceId) ?? 0);
+  }
+
+  /** Tells the views of the workspace's apps to list its files again, as a task, an agent's turn or an open may have changed them. */
+  filesMayHaveChanged(workspaceId: string) {
+    this.filesChanges.set(workspaceId, (this.filesChanges.get(workspaceId) ?? 0) + 1);
+    for (const opened of this.documents.values()) if (opened.workspaceId === workspaceId) this.publisher.stateChanged(this.stateOf(opened));
   }
 
   forgetWorkspace(workspaceId: string) {

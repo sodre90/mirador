@@ -36,10 +36,14 @@ export type CanvasFrameMessage =
    * canvas shows it; the panel answers with an "app-answer" once the message went, or an "app-answer-failed".
    */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-prompt"; requestId: string; text: unknown; images: unknown }
-  /** A file next to the app's document that the view wants, named relative to the document's folder; the panel answers with an "app-file" or "app-file-failed" message. */
+  /** A file of the workspace the view wants, named from the document's folder; the panel answers with an "app-file" or "app-file-failed" message. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-read-file"; requestId: string; path: unknown }
-  /** A file next to the app's document that the view streams; the panel answers with an "app-answer" holding its address, or an "app-answer-failed". */
+  /** A file of the workspace the view streams, named as for "app-read-file"; the panel answers with an "app-answer" holding its address, or an "app-answer-failed". */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-media-url"; requestId: string; path: unknown }
+  /** The view wants the workspace's files; the panel answers with an "app-answer" holding an AppWorkspaceFiles, or an "app-answer-failed". */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-list-files"; requestId: string }
+  /** The view opens the app on another file of the workspace; the panel answers with an "app-answer" once it is open, or an "app-answer-failed". */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-open"; requestId: string; file: unknown }
   /** One of the app's tasks the user runs from its view; its progress and end come in the app's state. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-run"; task: unknown }
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-stop-task" }
@@ -184,9 +188,12 @@ export const APP_ANSWER_MS = 30_000;
  * where the parent is the page itself, injects it as an event with no source. A view gets the latest state as soon as
  * it listens, so it may start listening whenever its code is ready. `prompt` sends the user's words to the agent of the
  * conversation the view is open in, as the user's message, with up to MAX_APP_PROMPT_IMAGES pictures as Blobs, and
- * resolves once it went. `readFile` reads a file in the folder of the view's document, or below it, as a Blob; `mediaUrl`
- * resolves with an address a video, audio or img element streams it from, which changes when the file does. `run` starts
- * one of the app's tasks and `stopTask` stops it. `storage` is a Storage the host keeps for the app in the workspace,
+ * resolves once it went. `readFile` reads a file of the workspace, named from the folder of the view's document (`../`
+ * leads up to the workspace, not out of it), as a Blob; `mediaUrl` resolves with an address a video, audio or img element
+ * streams such a file from, which changes when the file does. `listFiles` resolves with the workspace's files, named from
+ * it, and `open` opens the app on another existing one, as app_open does, and is refused while a task runs; the new
+ * document and its `file` then arrive through `onState`. `onFiles` calls its listener when the workspace's files may
+ * have changed: after a task ends, after an agent's turn, and after an open. `run` starts one of the app's tasks and `stopTask` stops it. `storage` is a Storage the host keeps for the app in the workspace,
  * starting as it was when the page loaded; it is the view's localStorage too, in place of the page's own: a sandboxed
  * frame's throws, and a WebView's is the device's rather than the workspace's.
  */
@@ -195,6 +202,7 @@ function appBridge(frameId: string, storage: AppStorageItems) {
   const source = ${JSON.stringify(CANVAS_MESSAGE_SOURCE)};
   const itemId = ${JSON.stringify(frameId)};
   const listeners = new Set();
+  const fileListeners = new Set();
   const requests = new Map();
   let latest;
   const stored = new Map(Object.entries(${JSON.stringify(storage).replace(/</g, "\\u003c")}));
@@ -237,8 +245,10 @@ function appBridge(frameId: string, storage: AppStorageItems) {
     const data = event.data;
     if ((event.source !== parent && event.source !== null) || !data || data.source !== source) return;
     if (data.kind === "app-state") {
+      const filesChanged = latest?.filesChange !== undefined && data.state?.filesChange !== latest.filesChange;
       latest = data.state;
       listeners.forEach((listener) => listener(latest));
+      if (filesChanged) fileListeners.forEach((listener) => listener());
     }
     if (data.kind === "app-file") requests.get(data.requestId)?.resolve(new Blob([data.bytes], { type: data.type }));
     if (data.kind === "app-answer") requests.get(data.requestId)?.resolve(data.value);
@@ -276,6 +286,10 @@ function appBridge(frameId: string, storage: AppStorageItems) {
       if (latest !== undefined) listener(latest);
       return () => listeners.delete(listener);
     },
+    onFiles(listener) {
+      fileListeners.add(listener);
+      return () => fileListeners.delete(listener);
+    },
     apply(op) {
       parent.postMessage({ source, itemId, kind: "app-apply", op }, "*");
     },
@@ -288,6 +302,12 @@ function appBridge(frameId: string, storage: AppStorageItems) {
     },
     mediaUrl(path) {
       return ask({ kind: "app-media-url", path }, "the request for " + path);
+    },
+    listFiles() {
+      return ask({ kind: "app-list-files" }, "the request for the workspace's files");
+    },
+    open(file) {
+      return ask({ kind: "app-open", file }, "the request to open " + file).then(() => undefined);
     },
     run(task) {
       parent.postMessage({ source, itemId, kind: "app-run", task }, "*");

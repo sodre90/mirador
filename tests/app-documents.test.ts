@@ -1,12 +1,12 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppDocuments, AppFileRefused, type AppPublisher } from "../host/apps/documents.ts";
 import { AppProblem, loadPlugins } from "../host/apps/plugins.ts";
 import { Store } from "../host/store.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
-import { APP_MEDIA_PATH, appFileUrl, appMediaGrantUrl, appPromptText, type AppAuthor, type AppDocumentState, type OpenApp } from "../shared/apps.ts";
+import { APP_MEDIA_PATH, appFilesUrl, appFileUrl, appMediaGrantUrl, appOpenUrl, appPromptText, type AppAuthor, type AppDocumentState, type OpenApp } from "../shared/apps.ts";
 
 const FIXTURE_APPS = join(import.meta.dir, "fixtures", "apps");
 
@@ -125,7 +125,7 @@ describe("AppDocuments", () => {
     expect(await apps.open("w1", "counter", "counter.json")).toEqual({ workspaceId: "w1", app: "counter", title: "Counter", file: "counter.json", conversationIds: [] });
     expect(JSON.parse(fileText())).toEqual({ count: 0 });
     expect(openAppLists.at(-1)).toHaveLength(1);
-    expect(states.at(-1)).toEqual({ workspaceId: "w1", app: "counter", document: { count: 0 }, lastChange: null, problem: null, task: null });
+    expect(states.at(-1)).toEqual({ workspaceId: "w1", app: "counter", file: "counter.json", filesChange: 1, document: { count: 0 }, lastChange: null, problem: null, task: null });
     apps.stop();
   });
 
@@ -322,7 +322,7 @@ describe("AppDocuments", () => {
   });
 });
 
-describe("AppDocuments.fileNextToDocument", () => {
+describe("AppDocuments.fileForView", () => {
   async function openIn(documentFolder: string, maxFileBytes?: number) {
     const set = await setUp(new Store(":memory:"), mkdtempSync(join(tmpdir(), "app-workspace-")), maxFileBytes);
     mkdirSync(join(set.workspacePath, documentFolder), { recursive: true });
@@ -330,7 +330,7 @@ describe("AppDocuments.fileNextToDocument", () => {
     const folder = join(set.workspacePath, documentFolder);
     const refusal = (path: unknown) => {
       try {
-        set.apps.fileNextToDocument("w1", "counter", path);
+        set.apps.fileForView("w1", "counter", path);
       } catch (error) {
         return error as AppFileRefused;
       }
@@ -344,35 +344,46 @@ describe("AppDocuments.fileNextToDocument", () => {
     mkdirSync(join(folder, "textures"));
     writeFileSync(join(folder, "note.txt"), "note");
     writeFileSync(join(folder, "textures", "1.jpg"), "jpg");
-    expect(readFileSync(apps.fileNextToDocument("w1", "counter", "note.txt"), "utf8")).toBe("note");
-    expect(readFileSync(apps.fileNextToDocument("w1", "counter", "textures/1.jpg"), "utf8")).toBe("jpg");
-    expect(readFileSync(apps.fileNextToDocument("w1", "counter", "./textures/../note.txt"), "utf8")).toBe("note");
+    expect(readFileSync(apps.fileForView("w1", "counter", "note.txt"), "utf8")).toBe("note");
+    expect(readFileSync(apps.fileForView("w1", "counter", "textures/1.jpg"), "utf8")).toBe("jpg");
+    expect(readFileSync(apps.fileForView("w1", "counter", "./textures/../note.txt"), "utf8")).toBe("note");
     apps.stop();
   });
 
-  test("refuses a path that leaves the folder, an absolute one, and one that is empty or not a string", async () => {
+  test("gives a file up in the workspace, but refuses one outside it, an absolute path, and one that is empty or not a string", async () => {
     const { apps, workspacePath, refusal } = await openIn("plan");
-    writeFileSync(join(workspacePath, "outside.txt"), "secret");
-    expect(refusal("../outside.txt")).toMatchObject({ status: 403, message: "../outside.txt is outside the document's folder." });
-    expect(refusal("textures/../../outside.txt").status).toBe(403);
-    expect(refusal(join(workspacePath, "outside.txt")).status).toBe(400);
+    writeFileSync(join(workspacePath, "main.tex"), "main");
+    writeFileSync(join(workspacePath, "..", "outside.txt"), "secret");
+    expect(readFileSync(apps.fileForView("w1", "counter", "../main.tex"), "utf8")).toBe("main");
+    expect(refusal("../../outside.txt")).toMatchObject({ status: 403, message: "../../outside.txt is outside the workspace." });
+    expect(refusal("textures/../../../outside.txt").status).toBe(403);
+    expect(refusal(join(workspacePath, "main.tex"))).toMatchObject({ status: 400, message: "Give the file's path relative to the document's folder." });
     expect(refusal("").status).toBe(400);
     expect(refusal(undefined).status).toBe(400);
     expect(refusal(7).status).toBe(400);
     apps.stop();
   });
 
-  test("refuses a link inside the folder that leads out of it, to a file or a folder, but follows one that stays in", async () => {
+  test("refuses a link that leads out of the workspace, to a file or a folder, but follows one that stays in", async () => {
     const { apps, folder, workspacePath, refusal } = await openIn("plan");
+    const outside = mkdtempSync(join(tmpdir(), "outside-"));
+    writeFileSync(join(outside, "secret.txt"), "secret");
     mkdirSync(join(workspacePath, "elsewhere"));
-    writeFileSync(join(workspacePath, "elsewhere", "secret.txt"), "secret");
-    writeFileSync(join(folder, "real.txt"), "real");
-    symlinkSync(join(workspacePath, "elsewhere", "secret.txt"), join(folder, "leak.txt"));
-    symlinkSync(join(workspacePath, "elsewhere"), join(folder, "leaky"));
-    symlinkSync("real.txt", join(folder, "alias.txt"));
-    expect(refusal("leak.txt").status).toBe(403);
-    expect(refusal("leaky/secret.txt").status).toBe(403);
-    expect(readFileSync(apps.fileNextToDocument("w1", "counter", "alias.txt"), "utf8")).toBe("real");
+    writeFileSync(join(workspacePath, "elsewhere", "kept.txt"), "kept");
+    symlinkSync(join(outside, "secret.txt"), join(folder, "leak.txt"));
+    symlinkSync(outside, join(workspacePath, "leaky"));
+    symlinkSync(join(workspacePath, "elsewhere"), join(folder, "near"));
+    expect(refusal("leak.txt")).toMatchObject({ status: 403, message: "leak.txt is outside the workspace." });
+    expect(refusal("../leaky/secret.txt").status).toBe(403);
+    expect(readFileSync(apps.fileForView("w1", "counter", "near/kept.txt"), "utf8")).toBe("kept");
+    apps.stop();
+  });
+
+  test("refuses a file in the repository's .git folder", async () => {
+    const { refusal, workspacePath, apps } = await openIn("plan");
+    mkdirSync(join(workspacePath, ".git"));
+    writeFileSync(join(workspacePath, ".git", "config"), "[remote]");
+    expect(refusal("../.git/config")).toMatchObject({ status: 403, message: "../.git/config is in the repository's .git folder." });
     apps.stop();
   });
 
@@ -381,8 +392,8 @@ describe("AppDocuments.fileNextToDocument", () => {
     mkdirSync(join(folder, "textures"));
     expect(refusal("textures")).toMatchObject({ status: 400, message: "textures isn't a file." });
     expect(refusal("missing.txt")).toMatchObject({ status: 404, message: "missing.txt doesn't exist." });
-    expect(() => apps.fileNextToDocument("w2", "counter", "x")).toThrow(AppFileRefused);
-    expect(() => apps.fileNextToDocument("w1", "sketchbook", "x")).toThrow("sketchbook isn't open in this workspace.");
+    expect(() => apps.fileForView("w2", "counter", "x")).toThrow(AppFileRefused);
+    expect(() => apps.fileForView("w1", "sketchbook", "x")).toThrow("sketchbook isn't open in this workspace.");
     apps.stop();
   });
 
@@ -390,7 +401,7 @@ describe("AppDocuments.fileNextToDocument", () => {
     const { apps, folder, refusal } = await openIn("plan", 10);
     writeFileSync(join(folder, "fits.txt"), "0123456789");
     writeFileSync(join(folder, "big.bin"), "0123456789!");
-    expect(apps.fileNextToDocument("w1", "counter", "fits.txt")).toEndWith("fits.txt");
+    expect(apps.fileForView("w1", "counter", "fits.txt")).toEndWith("fits.txt");
     expect(refusal("big.bin").status).toBe(413);
     apps.stop();
   });
@@ -559,16 +570,89 @@ describe("AppDocuments.mediaGrant", () => {
     apps.stop();
   });
 
-  test("refuses a file outside the document's folder, and ends every address when the app closes", async () => {
+  test("streams a file up in the workspace, refuses one outside it, and ends every address when the app closes", async () => {
     const { apps, workspacePath } = await setUp();
     mkdirSync(join(workspacePath, "plan"));
     await apps.open("w1", "counter", "plan/counter.json");
-    writeFileSync(join(workspacePath, "outside.webm"), "secret");
-    writeFileSync(join(workspacePath, "plan", "clip.webm"), "clip");
-    expect(() => apps.mediaGrant("w1", "counter", "../outside.webm")).toThrow("../outside.webm is outside the document's folder.");
-    const { pathname } = new URL(apps.mediaGrant("w1", "counter", "clip.webm").path, "http://assets");
+    writeFileSync(join(workspacePath, "..", "outside.webm"), "secret");
+    writeFileSync(join(workspacePath, "clip.webm"), "clip");
+    expect(() => apps.mediaGrant("w1", "counter", "../../outside.webm")).toThrow("../../outside.webm is outside the workspace.");
+    const { pathname } = new URL(apps.mediaGrant("w1", "counter", "../clip.webm").path, "http://assets");
     apps.forgetWorkspace("w1");
     expect(apps.mediaFile(pathname)).toBeNull();
+  });
+});
+
+describe("AppDocuments for a view's files", () => {
+  test("lists the workspace's files git would, named from the workspace, and every file outside git", async () => {
+    const { apps, workspacePath } = await setUp();
+    await apps.open("w1", "counter", "counter.json");
+    mkdirSync(join(workspacePath, "chapters"));
+    writeFileSync(join(workspacePath, "chapters", "one.tex"), "one");
+    writeFileSync(join(workspacePath, ".gitignore"), "build/\n");
+    mkdirSync(join(workspacePath, "build"));
+    writeFileSync(join(workspacePath, "build", "out.pdf"), "pdf");
+    const listed = async () => (await apps.workspaceFiles("w1", "counter")).files.toSorted();
+    expect(await listed()).toEqual([".gitignore", "build/out.pdf", "chapters/one.tex", "counter.json"]);
+    Bun.spawnSync(["git", "init", "-q", workspacePath]);
+    expect(await listed()).toEqual([".gitignore", "chapters/one.tex", "counter.json"]);
+    await expect(apps.workspaceFiles("w1", "sketchbook")).rejects.toThrow("sketchbook isn't open in this workspace.");
+    apps.stop();
+  });
+
+  test("opens the app on another file of the workspace as the view asks, naming the file in its state, as news to no conversation", async () => {
+    const { apps, workspacePath, states, openAppLists } = await setUpWithTwoConversations();
+    await apps.open("w1", "counter", "counter.json", "c1");
+    mkdirSync(join(workspacePath, "plans"));
+    writeFileSync(join(workspacePath, "plans", "week.json"), JSON.stringify({ count: 7 }));
+    expect(await apps.openFromView("w1", "counter", "plans/week.json")).toMatchObject({ file: "plans/week.json", conversationIds: ["c1"], openedInView: true });
+    expect(states.at(-1)).toMatchObject({ file: "plans/week.json", document: { count: 7 } });
+    expect(openAppLists.at(-1)![0]!.shownBy).toBeUndefined();
+    expect(await apps.apply("w1", "counter", { op: "add", by: 1 }, { kind: "you" })).toMatchObject({ file: "plans/week.json", summary: "Added 1; the count is 8." });
+    expect((await apps.open("w1", "counter", "counter.json", "c2")).openedInView).toBeUndefined();
+    apps.stop();
+  });
+
+  test("opens nothing for a view of an app that isn't open, nor a file outside the workspace, a missing one, or one in .git", async () => {
+    const { apps, workspacePath } = await setUp();
+    await expect(apps.openFromView("w1", "counter", "counter.json")).rejects.toThrow("counter isn't open in this workspace.");
+    await apps.open("w1", "counter", "counter.json");
+    await expect(apps.openFromView("w1", "counter", "../elsewhere.json")).rejects.toThrow("../elsewhere.json is outside the workspace");
+    await expect(apps.openFromView("w1", "counter", join(workspacePath, "counter.json"))).rejects.toThrow("Give the file's path relative to the workspace.");
+    await expect(apps.openFromView("w1", "counter", 7)).rejects.toThrow("Give the file's path relative to the workspace.");
+    await expect(apps.openFromView("w1", "counter", "plans/new.json")).rejects.toMatchObject({ status: 404, message: "plans/new.json doesn't exist." });
+    expect(existsSync(join(workspacePath, "plans"))).toBe(false);
+    mkdirSync(join(workspacePath, "drafts"));
+    await expect(apps.openFromView("w1", "counter", "drafts")).rejects.toMatchObject({ status: 404 });
+    mkdirSync(join(workspacePath, ".git"));
+    writeFileSync(join(workspacePath, ".git", "x.json"), "{}");
+    await expect(apps.openFromView("w1", "counter", "plans/../.git/x.json")).rejects.toMatchObject({ status: 403 });
+    apps.stop();
+  });
+
+  test("refuses to open another file while a task runs, which would stop it", async () => {
+    const { apps, workspacePath } = await setUp();
+    await apps.open("w1", "counter", "counter.json");
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 3 }));
+    const { ended } = apps.startTask("w1", "counter", "wait", { kind: "you" });
+    await expect(apps.openFromView("w1", "counter", "other.json")).rejects.toMatchObject({ status: 409, message: "Wait until stopped is still running; wait for it to end, or stop it, before opening another file." });
+    expect(apps.state("w1", "counter")!.task).toMatchObject({ state: "running" });
+    apps.stopTask("w1", "counter");
+    await ended.catch(() => {});
+    expect((await apps.openFromView("w1", "counter", "other.json")).file).toBe("other.json");
+    apps.stop();
+  });
+
+  test("tells the views of the workspace's apps that its files may have changed, after an open, a task's end, or when asked", async () => {
+    const { apps, states } = await setUp();
+    await apps.open("w1", "counter", "counter.json");
+    expect(states.at(-1)!.filesChange).toBe(1);
+    await apps.startTask("w1", "counter", "count-up", { kind: "you" }).ended;
+    expect(states.at(-1)).toMatchObject({ filesChange: 2, task: { state: "done" } });
+    apps.filesMayHaveChanged("w1");
+    expect(states.at(-1)!.filesChange).toBe(3);
+    expect(apps.state("w1", "counter")!.filesChange).toBe(3);
+    apps.stop();
   });
 });
 
@@ -649,6 +733,14 @@ describe("appPromptText", () => {
   test("names the app and its file before the user's words, so the agent knows what they are about", () => {
     const counter: OpenApp = { workspaceId: "w1", app: "counter", title: "Counter", file: "notes/counter.json", conversationIds: [] };
     expect(appPromptText(counter, "  Make it 10\n")).toBe("About notes/counter.json, open in Counter (app_state reads it, apply changes it):\n\nMake it 10");
+  });
+});
+
+describe("the URLs of a view's files", () => {
+  test("name the listing, and the file to open, escaped", () => {
+    const counter = { workspaceId: "w 1", app: "counter" };
+    expect(appFilesUrl(counter)).toBe("/workspaces/w%201/apps/counter/files");
+    expect(appOpenUrl(counter, "plans/a&b.json")).toBe("/workspaces/w%201/apps/counter/open?file=plans%2Fa%26b.json");
   });
 });
 

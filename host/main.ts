@@ -87,7 +87,11 @@ const conversations = new ConversationService(store, hub, config, notifierMute, 
 canvasPlugins.sendsPromptsWith((conversationId, text, { afterTurn, fromPlugin }) => conversations.send(conversationId, text, [], { afterTurn, fromPlugin }));
 canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt) => conversations.startBeside(callerId, plugin, profileName, prompt));
 conversations.hearRepliesWith((started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply));
-conversations.hearActivityWith((conversationId, activity) => canvasPlugins.activity(conversationId, activity));
+conversations.hearActivityWith((conversationId, activity) => {
+  canvasPlugins.activity(conversationId, activity);
+  const workspaceId = activity.kind === "turn-ended" ? store.findConversation(conversationId)?.workspaceId : undefined;
+  if (workspaceId) apps.filesMayHaveChanged(workspaceId);
+});
 const canvasAssetsOrigins = [
   ...new Set([
     config.canvasAssetsOrigin,

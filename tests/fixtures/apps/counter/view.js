@@ -1,5 +1,5 @@
 const page = document.createElement("main");
-page.innerHTML = '<p>Count: <output id="count">…</output></p><p id="last-change"></p><p id="problem"></p><button id="add">Add one</button><button id="ask">Ask about the count</button><button id="read-note">Read the note</button><button id="read-outside">Read the file outside</button><p id="file-text"></p><p id="page-load"></p><button id="remember">Remember the count</button><p id="remembered"></p><p id="same-storage"></p><button id="show-clip">Show the clip</button><video id="clip" crossorigin="anonymous" muted preload="auto"></video><p id="clip-state"></p><button id="ask-frame">Ask about the frame</button><p id="prompt-state"></p><button id="count-up">Count up</button><button id="wait">Wait</button><button id="stop">Stop the task</button><p id="task"></p>';
+page.innerHTML = '<p>Count: <output id="count">…</output></p><p id="last-change"></p><p id="problem"></p><button id="add">Add one</button><button id="ask">Ask about the count</button><button id="read-note">Read the note</button><button id="read-outside">Read the file outside</button><p id="file-text"></p><p id="page-load"></p><button id="remember">Remember the count</button><p id="remembered"></p><p id="same-storage"></p><button id="show-clip">Show the clip</button><video id="clip" crossorigin="anonymous" muted preload="auto"></video><p id="clip-state"></p><button id="ask-frame">Ask about the frame</button><p id="prompt-state"></p><button id="count-up">Count up</button><button id="wait">Wait</button><button id="stop">Stop the task</button><p id="task"></p><p>File: <output id="document-file"></output></p><button id="list-files">List files</button><p id="file-list"></p><input id="open-name" aria-label="File to open"><button id="open-file">Open</button><p id="open-result"></p><button id="read-up">Read up from the document</button><p>Files changed: <output id="files-heard">0</output></p>';
 document.body.append(page);
 document.getElementById("page-load").textContent = crypto.randomUUID();
 const taskText = (task) => {
@@ -12,6 +12,7 @@ window.mirador.onState((state) => {
   document.getElementById("last-change").textContent = state.lastChange ? `${state.lastChange.author.kind}: ${state.lastChange.summary}` : "";
   document.getElementById("problem").textContent = state.problem ?? "";
   document.getElementById("task").textContent = taskText(state.task);
+  document.getElementById("document-file").textContent = state.file;
 });
 document.getElementById("add").addEventListener("click", () => window.mirador.apply({ op: "add", by: 1 }));
 document.getElementById("ask").addEventListener("click", () => window.mirador.prompt(`Is ${document.getElementById("count").textContent} a good count?`));
@@ -41,3 +42,12 @@ document.getElementById("ask-frame").addEventListener("click", async () => {
 document.getElementById("count-up").addEventListener("click", () => window.mirador.run("count-up"));
 document.getElementById("wait").addEventListener("click", () => window.mirador.run("wait"));
 document.getElementById("stop").addEventListener("click", () => window.mirador.stopTask());
+document.getElementById("list-files").addEventListener("click", () => {
+  window.mirador.listFiles().then(({ files, truncated }) => showText("file-list")(`${[...files].sort().join(", ")}${truncated ? " (more files)" : ""}`), (error) => showText("file-list")(error.message));
+});
+document.getElementById("open-file").addEventListener("click", () => {
+  window.mirador.open(document.getElementById("open-name").value).then(() => "opened", (error) => error.message).then(showText("open-result"));
+});
+document.getElementById("read-up").addEventListener("click", () => showFile("../root-note.txt"));
+let filesHeard = 0;
+window.mirador.onFiles(() => showText("files-heard")(String(++filesHeard)));

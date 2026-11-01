@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  appFilesUrl,
   appFileUrl,
   appKey,
   appMediaGrantUrl,
+  appOpenUrl,
   appPromptText,
   MAX_APP_PROMPT_IMAGES,
   type AppDocumentState,
   type AppMediaGrant,
   type AppStorageItems,
+  type AppWorkspaceFiles,
   type InstalledApp,
   type OpenApp,
 } from "../shared/apps.ts";
@@ -98,19 +101,29 @@ function useAppPrompt(openApp: OpenApp, conversationId: string) {
   return { prompt, sent: sentAt !== null };
 }
 
-/** The bytes of a file next to the app's document, or the host's reason it can't be had. */
-async function fileForView(openApp: OpenApp, path: string) {
-  const response = await fetch(appFileUrl(openApp, path));
+/** The host's answer, or its reason for refusing. */
+async function answered(response: Response) {
   if (!response.ok) throw new Error((await response.text()) || `Mirador answered ${response.status}.`);
+  return response;
+}
+
+/** The bytes of a file the view asked for, or the host's reason it can't be had. */
+async function fileForView(openApp: OpenApp, path: string) {
+  const response = await answered(await fetch(appFileUrl(openApp, path)));
   return { bytes: await response.arrayBuffer(), type: response.headers.get("content-type") ?? "" };
 }
 
-/** The address on the canvas assets the view streams a file next to the app's document from. */
+/** The address on the canvas assets the view streams a file from. */
 async function mediaUrlForView(openApp: OpenApp, path: string, assetsOrigin: string) {
-  const response = await fetch(appMediaGrantUrl(openApp, path), { method: "POST" });
-  if (!response.ok) throw new Error((await response.text()) || `Mirador answered ${response.status}.`);
-  const grant: AppMediaGrant = await response.json();
+  const grant: AppMediaGrant = await (await answered(await fetch(appMediaGrantUrl(openApp, path), { method: "POST" }))).json();
   return `${assetsOrigin}${grant.path}`;
+}
+
+const workspaceFilesForView = async (openApp: OpenApp): Promise<AppWorkspaceFiles> => (await answered(await fetch(appFilesUrl(openApp)))).json();
+
+async function openFromView(openApp: OpenApp, file: unknown) {
+  if (typeof file !== "string") throw new Error("Give the file's path relative to the workspace.");
+  await answered(await fetch(appOpenUrl(openApp, file), { method: "POST" }));
 }
 
 /** An app's view, live: its page loads once and every change to the document reaches it as a message. */
@@ -170,6 +183,8 @@ export function AppView({
       const { path } = message;
       void answer(message.requestId, () => mediaUrlForView(openApp, path, assetsOrigin));
     }
+    if (message.kind === "app-list-files" && typeof message.requestId === "string") void answer(message.requestId, () => workspaceFilesForView(openApp));
+    if (message.kind === "app-open" && typeof message.requestId === "string") void answer(message.requestId, () => openFromView(openApp, message.file));
     if (message.kind === "app-run" && typeof message.task === "string") connection.send({ type: "app.run", workspaceId, app, task: message.task });
     if (message.kind === "app-stop-task") connection.send({ type: "app.stop-task", workspaceId, app });
     if (message.kind === "app-storage-set" && typeof message.key === "string" && (typeof message.value === "string" || message.value === null)) {

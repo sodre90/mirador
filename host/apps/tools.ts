@@ -71,7 +71,7 @@ export function registerAppTools(
       answered(ctx, async (workspaceId, conversationId) => {
         const change = await apps.apply(workspaceId, app, op, { kind: "agent", conversationId, turnSeq: conversations.latestTurnSeq(conversationId) });
         apps.useIn(workspaceId, app, conversationId);
-        return change.summary;
+        return `${change.file}: ${change.summary}`;
       }),
   );
 

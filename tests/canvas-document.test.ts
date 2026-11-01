@@ -10,6 +10,7 @@ import {
   appAnswerMessage,
   appFileFailedMessage,
   appFileMessage,
+  appStateMessage,
   appViewPage,
   buildCanvasDocument,
   CANVAS_MESSAGE_SOURCE,
@@ -236,6 +237,9 @@ interface FrameWindow {
   mirador: {
     readFile(path: string): Promise<Blob>;
     mediaUrl(path: string): Promise<string>;
+    listFiles(): Promise<unknown>;
+    onFiles(listener: () => void): () => void;
+    open(file: string): Promise<void>;
     prompt(text: string, options?: { images?: Blob[] }): Promise<void>;
     run(task: string): void;
     stopTask(): void;
@@ -379,6 +383,42 @@ describe("an app view's window.mirador.mediaUrl", () => {
     const unanswered = mirador.mediaUrl("b.mp4");
     timers.at(-1)!.fire();
     await expect(unanswered).rejects.toThrow("Mirador didn't answer the request for b.mp4.");
+  });
+});
+
+describe("an app view's window.mirador, for the workspace's files", () => {
+  const request = (posted: Record<string, unknown>[], kind: string) => posted.find((message) => message.kind === kind)!;
+
+  test("calls onFiles when the state says the files may have changed, not for the first state nor for other changes", () => {
+    const { mirador, answer } = runAppBridge();
+    let heard = 0;
+    mirador.onFiles(() => heard++);
+    answer(appStateMessage({ document: 1, filesChange: 4 }));
+    answer(appStateMessage({ document: 2, filesChange: 4 }));
+    expect(heard).toBe(0);
+    answer(appStateMessage({ document: 2, filesChange: 5 }));
+    expect(heard).toBe(1);
+  });
+
+  test("lists the files, resolving with the list it is answered with", async () => {
+    const { mirador, posted, answer } = runAppBridge();
+    const listing = mirador.listFiles();
+    const asked = request(posted, "app-list-files");
+    expect(asked).toEqual({ source: CANVAS_MESSAGE_SOURCE, itemId: "app:w1/counter", kind: "app-list-files", requestId: expect.any(String) });
+    answer(appAnswerMessage(asked.requestId as string, { files: ["main.tex"], truncated: false }));
+    expect(await listing).toEqual({ files: ["main.tex"], truncated: false });
+  });
+
+  test("opens another file, resolving once it is open, or rejecting with the reason it isn't", async () => {
+    const { mirador, posted, answer } = runAppBridge();
+    const opening = mirador.open("chapters/one.tex");
+    const asked = request(posted, "app-open");
+    expect(asked).toMatchObject({ kind: "app-open", file: "chapters/one.tex" });
+    answer(appAnswerMessage(asked.requestId as string, null));
+    expect(await opening).toBeUndefined();
+    const refused = mirador.open("../out.tex");
+    answer(appAnswerFailedMessage(posted.filter(({ kind }) => kind === "app-open").at(-1)!.requestId as string, "../out.tex is outside the workspace."));
+    await expect(refused).rejects.toThrow("../out.tex is outside the workspace.");
   });
 });
 

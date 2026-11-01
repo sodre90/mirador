@@ -4,7 +4,8 @@ import type { HostProblem } from "./host-problems.ts";
  * version up to its own. API 2 brought host tasks, streamed files and images in a view's message; API 3 brought canvas
  * tools and items; API 4 tells apply who made the change; API 5 lets a canvas tool message its agent and start a
  * conversation on another profile, and brings profile settings; API 6 brings a canvas plugin's own window, the
- * conversations' activity and canvas tools the user runs from the slash menu.
+ * conversations' activity, canvas tools the user runs from the slash menu, and lets an app's view list the
+ * workspace's files, read any of them, and open the app on another one.
  */
 export const APP_PLUGIN_API = 6;
 
@@ -156,6 +157,8 @@ export interface OpenApp {
   conversationIds: string[];
   /** The agent that last opened the app with app_open or ran one of its tasks with app_run, whose canvas brings its tab forward, even on the file already open. Missing from older hosts, and until an agent does either in this run of the host. */
   shownBy?: AppShownBy;
+  /** The user picked the file in the app's view, which brings its tab forward in no other conversation. */
+  openedInView?: true;
 }
 
 export interface AppShownBy {
@@ -167,6 +170,13 @@ export interface AppShownBy {
 export interface AppDocumentState {
   workspaceId: string;
   app: string;
+  /** The document's file, relative to the workspace. Missing from hosts before plugin API 6. */
+  file?: string;
+  /**
+   * Counts, per workspace, the times its files may have changed: after a task ends, after an agent's turn and after an
+   * open. A view's onFiles fires when it moves. Missing from hosts before plugin API 6.
+   */
+  filesChange?: number;
   document: unknown;
   lastChange: AppChange | null;
   /** Why the file's content isn't shown: it stopped parsing after an edit made outside Mirador. */
@@ -347,13 +357,28 @@ export const storageCharacters = (items: AppStorageItems) => Object.entries(item
 
 export const appKey = ({ workspaceId, app }: { workspaceId: string; app: string }) => `${workspaceId}/${app}`;
 
-/** Where the host serves a file next to the app's document to signed-in pages and devices, `path` named from the document's folder. */
-export const appFileUrl = ({ workspaceId, app }: { workspaceId: string; app: string }, path: string) =>
-  `/workspaces/${encodeURIComponent(workspaceId)}/apps/${encodeURIComponent(app)}/file?path=${encodeURIComponent(path)}`;
+const appPath = ({ workspaceId, app }: { workspaceId: string; app: string }) => `/workspaces/${encodeURIComponent(workspaceId)}/apps/${encodeURIComponent(app)}`;
 
-/** Where signed-in pages and devices ask for an address the view can stream a file next to the app's document from; POST, answered with an AppMediaGrant. */
-export const appMediaGrantUrl = ({ workspaceId, app }: { workspaceId: string; app: string }, path: string) =>
-  `/workspaces/${encodeURIComponent(workspaceId)}/apps/${encodeURIComponent(app)}/media?path=${encodeURIComponent(path)}`;
+/** Where the host serves a file of the workspace to an app's view in signed-in pages and devices, `path` named from the document's folder. */
+export const appFileUrl = (openApp: { workspaceId: string; app: string }, path: string) => `${appPath(openApp)}/file?path=${encodeURIComponent(path)}`;
+
+/** Where signed-in pages and devices ask for an address the view can stream a file of the workspace from; POST, answered with an AppMediaGrant. */
+export const appMediaGrantUrl = (openApp: { workspaceId: string; app: string }, path: string) => `${appPath(openApp)}/media?path=${encodeURIComponent(path)}`;
+
+/** Where an app's view lists the workspace's files; GET, answered with AppWorkspaceFiles. */
+export const appFilesUrl = (openApp: { workspaceId: string; app: string }) => `${appPath(openApp)}/files`;
+
+/** Where an app's view opens the app on another file of the workspace, as app_open does; POST. */
+export const appOpenUrl = (openApp: { workspaceId: string; app: string }, file: string) => `${appPath(openApp)}/open?file=${encodeURIComponent(file)}`;
+
+/**
+ * The workspace's files, relative to it with /: in a repository those git tracks and the untracked ones it doesn't
+ * ignore, elsewhere every file but the folders tools keep their state in. A long list stops, and says so.
+ */
+export interface AppWorkspaceFiles {
+  files: string[];
+  truncated: boolean;
+}
 
 /** Where the canvas assets serve streamed files, so the canvas pages' policy lets media and images load from there. */
 export const APP_MEDIA_PATH = "/media/";
