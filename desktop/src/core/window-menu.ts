@@ -54,7 +54,7 @@ export type PageRequest =
   | { type: "close-window" }
   | { type: "appearance"; appearance: DesktopAppearance }
   | { type: "language"; language: Language }
-  | { type: "open-item-window"; route: ItemWindowRoute }
+  | { type: "open-item-window"; route: ItemWindowRoute; title: string }
   | { type: "window-title"; title: string };
 
 /**
@@ -71,8 +71,8 @@ export function pageRequest(detail: unknown, nonce: string): PageRequest | null 
   if (message.type === "desktop-close-window") return { type: "close-window" };
   if (message.type === "desktop-appearance" && isDesktopAppearance(message.appearance)) return { type: "appearance", appearance: message.appearance };
   if (message.type === "desktop-language" && isLanguage(message.language)) return { type: "language", language: message.language };
-  if (message.type === "desktop-open-item-window" && isId(message.conversationId) && isId(message.itemId)) {
-    return { type: "open-item-window", route: { conversationId: message.conversationId, itemId: message.itemId } };
+  if (message.type === "desktop-open-item-window" && isId(message.conversationId) && isId(message.itemId) && typeof message.title === "string") {
+    return { type: "open-item-window", route: { conversationId: message.conversationId, itemId: message.itemId }, title: message.title };
   }
   if (message.type === "desktop-window-title" && typeof message.title === "string") return { type: "window-title", title: message.title };
   const url = message.type === "desktop-open-link" ? webUrl(message.url) : null;

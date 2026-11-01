@@ -46,5 +46,5 @@ export type DesktopMenuMessage =
   | { type: "desktop-close-window"; nonce: string }
   | { type: "desktop-appearance"; nonce: string; appearance: DesktopAppearance }
   | { type: "desktop-language"; nonce: string; language: Language }
-  | { type: "desktop-open-item-window"; nonce: string; conversationId: string; itemId: string }
+  | { type: "desktop-open-item-window"; nonce: string; conversationId: string; itemId: string; title: string }
   | { type: "desktop-window-title"; nonce: string; title: string };

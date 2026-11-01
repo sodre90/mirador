@@ -91,18 +91,24 @@ test("a plugin's item opens in a window of its own, which stays live and is titl
   });
 });
 
-test("the tab's item opens in its own window too, which says when the item is dismissed", async ({ page }) => {
+test("the tab's item opens in its own window too, from More where the bar is narrow, and says when the item is dismissed", async ({ page }) => {
   await signIn(page, host);
   await page.goto(`${host.origin}/#/c/${conversationId}`);
   await callCanvasTool(host, conversationId, "track_steps", { title: "Release", steps: ["Build", "Ship"] });
   await expect(page.locator(".checklist:visible .canvas-frame.plugin")).toHaveCount(1);
 
-  const stepsWindow = await popOut(page);
+  await page.setViewportSize({ width: 820, height: 800 });
+  await expect(popOutButton(page)).toBeHidden();
+  const opened = page.context().waitForEvent("page");
+  await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();
+  await page.getByRole("menu", { name: "More of the canvas bar" }).getByRole("menuitem", { name: "Open in its own window" }).click();
+  const stepsWindow = await opened;
   await expect(stepsWindow).toHaveTitle("Mirador: Release");
   await expect(windowView(stepsWindow).locator("#text")).toHaveText("0 of 2 steps done");
   await callCanvasTool(host, conversationId, "finish_step", {});
   await expect(windowView(stepsWindow).locator("#text")).toHaveText("1 of 2 steps done");
 
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole("button", { name: "Dismiss the checklist" }).click();
   await expect(stepsWindow.locator(".item-gone")).toHaveText("This item is no longer on the canvas: it was dismissed, or its conversation was deleted.");
   await stepsWindow.close();
@@ -130,7 +136,7 @@ test("inside the desktop app, the app opens the item's window, which tells the a
   const pagesBefore = page.context().pages().length;
   await popOutButton(page).click();
   await expect.poll(() => sentToApp("desktop-open-item-window")).toEqual([
-    { type: "desktop-open-item-window", nonce: "nonce-1", conversationId, itemId: expect.any(String) },
+    { type: "desktop-open-item-window", nonce: "nonce-1", conversationId, itemId: expect.any(String), title: "Renamed" },
   ]);
   expect(page.context().pages()).toHaveLength(pagesBefore);
 

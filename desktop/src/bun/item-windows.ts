@@ -1,6 +1,6 @@
 import Electrobun, { BrowserWindow, PATHS, Utils } from "electrobun/main";
 import { join } from "node:path";
-import { itemWindowRoute, type ItemWindowRoute } from "../../../shared/item-window.ts";
+import { itemWindowRoute, itemWindowTitle, type ItemWindowRoute } from "../../../shared/item-window.ts";
 import { navigationRules } from "../core/navigation.ts";
 import { giveWindowIcon } from "../core/window-icon.ts";
 import { giveNonceScript, pageRequest } from "../core/window-menu.ts";
@@ -31,7 +31,8 @@ export class ItemWindows {
     return this.windows.size > 0;
   }
 
-  open(route: ItemWindowRoute) {
+  /** Titled after the item from the start, as window managers apply some rules only when a window first shows. */
+  open(route: ItemWindowRoute, itemTitle: string) {
     const opened = this.windows.get(route.itemId);
     if (opened) {
       opened.show();
@@ -39,7 +40,7 @@ export class ItemWindows {
       return;
     }
     // sandbox keeps Electrobun's bridge secret out of every frame, including the plugin's canvas frame.
-    const window = new BrowserWindow({ title: "Mirador", url: this.urlOf(itemWindowRoute(route)), frame: ITEM_WINDOW_FRAME, sandbox: true });
+    const window = new BrowserWindow({ title: itemWindowTitle(itemTitle), url: this.urlOf(itemWindowRoute(route)), frame: ITEM_WINDOW_FRAME, sandbox: true });
     if (process.platform === "win32" && window.ptr !== null) giveWindowIcon(BigInt(window.ptr), join(PATHS.RESOURCES_FOLDER, "app.ico"));
     // The navigationRules constructor option is ignored by Electrobun 2.0.2; only this call takes effect.
     window.webview.setNavigationRules(navigationRules([this.appOrigin, ...this.framedOrigins]));

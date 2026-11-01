@@ -97,8 +97,9 @@ describe("menu in the window", () => {
   });
 
   test("opens an item in a window of its own, and names that window, only when asked with the nonce", () => {
-    const opening = { type: "desktop-open-item-window", nonce: "n-1", conversationId: "c-1", itemId: "i-1" };
-    expect(pageRequest(opening, "n-1")).toEqual({ type: "open-item-window", route: { conversationId: "c-1", itemId: "i-1" } });
+    const opening = { type: "desktop-open-item-window", nonce: "n-1", conversationId: "c-1", itemId: "i-1", title: "Review" };
+    expect(pageRequest(opening, "n-1")).toEqual({ type: "open-item-window", route: { conversationId: "c-1", itemId: "i-1" }, title: "Review" });
+    expect(pageRequest({ ...opening, title: undefined }, "n-1")).toBeNull();
     expect(pageRequest({ ...opening, nonce: "guess" }, "n-1")).toBeNull();
     expect(pageRequest({ ...opening, itemId: "" }, "n-1")).toBeNull();
     expect(pageRequest({ ...opening, conversationId: 7 }, "n-1")).toBeNull();

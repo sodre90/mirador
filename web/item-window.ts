@@ -8,10 +8,10 @@ const ITEM_WINDOW_FEATURES = "popup,width=720,height=820";
 export const canOpenItemWindows = () => !(inDesktopApp() && window.parent !== window);
 
 /** Opens the item in a window of its own, or brings forward the one it already has. */
-export function openItemWindow(route: ItemWindowRoute) {
+export function openItemWindow(route: ItemWindowRoute, itemTitle: string) {
   if (inDesktopApp()) {
     const nonce = desktopNonce();
-    if (nonce) sendToDesktopApp({ type: "desktop-open-item-window", nonce, ...route });
+    if (nonce) sendToDesktopApp({ type: "desktop-open-item-window", nonce, ...route, title: itemTitle });
     return;
   }
   const url = `${location.origin}${location.pathname}${itemWindowRoute(route)}`;

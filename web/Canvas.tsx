@@ -817,7 +817,7 @@ export function CanvasPanel({
   const toggleHistory = () => setHistoryOpen((open) => !open);
   const shownPluginItem = checklistOpen ? tabItem : !tab && selected?.kind === "plugin" ? selected : undefined;
   const poppable = canOpenItemWindows() ? shownPluginItem : undefined;
-  const popOut = () => poppable && openItemWindow({ conversationId, itemId: poppable.id });
+  const popOut = () => poppable && openItemWindow({ conversationId, itemId: poppable.id }, poppable.title);
   const shownPage = !tab && selected?.kind === "show" ? selected : undefined;
   const pageExport = usePageExport(shownPage, shownPageFrame);
   const pageMarks = usePageMarks(shownPage, shownPageFrame);
