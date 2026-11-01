@@ -215,10 +215,6 @@ export type ClientMessage =
   /** What the user did in a plugin item's view, for the plugin's host code; answered with "canvas.item-acted". */
   | { type: "canvas.item-action"; requestId: string; itemId: string; action: unknown }
   /** The user takes a plugin's item out of the tab; it stays gone until the plugin publishes a new one. */
-  /** A plugin's own window opened: it gets the window's state now, and again whenever the plugin changes it. */
-  | { type: "plugin-window.subscribe"; plugin: string }
-  /** What the user did in a plugin's own window, for its host code; answered with "plugin-window.acted". */
-  | { type: "plugin-window.action"; requestId: string; plugin: string; action: unknown }
   | { type: "canvas.dismiss"; itemId: string }
   /** A page the agent showed, as a file of its own, for the user to copy or download. */
   | { type: "canvas.export"; requestId: string; itemId: string; libraries: PageLibraries }
@@ -341,8 +337,6 @@ export type ServerMessage =
       /** Each plugin's tools by their name on the canvas server, with the plugin's title; missing from an older host. */
       pluginToolTitles?: Record<string, string>;
       /** Missing from a host older than plugin settings. */
-      /** The plugins that have a window of their own: their titles by name. Missing from a host older than plugin windows. */
-      pluginWindows?: Record<string, string>;
       pluginSettings?: PluginSettings[];
       /** Missing from a host older than the keep awake setting. */
       keepAwake?: KeepAwake;
@@ -479,9 +473,6 @@ export type ServerMessage =
   /** The plugin's reply to an item's action, or why there is none. */
   | { type: "canvas.item-acted"; requestId: string; reply: unknown; problem: string | null }
   /** What updating the plugin would bring: a newer release and its commits, or the commits on its branch it lacks, newest first. */
-  /** A plugin window's state, or why there is none, such as a plugin with no window. */
-  | { type: "plugin-window.state"; plugin: string; state: unknown; problem: string | null }
-  | { type: "plugin-window.acted"; requestId: string; reply: unknown; problem: string | null }
   | { type: "plugins.commits-found"; requestId: string; release: string | null; commits: PluginCommit[]; problem: string | null }
   | { type: "devices.invited"; requestId: string; code: string; expiresAt: number; tunnel: InviteTunnel | null }
   /** The addresses that answered as this Mirador, and whether this machine has Tailscale to put its ports on the tailnet. */

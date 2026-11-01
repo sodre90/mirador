@@ -1,6 +1,4 @@
 import { realpath } from "node:fs/promises";
-import type { PluginActivity } from "../shared/canvas-plugins.ts";
-import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
 import { isDeepStrictEqual } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk";
 import {
@@ -283,7 +281,6 @@ export class ConversationService {
   private readonly asyncTasks = new AsyncTasks();
   private readonly checkpoints: Checkpoints;
   readonly changes: Changes;
-  private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   /** While the host stops or restarts, messages wait in the queue for the next host, and turns it ends are not the agent's failures. */
   private stopping = false;
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
@@ -400,11 +397,6 @@ export class ConversationService {
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return { id: conversation.id, profile: profile.name };
-  }
-
-  /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
-  hearActivityWith(hearActivity: (conversationId: string, activity: PluginActivity) => void) {
-    this.hearActivity = hearActivity;
   }
 
   hearRepliesWith(hearReply: HearReply) {
@@ -738,7 +730,6 @@ export class ConversationService {
     runtime.turn = turn;
     runtime.openToolCalls.clear();
     this.forgetUnseenTurnEnd(conversationId);
-    this.hearActivity(conversationId, { kind: "turn-started" });
     this.retitleFromFirstMessage(conversationId, text);
     const notes = this.notesForAgent(conversationId);
     this.setStatus(conversationId, "starting");
@@ -783,7 +774,6 @@ export class ConversationService {
       if (response?.stopReason !== "end_turn") {
         await this.returnUnansweredSteers(conversationId, runtime, turn.steered, response).catch((error: unknown) =>
           console.error(`could not tell whether the agent answered the messages that joined the turn of conversation ${conversationId}: ${errorMessage(error)}`),
-      this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(response?.stopReason, runtime.killedOnPurpose === true) });
         );
       }
       runtime.running = false;
@@ -2102,8 +2092,6 @@ export class ConversationService {
   }
 
   private notifyTurnEnded(conversationId: string, outcome: TurnOutcome) {
-    const activity = activityOf(event);
-    if (activity) this.hearActivity(conversationId, activity);
     if (!this.store.hasConversation(conversationId)) return;
     const reason = turnEndReason(outcome, {
       messagesQueued: this.runtime(conversationId).queuedMessages.length > 0,

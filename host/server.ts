@@ -1193,14 +1193,6 @@ export function startServer(services: HostServices) {
           .exportPage(message.itemId, message.libraries)
           .then(({ html }) => reply({ type: "canvas.exported", requestId: message.requestId, html }))
           .catch((error) => reply({ type: "canvas.export-failed", requestId: message.requestId, message: errorMessage(error), alreadyThere: false }));
-      case "plugin-window.subscribe":
-        socket.data.pluginWindowSubscriptions.add(message.plugin);
-        return reply(canvasPlugins.windowStateMessage(message.plugin));
-      case "plugin-window.action":
-        return void canvasPlugins.actInWindow(message.plugin, message.action).then(
-          (answer) => reply({ type: "plugin-window.acted", requestId: message.requestId, reply: answer, problem: null }),
-          (error) => reply({ type: "plugin-window.acted", requestId: message.requestId, reply: null, problem: messageOf(error) }),
-        );
         return;
       case "canvas.save-to-project":
       case "canvas.save-image-to-project":
@@ -1467,7 +1459,6 @@ export function startServer(services: HostServices) {
     hub.send(socket, { type: "join-requests.listed", joinRequests: joinRequests.waiting() });
     hub.send(socket, voiceSettingsFor(socket));
     hub.send(socket, { type: "voice.engine", engine: voiceEngine.status() });
-      pluginWindows: canvasPlugins.windowTitles(),
   }
 
   /** Every page's list of devices shows who is connected now, and when the others were last seen. */
