@@ -36,13 +36,13 @@ describe("HarnessProcess.steer", () => {
     const harness = harnessRunning(agentSteeringWith(true, "promptRequired"));
     await harness.start();
     expect(await harness.steer("session", [{ type: "text", text: "also this" }])).toBe("promptRequired");
-    await harness.stop("test over");
+    await harness.stop();
   }, 15_000);
 
   test("says the agent cannot steer when it does not advertise steering", async () => {
     const harness = harnessRunning(agentSteeringWith(false, "injected"));
     await harness.start();
     expect(await harness.steer("session", [{ type: "text", text: "also this" }])).toBe("unsupported");
-    await harness.stop("test over");
+    await harness.stop();
   }, 15_000);
 });

@@ -109,7 +109,7 @@ describe("HarnessProcess.prompt", () => {
     await harness.start();
     const { sessionId } = await harness.newSession({ cwd: tmpdir(), mcpServers: [] });
     const prompt = harness.prompt(sessionId, [{ type: "text", text: "hello" }]);
-    void harness.stop("was restarted because its profile changed");
+    void harness.stop({ kind: "restarted-for-profile" });
     await expect(prompt).rejects.toThrow("The Crashing agent agent process was restarted because its profile changed.");
   }, 15_000);
 
@@ -137,7 +137,7 @@ describe("HarnessProcess.prompt", () => {
     const child = Number(readFileSync(pidFile, "utf8"));
     expect(isRunning(child)).toBe(true);
 
-    await harness.stop("was stopped");
+    await harness.stop();
     const deadline = Date.now() + 3_000;
     while (isRunning(child) && Date.now() < deadline) await Bun.sleep(20);
     expect(isRunning(child)).toBe(false);

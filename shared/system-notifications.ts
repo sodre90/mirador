@@ -1,3 +1,4 @@
+import type { HostProblem } from "./host-problems.ts";
 import { isUntitled, type Conversation, type JoinRequest } from "./model.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 
@@ -6,7 +7,7 @@ export type NotificationReason =
   | { kind: "question"; question: string }
   | { kind: "permission"; tool?: string | null }
   | { kind: "finished" }
-  | { kind: "error"; message: string }
+  | { kind: "error"; message: string; problem?: HostProblem }
   /** A job the agent left running ended, and its message is for you rather than the agent. */
   | { kind: "job-ended"; message: string };
 
@@ -67,7 +68,7 @@ export const systemNotification = (
   about: { kind: "conversation", reason, ...(isUntitled(conversation) && { untitled: true as const }) },
 });
 
-export type TurnOutcome = { stopReason: string } | { error: string };
+export type TurnOutcome = { stopReason: string } | { error: string; problem?: HostProblem };
 
 /**
  * A turn you cancelled, one whose queued message goes out right away, or one that finished to wait for a job whose end
@@ -78,7 +79,7 @@ export function turnEndReason(
   { messagesQueued = false, resumedByAJob = false } = {},
 ): Extract<NotificationReason, { kind: "finished" | "error" }> | null {
   if (messagesQueued) return null;
-  if ("error" in outcome) return { kind: "error", message: outcome.error };
+  if ("error" in outcome) return { kind: "error", message: outcome.error, ...(outcome.problem && { problem: outcome.problem }) };
   return outcome.stopReason === "cancelled" || resumedByAJob ? null : { kind: "finished" };
 }
 

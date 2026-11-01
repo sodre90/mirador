@@ -3,6 +3,7 @@ import { appendFileSync, closeSync, createWriteStream, mkdirSync, openSync, read
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk";
+import { HostProblemError, type AgentGone, type PrelaunchFailure } from "../../shared/host-problems.ts";
 import type { HarnessId } from "../../shared/model.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import { asyncTaskUpdateOf } from "../async-tasks.ts";
@@ -82,16 +83,16 @@ export interface HarnessSpec {
 export interface HarnessListener {
   onSessionUpdate(notification: acp.SessionNotification): void;
   onPermissionRequest(request: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse>;
-  onExit(harness: HarnessProcess, reason: string): void;
+  onExit(harness: HarnessProcess, gone: AgentGone): void;
 }
 
 export class HarnessProcess {
   private child?: ChildProcess;
-  /** Settles with why the agent process went away, e.g. "exited with 1". */
-  private exited: Promise<string> = Promise.resolve("is not running");
+  /** Settles with why the agent process went away, e.g. it exited with 1. */
+  private exited: Promise<AgentGone> = Promise.resolve({ kind: "not-running" });
   private connection?: acp.ClientConnection;
   private initialized?: Promise<acp.InitializeResponse>;
-  private stopReason?: string;
+  private stopReason?: AgentGone;
 
   constructor(
     readonly spec: HarnessSpec,
@@ -187,7 +188,7 @@ export class HarnessProcess {
    * Windows has no stop signal, so there the agent cannot end what it started: it is killed at once with all of it.
    * Either way the agent process went away because it was stopped, not with the exit code or signal that ended it.
    */
-  stop(reason = "was stopped") {
+  stop(reason: AgentGone = { kind: "stopped" }) {
     this.stopReason = reason;
     const child = this.child;
     this.connection?.close();
@@ -200,7 +201,7 @@ export class HarnessProcess {
   }
 
   private agent() {
-    if (!this.connection) throw new Error(`The ${this.spec.label} agent is not running`);
+    if (!this.connection) throw new HostProblemError({ code: "agent-not-running", agent: this.spec.label });
     return this.connection.agent;
   }
 
@@ -215,7 +216,7 @@ export class HarnessProcess {
     } catch (error) {
       if (!connection?.signal.aborted) throw error;
       const reason = await Promise.race([this.exited, Bun.sleep(EXIT_WAIT_MS).then(() => null)]);
-      throw reason === null ? error : new Error(`The ${this.spec.label} agent process ${reason}.`);
+      throw reason === null ? error : new HostProblemError({ code: "agent-gone", agent: this.spec.label, gone: reason });
     }
   }
 
@@ -233,10 +234,10 @@ export class HarnessProcess {
     const [command, ...args] = this.spec.command;
     const child = spawnAgent(command!, args, this.spec.environment);
     this.child = child;
-    let exitedBecause = (_reason: string) => {};
+    let exitedBecause = (_reason: AgentGone) => {};
     this.exited = new Promise((resolve) => (exitedBecause = resolve));
     let gone = false;
-    const goneBecause = (reason: string) => {
+    const goneBecause = (reason: AgentGone) => {
       if (gone) return;
       gone = true;
       this.connection = undefined;
@@ -246,7 +247,7 @@ export class HarnessProcess {
       this.listener.onExit(this, reason);
       exitedBecause(reason);
     };
-    child.on("error", (error) => child.pid === undefined && goneBecause(`could not start: ${error.message}`));
+    child.on("error", (error) => child.pid === undefined && goneBecause({ kind: "could-not-start", cause: error.message }));
     const log = createWriteStream(this.logPath(), { flags: "a" });
     const stamped = timestampedLines();
     log.on("error", (error) => {
@@ -273,7 +274,7 @@ export class HarnessProcess {
       .connect(stream);
     this.connection = connection;
     child.once("exit", (code, signal) => {
-      goneBecause(this.stopReason ?? `exited with ${code ?? signal}`);
+      goneBecause(this.stopReason ?? { kind: "exited", how: String(code ?? signal) });
       setTimeout(() => connection.close(), LAST_OUTPUT_AFTER_EXIT_MS).unref();
     });
     return this.initialize();
@@ -282,7 +283,7 @@ export class HarnessProcess {
   /** An agent that never answers would hold up every later start of its kind, when they start one at a time. */
   private async initialize() {
     const givingUp = setTimeout(
-      () => void this.stop(`did not answer within ${this.initializeTimeoutMs / 1000} s of starting`),
+      () => void this.stop({ kind: "no-answer", seconds: this.initializeTimeoutMs / 1000 }),
       this.initializeTimeoutMs,
     );
     try {
@@ -321,7 +322,7 @@ export class HarnessProcess {
     const isGitBash = process.platform === "win32" && shell.kind === "posix";
     const log = isGitBash ? "ignore" : openSync(logPath, "a");
     const command = isGitBash ? withOutputAppendedTo(logPath, this.spec.prelaunch) : this.spec.prelaunch;
-    const outcome = await new Promise<string | null>((resolve) => {
+    const failure = await new Promise<PrelaunchFailure | null>((resolve) => {
       const [program, ...args] = commandLine(shell, command);
       const prelaunch = spawn(program!, args, {
         env: this.spec.environment,
@@ -329,18 +330,18 @@ export class HarnessProcess {
       });
       const timeout = setTimeout(() => {
         prelaunch.kill();
-        resolve(`timed out after ${PRELAUNCH_TIMEOUT_MS / 1000} s`);
+        resolve({ kind: "timed-out", seconds: PRELAUNCH_TIMEOUT_MS / 1000 });
       }, PRELAUNCH_TIMEOUT_MS);
-      prelaunch.once("error", (error) => resolve(error.message));
+      prelaunch.once("error", (error) => resolve({ kind: "could-not-run", cause: error.message }));
       prelaunch.once("exit", (code, signal) => {
         clearTimeout(timeout);
-        resolve(code === 0 ? null : `exited with ${code ?? signal}`);
+        resolve(code === 0 ? null : { kind: "exited", how: String(code ?? signal) });
       });
     });
     if (log !== "ignore") closeSync(log);
-    if (outcome === null) return;
+    if (failure === null) return;
     const output = readFileSync(logPath).subarray(logSizeBefore).toString().trim().slice(-PRELAUNCH_OUTPUT_IN_ERRORS);
-    throw new Error(`The pre-launch command of ${this.spec.label} ${outcome}${output ? `: ${output}` : ""}`);
+    throw new HostProblemError({ code: "prelaunch-failed", agent: this.spec.label, failure, output });
   }
 
   private logPath() {

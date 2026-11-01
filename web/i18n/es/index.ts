@@ -13,5 +13,6 @@ import { voice } from "./voice.ts";
 import { profiles } from "./profiles.ts";
 import { plugins } from "./plugins.ts";
 import { desktop } from "./desktop.ts";
+import { problems } from "./problems.ts";
 
-export const es: Messages = { hints, waitingHints, statusHints, labels, settings, chat, revert, dictation, shell, canvas, terminals, devices, voice, profiles, plugins, desktop };
+export const es: Messages = { hints, waitingHints, statusHints, labels, settings, chat, revert, dictation, shell, canvas, terminals, devices, voice, profiles, plugins, desktop, problems };

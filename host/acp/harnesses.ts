@@ -1,6 +1,7 @@
 import { RequestError } from "@agentclientprotocol/sdk";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
+import { HostProblemError } from "../../shared/host-problems.ts";
 import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile } from "../../shared/model.ts";
 import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
@@ -32,7 +33,7 @@ const findPi = (path = currentPath()) => Bun.which("pi", { PATH: path });
 
 function opencodeCommand(): string[] {
   const executable = findOpencode();
-  if (!executable) throw new Error("opencode is not installed: no opencode executable on PATH or in its usual install directories.");
+  if (!executable) throw new HostProblemError({ code: "opencode-not-installed" });
   return [executable, "acp"];
 }
 
@@ -139,7 +140,7 @@ export function launchEnvironment(harness: HarnessId, profile: Profile | null, c
   if (harness === "pi") return piAcpEnvironment(environment);
   if (environment.CLAUDE_CODE_EXECUTABLE) return environment;
   const program = findClaudeProgram(claudeProgramSetting, environment.PATH);
-  if (!program) throw new Error(claudeProgramMissing(claudeProgramSetting));
+  if (!program) throw new HostProblemError(claudeProgramMissing(claudeProgramSetting));
   return { ...environment, CLAUDE_CODE_EXECUTABLE: program };
 }
 
@@ -151,7 +152,7 @@ function piAcpEnvironment(profileEnvironment: Record<string, string>): Record<st
   const environment: Record<string, string> = { PI_ACP_QUIET_STARTUP: "true", ...profileEnvironment };
   if (environment.PI_ACP_PI_COMMAND) return environment;
   const program = findPi(environment.PATH);
-  if (!program) throw new Error("pi is not installed: no pi executable on PATH. Install it with npm install -g @earendil-works/pi-coding-agent.");
+  if (!program) throw new HostProblemError({ code: "pi-not-installed" });
   return { ...environment, PI_ACP_PI_COMMAND: program };
 }
 
@@ -159,7 +160,7 @@ export function profileEnvironment(profile: Profile | null): Record<string, stri
   if (!profile) return agentEnvironment(hostEnvironment());
   const environment = parseEnvironment(profile.environment);
   if (environment.errors.length > 0) {
-    throw new Error(`Profile "${profile.name}" has an invalid environment: ${environment.errors.join("; ")}`);
+    throw new HostProblemError({ code: "profile-environment-invalid", profile: profile.name, errors: environment.errors.join("; ") });
   }
   return applyEnvironment(agentEnvironment(hostEnvironment()), environment);
 }

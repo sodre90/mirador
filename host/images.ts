@@ -1,6 +1,7 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import type * as acp from "@agentclientprotocol/sdk";
+import { HostProblemError } from "../shared/host-problems.ts";
 import { extensionFor, isImageId, mimeTypeOf } from "../shared/images.ts";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
@@ -20,13 +21,13 @@ export class ImageStore {
   }
 
   file(conversationId: string, imageId: string) {
-    if (!isImageId(imageId)) throw new Error("That is not an image of this conversation.");
+    if (!isImageId(imageId)) throw new HostProblemError({ code: "not-an-image-of-conversation" });
     return Bun.file(join(this.folder(conversationId), imageId), { type: mimeTypeOf(imageId) });
   }
 
   async contentBlock(conversationId: string, imageId: string): Promise<acp.ContentBlock> {
     const file = this.file(conversationId, imageId);
-    if (!(await file.exists())) throw new Error("An image of this message is missing; paste it again.");
+    if (!(await file.exists())) throw new HostProblemError({ code: "image-missing" });
     return { type: "image", mimeType: mimeTypeOf(imageId), data: Buffer.from(await file.arrayBuffer()).toString("base64") };
   }
 
@@ -39,7 +40,7 @@ export class ImageStore {
   }
 
   private folder(conversationId: string) {
-    if (!/^[0-9a-f-]{36}$/.test(conversationId)) throw new Error("Unknown conversation.");
+    if (!/^[0-9a-f-]{36}$/.test(conversationId)) throw new HostProblemError({ code: "unknown-conversation" });
     return join(this.directory, conversationId);
   }
 }

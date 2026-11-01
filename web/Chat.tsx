@@ -100,6 +100,7 @@ import {
 } from "../shared/timeline.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { noticeText } from "./notice-text.ts";
+import { errorText } from "./problem-text.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import { formatClockTime, formatDuration, formatFullTime } from "./timestamps.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
@@ -995,15 +996,15 @@ function TimelineEntry({ block, conversationId, harness, canRewind }: { block: T
       if (block.authRequired && !block.signedInSince) {
         return (
           <div className="error-line sign-in-line">
-            <span>{block.message}</span>
+            <span>{errorText(block, t.problems)}</span>
             <button type="button" data-hint={hints.logIn} onClick={() => requestLogin(conversationId)}>
               {words.entry.logIn}
             </button>
           </div>
         );
       }
-      if (block.tryAgainSeq !== undefined) return <FailedTurnLine message={block.message} conversationId={conversationId} errorSeq={block.tryAgainSeq} />;
-      return <div className={block.usageLimit ? "usage-limit-line" : "error-line"}>{block.message}</div>;
+      if (block.tryAgainSeq !== undefined) return <FailedTurnLine message={errorText(block, t.problems)} conversationId={conversationId} errorSeq={block.tryAgainSeq} />;
+      return <div className={block.usageLimit ? "usage-limit-line" : "error-line"}>{errorText(block, t.problems)}</div>;
   }
 }
 

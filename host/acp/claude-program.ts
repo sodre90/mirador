@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import type { Subprocess } from "bun";
+import type { HostProblem } from "../../shared/host-problems.ts";
 import type { ClaudeProgram } from "../../shared/model.ts";
 import { currentPath } from "../current-path.ts";
 import { expandHome } from "../paths.ts";
@@ -16,10 +17,9 @@ export const claudeInstall = (platform = process.platform): Pick<ClaudeProgram, 
     ? { installFolders: "%USERPROFILE%\\.local\\bin", installCommand: "irm https://claude.ai/install.ps1 | iex" }
     : { installFolders: "~/.local/bin, /opt/homebrew/bin or /usr/local/bin", installCommand: "curl -fsSL https://claude.ai/install.sh | bash" };
 
-export function claudeProgramMissing(configured: string, platform = process.platform) {
-  if (configured) return `The Claude Code program set in Settings › Agents, ${configured}, does not exist or cannot run.`;
-  const { installFolders, installCommand } = claudeInstall(platform);
-  return `Claude Code is not installed: no claude on PATH or in ${installFolders}. Install it with \`${installCommand}\`, or set its path in Settings › Agents.`;
+export function claudeProgramMissing(configured: string, platform = process.platform): HostProblem {
+  if (configured) return { code: "claude-program-missing", program: configured };
+  return { code: "claude-not-installed", ...claudeInstall(platform) };
 }
 
 /** What Settings shows of the Claude Code the host runs. */

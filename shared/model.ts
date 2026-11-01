@@ -7,6 +7,7 @@ import type {
   ToolKind,
 } from "@agentclientprotocol/sdk";
 import type { ConversationReply, PluginItemPlacement } from "./canvas-plugins.ts";
+import type { HostProblem } from "./host-problems.ts";
 import type { EditDiff } from "./review.ts";
 import type { TerminalLayout } from "./terminal-layout.ts";
 
@@ -460,6 +461,8 @@ export interface Conversation {
   statusDetail: string | null;
   /** What the host is busy with while the conversation starts, for the page to say in its own language; statusDetail says it in English. */
   busyWith?: BusyWith;
+  /** The problem statusDetail tells in English, when the host described it, for the page to say in its own language. */
+  statusProblem?: HostProblem;
   openInTerminal: TerminalActivity | null;
   /** The agent's latest report of its context window; kept with the conversation, so it survives a host restart and empties when its context does. */
   contextUsage: ContextUsage | null;
@@ -566,7 +569,8 @@ export type ConversationEvent =
    * `continuable`: the error ended a turn after its message went to the agent, so the agent can continue from it.
    * `endsTurn`: the turn failed with it, where other errors come before a turn starts or beside one.
    */
-  | { type: "error"; message: string; usageLimit?: { resetsAt: number | null }; authRequired?: true; continuable?: true; endsTurn?: true }
+  /** `problem`: what the message says, when the host wrote it, for the page to say in its own language. */
+  | { type: "error"; message: string; problem?: HostProblem; usageLimit?: { resetsAt: number | null }; authRequired?: true; continuable?: true; endsTurn?: true }
   /** The agent's sign-in, started from the conversation in a terminal tab, ended. */
   | { type: "login-ended"; signedIn: boolean }
   | { type: "usage-limit-wait-stopped" }

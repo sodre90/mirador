@@ -13,6 +13,7 @@ import type {
   ToolKind,
 } from "@agentclientprotocol/sdk";
 import { hookNoticeIn } from "./hook-message.ts";
+import type { HostProblem } from "./host-problems.ts";
 import type { StoredEvent } from "./model.ts";
 import { englishNoticeText, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
@@ -182,7 +183,7 @@ export type TimelineBlock =
  * `authRequired` until a sign-in started from the conversation succeeds, then `signedInSince`.
  * `tryAgainSeq`: the error ended the latest turn, which the user can try again by naming this error.
  */
-type ErrorBlock = Origin & { kind: "error"; message: string; usageLimit?: true; authRequired?: true; signedInSince?: true; tryAgainSeq?: number };
+type ErrorBlock = Origin & { kind: "error"; message: string; problem?: HostProblem; usageLimit?: true; authRequired?: true; signedInSince?: true; tryAgainSeq?: number };
 
 /** A plugin is named by its title. */
 export type Author = "user" | "script" | "mirador" | "agent" | { plugin: string };
@@ -428,6 +429,7 @@ class TimelineBuilder {
           kind: "error",
           ...origin,
           message: event.message,
+          ...(event.problem && { problem: event.problem }),
           ...(event.usageLimit && { usageLimit: true as const }),
           ...(event.authRequired && { authRequired: true as const }),
         };

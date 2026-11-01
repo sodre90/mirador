@@ -1,4 +1,5 @@
 import type { HarnessId } from "./model.ts";
+import { englishProblem, type HostProblem } from "./host-problems.ts";
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
@@ -93,7 +94,10 @@ export const isUsageLimitError = (error: unknown, harness: HarnessId) => {
   return harness === "claude" && USAGE_LIMIT_OPENINGS.some((opening) => bannerOf(error).startsWith(opening));
 };
 
-/** Claude Code's own words for the limit, e.g. "You've hit your session limit · resets 6:20pm (Europe/Budapest)". */
-export function usageLimitMessage(error: unknown) {
-  return bannerOf(error) || "Claude's usage limit is reached.";
+/** Claude Code's own words for the limit, e.g. "You've hit your session limit · resets 6:20pm (Europe/Budapest)", or the host's when it gave none. */
+export function usageLimitMessage(error: unknown): { message: string; problem?: HostProblem } {
+  const banner = bannerOf(error);
+  if (banner) return { message: banner };
+  const problem: HostProblem = { code: "usage-limit-reached" };
+  return { message: englishProblem(problem), problem };
 }

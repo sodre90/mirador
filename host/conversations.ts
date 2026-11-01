@@ -36,6 +36,7 @@ import {
 } from "../shared/model.ts";
 import { chosenModel, offersValue } from "../shared/config-options.ts";
 import { MIN_SEARCH_LENGTH } from "../shared/find.ts";
+import { causeOf, englishProblem, HostProblemError, problemOf, type AgentGone, type HostProblem } from "../shared/host-problems.ts";
 import { messageAtEnd, type JobWaitRequest } from "../shared/job-waits.ts";
 import { panelCommandRun } from "../shared/panel-commands.ts";
 import { historyEntry } from "../shared/prompt-history.ts";
@@ -263,7 +264,7 @@ export class ConversationService {
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
   private readonly sessionsSlowToAnswer = new Set<string>();
   private readonly updatesForUnknownSessions = new UnknownSessionUpdates();
-  private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail" | "busyWith">>();
+  private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail" | "busyWith" | "statusProblem">>();
   private readonly terminalActivity = new Map<string, TerminalActivity>();
   private readonly terminalWork = new TerminalWork();
   private readonly catchingUpWithTerminal = new Set<string>();
@@ -718,7 +719,7 @@ export class ConversationService {
 
   async prompt(conversationId: string, text: string, { imageIds = [], fromScript = false, fromMirador = false, fromPlugin, startsTurn = false }: PromptStart = {}) {
     const runtime = this.runtime(conversationId);
-    if (runtime.running) throw new Error("The agent is still working on the previous message.");
+    if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
     runtime.running = true;
     this.announceRunningTurnsCount();
@@ -756,7 +757,7 @@ export class ConversationService {
         this.append(conversationId, { type: "turn-end", stopReason: "cancelled" });
         this.notifyTurnEnded(conversationId, { stopReason: "cancelled" });
       } else {
-        this.notifyTurnEnded(conversationId, { error: this.recordTurnFailure(conversationId, error, turn.promptSent !== undefined) });
+        this.notifyTurnEnded(conversationId, this.recordTurnFailure(conversationId, error, turn.promptSent !== undefined));
       }
     } finally {
       this.showHeldBackReply(conversationId);
@@ -1202,7 +1203,7 @@ export class ConversationService {
   private async forceCancel(conversationId: string): Promise<void> {
     const harness = this.runtime(conversationId).harness;
     if (!harness) return this.cancel(conversationId);
-    const stopped = await this.killAgent(harness, "was force stopped");
+    const stopped = await this.killAgent(harness, { kind: "force-stopped" });
     this.continueStoppedTurns(stopped.filter((turn) => turn.conversationId !== conversationId));
   }
 
@@ -1210,7 +1211,7 @@ export class ConversationService {
    * Every turn the kill ends is the host's doing rather than the agent's failure, so each ends the way a stop ends it.
    * Returns those turns once they all have ended.
    */
-  private async killAgent(harness: HarnessProcess, reason: string): Promise<StoppedTurn[]> {
+  private async killAgent(harness: HarnessProcess, reason: AgentGone): Promise<StoppedTurn[]> {
     const running = [...this.runtimes].filter(([, runtime]) => runtime.harness === harness && runtime.running);
     running.forEach(([, runtime]) => (runtime.killedOnPurpose = true));
     const stopped = running.map(([conversationId]) => ({ conversationId, sessionId: this.get(conversationId).acpSessionId }));
@@ -1298,7 +1299,7 @@ export class ConversationService {
     const harness = this.harnessesByProfile.get(profileId);
     this.harnessesByProfile.delete(profileId);
     if (!harness) return;
-    void this.killAgent(harness, "was restarted because its profile changed").then((stopped) => {
+    void this.killAgent(harness, { kind: "restarted-for-profile" }).then((stopped) => {
       if (this.store.findProfile(profileId)) this.continueStoppedTurns(stopped);
     });
   }
@@ -1309,7 +1310,7 @@ export class ConversationService {
       .filter(([profileId]) => this.store.findProfile(profileId)?.harness === "claude")
       .forEach(([profileId, harness]) => {
         this.harnessesByProfile.delete(profileId);
-        void this.killAgent(harness, "was restarted because the Claude Code program changed").then((stopped) => this.continueStoppedTurns(stopped));
+        void this.killAgent(harness, { kind: "restarted-for-claude-program" }).then((stopped) => this.continueStoppedTurns(stopped));
       });
   }
 
@@ -1351,7 +1352,7 @@ export class ConversationService {
     const opening: Promise<string> = open().catch((error) => {
       if (runtime.sessionId && runtime.sessionId !== opening) throw error;
       runtime.sessionId = undefined;
-      this.setStatus(conversationId, "error", errorMessage(error));
+      this.setStatus(conversationId, "error", errorMessage(error), problemOf(error).problem);
       throw error;
     });
     runtime.sessionId = opening;
@@ -1431,10 +1432,7 @@ export class ConversationService {
         return conversation.acpSessionId;
       } catch (error) {
         this.closeSessionIfConversationDeleted(conversationId, harness, conversation.acpSessionId);
-        this.append(conversationId, {
-          type: "error",
-          message: `Could not resume the previous agent session (${errorMessage(error)}); starting a fresh one.`,
-        });
+        this.append(conversationId, problemEvent({ code: "could-not-resume", ...causeOf(error, errorMessage(error)) }));
       }
     }
 
@@ -1453,7 +1451,7 @@ export class ConversationService {
   private closeSessionIfConversationDeleted(conversationId: string, harness: HarnessProcess, sessionId: string) {
     if (this.store.findConversation(conversationId)) return;
     harness.closeSession(sessionId).catch(() => {});
-    throw new Error("The conversation was deleted while its agent session opened.");
+    throw new HostProblemError({ code: "conversation-deleted-while-opening" });
   }
 
   /** Replayed history arrives as session updates before the load request returns, so the session is bound first. */
@@ -1462,8 +1460,8 @@ export class ConversationService {
     const harness = this.harnessFor(conversation);
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
-    if (!capabilities.agentCapabilities?.loadSession) throw new Error(`${harness.spec.label} cannot load existing sessions.`);
-    if (mode === "fork" && !capabilities.agentCapabilities.sessionCapabilities?.fork) throw new Error(`${harness.spec.label} cannot fork sessions.`);
+    if (!capabilities.agentCapabilities?.loadSession) throw new HostProblemError({ code: "agent-cannot-load-sessions", agent: harness.spec.label });
+    if (mode === "fork" && !capabilities.agentCapabilities.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-fork-sessions", agent: harness.spec.label });
     this.setBusy(conversationId, "loading-history");
     const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
     const loadedId = mode === "fork" ? (await harness.forkSession({ sessionId, cwd: sessionRequest.cwd })).sessionId : sessionId;
@@ -1487,7 +1485,7 @@ export class ConversationService {
     const harness = this.harnessFor(conversation);
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
-    if (!capabilities.agentCapabilities?.loadSession) throw new Error(`${harness.spec.label} cannot load existing sessions.`);
+    if (!capabilities.agentCapabilities?.loadSession) throw new HostProblemError({ code: "agent-cannot-load-sessions", agent: harness.spec.label });
     this.setBusy(conversationId, "reading-terminal-turns");
     const workspace = this.existingWorkspace(conversation.workspaceId);
     const replay: acp.SessionNotification[] = [];
@@ -1519,7 +1517,7 @@ export class ConversationService {
 
   private existingWorkspace(workspaceId: string) {
     const workspace = this.store.findWorkspace(workspaceId);
-    if (!workspace) throw new Error("The workspace no longer exists.");
+    if (!workspace) throw new HostProblemError({ code: "workspace-gone" });
     return workspace;
   }
 
@@ -1583,17 +1581,17 @@ export class ConversationService {
         if (this.isOnSession(conversationId, sessionId)) this.save({ ...this.get(conversationId), configOptions: response.configOptions });
       },
       (error) => {
-        if (this.isOnSession(conversationId, sessionId)) this.append(conversationId, { type: "error", message: `Could not set ${current.name} to ${value}: ${errorMessage(error)}` });
+        if (this.isOnSession(conversationId, sessionId)) this.append(conversationId, problemEvent({ code: "could-not-set-option", option: current.name, value: String(value), ...causeOf(error, errorMessage(error)) }));
       },
     );
     if (this.sessionsSlowToAnswer.has(sessionId)) return;
     const answeredInTime = await Promise.race([answered.then(() => true), Bun.sleep(OPTION_ANSWER_TIMEOUT_MS).then(() => false)]);
     if (answeredInTime) return;
     this.sessionsSlowToAnswer.add(sessionId);
-    this.append(conversationId, {
-      type: "error",
-      message: `${current.name} is still ${current.currentValue}: the agent has not answered the change to ${value} for ${OPTION_ANSWER_TIMEOUT_MS / 1000} seconds. It changes once the agent answers.`,
-    });
+    this.append(
+      conversationId,
+      problemEvent({ code: "option-change-unanswered", option: current.name, current: String(current.currentValue), value: String(value), seconds: OPTION_ANSWER_TIMEOUT_MS / 1000 }),
+    );
   }
 
   /** The conversation whose agent runs a session, or one of its subagents. */
@@ -1651,7 +1649,7 @@ export class ConversationService {
 
   private profileOf({ profileId }: { profileId: string | null }) {
     const profile = profileId === null ? undefined : this.store.findProfile(profileId);
-    if (!profile) throw new Error("This conversation has no profile, or its profile was deleted. Pick a profile at the top of the conversation.");
+    if (!profile) throw new HostProblemError({ code: "conversation-has-no-profile" });
     return profile;
   }
 
@@ -1981,19 +1979,20 @@ export class ConversationService {
     return null;
   }
 
-  /** Returns the failure's message. A turn Claude's usage limit stopped holds the queue until the limit resets. */
-  private recordTurnFailure(conversationId: string, error: unknown, promptSent: boolean) {
+  /** Returns the failure, as a notification tells it. A turn Claude's usage limit stopped holds the queue until the limit resets. */
+  private recordTurnFailure(conversationId: string, error: unknown, promptSent: boolean): Extract<TurnOutcome, { error: string }> {
     const continuable = promptSent && { continuable: true as const };
     const conversation = this.store.findConversation(conversationId);
     if (!conversation || !isUsageLimitError(error, conversation.harness)) {
-      this.append(conversationId, { type: "error", message: errorMessage(error), ...continuable, ...(isAuthRequiredError(error) && { authRequired: true as const }), endsTurn: true });
-      return errorMessage(error);
+      const failure = { message: errorMessage(error), ...problemOf(error) };
+      this.append(conversationId, { type: "error", ...failure, ...continuable, ...(isAuthRequiredError(error) && { authRequired: true as const }), endsTurn: true });
+      return { error: failure.message, ...problemOf(error) };
     }
-    const message = usageLimitMessage(error);
-    const resetsAt = usageLimitResetIn(message);
-    this.append(conversationId, { type: "error", message, usageLimit: { resetsAt }, ...continuable, endsTurn: true });
+    const limit = usageLimitMessage(error);
+    const resetsAt = usageLimitResetIn(limit.message);
+    this.append(conversationId, { type: "error", ...limit, usageLimit: { resetsAt }, ...continuable, endsTurn: true });
     this.waitForUsageLimitReset(conversationId, resetsAt);
-    return message;
+    return { error: limit.message, ...(limit.problem && { problem: limit.problem }) };
   }
 
   private waitForUsageLimitReset(conversationId: string, resetsAt: number | null) {
@@ -2143,9 +2142,9 @@ export class ConversationService {
     return oldestPermission?.request ?? this.asksWaitedOn.get(conversationId) ?? null;
   }
 
-  private setStatus(conversationId: string, status: ConversationStatus, statusDetail: string | null = null) {
+  private setStatus(conversationId: string, status: ConversationStatus, statusDetail: string | null = null, statusProblem?: HostProblem) {
     if (!this.store.hasConversation(conversationId)) return;
-    this.statusOverrides.set(conversationId, { status, statusDetail });
+    this.statusOverrides.set(conversationId, { status, statusDetail, ...(statusProblem && { statusProblem }) });
     this.publish(this.get(conversationId));
   }
 
@@ -2373,6 +2372,9 @@ const externalSession = (
   updatedAt: updatedAt ?? null,
   conversationId: conversationIdBySession.get(sessionId) ?? null,
 });
+
+/** An error event the host writes itself: in English, and as the problem for the page to translate. */
+const problemEvent = (problem: HostProblem) => ({ type: "error" as const, message: englishProblem(problem), problem });
 
 export function errorMessage(error: unknown): string {
   if (typeof error !== "object" || error === null) return String(error);

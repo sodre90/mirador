@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HarnessProcess, type HarnessSpec } from "../host/acp/harness.ts";
+import { englishAgentGone } from "../shared/host-problems.ts";
 
 const silentAgent = `process.stdin.resume();`;
 
@@ -24,7 +25,7 @@ function harnessRunning(agentSource: string, { initializeTimeoutMs = 10_000, ...
   const exits: string[] = [];
   const harness = new HarnessProcess(
     { id: "opencode", label: "Test", logName: "test", command: [process.execPath, script], environment: {}, prelaunch: "", startsOneAtATime: false, ...spec },
-    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: (_harness, reason) => void exits.push(reason) },
+    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: (_harness, reason) => void exits.push(englishAgentGone(reason)) },
     directory,
     initializeTimeoutMs,
   );

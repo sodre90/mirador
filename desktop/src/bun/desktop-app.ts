@@ -12,7 +12,7 @@ import type { SelfUpdate, UpdateOffer } from "../core/self-update.ts";
 import { platformServices } from "../core/platform-services.ts";
 import { PidFileOnDisk, systemProcesses } from "../core/processes.ts";
 import { authUrl, hostEnvironmentOverrides, type DataPaths, type Runtime } from "../core/runtime.ts";
-import { desktopWords } from "../core/desktop-words.ts";
+import { desktopWords, notificationWords } from "../core/desktop-words.ts";
 import type { SettingsStore } from "../core/settings.ts";
 import { restartDetail, type TrayAction, type TrayState } from "../core/tray-menu.ts";
 import { hostRunsReplacedFiles, markUpdatePending, takePendingUpdate, updateRestartStopsTheHost } from "../core/update-checks.ts";
@@ -33,6 +33,7 @@ import { showApplicationMenu } from "./app-menu.ts";
 import { AppTray } from "./app-tray.ts";
 import { selfUpdateFromReleases } from "./app-updates.ts";
 import { setDockIconVisible } from "./dock.ts";
+import { ItemWindows } from "./item-windows.ts";
 import { MainWindow } from "./main-window.ts";
 
 const STATUS_POLL_MILLISECONDS = 10_000;
@@ -56,6 +57,7 @@ export class DesktopApp {
   private readonly supervisor: HostSupervisor;
   private readonly openAtLogin: LoginItem;
   private readonly window: MainWindow;
+  private readonly itemWindows: ItemWindows;
   private readonly tray: AppTray;
   private readonly notifications: HostNotifications;
   private status: TrayState["status"] = "starting";
@@ -97,18 +99,20 @@ export class DesktopApp {
       background,
       pause: Bun.sleep,
     });
-    this.window = new MainWindow(
-      environment.appName,
+    const framedOrigins = [runtime.canvasOrigin, ...runtime.relayOrigins];
+    this.itemWindows = new ItemWindows(
       runtime.origin,
-      [runtime.canvasOrigin, ...runtime.relayOrigins],
-      (detail) => this.answerPage(detail),
-      paths.windowFrame,
+      framedOrigins,
+      this.pageNonce,
+      (route) => `${authUrl(runtime, this.browserToken())}${route}`,
+      () => setDockIconVisible(this.window.isOpen),
     );
+    this.window = new MainWindow(environment.appName, runtime.origin, framedOrigins, (detail) => this.answerPage(detail), paths.windowFrame, () => this.itemWindows.anyOpen);
     this.tray = new AppTray(environment.appName, (action, conversationId) => void this.handle(action, conversationId));
     this.notifications = new HostNotifications({
       origin: runtime.origin,
       token: () => this.browserTokenOnceWritten(),
-      show: (notification) => Utils.showNotification(nativeNotification(inLanguage(notification, this.words()), process.platform)),
+      show: (notification) => Utils.showNotification(nativeNotification(inLanguage(notification, notificationWords(this.environment.settings.current().language)), process.platform)),
       showWaiting: (waiting) => {
         this.tray.showWaiting(waiting);
         this.waiting = waiting.conversations;
@@ -180,6 +184,7 @@ export class DesktopApp {
   }
 
   closeWhatHasFocus() {
+    if (this.itemWindows.closeFocused()) return;
     this.window.runInPage(closeWhatHasFocusScript);
   }
 
@@ -349,6 +354,7 @@ export class DesktopApp {
     if (request?.type === "language") this.takeLanguage(request.language);
     if (request?.type === "action" && pageMayRun(request.action, showsMenuInWindow)) void this.handle(request.action);
     if (request?.type === "menu") this.showMenuInWindow();
+    if (request?.type === "open-item-window") this.itemWindows.open(request.route);
   }
 
   private async report(error: unknown) {

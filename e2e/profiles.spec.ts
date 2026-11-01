@@ -106,6 +106,11 @@ test("a failing pre-launch command is reported with its output", async ({ page }
     { timeout: 30_000 },
   );
   expect(existsSync(prelaunchMarker)).toBe(true);
+
+  await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+  await page.reload();
+  await expect(page.locator(".chat-header:visible .status-detail")).toHaveText("Az indítás előtti parancs (Claude Code (broken proxy)) kilépett (3): proxy binary missing");
+  await page.evaluate(() => localStorage.removeItem("mirador-language"));
 });
 
 test("a conversation moves to another profile of its agent and continues the same session there", async ({ page }) => {

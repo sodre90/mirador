@@ -52,7 +52,7 @@ export async function setNotificationsWanted(wanted: boolean) {
 function show(received: SystemNotification, open: OpenConversation) {
   refresh();
   if (!notifies(setting)) return;
-  const notification = inLanguage(received, t.desktop);
+  const notification = inLanguage(received, t);
   const shown = new Notification(notification.title, { body: bodyWithWorkspace(notification), tag: notification.conversationId ?? "about-this-machine" });
   shown.onclick = () => {
     window.focus();

@@ -29,8 +29,8 @@ describe("a usage limit's reset", () => {
 
   test("comes with the rate_limit error kind, in Claude Code's own words", () => {
     const limited = { message: "Internal error: You've hit your session limit · resets 6:20pm (Europe/Budapest)", data: { errorKind: "rate_limit" } };
-    expect(usageLimitMessage(limited)).toBe("You've hit your session limit · resets 6:20pm (Europe/Budapest)");
-    expect(usageLimitMessage({ message: "Internal error", data: { errorKind: "rate_limit" } })).toBe("Claude's usage limit is reached.");
+    expect(usageLimitMessage(limited)).toEqual({ message: "You've hit your session limit · resets 6:20pm (Europe/Budapest)" });
+    expect(usageLimitMessage({ message: "Internal error", data: { errorKind: "rate_limit" } })).toEqual({ message: "Claude's usage limit is reached.", problem: { code: "usage-limit-reached" } });
     expect(isUsageLimitError({ message: "Internal error", data: { errorKind: "rate_limit" } }, "claude")).toBe(true);
     expect(isUsageLimitError({ message: "Internal error", data: { errorKind: "overloaded" } }, "claude")).toBe(false);
     expect(isUsageLimitError(new Error("rate_limit"), "claude")).toBe(false);
@@ -39,7 +39,7 @@ describe("a usage limit's reset", () => {
   test("is still one when claude-agent-acp drops the rate_limit tag, which it does when the turn also compacted", () => {
     const untagged = { message: "Internal error: You've hit your session limit · resets 11:20pm (Europe/Budapest)" };
     expect(isUsageLimitError(untagged, "claude")).toBe(true);
-    expect(usageLimitMessage(untagged)).toBe("You've hit your session limit · resets 11:20pm (Europe/Budapest)");
+    expect(usageLimitMessage(untagged)).toEqual({ message: "You've hit your session limit · resets 11:20pm (Europe/Budapest)" });
     expect(isUsageLimitError({ message: "Internal error: You're out of usage credits. Run /usage-credits to buy more." }, "claude")).toBe(true);
     expect(isUsageLimitError({ message: "Internal error: Upstream error: 502 Bad Gateway" }, "claude")).toBe(false);
     expect(isUsageLimitError({ message: "Internal error" }, "claude")).toBe(false);

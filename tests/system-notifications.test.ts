@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { desktopWords } from "../desktop/src/core/desktop-words.ts";
+import { notificationWords } from "../desktop/src/core/desktop-words.ts";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { bodyWithWorkspace, joinRequestNotification, systemNotification, turnEndReason, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
@@ -143,21 +143,28 @@ test("a device asking to join says where it asks from, and who it is signed in t
 });
 
 describe("a notification in the page's or the desktop app's language", () => {
-  const hungarian = desktopWords("hu");
+  const hungarian = notificationWords("hu");
   test("says why the conversation needs you, and names an untitled one by the default name", () => {
     const untitled = systemNotification({ ...conversation, title: "New conversation" }, "mirador", { kind: "permission", tool: null });
     expect(inLanguage(untitled, hungarian)).toMatchObject({ title: "Új beszélgetés", workspace: "mirador", body: "Engedélyt kér: egy eszköz" });
     expect(inLanguage(systemNotification(conversation, "mirador", { kind: "finished" }), hungarian)).toMatchObject({ title: "Fix the tray menu", body: "Kész, rád vár" });
   });
 
+  test("says an error the host described in that language, and one from the agent as it came", () => {
+    const described = systemNotification(conversation, "mirador", { kind: "error", message: "The workspace no longer exists.", problem: { code: "workspace-gone" } });
+    expect(inLanguage(described, hungarian).body).toBe("Hibával leállt: A munkaterület már nem létezik.");
+    expect(inLanguage(systemNotification(conversation, "mirador", { kind: "error", message: "Overloaded" }), hungarian).body).toBe("Hibával leállt: Overloaded");
+  });
+
   test("in English, it says what the host wrote", () => {
-    const english = desktopWords("en");
+    const english = notificationWords("en");
     const reasons: NotificationReason[] = [
       { kind: "question", question: `Line one\n${"x".repeat(300)}` },
       { kind: "permission", tool: "bun run test" },
       { kind: "permission", tool: null },
       { kind: "finished" },
       { kind: "error", message: "exited" },
+      { kind: "error", message: "The workspace no longer exists.", problem: { code: "workspace-gone" } },
       { kind: "job-ended", message: "The build ended" },
     ];
     for (const reason of reasons) {

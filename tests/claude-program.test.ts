@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { claudeProgramLookUps, claudeProgramMissing, claudeProgramReport, findClaudeProgram, versionOf } from "../host/acp/claude-program.ts";
 import { launchEnvironment } from "../host/acp/harnesses.ts";
 import { claudeConfigDir } from "../host/terminal-sessions.ts";
+import { englishProblem } from "../shared/host-problems.ts";
 import type { ClaudeProgram, Profile } from "../shared/model.ts";
 import { fakeProgram } from "./fake-program.ts";
 
@@ -131,10 +132,10 @@ test("Claude Code's agent is told which program to run, a profile may name its o
 });
 
 test("without Claude Code, the host names the folders it looked in and the install command for its own platform", () => {
-  expect(claudeProgramMissing("", "darwin")).toBe(
+  expect(englishProblem(claudeProgramMissing("", "darwin"))).toBe(
     "Claude Code is not installed: no claude on PATH or in ~/.local/bin, /opt/homebrew/bin or /usr/local/bin. Install it with `curl -fsSL https://claude.ai/install.sh | bash`, or set its path in Settings › Agents.",
   );
-  expect(claudeProgramMissing("", "win32")).toBe(
+  expect(englishProblem(claudeProgramMissing("", "win32"))).toBe(
     "Claude Code is not installed: no claude on PATH or in %USERPROFILE%\\.local\\bin. Install it with `irm https://claude.ai/install.ps1 | iex`, or set its path in Settings › Agents.",
   );
   expect(claudeProgramReport("", null, null)).toMatchObject({ installCommand: process.platform === "win32" ? "irm https://claude.ai/install.ps1 | iex" : "curl -fsSL https://claude.ai/install.sh | bash" });
