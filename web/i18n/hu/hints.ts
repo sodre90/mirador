@@ -306,6 +306,7 @@ export const hints: Messages["hints"] = {
   canvasNewer: "A vászon következő elemének megjelenítése.",
   canvasHistory: "Minden, amit az ágens ebben a beszélgetésben rajzolt vagy kérdezett, a legújabbal kezdve.",
   canvasClear: "A vászon kiürítése. Semmi sem törlődik: az elem az Előzményekben marad.",
+  canvasOpenInWindow: "Az elem megjelenítése egy saját, mindig naprakész ablakban, például egy második képernyőn. Ha újra megnyitod, az ablak előre jön.",
   canvasMore: "A sáv további gombjai, amelyeknek egy keskeny panelen nincs hely, és a munkaterület más beszélgetései által használt alkalmazások, hogy itt is megjelenjenek.",
   canvasPageExport: "Az oldal másolása képként vagy HTML-ként, megkérni az ágenst, hogy írja meg Markdownként, vagy mentés külön fájlba.",
   canvasPoint:

@@ -54,8 +54,13 @@ export const canvas: Messages["canvas"] = {
     more: "Továbbiak",
     moreMenu: "A vászonsáv további gombjai",
     hide: "Elrejtés",
+    openInWindow: "Megnyitás külön ablakban",
     emptyFirst: "Ha az ágens mutat valamit, vagy választást kér tőled, itt jelenik meg.",
     empty: "Most nincs semmi a vásznon. A korábbi rajzok és kérdések az Előzményekben vannak.",
+  },
+  itemWindow: {
+    loading: "Betöltés…",
+    gone: "Ez az elem már nincs a vásznon: elvetették, vagy törölték a beszélgetését.",
   },
   checklist: {
     agentsPlan: "Az ágens terve",

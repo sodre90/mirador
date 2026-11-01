@@ -48,7 +48,7 @@ import { idBelowGroup, landingBefore } from "./workspace-groups.ts";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
 
-function useConnectionStatus() {
+export function useConnectionStatus() {
   const [status, setStatus] = useState<ConnectionStatus>(connection.status);
   useEffect(() => connection.onStatus(setStatus), []);
   return status;
@@ -57,7 +57,7 @@ function useConnectionStatus() {
 const restartHost = () => connection.send({ type: "host.restart" });
 
 /** A restarted host may speak a newer protocol and serves newer UI code, so the page loads again from it. */
-function useReloadWhenHostRestarted(hostRunId: string | null) {
+export function useReloadWhenHostRestarted(hostRunId: string | null) {
   const loadedFrom = useRef(hostRunId);
   useEffect(() => {
     loadedFrom.current ??= hostRunId;
@@ -65,7 +65,7 @@ function useReloadWhenHostRestarted(hostRunId: string | null) {
   }, [hostRunId]);
 }
 
-function HostBanner({ status, state }: { status: ConnectionStatus; state: AppState }) {
+export function HostBanner({ status, state }: { status: ConnectionStatus; state: AppState }) {
   if (state.hostRestarting) return <div className="banner">{t.shell.app.restartingHost}</div>;
   if (status !== "open") return <div className="banner">{status === "connecting" ? t.shell.app.connecting : t.shell.app.reconnecting}</div>;
   if (!state.hostCodeChanged) return null;

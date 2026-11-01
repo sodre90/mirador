@@ -40,6 +40,7 @@ These terms stay the same everywhere:
 | Changes (canvas) | Változások | Cambios | 更改 |
 | Point and ask | Mutass és kérdezz | Señala y pregunta | 指着问 |
 | Dismiss | Elvetés | Descartar | 忽略 |
+| window (of its own) | ablak | ventana | 窗口 |
 | Settings | Beállítások | Configuración | 设置 |
 | Add / Remove / Delete | Hozzáadás / Eltávolítás / Törlés | Agregar / Quitar / Eliminar | 添加 / 移除 / 删除 |
 | uncommitted | nem commitolt | sin confirmar | 未提交 |

@@ -36,13 +36,14 @@ const host: CanvasHost<BoardData> = {
       },
     },
     change_card: {
-      description: "Change the text of the newest card.",
+      description: "Change the text of the newest card, and its title if given.",
       onDemand: true,
-      input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
+      input: { type: "object", properties: { text: { type: "string" }, title: { type: "string" } }, required: ["text"] },
       run(input, context) {
         const card = newest(context, "card");
         if (!card) throw new Error("There is no card to change; show one with show_card.");
-        context.change(card.id, { data: { ...(card.data as Card), text: (input as { text: string }).text } });
+        const { text, title } = input as { text: string; title?: string };
+        context.change(card.id, { ...(title && { title }), data: { ...(card.data as Card), text } });
         return "Changed.";
       },
     },

@@ -54,8 +54,13 @@ export const canvas: Messages["canvas"] = {
     more: "更多",
     moreMenu: "画布栏的更多选项",
     hide: "隐藏",
+    openInWindow: "在单独的窗口中打开",
     emptyFirst: "智能体展示内容或请你做选择时，会出现在这里。",
     empty: "画布上暂时没有内容。之前的绘图和问题在“历史”中。",
+  },
+  itemWindow: {
+    loading: "正在加载…",
+    gone: "此项目已不在画布上：它已被忽略，或其对话已被删除。",
   },
   checklist: {
     agentsPlan: "智能体的计划",

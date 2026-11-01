@@ -284,6 +284,7 @@ export const hints = {
   canvasNewer: "Show the next canvas item.",
   canvasHistory: "Everything the agent drew or asked in this conversation, newest first.",
   canvasClear: "Empty the canvas. Nothing is deleted: the item stays in History.",
+  canvasOpenInWindow: "Show this item in a window of its own that stays up to date, say on a second screen. Opening it again brings that window forward.",
   canvasMore: "The bar's other buttons, which a narrow pane has no room for, and the apps other conversations of this workspace use, to show here too.",
   canvasPageExport: "Copy this page as an image or as HTML, ask the agent to write it as Markdown, or save it as a file of its own.",
   canvasPoint:

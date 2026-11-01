@@ -316,6 +316,7 @@ export const hints: Messages["hints"] = {
   canvasNewer: "Muestra el elemento siguiente del lienzo.",
   canvasHistory: "Todo lo que el agente dibujó o preguntó en esta conversación, lo más reciente primero.",
   canvasClear: "Vacía el lienzo. No se elimina nada: el elemento se queda en el Historial.",
+  canvasOpenInWindow: "Muestra este elemento en una ventana propia que se mantiene al día, por ejemplo en una segunda pantalla. Abrirlo de nuevo trae esa ventana al frente.",
   canvasMore:
     "Los otros botones de la barra, para los que un panel estrecho no tiene espacio, y las aplicaciones que usan otras conversaciones de este espacio de trabajo, para mostrarlas también aquí.",
   canvasPageExport: "Copia esta página como imagen o como HTML, pide al agente que la escriba como Markdown, o guárdala como un archivo aparte.",

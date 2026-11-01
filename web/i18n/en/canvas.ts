@@ -57,8 +57,13 @@ export const canvas = {
     more: "More",
     moreMenu: "More of the canvas bar",
     hide: "Hide",
+    openInWindow: "Open in its own window",
     emptyFirst: "When the agent shows something or asks you to choose, it appears here.",
     empty: "Nothing on the canvas right now. Earlier drawings and questions are in History.",
+  },
+  itemWindow: {
+    loading: "Loading…",
+    gone: "This item is no longer on the canvas: it was dismissed, or its conversation was deleted.",
   },
   checklist: {
     agentsPlan: "Agent's plan",

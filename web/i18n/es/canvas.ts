@@ -56,8 +56,13 @@ export const canvas: Messages["canvas"] = {
     more: "Más",
     moreMenu: "Más opciones de la barra del lienzo",
     hide: "Ocultar",
+    openInWindow: "Abrir en su propia ventana",
     emptyFirst: "Cuando el agente muestre algo o te pida elegir, aparecerá aquí.",
     empty: "No hay nada en el lienzo ahora mismo. Los dibujos y preguntas anteriores están en el Historial.",
+  },
+  itemWindow: {
+    loading: "Cargando…",
+    gone: "Este elemento ya no está en el lienzo: se descartó o se eliminó su conversación.",
   },
   checklist: {
     agentsPlan: "Plan del agente",

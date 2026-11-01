@@ -10,6 +10,7 @@ import {
   type DesktopUpdate,
 } from "../../../shared/desktop-menu.ts";
 import { isLanguage, type Language } from "../../../shared/i18n/languages.ts";
+import type { ItemWindowRoute } from "../../../shared/item-window.ts";
 import { webUrl } from "./navigation.ts";
 import type { UpdateOffer } from "./self-update.ts";
 import { isTrayAction, trayMenu, type TrayAction, type TrayState } from "./tray-menu.ts";
@@ -43,6 +44,8 @@ export const closeWhatHasFocusScript = `window.dispatchEvent(new CustomEvent(${J
 /** Where the window shows the tray's menu (Linux) the page runs any of its actions; elsewhere only those of its update banner. */
 export const pageMayRun = (action: TrayAction, menuInWindow: boolean) => menuInWindow || action === "install-update" || action === "check-for-update";
 
+const isId = (value: unknown): value is string => typeof value === "string" && value.length > 0;
+
 export type PageRequest =
   | { type: "menu" }
   | { type: "nonce" }
@@ -50,7 +53,9 @@ export type PageRequest =
   | { type: "open-link"; url: string }
   | { type: "close-window" }
   | { type: "appearance"; appearance: DesktopAppearance }
-  | { type: "language"; language: Language };
+  | { type: "language"; language: Language }
+  | { type: "open-item-window"; route: ItemWindowRoute }
+  | { type: "window-title"; title: string };
 
 /**
  * Any frame in the window can post to the app, the agents' canvas pages included; only the page the app handed the
@@ -66,6 +71,10 @@ export function pageRequest(detail: unknown, nonce: string): PageRequest | null 
   if (message.type === "desktop-close-window") return { type: "close-window" };
   if (message.type === "desktop-appearance" && isDesktopAppearance(message.appearance)) return { type: "appearance", appearance: message.appearance };
   if (message.type === "desktop-language" && isLanguage(message.language)) return { type: "language", language: message.language };
+  if (message.type === "desktop-open-item-window" && isId(message.conversationId) && isId(message.itemId)) {
+    return { type: "open-item-window", route: { conversationId: message.conversationId, itemId: message.itemId } };
+  }
+  if (message.type === "desktop-window-title" && typeof message.title === "string") return { type: "window-title", title: message.title };
   const url = message.type === "desktop-open-link" ? webUrl(message.url) : null;
   return url ? { type: "open-link", url } : null;
 }

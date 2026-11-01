@@ -28,6 +28,8 @@ export class MainWindow {
     private readonly framedOrigins: string[],
     private readonly onPageMessage: (detail: unknown) => void,
     private readonly frameFile: string,
+    /** Windows of the app's other than this one, which keep the Dock icon while they are open. */
+    private readonly otherWindowsOpen: () => boolean,
   ) {
     this.frameKeeper = new WindowFrameKeeper(frameFile);
     Electrobun.events.on("before-quit", () => this.frameKeeper.flush());
@@ -56,7 +58,7 @@ export class MainWindow {
     window.on("close", () => {
       this.frameKeeper.flush();
       this.window = null;
-      setDockIconVisible(false);
+      setDockIconVisible(this.otherWindowsOpen());
     });
     // Blocked navigations and new windows are not opened in the browser: any frame can cause or forge those events, the
     // agents' canvas pages included. The app's own page asks for its links with the nonce instead (web/outside-links.ts).

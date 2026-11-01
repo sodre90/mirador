@@ -96,6 +96,17 @@ describe("menu in the window", () => {
     expect(pageRequest({ type: "desktop-close-window" }, "n-1")).toBeNull();
   });
 
+  test("opens an item in a window of its own, and names that window, only when asked with the nonce", () => {
+    const opening = { type: "desktop-open-item-window", nonce: "n-1", conversationId: "c-1", itemId: "i-1" };
+    expect(pageRequest(opening, "n-1")).toEqual({ type: "open-item-window", route: { conversationId: "c-1", itemId: "i-1" } });
+    expect(pageRequest({ ...opening, nonce: "guess" }, "n-1")).toBeNull();
+    expect(pageRequest({ ...opening, itemId: "" }, "n-1")).toBeNull();
+    expect(pageRequest({ ...opening, conversationId: 7 }, "n-1")).toBeNull();
+    expect(pageRequest({ type: "desktop-window-title", nonce: "n-1", title: "Mirador: Review" }, "n-1")).toEqual({ type: "window-title", title: "Mirador: Review" });
+    expect(pageRequest({ type: "desktop-window-title", nonce: "guess", title: "Mirador: Review" }, "n-1")).toBeNull();
+    expect(pageRequest({ type: "desktop-window-title", nonce: "n-1" }, "n-1")).toBeNull();
+  });
+
   test("opens a link only when the request carries the nonce and the link is a web address", () => {
     const link = { type: "desktop-open-link", nonce: "n-1", url: "https://example.com/a" };
     expect(pageRequest(link, "n-1")).toEqual({ type: "open-link", url: "https://example.com/a" });

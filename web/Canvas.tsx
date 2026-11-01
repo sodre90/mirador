@@ -15,6 +15,7 @@ import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
 import { usePageMarks } from "./PageMarks.tsx";
+import { canOpenItemWindows, openItemWindow } from "./item-window.ts";
 import { PluginItemView } from "./PluginItemView.tsx";
 import { SettledNoteLine, type SettledNote } from "./SettledNote.tsx";
 import { shortcutKeys } from "./shortcuts.ts";
@@ -814,6 +815,9 @@ export function CanvasPanel({
     if (tabItem) connection.send({ type: "canvas.dismiss", itemId: tabItem.id });
   };
   const toggleHistory = () => setHistoryOpen((open) => !open);
+  const shownPluginItem = checklistOpen ? tabItem : !tab && selected?.kind === "plugin" ? selected : undefined;
+  const poppable = canOpenItemWindows() ? shownPluginItem : undefined;
+  const popOut = () => poppable && openItemWindow({ conversationId, itemId: poppable.id });
   const shownPage = !tab && selected?.kind === "show" ? selected : undefined;
   const pageExport = usePageExport(shownPage, shownPageFrame);
   const pageMarks = usePageMarks(shownPage, shownPageFrame);
@@ -835,6 +839,7 @@ export function CanvasPanel({
       ? [
           { label: words.bar.historyCount(pages.length), checked: historyOpen, disabled: pages.length === 0, onChoose: toggleHistory },
           { label: words.bar.clear, disabled: !somethingElseShown && !checklistOpen, onChoose: clear },
+          ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
           ...(shownPage ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, separatorBefore: true, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
           ...pageExport.entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
         ]
@@ -919,6 +924,11 @@ export function CanvasPanel({
             onClick={() => pageMarks.point(!pageMarks.pointing)}
           >
             {words.bar.pointAndAsk}
+          </button>
+        )}
+        {poppable && (
+          <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
+            ⧉
           </button>
         )}
         {shownPage && <BarMenu className="page-export" label={words.bar.export} menuName={words.bar.exportMenu} hint={hints.canvasPageExport} entries={pageExport.entries} />}

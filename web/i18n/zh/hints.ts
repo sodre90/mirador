@@ -285,6 +285,7 @@ export const hints: Messages["hints"] = {
   canvasNewer: "显示下一个画布项目。",
   canvasHistory: "智能体在这个对话中绘制或询问的一切，最新的在前。",
   canvasClear: "清空画布。不会删除任何内容：该项目仍保留在历史中。",
+  canvasOpenInWindow: "在一个始终保持最新的单独窗口中显示此项目，例如放在第二块屏幕上。再次打开会把该窗口带到前面。",
   canvasMore: "栏中的其他按钮（窄窗格放不下它们），以及这个工作区其他对话所用的、也可以在这里显示的应用。",
   canvasPageExport: "把这个页面复制为图片或 HTML，请智能体把它写成 Markdown，或者另存为单独的文件。",
   canvasPoint:

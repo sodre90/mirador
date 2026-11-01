@@ -3319,7 +3319,7 @@ button.edits-waiting {
 
 /* The bar folds its buttons into the More menu, the least used first, as data-fold rises with how narrow it is. */
 .canvas-header[data-fold="0"] .canvas-more:not(.offers-apps),
-.canvas-header:not([data-fold="0"]) :is(.history-toggle, .canvas-clear, .point-toggle, .page-export),
+.canvas-header:not([data-fold="0"]) :is(.history-toggle, .canvas-clear, .point-toggle, .page-export, .open-in-window),
 .canvas-header:is([data-fold="2"], [data-fold="3"]) :is(.canvas-nav, .changes-toggle),
 .canvas-header[data-fold="3"] :is(.checklist-toggle, .checklist-dismiss, .app-toggle) {
   display: none;
@@ -3786,6 +3786,12 @@ button.edits-waiting {
 
 .checklist .canvas-frame.plugin iframe {
   flex: none;
+}
+
+.item-window {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 .plugin-item-missing {
