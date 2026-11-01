@@ -22,3 +22,17 @@ export const imageUrl = (conversationId: string, imageId: string) => `/conversat
 /** An image the agent's update carried, shown from its own data: never fetched from an address the agent named. */
 export const carriedImageSource = ({ mimeType, data }: { mimeType: string; data: string }) =>
   extensionFor(mimeType) && data ? `data:${mimeType};base64,${data}` : null;
+
+/** An absolute path on the host's machine, as an agent names a screenshot it took; not an address on another site. */
+export const isLocalImagePath = (source: string) => source.startsWith("/") && !source.startsWith("//");
+
+/** Markdown percent-encodes an image's address, so a path with spaces or accents arrives encoded. */
+const decodedPath = (source: string) => {
+  try {
+    return decodeURI(source);
+  } catch {
+    return source;
+  }
+};
+
+export const localImageUrl = (conversationId: string, source: string) => `/conversations/${conversationId}/local-image?path=${encodeURIComponent(decodedPath(source))}`;

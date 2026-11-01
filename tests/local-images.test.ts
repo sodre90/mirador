@@ -1,0 +1,42 @@
+import { afterAll, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { imageTypeOf, localImage } from "../host/local-images.ts";
+
+const folder = mkdtempSync(join(tmpdir(), "local-images-"));
+afterAll(() => rmSync(folder, { recursive: true, force: true }));
+
+const bytes = (...parts: (string | number[])[]) => new Uint8Array(parts.flatMap((part) => (typeof part === "string" ? [...part].map((character) => character.charCodeAt(0)) : part)));
+
+describe("imageTypeOf", () => {
+  test("knows PNG, JPEG, GIF and WebP by their first bytes", () => {
+    expect(imageTypeOf(bytes([0x89], "PNG\r\n", [0x1a, 0x0a]))).toBe("image/png");
+    expect(imageTypeOf(bytes([0xff, 0xd8, 0xff, 0xe0]))).toBe("image/jpeg");
+    expect(imageTypeOf(bytes("GIF89a"))).toBe("image/gif");
+    expect(imageTypeOf(bytes("RIFF", [0, 0, 0, 0], "WEBP"))).toBe("image/webp");
+  });
+
+  test("takes nothing else for an image, SVG included", () => {
+    expect(imageTypeOf(bytes("TOKEN=secret"))).toBeNull();
+    expect(imageTypeOf(bytes("<svg xmlns"))).toBeNull();
+    expect(imageTypeOf(bytes("RIFF", [0, 0, 0, 0], "WAVE"))).toBeNull();
+  });
+});
+
+describe("localImage", () => {
+  test("serves an image file by an absolute path, whatever its name", async () => {
+    const path = join(folder, "shot.txt");
+    writeFileSync(path, bytes([0x89], "PNG\r\n", [0x1a, 0x0a], [0, 0, 0, 0]));
+    expect((await localImage(path))?.mimeType).toBe("image/png");
+  });
+
+  test("refuses relative paths, folders, missing files and files that are not images", async () => {
+    const text = join(folder, "secret.png");
+    writeFileSync(text, "TOKEN=secret");
+    expect(await localImage(text)).toBeNull();
+    expect(await localImage(folder)).toBeNull();
+    expect(await localImage(join(folder, "missing.png"))).toBeNull();
+    expect(await localImage("shot.png")).toBeNull();
+  });
+});

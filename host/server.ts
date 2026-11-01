@@ -60,6 +60,7 @@ import { cookieValue, sameSecret, signedInWith } from "./sign-in.ts";
 import { MAX_DROPPED_FILE_BYTES, type DroppedFiles } from "./dropped-files.ts";
 import { MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { imagesOf, lowDataEvent, pageEvent, wholeToolOutput } from "./low-data.ts";
+import { localImage } from "./local-images.ts";
 import { completeDirectories, createsDirectory, directoryToAdd } from "./paths.ts";
 import { launchForNewWorkspace, profileFor, type ProfileService } from "./profiles.ts";
 import type { DesktopAppCheck } from "./desktop-app-check.ts";
@@ -696,6 +697,15 @@ export function startServer(services: HostServices) {
     return new Response(Buffer.from(image.data, "base64"), {
       headers: { "Content-Type": image.mimeType, "Cache-Control": "private, max-age=31536000, immutable", "X-Content-Type-Options": "nosniff" },
     });
+  }
+
+  /** An image file on this machine that an agent's reply names by its path, such as a screenshot it took. */
+  async function serveLocalImage(request: Bun.BunRequest<"/conversations/:conversationId/local-image">) {
+    const refused = refusedAttachmentRequest(request, request.params.conversationId);
+    if (refused) return refused;
+    const image = await localImage(new URL(request.url).searchParams.get("path") ?? "");
+    if (!image) return new Response("not found", { status: 404 });
+    return new Response(image.file, { headers: { "Content-Type": image.mimeType, "Cache-Control": "private, no-cache", "X-Content-Type-Options": "nosniff" } });
   }
 
   const listedCanvas = (conversationId: string) => canvas.list(conversationId).map((item) => (item.kind === "plugin" ? canvasPlugins.listed(item) : item));
@@ -1395,6 +1405,7 @@ export function startServer(services: HostServices) {
     "/conversations/:conversationId/spoken-sentence": { POST: speakSentence },
     "/conversations/:conversationId/images/:imageId": { GET: serveImage },
     "/conversations/:conversationId/events/:seq/images/:index": { GET: serveEventImage },
+    "/conversations/:conversationId/local-image": { GET: serveLocalImage },
     "/workspaces/:workspaceId/apps/:app/file": { GET: serveAppFile },
     "/workspaces/:workspaceId/apps/:app/media": { POST: grantAppMedia },
     "/mirador-ca.pem": serveAuthority,

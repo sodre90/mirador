@@ -2,6 +2,7 @@ import { createContext, memo, useContext, useEffect, useRef, useState, type Comp
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isFromAnotherSite, siteOf, useExternalImagesBlocked } from "./external-images.ts";
+import { isLocalImagePath, localImageUrl } from "../shared/images.ts";
 import { hints } from "./hints.ts";
 import { looksLikeFilePath } from "../shared/file-paths.ts";
 import { connection } from "./connection.ts";
@@ -63,7 +64,9 @@ function MarkdownImage({ node: _node, ...props }: ComponentProps<"img"> & ExtraP
   const blockedByThisPage = useExternalImagesBlocked();
   const externalImagesBlocked = useContext(ExternalImagesBlocked) ?? blockedByThisPage;
   const insideLink = useContext(InsideLink);
+  const conversationId = useContext(FilesOfConversation);
   const source = typeof props.src === "string" ? props.src : "";
+  if (conversationId && isLocalImagePath(source)) return <img {...props} src={localImageUrl(conversationId, source)} />;
   if (!externalImagesBlocked || !isFromAnotherSite(source, location.origin)) return <img {...props} />;
   const site = siteOf(source, location.origin);
   const label = props.alt ? `${props.alt} (image from ${site})` : `Image from ${site}`;
