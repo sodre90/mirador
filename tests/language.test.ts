@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isLanguage, LANGUAGES } from "../shared/i18n/languages.ts";
+import { isLanguage, languageFor, LANGUAGES } from "../shared/i18n/languages.ts";
 import { en } from "../web/i18n/en/index.ts";
 import { es } from "../web/i18n/es/index.ts";
 import { hu } from "../web/i18n/hu/index.ts";
@@ -21,6 +21,14 @@ describe("languages", () => {
     expect(LANGUAGES.every(isLanguage)).toBe(true);
     expect(isLanguage("de")).toBe(false);
     expect(isLanguage(null)).toBe(false);
+  });
+
+  test("the language chosen in Settings wins; without one, the first browser language Mirador has, else English", () => {
+    expect(languageFor("en", ["hu-HU"])).toBe("en");
+    expect(languageFor(null, ["de-DE", "hu-HU", "es"])).toBe("hu");
+    expect(languageFor("klingon", ["es-MX"])).toBe("es");
+    expect(languageFor(null, ["de-DE", "fr"])).toBe("en");
+    expect(languageFor(null, [])).toBe("en");
   });
 
   test.each([

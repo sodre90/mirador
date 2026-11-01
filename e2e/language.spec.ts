@@ -135,3 +135,20 @@ test("Español in Settings shows Mirador in Spanish", async ({ page }) => {
   await Promise.all([page.waitForEvent("load"), configuracion.getByLabel("Idioma").selectOption("en")]);
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
+
+test.describe("with a Hungarian browser", () => {
+  test.use({ locale: "hu-HU" });
+
+  test("Mirador opens in Hungarian without being told, and English chosen in Settings stays", async ({ page }) => {
+    await page.goto(host.authUrl);
+    await expect(page.locator("html")).toHaveAttribute("lang", "hu");
+    await expect(page.locator("nav.sidebar").getByRole("heading", { name: "Munkaterületek" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Beállítások…" }).click();
+    const beallitasok = page.getByRole("dialog", { name: "Beállítások" });
+    await Promise.all([page.waitForEvent("load"), beallitasok.getByLabel("Nyelv").selectOption("en")]);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await page.reload();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  });
+});

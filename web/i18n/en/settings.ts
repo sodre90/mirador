@@ -22,7 +22,7 @@ export const settings = {
   appearance: {
     title: "Appearance",
     language: "Language",
-    languageHint: "The language of Mirador's own words. Choosing another one reloads the page. What agents write stays in the language they write in.",
+    languageHint: "The language of Mirador's own words, at first your browser's when Mirador has it. Choosing another one reloads the page. What agents write stays in the language they write in.",
     textSize: "Text size",
     theme: "Theme",
     waitingForYou: "Waiting for you",

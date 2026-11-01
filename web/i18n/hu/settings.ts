@@ -24,7 +24,7 @@ export const settings: Messages["settings"] = {
   appearance: {
     title: "Megjelenés",
     language: "Nyelv",
-    languageHint: "A Mirador saját szövegeinek nyelve. Ha másikat választasz, az oldal újratöltődik. Amit az ágensek írnak, az azon a nyelven marad, amelyen írták.",
+    languageHint: "A Mirador saját szövegeinek nyelve; kezdetben a böngészőé, ha a Mirador ismeri. Ha másikat választasz, az oldal újratöltődik. Amit az ágensek írnak, az azon a nyelven marad, amelyen írták.",
     textSize: "Szövegméret",
     theme: "Téma",
     waitingForYou: "Rád vár",

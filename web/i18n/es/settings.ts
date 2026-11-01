@@ -24,7 +24,7 @@ export const settings: Messages["settings"] = {
   appearance: {
     title: "Apariencia",
     language: "Idioma",
-    languageHint: "El idioma de los textos propios de Mirador. Al elegir otro, se recarga la página. Lo que escriben los agentes se queda en el idioma en que lo escriben.",
+    languageHint: "El idioma de los textos propios de Mirador; al principio, el de tu navegador si Mirador lo tiene. Al elegir otro, se recarga la página. Lo que escriben los agentes se queda en el idioma en que lo escriben.",
     textSize: "Tamaño del texto",
     theme: "Tema",
     waitingForYou: "Esperando tu respuesta",

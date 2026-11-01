@@ -1,18 +1,19 @@
-import { isLanguage, type Language } from "../shared/i18n/languages.ts";
+import { languageFor, type Language } from "../shared/i18n/languages.ts";
 
 const STORAGE_KEY = "mirador-language";
 
-export function storedLanguage(): Language {
+function chosenLanguage() {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return isLanguage(saved) ? saved : "en";
+    return localStorage.getItem(STORAGE_KEY);
   } catch {
-    return "en";
+    return null;
   }
 }
 
+const browserLanguages = (): string[] => (typeof navigator === "undefined" ? [] : [...(navigator.languages ?? [navigator.language])].filter(Boolean));
+
 /** Read once as the page loads: every text of the page is picked in it, so choosing another one reloads the page. */
-export const language = storedLanguage();
+export const language = languageFor(chosenLanguage(), browserLanguages());
 
 export function chooseLanguage(next: Language) {
   if (next === language) return;
