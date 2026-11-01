@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- The app loads and connects to nothing but its own host; script-src 'self' is the XSS wall. frame-src stays open for the rail's frames of other machines and the canvas frames, which load from the canvas assets origin and answer to the policy it serves them with. img-src lets agents' Markdown images from other sites load only so Settings can allow them; while they are blocked, web/external-images.ts adds a stricter policy before anything renders. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: blob: http: https:; connect-src 'self' blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src *" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Mirador</title>
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,9 @@
+{$PUSH_RELAY_DOMAIN} {
+	reverse_proxy 127.0.0.1:8790
+	request_body {
+		max_size 8KB
+	}
+	log {
+		output discard
+	}
+}

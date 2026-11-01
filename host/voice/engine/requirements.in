@@ -1,0 +1,6 @@
+# The speech engine Mirador sets up on Apple silicon Macs. scripts/lock-voice-engine.sh compiles requirements.lock from it.
+mlx-audio[server,stt,tts]==0.6.1
+misaki[en]
+mlx-lm==0.32.0
+# misaki installs spaCy's English model with pip at first use otherwise, which the engine's environment has no pip for.
+en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl

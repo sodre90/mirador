@@ -1,0 +1,33 @@
+import type { Messages } from "../en/index.ts";
+
+export const terminals: Messages["terminals"] = {
+  copyFailed: (key) => `无法复制所选内容。按 ${key} 复制。`,
+  showAll: "显示全部",
+  closeTerminal: (number) => `关闭终端 ${number}`,
+  closeTab: (tab) => `关闭 ${tab}`,
+  closeArmed: "关闭？",
+  resize: "调整终端大小",
+  terminalNumber: (number) => `终端 ${number}`,
+  paneLabel: (workspace) => `${workspace} 中的终端`,
+  tabs: "终端标签页",
+  newTab: "新建终端标签页",
+  splitRight: "向右拆分",
+  splitDown: "向下拆分",
+  hide: "隐藏",
+  startShell: "启动 shell",
+  linkClick: { mac: "⌘ 点击", other: "Ctrl 点击" },
+  find: {
+    placeholder: "查找",
+    label: "在此终端中查找",
+    matchCase: "区分大小写",
+    wholeWord: "全词匹配",
+    regex: "使用正则表达式",
+    older: "较早的匹配项",
+    newer: "较新的匹配项",
+    close: "关闭查找",
+    invalidPattern: "无效的模式",
+    noMatches: "没有匹配项",
+    position: (position, total) => `${position} / ${total}`,
+    matches: (total) => `${total} 个匹配项`,
+  },
+};

@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Mirador's command line, e.g. `mirador invite`, run from the Mirador folder this file is in.
+# Put it on your PATH with a link, which it follows back to its folder:
+#   ln -s "$PWD/bin/mirador" ~/.local/bin/mirador
+# It runs on the Bun on your PATH, or the one MIRADOR_BUN names.
+set -euo pipefail
+
+mirador_dir="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/.." && pwd)"
+bun="${MIRADOR_BUN:-$(command -v bun || echo "$HOME/.bun/bin/bun")}"
+if [ ! -x "$bun" ]; then
+  echo "mirador: Bun not found. Put bun on your PATH, or set MIRADOR_BUN to its path." >&2
+  exit 1
+fi
+exec "$bun" "$mirador_dir/host/cli.ts" "$@"

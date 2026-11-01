@@ -1,0 +1,33 @@
+import type { Messages } from "../en/index.ts";
+
+export const terminals: Messages["terminals"] = {
+  copyFailed: (key) => `A kijelölést nem sikerült másolni. Nyomd meg ezt a másoláshoz: ${key}.`,
+  showAll: "Összes mutatása",
+  closeTerminal: (number) => `Terminál bezárása: ${number}`,
+  closeTab: (tab) => `Bezárás: ${tab}`,
+  closeArmed: "Bezárod?",
+  resize: "Terminálok átméretezése",
+  terminalNumber: (number) => `Terminál ${number}`,
+  paneLabel: (workspace) => `Terminálok itt: ${workspace}`,
+  tabs: "Terminállapok",
+  newTab: "Új terminállap",
+  splitRight: "Felosztás jobbra",
+  splitDown: "Felosztás lefelé",
+  hide: "Elrejtés",
+  startShell: "Shell indítása",
+  linkClick: { mac: "⌘-kattintás", other: "Ctrl+kattintás" },
+  find: {
+    placeholder: "Keresés",
+    label: "Keresés ebben a terminálban",
+    matchCase: "Kis- és nagybetű",
+    wholeWord: "Egész szó",
+    regex: "Reguláris kifejezés",
+    older: "Előző találat",
+    newer: "Következő találat",
+    close: "A keresés bezárása",
+    invalidPattern: "Érvénytelen minta",
+    noMatches: "Nincs találat",
+    position: (position, total) => `${position} / ${total}`,
+    matches: (total) => `${total} találat`,
+  },
+};

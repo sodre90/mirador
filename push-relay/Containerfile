@@ -1,0 +1,10 @@
+# Built from the repository root: podman build -f push-relay/Containerfile -t mirador-push-relay .
+FROM docker.io/oven/bun:1-slim
+WORKDIR /relay
+COPY shared/push.ts shared/push.ts
+COPY push-relay/*.ts push-relay/
+USER bun
+ENV PUSH_RELAY_HOSTNAME=0.0.0.0 PUSH_RELAY_PORT=8790 PUSH_RELAY_TOKENS_FILE=/data/tokens
+EXPOSE 8790
+ENTRYPOINT ["bun", "push-relay/main.ts"]
+CMD ["serve"]

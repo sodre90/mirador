@@ -1,0 +1,62 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Canvas spike</title>
+<style>
+  body { font: 15px system-ui, sans-serif; margin: 2rem; background: #f6f5f2; color: #222; }
+  .ask { background: #fff; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; box-shadow: 0 1px 3px #0002; }
+  .conversation { color: #888; font-size: 12px; }
+  .options { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .option { flex: 1 1 280px; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+  .option iframe { border: 0; width: 100%; height: 220px; background: #fff; }
+  .option button { font: inherit; padding: .6rem; border: 0; border-top: 1px solid #ddd; background: #f0eee9; cursor: pointer; }
+  .option button:hover { background: #e2dfd7; }
+  #empty { color: #888; }
+</style>
+<p id="empty">No pending questions.</p>
+<div id="asks"></div>
+<script>
+  const asks = document.getElementById("asks");
+  const empty = document.getElementById("empty");
+  const socket = new WebSocket(`ws://${location.host}/ws`);
+
+  const refreshEmptyState = () => { empty.hidden = asks.children.length > 0; };
+
+  function renderOption(ask, option) {
+    const card = document.createElement("div");
+    card.className = "option";
+    if (option.html) {
+      const frame = document.createElement("iframe");
+      frame.sandbox = "allow-scripts";
+      frame.srcdoc = option.html;
+      card.append(frame);
+    }
+    const button = document.createElement("button");
+    button.textContent = option.label;
+    button.onclick = () => socket.send(JSON.stringify({ type: "answer", askId: ask.id, label: option.label }));
+    card.append(button);
+    return card;
+  }
+
+  function renderAsk(ask) {
+    const section = document.createElement("section");
+    section.className = "ask";
+    section.id = `ask-${ask.id}`;
+    const conversation = document.createElement("div");
+    conversation.className = "conversation";
+    conversation.textContent = `conversation ${ask.conversation}`;
+    const question = document.createElement("h3");
+    question.textContent = ask.question;
+    const options = document.createElement("div");
+    options.className = "options";
+    options.append(...ask.options.map((option) => renderOption(ask, option)));
+    section.append(conversation, question, options);
+    asks.append(section);
+  }
+
+  socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === "ask") renderAsk(message.ask);
+    if (message.type === "ask-withdrawn") document.getElementById(`ask-${message.id}`)?.remove();
+    refreshEmptyState();
+  };
+</script>

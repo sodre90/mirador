@@ -1,0 +1,15 @@
+./.git
+./node_modules
+./test-results
+./playwright-report
+./.e2e-data
+./desktop/node_modules
+./desktop/build
+./desktop/artifacts
+./desktop/.hutch
+./spike
+./video
+./.agents
+./.beads
+./.claude
+./.codex

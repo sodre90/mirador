@@ -1,0 +1,45 @@
+name: Unit tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  unit-tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - if: runner.os != 'Windows'
+        run: bun run test
+      # Git for Windows puts only its cmd folder on PATH, so a user's Windows has no sh, sleep or openssl there; the
+      # runner's PATH has them, from Git's other folders and from OpenSSL.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $unixTools = "sh.exe", "sleep.exe", "openssl.exe"
+          $env:Path = ($env:Path -split ";" | Where-Object { $folder = $_; $folder -and -not ($unixTools | Where-Object { Test-Path -LiteralPath (Join-Path $folder $_) }) }) -join ";"
+          "::group::What the tests run with"
+          "TEMP: $env:TEMP"
+          "core.autocrlf: $(git config --get core.autocrlf)"
+          where.exe git bun pwsh powershell bash sh sleep openssl
+          "::endgroup::"
+          # Starting git, Git Bash or PowerShell takes the runner up to seconds each, so tests that start several run past
+          # bun's 5 s; a test past its time is killed with the processes it started, which then fail in other ways.
+          bun run test --timeout 20000

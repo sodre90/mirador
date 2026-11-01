@@ -1,0 +1,47 @@
+const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+
+export const revert = {
+  rewindToHere: "Rewind to here",
+  undoFiles: "Undo files",
+  undoTheFiles: "Undo the files",
+  undoTheFilesOfATurn: "Undo the files of a turn",
+  rewindBefore: (turn: string) => `Rewind to before “${turn}”`,
+  undoTheFilesOf: (turn: string) => `Undo the files of “${turn}”`,
+  checking: "Checking what would change…",
+  putFilesBackToo: "Put the files back too",
+  cancel: "Cancel",
+  goingBack: "Going back…",
+  puttingFilesBack: "Putting the files back…",
+  rewind: "Rewind",
+  putFilesBack: "Put the files back",
+  showFiles: "Show the files",
+  hideFiles: "Hide the files",
+  deleted: "Deleted",
+  putBackAsTheyWere: "Put back as they were",
+  stayAsTheyAre: "Stay as they are",
+  stayAsCommitted: "Stay as committed",
+  andMore: (count: string) => `and ${count} more`,
+  turnsLeave: (turns: number, keptFrom: string) =>
+    `${turns === 1 ? "1 turn leaves" : `${turns} turns leave`} the conversation, and the agent's own history goes back with ${turns === 1 ? "it" : "them"}, to before “${keptFrom}”.`,
+  everyTurnLeaves: "Every turn leaves the conversation, and the agent starts over with nothing of it.",
+  filesStayBecause: (note: string) => `The files stay as they are: ${note}`,
+  filesStayNow: "The files stay as they are now, with what the turns that leave did to them.",
+  filesGoBackToo: (changed: string) => `The files go back too, to how they were when this turn began: ${changed}.`,
+  filesGoBack: (changed: string) => `The files go back to how they were when this turn began: ${changed}.`,
+  noOtherFileChanged: "No other file changed since this turn began.",
+  noFileChanged: "No file changed since this turn began.",
+  turnStays: "The turn above stays in the conversation, and the agent is told the files no longer hold it.",
+  restored: (count: number) => counted(count, "file put back as it was", "files put back as they were"),
+  removed: (count: number) => counted(count, "file deleted that was created since", "files deleted that were created since"),
+  both: (first: string, second: string) => `${first} and ${second}`,
+  noOtherFileDifferent: "no other file was different",
+  noFileDifferent: "no file was different",
+  headMoved: (files: number) =>
+    `HEAD moved to another commit since then, and the ${counted(files, "file that differs there stays", "files that differ there stay")} as ${files === 1 ? "it is" : "they are"}.`,
+  commitsCameIn: (commits: number, files: number) =>
+    `${counted(commits, "commit", "commits")} came in since then, and the ${counted(files, "file", "files")} ${commits === 1 ? "it" : "they"} changed ${files === 1 ? "stays" : "stay"} as committed.`,
+  theFileWasEdited: "It was also edited after that, and keeps those edits.",
+  someWereEdited: (edited: number) => `${edited} of them ${edited === 1 ? "was" : "were"} also edited after that, and ${edited === 1 ? "keeps" : "keep"} those edits.`,
+  submodulesLeft: (count: number) =>
+    `${count === 1 ? "1 submodule that changed stays as it is" : `${count} submodules that changed stay as they are`} now: a submodule's files are its own repository's, so Mirador does not put them back.`,
+};

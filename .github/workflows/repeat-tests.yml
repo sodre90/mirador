@@ -1,0 +1,50 @@
+name: Repeat tests
+
+# Runs some unit test files many times on one OS, to tell a fixed flake from a lucky run.
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        type: choice
+        options: [windows-latest, macos-latest, ubuntu-latest]
+      files:
+        description: Test files, separated by spaces
+        required: true
+      runs:
+        default: "10"
+
+permissions:
+  contents: read
+
+jobs:
+  repeat:
+    runs-on: ${{ inputs.os }}
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+      - run: bun install --frozen-lockfile
+      - if: runner.os != 'Windows'
+        env:
+          FILES: ${{ inputs.files }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          failed=0
+          for run in $(seq "$RUNS"); do bun test $FILES || failed=$((failed + 1)); done
+          echo "failed runs: $failed of $RUNS"
+          test "$failed" = 0
+      # The same PATH and timeout as the Unit tests workflow gives Windows.
+      - if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          FILES: ${{ inputs.files }}
+          RUNS: ${{ inputs.runs }}
+        run: |
+          $unixTools = "sh.exe", "sleep.exe", "openssl.exe"
+          $env:Path = ($env:Path -split ";" | Where-Object { $folder = $_; $folder -and -not ($unixTools | Where-Object { Test-Path -LiteralPath (Join-Path $folder $_) }) }) -join ";"
+          $failed = 0
+          foreach ($run in 1..[int]$env:RUNS) { bun test --timeout 20000 ($env:FILES -split " "); if ($LASTEXITCODE -ne 0) { $failed++ } }
+          "failed runs: $failed of $env:RUNS"
+          exit [int]($failed -ne 0)

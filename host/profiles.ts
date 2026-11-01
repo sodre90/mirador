@@ -1,0 +1,138 @@
+import { askModeLabels, harnessIds, harnessLabels, isPastel, type HarnessId, type Launch, type Profile, type Workspace } from "../shared/model.ts";
+import { parseEnvironment } from "../shared/profile-environment.ts";
+import type { ProfileDraft } from "../shared/protocol.ts";
+import type { ConversationService } from "./conversations.ts";
+import type { BrowserSocket, Hub } from "./hub.ts";
+import type { Store } from "./store.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
+
+/** Every conversation runs on a profile, and a profile only on the agent it was made for; the picker sends both, and the host checks they agree. */
+export function profileToLaunch(store: Store, launch: Launch): Profile {
+  if (!harnessIds.includes(launch.harness)) throw new HostProblemError({ code: "unknown-agent", agent: launch.harness });
+  if (launch.profileId === null) throw new HostProblemError({ code: "profile-required" });
+  const profile = store.findProfile(launch.profileId);
+  if (!profile) throw new HostProblemError({ code: "profile-gone" });
+  if (profile.harness !== launch.harness) {
+    throw new HostProblemError({ code: "profile-is-for-other-agent", profile: profile.name, profileAgent: harnessLabels[profile.harness], agent: harnessLabels[launch.harness] });
+  }
+  return profile;
+}
+
+const launchOn = ({ harness, id }: Profile): Launch => ({ harness, profileId: id });
+
+/**
+ * Once there is a profile, every workspace starts its conversations on one: a workspace without one, or whose profile
+ * was deleted, takes one of the same agent if there is one, else the first. Gives the workspaces that changed.
+ */
+export function giveEveryWorkspaceAProfile(store: Store): Workspace[] {
+  const profiles = store.listProfiles();
+  if (profiles.length === 0) return [];
+  const hasOne = ({ defaultLaunch }: Workspace) => profiles.some(({ id }) => id === defaultLaunch.profileId);
+  return store
+    .listWorkspaces()
+    .filter((workspace) => !hasOne(workspace))
+    .map(({ id, defaultLaunch }) => {
+      store.setWorkspaceDefaultLaunch(id, launchOn(profiles.find(({ harness }) => harness === defaultLaunch.harness) ?? profiles[0]!));
+      return store.findWorkspace(id)!;
+    });
+}
+
+/** A new workspace starts its conversations on the profile it was added with; with no profile yet, on none. */
+export function launchForNewWorkspace(store: Store, profileId: string | null): Launch {
+  if (store.listProfiles().length === 0) return { harness: "claude", profileId: null };
+  if (!profileId) throw new HostProblemError({ code: "pick-workspace-profile" });
+  const profile = store.findProfile(profileId);
+  if (!profile) throw new HostProblemError({ code: "profile-gone" });
+  return launchOn(profile);
+}
+
+/**
+ * Workspaces and conversations from before every conversation ran on a profile move onto one per agent, named after it
+ * and with nothing of its own, so they run as they did. Only for the agents this machine has a program for.
+ */
+export function moveProfilelessOntoProfiles(store: Store, installed: HarnessId[]) {
+  store
+    .profilelessHarnesses()
+    .filter((harness) => installed.includes(harness))
+    .forEach((harness) =>
+      store.putProfilelessOn({
+        id: crypto.randomUUID(),
+        name: harnessLabels[harness],
+        harness,
+        environment: "",
+        prelaunch: "",
+        mode: null,
+        effort: null,
+        bypassPermissions: false,
+        askMode: "wait",
+        color: null,
+        createdAt: Date.now(),
+      }),
+    );
+}
+
+/** A profile as a socket gets it: without what it launches its agent with, unless the socket's page edits profiles. */
+export const profileFor = (socket: BrowserSocket, profile: Profile): Profile =>
+  socket.data.readsProfileLaunch ? profile : { ...profile, environment: "", prelaunch: "" };
+
+export class ProfileService {
+  constructor(
+    private readonly store: Store,
+    private readonly hub: Hub,
+    private readonly conversations: ConversationService,
+  ) {}
+
+  save(draft: ProfileDraft): Profile {
+    const name = draft.name.trim();
+    if (!name) throw new HostProblemError({ code: "profile-needs-name" });
+    const { errors } = parseEnvironment(draft.environment);
+    if (errors.length > 0) throw new Error(errors.join("\n"));
+    const existing = draft.id ? this.store.findProfile(draft.id) : undefined;
+    if (draft.id && !existing) throw new HostProblemError({ code: "profile-gone" });
+    if (!harnessIds.includes(draft.harness)) throw new HostProblemError({ code: "unknown-agent", agent: draft.harness });
+    if (!(draft.askMode in askModeLabels)) throw new HostProblemError({ code: "unknown-questions-setting", value: draft.askMode });
+    if (draft.color !== null && !isPastel(draft.color)) throw new HostProblemError({ code: "unknown-colour", value: draft.color });
+    const profile: Profile = {
+      id: existing?.id ?? crypto.randomUUID(),
+      name,
+      harness: existing?.harness ?? draft.harness,
+      environment: draft.environment,
+      prelaunch: draft.prelaunch,
+      mode: draft.mode || null,
+      effort: draft.effort || null,
+      bypassPermissions: draft.bypassPermissions,
+      askMode: draft.askMode,
+      color: draft.color,
+      ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
+      createdAt: existing?.createdAt ?? Date.now(),
+    };
+    this.store.saveProfile(profile);
+    const launchChanged = existing && (existing.environment !== profile.environment || existing.prelaunch !== profile.prelaunch);
+    if (launchChanged) this.conversations.restartProfile(profile.id);
+    this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile) }));
+    if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
+    return profile;
+  }
+
+  /** The last profile stays: without one, no conversation could start. Workspaces that used a deleted one move to another. */
+  delete(profileId: string) {
+    if (this.store.listProfiles().every(({ id }) => id === profileId)) {
+      throw new HostProblemError({ code: "last-profile" });
+    }
+    this.store.deleteProfile(profileId);
+    this.conversations.restartProfile(profileId);
+    this.hub.broadcast({ type: "profile.deleted", profileId });
+    this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
+  }
+
+  private broadcastWorkspaces(workspaces: Workspace[]) {
+    workspaces.forEach((workspace) => this.hub.broadcast({ type: "workspace.upserted", workspace }));
+  }
+
+  setWorkspaceDefault(workspaceId: string, launch: Launch) {
+    profileToLaunch(this.store, launch);
+    this.store.setWorkspaceDefaultLaunch(workspaceId, launch);
+    const workspace = this.store.findWorkspace(workspaceId);
+    if (workspace) this.hub.broadcast({ type: "workspace.upserted", workspace });
+  }
+}

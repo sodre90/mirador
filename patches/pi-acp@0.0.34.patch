@@ -1,0 +1,762 @@
+diff --git a/node_modules/pi-acp/dist/fork-point.js b/dist/fork-point.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..a077840b116493e38f412b3a8572502bffa78434
+--- /dev/null
++++ b/dist/fork-point.js
+@@ -0,0 +1,43 @@
++import { STEER_MARK } from "./session-extension.js";
++
++/** pi has no id for a message, so its timestamp, which the session file keeps with it, stands in for one. */
++export function piMessageId(message) {
++  const timestamp = message?.timestamp;
++  return typeof timestamp === "number" ? String(timestamp) : void 0;
++}
++
++/**
++ * The fork that leaves the session with what it had up to the agent message `messageId` and the rest of that message's
++ * turn: cut at the next message that started a turn, or with `atSteeredMessage`, at the next user message of any kind,
++ * as the client goes back to one that joined a running turn. pi records both kinds alike, so the session extension
++ * marks the steered ones. Null when the branch has no such agent message.
++ */
++export function forkCommandAt(entries, leafId, messageId, atSteeredMessage = false) {
++  const branch = currentBranch(entries, leafId);
++  const pointIndex = branch.findLastIndex((entry) => isMessage(entry, "assistant") && piMessageId(entry.message) === messageId);
++  if (pointIndex === -1) return null;
++  const steered = steeredMessageTimestamps(branch);
++  const isCut = (entry) => isMessage(entry, "user") && (atSteeredMessage || !steered.has(entry.message.timestamp));
++  const cut = branch.slice(pointIndex + 1).find(isCut);
++  return cut ? { type: "fork", entryId: cut.id } : { type: "clone" };
++}
++
++function currentBranch(entries, leafId) {
++  const unvisited = new Map(entries.map((entry) => [entry.id, entry]));
++  const branch = [];
++  for (let id = leafId; id && unvisited.has(id); ) {
++    const entry = unvisited.get(id);
++    unvisited.delete(id);
++    branch.unshift(entry);
++    id = entry.parentId;
++  }
++  return branch;
++}
++
++function steeredMessageTimestamps(branch) {
++  return new Set(branch.filter((entry) => entry.type === "custom" && entry.customType === STEER_MARK).map((entry) => entry.data?.timestamp));
++}
++
++function isMessage(entry, role) {
++  return entry.type === "message" && entry.message?.role === role;
++}
+diff --git a/dist/index.js b/dist/index.js
+index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..46020d54bab7e0ffd8e400b524fe5791d318568a 100755
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -71,6 +71,8 @@ function shouldUseShellForPiCommand(cmd) {
+ }
+ 
+ // src/pi-rpc/process.ts
++var SESSION_EXTENSION = fileURLToPath(new URL("./session-extension.js", import.meta.url));
++var SESSION_VARIABLE = "PI_ACP_SESSION";
+ var PiRpcSpawnError = class extends Error {
+   /** Underlying spawn error code, e.g. ENOENT, EACCES */
+   code;
+@@ -91,13 +93,20 @@ function stripAnsi(s) {
+   return s.replace(ANSI_ESCAPE_REGEX, "");
+ }
+ var SESSION_STATS_TIMEOUT_MS = 1e3;
++var STDERR_TAIL_LENGTH = 2e3;
+ var PiRpcProcess = class _PiRpcProcess {
+   child;
+   pending = /* @__PURE__ */ new Map();
+   eventHandlers = [];
+   preludeLines = [];
++  stderrTail = "";
++  exitError;
++  unexpectedExitHandlers = [];
+   constructor(child) {
+     this.child = child;
++    child.stderr?.on("data", (chunk) => {
++      this.stderrTail = (this.stderrTail + String(chunk)).slice(-STDERR_TAIL_LENGTH);
++    });
+     const rl = readline.createInterface({ input: child.stdout });
+     rl.on("line", (line) => {
+       if (!line.trim()) return;
+@@ -117,9 +126,12 @@ var PiRpcProcess = class _PiRpcProcess {
+       for (const h of this.eventHandlers) h(msg);
+     });
+     child.on("exit", (code, signal) => {
+-      const err = new Error(`pi process exited (code=${code}, signal=${signal})`);
++      const said = stripAnsi(this.stderrTail).trim();
++      const err = new Error(`pi process exited (code=${code}, signal=${signal})${said ? `: ${said}` : ""}`);
++      this.exitError = err;
+       for (const [, p] of this.pending) p.reject(err);
+       this.pending.clear();
++      if (!child.killed) for (const handler of this.unexpectedExitHandlers) handler(err);
+     });
+     child.on("error", (err) => {
+       for (const [, p] of this.pending) p.reject(err);
+@@ -130,11 +142,15 @@ var PiRpcProcess = class _PiRpcProcess {
+     const cmd = getPiCommand(params.piCommand);
+     const args = ["--mode", "rpc", "--no-themes"];
+     if (params.sessionPath) args.push("--session", params.sessionPath);
++    const mcpServers = (params.mcpServers ?? []).filter((server) => server.type !== "sse");
++    const appendSystemPrompt = params.appendSystemPrompt ?? "";
++    const forwardsSession = mcpServers.length > 0 || appendSystemPrompt !== "";
++    if (forwardsSession) args.push("--extension", SESSION_EXTENSION);
+     const start = shouldUseShellForPiCommand(cmd) ? crossSpawn : spawn;
+     const child = start(cmd, args, {
+       cwd: params.cwd,
+       stdio: "pipe",
+-      env: process.env
++      env: forwardsSession ? { ...process.env, [SESSION_VARIABLE]: JSON.stringify({ mcpServers, appendSystemPrompt }) } : process.env
+     });
+     try {
+       await new Promise((resolve4, reject) => {
+@@ -166,8 +182,6 @@ var PiRpcProcess = class _PiRpcProcess {
+       }
+       throw new PiRpcSpawnError(`Could not start pi (command: ${cmd}).`, { code, cause: e });
+     }
+-    child.stderr.on("data", () => {
+-    });
+     const proc = new _PiRpcProcess(child);
+     try {
+       const state = await proc.getState();
+@@ -187,6 +201,11 @@ var PiRpcProcess = class _PiRpcProcess {
+       this.eventHandlers = this.eventHandlers.filter((h) => h !== handler);
+     };
+   }
++  /** pi exiting of its own accord, such as by a crash or a kill from outside, not by `dispose`; already gone, it is called at once. */
++  onUnexpectedExit(handler) {
++    if (!this.exitError) this.unexpectedExitHandlers.push(handler);
++    else if (!this.child.killed) handler(this.exitError);
++  }
+   dispose(signal = "SIGTERM") {
+     if (this.child.killed) return;
+     try {
+@@ -206,10 +225,21 @@ var PiRpcProcess = class _PiRpcProcess {
+     const res = await this.request({ type: "prompt", message, images });
+     if (!res.success) throw new Error(`pi prompt failed: ${res.error ?? JSON.stringify(res.data)}`);
+   }
++  /** pi takes the message into the running agent loop once its current tool calls finish, before the next model call. */
++  async steer(message, images = []) {
++    const res = await this.request({ type: "steer", message, images });
++    if (!res.success) throw new Error(`pi steer failed: ${res.error ?? JSON.stringify(res.data)}`);
++  }
+   async abort() {
+     const res = await this.request({ type: "abort" });
+     if (!res.success) throw new Error(`pi abort failed: ${res.error ?? JSON.stringify(res.data)}`);
+   }
++  /** Takes the steering and follow-up messages pi has not read yet out of its queue, and returns their texts. */
++  async clearQueue() {
++    const res = await this.request({ type: "clear_queue" });
++    if (!res.success) throw new Error(`pi clear_queue failed: ${res.error ?? JSON.stringify(res.data)}`);
++    return res.data;
++  }
+   async getState() {
+     const res = await this.request({ type: "get_state" });
+     if (!res.success) throw new Error(`pi get_state failed: ${res.error ?? JSON.stringify(res.data)}`);
+@@ -276,6 +306,23 @@ var PiRpcProcess = class _PiRpcProcess {
+     const res = await this.request({ type: "switch_session", sessionPath });
+     if (!res.success) throw new Error(`pi switch_session failed: ${res.error ?? JSON.stringify(res.data)}`);
+   }
++  /** Every entry of the session file, earlier branches included, and the leaf of the current branch. */
++  async getEntries() {
++    const res = await this.request({ type: "get_entries" });
++    if (!res.success) throw new Error(`pi get_entries failed: ${res.error ?? JSON.stringify(res.data)}`);
++    return res.data;
++  }
++  /**
++   * Switches this pi to a new session that keeps what came before the user message `entryId`, or to a copy of the whole
++   * session for `clone`. The session it had stays as it was.
++   */
++  async fork(command) {
++    const res = await this.request(command);
++    if (!res.success) throw new Error(`pi ${command.type} failed: ${res.error ?? JSON.stringify(res.data)}`);
++    if (res.data?.cancelled === true) {
++      throw new Error(`pi ${command.type} was cancelled by an extension`);
++    }
++  }
+   async getMessages() {
+     const res = await this.request({ type: "get_messages" });
+     if (!res.success) throw new Error(`pi get_messages failed: ${res.error ?? JSON.stringify(res.data)}`);
+@@ -291,6 +338,7 @@ var PiRpcProcess = class _PiRpcProcess {
+ `);
+   }
+   request(cmd, opts) {
++    if (this.exitError) return Promise.reject(this.exitError);
+     const id = crypto.randomUUID();
+     const withId = { ...cmd, id };
+     const timeoutMs = opts?.timeoutMs;
+@@ -590,7 +638,16 @@ function bashExitCode(result, isError) {
+   return typeof exitCode === "number" ? exitCode : isError ? 1 : 0;
+ }
+ function bashOutputDelta(previous, next) {
+-  return next.startsWith(previous) ? next.slice(previous.length) : next;
++  if (next.text.startsWith(previous.text)) return next.text.slice(previous.text.length);
++  if (typeof next.totalBytes !== "number") return next.text;
++  const window = Buffer.from(next.text, "utf8");
++  const grown = next.totalBytes - (previous.totalBytes ?? Buffer.byteLength(previous.text, "utf8"));
++  if (grown <= 0) return "";
++  return grown >= window.length ? next.text : window.subarray(window.length - grown).toString("utf8");
++}
++function bashOutputSnapshot(result) {
++  const totalBytes = result?.details?.truncation?.totalBytes;
++  return { text: bashResultText(result), totalBytes: typeof totalBytes === "number" ? totalBytes : void 0 };
+ }
+ function bashTerminalContent(toolCallId) {
+   return [{ type: "terminal", terminalId: toolCallId }];
+@@ -721,6 +778,8 @@ function toToolCallLocations(args, cwd, line) {
+ var SessionManager = class {
+   sessions = /* @__PURE__ */ new Map();
+   store = new SessionStore();
++  /** How each session whose pi exited on its own was opened, for the pi the next request for it starts on its session file. */
++  openOptionsOfEnded = /* @__PURE__ */ new Map();
+   /** Dispose all sessions and their underlying pi subprocesses. */
+   disposeAll() {
+     for (const [id] of this.sessions) this.close(id);
+@@ -734,6 +793,7 @@ var SessionManager = class {
+    * Used when clients explicitly reload a session and we want a fresh pi subprocess.
+    */
+   close(sessionId) {
++    this.openOptionsOfEnded.delete(sessionId);
+     const s = this.sessions.get(sessionId);
+     if (!s) return;
+     try {
+@@ -742,6 +802,19 @@ var SessionManager = class {
+     }
+     this.sessions.delete(sessionId);
+   }
++  /**
++   * A session whose pi exits of its own accord is dropped, so the next request for it starts a pi on its session file,
++   * opened as it was: requests other than session/load and session/resume bring no MCP servers or system prompt of their own.
++   */
++  register(session) {
++    this.sessions.set(session.sessionId, session);
++    this.openOptionsOfEnded.delete(session.sessionId);
++    session.proc.onUnexpectedExit(() => {
++      if (this.sessions.get(session.sessionId) !== session) return;
++      this.sessions.delete(session.sessionId);
++      this.openOptionsOfEnded.set(session.sessionId, session.openOptions());
++    });
++  }
+   /** Close all sessions except the one with `keepSessionId`. */
+   closeAllExcept(keepSessionId) {
+     for (const [id] of this.sessions) {
+@@ -754,6 +827,8 @@ var SessionManager = class {
+     try {
+       proc = await PiRpcProcess.spawn({
+         cwd: params.cwd,
++        mcpServers: params.mcpServers,
++        appendSystemPrompt: params.appendSystemPrompt,
+         piCommand: params.piCommand
+       });
+     } catch (e) {
+@@ -777,11 +852,12 @@ var SessionManager = class {
+       sessionId,
+       cwd: params.cwd,
+       mcpServers: params.mcpServers,
++      appendSystemPrompt: params.appendSystemPrompt,
+       proc,
+       conn: params.conn,
+       fileCommands: params.fileCommands ?? []
+     });
+-    this.sessions.set(sessionId, session);
++    this.register(session);
+     return session;
+   }
+   get(sessionId) {
+@@ -800,11 +876,12 @@ var SessionManager = class {
+       sessionId,
+       cwd: params.cwd,
+       mcpServers: params.mcpServers,
++      appendSystemPrompt: params.appendSystemPrompt,
+       proc: params.proc,
+       conn: params.conn,
+       fileCommands: params.fileCommands ?? []
+     });
+-    this.sessions.set(sessionId, session);
++    this.register(session);
+     return session;
+   }
+ };
+@@ -812,6 +889,7 @@ var PiAcpSession = class {
+   sessionId;
+   cwd;
+   mcpServers;
++  appendSystemPrompt;
+   startupInfo = null;
+   startupInfoSent = false;
+   proc;
+@@ -823,6 +901,13 @@ var PiAcpSession = class {
+   // Current in-flight turn (if any). Additional prompts are queued.
+   pendingTurn = null;
+   turnQueue = [];
++  // pi has settled the turn, which stays pending until its last updates are out.
++  settlingTurn = false;
++  steersInFlight = /* @__PURE__ */ new Set();
++  /** How many of the running turn's last steered messages its cancel took back from pi unread. */
++  steersTakenBack = null;
++  /** How many of the last settled turn's steered messages pi never read. */
++  unansweredSteers = 0;
+   // Track tool call statuses and ensure they are monotonic (pending -> in_progress -> completed).
+   // Some pi events can arrive out of order (e.g. late toolcall_* deltas after execution starts),
+   // and clients may hide progress if we ever downgrade back to `pending`.
+@@ -831,6 +916,8 @@ var PiAcpSession = class {
+   // when retry, compaction, or queued continuations run. The session-level prompt
+   // completes only when `agent_settled` is emitted.
+   inAgentLoop = false;
++  /** The `messageId` of the assistant message streaming now: pi names its message on `message_start` alone. */
++  streamingMessageId;
+   // For ACP diff support: capture file contents before edit/write mutations,
+   // then emit ToolCallContent {type:"diff"}. Compatible structured edit/write
+   // events may need to be implemented in pi in the future.
+@@ -845,10 +932,25 @@ var PiAcpSession = class {
+     this.sessionId = opts.sessionId;
+     this.cwd = opts.cwd;
+     this.mcpServers = opts.mcpServers;
++    this.appendSystemPrompt = opts.appendSystemPrompt;
+     this.proc = opts.proc;
+     this.conn = opts.conn;
+     this.fileCommands = opts.fileCommands ?? [];
+     this.proc.onEvent((ev) => this.handlePiEvent(ev));
++    this.proc.onUnexpectedExit((error) => this.failUnsettledTurns(error));
++  }
++  openOptions() {
++    return { cwd: this.cwd, mcpServers: this.mcpServers, appendSystemPrompt: this.appendSystemPrompt };
++  }
++  /** A pi that is gone settles no turn, so the running turn, unless pi had settled it, and those queued behind it end with why it went. */
++  failUnsettledTurns(error) {
++    const queued = this.turnQueue.splice(0);
++    const running = this.settlingTurn ? null : this.pendingTurn;
++    if (running) this.pendingTurn = null;
++    this.inAgentLoop = false;
++    void this.flushEmits().finally(() => {
++      for (const turn of [running, ...queued]) turn?.reject(error);
++    });
+   }
+   setStartupInfo(text) {
+     this.startupInfo = text;
+@@ -890,6 +992,40 @@ var PiAcpSession = class {
+     });
+     return turnPromise;
+   }
++  /**
++   * Adds the message to the running turn, as pi's steer does. Sends nothing and returns false when no turn is running,
++   * or when pi has already settled it or is being cancelled.
++   */
++  async steer(message, images = []) {
++    if (!this.pendingTurn || this.settlingTurn || this.cancelRequested) return false;
++    const steering = this.proc.steer(expandSlashCommand(message, this.fileCommands), images);
++    this.steersInFlight.add(steering);
++    try {
++      await steering;
++    } finally {
++      this.steersInFlight.delete(steering);
++    }
++    return true;
++  }
++  /**
++   * pi keeps a steered message it has not read yet through an abort, and reads it at the start of its next run, after
++   * that run's own message, so a cancel takes such messages back first. pi reads its queue first in, first out: those
++   * it never read are the turn's last ones.
++   */
++  async takeBackUnreadSteers() {
++    await Promise.allSettled(this.steersInFlight);
++    try {
++      const { steering } = await this.proc.clearQueue();
++      return Array.isArray(steering) ? steering.length : 0;
++    } catch {
++      return 0;
++    }
++  }
++  takeUnansweredSteers() {
++    const unanswered = this.unansweredSteers;
++    this.unansweredSteers = 0;
++    return unanswered;
++  }
+   async cancel() {
+     this.cancelRequested = true;
+     if (this.turnQueue.length) {
+@@ -904,6 +1040,8 @@ var PiAcpSession = class {
+         _meta: { piAcp: { queueDepth: 0, running: Boolean(this.pendingTurn) } }
+       });
+     }
++    this.steersTakenBack ??= this.takeBackUnreadSteers();
++    await this.steersTakenBack;
+     await this.proc.abort();
+   }
+   wasCancelRequested() {
+@@ -937,10 +1075,13 @@ var PiAcpSession = class {
+     await this.flushEmits();
+   }
+   async settleTurn() {
++    this.settlingTurn = true;
+     await this.publishContextUsage();
++    this.unansweredSteers = await this.steersTakenBack ?? 0;
+     const reason = this.cancelRequested ? "cancelled" : "end_turn";
+     this.pendingTurn?.resolve(reason);
+     this.pendingTurn = null;
++    this.settlingTurn = false;
+     this.inAgentLoop = false;
+     const next = this.turnQueue.shift();
+     if (next) {
+@@ -970,10 +1111,10 @@ var PiAcpSession = class {
+     });
+   }
+   emitBashOutputUpdate(params) {
+-    const text = bashResultText(params.result);
+-    const previous = this.bashOutputSnapshots.get(params.toolCallId) ?? "";
+-    const delta = bashOutputDelta(previous, text);
+-    this.bashOutputSnapshots.set(params.toolCallId, text);
++    const snapshot = bashOutputSnapshot(params.result);
++    const previous = this.bashOutputSnapshots.get(params.toolCallId) ?? { text: "" };
++    const delta = bashOutputDelta(previous, snapshot);
++    this.bashOutputSnapshots.set(params.toolCallId, snapshot);
+     this.emit({
+       sessionUpdate: "tool_call_update",
+       toolCallId: params.toolCallId,
+@@ -993,6 +1134,7 @@ var PiAcpSession = class {
+   }
+   startTurn(t) {
+     this.cancelRequested = false;
++    this.steersTakenBack = null;
+     this.inAgentLoop = false;
+     this.pendingTurn = { resolve: t.resolve, reject: t.reject };
+     this.emit({
+@@ -1021,12 +1163,19 @@ var PiAcpSession = class {
+   handlePiEvent(ev) {
+     const type = String(ev.type ?? "");
+     switch (type) {
++      case "message_start": {
++        const message = ev.message;
++        if (message?.role === "assistant") this.streamingMessageId = piMessageId(message);
++        break;
++      }
+       case "message_update": {
+         const ame = ev.assistantMessageEvent;
+         if (ame?.type === "text_delta" && typeof ame.delta === "string") {
++          const messageId = this.streamingMessageId;
+           this.emit({
+             sessionUpdate: "agent_message_chunk",
+-            content: { type: "text", text: ame.delta }
++            content: { type: "text", text: ame.delta },
++            ...messageId && { messageId }
+           });
+           break;
+         }
+@@ -1790,6 +1939,7 @@ function getEnableSkillCommands(cwd) {
+   return true;
+ }
+ function getQuietStartup(cwd) {
++  if (process.env.PI_ACP_QUIET_STARTUP === "true") return true;
+   const merged = getMergedSettings(cwd);
+   const direct = merged.quietStartup;
+   if (typeof direct === "boolean") return direct;
+@@ -1834,6 +1984,7 @@ import { existsSync as existsSync4, readFileSync as readFileSync6, realpathSync,
+ import { join as join5, dirname as dirname2, basename } from "path";
+ import { spawnSync } from "child_process";
+ import { fileURLToPath } from "url";
++import { forkCommandAt, piMessageId } from "./fork-point.js";
+ var MODEL_CONFIG_ID = "model";
+ var THOUGHT_LEVEL_CONFIG_ID = "thought_level";
+ function builtinAvailableCommands() {
+@@ -1888,6 +2039,28 @@ function mergeCommands(a, b) {
+   return out;
+ }
+ var pkg = readNearestPackageJson(import.meta.url);
++var appendedSystemPrompt = (params) => params._meta?.systemPrompt?.append ?? "";
++function forkPointOf(meta) {
++  const point = meta?.jetbrains?.air?.fork?.messageId;
++  return typeof point === "string" && point ? point : void 0;
++}
++async function forkCommandFor(proc, messageId, atSteeredMessage) {
++  const { entries, leafId } = await proc.getEntries();
++  const command = forkCommandAt(entries ?? [], leafId ?? null, messageId, atSteeredMessage);
++  if (!command) throw RequestError3.invalidParams(`The session has no agent message ${messageId} to fork at`);
++  return command;
++}
++var STEERING_METHOD = "_session/steering";
++function parseSteerRequest(params) {
++  const { sessionId, prompt, _meta } = params;
++  if (typeof sessionId !== "string" || !sessionId) throw RequestError3.invalidParams("steering needs a sessionId");
++  if (!Array.isArray(prompt) || prompt.length === 0) throw RequestError3.invalidParams("steering needs a prompt");
++  const idleBehavior = _meta?.steering?.idleBehavior;
++  if (idleBehavior !== void 0 && idleBehavior !== "promptRequired") {
++    throw RequestError3.invalidParams(`unsupported steering idleBehavior: ${String(idleBehavior)}`);
++  }
++  return { sessionId, prompt, idleBehavior };
++}
+ var PiAcpAgent = class {
+   conn;
+   sessions = new SessionManager();
+@@ -1940,12 +2113,15 @@ var PiAcpAgent = class {
+       if (!stored) {
+         throw RequestError3.invalidParams(`Unknown sessionId: ${sessionId}`);
+       }
++      opts ??= this.sessions.openOptionsOfEnded.get(sessionId);
+       const cwd = opts?.cwd ?? stored.cwd;
+       let proc;
+       try {
+         proc = await PiRpcProcess.spawn({
+           cwd,
+           sessionPath: stored.sessionFile,
++          mcpServers: opts?.mcpServers ?? [],
++          appendSystemPrompt: opts?.appendSystemPrompt,
+           piCommand: process.env.PI_ACP_PI_COMMAND
+         });
+       } catch (e) {
+@@ -1958,6 +2134,7 @@ var PiAcpAgent = class {
+       const session = this.sessions.getOrCreate(sessionId, {
+         cwd,
+         mcpServers: opts?.mcpServers ?? [],
++        appendSystemPrompt: opts?.appendSystemPrompt,
+         conn: this.conn,
+         proc,
+         fileCommands
+@@ -1990,7 +2167,7 @@ var PiAcpAgent = class {
+       }),
+       agentCapabilities: {
+         loadSession: true,
+-        mcpCapabilities: { http: false, sse: false },
++        mcpCapabilities: { http: true, sse: false },
+         promptCapabilities: {
+           image: true,
+           audio: false,
+@@ -2000,11 +2177,33 @@ var PiAcpAgent = class {
+           // **UNSTABLE** ACP capability used by Zed's codex-acp adapter.
+           // Enables a native session picker in clients that support it.
+           list: {},
+-          delete: {}
++          delete: {},
++          close: {},
++          resume: {},
++          fork: {}
+         }
+-      }
++      },
++      _meta: { steering: { supported: true } }
+     };
+   }
++  async extMethod(method, params) {
++    if (method === STEERING_METHOD) return this.steer(parseSteerRequest(params));
++    throw RequestError3.methodNotFound(method);
++  }
++  /**
++   * The message joins the turn running in the session. With no turn running, a client that asks for it in
++   * `_meta.steering.idleBehavior` gets `promptRequired` and sends the message as a prompt itself; otherwise the message
++   * starts a turn of its own.
++   */
++  async steer({ sessionId, prompt, idleBehavior }) {
++    const { message, images } = promptToPiMessage(prompt);
++    if (await this.sessions.maybeGet(sessionId)?.steer(message, images)) return { outcome: "injected" };
++    if (idleBehavior === "promptRequired") return { outcome: "promptRequired", reason: "noRunningTurn" };
++    this.prompt({ sessionId, prompt }).catch((error) => {
++      console.error(`pi-acp: a steered message could not start a turn: ${error instanceof Error ? error.message : String(error)}`);
++    });
++    return { outcome: "startedNewTurn" };
++  }
+   async newSession(params) {
+     if (!isAbsolute3(params.cwd)) {
+       throw RequestError3.invalidParams(`cwd must be an absolute path: ${params.cwd}`);
+@@ -2015,6 +2214,7 @@ var PiAcpAgent = class {
+     const session = await this.sessions.create({
+       cwd: params.cwd,
+       mcpServers: params.mcpServers,
++      appendSystemPrompt: appendedSystemPrompt(params),
+       conn: this.conn,
+       fileCommands,
+       piCommand: process.env.PI_ACP_PI_COMMAND
+@@ -2079,7 +2279,6 @@ var PiAcpAgent = class {
+     });
+     if (preludeText)
+       session.setStartupInfo(preludeText);
+-    this.sessions.closeAllExcept?.(session.sessionId);
+     const response = {
+       sessionId: session.sessionId,
+       configOptions,
+@@ -2496,7 +2695,8 @@ ${JSON.stringify(stats, null, 2)}`;
+     }
+     const result = await session.prompt(message, images);
+     const stopReason = result === "error" ? session.wasCancelRequested() ? "cancelled" : "end_turn" : result;
+-    return { stopReason };
++    const unanswered = session.takeUnansweredSteers();
++    return { stopReason, ...unanswered > 0 && { _meta: { steering: { unanswered } } } };
+   }
+   async cancel(params) {
+     const session = this.sessions.maybeGet(params.sessionId);
+@@ -2521,6 +2721,12 @@ ${JSON.stringify(stats, null, 2)}`;
+     return { sessions, nextCursor, _meta: {} };
+   }
+   async loadSession(params) {
++    return this.openStoredSession(params, true);
++  }
++  async resumeSession(params) {
++    return this.openStoredSession(params, false);
++  }
++  async openStoredSession(params, replayHistory) {
+     if (!isAbsolute3(params.cwd)) {
+       throw RequestError3.invalidParams(`cwd must be an absolute path: ${params.cwd}`);
+     }
+@@ -2533,7 +2739,8 @@ ${JSON.stringify(stats, null, 2)}`;
+     const enableSkillCommands = getEnableSkillCommands(params.cwd);
+     const session = await this.restoreSession(params.sessionId, {
+       cwd: params.cwd,
+-      mcpServers: params.mcpServers
++      mcpServers: params.mcpServers,
++      appendSystemPrompt: appendedSystemPrompt(params)
+     });
+     const proc = session.proc;
+     let configuration;
+@@ -2545,13 +2752,12 @@ ${JSON.stringify(stats, null, 2)}`;
+     }
+     const { configOptions, models, modes } = configuration;
+     const fileCommands = loadSlashCommands(params.cwd);
+-    this.sessions.closeAllExcept?.(session.sessionId);
+     this.store.upsert({
+       sessionId: params.sessionId,
+       cwd: params.cwd,
+       sessionFile: stored.sessionFile
+     });
+-    const data = await proc.getMessages();
++    const data = replayHistory ? await proc.getMessages() : null;
+     const messages = Array.isArray(data?.messages) ? data.messages : [];
+     for (const m of messages) {
+       const role = String(m?.role ?? "");
+@@ -2569,12 +2775,14 @@ ${JSON.stringify(stats, null, 2)}`;
+       }
+       if (role === "assistant") {
+         const text = normalizePiAssistantText(m?.content);
++        const messageId = piMessageId(m);
+         if (text) {
+           await this.conn.sessionUpdate({
+             sessionId: session.sessionId,
+             update: {
+               sessionUpdate: "agent_message_chunk",
+-              content: { type: "text", text }
++              content: { type: "text", text },
++              ...messageId && { messageId }
+             }
+           });
+         }
+@@ -2677,6 +2885,48 @@ ${JSON.stringify(stats, null, 2)}`;
+     }, 0);
+     return response;
+   }
++  async closeSession(params) {
++    this.sessions.close(params.sessionId);
++    return {};
++  }
++  /**
++   * A new session that holds what the session had up to the agent message a client names the way claude-agent-acp
++   * reads it (`_meta.jetbrains.air.fork.messageId`), with the rest of that message's turn; without one, all of it. A
++   * client going back to a message that joined that turn says so with `_meta.steering.atSteeredMessage`, and the new
++   * session ends where that message came in. A pi of its own makes the new session file with pi's fork, so the session
++   * stays as it was, and is gone once that is done: the client loads or resumes the new session as any other.
++   */
++  async unstable_forkSession(params) {
++    if (!isAbsolute3(params.cwd)) {
++      throw RequestError3.invalidParams(`cwd must be an absolute path: ${params.cwd}`);
++    }
++    const stored = this.findStoredSession(params.sessionId);
++    if (!stored) {
++      throw RequestError3.invalidParams(`Unknown sessionId: ${params.sessionId}`);
++    }
++    const point = forkPointOf(params._meta);
++    let proc;
++    try {
++      proc = await PiRpcProcess.spawn({ cwd: params.cwd, sessionPath: stored.sessionFile, piCommand: process.env.PI_ACP_PI_COMMAND });
++    } catch (e) {
++      if (e?.name === "PiRpcSpawnError") {
++        throw RequestError3.internalError({ code: e?.code }, String(e?.message ?? e));
++      }
++      throw e;
++    }
++    try {
++      const atSteeredMessage = params._meta?.steering?.atSteeredMessage === true;
++      await proc.fork(point ? await forkCommandFor(proc, point, atSteeredMessage) : { type: "clone" });
++      const state = await proc.getState();
++      if (typeof state?.sessionId !== "string" || typeof state.sessionFile !== "string") {
++        throw RequestError3.internalError({}, "pi did not say which session the fork made");
++      }
++      this.store.upsert({ sessionId: state.sessionId, cwd: params.cwd, sessionFile: state.sessionFile });
++      return { sessionId: state.sessionId };
++    } finally {
++      proc.dispose();
++    }
++  }
+   async deleteSession(params) {
+     const stored = this.store.get(params.sessionId);
+     const piSession = findPiSession(params.sessionId);
+diff --git a/node_modules/pi-acp/dist/session-extension.js b/dist/session-extension.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..c76d03076ab58b9f6692943a0b16fde40a07ea35
+--- /dev/null
++++ b/dist/session-extension.js
+@@ -0,0 +1,67 @@
++/**
++ * Loaded into each pi that pi-acp starts for a session with MCP servers or added system prompt text. It hands the
++ * servers the ACP client sent in session/new, session/load or session/resume to pi's built-in MCP support, with their
++ * tools declared to the model directly, adds the client's `_meta.systemPrompt.append` to pi's system prompt, and marks
++ * the user messages steered into a run.
++ */
++const SESSION_VARIABLE = "PI_ACP_SESSION";
++const SESSION_KEY = Symbol.for("pi-acp.session");
++
++/**
++ * Read once per process, as a reload loads the extension again, and taken out of the environment, which the bash tool's
++ * commands inherit, since server headers and environments can hold credentials.
++ */
++function sessionOptions() {
++  globalThis[SESSION_KEY] ??= JSON.parse(process.env[SESSION_VARIABLE] ?? "{}");
++  delete process.env[SESSION_VARIABLE];
++  return globalThis[SESSION_KEY];
++}
++
++const asObject = (pairs) => Object.fromEntries((pairs ?? []).map(({ name, value }) => [name, value]));
++
++function piServerConfig(server) {
++  if (server.type === "http") return { url: server.url, headers: asObject(server.headers) };
++  return { command: server.command, args: server.args ?? [], env: asObject(server.env) };
++}
++
++/**
++ * The custom entry naming, by its timestamp, a user message that joined a run: pi records it as any other user message.
++ * A fork at that message leaves the mark at the end of the new session, so the mark names its message rather than
++ * standing next to it.
++ */
++export const STEER_MARK = "pi-acp.steer";
++
++/**
++ * Marks each user message of a run but the one it started with, so a fork can tell the message that started a turn from
++ * those steered into it. pi writes a message to the session only after the extensions' message_end handlers ran, so the
++ * mark comes just before it.
++ */
++function markSteeredMessages(pi) {
++  let awaitingRunsPrompt = false;
++  pi.on("before_agent_start", ({ messageType }) => {
++    awaitingRunsPrompt = messageType !== "custom";
++  });
++  pi.on("message_end", ({ message }) => {
++    if (message?.role !== "user") return;
++    if (awaitingRunsPrompt) awaitingRunsPrompt = false;
++    else pi.appendEntry(STEER_MARK, { timestamp: message.timestamp });
++  });
++}
++
++/** pi.registerMcpServer came in pi 0.99.0, and before_agent_start's systemPromptOptions with it. */
++const OLDEST_PI = "0.99.0";
++
++export default function (pi) {
++  if (typeof pi.registerMcpServer !== "function") {
++    throw new Error(`Mirador needs pi ${OLDEST_PI} or later. Update pi with npm install -g @earendil-works/pi-coding-agent`);
++  }
++  const { mcpServers = [], appendSystemPrompt = "" } = sessionOptions();
++  for (const server of mcpServers) pi.registerMcpServer(server.name, { ...piServerConfig(server), exposure: "direct" });
++  // Not pi's --append-system-prompt, which would take the place of the APPEND_SYSTEM.md files pi finds.
++  if (appendSystemPrompt) {
++    pi.on("before_agent_start", ({ systemPromptOptions }) => {
++      systemPromptOptions.appendSystemPrompt = [systemPromptOptions.appendSystemPrompt, appendSystemPrompt].filter(Boolean).join("\n\n");
++    });
++  }
++  markSteeredMessages(pi);
++}

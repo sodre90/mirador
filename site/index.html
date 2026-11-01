@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mirador: a canvas for your coding agent</title>
+  <meta name="description" content="Mirador gives your coding agent a canvas beside the conversation: it draws what it means, asks you with pictures, and walks you through its changes and reviews. Free and open source, for macOS, Linux and Windows.">
+  <link rel="canonical" href="https://mirador.sodre90.com/">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Mirador">
+  <meta property="og:title" content="Mirador: a canvas for your coding agent">
+  <meta property="og:description" content="Your coding agent draws what it means, asks you with pictures, and walks you through its changes and reviews, right beside the conversation.">
+  <meta property="og:url" content="https://mirador.sodre90.com/">
+  <meta property="og:image" content="https://mirador.sodre90.com/og.jpg">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="theme-color" content="#0c0b16">
+  <link rel="preload" href="inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#"><img src="icon.svg" alt="" width="32" height="32">Mirador</a>
+    <nav aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#install">Install</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/sodre90/mirador">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Free and open source · macOS, Linux and Windows</p>
+      <h1>See what your coding agent <span class="gradient">means.</span></h1>
+      <p class="lede">Mirador gives your coding agent a canvas beside the conversation. It draws what it means, asks you with pictures, and walks you through its changes and reviews, so you understand them at a glance.</p>
+      <div class="command" data-command="curl -fsSL https://github.com/sodre90/mirador/releases/latest/download/install.sh | sh">
+        <code>curl -fsSL https://github.com/sodre90/mirador/releases/latest/download/install.sh | sh</code>
+        <button type="button" class="copy">Copy</button>
+      </div>
+      <p class="alternative">or <code>brew install --cask sodre90/tap/mirador</code> · <a href="#install">Windows</a></p>
+      <div class="actions">
+        <a class="button primary" href="https://github.com/sodre90/mirador/releases/latest">Download</a>
+        <a class="button" href="https://github.com/sodre90/mirador">Star on GitHub</a>
+      </div>
+    </section>
+
+    <section class="trailer" aria-label="Trailer">
+      <a class="video" href="https://youtu.be/ZMpbOZdF4bU" data-video="ZMpbOZdF4bU">
+        <img src="screenshots/trailer.jpg" alt="The trailer: no more walls of text, your agent draws now" width="1280" height="720">
+        <span class="play" aria-hidden="true"></span>
+      </a>
+      <p class="caption">Watch the trailer (2:33)</p>
+    </section>
+
+    <section class="why">
+      <h2>Writing code is no longer the slow part. Reading it is.</h2>
+      <p>In a few minutes an agent reads a codebase, changes ten files and explains what it did in a long stream of text, all in one font, at the speed it types. People understand pictures far faster than text: a sequence diagram explains a request path at a glance, where the same in prose takes a page. Mirador isn't another agent: it runs the ones you already use, with your own settings, and gives them a place to show you.</p>
+    </section>
+
+    <section id="features" class="ideas">
+      <article class="idea">
+        <div class="words">
+          <p class="kicker">Show</p>
+          <h2>Your agent draws what it means.</h2>
+          <p>Diagrams, mockups, charts, comparisons, even 3D scenes, on a canvas next to the chat instead of a page of prose. Mermaid, D3 and three.js are built in and work offline. When a page has a script error, the agent hears about it and fixes it.</p>
+        </div>
+        <img src="screenshots/canvas.png" alt="A conversation about a checkout flow, with the agent's sequence diagram on the canvas beside it" width="1600" height="1000" loading="lazy">
+      </article>
+      <article class="idea">
+        <div class="words">
+          <p class="kicker">Ask</p>
+          <h2>Decisions come with pictures.</h2>
+          <p>Instead of a numbered list in text, the agent asks on the canvas: up to eight options, each with a preview. Click one, or type your own answer and add a note. Several questions come at once, a page each, with a review before you send.</p>
+        </div>
+        <img src="screenshots/ask.png" alt="The agent asks which settings layout to build, with a mockup preview for each option" width="1600" height="1000" loading="lazy">
+      </article>
+      <article class="idea">
+        <div class="words">
+          <p class="kicker">Tour</p>
+          <h2>A walk through the code, in the order it runs.</h2>
+          <p>How something works, or what the agent just changed: a short summary and steps through the code, each with its lines, and the changed ones marked. Ask about any lines, or open them in IntelliJ IDEA.</p>
+        </div>
+        <img src="screenshots/tour.png" alt="The agent's tour of its fix: the steps on the left, the changed line of src/checkout.ts marked on the right" width="1600" height="1000" loading="lazy">
+      </article>
+      <article class="idea">
+        <div class="words">
+          <p class="kicker">Review</p>
+          <h2>A code review you can walk through.</h2>
+          <p>The verdict and summary, a guided tour of the change, every diff, and findings pinned to their lines, each marked as confirmed or only suspected. Keep the findings you agree with, reword them, and post them to the GitHub pull request as your pending review.</p>
+        </div>
+        <img src="screenshots/review-flow.png" alt="A code review open on its flow tour: the steps beside the current step's explanation, and the diff below them with the step's lines marked" width="1600" height="1000" loading="lazy">
+      </article>
+    </section>
+
+    <section class="more">
+      <h2>And the rest of your day with an agent</h2>
+      <div class="cards">
+        <article class="card wide">
+          <img src="screenshots/changes.png" alt="The Changes view: the uncommitted files of a project, with the agent's edit open under its row" width="1600" height="1000" loading="lazy">
+          <h3>Every change, even outside the project</h3>
+          <p>What this turn or this conversation changed, or all uncommitted work, with each file's diff a click away.</p>
+        </article>
+        <article class="card wide">
+          <img src="screenshots/terminals.png" alt="Two terminals side by side under the conversation" width="1600" height="1000" loading="lazy">
+          <h3>A shell beside every conversation</h3>
+          <p>Tabs and splits that keep running while you switch, and come back after a restart.</p>
+        </article>
+        <article class="card">
+          <h3>Approve each edit with its diff</h3>
+          <p>A requested edit shows on the canvas, with the file's own line numbers, before you allow it.</p>
+        </article>
+        <article class="card">
+          <h3>See who needs you</h3>
+          <p>Every project in one sidebar, marking the conversations that wait for you, are done or failed.</p>
+        </article>
+        <article class="card">
+          <h3>Pick up where the terminal left off</h3>
+          <p>Continue a session you started in a terminal, with its whole history.</p>
+        </article>
+        <article class="card">
+          <h3>Point and ask</h3>
+          <p>Point at any part of a page the agent drew, and ask about it or have it changed.</p>
+        </article>
+        <article class="card">
+          <h3>Your agents, together</h3>
+          <p>The real agents with your hooks and MCP servers. One can hand a long, easy task to another, like a local model, and check what comes back.</p>
+        </article>
+        <article class="card">
+          <h3>It waits for long jobs</h3>
+          <p>The agent leaves a build or a test run going, even on a build server over ssh or in a container, and Mirador wakes it when the job ends.</p>
+        </article>
+        <article class="card">
+          <h3>Plugins</h3>
+          <p>Official plugins add tools to the canvas, like Media: mark what's wrong on a video's frame, and the agent cuts it and renders it.</p>
+        </article>
+        <article class="card">
+          <h3>Talk to it</h3>
+          <p>Dictate your message, hear the gist of the reply, and keep talking, hands free.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="install" class="install">
+      <h2>Install</h2>
+      <p>On a Mac with Apple Silicon, or on Linux (x64 or arm64), this downloads the app, installs it and starts it:</p>
+      <div class="command" data-command="curl -fsSL https://github.com/sodre90/mirador/releases/latest/download/install.sh | sh">
+        <code>curl -fsSL https://github.com/sodre90/mirador/releases/latest/download/install.sh | sh</code>
+        <button type="button" class="copy">Copy</button>
+      </div>
+      <p>On Windows (x64, experimental), in PowerShell:</p>
+      <div class="command" data-command="irm https://github.com/sodre90/mirador/releases/latest/download/install.ps1 | iex">
+        <code>irm https://github.com/sodre90/mirador/releases/latest/download/install.ps1 | iex</code>
+        <button type="button" class="copy">Copy</button>
+      </div>
+      <p>Or with Homebrew, on macOS and Linux:</p>
+      <div class="command" data-command="brew install --cask sodre90/tap/mirador">
+        <code>brew install --cask sodre90/tap/mirador</code>
+        <button type="button" class="copy">Copy</button>
+      </div>
+      <p>The macOS app is signed and notarized by Apple. The Windows app isn't signed yet, so SmartScreen warns when you run its installer by hand. Linux needs a few system libraries, and the <a href="https://github.com/sodre90/mirador#get-it">README</a> lists them, along with installing by hand and running from source. Or download the files from the <a href="https://github.com/sodre90/mirador/releases/latest">latest release</a>. After that, the app updates itself.</p>
+    </section>
+
+    <section id="faq" class="faq">
+      <h2>Questions</h2>
+      <details>
+        <summary>What does it cost?</summary>
+        <p>Nothing. Mirador is open source under the MIT license, with no account to create. You use your agent's own plan or API key, as you do now.</p>
+      </details>
+      <details>
+        <summary>Which coding agents does it work with?</summary>
+        <p>Claude Code, opencode and pi (experimental) today, through the Agent Client Protocol (ACP). More agents are coming.</p>
+      </details>
+      <details>
+        <summary>Does my code leave my computer?</summary>
+        <p>Mirador runs on your computer. Your agent talks to its model provider as it always does, and Mirador itself only asks GitHub whether a newer release is out. There is no telemetry.</p>
+      </details>
+      <details>
+        <summary>Does it replace my terminal?</summary>
+        <p>No. It runs the same agent with your settings, hooks and MCP servers, and it can continue a session you started in a terminal.</p>
+      </details>
+      <details>
+        <summary>What about phones?</summary>
+        <p>Android and iOS apps are coming.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    <p><img src="icon.svg" alt="" width="20" height="20"> Mirador · MIT license · Made by Péter Erdős</p>
+    <p><a href="https://github.com/sodre90/mirador">GitHub</a> · <a href="https://github.com/sodre90/mirador/releases/latest">Releases</a> · <a href="https://youtu.be/ZMpbOZdF4bU">Trailer</a> · <a href="privacy.html">Privacy</a></p>
+  </footer>
+
+  <script>
+    for (const command of document.querySelectorAll(".command")) {
+      const button = command.querySelector(".copy");
+      button.addEventListener("click", async () => {
+        await navigator.clipboard.writeText(command.dataset.command);
+        button.textContent = "Copied";
+        setTimeout(() => { button.textContent = "Copy"; }, 1600);
+      });
+    }
+
+    const video = document.querySelector(".video");
+    video.addEventListener("click", (event) => {
+      event.preventDefault();
+      const player = document.createElement("iframe");
+      player.src = `https://www.youtube-nocookie.com/embed/${video.dataset.video}?autoplay=1&rel=0`;
+      player.title = "Mirador trailer";
+      player.allow = "autoplay; encrypted-media; picture-in-picture; fullscreen";
+      player.allowFullscreen = true;
+      video.replaceWith(player);
+    });
+  </script>
+</body>
+</html>
