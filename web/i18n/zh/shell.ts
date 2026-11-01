@@ -58,7 +58,7 @@ export const shell: Messages["shell"] = {
     profiles: "配置…",
     machines: "机器…",
     search: "搜索…",
-    palette: "面板",
+    paletteBar: "对话和操作…",
     shortcuts: "快捷键",
   },
   sessions: {

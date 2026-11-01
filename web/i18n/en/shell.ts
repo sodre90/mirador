@@ -62,7 +62,7 @@ export const shell = {
     profiles: "Profiles…",
     machines: "Machines…",
     search: "Search…",
-    palette: "Palette",
+    paletteBar: "Conversations and actions…",
     shortcuts: "Shortcuts",
   },
   sessions: {

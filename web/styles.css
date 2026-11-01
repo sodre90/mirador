@@ -629,6 +629,42 @@ body.resizing iframe {
   flex-direction: column;
 }
 
+.palette-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 10px 0;
+  padding: 6px 10px;
+  border: 1px solid var(--rail-line);
+  border-radius: 6px;
+  background: var(--rail-card);
+  color: var(--muted);
+  font: inherit;
+  font-size: calc(12px * var(--font-scale));
+  text-align: left;
+  cursor: text;
+}
+
+.palette-bar:hover {
+  background: var(--rail-selected);
+}
+
+.palette-bar > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-bar > kbd {
+  flex: none;
+  border: 0;
+  background: none;
+  color: var(--muted);
+}
+
 .sidebar-scroll {
   flex: 1;
   min-height: 0;

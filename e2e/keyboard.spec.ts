@@ -115,6 +115,17 @@ test("conversations, workspaces, the canvas and the dialogs are all reachable fr
   await expect.poll(() => focusedTag(page)).toBe("TEXTAREA");
 });
 
+test("the search bar at the top of the sidebar shows the palette's shortcut and opens the palette", async ({ page }) => {
+  await signIn(page, host);
+  const primary = await primaryModifier(page);
+  const bar = page.locator(".sidebar .palette-bar");
+  await expect(bar).toContainText("Conversations and actions…");
+  await expect(bar.locator("kbd")).toHaveText(primary === "Meta" ? "⌘K" : "Ctrl+K");
+  await bar.click();
+  await expect(page.getByRole("dialog", { name: "Palette" })).toBeVisible();
+  await page.keyboard.press("Escape");
+});
+
 test("keys pressed inside a focused canvas page navigate, but cannot create conversations or reload the page", async ({ page }) => {
   await signIn(page, host);
   const primary = await primaryModifier(page);

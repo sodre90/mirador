@@ -747,6 +747,10 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
   };
   return (
     <nav className="sidebar">
+      <button className="palette-bar" onClick={() => openOverlay({ kind: "palette" })}>
+        <span>{words.paletteBar}</span>
+        <kbd>{shortcutKeys().palette}</kbd>
+      </button>
       <div className="sidebar-scroll" ref={sidebar}>
         <WaitingEdge side="above" hidden={outOfView.above} onClick={() => scrollToWaiting("above")} />
         <WaitingList state={state} dispatch={dispatch} />
@@ -793,9 +797,6 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
           </button>
           <button className="link" data-hint={hints.searchAll} data-shortcut={shortcutKeys().search} onClick={() => openOverlay({ kind: "search" })}>
             {words.search}
-          </button>
-          <button className="link" onClick={() => openOverlay({ kind: "palette" })}>
-            {words.palette} <kbd>{shortcutKeys().palette}</kbd>
           </button>
           <button className="link" onClick={() => openOverlay({ kind: "help" })}>
             {words.shortcuts} <kbd>{shortcutKeys().help}</kbd>

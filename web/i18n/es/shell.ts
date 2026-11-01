@@ -60,7 +60,7 @@ export const shell: Messages["shell"] = {
     profiles: "Perfiles…",
     machines: "Máquinas…",
     search: "Buscar…",
-    palette: "Paleta",
+    paletteBar: "Conversaciones y acciones…",
     shortcuts: "Atajos",
   },
   sessions: {

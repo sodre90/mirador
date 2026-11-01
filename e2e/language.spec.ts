@@ -59,9 +59,9 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   const sidebar = page.locator("nav.sidebar");
   await expect(sidebar.getByRole("heading", { name: "Munkaterületek" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "+ Új beszélgetés" })).toBeVisible();
-  await expect(sidebar.locator(".footer-buttons > button")).toHaveText([/^Beállítások…/, "Profilok…", "Gépek…", "Keresés…", /^Paletta/, /^Billentyűk/]);
+  await expect(sidebar.locator(".footer-buttons > button")).toHaveText([/^Beállítások…/, "Profilok…", "Gépek…", "Keresés…", /^Billentyűk/]);
 
-  await sidebar.getByRole("button", { name: /^Paletta/ }).click();
+  await sidebar.getByRole("button", { name: /^Beszélgetések és műveletek…/ }).click();
   const palette = page.getByRole("dialog", { name: "Paletta" });
   await expect(palette.getByRole("textbox", { name: "Beszélgetések és műveletek keresése" })).toBeVisible();
   const entries = palette.getByRole("option");

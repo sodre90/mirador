@@ -58,7 +58,7 @@ export const shell: Messages["shell"] = {
     profiles: "Profilok…",
     machines: "Gépek…",
     search: "Keresés…",
-    palette: "Paletta",
+    paletteBar: "Beszélgetések és műveletek…",
     shortcuts: "Billentyűk",
   },
   sessions: {
