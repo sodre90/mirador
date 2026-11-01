@@ -1,3 +1,4 @@
+import { useOpensIn } from "./opens-in.ts";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { pluginItemOf } from "../shared/canvas-plugins.ts";
 import {
@@ -102,6 +103,7 @@ export function PluginItemView({
   const [seenWhenShown] = useState(seenAgentEditAt);
   const imagesFromOtherSites = !useExternalImagesBlocked();
   const typingAids = useTypingAids();
+  const opensIn = useOpensIn();
   const enterWhileBusy = useEnterWhileBusy();
   const paneFullscreen = usePaneFullscreen("canvas");
   const fullscreen = fitsContent ? undefined : paneFullscreen;
@@ -113,6 +115,7 @@ export function PluginItemView({
     seenAgentEditAt: seenWhenShown,
     imagesFromOtherSites,
     typingAids,
+    opensIn,
     ...(fullscreen && { fullscreen: fullscreen.isFullscreen }),
   };
   const post = (message: unknown) => frame.current?.contentWindow?.postMessage(message, "*");
@@ -122,7 +125,7 @@ export function PluginItemView({
     if (where) post(pluginThemeMessage(themeVariables(where)));
   };
 
-  useEffect(postItem, [item, imagesFromOtherSites, typingAids, fullscreen?.isFullscreen]);
+  useEffect(postItem, [item, imagesFromOtherSites, typingAids, opensIn, fullscreen?.isFullscreen]);
   useEffect(postTheme, [shownTheme, fontScale]);
   useEffect(() => () => showFramedHint(null), []);
 

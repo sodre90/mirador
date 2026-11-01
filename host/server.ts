@@ -1,3 +1,5 @@
+import { editorState } from "./editor.ts";
+import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { homedir } from "node:os";
 import { basename } from "node:path";
 import index from "../web/index.html";
@@ -883,6 +885,13 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.push-relay", pushRelay: store.pushRelaySetting() });
   }
 
+  function setEditor(setting: EditorSetting) {
+    if (!isEditorSetting(setting)) throw new HostProblemError({ code: "unknown-editor" });
+    const blankCommand = setting.editor === "custom" && !setting.command.trim();
+    store.setEditorSetting(blankCommand ? { editor: "first-found" } : setting.editor === "custom" ? { editor: "custom", command: setting.command.trim() } : setting);
+    hub.broadcast({ type: "settings.editor", editor: editorState(store.editorSetting()) });
+  }
+
   function setScriptProgram(program: string) {
     store.setScriptProgramSetting(program.trim());
     hub.broadcast({ type: "settings.script-program", scriptProgram: store.scriptProgramSetting() });
@@ -984,6 +993,8 @@ export function startServer(services: HostServices) {
           .then((failed) => reply({ type: "newer-version.checked", requestId: message.requestId, failure: failed?.problem ?? null, ...(failed?.problemAbout && { failureAbout: failed.problemAbout }) }));
       case "settings.set-script-program":
         return setScriptProgram(message.program);
+      case "settings.set-editor":
+        return setEditor(message.setting);
       case "settings.set-machine-name":
         return setMachineName(message.machineName);
       case "settings.set-push-relay":
@@ -1473,6 +1484,7 @@ export function startServer(services: HostServices) {
       keepAwake: store.keepAwake(),
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),
+      editor: editorState(store.editorSetting()),
       machineName: store.machineNameSetting(),
       computerName: computerName(),
       pushRelay: store.pushRelaySetting(),

@@ -1,3 +1,4 @@
+import type { EditorSetting, EditorState } from "./editors.ts";
 import type { ToolCallContent } from "@agentclientprotocol/sdk";
 import type {
   AdoptMode,
@@ -104,6 +105,7 @@ export type ClientMessage =
   | { type: "newer-version.check"; requestId: string }
   /** Empty for the system's text editor. */
   | { type: "settings.set-script-program"; program: string }
+  | { type: "settings.set-editor"; setting: EditorSetting }
   | { type: "settings.set-machine-name"; machineName: string }
   /** An empty address stops pushes and forgets the token; a null token keeps the one set before. Answered with settings.saved. */
   | { type: "settings.set-push-relay"; requestId: string; address: string; token: string | null }
@@ -308,6 +310,7 @@ export type ServerMessage =
       claudeProgram: ClaudeProgram;
       /** The program the host opens scripts in, as text; empty for the system's text editor. */
       scriptProgram: string;
+      editor: EditorState;
       /** The name Settings gave this machine, which devices show for it; null while it goes by its computer's name. Absent from hosts before names. */
       machineName?: string | null;
       /** The computer's own name, which the machine goes by while Settings give it none. */
@@ -363,6 +366,7 @@ export type ServerMessage =
   | { type: "settings.keep-awake"; keepAwake: KeepAwake }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }
+  | { type: "settings.editor"; editor: EditorState }
   | { type: "settings.machine-name"; machineName: string | null }
   | { type: "settings.push-relay"; pushRelay: PushRelaySetting }
   /** The user's picture next to every page; null when they set none, leaving the person icon. */

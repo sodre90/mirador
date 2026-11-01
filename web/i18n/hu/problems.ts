@@ -50,6 +50,8 @@ export const problems: Messages["problems"] = {
     "host-cannot-restart": "Ez a host itt nem tudja újraindítani magát; indítsd újra a tálcáról vagy a terminálból.",
     "idea-launcher-missing-windows": "Az IntelliJ IDEA parancssori indítója (idea) nem található a PATH-on. Jelöld be az IDEA telepítőjében az Add \"bin\" folder to the PATH lehetőséget, vagy telepítsd az IDEA-t a Toolbox Appal, majd próbáld újra.",
     "idea-launcher-missing": "Az IntelliJ IDEA parancssori indítója (idea) nem található. Az IDEA-ban válaszd a Tools › Create Command Line Launcher… menüpontot, majd próbáld újra.",
+    "no-editor-found": "A Mirador nem talált szerkesztőt a hoston: az idea, code, cursor, zed és subl egyike sincs a PATH-ján. Telepítsd valamelyik parancssori indítóját, vagy adj meg egy parancsot a Beállítások › Beszélgetések alatt.",
+    "unknown-editor": "Ezt a szerkesztőt a Mirador nem ismeri.",
     "save-needs-name": "Add meg, milyen nevű fájlba mentse az oldalt.",
     "save-as-html": "Az oldalt .html fájlként mentsd.",
     "save-as-png": "A képet .png fájlként mentsd.",
@@ -166,6 +168,9 @@ export const problems: Messages["problems"] = {
   fileCannotOpenAsText: (path) => `A Mirador nem tudta szövegként megnyitni: ${path}`,
   executableNotOpened: (file) =>
     `Ez futtatható, és az xdg-open elindíthatná, ezért a Mirador nem nyitja meg: ${file}. A Beállítások › Beszélgetések alatt megadhatsz egy programot a szkriptek megnyitásához.`,
+  editorLauncherMissing: (editor, launcher) =>
+    `A(z) ${editor} parancssori indítója (${launcher}) nem található a host PATH-ján. Állítsd be, vagy válassz másik szerkesztőt a Beállítások › Beszélgetések alatt.`,
+  editorCommandNotFound: (program) => `A Mirador nem találja a host PATH-ján a Beállítások › Beszélgetések alatt megadott szerkesztőt: ${program}`,
   scriptProgramNotFound: (program) =>
     `A Mirador nem találja a host PATH-ján a Beállítások › Beszélgetések alatt megadott, szkriptek megnyitására szolgáló programot: ${program}`,
   scriptProgramThroughCmd: (program) =>

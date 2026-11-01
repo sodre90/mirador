@@ -1,3 +1,4 @@
+import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { Database } from "bun:sqlite";
 import type { AppStorageItems } from "../shared/apps.ts";
 import type { AvailableCommand, ToolCallUpdate } from "@agentclientprotocol/sdk";
@@ -757,6 +758,17 @@ export class Store {
 
   setScriptProgramSetting(program: string) {
     this.setSetting("script_program", program || null);
+  }
+
+  /** The editor Open in … buttons use; the first editor found when Settings name none. */
+  editorSetting(): EditorSetting {
+    const stored = this.setting("editor");
+    const parsed: unknown = stored === null ? null : JSON.parse(stored);
+    return isEditorSetting(parsed) ? parsed : { editor: "first-found" };
+  }
+
+  setEditorSetting(setting: EditorSetting) {
+    this.setSetting("editor", setting.editor === "first-found" ? null : JSON.stringify(setting));
   }
 
   /** The name this machine goes by on devices and other machines, as set in Settings; null for its computer's name. */

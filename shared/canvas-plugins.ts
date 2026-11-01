@@ -83,6 +83,11 @@ export interface CanvasPluginStorage {
 export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext<Data> {
   /** Sends the agent a message, as if the user wrote it; `afterTurn` keeps it queued until the agent's turn ends. */
   prompt(text: string, options?: { afterTurn?: boolean }): Promise<void>;
+  /**
+   * Opens a file, by its absolute path, at a line in the editor Settings name, on the host's computer. The plugin decides
+   * which files its view may open. Throws, saying what would work, when the editor is not found.
+   */
+  openInEditor(file: string, line: number): void;
 }
 
 export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<Data> {

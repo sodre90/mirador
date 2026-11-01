@@ -298,6 +298,8 @@ export interface PluginItemContext {
   fullscreen?: boolean;
   /** What Settings say text fields do as the user types. */
   typingAids?: { autocorrect: boolean; predictions: boolean };
+  /** The editor that context.openInEditor opens files in, by name, for "Open in …"; null when the host finds none. */
+  opensIn?: string | null;
 }
 
 /** A plugin's item for its view, posted by the panel on every change. */

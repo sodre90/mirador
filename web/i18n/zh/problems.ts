@@ -50,6 +50,8 @@ export const problems: Messages["problems"] = {
     "host-cannot-restart": "此 host 无法在这里自行重启；请从托盘或终端重启它。",
     "idea-launcher-missing-windows": "在 PATH 中找不到 IntelliJ IDEA 的命令行启动器（idea）。请在 IDEA 安装程序中勾选 Add \"bin\" folder to the PATH，或用 Toolbox App 安装 IDEA，然后重试。",
     "idea-launcher-missing": "找不到 IntelliJ IDEA 的命令行启动器（idea）。请在 IDEA 中选择 Tools › Create Command Line Launcher…，然后重试。",
+    "no-editor-found": "Mirador 在 host 上没有找到编辑器：PATH 中没有 idea、code、cursor、zed 或 subl。请安装其中一个的命令行启动器，或在“设置 › 对话”中指定一个命令。",
+    "unknown-editor": "Mirador 不认识这个编辑器。",
     "save-needs-name": "请为要保存的页面文件命名。",
     "save-as-html": "请将页面保存为 .html 文件。",
     "save-as-png": "请将图片保存为 .png 文件。",
@@ -162,6 +164,8 @@ export const problems: Messages["problems"] = {
   noProgramForFile: (path) => `没有设置用来打开 ${path} 的程序，而且它不是文本，因此 Mirador 无法打开它。`,
   fileCannotOpenAsText: (path) => `Mirador 无法以文本形式打开 ${path}。`,
   executableNotOpened: (file) => `${file} 是可执行文件，xdg-open 可能会运行它，因此 Mirador 不会打开它。你可以在“设置 › 对话”中指定用来打开脚本的程序。`,
+  editorLauncherMissing: (editor, launcher) => `在 host 的 PATH 中找不到 ${editor} 的命令行启动器（${launcher}）。请先设置它，或在“设置 › 对话”中选择其他编辑器。`,
+  editorCommandNotFound: (program) => `Mirador 在 host 的 PATH 中找不到 ${program}，即“设置 › 对话”中指定的编辑器。`,
   scriptProgramNotFound: (program) => `Mirador 在 host 的 PATH 中找不到 ${program}，即“设置 › 对话”中指定用来打开脚本的程序。`,
   scriptProgramThroughCmd: (program) =>
     `${program} 通过 cmd.exe 运行，而 cmd.exe 可能把文件名的一部分当作命令，因此 Mirador 不用它打开脚本。请改为在“设置 › 对话”中指定该程序的 .exe，例如 VS Code 的 Code.exe。`,

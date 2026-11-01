@@ -293,6 +293,10 @@ export const hints: Messages["hints"] = {
     "Cómo llaman los teléfonos a esta máquina: lo toman al conectarse, y un teléfono puede darle un nombre propio. También se une a otras máquinas como Mirador con este nombre. Vacío, usa el nombre de su equipo.",
   scriptProgram:
     "Dónde se abre, como texto, un enlace a un archivo de script en el equipo del host. El programa de su tipo podría ejecutarlo: Git for Windows ejecuta los archivos .sh, el lanzador de Python los .py.\n\nEl editor de texto del sistema: en macOS el que elegiste para texto, en Windows el Bloc de notas. Linux no tiene uno propio, así que allí xdg-open elige el programa según el tipo del script, y un script ejecutable, que ese programa podría ejecutar, no se abre.\n\nUn programa que indiques: su nombre en el PATH del host, como code o subl, o su ruta completa. Recibe la ruta del archivo. En Windows indica un .exe, como Code.exe: un .cmd o .bat se ejecutaría mediante cmd.exe, que podría tomar parte del nombre de un archivo por un comando.",
+  editor:
+    "El editor que usa Abrir en …, en el equipo del host. Mirador busca el lanzador de línea de comandos de cada uno (idea, code, cursor, zed, subl) en el PATH del host y donde lo deja su instalador. El primero que se encuentre sigue este orden.",
+  editorCommand:
+    "Un programa y sus argumentos, ejecutados sin shell. {file} se cambia por la ruta del archivo y {line} por su línea; sin {file}, la ruta va al final. Pon entre comillas la ruta de un programa que tenga espacios.",
   profilePicture:
     "Tu foto, que se muestra junto a tus mensajes. Se recorta en cuadrado y aquí se dibuja a 128 píxeles; el host la guarda: todos los navegadores y dispositivos que abren este Mirador la ven.",
   blockedImage:
@@ -353,7 +357,7 @@ export const hints: Messages["hints"] = {
   changesFromCommit: "Un commit desde que empezó el turno cambió este archivo, como el de un pull o uno del propio agente.",
   changesRefresh: "Carga la lista de nuevo. También se carga después de cada llamada a una herramienta que termina el agente y cuando termina el turno.",
   changesByAgent: "El agente de esta conversación cambió este archivo con sus herramientas de edición.",
-  changesOpenInIdea: "Abre el archivo en IntelliJ IDEA en su primera línea cambiada.",
+  changesOpenInEditor: "Abre el archivo en su primera línea cambiada, en el editor que elijas en Configuración › Conversaciones.",
   editDiffStyle:
     "Unificada muestra las líneas antiguas y nuevas en una sola columna; Dividida muestra la versión antigua a la izquierda y la nueva a la derecha. Se recuerda en este navegador.",
 };

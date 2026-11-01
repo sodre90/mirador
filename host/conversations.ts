@@ -52,7 +52,7 @@ import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { pendingAsk, pendingPermission } from "./pending-requests.ts";
-import { launchIdea } from "./idea.ts";
+import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
 import { mentionSuggestions } from "./mentions.ts";
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
@@ -298,7 +298,7 @@ export class ConversationService {
     private readonly canvasPlugins: (conversationId: string) => CanvasPluginGuidance = () => NO_CANVAS_PLUGINS,
   ) {
     this.checkpoints = new Checkpoints(config.dataDir);
-    this.changes = new Changes(store, this.checkpoints, (conversationId) => this.workspaceOf(conversationId), launchIdea, openWithSystemDefault, (file) =>
+    this.changes = new Changes(store, this.checkpoints, (conversationId) => this.workspaceOf(conversationId), (file, line) => launchEditor(store.editorSetting(), file, line), openWithSystemDefault, (file) =>
       openAsText(file, store.scriptProgramSetting()),
     );
     this.cancelPermissionsOrphanedByRestart();

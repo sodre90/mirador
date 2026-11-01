@@ -264,6 +264,10 @@ export const hints: Messages["hints"] = {
   machineName: "手机对这台机器的称呼：它们连接时会获取这个名称，手机仍可以给它起自己的名字。它也会以这个名称作为 Mirador 加入其他机器。留空则使用电脑的名称。",
   scriptProgram:
     "指向脚本的文件链接在 host 的电脑上以文本打开时所用的程序。该类型对应的程序可能会直接运行它：Git for Windows 会运行 .sh 文件，Python 启动器会运行 .py 文件。\n\n系统的文本编辑器：在 macOS 上是你为文本选定的那个，在 Windows 上是记事本。Linux 没有自己的，所以在那里由 xdg-open 根据脚本类型选择程序，而可执行脚本（该程序可能会运行它）不会被打开。\n\n你指定的程序：它在 host 的 PATH 中的名称，例如 code 或 subl，或者它的完整路径。它会收到文件的路径。在 Windows 上请指定 .exe，例如 Code.exe：.cmd 或 .bat 会通过 cmd.exe 运行，而 cmd.exe 可能把文件名的一部分当作命令。",
+  editor:
+    "“在 … 中打开”在 host 电脑上使用的编辑器。Mirador 在 host 的 PATH 和各安装程序存放的位置查找每个编辑器的命令行启动器（idea、code、cursor、zed、subl），按此顺序取找到的第一个。",
+  editorCommand:
+    "一个程序及其参数，不经 shell 运行。{file} 替换为文件路径，{line} 替换为行号；没有 {file} 时路径放在最后。程序路径含空格时请加引号。",
   profilePicture:
     "你的头像，显示在你的消息旁边。它会被裁成正方形并在这里以 128 像素绘制，由 host 保存：打开这个 Mirador 的每个浏览器和设备都会看到它。",
   blockedImage: "在你的浏览器中打开这张图片。Mirador 自己不会从其他网站加载图片，所以智能体无法借此把它读到的内容发给对方；设置 → 对话 可以更改这一点。",
@@ -319,7 +323,7 @@ export const hints: Messages["hints"] = {
   changesFromCommit: "这一轮开始后的某个提交改动了这个文件，例如 pull 带来的，或智能体自己的提交。",
   changesRefresh: "重新加载列表。智能体每完成一次工具调用和轮次结束时也会重新加载。",
   changesByAgent: "这个对话的智能体用编辑工具改动了这个文件。",
-  changesOpenInIdea: "在 IntelliJ IDEA 中打开该文件，定位到第一处更改的行。",
+  changesOpenInEditor: "在“设置 › 对话”中选择的编辑器里打开该文件，定位到第一处更改的行。",
   editDiffStyle: "“统一”把旧行和新行放在同一列；“并排”左边显示旧版本，右边显示新版本。保存在这个浏览器中。",
 };
 

@@ -10,6 +10,7 @@ import { formatNumber, t } from "./i18n/index.ts";
 import { storedChoice } from "./stored-choice.ts";
 import { withHomeAsTilde } from "./workspace-folder.ts";
 import { hostErrorText } from "./host-error.ts";
+import { openInLabel, useOpensIn } from "./opens-in.ts";
 
 const words = t.canvas.changes;
 const scopeLabels: Record<ChangeScope, string> = words.scope;
@@ -238,13 +239,14 @@ function FileSection({ title, hint, files, asTree, rows, folding }: { title: str
 }
 
 function UnchangedFile({ conversationId, path }: { conversationId: string; path: string }) {
+  const opensIn = useOpensIn();
   return (
     <div className="changes-diff">
       <div className="edit-approval-bar">
         <span className="review-empty">{words.noChangesInFile}</span>
         <span className="spacer" />
-        <button type="button" className="link" data-hint={hints.changesOpenInIdea} onClick={() => connection.send({ type: "changes.open-in-editor", conversationId, path, line: 1 })}>
-          {words.openInIdea}
+        <button type="button" className="link" data-hint={hints.changesOpenInEditor} onClick={() => connection.send({ type: "changes.open-in-editor", conversationId, path, line: 1 })}>
+          {openInLabel(opensIn)}
         </button>
       </div>
     </div>
@@ -253,6 +255,7 @@ function UnchangedFile({ conversationId, path }: { conversationId: string; path:
 
 function SelectedFile({ conversationId, file, loaded, homeDir }: { conversationId: string; file: ChangedFile; loaded: Loaded<FileChanges | null> | null; homeDir: string }) {
   const style = diffStyle.use();
+  const opensIn = useOpensIn();
   const changes = loaded && "value" in loaded && loaded.value?.path === file.path ? loaded.value : null;
   return (
     <div className="changes-diff">
@@ -262,10 +265,10 @@ function SelectedFile({ conversationId, file, loaded, homeDir }: { conversationI
           <button
             type="button"
             className="link"
-            data-hint={hints.changesOpenInIdea}
+            data-hint={hints.changesOpenInEditor}
             onClick={() => connection.send({ type: "changes.open-in-editor", conversationId, path: file.path, line: firstChangedLine(changes) })}
           >
-            {words.openInIdea}
+            {openInLabel(opensIn)}
           </button>
         )}
         <DiffStyleChoice style={style} />

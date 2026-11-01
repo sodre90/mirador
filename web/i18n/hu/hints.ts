@@ -284,6 +284,10 @@ export const hints: Messages["hints"] = {
     "Ahogy a telefonok hívják ezt a gépet: csatlakozáskor átveszik, és egy telefon saját nevet is adhat neki. Más gépekhez is ezen a néven csatlakozik Miradorként. Üresen a számítógép nevét viseli.",
   scriptProgram:
     "Ahol egy szkriptre mutató fájllink megnyílik, szövegként, a host gépén. A típusához tartozó program le is futtathatná: a Git for Windows a .sh fájlokat futtatja, a Python indítója a .py fájlokat.\n\nA rendszer szövegszerkesztője: macOS-en az, amelyet a szöveghez választottál, Windowson a Jegyzettömb. A Linuxnak nincs sajátja, így ott az xdg-open választja ki a programot a szkript típusához, egy futtatható szkript pedig – amelyet az a program futtathatna – nem nyílik meg.\n\nEgy általad megadott program: a neve a host PATH-ján, például code vagy subl, vagy a teljes útvonala. A fájl útvonalát kapja meg. Windowson .exe-t adj meg, például Code.exe-t: egy .cmd vagy .bat a cmd.exe-n keresztül futna, amely egy fájlnév egy részét parancsnak vehetné.",
+  editor:
+    "A szerkesztő, amelyben a Megnyitás gomb megnyit a host gépén. A Mirador mindegyik parancssori indítóját (idea, code, cursor, zed, subl) keresi a host PATH-ján és ott, ahová a telepítője teszi. Az első megtalált ebben a sorrendben dől el.",
+  editorCommand:
+    "Egy program és argumentumai, shell nélkül futtatva. A {file} helyére a fájl útvonala, a {line} helyére a sora kerül; {file} nélkül az útvonal a végére. A szóközt tartalmazó programútvonalat tedd idézőjelbe.",
   profilePicture:
     "A képed, amely az üzeneteid mellett látszik. Négyzetre vágja, itt 128 pixelesen rajzolja ki, és a host őrzi meg: minden böngésző és készülék, amely megnyitja ezt a Miradort, látja.",
   blockedImage:
@@ -342,7 +346,7 @@ export const hints: Messages["hints"] = {
   changesFromCommit: "A kör kezdete óta egy commit módosította ezt a fájlt, például egy pullé vagy az ágens sajátja.",
   changesRefresh: "A lista újratöltése. Az ágens minden befejezett eszközhívása után és a kör végén is betöltődik.",
   changesByAgent: "Ennek a beszélgetésnek az ágense a szerkesztőeszközeivel módosította ezt a fájlt.",
-  changesOpenInIdea: "A fájl megnyitása az IntelliJ IDEA-ban az első módosított soránál.",
+  changesOpenInEditor: "A fájl megnyitása az első módosított soránál, a Beállítások › Beszélgetések alatt választott szerkesztőben.",
   editDiffStyle: "Az Egyesített egy oszlopban mutatja a régi és az új sorokat; az Osztott bal oldalon a régi, jobb oldalon az új változatot. Ez a böngésző megjegyzi.",
 };
 

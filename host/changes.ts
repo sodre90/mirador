@@ -275,7 +275,7 @@ export class Changes {
     private readonly store: Store,
     private readonly checkpoints: Checkpoints,
     private readonly workspaceOf: (conversationId: string) => Workspace,
-    private readonly openInIdea: (file: string, line: number) => void,
+    private readonly launchEditor: (file: string, line: number) => void,
     private readonly openWithDefault: (file: string) => Promise<boolean>,
     private readonly openAsText: (file: string) => Promise<boolean>,
   ) {}
@@ -354,17 +354,17 @@ export class Changes {
     return { path, source: "files", diffs: [{ ...fileChangeDiff(path, { kind: "missing" }, { kind: "missing" }), change: "modified", ...noEarlierVersion }] };
   }
 
-  /** Opens a file of the project, or one the agent changed anywhere in this conversation, in IntelliJ IDEA. */
+  /** Opens a file of the project, or one the agent changed anywhere in this conversation, in the editor Settings name. */
   async openInEditor(conversationId: string, path: string, line: number) {
     const workspace = this.workspaceOf(conversationId);
     if (!Number.isInteger(line) || line < 1) throw new HostProblemError({ code: "not-a-line-number", line: String(line) });
     if (isAbsolute(path)) {
       const changedByAgent = this.agentEdits(conversationId, workspace, 0).some((edit) => edit.path === normalize(path));
       if (!changedByAgent) throw new HostProblemError({ code: "agent-did-not-change-file", path });
-      return this.openInIdea(normalize(path), line);
+      return this.launchEditor(normalize(path), line);
     }
     if (!withinWorkspace(workspace, path)) throw new HostProblemError({ code: "not-a-workspace-file", path });
-    this.openInIdea(join(resolve(workspace.path), path), line);
+    this.launchEditor(join(resolve(workspace.path), path), line);
   }
 
   /**

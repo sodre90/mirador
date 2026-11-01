@@ -48,6 +48,8 @@ export const problems = {
     "host-cannot-restart": "This host cannot restart itself here; restart it from the tray or the terminal instead.",
     "idea-launcher-missing-windows": "IntelliJ IDEA's command-line launcher (idea) was not found on PATH. Tick Add \"bin\" folder to the PATH in IDEA's installer, or install IDEA with the Toolbox App, then try again.",
     "idea-launcher-missing": "IntelliJ IDEA's command-line launcher (idea) was not found. In IDEA, choose Tools › Create Command Line Launcher…, then try again.",
+    "no-editor-found": "Mirador found no editor on the host: none of idea, code, cursor, zed or subl is on its PATH. Install one's command-line launcher, or name a command in Settings › Conversations.",
+    "unknown-editor": "That is not an editor Mirador knows.",
     "save-needs-name": "Name the file to save the page as.",
     "save-as-html": "Save the page as an .html file.",
     "save-as-png": "Save the image as a .png file.",
@@ -164,6 +166,9 @@ export const problems = {
   fileCannotOpenAsText: (path: string) => `Mirador could not open ${path} as text.`,
   executableNotOpened: (file: string) =>
     `${file} is executable, and xdg-open could run it, so Mirador does not open it. Settings › Conversations can name a program to open scripts in.`,
+  editorLauncherMissing: (editor: string, launcher: string) =>
+    `${editor}'s command-line launcher (${launcher}) was not found on the host's PATH. Set it up, or pick another editor in Settings › Conversations.`,
+  editorCommandNotFound: (program: string) => `Mirador cannot find ${program}, the editor Settings › Conversations name, on the host's PATH.`,
   scriptProgramNotFound: (program: string) =>
     `Mirador cannot find ${program}, the program Settings › Conversations name to open scripts in, on the host's PATH.`,
   scriptProgramThroughCmd: (program: string) =>

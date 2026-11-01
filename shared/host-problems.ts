@@ -68,6 +68,8 @@ export type HostProblem =
   | { code: "file-cannot-open-as-text"; path: string }
   | { code: "executable-not-opened"; file: string }
   | { code: "script-program-not-found"; program: string }
+  | { code: "editor-launcher-missing"; editor: string; launcher: string }
+  | { code: "editor-command-not-found"; program: string }
   | { code: "script-program-through-cmd"; program: string }
   | { code: "git-failed"; command: string; directory: string; output: string }
   | { code: "snapshot-blob-unreadable"; blob: string; directory: string }

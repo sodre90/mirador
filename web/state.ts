@@ -1,3 +1,4 @@
+import type { EditorState } from "../shared/editors.ts";
 import type { CanvasItem, CanvasUse, KeepAwake, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
@@ -20,6 +21,9 @@ export interface OpenConversation {
   hasEarlier: boolean;
   canvas: CanvasItem[];
 }
+
+/** A host from before the editor setting opens files in IDEA. */
+const UNKNOWN_EDITOR: EditorState = { setting: { editor: "idea" }, found: [], opensIn: "IDEA" };
 
 export type Overlay =
   | { kind: "palette" }
@@ -52,6 +56,8 @@ export interface AppState {
   claudeProgram: ClaudeProgram;
   /** The program the host opens scripts in, as text; empty for the system's text editor. */
   scriptProgram: string;
+  /** The editor the host opens files at a line in, and the ones it finds. */
+  editor: EditorState;
   /** The name Settings gave this machine; null while it goes by its computer's name. */
   machineName: string | null;
   computerName: string;
@@ -121,6 +127,7 @@ export const initialState: AppState = {
   keepAwake: "never",
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
+  editor: UNKNOWN_EDITOR,
   machineName: null,
   computerName: "",
   pushRelay: { address: null, tokenSet: false },
@@ -224,6 +231,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         keepAwake: message.keepAwake ?? "never",
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
+        editor: message.editor ?? UNKNOWN_EDITOR,
         machineName: message.machineName ?? null,
         computerName: message.computerName ?? "",
         pushRelay: message.pushRelay ?? { address: null, tokenSet: false },
@@ -314,6 +322,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, claudeProgram: message.claudeProgram };
     case "settings.script-program":
       return { ...state, scriptProgram: message.scriptProgram };
+    case "settings.editor":
+      return { ...state, editor: message.editor };
     case "settings.machine-name":
       return { ...state, machineName: message.machineName };
     case "settings.push-relay":

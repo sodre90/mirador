@@ -467,6 +467,19 @@ describe("Store", () => {
     reopened.close();
   });
 
+  test("opens files in the first editor found until Settings name one, also after reopening", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const store = new Store(path);
+    expect(store.editorSetting()).toEqual({ editor: "first-found" });
+    store.setEditorSetting({ editor: "custom", command: "nvim +{line} {file}" });
+    store.close();
+    const reopened = new Store(path);
+    expect(reopened.editorSetting()).toEqual({ editor: "custom", command: "nvim +{line} {file}" });
+    reopened.setEditorSetting({ editor: "first-found" });
+    expect(reopened.editorSetting()).toEqual({ editor: "first-found" });
+    reopened.close();
+  });
+
   test("goes by its computer's name until Settings name the machine, trimmed and kept short, also after reopening", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);

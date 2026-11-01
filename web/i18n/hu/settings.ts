@@ -120,6 +120,17 @@ export const settings: Messages["settings"] = {
     programYouName: "Egy általad megadott program",
     programPlaceholder: "Például code vagy subl",
   },
+  editor: {
+    title: "Szerkesztő",
+    hint: "Ahol a Megnyitás gomb a fájlt a soránál megnyitja: a Változásokban, az átnézésekben és a bejárásokban. A host tárolja minden böngészőnek.",
+    opensIn: "Fájlok megnyitása ebben",
+    firstFound: (editor) => `Az első megtalált (${editor})`,
+    firstFoundNone: "Az első megtalált (még nincs)",
+    notFound: (editor) => `${editor} (nem található)`,
+    command: "Egy megadott parancs",
+    commandLine: "Parancs",
+    commandPlaceholder: "Például nvim +{line} {file}",
+  },
   machine: {
     title: "Ez a gép",
     name: "Név",

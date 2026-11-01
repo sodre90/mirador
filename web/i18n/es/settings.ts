@@ -120,6 +120,17 @@ export const settings: Messages["settings"] = {
     programYouName: "Un programa que indiques",
     programPlaceholder: "Por ejemplo, code o subl",
   },
+  editor: {
+    title: "Editor",
+    hint: "Dónde abre Abrir en … un archivo en su línea: en Cambios, revisiones y recorridos. Lo guarda el host para todos los navegadores.",
+    opensIn: "Abrir los archivos en",
+    firstFound: (editor) => `El primero que se encuentre (${editor})`,
+    firstFoundNone: "El primero que se encuentre (ninguno aún)",
+    notFound: (editor) => `${editor} (no encontrado)`,
+    command: "Un comando que indiques",
+    commandLine: "Comando",
+    commandPlaceholder: "Por ejemplo, nvim +{line} {file}",
+  },
   machine: {
     title: "Esta máquina",
     name: "Nombre",

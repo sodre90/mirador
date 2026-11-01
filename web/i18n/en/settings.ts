@@ -118,6 +118,17 @@ export const settings = {
     programYouName: "A program you name",
     programPlaceholder: "Such as code or subl",
   },
+  editor: {
+    title: "Editor",
+    hint: "Where Open in … opens a file at its line: in Changes, reviews and tours. Kept by the host for every browser.",
+    opensIn: "Files open in",
+    firstFound: (editor: string) => `The first one found (${editor})`,
+    firstFoundNone: "The first one found (none yet)",
+    notFound: (editor: string) => `${editor} (not found)`,
+    command: "A command you give",
+    commandLine: "Command",
+    commandPlaceholder: "Such as nvim +{line} {file}",
+  },
   machine: {
     title: "This machine",
     name: "Name",

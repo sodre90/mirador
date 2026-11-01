@@ -1,3 +1,4 @@
+import { OpensIn } from "./opens-in.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { harnessRewinds, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
@@ -482,16 +483,18 @@ export function App() {
   const showCanvas = canvasVisible && conversation !== null && open !== null;
   const showTerminals = terminalVisible && conversation !== null && workspace !== undefined;
   const keptCanvases = (
-    <KeptCanvases
-      kept={inFixedOrder(state.kept)}
-      shownId={showCanvas ? conversation!.id : null}
-      workspaceOf={(conversationId) => state.conversations.find(({ id }) => id === conversationId)?.workspaceId}
-      apps={apps}
-      assetsOrigin={state.canvasAssetsOrigin}
-      homeDir={state.homeDir}
-      canvasViews={state.canvasViews}
-      onHide={hideCanvas}
-    />
+    <OpensIn.Provider value={state.editor.opensIn}>
+      <KeptCanvases
+        kept={inFixedOrder(state.kept)}
+        shownId={showCanvas ? conversation!.id : null}
+        workspaceOf={(conversationId) => state.conversations.find(({ id }) => id === conversationId)?.workspaceId}
+        apps={apps}
+        assetsOrigin={state.canvasAssetsOrigin}
+        homeDir={state.homeDir}
+        canvasViews={state.canvasViews}
+        onHide={hideCanvas}
+      />
+    </OpensIn.Provider>
   );
   const overlay = state.overlay;
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
@@ -657,6 +660,7 @@ export function App() {
           keepAwake={state.keepAwake}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
+          editor={state.editor}
           machineName={state.machineName}
           computerName={state.computerName}
           pushRelay={state.pushRelay}

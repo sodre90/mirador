@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+import { launchEditor } from "../editor.ts";
 import { fromJsonSchema, type McpServer, type ServerContext, type ToolAnnotations } from "@modelcontextprotocol/server";
 import {
   pluginItemOf,
@@ -309,6 +311,10 @@ export class CanvasPlugins {
     return {
       ...this.context(plugin, conversationId, { byAgent: false }),
       prompt: (text, { afterTurn = false } = {}) => this.sendPrompt(conversationId, text, { afterTurn }),
+      openInEditor: (file, line) => {
+        if (!isAbsolute(file) || !Number.isInteger(line) || line < 1) throw new Error(`${file}:${line} is not an absolute path and a line in it.`);
+        launchEditor(this.store.editorSetting(), file, line);
+      },
     };
   }
 

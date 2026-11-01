@@ -1,3 +1,4 @@
+import { OpensIn } from "./opens-in.ts";
 import { useEffect, useReducer } from "react";
 import type { ItemWindowRoute } from "../shared/item-window.ts";
 import type { PluginCanvasItem } from "../shared/model.ts";
@@ -28,7 +29,7 @@ function shownItem(state: AppState, itemId: string): PluginCanvasItem | null | u
 
 function ItemView({ item, state }: { item: PluginCanvasItem; state: AppState }) {
   const view = <PluginItemView item={item} viewPath={state.canvasViews[item.plugin]} assetsOrigin={state.canvasAssetsOrigin} fitsContent={isTabItem(item)} />;
-  return isTabItem(item) ? <div className="checklist">{view}</div> : view;
+  return <OpensIn.Provider value={state.editor.opensIn}>{isTabItem(item) ? <div className="checklist">{view}</div> : view}</OpensIn.Provider>;
 }
 
 /**

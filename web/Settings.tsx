@@ -1,3 +1,4 @@
+import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState } from "../shared/editors.ts";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
@@ -105,6 +106,7 @@ export function SettingsDialog({
   keepAwake,
   claudeProgram,
   scriptProgram,
+  editor,
   machineName,
   computerName,
   pushRelay,
@@ -127,6 +129,7 @@ export function SettingsDialog({
   keepAwake: KeepAwake;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
+  editor: EditorState;
   machineName: string | null;
   computerName: string;
   pushRelay: PushRelaySetting;
@@ -162,6 +165,7 @@ export function SettingsDialog({
         <PromptTemplateSettings templates={promptTemplates} />
         <ExternalImageSettings />
         <FileLinkSettings scriptProgram={scriptProgram} />
+        <EditorSettings editor={editor} />
         {isMac && <TypingSettings />}
       </>
     ),
@@ -949,6 +953,64 @@ function FileLinkSettings({ scriptProgram }: { scriptProgram: string }) {
               onChange={(event) => setProgram(event.target.value)}
               onBlur={() => save(program)}
               onKeyDown={(event) => event.key === "Enter" && save(program)}
+            />
+          </label>
+        )}
+      </div>
+    </>
+  );
+}
+
+type EditorChoice = EditorSetting["editor"];
+
+function EditorSettings({ editor }: { editor: EditorState }) {
+  const [choice, setChoice] = useState<EditorChoice>(editor.setting.editor);
+  const savedCommand = editor.setting.editor === "custom" ? editor.setting.command : "";
+  const [command, setCommand] = useState(savedCommand);
+  useEffect(() => {
+    setChoice(editor.setting.editor);
+    setCommand(savedCommand);
+  }, [editor.setting.editor, savedCommand]);
+  const firstFound = editor.found[0];
+  const labelOf = (option: EditorChoice) => {
+    if (option === "first-found") return firstFound ? text.editor.firstFound(knownEditorNames[firstFound]) : text.editor.firstFoundNone;
+    if (option === "custom") return text.editor.command;
+    return editor.found.includes(option) ? knownEditorNames[option] : text.editor.notFound(knownEditorNames[option]);
+  };
+  const choose = (chosen: EditorChoice) => {
+    setChoice(chosen);
+    if (chosen !== "custom") connection.send({ type: "settings.set-editor", setting: { editor: chosen } });
+  };
+  const saveCommand = () => {
+    if (command.trim() !== savedCommand) connection.send({ type: "settings.set-editor", setting: { editor: "custom", command } });
+  };
+  return (
+    <>
+      <h3>{text.editor.title}</h3>
+      <p className="hint">{text.editor.hint}</p>
+      <div className="sending-settings">
+        <label data-hint={hints.editor}>
+          {text.editor.opensIn}
+          <select className="editor-choice" value={choice} onChange={(event) => choose(event.target.value as EditorChoice)}>
+            {(["first-found", ...knownEditorIds, "custom"] as const).map((option) => (
+              <option key={option} value={option}>
+                {labelOf(option)}
+              </option>
+            ))}
+          </select>
+        </label>
+        {choice === "custom" && (
+          <label data-hint={hints.editorCommand}>
+            {text.editor.commandLine}
+            <input
+              type="text"
+              className="editor-command"
+              value={command}
+              placeholder={text.editor.commandPlaceholder}
+              spellCheck={false}
+              onChange={(event) => setCommand(event.target.value)}
+              onBlur={saveCommand}
+              onKeyDown={(event) => event.key === "Enter" && saveCommand()}
             />
           </label>
         )}

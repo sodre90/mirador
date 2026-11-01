@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, createProfile, literally, sendMessage, signIn, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, createProfile, literally, openSettings, sendMessage, signIn, waitForTurnToEnd } from "./helpers.ts";
 import { scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const home = scratchPath("changes-home");
@@ -111,7 +111,7 @@ test("the empty canvas lists the files this turn changed as the agent works, its
   await expect(fileRow(page, outsideFileShown).locator(".change-status"), "the agent's edit made it").toHaveText("A");
 });
 
-test("clicking a file opens its line changes under its row, with the file's line numbers, unified or split, and Open in IDEA", async ({ page }) => {
+test("clicking a file opens its line changes under its row, with the file's line numbers, unified or split, and Open in the editor", async ({ page }) => {
   await signIn(page, host);
   await page.goto(`${host.origin}/#/c/${conversationId}`);
   await fileRow(page, "src/app.ts").click();
@@ -125,7 +125,7 @@ test("clicking a file opens its line changes under its row, with the file's line
   await expect(diff.locator(".code-row.removed .line-number")).toHaveText("15");
   await expect(diff.locator(".code-row.added .line-number")).toHaveText("15");
   await expect(diff.locator(".code-row.added")).toContainText("line fifteen");
-  await expect(diff.getByRole("button", { name: "Open in IDEA" })).toBeVisible();
+  await expect(diff.getByRole("button", { name: /^Open in / })).toBeVisible();
 
   await diff.getByRole("button", { name: "Split" }).click();
   await expect(diff.locator(".split-side.removed .line-number")).toHaveText("15");
@@ -151,6 +151,50 @@ test("clicking a file opens its line changes under its row, with the file's line
     await changes(page).getByRole("button", { name: "Refresh" }).click();
     await expect(fileRow(page, outsideFileShown).locator(".change-status")).toHaveText("A");
   });
+});
+
+// The host keeps the editor chosen for the specs after this one; the other specs don't depend on which it is.
+test("Open in uses the editor Settings choose: one Mirador knows, or a command line of the owner's", async ({ page }) => {
+  const openedLog = join(host.root, "editor-opened.log");
+  for (const editor of ["code", "my-editor"]) writeBunProgram(host.fakeProgramsDir, editor, join(import.meta.dirname, "fake-text-editor.ts"), { MIRADOR_OPENED_LOG: openedLog, MIRADOR_EDITOR_NAME: editor });
+  const openedSoFar = () => (existsSync(openedLog) ? readFileSync(openedLog, "utf8").trim().split("\n") : []);
+  await signIn(page, host);
+  await page.goto(`${host.origin}/#/c/${conversationId}`);
+
+  const chooseEditor = async (label: string, command?: string) => {
+    const settings = await openSettings(page, "Conversations");
+    await settings.getByLabel("Files open in").selectOption({ label });
+    if (command !== undefined) {
+      await settings.getByLabel("Command", { exact: true }).fill(command);
+      await settings.getByLabel("Command", { exact: true }).press("Enter");
+    }
+    await settings.getByRole("button", { name: "Close" }).click();
+  };
+  const diff = changes(page).locator(".changes-diff");
+
+  await test.step("VS Code gets the file and its first changed line", async () => {
+    await chooseEditor("VS Code");
+    await fileRow(page, "src/app.ts").click();
+    await diff.getByRole("button", { name: "Open in VS Code" }).click();
+    await expect.poll(openedSoFar).toEqual([`code --goto ${appFile}:15`]);
+  });
+
+  await test.step("a command of the owner's gets {file} and {line} filled in, and names the button", async () => {
+    await chooseEditor("A command you give", "my-editor --line={line} {file}");
+    await diff.getByRole("button", { name: "Open in my-editor" }).click();
+    await expect.poll(openedSoFar).toEqual([`code --goto ${appFile}:15`, `my-editor --line=15 ${appFile}`]);
+    const settings = await openSettings(page, "Conversations");
+    await expect(settings.getByLabel("Command", { exact: true }), "the host kept it").toHaveValue("my-editor --line={line} {file}");
+    await settings.getByRole("button", { name: "Close" }).click();
+  });
+
+  await test.step("an editor the host doesn't find says so where the button is", async () => {
+    await chooseEditor("Sublime Text (not found)");
+    await diff.getByRole("button", { name: "Open in Sublime Text" }).click();
+    await expect(page.getByText("Sublime Text's command-line launcher (subl) was not found")).toBeVisible();
+    await chooseEditor("VS Code");
+  });
+  await fileRow(page, "src/app.ts").click();
 });
 
 test("a link to a file outside the project shows as a link, with its target's path in its line changes and never the file's contents", async ({ page }) => {
@@ -238,12 +282,12 @@ test("All files shows every file of the project in its folders, the changed ones
     await folderRow(page, "src").click();
   });
 
-  await test.step("an unchanged file opens under its row with Open in IDEA", async () => {
+  await test.step("an unchanged file opens under its row with Open in the editor", async () => {
     await lib.click();
     await fileRow(page, "lib/kept.ts").click();
     const opened = fileRow(page, "lib/kept.ts").locator("xpath=..").locator(".changes-diff");
     await expect(opened).toContainText("No changes in this file.");
-    await expect(opened.getByRole("button", { name: "Open in IDEA" })).toBeVisible();
+    await expect(opened.getByRole("button", { name: /^Open in / })).toBeVisible();
     await fileRow(page, "lib/kept.ts").click();
   });
 

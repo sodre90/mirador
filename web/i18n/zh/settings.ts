@@ -120,6 +120,17 @@ export const settings: Messages["settings"] = {
     programYouName: "你指定的程序",
     programPlaceholder: "例如 code 或 subl",
   },
+  editor: {
+    title: "编辑器",
+    hint: "“在 … 中打开”在其所在行打开文件的地方：变更、代码审查和导览中。由 host 为所有浏览器保存。",
+    opensIn: "文件打开方式",
+    firstFound: (editor) => `找到的第一个（${editor}）`,
+    firstFoundNone: "找到的第一个（暂无）",
+    notFound: (editor) => `${editor}（未找到）`,
+    command: "你指定的命令",
+    commandLine: "命令",
+    commandPlaceholder: "例如 nvim +{line} {file}",
+  },
   machine: {
     title: "这台机器",
     name: "名称",

@@ -263,6 +263,10 @@ export const hints = {
   machineName: "What phones call this machine: they pick it up when they connect, and a phone can still give it a name of its own. It also joins other machines as Mirador on this name. Empty, it goes by its computer's name.",
   scriptProgram:
     "Where a file link to a script opens, as text, on the host's computer. The program for its type could run it: Git for Windows runs .sh files, Python's launcher .py files.\n\nThe system's text editor: on macOS the one you chose for text, on Windows Notepad. Linux has none of its own, so there xdg-open picks the program for the script's type, and an executable script, which that program could run, does not open.\n\nA program you name: its name on the host's PATH, such as code or subl, or its full path. It gets the file's path. On Windows name an .exe, such as Code.exe: a .cmd or .bat would run through cmd.exe, which could take part of a file's name for a command.",
+  editor:
+    "The editor Open in … uses, on the host's computer. Mirador looks for each one's command-line launcher (idea, code, cursor, zed, subl) on the host's PATH and where its installer puts it. The first one found goes in this order.",
+  editorCommand:
+    "A program and its arguments, run with no shell. {file} becomes the file's path and {line} its line; with no {file}, the path goes last. Quote a program's path that has spaces in it.",
   profilePicture:
     "Your picture, shown next to your messages. It is cut to a square and drawn at 128 pixels here, and kept by the host: every browser and device that opens this Mirador sees it.",
   blockedImage: "Opens the image in your browser. Mirador does not load images from other sites itself, so an agent cannot send them what it read; Settings → Conversations can change that.",
@@ -318,7 +322,7 @@ export const hints = {
   changesFromCommit: "A commit since the turn began changed this file, such as a pull's or the agent's own.",
   changesRefresh: "Load the list again. It also loads after each tool call the agent finishes and when the turn ends.",
   changesByAgent: "This conversation's agent changed this file with its edit tools.",
-  changesOpenInIdea: "Open the file in IntelliJ IDEA at its first changed line.",
+  changesOpenInEditor: "Open the file at its first changed line, in the editor Settings › Conversations choose.",
   editDiffStyle: "Unified shows the old and new lines in one column; Split shows the old version on the left and the new one on the right. Remembered in this browser.",
 };
 
