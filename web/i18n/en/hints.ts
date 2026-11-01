@@ -179,6 +179,8 @@ export const hints = {
     "How a workspace you gave a colour shows it: on its whole card, on its heading only, or as a stripe down its edge over a softer tint. Click a workspace's initials to give it a colour.",
   newConversation: "Start a conversation in this workspace, on the profile picked next to this button.",
   addWorkspace: "Add a project directory. Its conversations run with it as the working directory.",
+  hideSidebar: "Hide the sidebar, to give the conversation, canvas and terminal the whole width. Remembered in this browser.",
+  showSidebar: "Show the sidebar with the workspaces and conversations again.",
   addWorkspaceGroup: "Add a group: a heading that folds, to gather workspaces under, e.g. per project or client. Drag a workspace by its heading into a group, and workspaces and groups into any order.",
   foldWorkspace: "Fold this workspace to its heading. Opening one of its conversations unfolds it.",
   unfoldWorkspace: "Show this workspace's conversations again.",

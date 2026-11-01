@@ -3,6 +3,8 @@ import type { Messages } from "../en/index.ts";
 export const shell: Messages["shell"] = {
   close: "Bezárás",
   sidebar: {
+    hideSidebar: "Oldalsáv elrejtése",
+    showSidebar: "Oldalsáv megjelenítése",
     workspaces: "Munkaterületek",
     waiting: { decision: "Rád vár", failed: "Sikertelen", done: "Kész", unread: "Olvasatlan" },
     connectedDevices: (count) => `${count} készülék csatlakozik`,
@@ -139,6 +141,7 @@ export const shell: Messages["shell"] = {
       conversationByNumber: "Az 1–9. beszélgetés ebben a munkaterületen",
       newConversation: "Új beszélgetés ebben a munkaterületen (a profiljával)",
       newWorkspace: "Munkaterület (projektkönyvtár) hozzáadása",
+      toggleSidebar: "Az oldalsáv megjelenítése / elrejtése",
       toggleCanvas: "A vászon megjelenítése / elrejtése",
       toggleTerminal: "A terminál megjelenítése / elrejtése",
       search: "Keresés minden munkaterület minden beszélgetésében",

@@ -5,6 +5,8 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 export const shell: Messages["shell"] = {
   close: "Cerrar",
   sidebar: {
+    hideSidebar: "Ocultar la barra lateral",
+    showSidebar: "Mostrar la barra lateral",
     workspaces: "Espacios de trabajo",
     waiting: { decision: "Esperándote", failed: "Falló", done: "Listo", unread: "No leída" },
     connectedDevices: (count) => plural(count, "1 dispositivo conectado", `${count} dispositivos conectados`),
@@ -144,6 +146,7 @@ export const shell: Messages["shell"] = {
       conversationByNumber: "Conversación 1–9 de este espacio de trabajo",
       newConversation: "Nueva conversación en este espacio de trabajo (con su perfil)",
       newWorkspace: "Agregar un espacio de trabajo (un directorio de proyecto)",
+      toggleSidebar: "Mostrar / ocultar la barra lateral",
       toggleCanvas: "Mostrar / ocultar el lienzo",
       toggleTerminal: "Mostrar / ocultar la terminal",
       search: "Buscar en todas las conversaciones de todos los espacios de trabajo",

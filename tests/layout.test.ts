@@ -16,7 +16,16 @@ test("all three panes shown: conversation on the left, canvas over terminals, wi
     areas: { conversation: "1 / 1 / 4 / 2", canvas: "1 / 3 / 2 / 4", terminals: "3 / 3 / 4 / 4" },
     columnDivider: "1 / 2 / 4 / 3",
     rowDivider: "2 / 3 / 3 / 4",
+    topLeft: "conversation",
   });
+});
+
+test("the top-left pane is the left one, else the top one, else the bottom one, and a fullscreen pane covers them all", () => {
+  expect(placement(layout, everything, "terminals").topLeft).toBe("terminals");
+  const swapped = swapPanes(layout, "conversation", "terminals");
+  expect(placement(swapped, everything, null).topLeft).toBe("terminals");
+  expect(placement(swapped, { ...everything, terminals: false }, null).topLeft).toBe("canvas");
+  expect(placement(swapped, { ...everything, terminals: false, canvas: false }, null).topLeft).toBe("conversation");
 });
 
 test("a hidden pane's tracks collapse while the others keep their areas", () => {

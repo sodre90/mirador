@@ -198,6 +198,8 @@ export const hints: Messages["hints"] = {
     "Cómo muestra su color un espacio de trabajo al que se lo diste: en toda su tarjeta, solo en su encabezado, o como una franja en su borde sobre un tono más suave. Haz clic en las iniciales de un espacio de trabajo para darle un color.",
   newConversation: "Inicia una conversación en este espacio de trabajo, con el perfil elegido junto a este botón.",
   addWorkspace: "Agrega un directorio de proyecto. Sus conversaciones se ejecutan con él como directorio de trabajo.",
+  hideSidebar: "Oculta la barra lateral para dar todo el ancho a la conversación, el lienzo y la terminal. Este navegador lo recuerda.",
+  showSidebar: "Vuelve a mostrar la barra lateral con los espacios de trabajo y las conversaciones.",
   addWorkspaceGroup:
     "Agrega un grupo: un encabezado que se contrae, para reunir espacios de trabajo, p. ej. por proyecto o cliente. Arrastra un espacio de trabajo por su encabezado a un grupo, y ordena espacios de trabajo y grupos como quieras.",
   foldWorkspace: "Contrae este espacio de trabajo hasta su encabezado. Abrir una de sus conversaciones lo expande.",

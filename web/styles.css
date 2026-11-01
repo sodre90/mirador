@@ -184,6 +184,33 @@ kbd {
   height: 100vh;
 }
 
+.layout.sidebar-hidden {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+button.icon.show-sidebar {
+  position: absolute;
+  top: 5px;
+  left: 6px;
+  z-index: 5;
+  height: 24px;
+  width: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+button.icon.hide-sidebar svg,
+button.icon.show-sidebar svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
+.layout.sidebar-hidden .pane.top-left [data-pane-bar] {
+  padding-left: 40px;
+}
+
 .workspace-area {
   display: grid;
   min-width: 0;

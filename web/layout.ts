@@ -95,6 +95,8 @@ export interface Placement {
   areas: Partial<Record<PaneId, string>>;
   columnDivider: string | null;
   rowDivider: string | null;
+  /** The pane in the top-left corner, where the button that shows a hidden sidebar sits over its bar. */
+  topLeft: PaneId | null;
 }
 
 const split = (share: number) => `minmax(0, ${share}fr) var(--splitter-width) minmax(0, ${1 - share}fr)`;
@@ -120,6 +122,7 @@ export function placement(layout: PaneLayout, shown: Record<PaneId, boolean>, fu
     areas,
     columnDivider: left && right && !isFullscreen ? "1 / 2 / 4 / 3" : null,
     rowDivider: top && bottom && !isFullscreen ? "2 / 3 / 3 / 4" : null,
+    topLeft: isFullscreen ? fullscreen : (left ?? top ?? bottom),
   };
 }
 

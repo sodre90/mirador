@@ -9,6 +9,7 @@ export type ShortcutCommand =
   | { type: "numbered-conversation"; number: number }
   | { type: "new-conversation" }
   | { type: "new-workspace" }
+  | { type: "toggle-sidebar" }
   | { type: "toggle-canvas" }
   | { type: "toggle-terminal" }
   | { type: "find" }
@@ -52,6 +53,7 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
   const terminalEntersUnicode = !mac && typing === "terminal";
   if (primary && !press.altKey && !press.shiftKey && press.code === "KeyK" && !terminalClears) return { type: "palette" };
   if (primary && !press.altKey && press.code === "KeyR" && !terminalSearchesHistory) return press.shiftKey ? { type: "restart-host" } : { type: "reload-page" };
+  if (primary && !press.altKey && press.shiftKey && press.code === "KeyS") return { type: "toggle-sidebar" };
   if (primary && !press.altKey && !press.shiftKey && press.code === "Backslash") return { type: "toggle-canvas" };
   if (press.ctrlKey && !press.metaKey && !press.altKey && !press.shiftKey && press.code === "Backquote") return { type: "toggle-terminal" };
   if (primary && !press.altKey && !press.shiftKey && press.code === "KeyF" && typing !== "terminal") return { type: "find" };
@@ -107,6 +109,7 @@ export function shortcutKeys(mac = isMac) {
     help: "?",
     newConversation: `${option}T`,
     newWorkspace: `${option}${shift}T`,
+    toggleSidebar: `${primary}${shift}S`,
     toggleCanvas: `${primary}\\`,
     toggleTerminal: mac ? "⌃`" : "Ctrl+`",
     focusTerminal: `${primary}${shift}↓`,
@@ -149,6 +152,7 @@ export function shortcutHelp(mac = isMac): { keys: string; action: string }[] {
     { keys: `${option}1 … ${option}9`, action: actions.conversationByNumber },
     { keys: keys.newConversation, action: actions.newConversation },
     { keys: keys.newWorkspace, action: actions.newWorkspace },
+    { keys: keys.toggleSidebar, action: actions.toggleSidebar },
     { keys: keys.toggleCanvas, action: actions.toggleCanvas },
     { keys: keys.toggleTerminal, action: actions.toggleTerminal },
     { keys: keys.search, action: actions.search },

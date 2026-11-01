@@ -16,6 +16,7 @@ const WORKSPACE_LAYOUTS_KEY = "mirador-layouts";
 const DEFAULT_KEY = "mirador-default-layout";
 const SIDEBAR_WIDTH_KEY = "mirador-sidebar-width";
 const SETTINGS_SIZE_KEY = "mirador-settings-size";
+const SIDEBAR_HIDDEN_KEY = "mirador-sidebar-hidden";
 
 function readJson(key: string): unknown {
   try {
@@ -88,6 +89,13 @@ export function useSidebarWidth() {
   const [width, setWidth] = useState(storedSidebarWidth);
   useEffect(() => writeJson(SIDEBAR_WIDTH_KEY, width), [width]);
   return [width, (next: number) => setWidth(sidebarWidthWithinLimits(next))] as const;
+}
+
+/** Whether the sidebar is hidden, for every workspace and kept per browser. */
+export function useSidebarHidden() {
+  const [hidden, setHidden] = useState(() => readJson(SIDEBAR_HIDDEN_KEY) === true);
+  useEffect(() => writeJson(SIDEBAR_HIDDEN_KEY, hidden), [hidden]);
+  return [hidden, setHidden] as const;
 }
 
 interface DialogSize {

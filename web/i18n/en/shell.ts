@@ -7,6 +7,8 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 export const shell = {
   close: "Close",
   sidebar: {
+    hideSidebar: "Hide the sidebar",
+    showSidebar: "Show the sidebar",
     workspaces: "Workspaces",
     waiting: { decision: "Needs you", failed: "Failed", done: "Done", unread: "Unread" } satisfies Record<WaitingTone, string>,
     connectedDevices: (count: number) => plural(count, "1 device connected", `${count} devices connected`),
@@ -144,6 +146,7 @@ export const shell = {
       conversationByNumber: "Conversation 1–9 in this workspace",
       newConversation: "New conversation in this workspace (with its profile)",
       newWorkspace: "Add a workspace (a project directory)",
+      toggleSidebar: "Show / hide the sidebar",
       toggleCanvas: "Show / hide the canvas",
       toggleTerminal: "Show / hide the terminal",
       search: "Search every conversation in every workspace",

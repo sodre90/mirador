@@ -30,6 +30,13 @@ describe("commandFor", () => {
     expect(commandFor(press("Backslash", { metaKey: true }), "typing", true)).toEqual({ type: "toggle-canvas" });
   });
 
+  test("Cmd+Shift+S (Ctrl+Shift+S elsewhere) toggles the sidebar, while typing and in a terminal too; plain Cmd+S does not", () => {
+    expect(commandFor(press("KeyS", { metaKey: true, shiftKey: true }), "typing", true)).toEqual({ type: "toggle-sidebar" });
+    expect(commandFor(press("KeyS", { metaKey: true, shiftKey: true }), "terminal", true)).toEqual({ type: "toggle-sidebar" });
+    expect(commandFor(press("KeyS", { ctrlKey: true, shiftKey: true }), "terminal", false)).toEqual({ type: "toggle-sidebar" });
+    expect(commandFor(press("KeyS", { metaKey: true }), "not-typing", true)).toBeNull();
+  });
+
   test("Option bindings match the physical key, so the character Option types (∆, ¡, †) does not matter", () => {
     expect(commandFor(press("ArrowDown", { altKey: true }), "typing", true)).toEqual({ type: "adjacent-conversation", step: 1 });
     expect(commandFor(press("ArrowUp", { altKey: true, shiftKey: true }), "typing", true)).toEqual({ type: "adjacent-workspace", step: -1 });

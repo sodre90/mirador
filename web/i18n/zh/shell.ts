@@ -3,6 +3,8 @@ import type { Messages } from "../en/index.ts";
 export const shell: Messages["shell"] = {
   close: "关闭",
   sidebar: {
+    hideSidebar: "隐藏侧边栏",
+    showSidebar: "显示侧边栏",
     workspaces: "工作区",
     waiting: { decision: "需要你", failed: "失败", done: "完成", unread: "未读" },
     connectedDevices: (count) => `已连接 ${count} 台设备`,
@@ -139,6 +141,7 @@ export const shell: Messages["shell"] = {
       conversationByNumber: "本工作区中的第 1–9 个对话",
       newConversation: "在本工作区中新建对话（使用它的配置）",
       newWorkspace: "添加工作区（一个项目目录）",
+      toggleSidebar: "显示 / 隐藏侧边栏",
       toggleCanvas: "显示 / 隐藏画布",
       toggleTerminal: "显示 / 隐藏终端",
       search: "搜索所有工作区中的每个对话",

@@ -27,7 +27,7 @@ import { requestOfTerminalPane, type TerminalPaneRequest } from "./terminal-pane
 import { adjacentConversation, adjacentWorkspaceConversation, currentWorkspace, numberedConversation } from "./navigation.ts";
 import { Palette, ShortcutHelp, type PaletteEntry } from "./Palette.tsx";
 import { DEFAULT_SIDEBAR_WIDTH, inView, sidebarWidthWithinLimits, swapPanes, toggledInView, type PaneId, type PaneLayout } from "./layout.ts";
-import { useConversationLayouts, useSidebarWidth } from "./paneLayouts.ts";
+import { useConversationLayouts, useSidebarHidden, useSidebarWidth } from "./paneLayouts.ts";
 import { FirstProfile, ProfilesDialog } from "./Profiles.tsx";
 import { AskToRevert, RevertDialog } from "./Revert.tsx";
 import { SessionsDialog } from "./Sessions.tsx";
@@ -35,7 +35,7 @@ import { SettingsDialog } from "./Settings.tsx";
 import { shortcutKeys, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
 import { setFontScale, stepFontScale } from "./font-scale.ts";
 import { resetTerminalFontSize, stepTerminalFontSize } from "./terminal-settings.ts";
-import { Sidebar } from "./Sidebar.tsx";
+import { ShowSidebarButton, Sidebar } from "./Sidebar.tsx";
 import { Splitter } from "./Splitter.tsx";
 import { initialStateFor, reducer, selectedOpen, type AppAction, type AppState, type OpenConversation } from "./state.ts";
 import { useSystemNotifications } from "./system-notifications.ts";
@@ -100,6 +100,7 @@ interface PaneToggle {
 }
 
 interface PanesInPalette {
+  sidebar: PaneToggle;
   canvas: PaneToggle;
   terminal: PaneToggle;
   /** Shows the terminal pane where it is hidden, then has it open a tab, split or take the keys. */
@@ -233,6 +234,7 @@ function paletteEntries(
   return [
     ...conversations,
     ...workspaceActions,
+    { id: "toggle-sidebar", label: panes.sidebar.visible ? t.shell.sidebar.hideSidebar : t.shell.sidebar.showSidebar, kind: "action", run: panes.sidebar.toggle },
     ...openConversationActions,
     ...machineActions,
     { id: "search", label: words.searchAll, detail: words.everyConversation, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "search" } }) },
@@ -255,6 +257,14 @@ const isModal = (state: AppState) => state.overlay !== null && state.overlay.kin
  */
 const outOfCanvasPagesReach = (command: ShortcutCommand) =>
   ["new-conversation", "new-workspace", "restart-host", "reload-page", "toggle-terminal"].includes(command.type) || (command.type === "focus" && command.pane === "terminals");
+
+/** Adding a workspace or a group opens a field in the sidebar, so a hidden sidebar comes back for it. */
+function useSidebarShownForItsFields(overlay: AppState["overlay"], showSidebar: () => void) {
+  const opensSidebarField = overlay?.kind === "add-workspace" || overlay?.kind === "add-workspace-group";
+  useEffect(() => {
+    if (opensSidebarField) showSidebar();
+  }, [opensSidebarField]);
+}
 
 /** A canvas the user hid comes back when the agent puts something new on it: a page, a question, a review, a checklist or an app. */
 function useShowCanvasForNews(news: CanvasNews | undefined, layout: PaneLayout, showCanvas: () => void) {
@@ -306,6 +316,9 @@ export function App() {
     if (state.hostRunId !== null) conversationLayouts.forgetAllBut(conversationIds.split(" "));
   }, [state.hostRunId, conversationIds]);
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
+  const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
+  const toggleSidebar = () => setSidebarHidden((wasHidden) => !wasHidden);
+  useSidebarShownForItsFields(state.overlay, () => setSidebarHidden(false));
   const layoutElement = useRef<HTMLDivElement>(null);
   const layoutArea = () => {
     const { left, width } = layoutElement.current!.getBoundingClientRect();
@@ -392,6 +405,8 @@ export function App() {
       case "new-workspace":
         dispatch({ type: "open-overlay", overlay: { kind: "add-workspace" } });
         return requestAnimationFrame(() => document.querySelector<HTMLInputElement>(".add-workspace input")?.focus());
+      case "toggle-sidebar":
+        return toggleSidebar();
       case "toggle-canvas":
         return toggleCanvas();
       case "toggle-terminal":
@@ -531,17 +546,27 @@ export function App() {
           onManage={() => dispatch({ type: "open-overlay", overlay: { kind: "machines" } })}
         />
       )}
-      <div ref={layoutElement} className={`layout ${shownMachine ? "covered" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
-        <Sidebar state={state} dispatch={dispatch} />
-        <Splitter
-          label={t.shell.panes.resizeSidebar}
-          share={sidebarWidth / layoutWidth}
-          resetShare={DEFAULT_SIDEBAR_WIDTH / layoutWidth}
-          minimumSize={0}
-          area={layoutArea}
-          onDrag={showSidebarWidth}
-          onChange={(share) => setSidebarWidth(share * layoutArea().size)}
-        />
+      <div
+        ref={layoutElement}
+        className={`layout ${shownMachine ? "covered" : ""} ${sidebarHidden ? "sidebar-hidden" : ""}`}
+        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      >
+        {sidebarHidden ? (
+          <ShowSidebarButton onShow={toggleSidebar} />
+        ) : (
+          <>
+            <Sidebar state={state} dispatch={dispatch} onHide={toggleSidebar} />
+            <Splitter
+              label={t.shell.panes.resizeSidebar}
+              share={sidebarWidth / layoutWidth}
+              resetShare={DEFAULT_SIDEBAR_WIDTH / layoutWidth}
+              minimumSize={0}
+              area={layoutArea}
+              onDrag={showSidebarWidth}
+              onChange={(share) => setSidebarWidth(share * layoutArea().size)}
+            />
+          </>
+        )}
         <WorkspaceArea
           layout={layout}
           onChange={changeLayout}
@@ -581,6 +606,7 @@ export function App() {
             state,
             dispatch,
             {
+              sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
               canvas: { visible: canvasInView, toggle: toggleCanvas },
               terminal: { visible: terminalInView, toggle: toggleTerminal },
               askTerminals,

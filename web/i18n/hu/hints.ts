@@ -189,6 +189,8 @@ export const hints: Messages["hints"] = {
     "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára, hogy színt adj neki.",
   newConversation: "Beszélgetés indítása ebben a munkaterületben, a gomb mellett kiválasztott profilon.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",
+  hideSidebar: "Elrejti az oldalsávot, hogy a beszélgetés, a vászon és a terminál kapja a teljes szélességet. Ez a böngésző megjegyzi.",
+  showSidebar: "Újra megjeleníti az oldalsávot a munkaterületekkel és a beszélgetésekkel.",
   addWorkspaceGroup:
     "Csoport hozzáadása: egy összecsukható fejléc, amely alá munkaterületeket gyűjthetsz, például projektenként vagy ügyfelenként. Húzz egy munkaterületet a fejlécénél fogva egy csoportba, a munkaterületeket és csoportokat pedig bármilyen sorrendbe.",
   foldWorkspace: "A munkaterület összecsukása a fejlécére. Ha megnyitod valamelyik beszélgetését, kinyílik.",

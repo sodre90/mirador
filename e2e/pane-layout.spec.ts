@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseInSettings, openSettings, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseInSettings, openSettings, primaryModifier, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -232,4 +232,60 @@ test("at its narrowest and the largest text size, the sidebar keeps its header b
   await page.mouse.wheel(200, 0);
   await page.waitForTimeout(200);
   expect(await sidebarScroll.evaluate((element) => element.scrollLeft)).toBe(0);
+});
+
+test("the sidebar hides completely by its button, the palette or the shortcut, stays hidden after a reload, and a button at the top left brings it back", async ({ page }) => {
+  await signIn(page, host);
+  const [newConversation, addProject] = [page.getByRole("button", { name: "+ New conversation" }), page.getByRole("button", { name: "+ Add a project directory" })];
+  await expect(newConversation.or(addProject)).toBeVisible();
+  if (await addProject.isVisible()) await addWorkspace(page, host.projectDir);
+  await startConversation(page);
+  const primary = await primaryModifier(page);
+  const sidebar = page.locator(".sidebar");
+  const showButton = page.getByRole("button", { name: "Show the sidebar" });
+  const title = page.locator(".chat-header h2:visible");
+  const expectHidden = async () => {
+    await expect(sidebar).toHaveCount(0);
+    await expect(showButton).toBeVisible();
+    expect((await workspaceBox(page)).x).toBe(0);
+    const button = (await showButton.boundingBox())!;
+    expect((await title.boundingBox())!.x).toBeGreaterThanOrEqual(button.x + button.width);
+  };
+  const expectShown = async () => {
+    await expect(sidebar).toBeVisible();
+    await expect(showButton).toHaveCount(0);
+    expect((await workspaceBox(page)).x).toBe(256);
+  };
+
+  await page.getByRole("button", { name: "Hide the sidebar" }).click();
+  await expectHidden();
+  await page.reload();
+  await expectHidden();
+  await showButton.click();
+  await expectShown();
+  await page.reload();
+  await expectShown();
+
+  await page.locator(".composer:visible textarea").focus();
+  await page.keyboard.press(`${primary}+Shift+KeyS`);
+  await expectHidden();
+  await page.keyboard.press(`${primary}+Shift+KeyS`);
+  await expectShown();
+
+  await page.keyboard.press(`${primary}+KeyK`);
+  const palette = page.getByLabel("Search conversations and actions");
+  await palette.fill("hide the sidebar");
+  await palette.press("Enter");
+  await expectHidden();
+  await page.keyboard.press(`${primary}+KeyK`);
+  await palette.fill("show the sidebar");
+  await palette.press("Enter");
+  await expectShown();
+
+  await page.getByRole("button", { name: "Hide the sidebar" }).click();
+  await expectHidden();
+  await page.keyboard.press("Alt+Shift+KeyT");
+  await expectShown();
+  await expect(page.locator(".add-workspace input")).toBeFocused();
+  await page.keyboard.press("Escape");
 });

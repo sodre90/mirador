@@ -177,7 +177,7 @@ export function WorkspaceArea({
   const { moving, startMove } = useMovePane(onChange);
   const [dragged, setDragged] = useState<Partial<Pick<PaneLayout, "leftShare" | "topShare">>>({});
   const shownLayout = { ...layout, ...dragged };
-  const { columns, rows, areas, columnDivider, rowDivider } = placement(shownLayout, shown, fullscreen);
+  const { columns, rows, areas, columnDivider, rowDivider, topLeft } = placement(shownLayout, shown, fullscreen);
   const commitShares = (shares: Partial<Pick<PaneLayout, "leftShare" | "topShare">>) => {
     setDragged({});
     onChange((current) => ({ ...current, ...shares }));
@@ -197,7 +197,7 @@ export function WorkspaceArea({
   };
 
   const paneClass = (pane: PaneId) =>
-    ["pane", fullscreen === pane && "fullscreen", moving?.pane === pane && "moving", moving?.over === pane && "drop-target"].filter(Boolean).join(" ");
+    ["pane", topLeft === pane && "top-left", fullscreen === pane && "fullscreen", moving?.pane === pane && "moving", moving?.over === pane && "drop-target"].filter(Boolean).join(" ");
 
   return (
     <PaneControlsContext.Provider value={{ fullscreen, toggleFullscreen, setFullscreen, startMove }}>
