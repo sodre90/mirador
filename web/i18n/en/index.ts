@@ -11,7 +11,8 @@ import { devices } from "./devices.ts";
 import { voice } from "./voice.ts";
 import { profiles } from "./profiles.ts";
 import { plugins } from "./plugins.ts";
+import { desktop } from "./desktop.ts";
 
-export const en = { hints, waitingHints, statusHints, labels, settings, chat, revert, dictation, shell, canvas, terminals, devices, voice, profiles, plugins };
+export const en = { hints, waitingHints, statusHints, labels, settings, chat, revert, dictation, shell, canvas, terminals, devices, voice, profiles, plugins, desktop };
 
 export type Messages = typeof en;

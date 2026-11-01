@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { desktopWords } from "../desktop/src/core/desktop-words.ts";
 import { navigationRules, webUrl } from "../desktop/src/core/navigation.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { clickedTrayItem, menuLabel, nativeTrayMenu, restartDetail, trayMenu, type TrayItem, type TrayState } from "../desktop/src/core/tray-menu.ts";
@@ -93,6 +94,14 @@ describe("tray menu", () => {
 
   test("shows the background checkbox ticked when the setting is on", () => {
     expect(item(trayMenu({ ...state, hostRunsInBackground: true }), "Run host in the background")).toMatchObject({ checked: true });
+  });
+
+  test("speaks the language the page told the app", () => {
+    const labelsIn = (language: TrayState["language"]) =>
+      trayMenu({ ...state, language, waiting: [waitingConversation(1)] }).flatMap((entry) => (entry.type === "normal" ? [entry.label] : []));
+    expect(labelsIn("hu")).toEqual(expect.arrayContaining(["Rád várnak", "Rád vár: Conversation 1 · mirador", "Host: fut, ez az alkalmazás indította", "Megnyitás", "Kilépés"]));
+    expect(labelsIn("es")).toEqual(expect.arrayContaining(["Esperándote: Conversation 1 · mirador", "Reiniciar el host", "Abrir al iniciar sesión", "Salir"]));
+    expect(restartDetail("Mirador", 2, desktopWords("es"))).toBe("Mirador se cierra y se vuelve a abrir. Se detendrán 2 turnos en curso.");
   });
 
   test("explains the restart and names running turns that will stop", () => {

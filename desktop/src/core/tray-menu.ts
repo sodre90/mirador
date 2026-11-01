@@ -1,6 +1,8 @@
-import { newerVersionLabel, type NewerVersion } from "../../../shared/newer-version.ts";
+import type { Language } from "../../../shared/i18n/languages.ts";
+import type { NewerVersion } from "../../../shared/newer-version.ts";
 import { MIRADOR_VERSION } from "../../../shared/version.ts";
-import { waitingLabels, type WaitingConversation, type WaitingSummary, type WaitingTone } from "../../../shared/waiting.ts";
+import type { WaitingConversation, WaitingSummary, WaitingTone } from "../../../shared/waiting.ts";
+import { desktopWords, type DesktopWords } from "./desktop-words.ts";
 import type { HostStatus } from "./host-supervisor.ts";
 import type { UpdateOffer } from "./self-update.ts";
 
@@ -42,33 +44,30 @@ export interface TrayState {
   update: UpdateOffer | null;
   /** Most urgent first. */
   waiting: readonly WaitingConversation[];
+  /** English until the page has told the app its language. */
+  language?: Language;
 }
 
-const statusLabels: Record<TrayState["status"], string> = {
-  starting: "Host: starting...",
-  stopped: "Host: not running",
-  owned: "Host: running, started by this app",
-  external: "Host: running, started elsewhere",
-  background: "Host: running in the background",
-};
-
-function updateItems(update: UpdateOffer | null): TrayItem[] {
+function updateItems(update: UpdateOffer | null, words: DesktopWords): TrayItem[] {
   if (!update) return [];
-  if (update.stage === "blocked") return [{ type: "normal", label: `Mirador ${update.version} is out: ${update.blockedBy}`, enabled: false }];
-  if (update.stage === "downloading") return [{ type: "normal", label: `Downloading Mirador ${update.version}...`, enabled: false }];
-  return [{ type: "normal", label: `Restart to update to Mirador ${update.version}`, action: "install-update" }];
+  if (update.stage === "blocked") return [{ type: "normal", label: words.updateBlocked(update.version, update.blockedBy), enabled: false }];
+  if (update.stage === "downloading") return [{ type: "normal", label: words.downloadingUpdate(update.version), enabled: false }];
+  return [{ type: "normal", label: words.restartToUpdate(update.version), action: "install-update" }];
 }
+
+const newerVersionLabel = (newer: NewerVersion, words: DesktopWords) =>
+  newer.kind === "release" ? words.releaseOut(newer.version) : words.newCommits(newer.commits, newer.upstream);
 
 /**
  * A release is downloaded by the app that updates itself, unless it is already, and otherwise links to its download page,
  * as it does where the app cannot install it. New commits on a checkout's upstream are only told.
  */
-function newerVersionItems({ newerVersion, updatesItself, update }: TrayState): TrayItem[] {
+function newerVersionItems({ newerVersion, updatesItself, update }: TrayState, words: DesktopWords): TrayItem[] {
   if (!newerVersion) return [];
-  if (newerVersion.kind === "checkout") return [{ type: "normal", label: newerVersionLabel(newerVersion), enabled: false }];
+  if (newerVersion.kind === "checkout") return [{ type: "normal", label: newerVersionLabel(newerVersion, words), enabled: false }];
   if (update && update.stage !== "blocked") return [];
   const action = updatesItself && !update ? "check-for-update" : "download-newer-version";
-  return [{ type: "normal", label: `${newerVersionLabel(newerVersion)}: download`, action }];
+  return [{ type: "normal", label: words.download(newerVersionLabel(newerVersion, words)), action }];
 }
 
 const MAX_WAITING_SHOWN = 10;
@@ -85,18 +84,18 @@ export function menuLabel(text: string, platform: NodeJS.Platform) {
   return platform === "win32" ? short.replaceAll("&", "&&") : short;
 }
 
-function waitingItem({ conversationId, title, workspace, tone }: WaitingConversation, platform: NodeJS.Platform): TrayItem {
+function waitingItem({ conversationId, title, workspace, tone }: WaitingConversation, platform: NodeJS.Platform, words: DesktopWords): TrayItem {
   const where = workspace ? ` · ${menuLabel(workspace, platform)}` : "";
-  return { type: "normal", label: `${waitingLabels[tone]}: ${menuLabel(title, platform)}${where}`, action: "open-conversation", data: { conversationId } };
+  return { type: "normal", label: `${words.waiting[tone]}: ${menuLabel(title, platform)}${where}`, action: "open-conversation", data: { conversationId } };
 }
 
-function waitingItems(waiting: readonly WaitingConversation[], platform: NodeJS.Platform): TrayItem[] {
+function waitingItems(waiting: readonly WaitingConversation[], platform: NodeJS.Platform, words: DesktopWords): TrayItem[] {
   if (waiting.length === 0) return [];
   const hidden = waiting.length - MAX_WAITING_SHOWN;
   return [
-    { type: "normal", label: "Waiting for you", enabled: false },
-    ...waiting.slice(0, MAX_WAITING_SHOWN).map((conversation) => waitingItem(conversation, platform)),
-    ...(hidden > 0 ? [{ type: "normal", label: `${hidden} more…`, action: "open" } satisfies TrayItem] : []),
+    { type: "normal", label: words.waitingForYou, enabled: false },
+    ...waiting.slice(0, MAX_WAITING_SHOWN).map((conversation) => waitingItem(conversation, platform, words)),
+    ...(hidden > 0 ? [{ type: "normal", label: words.more(hidden), action: "open" } satisfies TrayItem] : []),
     { type: "separator" },
   ];
 }
@@ -123,19 +122,20 @@ export function clickedTrayItem(action: unknown): { action: TrayAction; conversa
 
 export function trayMenu(state: TrayState, platform: NodeJS.Platform = process.platform): TrayItem[] {
   const restartable = state.status !== "external" && state.status !== "starting";
+  const words = desktopWords(state.language);
   return [
-    ...waitingItems(state.waiting, platform),
-    { type: "normal", label: statusLabels[state.status], enabled: false },
+    ...waitingItems(state.waiting, platform, words),
+    { type: "normal", label: words.status[state.status], enabled: false },
     { type: "normal", label: `Mirador ${MIRADOR_VERSION}`, enabled: false },
-    ...updateItems(state.update),
-    ...newerVersionItems(state),
-    { type: "normal", label: "Open", action: "open" },
+    ...updateItems(state.update, words),
+    ...newerVersionItems(state, words),
+    { type: "normal", label: words.open, action: "open" },
     { type: "separator" },
-    { type: "normal", label: restartable ? "Restart host" : "Restart host (not started by this app)", action: "restart-host", enabled: restartable },
-    { type: "normal", label: "Run host in the background", action: "toggle-background", checked: state.hostRunsInBackground },
-    { type: "normal", label: "Open at login", action: "toggle-open-at-login", checked: state.openAtLogin },
+    { type: "normal", label: restartable ? words.restartHost : words.restartHostStartedElsewhere, action: "restart-host", enabled: restartable },
+    { type: "normal", label: words.runInBackground, action: "toggle-background", checked: state.hostRunsInBackground },
+    { type: "normal", label: words.openAtLogin, action: "toggle-open-at-login", checked: state.openAtLogin },
     { type: "separator" },
-    { type: "normal", label: "Quit", action: "quit" },
+    { type: "normal", label: words.quit, action: "quit" },
   ];
 }
 
@@ -167,8 +167,7 @@ export function colourTrayImage(dot: TrayDot | null, platform: NodeJS.Platform) 
 /** On macOS a tray title is text beside the icon, kept for the waiting count; Linux panels show it as the icon's tooltip. */
 export const firstTrayTitle = (platform: NodeJS.Platform, appName: string) => (platform === "darwin" ? "" : appName);
 
-export function restartDetail(appName: string, runningTurns: number): string {
-  if (runningTurns === 0) return `${appName} closes and opens again.`;
-  const turns = runningTurns === 1 ? "turn" : "turns";
-  return `${appName} closes and opens again. ${runningTurns} running ${turns} will stop.`;
+export function restartDetail(appName: string, runningTurns: number, words = desktopWords()): string {
+  if (runningTurns === 0) return words.closesAndOpensAgain(appName);
+  return `${words.closesAndOpensAgain(appName)} ${words.runningTurnsStop(runningTurns)}`;
 }

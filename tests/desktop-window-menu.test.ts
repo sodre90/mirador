@@ -116,6 +116,13 @@ describe("menu in the window", () => {
       expect(pageRequest({ type: "desktop-appearance", nonce: "n-1", appearance }, "n-1")).toBeNull();
     }
   });
+
+  test("takes Mirador's language only from the page with the nonce, and only a language Mirador has", () => {
+    expect(pageRequest({ type: "desktop-language", nonce: "n-1", language: "hu" }, "n-1")).toEqual({ type: "language", language: "hu" });
+    expect(pageRequest({ type: "desktop-language", nonce: "guess", language: "es" }, "n-1")).toBeNull();
+    expect(pageRequest({ type: "desktop-language", language: "es" }, "n-1")).toBeNull();
+    expect(pageRequest({ type: "desktop-language", nonce: "n-1", language: "de" }, "n-1")).toBeNull();
+  });
 });
 
 describe("opening a conversation from the tray", () => {

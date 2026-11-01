@@ -1,3 +1,5 @@
+import type { Language } from "./i18n/languages.ts";
+
 /** The desktop app's menu, shown inside its window on Linux, which has no menu bar and may show no tray icon. */
 export type DesktopMenuItem =
   | { type: "separator" }
@@ -42,4 +44,5 @@ export type DesktopMenuMessage =
   | { type: "desktop-nonce-request" }
   | { type: "desktop-open-link"; nonce: string; url: string }
   | { type: "desktop-close-window"; nonce: string }
-  | { type: "desktop-appearance"; nonce: string; appearance: DesktopAppearance };
+  | { type: "desktop-appearance"; nonce: string; appearance: DesktopAppearance }
+  | { type: "desktop-language"; nonce: string; language: Language };

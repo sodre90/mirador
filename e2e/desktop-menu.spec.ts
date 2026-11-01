@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { DesktopMenu, DesktopMenuMessage } from "../shared/desktop-menu.ts";
-import { addWorkspace, chooseInSettings, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, chooseInSettings, openSettings, signIn, startConversation } from "./helpers.ts";
 import { keepShellBusy } from "./terminal-shell.ts";
 import { jobControlShell, TestHost } from "./test-host.ts";
 
@@ -211,6 +211,16 @@ test("inside the desktop app, the page gives the app the chosen theme with its n
   await chooseInSettings(page, "Theme", "Dark");
   await chooseInSettings(page, "Theme", "Match system");
   await expect.poll(appearances).toEqual(given("light", "dark", "system"));
+});
+
+test("inside the desktop app, the page tells the app Mirador's language with its nonce, and again in the new language after a switch", async ({ page }) => {
+  const sentToDesktopApp = await actAsDesktopApp(page);
+  await signIn(page, host);
+  const languages = async () => (await sentToDesktopApp()).filter(({ type }) => type === "desktop-language");
+  await expect.poll(languages).toEqual([{ type: "desktop-language", nonce: "nonce-1", language: "en" }]);
+
+  await Promise.all([page.waitForEvent("load"), (await openSettings(page)).getByLabel("Language").selectOption("hu")]);
+  await expect.poll(languages).toEqual([{ type: "desktop-language", nonce: "nonce-1", language: "hu" }]);
 });
 
 test("the desktop app menu reaches past the sidebar's edge without being cut off", async ({ page }) => {

@@ -10,13 +10,6 @@ export const waitingTones: Record<WaitingFor, WaitingTone> = {
   unread: "unread",
 };
 
-export const waitingLabels: Record<WaitingTone, string> = {
-  decision: "Needs you",
-  failed: "Failed",
-  done: "Done",
-  unread: "Unread",
-};
-
 export const tonesByUrgency: WaitingTone[] = ["decision", "failed", "done", "unread"];
 
 const urgencyOf = ({ waitingFor }: Conversation) => (waitingFor ? tonesByUrgency.indexOf(waitingTones[waitingFor]) : -1);

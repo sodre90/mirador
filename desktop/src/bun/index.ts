@@ -5,10 +5,11 @@ import { accountShell } from "../../../shared/login-shell.ts";
 import { installedAppPath } from "../core/app-bundle.ts";
 import { loginShell } from "../core/host-command.ts";
 import { dataPaths, resolveRuntime } from "../core/runtime.ts";
-import { SettingsStore } from "../core/settings.ts";
+import { desktopWords } from "../core/desktop-words.ts";
+import { loadSettings, SettingsStore } from "../core/settings.ts";
 import { claimSingleInstance } from "../core/single-instance.ts";
 import { recordStartupFailure } from "../core/startup-failure.ts";
-import { installApplicationMenu } from "./app-menu.ts";
+import { closeWhatHasFocusOnMenuClose } from "./app-menu.ts";
 import { DesktopApp } from "./desktop-app.ts";
 
 const APP_NAME = "Mirador";
@@ -41,15 +42,25 @@ async function launch() {
     builtFromCode: BUILD_DESKTOP_APP_CODE,
   });
 
-  if (process.platform === "darwin") installApplicationMenu(APP_NAME, () => app?.closeWhatHasFocus());
+  if (process.platform === "darwin") closeWhatHasFocusOnMenuClose(() => app?.closeWhatHasFocus());
   Electrobun.events.on("reopen", () => void app?.openWindow());
   Electrobun.events.on("before-quit", () => app?.stopOwnedHost());
   await app.start();
 }
 
+/** The language the page last told the app, read again in case the failure came before the app had its settings. */
+function wordsBeforeTheApp() {
+  try {
+    return desktopWords(loadSettings(paths.settings, { hostDirectory: BUILD_HOST_DIRECTORY, bun: BUILD_BUN }).language);
+  } catch {
+    return desktopWords();
+  }
+}
+
 async function tellStartupFailed(error: unknown) {
-  const notice = recordStartupFailure(APP_NAME, error, paths.desktopLog);
-  await Utils.showMessageBox({ type: "error", ...notice, buttons: ["OK"] });
+  const words = wordsBeforeTheApp();
+  const notice = recordStartupFailure(APP_NAME, error, paths.desktopLog, new Date(), words);
+  await Utils.showMessageBox({ type: "error", ...notice, buttons: [words.ok] });
   Utils.quit();
 }
 

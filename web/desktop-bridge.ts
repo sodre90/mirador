@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { DESKTOP_NONCE_EVENT, DESKTOP_UPDATE_EVENT, type DesktopMenuMessage, type DesktopUpdate } from "../shared/desktop-menu.ts";
+import { language } from "./language.ts";
 
 declare global {
   interface Window {
@@ -34,6 +35,14 @@ export function askDesktopAppForNonce() {
 }
 
 export const desktopNonce = () => nonce;
+
+/** The app draws its tray, menus and dialogs in Mirador's language; choosing another reloads the page, which tells it again. */
+export function giveLanguageToDesktopApp() {
+  if (!inDesktopApp() || window.parent !== window) return;
+  const give = (nonce: string | null) => nonce && sendToDesktopApp({ type: "desktop-language", nonce, language });
+  window.addEventListener(DESKTOP_NONCE_EVENT, (event) => give((event as CustomEvent<string>).detail));
+  give(desktopNonce());
+}
 
 function askDesktopAppTo(action: "install-update" | "check-for-update") {
   const currentNonce = desktopNonce();

@@ -1,5 +1,6 @@
 import { Utils } from "electrobun/main";
 import { readFileSync } from "node:fs";
+import type { Language } from "../../../shared/i18n/languages.ts";
 import type { NewerVersion } from "../../../shared/newer-version.ts";
 import type { WaitingConversation } from "../../../shared/waiting.ts";
 import { HostNotifications, nativeNotification } from "../core/host-notifications.ts";
@@ -10,6 +11,7 @@ import type { SelfUpdate, UpdateOffer } from "../core/self-update.ts";
 import { platformServices } from "../core/platform-services.ts";
 import { PidFileOnDisk, systemProcesses } from "../core/processes.ts";
 import { authUrl, hostEnvironmentOverrides, type DataPaths, type Runtime } from "../core/runtime.ts";
+import { desktopWords } from "../core/desktop-words.ts";
 import type { SettingsStore } from "../core/settings.ts";
 import { restartDetail, type TrayAction, type TrayState } from "../core/tray-menu.ts";
 import { hostRunsReplacedFiles, markUpdatePending, takePendingUpdate, updateRestartStopsTheHost } from "../core/update-checks.ts";
@@ -26,6 +28,7 @@ import {
   windowMenu,
 } from "../core/window-menu.ts";
 import { giveAppAppearance } from "./app-appearance.ts";
+import { showApplicationMenu } from "./app-menu.ts";
 import { AppTray } from "./app-tray.ts";
 import { selfUpdateFromReleases } from "./app-updates.ts";
 import { setDockIconVisible } from "./dock.ts";
@@ -124,6 +127,7 @@ export class DesktopApp {
   }
 
   async start() {
+    this.showApplicationMenu();
     await this.reconcileOpenAtLogin();
     this.notifications.start();
     await this.openWindow();
@@ -139,7 +143,7 @@ export class DesktopApp {
           this.renderTray();
           this.showUpdateInWindow();
         },
-        failedToInstall: (message) => Utils.showNotification({ title: `${this.environment.appName} could not update itself`, body: message }),
+        failedToInstall: (message) => Utils.showNotification({ title: this.words().couldNotUpdate(this.environment.appName), body: message }),
       });
     }
     this.knowsWhetherItUpdatesItself = true;
@@ -157,6 +161,21 @@ export class DesktopApp {
       this.window.open(`${authUrl(this.environment.runtime, this.browserToken())}${route}`);
     });
     if (!this.window.isOpen) setDockIconVisible(false);
+  }
+
+  private words() {
+    return desktopWords(this.environment.settings.current().language);
+  }
+
+  private showApplicationMenu() {
+    if (process.platform === "darwin") showApplicationMenu(this.environment.appName, this.words());
+  }
+
+  private takeLanguage(language: Language) {
+    if (language === this.environment.settings.current().language) return;
+    this.environment.settings.update({ language });
+    this.showApplicationMenu();
+    this.renderTray();
   }
 
   closeWhatHasFocus() {
@@ -218,9 +237,9 @@ export class DesktopApp {
     const { response } = await Utils.showMessageBox({
       type: "question",
       title: this.environment.appName,
-      message: `Restart ${this.environment.appName} to update to ${this.update.version}?`,
-      detail: restartDetail(this.environment.appName, await this.turnsTheRestartStops()),
-      buttons: ["Restart", "Later"],
+      message: this.words().restartToUpdateQuestion(this.environment.appName, this.update.version),
+      detail: restartDetail(this.environment.appName, await this.turnsTheRestartStops(), this.words()),
+      buttons: [this.words().restart, this.words().later],
       defaultId: 0,
       cancelId: 1,
     });
@@ -294,7 +313,7 @@ export class DesktopApp {
   }
 
   private trayState(): TrayState {
-    const { hostRunsInBackground, openAtLogin } = this.environment.settings.current();
+    const { hostRunsInBackground, openAtLogin, language } = this.environment.settings.current();
     return {
       status: this.status,
       hostRunsInBackground,
@@ -303,6 +322,7 @@ export class DesktopApp {
       updatesItself: this.selfUpdate !== null,
       update: this.update,
       waiting: this.waiting,
+      language,
     };
   }
 
@@ -323,14 +343,15 @@ export class DesktopApp {
       this.showUpdateInWindow();
     }
     if (request?.type === "open-link") this.window.openInBrowser(request.url);
-    if (request?.type === "close-window") void this.window.closeAfterAsking();
+    if (request?.type === "close-window") void this.window.closeAfterAsking(this.words());
     if (request?.type === "appearance") giveAppAppearance(request.appearance);
+    if (request?.type === "language") this.takeLanguage(request.language);
     if (request?.type === "action" && pageMayRun(request.action, showsMenuInWindow)) void this.handle(request.action);
     if (request?.type === "menu") this.showMenuInWindow();
   }
 
   private async report(error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    await Utils.showMessageBox({ type: "error", title: this.environment.appName, message, buttons: ["OK"] });
+    await Utils.showMessageBox({ type: "error", title: this.environment.appName, message, buttons: [this.words().ok] });
   }
 }

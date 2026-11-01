@@ -27,14 +27,15 @@ describe("desktop settings", () => {
     expect(fromTheRepo.runsTheMiradorItCarries()).toBe(false);
   });
 
-  test("default to hosting from the repo with the build's bun, in the foreground, opening at login", () => {
-    expect(defaultSettings(build)).toEqual({ hostDirectory: "/repo", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: true });
+  test("default to hosting from the repo with the build's bun, in the foreground, opening at login, in English", () => {
+    expect(defaultSettings(build)).toEqual({ hostDirectory: "/repo", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: true, language: "en" });
   });
 
   test("keep valid stored values and fall back per field for the rest", () => {
     const defaults = defaultSettings(build);
-    const stored = JSON.stringify({ hostDirectory: "/elsewhere", bun: "", hostRunsInBackground: "yes", openAtLogin: false });
-    expect(parseSettings(stored, defaults)).toEqual({ hostDirectory: "/elsewhere", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: false });
+    const stored = JSON.stringify({ hostDirectory: "/elsewhere", bun: "", hostRunsInBackground: "yes", openAtLogin: false, language: "hu" });
+    expect(parseSettings(stored, defaults)).toEqual({ hostDirectory: "/elsewhere", bun: "/bin/bun", hostRunsInBackground: false, openAtLogin: false, language: "hu" });
+    expect(parseSettings(JSON.stringify({ language: "klingon" }), defaults).language).toBe("en");
   });
 
   test("fall back to the defaults for text that is not a JSON object", () => {

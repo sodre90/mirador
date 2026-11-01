@@ -6,6 +6,7 @@ import { pastelVariables } from "./pastels.ts";
 import type { Theme } from "./theme.ts";
 import type { WaitingStyle } from "./waiting.ts";
 import type { WorkspaceColorStyle } from "./workspace-colors.ts";
+import { t } from "./i18n/index.ts";
 
 const Line = ({ width, strong = false }: { width: number; strong?: boolean }) => (
   <span className={`preview-line ${strong ? "strong" : ""}`} style={{ width: `${width}%` }} />
@@ -44,7 +45,7 @@ function WaitingRow({ style, waits }: { style: WaitingStyle; waits: boolean }) {
     <span className="preview-row">
       <span className={`preview-dot ${waits ? "waiting" : ""} ${waits && style === "dots" ? "glowing" : ""}`} />
       <Line width={waits && style === "dots" ? 62 : 48} strong={waits && style === "dots"} />
-      {waits && style !== "dots" && <span className="preview-pill">Needs you</span>}
+      {waits && style !== "dots" && <span className="preview-pill">{t.shell.sidebar.waiting.decision}</span>}
     </span>
   );
 }
@@ -165,7 +166,7 @@ export function ShellLookPreview({ look }: { look: ShellLook }) {
             <span className="prompt">$</span> <span className="typed">bun test</span>
           </span>
           <span>12 pass</span>
-          <span className="link">Show more</span>
+          <span className="link">{t.chat.tool.showMoreLines(8)}</span>
         </span>
       </span>
     </span>

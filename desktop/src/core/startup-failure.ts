@@ -1,5 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { desktopWords } from "./desktop-words.ts";
 
 export interface StartupFailureNotice {
   title: string;
@@ -24,8 +25,8 @@ function appended(logPath: string, line: string) {
  * Electrobun ends the app without a word when its main script throws, so a start that fails is written to the log and
  * told to the user. The notice names the log only when the failure made it there.
  */
-export function recordStartupFailure(appName: string, error: unknown, logPath: string, now = new Date()): StartupFailureNotice {
-  const notice = { title: appName, message: `${appName} could not start: ${messageOf(error)}` };
+export function recordStartupFailure(appName: string, error: unknown, logPath: string, now = new Date(), words = desktopWords()): StartupFailureNotice {
+  const notice = { title: appName, message: words.couldNotStart(appName, messageOf(error)) };
   const logged = appended(logPath, `${now.toISOString()} ${appName} could not start: ${detailsOf(error)}\n`);
-  return logged ? { ...notice, detail: `The details are in ${logPath}.` } : notice;
+  return logged ? { ...notice, detail: words.detailsIn(logPath) } : notice;
 }

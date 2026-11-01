@@ -4,6 +4,7 @@ import { navigationRules } from "../core/navigation.ts";
 import { frameToOpenWith, readWindowFrame, WindowFrameKeeper } from "../core/window-frame.ts";
 import { giveWindowIcon } from "../core/window-icon.ts";
 import { setDockIconVisible } from "./dock.ts";
+import type { DesktopWords } from "../core/desktop-words.ts";
 
 interface HostMessageEvent {
   data?: { detail?: unknown };
@@ -68,14 +69,14 @@ export class MainWindow {
     return frameToOpenWith(readWindowFrame(this.frameFile), workAreas, DEFAULT_WINDOW_SIZE);
   }
 
-  async closeAfterAsking() {
+  async closeAfterAsking(words: DesktopWords) {
     if (!this.window) return;
     const { response } = await Utils.showMessageBox({
       type: "question",
       title: this.title,
-      message: `Close the ${this.title} window?`,
-      detail: "Conversations keep running. Open the window again from the menu bar.",
-      buttons: ["Close window", "Cancel"],
+      message: words.closeWindowQuestion(this.title),
+      detail: words.closeWindowDetail,
+      buttons: [words.closeWindow, words.cancel],
       defaultId: 0,
       cancelId: 1,
     });

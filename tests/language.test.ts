@@ -36,4 +36,12 @@ describe("languages", () => {
       expect(text.split(SAMPLE).length - 1, path).toBe(valuesGiven);
     }
   });
+
+  test.each([
+    ["English", en],
+    ["Hungarian", hu],
+    ["Spanish", es],
+  ])("%s desktop texts keep out what trays misread: quotes and brackets on Linux, & on Windows", (_, messages) => {
+    for (const [path, text] of texts(messages.desktop as unknown as Entry, "desktop")) expect(text, path).not.toMatch(/["\\{}[\]&]/);
+  });
 });

@@ -1,11 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { isLanguage, type Language } from "../../../shared/i18n/languages.ts";
 
 export interface DesktopSettings {
   hostDirectory: string;
   bun: string;
   hostRunsInBackground: boolean;
   openAtLogin: boolean;
+  /** Mirador's language, as its page last told the app, so the tray and the app's dialogs speak it before any page loads. */
+  language: Language;
 }
 
 /** Where a build finds the host. */
@@ -23,6 +26,7 @@ export const defaultSettings = <Build extends BuildDefaults>(build: Build) => ({
   ...build,
   hostRunsInBackground: false,
   openAtLogin: true,
+  language: "en" as Language,
 });
 
 const isNonEmptyString = (value: unknown): value is string => typeof value === "string" && value.trim() !== "";
@@ -49,6 +53,7 @@ export function parseSettings(text: string, defaults: StoredSettings): StoredSet
     bun: storedPath(stored.bun, defaults.bun),
     hostRunsInBackground: typeof stored.hostRunsInBackground === "boolean" ? stored.hostRunsInBackground : defaults.hostRunsInBackground,
     openAtLogin: typeof stored.openAtLogin === "boolean" ? stored.openAtLogin : defaults.openAtLogin,
+    language: isLanguage(stored.language) ? stored.language : defaults.language,
   };
 }
 

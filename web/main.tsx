@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
-import { askDesktopAppForNonce } from "./desktop-bridge.ts";
+import { askDesktopAppForNonce, giveLanguageToDesktopApp } from "./desktop-bridge.ts";
 import { closeWhatHasFocusOnCommandW } from "./desktop-close.ts";
 import { applyExternalImages, externalImages } from "./external-images.ts";
 import { openOutsideLinksInTheBrowser } from "./outside-links.ts";
@@ -25,6 +25,7 @@ applyWaitingStyle(storedWaitingStyle());
 applyWorkspaceColorStyle();
 askDesktopAppForNonce();
 giveThemeToDesktopApp();
+giveLanguageToDesktopApp();
 openOutsideLinksInTheBrowser();
 closeWhatHasFocusOnCommandW();
 createRoot(document.getElementById("root")!).render(<App />);
