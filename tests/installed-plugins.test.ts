@@ -71,7 +71,7 @@ describe("InstalledPlugins", () => {
     const listed = await new InstalledPlugins(plugins, loaded.problems).list();
 
     expect(listed).toEqual([
-      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", waitsForRestart: false },
+      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", waitsForRestart: false, kinds: ["app"], tools: [] },
       {
         folder: "cloned",
         name: "counter",
@@ -80,11 +80,22 @@ describe("InstalledPlugins", () => {
         source: { kind: "git", remote: "https://example.com/me/counter.git", branch: "main", release: null, commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by one" },
         problem: null,
         waitsForRestart: false,
+        kinds: ["app"],
+        tools: [],
       },
-      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false },
+      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [] },
     ]);
   });
 
+  test("lists the canvas tools each plugin gave the agent when Mirador started", async () => {
+    const plugins = join(root, "with-tools");
+    cpSync(join(import.meta.dir, "fixtures", "canvas-plugins", "board"), join(plugins, "board"), { recursive: true });
+    const loaded = await loadPlugins(plugins);
+    const [board] = await new InstalledPlugins(plugins, loaded.problems, loaded.canvases).list();
+    expect(board?.kinds).toEqual(["canvas"]);
+    expect(board?.tools?.find(({ name }) => name === "show_card")).toEqual({ name: "show_card", description: "Show a card the user can press." });
+    expect(board?.tools).toHaveLength(Object.keys(loaded.canvases[0]!.host.tools).length);
+  });
 });
 
 describe("adding, updating and removing plugins", () => {
@@ -133,6 +144,8 @@ describe("adding, updating and removing plugins", () => {
         source: { kind: "git", remote: repo, branch: "main", release: null, commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by one" },
         problem: null,
         waitsForRestart: true,
+        kinds: ["app"],
+        tools: [],
       },
     ]);
     expect(leftInStaging(plugins)).toEqual([]);

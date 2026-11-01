@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, openSettings, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, openPlugins, pluginTile, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host: TestHost = new TestHost({ fakePrograms: true, environment: () => ({ MIRADOR_PLUGIN_CATALOG: `file://${catalogFile()}` }) });
@@ -43,8 +43,7 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-const pluginRows = (page: Page) => page.getByRole("list", { name: "Plugins", exact: true }).getByRole("listitem");
-const moreOfficialPlugins = (page: Page) => page.getByRole("list", { name: "More official plugins" });
+const plugins = (page: Page) => page.getByRole("dialog", { name: "Plugins" });
 
 test("the agent recommends an official plugin, and Mirador installs it only once the user answers Install", async ({ page }) => {
   await signIn(page, host);
@@ -74,22 +73,24 @@ test("the agent recommends an official plugin, and Mirador installs it only once
     await expect(page.locator(".message.user:visible").last()).toContainText("Mirador installed the Counter plugin and uses it from its next restart.", { timeout: 30_000 });
   });
 
-  await test.step("Settings lists each plugin once: an official one in the plugins list with its tag and description, and those to install apart", async () => {
-    await openSettings(page, "Plugins");
-    await expect(pluginRows(page).filter({ hasText: "Counter" }).locator(".plugin-official")).toHaveText("Official");
-    await expect(pluginRows(page).filter({ hasText: "Counter" }).locator(".plugin-description")).toHaveText("Counts by one.");
-    await expect(moreOfficialPlugins(page).getByRole("listitem")).toHaveText(["TallytallyKeeps a tally.Install"]);
-    await expect(page.locator(".restart-needed")).toBeVisible();
+  await test.step("Plugins lists each plugin once: an official one installed with its tag and description, and those to install under Discover", async () => {
+    await openPlugins(page);
+    await expect(pluginTile(plugins(page), "Installed", "Counter")).toHaveText("CCounterCounts by one.AppOfficialused from the next startOpen");
+    await expect(plugins(page).getByRole("list", { name: "Discover" }).getByRole("listitem")).toHaveText(["TTallyKeeps a tally.OfficialInstall"]);
+    await expect(plugins(page).locator(".restart-needed")).toBeVisible();
   });
 
-  await test.step("Install in Settings asks first too: Don't install leaves it to install, and Install then installs it", async () => {
-    await moreOfficialPlugins(page).getByRole("button", { name: "Install" }).click();
-    await moreOfficialPlugins(page).getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Don't install" }).click();
-    await expect(moreOfficialPlugins(page).getByRole("listitem")).toHaveText(["TallytallyKeeps a tally.Install"]);
-    await moreOfficialPlugins(page).getByRole("button", { name: "Install" }).click();
-    await moreOfficialPlugins(page).getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Install", exact: true }).click();
-    await expect(pluginRows(page).filter({ hasText: "Tally" }).locator(".plugin-description")).toHaveText("Keeps a tally.", { timeout: 30_000 });
-    await expect(pluginRows(page).filter({ hasText: "Tally" }).locator(".plugin-official")).toHaveText("Official");
-    await expect(moreOfficialPlugins(page)).toHaveCount(0);
+  await test.step("a tile's Install asks first too: Don't install leaves it to install, and Install then installs it", async () => {
+    await pluginTile(plugins(page), "Discover", "Tally").getByRole("button", { name: "Install Tally" }).click();
+    const tally = plugins(page).getByRole("region", { name: "Tally" });
+    await expect(tally.locator(".plugin-description")).toHaveText("Keeps a tally.");
+    await tally.getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Don't install" }).click();
+    await expect(tally.getByRole("group", { name: "Install Tally?" })).toHaveCount(0);
+    await tally.getByRole("button", { name: "Install", exact: true }).click();
+    await tally.getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Install", exact: true }).click();
+    await expect(tally.getByText("used from the next start")).toBeVisible({ timeout: 30_000 });
+    await tally.getByRole("button", { name: "← All plugins" }).click();
+    await expect(pluginTile(plugins(page), "Installed", "Tally")).toContainText("Official");
+    await expect(plugins(page).getByRole("list", { name: "Discover" })).toHaveCount(0);
   });
 });

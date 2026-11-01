@@ -75,6 +75,7 @@ export const hints = {
   machineColorStyle:
     "Where a machine you gave a colour shows it: on its rail button only, or also as a strip along the top of its view, so you can tell at a glance which machine you work on. Give a machine a colour in Machines….",
   machines: "Other computers running Mirador, such as a server whose agents keep working while this one sleeps.",
+  plugins: "Plugins give the agent tools of its own on the canvas, or bring apps such as a video or a Google Docs editor. Install, update and set them up here.",
   revokeDeviceArmed: "Click again to sign this device out. It needs a new invite code to join again.",
   officialPlugin: "One of the official Mirador plugins, listed in the sodre90/mirador-plugins catalog.",
   installOfficialPlugin: "Clones the plugin's repo and shows what of it runs. Nothing of it runs until you agree.",

@@ -77,6 +77,7 @@ export const hints: Messages["hints"] = {
   machineColorStyle:
     "Hol mutatja a színét egy gép, amelynek színt adtál: csak a sávgombján, vagy egy csíkként a nézete tetején is, így egy pillantásból látod, melyik gépen dolgozol. Színt a Gépek… menüpontban adhatsz egy gépnek.",
   machines: "Más számítógépek, amelyeken Mirador fut, például egy szerver, amelynek az ágensei tovább dolgoznak, amíg ez a gép alszik.",
+  plugins: "A bővítmények saját eszközöket adnak az ágensnek a vásznon, vagy alkalmazást hoznak, például videó- vagy Google Docs-szerkesztőt. Itt telepítheted, frissítheted és állíthatod be őket.",
   revokeDeviceArmed: "Kattints újra, hogy kijelentkeztesd ezt a készüléket. Az újbóli csatlakozáshoz új meghívókód kell.",
   officialPlugin: "Az egyik hivatalos Mirador-bővítmény, amely a sodre90/mirador-plugins katalógusban szerepel.",
   installOfficialPlugin: "Klónozza a bővítmény repóját, és megmutatja, mi fut belőle. Semmi sem fut belőle, amíg bele nem egyezel.",

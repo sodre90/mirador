@@ -15,11 +15,13 @@ import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
 import { tellTheRailThePlace } from "./machine-place.ts";
 import { MachineFrames, MachineRail, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
 import { MachinesDialog, openMachine } from "./Machines.tsx";
+import { PluginsDialog } from "./Plugins.tsx";
 import { NewerVersionBanner } from "./NewerVersion.tsx";
 import { HintLayer } from "./Hint.tsx";
 import { SearchDialog } from "./Search.tsx";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
+import { canOpenItemWindows, openPluginWindow } from "./item-window.ts";
 import { launchLabel } from "./launch-label.ts";
 import { useProgramRequest } from "./program-request.ts";
 import { shownTitle } from "./shown-title.ts";
@@ -231,17 +233,22 @@ function paletteEntries(
   const machineActions = state.machines.map(
     (machine): PaletteEntry => ({ id: `machine-${machine.id}`, label: words.openMachine(machine.name), detail: machine.origin, kind: "action", run: () => showMachine(machine) }),
   );
+  const pluginWindowActions: PaletteEntry[] = canOpenItemWindows()
+    ? Object.entries(state.pluginWindows).map(([plugin, title]) => ({ id: `plugin-window-${plugin}`, label: words.openPluginWindow(title), kind: "action", run: () => openPluginWindow(plugin) }))
+    : [];
   return [
     ...conversations,
     ...workspaceActions,
     { id: "toggle-sidebar", label: panes.sidebar.visible ? t.shell.sidebar.hideSidebar : t.shell.sidebar.showSidebar, kind: "action", run: panes.sidebar.toggle },
     ...openConversationActions,
     ...machineActions,
+    ...pluginWindowActions,
     { id: "search", label: words.searchAll, detail: words.everyConversation, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "search" } }) },
     { id: "add-workspace", label: words.addWorkspace, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "add-workspace" } }) },
     { id: "add-workspace-group", label: words.newGroup, detail: words.ofWorkspaces, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "add-workspace-group" } }) },
     { id: "profiles", label: words.profiles, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "profiles" } }) },
     { id: "machines", label: words.machines, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "machines" } }) },
+    { id: "plugins", label: words.plugins, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "plugins" } }) },
     { id: "settings", label: words.settings, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "settings" } }) },
     { id: "help", label: words.keyboardShortcuts, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "help" } }) },
     { id: "restart-host", label: words.restartHost, detail: words.runsCodeAsItIsNow, kind: "action", run: restartHost },
@@ -640,6 +647,7 @@ export function App() {
           onClose={closeOverlay}
         />
       )}
+      {overlay?.kind === "plugins" && <PluginsDialog pluginUpdates={state.pluginUpdates} onClose={closeOverlay} />}
       {overlay?.kind === "settings" && (
         <SettingsDialog
           page={overlay.page}
@@ -661,6 +669,7 @@ export function App() {
           pluginUpdates={state.pluginUpdates}
           layoutDefault={conversationLayouts.layoutDefault}
           onChange={conversationLayouts.setLayoutDefault}
+          onOpenPlugins={() => dispatch({ type: "open-overlay", overlay: { kind: "plugins" } })}
           onClose={closeOverlay}
         />
       )}

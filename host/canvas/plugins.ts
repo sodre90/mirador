@@ -5,11 +5,15 @@ import {
   type CanvasPluginContext,
   type CanvasPluginStorage,
   type CanvasToolContext,
+  type PluginActivity,
+  type PluginActivityEvent,
+  type PluginWindowContext,
   type ConversationReply,
   type PluginItemType,
   type StartedConversation,
 } from "../../shared/canvas-plugins.ts";
 import type { PluginCanvasItem, StartedBy } from "../../shared/model.ts";
+import type { ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue } from "../../shared/apps.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
@@ -37,6 +41,9 @@ const roomOf = (type: PluginItemType | undefined) => {
 const shownOf = (type: PluginItemType | undefined, data: unknown) => ({ ...countOf(type, data), ...outcomeOf(type, data), ...roomOf(type) });
 
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
+/** A plugin may change its window's state on every tool call; its windows get the state as it settles. */
+const WINDOW_STATE_SETTLES_MS = 100;
+
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
 
 export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string) => StartedConversation;
@@ -155,6 +162,67 @@ export class CanvasPlugins {
   }
 
   /** Each plugin's tools, by name, with the plugin's title, for the timeline to name the plugin a tool call is from. */
+  /** Hands every plugin that hears activity what happened in a conversation, once the event is done with, so no plugin holds up the agent. */
+  activity(conversationId: string, activity: PluginActivity) {
+    const listening = this.plugins.filter(({ host }) => host.activity);
+    const conversation = listening.length > 0 ? this.store.findConversation(conversationId) : undefined;
+    if (!conversation) return;
+    const event: PluginActivityEvent = { ...activity, conversationId, conversationTitle: conversation.title, at: Date.now() };
+    queueMicrotask(() => listening.forEach((plugin) => this.tellActivity(plugin, event)));
+  }
+
+  private tellActivity(plugin: CanvasPlugin, event: PluginActivityEvent) {
+    const failed = (error: unknown) => console.error(`the activity hook of the ${plugin.manifest.name} plugin failed:`, error);
+    try {
+      const context = { ...this.windowContext(plugin), profileSetting: (id: string) => this.settingFor(plugin, event.conversationId, id) };
+      Promise.resolve(plugin.host.activity?.(event, context)).catch(failed);
+    } catch (error) {
+      failed(error);
+    }
+  }
+
+  /** The plugins that have a window of their own, their titles by name. */
+  windowTitles(): Record<string, string> {
+    return Object.fromEntries(this.plugins.filter(({ host }) => host.window).map(({ manifest }) => [manifest.name, manifest.title]));
+  }
+
+  windowStateMessage(name: string): ServerMessage {
+    try {
+      const plugin = this.withWindow(name);
+      return { type: "plugin-window.state", plugin: name, state: plugin.host.window!.state(this.windowContext(plugin)) ?? null, problem: null };
+    } catch (error) {
+      return { type: "plugin-window.state", plugin: name, state: null, problem: messageOf(error) };
+    }
+  }
+
+  /** The user's action in a plugin's own window, for its host code; resolves to its reply. */
+  async actInWindow(name: string, action: unknown): Promise<unknown> {
+    const plugin = this.withWindow(name);
+    if (!plugin.host.window!.action) throw new Error(`${plugin.manifest.title} takes no actions from its window.`);
+    return (await plugin.host.window!.action(action, this.windowContext(plugin))) ?? null;
+  }
+
+  private withWindow(name: string) {
+    const plugin = this.plugins.find(({ manifest }) => manifest.name === name);
+    if (!plugin?.host.window) throw new Error(plugin ? `${plugin.manifest.title} has no window of its own.` : `No plugin named ${name} is installed.`);
+    return plugin;
+  }
+
+  private readonly windowsSettling = new Set<string>();
+
+  private windowContext(plugin: CanvasPlugin): PluginWindowContext {
+    return { storage: this.storageOf(plugin), windowChanged: () => this.windowChanged(plugin.manifest.name) };
+  }
+
+  private windowChanged(name: string) {
+    if (this.windowsSettling.has(name)) return;
+    this.windowsSettling.add(name);
+    setTimeout(() => {
+      this.windowsSettling.delete(name);
+      this.hub.publishToPluginWindows(name, this.windowStateMessage(name));
+    }, WINDOW_STATE_SETTLES_MS);
+  }
+
   toolTitles(): Record<string, string> {
     return Object.fromEntries(this.plugins.flatMap(({ manifest, host }) => Object.keys(host.tools).map((tool) => [tool, manifest.title])));
   }

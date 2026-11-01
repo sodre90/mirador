@@ -41,7 +41,7 @@ test("choosing Magyar in Settings shows Mirador in Hungarian after the page relo
   await expect(beallitasok.getByLabel("Visszagörgethető sorok").locator("option").first()).toHaveText(/^1\s?000 sor$/);
 
   await beallitasok.getByRole("tab", { name: "Bővítmények" }).click();
-  await expect(beallitasok.getByRole("heading", { name: "Bővítmény hozzáadása git-repóból" })).toBeVisible();
+  await expect(beallitasok.getByRole("button", { name: "Bővítmények megnyitása…" })).toBeVisible();
 
   await beallitasok.getByRole("tab", { name: "Megjelenés" }).click();
   await Promise.all([page.waitForEvent("load"), beallitasok.getByLabel("Nyelv").selectOption("en")]);
@@ -59,7 +59,7 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   const sidebar = page.locator("nav.sidebar");
   await expect(sidebar.getByRole("heading", { name: "Munkaterületek" })).toBeVisible();
   await expect(sidebar.getByRole("button", { name: "+ Új beszélgetés" })).toBeVisible();
-  await expect(sidebar.locator(".footer-buttons > button")).toHaveText([/^Beállítások…/, "Profilok…", "Gépek…", "Keresés…", /^Billentyűk/]);
+  await expect(sidebar.locator(".footer-buttons > button")).toHaveText([/^Beállítások…/, /^Bővítmények…/, "Profilok…", "Gépek…", "Keresés…", /^Billentyűk/]);
 
   await sidebar.getByRole("button", { name: /^Beszélgetések és műveletek…/ }).click();
   const palette = page.getByRole("dialog", { name: "Paletta" });

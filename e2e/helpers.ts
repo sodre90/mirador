@@ -102,6 +102,22 @@ export async function openSettings(page: Page, pageName = "Appearance") {
   return settings;
 }
 
+/** The Plugins dialog, from the sidebar's Plugins… */
+export async function openPlugins(page: Page) {
+  await page.getByRole("button", { name: "Plugins…" }).click();
+  return page.getByRole("dialog", { name: "Plugins" });
+}
+
+/** A plugin's tile in the Plugins dialog's Installed or Discover list. */
+export const pluginTile = (plugins: Locator, section: "Installed" | "Discover", title: string) =>
+  plugins.getByRole("list", { name: section, exact: true }).getByRole("listitem", { name: title, exact: true });
+
+/** Opens an installed plugin's own view by clicking its tile, which starts nothing. */
+export async function openPluginDetail(plugins: Locator, title: string) {
+  await pluginTile(plugins, "Installed", title).locator(".plugin-title").click();
+  return plugins.getByRole("region", { name: title });
+}
+
 type VoiceSectionName = "Voice on this Mac" | "When you speak" | "Translating and summing up" | "When the agent replies" | "Models on this Mac";
 
 /** One of the sections of Settings → Voice; a change there saves at once and says so in the section. */

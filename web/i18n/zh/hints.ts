@@ -76,6 +76,7 @@ export const hints: Messages["hints"] = {
   machineColorStyle:
     "你给机器设置的颜色显示在哪里：仅在其机器栏按钮上，或者也作为其视图顶部的一条色带，让你一眼看出自己在哪台机器上工作。在“机器…”中给机器设置颜色。",
   machines: "运行 Mirador 的其他电脑，例如在这台电脑休眠时智能体仍能继续工作的服务器。",
+  plugins: "插件在画布上为智能体提供它自己的工具，或带来应用，例如视频或 Google Docs 编辑器。在这里安装、更新和设置它们。",
   revokeDeviceArmed: "再次点击，将让这台设备退出登录。它需要新的邀请码才能再次加入。",
   officialPlugin: "官方 Mirador 插件之一，列在 sodre90/mirador-plugins 目录中。",
   installOfficialPlugin: "克隆插件的仓库，并显示其中会运行的内容。在你同意之前，它的任何内容都不会运行。",

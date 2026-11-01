@@ -22,7 +22,7 @@ import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
 import { conversationsIn, isUnderCaller } from "./navigation.ts";
 import { pastelVariables } from "./pastels.ts";
-import { UpdatesWaiting } from "./PluginSettings.tsx";
+import { UpdatesWaiting } from "./Plugins.tsx";
 import { ProfileDot, ProfileEdge } from "./ProfileDot.tsx";
 import { highlightedCompletion } from "./path-completion.ts";
 import { shortcutKeys } from "./shortcuts.ts";
@@ -787,6 +787,9 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
         <div className="footer-buttons">
           <button className="link" data-hint={hints.settings} onClick={() => openOverlay({ kind: "settings" })}>
             {words.settings}
+          </button>
+          <button className="link" data-hint={hints.plugins} onClick={() => openOverlay({ kind: "plugins" })}>
+            {words.plugins}
             <UpdatesWaiting count={state.pluginUpdates.length} />
           </button>
           <button className="link" data-hint={hints.profiles} onClick={() => openOverlay({ kind: "profiles" })}>

@@ -86,6 +86,7 @@ const conversations = new ConversationService(store, hub, config, notifierMute, 
 canvasPlugins.sendsPromptsWith((conversationId, text, { afterTurn, fromPlugin }) => conversations.send(conversationId, text, [], { afterTurn, fromPlugin }));
 canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt) => conversations.startBeside(callerId, plugin, profileName, prompt));
 conversations.hearRepliesWith((started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply));
+conversations.hearActivityWith((conversationId, activity) => canvasPlugins.activity(conversationId, activity));
 const canvasAssetsOrigins = [
   ...new Set([
     config.canvasAssetsOrigin,
@@ -96,7 +97,7 @@ const canvasAssetsOrigins = [
 const canvas = new CanvasService(store, hub, conversations, notifications, canvasAssetsOrigins);
 // The checklist plugin's note about the user's ticks came before the page errors when the checklist was Mirador's own.
 conversations.hearCanvasNotesFrom((conversationId) => [...canvasPlugins.notesForAgent(conversationId), ...canvas.notesForAgent(conversationId)]);
-const plugins = new InstalledPlugins(pluginsFolder, loadedPlugins.problems);
+const plugins = new InstalledPlugins(pluginsFolder, loadedPlugins.problems, loadedPlugins.canvases);
 canvas.installsPluginsWith(officialPluginInstaller(catalog, plugins, (listed) => hub.broadcast(listed)));
 const apps = new AppDocuments(store, loadedPlugins.apps, {
   openAppsChanged: (openApps) => hub.broadcast({ type: "apps.open", openApps }),

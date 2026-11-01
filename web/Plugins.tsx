@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
 import {
   offerRuns,
   offerSource,
@@ -9,6 +9,7 @@ import {
   type PluginOffer,
   type PluginSettings as SettingsOfPlugin,
   type PluginSource,
+  type PluginTool,
   type PluginUpdate as FoundUpdate,
 } from "../shared/apps.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
@@ -42,6 +43,16 @@ async function offerPlugin(send: (requestId: string) => ClientMessage): Promise<
   } catch (error) {
     return { offer: null, problem: error instanceof Error ? error.message : String(error) };
   }
+}
+
+/** Runs `start` when the view opens for it, as when the tile's Install or Update opened it. */
+function useStartOnce(wanted: boolean, start: () => void) {
+  const started = useRef(false);
+  useEffect(() => {
+    if (!wanted || started.current) return;
+    started.current = true;
+    start();
+  });
 }
 
 const discard = (offers: PluginOffer[]) => offers.forEach(({ id }) => connection.send({ type: "plugins.discard", offerId: id }));
@@ -154,7 +165,7 @@ export function UpdatesWaiting({ count }: { count: number }) {
 
 const isNothingNew = ({ release, commits }: PluginNews) => release === null && commits.length === 0;
 
-function PluginUpdate({ plugin, found }: { plugin: PluginInfo; found: PluginNews | undefined }) {
+function PluginUpdate({ plugin, found, startUpdating }: { plugin: PluginInfo; found: PluginNews | undefined; startUpdating: boolean }) {
   const [checked, setUpdating] = useState<Updating>({ step: "idle" });
   const updating: Updating = checked.step === "idle" && found ? { step: "found", news: found } : checked;
   const check = async () => {
@@ -168,6 +179,7 @@ function PluginUpdate({ plugin, found }: { plugin: PluginInfo; found: PluginNews
     setUpdating(offer ? { step: "consenting", news, offer } : { step: "failed", problem });
   };
   const settled = (news: PluginNews, { problem }: Settled) => setUpdating(problem ? { step: "failed", problem } : { step: "found", news });
+  useStartOnce(startUpdating && found !== undefined, () => offerUpdate(found!));
   switch (updating.step) {
     case "idle":
       return (
@@ -250,45 +262,106 @@ function SettingsOf({ settings }: { settings: SettingsOfPlugin }) {
   );
 }
 
-function PluginRow({ plugin, official, found }: { plugin: PluginInfo; official?: CatalogPlugin; found: PluginNews | undefined }) {
-  const settings = usePluginSettings().find(({ plugin: name }) => name === plugin.name);
-  const [problem, setProblem] = useState<string | null>(null);
-  const title = plugin.title ?? plugin.folder;
-  const linked = plugin.source.kind === "linked";
-  const remove = async () => setProblem(await changePlugins((requestId) => ({ type: "plugins.remove", requestId, folder: plugin.folder })));
+/** A plugin as the gallery shows it: installed, from the catalog, or both. */
+interface GalleryPlugin {
+  key: string;
+  title: string;
+  installed: PluginInfo | null;
+  official: CatalogPlugin | null;
+}
+
+const galleryOf = (listed: PluginsListed): { installed: GalleryPlugin[]; discover: GalleryPlugin[] } => {
+  const official = listed.official ?? [];
+  const installed = listed.plugins.map((plugin) => ({
+    key: plugin.name ?? plugin.folder,
+    title: plugin.title ?? plugin.folder,
+    installed: plugin,
+    official: official.find(({ name }) => name === plugin.name) ?? null,
+  }));
+  const discover = toInstall(official, listed.plugins).map((plugin) => ({ key: plugin.name, title: plugin.title, installed: null, official: plugin }));
+  return { installed, discover };
+};
+
+const toInstall = (official: CatalogPlugin[], installed: PluginInfo[]) => official.filter((plugin) => !installed.some(({ name }) => name === plugin.name));
+
+const MONOGRAM_HUES = [262, 145, 220, 355, 30, 190, 300, 95];
+
+const hueOf = (key: string) => MONOGRAM_HUES[[...key].reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0) % MONOGRAM_HUES.length]!;
+
+function Monogram({ plugin }: { plugin: GalleryPlugin }) {
   return (
-    <li className={plugin.problem ? "failed" : undefined}>
-      <span className="plugin-title">{title}</span>
-      {plugin.name && <span className="plugin-name">{plugin.name}</span>}
-      {plugin.version && <span className="plugin-version">{plugin.version}</span>}
+    <span className="plugin-monogram" aria-hidden style={{ "--monogram-hue": hueOf(plugin.key) } as CSSProperties}>
+      {plugin.title.trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: PluginNews | undefined }) {
+  const { installed, official } = plugin;
+  return (
+    <span className="plugin-badges">
+      {installed?.kinds?.map((kind) => (
+        <span key={kind} className="plugin-badge">
+          {words.kind[kind]}
+        </span>
+      ))}
       {official && (
-        <span className="plugin-official" data-hint={hints.officialPlugin}>
+        <span className="plugin-badge plugin-official" data-hint={hints.officialPlugin}>
           {words.official}
         </span>
       )}
-      {plugin.waitsForRestart && <span className="plugin-waits">{words.waitsForRestart}</span>}
-      {official && <span className="plugin-description">{official.description}</span>}
-      <span className="plugin-source">{sourceLine(plugin.source)}</span>
-      {plugin.problem && <span className="plugin-problem">{words.didntLoad(plugin.problem)}</span>}
-      {settings && settings.settings.length > 0 && <SettingsOf settings={settings} />}
-      <span className="plugin-actions">
-        {plugin.source.kind === "git" && <PluginUpdate key={plugin.source.commit} plugin={plugin} found={found} />}
-        <ConfirmButton
-          className="danger"
-          label={words.removeLabel(title)}
-          armedText={linked ? words.removeLinkArmed : words.removeArmed}
-          armedHint={linked ? hints.unlinkPluginArmed : hints.removePluginArmed}
-          onConfirm={remove}
-        >
-          {words.remove}
-        </ConfirmButton>
+      {news && <span className="plugin-badge plugin-has-update">{words.updateAvailable}</span>}
+      {installed?.problem && <span className="plugin-badge plugin-failed">{words.didntLoadBadge}</span>}
+      {installed?.waitsForRestart && <span className="plugin-badge plugin-waits">{words.waitsForRestart}</span>}
+    </span>
+  );
+}
+
+type Start = "install" | "update" | null;
+
+function PluginTile({ plugin, news, onOpen }: { plugin: GalleryPlugin; news: PluginNews | undefined; onOpen: (start: Start) => void }) {
+  const action = !plugin.installed ? { label: words.install, start: "install" as const } : news ? { label: words.update, start: "update" as const } : { label: words.open, start: null };
+  return (
+    <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
+      <span className="plugin-tile-top">
+        <Monogram plugin={plugin} />
+        <span className="plugin-title">{plugin.title}</span>
       </span>
-      {problem && <pre className="plugin-output">{problem}</pre>}
+      <span className="plugin-tagline">{plugin.official?.description}</span>
+      <span className="plugin-tile-bottom">
+        <PluginBadges plugin={plugin} news={news} />
+        <button
+          type="button"
+          className={action.start ? "primary" : undefined}
+          aria-label={`${action.label} ${plugin.title}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpen(action.start);
+          }}
+        >
+          {action.label}
+        </button>
+      </span>
     </li>
   );
 }
 
-function OfficialPluginToInstall({ plugin }: { plugin: CatalogPlugin }) {
+function ToolList({ title, tools }: { title: string; tools: PluginTool[] }) {
+  return (
+    <>
+      <h3>{words.toolsHeading}</h3>
+      <ul className="plugin-tools" aria-label={words.toolsOf(title)}>
+        {tools.map(({ name, description }) => (
+          <li key={name}>
+            <code>{name}</code> <span title={description}>{description}</span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+function InstallOfficial({ plugin, startInstalling }: { plugin: CatalogPlugin; startInstalling: boolean }) {
   const [step, setStep] = useState<"idle" | "cloning" | PluginOffer>("idle");
   const [problem, setProblem] = useState<string | null>(null);
   const offer = async () => {
@@ -298,31 +371,116 @@ function OfficialPluginToInstall({ plugin }: { plugin: CatalogPlugin }) {
     setStep(offered.offer ?? "idle");
     setProblem(offered.problem);
   };
+  useStartOnce(startInstalling, offer);
   const settled = (outcome: Settled) => {
     setStep("idle");
     setProblem(outcome.problem);
   };
   return (
-    <li>
-      <span className="plugin-title">{plugin.title}</span>
-      <span className="plugin-name">{plugin.name}</span>
-      <span className="plugin-description">{plugin.description}</span>
+    <>
       {typeof step === "object" ? (
         <PluginConsent question={words.installQuestion(step.title)} offers={[step]} agree={words.install} decline={words.dontInstall} onSettled={settled} />
       ) : (
         <span className="plugin-actions">
-          <button type="button" data-hint={hints.installOfficialPlugin} disabled={step === "cloning"} onClick={offer}>
+          <button type="button" className="primary" data-hint={hints.installOfficialPlugin} disabled={step === "cloning"} onClick={offer}>
             {step === "cloning" ? words.cloning : words.install}
           </button>
         </span>
       )}
       {problem && <pre className="plugin-output">{problem}</pre>}
-    </li>
+    </>
   );
 }
 
-const toInstall = (official: CatalogPlugin[], installed: PluginInfo[]) =>
-  official.filter((plugin) => !installed.some(({ name }) => name === plugin.name));
+function InstalledDetail({ plugin, title, news, startUpdating }: { plugin: PluginInfo; title: string; news: PluginNews | undefined; startUpdating: boolean }) {
+  const settings = usePluginSettings().find(({ plugin: name }) => name === plugin.name);
+  const [problem, setProblem] = useState<string | null>(null);
+  const linked = plugin.source.kind === "linked";
+  const remove = async () => setProblem(await changePlugins((requestId) => ({ type: "plugins.remove", requestId, folder: plugin.folder })));
+  return (
+    <>
+      {plugin.problem && <p className="plugin-problem">{words.didntLoad(plugin.problem)}</p>}
+      {plugin.tools && plugin.tools.length > 0 && <ToolList title={title} tools={plugin.tools} />}
+      {settings && settings.settings.length > 0 && (
+        <>
+          <h3>{words.settingsHeading}</h3>
+          <SettingsOf settings={settings} />
+        </>
+      )}
+      {plugin.source.kind === "git" && (
+        <span className="plugin-actions">
+          <PluginUpdate key={plugin.source.commit} plugin={plugin} found={news} startUpdating={startUpdating} />
+        </span>
+      )}
+      <details className="plugin-upkeep">
+        <summary>{words.details}</summary>
+        <dl>
+          <dt>{words.nameLabel}</dt>
+          <dd>{plugin.name ?? "?"}</dd>
+          <dt>{words.versionLabel}</dt>
+          <dd>{plugin.version ?? "?"}</dd>
+          <dt>{words.sourceLabel}</dt>
+          <dd className="plugin-source">{sourceLine(plugin.source)}</dd>
+          <dt>{words.folderLabel}</dt>
+          <dd>
+            <code>{plugin.folder}</code>
+          </dd>
+        </dl>
+        <span className="plugin-actions">
+          <ConfirmButton
+            className="danger"
+            label={words.removeLabel(title)}
+            armedText={linked ? words.removeLinkArmed : words.removeArmed}
+            armedHint={linked ? hints.unlinkPluginArmed : hints.removePluginArmed}
+            onConfirm={remove}
+          >
+            {words.remove}
+          </ConfirmButton>
+        </span>
+        {problem && <pre className="plugin-output">{problem}</pre>}
+      </details>
+    </>
+  );
+}
+
+function PluginDetail({ plugin, news, start, onBack }: { plugin: GalleryPlugin; news: PluginNews | undefined; start: Start; onBack: () => void }) {
+  return (
+    <section className="plugin-detail" aria-label={plugin.title}>
+      <button type="button" className="link" onClick={onBack}>
+        {words.allPlugins}
+      </button>
+      <header className="plugin-detail-head">
+        <Monogram plugin={plugin} />
+        <h3>{plugin.title}</h3>
+      </header>
+      <PluginBadges plugin={plugin} news={news} />
+      {plugin.official && <p className="plugin-description">{plugin.official.description}</p>}
+      {plugin.installed ? (
+        <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} startUpdating={start === "update"} />
+      ) : (
+        plugin.official && <InstallOfficial plugin={plugin.official} startInstalling={start === "install"} />
+      )}
+    </section>
+  );
+}
+
+function AddFromGit() {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button type="button" className="link plugin-add-from-git" data-hint={hints.addPlugin} onClick={() => setOpen(true)}>
+        {words.addFromGitOpen}
+      </button>
+    );
+  }
+  return (
+    <>
+      <h3>{words.addFromGit}</h3>
+      <p className="hint">{words.addFromGitHint}</p>
+      <AddPlugin />
+    </>
+  );
+}
 
 function AddPlugin() {
   const [url, setUrl] = useState("");
@@ -432,53 +590,77 @@ function UpdateAll({ updates }: { updates: FoundUpdate[] }) {
   );
 }
 
-export function PluginSettings({ pluginUpdates }: { pluginUpdates: FoundUpdate[] }) {
-  const listed = usePluginsListed();
-  const waiting = pluginUpdates.filter(({ folder }) => listed?.plugins.some((plugin) => plugin.folder === folder && newsFor(plugin, pluginUpdates)));
+function TileList({ label, plugins, newsOf, onOpen }: { label: string; plugins: GalleryPlugin[]; newsOf: (plugin: GalleryPlugin) => PluginNews | undefined; onOpen: (plugin: GalleryPlugin, start: Start) => void }) {
   return (
-    <>
-      <h3>{words.title}</h3>
-      <p className="hint">
-        {words.introBeforeFolder}
-        {listed ? <code>{listed.folder}</code> : words.pluginsFolder}
-        {words.introAfterFolder}
-      </p>
-      {listed?.restartNeeded && (
-        <p className="restart-needed">
-          {words.restartNeeded}
-          <button type="button" data-hint={hints.restartHost} onClick={() => connection.send({ type: "host.restart" })}>
-            {t.shell.app.restartHost}
+    <ul className="plugin-tiles" aria-label={label}>
+      {plugins.map((plugin) => (
+        <PluginTile key={plugin.key} plugin={plugin} news={newsOf(plugin)} onOpen={(start) => onOpen(plugin, start)} />
+      ))}
+    </ul>
+  );
+}
+
+/** Plugins, as a gallery of what each does; a tile opens what it gives the agent, its settings and its upkeep. */
+export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: FoundUpdate[]; onClose: () => void }) {
+  const listed = usePluginsListed();
+  const [opened, setOpened] = useState<{ key: string; start: Start } | null>(null);
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+  const gallery = listed ? galleryOf(listed) : { installed: [], discover: [] };
+  const newsOf = ({ installed }: GalleryPlugin) => (installed ? newsFor(installed, pluginUpdates) : undefined);
+  const waiting = pluginUpdates.filter(({ folder }) => listed?.plugins.some((plugin) => plugin.folder === folder && newsFor(plugin, pluginUpdates)));
+  const openedPlugin = opened && [...gallery.installed, ...gallery.discover].find(({ key }) => key === opened.key);
+  const open = (plugin: GalleryPlugin, start: Start) => setOpened({ key: plugin.key, start });
+  const openedIsGone = opened !== null && listed !== null && !openedPlugin;
+  useEffect(() => {
+    if (openedIsGone) setOpened(null);
+  }, [openedIsGone]);
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <div className="modal plugins" role="dialog" aria-label={words.title}>
+        <header>
+          <h2>{words.title}</h2>
+          <button className="icon" title={t.shell.close} aria-label={t.shell.close} onClick={onClose}>
+            ×
           </button>
-        </p>
-      )}
-      {waiting.length > 0 && <UpdateAll updates={waiting} />}
-      <ul className="plugin-list" aria-label={words.title}>
-        {listed?.plugins.map((plugin) => (
-          <PluginRow
-            key={plugin.folder}
-            plugin={plugin}
-            official={listed.official?.find(({ name }) => name === plugin.name)}
-            found={newsFor(plugin, pluginUpdates)}
-          />
-        ))}
-        {listed?.plugins.length === 0 && <li className="plugin-none">{words.noPlugins}</li>}
-      </ul>
-      {listed && toInstall(listed.official ?? [], listed.plugins).length > 0 && (
-        <>
-          <h3>{words.moreOfficial}</h3>
-          <p className="hint">{words.moreOfficialHint}</p>
-          <ul className="plugin-list" aria-label={words.moreOfficial}>
-            {toInstall(listed.official ?? [], listed.plugins).map((plugin) => (
-              <OfficialPluginToInstall key={plugin.name} plugin={plugin} />
-            ))}
-          </ul>
-        </>
-      )}
-      <h3>{words.addFromGit}</h3>
-      <p className="hint">
-        {words.addFromGitHint}
-      </p>
-      <AddPlugin />
-    </>
+        </header>
+        <div className="plugins-body">
+          {listed?.restartNeeded && (
+            <p className="restart-needed">
+              {words.restartNeeded}
+              <button type="button" data-hint={hints.restartHost} onClick={() => connection.send({ type: "host.restart" })}>
+                {t.shell.app.restartHost}
+              </button>
+            </p>
+          )}
+          {openedPlugin ? (
+            <PluginDetail key={openedPlugin.key} plugin={openedPlugin} news={newsOf(openedPlugin)} start={opened.start} onBack={() => setOpened(null)} />
+          ) : (
+            <>
+              <p className="hint">
+                {words.introBeforeFolder}
+                {listed ? <code>{listed.folder}</code> : words.pluginsFolder}
+                {words.introAfterFolder}
+              </p>
+              {waiting.length > 0 && <UpdateAll updates={waiting} />}
+              <h3>{words.installed}</h3>
+              {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
+              {gallery.discover.length > 0 && (
+                <>
+                  <h3>{words.discover}</h3>
+                  <p className="hint">{words.moreOfficialHint}</p>
+                  <TileList label={words.discover} plugins={gallery.discover} newsOf={newsOf} onOpen={open} />
+                </>
+              )}
+              <AddFromGit />
+            </>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

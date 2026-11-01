@@ -75,7 +75,7 @@ export const officialPluginInstaller = (catalog: PluginCatalog, plugins: Install
     try {
       const { title } = await plugins.install(offerId);
       listed(await pluginsListed(plugins, catalog));
-      return `Mirador installed the ${title} plugin and uses it from its next restart. Tell the user to restart Mirador to use it: ⌘⇧R, or Restart host in Settings → Plugins.`;
+      return `Mirador installed the ${title} plugin and uses it from its next restart. Tell the user to restart Mirador to use it: ⌘⇧R, or Restart host in Plugins.`;
     } catch (error) {
       return `Installing the plugin failed: ${withoutCredentials(messageOf(error))}`;
     }

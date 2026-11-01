@@ -2,15 +2,19 @@
  * The plugin API version this Mirador speaks; a plugin.json names the one it was written for, and Mirador loads every
  * version up to its own. API 2 brought host tasks, streamed files and images in a view's message; API 3 brought canvas
  * tools and items; API 4 tells apply who made the change; API 5 lets a canvas tool message its agent and start a
- * conversation on another profile, and brings profile settings.
+ * conversation on another profile, and brings profile settings; API 6 brings a canvas plugin's own window and the
+ * conversations' activity.
  */
-export const APP_PLUGIN_API = 5;
+export const APP_PLUGIN_API = 6;
 
 /** The first plugin API whose plugin.json may have a canvas part. */
 export const CANVAS_PLUGIN_API = 3;
 
 /** The first plugin API whose plugin.json may have profile settings. */
 export const PROFILE_SETTINGS_PLUGIN_API = 5;
+
+/** The first plugin API whose canvas host may have a window and hear activity. */
+export const PLUGIN_WINDOW_API = 6;
 
 /**
  * A plugin's plugin.json. A plugin brings an app, a document that the agent and the user change together; canvas tools
@@ -186,6 +190,17 @@ export interface PluginInfo {
   problem: string | null;
   /** Added or updated since Mirador started, which loads it as it is now only at its next start. */
   waitsForRestart: boolean;
+  /** What its plugin.json brings; missing from a host older than it. */
+  kinds?: PluginKind[];
+  /** The canvas tools it gave the agent when Mirador started; none while it waits for a restart. Missing from a host older than it. */
+  tools?: PluginTool[];
+}
+
+export type PluginKind = "app" | "canvas";
+
+export interface PluginTool {
+  name: string;
+  description: string;
 }
 
 /** An official plugin, as the catalog of Mirador's plugins lists it. */

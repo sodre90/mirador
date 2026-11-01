@@ -82,6 +82,7 @@ export const hints: Messages["hints"] = {
   machineColorStyle:
     "Dónde muestra su color una máquina a la que se lo diste: solo en su botón de la barra, o también como una franja en la parte superior de su vista, para ver de un vistazo en qué máquina trabajas. Dale un color a una máquina en Máquinas….",
   machines: "Otros equipos que ejecutan Mirador, como un servidor cuyos agentes siguen trabajando mientras este equipo duerme.",
+  plugins: "Los complementos dan al agente herramientas propias en el lienzo, o traen aplicaciones como un editor de video o de Google Docs. Instálalos, actualízalos y configúralos aquí.",
   revokeDeviceArmed: "Haz clic de nuevo para cerrar la sesión de este dispositivo. Necesita un código de invitación nuevo para unirse otra vez.",
   officialPlugin: "Uno de los complementos oficiales de Mirador, incluido en el catálogo sodre90/mirador-plugins.",
   installOfficialPlugin: "Clona el repositorio del complemento y muestra qué parte de él se ejecuta. Nada se ejecuta hasta que aceptes.",

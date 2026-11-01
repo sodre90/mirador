@@ -1,11 +1,11 @@
 import { existsSync, lstatSync, mkdirSync, readlinkSync, rmSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, resolve } from "node:path";
-import { isPluginVersion, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginUpdate } from "../../shared/apps.ts";
+import { isPluginVersion, type PluginKind, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate } from "../../shared/apps.ts";
 import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
-import { AppProblem, messageOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type PluginLoadProblem } from "./plugins.ts";
+import { AppProblem, messageOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
 
 const GIT_GIVES_UP_AFTER_MS = 5 * 60_000;
 const BUILD_GIVES_UP_AFTER_MS = 10 * 60_000;
@@ -92,15 +92,18 @@ async function sourceOf(folder: string): Promise<PluginSource> {
 }
 
 /** What plugin.json says, as far as it can be read, for a plugin that may not load. */
-async function manifestFields(folder: string): Promise<{ name: string | null; title: string | null; version: string | null }> {
+async function manifestFields(folder: string): Promise<{ name: string | null; title: string | null; version: string | null; kinds: PluginKind[] }> {
   const textOrNull = (value: unknown) => (typeof value === "string" ? value : null);
   try {
-    const { name, title, version } = await Bun.file(join(folder, "plugin.json")).json();
-    return { name: textOrNull(name), title: textOrNull(title), version: textOrNull(version) };
+    const { name, title, version, app, canvas } = await Bun.file(join(folder, "plugin.json")).json();
+    const kinds = (["app", "canvas"] as const).filter((kind) => ({ app, canvas })[kind] !== undefined);
+    return { name: textOrNull(name), title: textOrNull(title), version: textOrNull(version), kinds };
   } catch {
-    return { name: null, title: null, version: null };
+    return { name: null, title: null, version: null, kinds: [] };
   }
 }
+
+const toolsOf = ({ host }: CanvasPlugin): PluginTool[] => Object.entries(host.tools).map(([name, { description }]) => ({ name, description }));
 
 /** `git log --format=%h%x09%s` as commits. */
 const commitsOfLog = (log: string) =>
@@ -137,6 +140,7 @@ export class InstalledPlugins {
   constructor(
     readonly folder: string,
     private readonly loadProblems: PluginLoadProblem[],
+    private readonly loadedCanvases: CanvasPlugin[] = [],
   ) {
     this.staging = `${folder}-staging`;
     rmSync(this.staging, { recursive: true, force: true });
@@ -159,12 +163,15 @@ export class InstalledPlugins {
   }
 
   private async info(folder: string, source: PluginSource): Promise<PluginInfo> {
+    const waitsForRestart = this.changed.has(basename(folder));
+    const loadedCanvas = this.loadedCanvases.find((canvas) => canvas.folder === folder);
     return {
       folder: basename(folder),
       ...(await manifestFields(folder)),
       source,
       problem: this.loadProblems.find((problem) => problem.folder === folder)?.message ?? null,
-      waitsForRestart: this.changed.has(basename(folder)),
+      waitsForRestart,
+      tools: loadedCanvas && !waitsForRestart ? toolsOf(loadedCanvas) : [],
     };
   }
 

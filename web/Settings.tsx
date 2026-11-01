@@ -12,7 +12,7 @@ import { formatBarLabels, messageBoxLabels, setFormatBar, setMessageBox, useForm
 import { connection } from "./connection.ts";
 import { inDesktopApp } from "./desktop-bridge.ts";
 import { DeviceSettings } from "./Devices.tsx";
-import { PluginSettings, UpdatesWaiting } from "./PluginSettings.tsx";
+import { UpdatesWaiting } from "./Plugins.tsx";
 import { externalImages, setExternalImages, useExternalImagesBlocked } from "./external-images.ts";
 import { setEditsInCanvas, useEditsInCanvas } from "./edits-in-canvas.ts";
 import { fontScaleLabels, useFontScale } from "./font-scale.ts";
@@ -117,6 +117,7 @@ export function SettingsDialog({
   pluginUpdates,
   layoutDefault,
   onChange,
+  onOpenPlugins,
   onClose,
 }: {
   page: SettingsPage | undefined;
@@ -138,6 +139,7 @@ export function SettingsDialog({
   pluginUpdates: PluginUpdate[];
   layoutDefault: LayoutDefault;
   onChange: (layoutDefault: LayoutDefault) => void;
+  onOpenPlugins: () => void;
   onClose: () => void;
 }) {
   const [page, setPage] = useState<SettingsPage>(openedAt ?? "appearance");
@@ -178,7 +180,16 @@ export function SettingsDialog({
         <SavedPageSettings />
       </>
     ),
-    plugins: () => <PluginSettings pluginUpdates={pluginUpdates} />,
+    plugins: () => (
+      <>
+        <h3>{t.plugins.title}</h3>
+        <p className="hint">{t.plugins.movedHint}</p>
+        <button type="button" onClick={onOpenPlugins}>
+          {t.plugins.openPlugins}
+          <UpdatesWaiting count={pluginUpdates.length} />
+        </button>
+      </>
+    ),
     layout: () => <LayoutSettings layoutDefault={layoutDefault} onChange={onChange} />,
     devices: () => (
       <>
