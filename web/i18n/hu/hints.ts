@@ -301,6 +301,7 @@ export const hints: Messages["hints"] = {
   gitBranch: "A munkaterület könyvtárában kicheckoutolt git-ág.",
   model: "A modell, amelyet az ágens használ, a fenti Modell menüben kiválasztva.",
   cost: "Amennyibe a beszélgetés eddig került, ahogy az ágens jelenti.",
+  credits: "A beszélgetés által eddig felhasznált AI-kreditek, ahogy a GitHub Copilot számolja.",
   profileChip: "A profil, amellyel ennek a beszélgetésnek az ágense fut.",
   quota: (limit, percent, resetsIn) =>
     `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,

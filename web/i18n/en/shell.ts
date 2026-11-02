@@ -251,6 +251,7 @@ export const shell = {
     contextExplained:
       "The agent reports this after each response (ACP usage_update). Close to the limit it compacts the conversation: older turns are replaced by a summary.",
     costSoFar: (cost: string) => `Cost so far, as the agent reports it: ${cost}.`,
+    credits: (amount: string) => `${amount} credits`,
     days: (count: number) => `${count}d`,
     hours: (count: number) => `${count}h`,
     minutes: (count: number) => `${count}m`,

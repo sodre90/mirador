@@ -75,6 +75,11 @@ describe("statusline", () => {
     );
   });
 
+  test("Copilot's credits are no dollars in the cost", () => {
+    const credited = { ...conversation, contextUsage: { used: 1, size: 2, cost: null, credits: 4.5 } };
+    expect(statuslineInput(credited, "/work", null, null, 0).cost.total_cost_usd).toBe(0);
+  });
+
   test("the input carries what Claude Code's statusline scripts read", () => {
     const input = statuslineInput(conversation, "/work", "/t.jsonl", null, 61_000);
     expect(input).toMatchObject({
@@ -129,7 +134,18 @@ describe("statusline", () => {
   });
 
   test("the model shown is the chosen option's name", () => {
-    expect(chosenModel([modelOption])).toEqual({ id: "opus", name: "Opus 5.5" });
+    expect(chosenModel([modelOption])).toEqual({ id: "opus", name: "Opus 5.5", multiplier: null });
     expect(chosenModel([])).toBeNull();
+  });
+
+  test("a model that Copilot prices carries its multiplier, and a malformed one is ignored", () => {
+    const priced = (copilotUsage: unknown): SessionConfigOption => ({
+      ...modelOption,
+      options: [{ value: "opus", name: "Opus 5.5", _meta: { copilotUsage } }],
+    });
+    expect(chosenModel([priced("15x")])).toEqual({ id: "opus", name: "Opus 5.5", multiplier: "15x" });
+    expect(chosenModel([priced("0.33x")])?.multiplier).toBe("0.33x");
+    expect(chosenModel([priced("lots")])?.multiplier).toBeNull();
+    expect(chosenModel([priced(15)])?.multiplier).toBeNull();
   });
 });

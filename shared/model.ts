@@ -304,6 +304,8 @@ export interface ContextUsage {
   used: number;
   size: number;
   cost: { amount: number; currency: string } | null;
+  /** The AI credits GitHub Copilot counts for the conversation; no money, so apart from the cost. */
+  credits?: number;
 }
 
 /** The tokens one turn took, as the agent reported them when it ended. */

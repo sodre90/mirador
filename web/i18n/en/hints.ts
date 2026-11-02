@@ -278,6 +278,7 @@ export const hints = {
   gitBranch: "The git branch checked out in the workspace directory.",
   model: "The model the agent uses, as chosen in the Model menu above.",
   cost: "What the conversation has cost so far, as the agent reports it.",
+  credits: "AI credits this conversation has used, as GitHub Copilot counts them.",
   profileChip: "The profile this conversation's agent runs with.",
   quota: (limit: string, percent: string, resetsIn: string) =>
     `${limit} usage limit of your plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,

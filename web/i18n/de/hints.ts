@@ -313,6 +313,7 @@ export const hints: Messages["hints"] = {
   gitBranch: "Der git-Branch, der im Verzeichnis des Arbeitsbereichs ausgecheckt ist.",
   model: "Das Modell, das der Agent nutzt, wie oben im Menü Modell gewählt.",
   cost: "Was die Unterhaltung bisher gekostet hat, wie der Agent es meldet.",
+  credits: "KI-Credits, die diese Unterhaltung bisher verbraucht hat, wie GitHub Copilot sie zählt.",
   profileChip: "Das Profil, mit dem der Agent dieser Unterhaltung läuft.",
   quota: (limit, percent, resetsIn) =>
     `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,

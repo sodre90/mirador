@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { compactTokenCount, contextHint, contextLevel, usedPercentLabel, usedShare } from "../web/usage.ts";
+import { compactTokenCount, contextHint, formatCost, formatCredits, contextLevel, usedPercentLabel, usedShare } from "../web/usage.ts";
 
 describe("context usage", () => {
   test("token counts read like 86k, 1.2k and 1M", () => {
@@ -26,5 +26,17 @@ describe("context usage", () => {
     expect(hint).toStartWith("Context window: 86,012 of 200,000 tokens in use (43%).");
     expect(hint).toContain("$0.0355");
     expect(contextHint({ used: 1, size: 2, cost: null })).not.toContain("Cost");
+  });
+});
+
+describe("AI credits", () => {
+  test("show as a count of credits, apart from the money cost", () => {
+    expect(formatCredits(2.04058)).toBe("2.04 credits");
+    expect(formatCredits(0)).toBe("0.00 credits");
+    expect(formatCost({ amount: 1.5, currency: "USD" })).toContain("1.50");
+  });
+
+  test("the context hint names the cost only when there is one, credits or not", () => {
+    expect(contextHint({ used: 1, size: 2, cost: null, credits: 3 })).not.toContain("Cost");
   });
 });

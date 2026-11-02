@@ -416,6 +416,18 @@ describe("Store", () => {
     reopened.close();
   });
 
+  test("Copilot's credits persist beside the cost, and a row saved without them loads as before", () => {
+    const store = new Store(":memory:");
+    store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    store.insertConversation({ ...seededStore().conversation, id: "c1" });
+    store.insertConversation({ ...seededStore().conversation, id: "c2" });
+    store.setContextUsage("c1", { used: 1, size: 2, cost: null, credits: 0 });
+    store.setContextUsage("c2", { used: 1, size: 2, cost: null });
+    expect(store.findConversation("c1")?.contextUsage).toEqual({ used: 1, size: 2, cost: null, credits: 0 });
+    expect(store.findConversation("c2")?.contextUsage?.credits).toBeUndefined();
+    store.close();
+  });
+
   test("starts with the default prompt templates once: one the user deletes stays deleted after reopening", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);
