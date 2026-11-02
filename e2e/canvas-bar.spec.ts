@@ -85,6 +85,7 @@ test("the canvas bar folds its buttons into More as its pane narrows, so every o
       "History (1)",
       "Clear",
       "Point and ask",
+      "Find on this page",
       "Copy as image",
       "Copy HTML",
       "Ask agent for Markdown",

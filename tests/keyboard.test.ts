@@ -9,7 +9,7 @@ import {
   type NavigationState,
 } from "../web/navigation.ts";
 import { matchesQuery } from "../web/Palette.tsx";
-import { commandFor, dictates, findsTemplate, shortcutKeys, type KeyPress } from "../web/shortcuts.ts";
+import { commandFor, dictates, findsInCanvasPage, findsTemplate, shortcutKeys, type KeyPress } from "../web/shortcuts.ts";
 import { terminalKeyAction } from "../web/terminal-keys.ts";
 
 const press = (code: string, modifiers: Partial<KeyPress> = {}, key = ""): KeyPress => ({
@@ -319,5 +319,16 @@ describe("matchesQuery", () => {
     expect(matchesQuery("login", entry)).toBe(true);
     expect(matchesQuery("BILLING refac", entry)).toBe(true);
     expect(matchesQuery("login checkout", entry)).toBe(false);
+  });
+});
+
+describe("findsInCanvasPage", () => {
+  test("takes ⌘F from a canvas frame and from the panel holding a shown page", () => {
+    expect(findsInCanvasPage(true, false)).toBe(true);
+    expect(findsInCanvasPage(false, true)).toBe(true);
+  });
+
+  test("leaves ⌘F to the conversation where the canvas has no page to find on", () => {
+    expect(findsInCanvasPage(false, false)).toBe(false);
   });
 });

@@ -152,6 +152,7 @@ export const shell: Messages["shell"] = {
       find: "在当前对话中查找，包括较早的条目和已折叠的卡片；Aa 区分大小写（Enter：上一个匹配项，Shift+Enter：下一个）",
       findInReview:
         "在审查或导览中：在其更改文件的代码里查找，可切换区分大小写、全词匹配和正则表达式（Enter：下一个匹配项，Shift+Enter：上一个）",
+      findInCanvas: "在画布页面中：查找其中的文字；Aa 区分大小写（Enter：下一个匹配项，Shift+Enter：上一个匹配项）",
       findInTerminal:
         "在终端中：在其输出里查找，可切换区分大小写、全词匹配和正则表达式（Enter：往上一个匹配项，Shift+Enter：往下一个）",
       pasteImage: "在消息框中，剪贴板里的图片会以 [Image #1] 的形式放入（拖入图片文件也一样）",

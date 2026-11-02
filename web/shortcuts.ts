@@ -80,6 +80,13 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
   return null;
 }
 
+/**
+ * Where ⌘F finds text: on the canvas page when the keys came from a canvas frame, or the canvas panel holding a shown
+ * page has focus; in the conversation everywhere else. A key from a frame that isn't a shown page finds nothing:
+ * its bar has no find button to open.
+ */
+export const findsInCanvasPage = (fromCanvas: boolean, canvasPageFocused: boolean) => fromCanvas || canvasPageFocused;
+
 /** In the message box: find a prompt template to put in at the caret. */
 export const findsTemplate = (press: KeyPress, mac = isMac) => holdsPrimary(press, mac) && !press.altKey && !press.shiftKey && press.code === "KeyJ";
 
@@ -159,6 +166,7 @@ export function shortcutHelp(mac = isMac): { keys: string; action: string }[] {
     { keys: keys.markUnread, action: actions.markUnread },
     { keys: keys.find, action: actions.find },
     { keys: keys.find, action: actions.findInReview },
+    { keys: keys.find, action: actions.findInCanvas },
     { keys: mac ? keys.find : "Ctrl+Shift+F", action: actions.findInTerminal },
     { keys: `${primary}V`, action: actions.pasteImage },
     { keys: keys.templates, action: actions.templates },

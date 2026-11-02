@@ -327,6 +327,7 @@ export const hints: Messages["hints"] = {
   canvasPageExport: "Copia esta página como imagen o como HTML, pide al agente que la escriba como Markdown, o guárdala como un archivo aparte.",
   canvasPoint:
     "Señala algo de la página para preguntarle al agente sobre ello o pedirle que lo cambie: un clic elige el elemento resaltado bajo el ratón, en lugar de hacer lo que hace la página, y arrastrar dibuja un recuadro alrededor de un área, que se envía como imagen. Esc lo detiene. Para preguntar sobre un texto, solo selecciónalo.",
+  canvasPageFind: "Buscar texto en la página que mostró el agente: cada coincidencia queda marcada en ella, y la actual se trae a la vista.",
   pageMarkChange: "Dile al agente qué cambiar ahí: vuelve a mostrar la página con el cambio hecho.",
   canvasEditsWaiting: "Muestra la edición que el agente espera que permitas o rechaces.",
   canvasChanges: "Los archivos que cambió este turno, o todos los cambios sin commit, con sus cambios de línea.",

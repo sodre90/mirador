@@ -43,6 +43,7 @@ export const canvas: Messages["canvas"] = {
     historyCount: (count) => `Előzmények (${count})`,
     clear: "Kiürítés",
     pointAndAsk: "Mutass és kérdezz",
+    findOnPage: "Keresés ezen az oldalon",
     showApp: (app) => `Megjelenítés: ${app}`,
     agentsPlan: "Az ágens terve",
     closeChecklist: "Az ellenőrzőlista bezárása",
@@ -129,6 +130,14 @@ export const canvas: Messages["canvas"] = {
     noMatches: "Nincs találat",
     older: "Előző találat",
     newer: "Következő találat",
+    close: "A keresés bezárása",
+  },
+  pageFind: {
+    placeholder: "Keresés ezen az oldalon",
+    position: (position, total) => `${position} / ${total}`,
+    noMatches: "Nincs találat",
+    previous: "Előző találat",
+    next: "Következő találat",
     close: "A keresés bezárása",
   },
   pageExport: {

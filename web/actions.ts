@@ -17,6 +17,19 @@ export function findInOpenConversation() {
   onScreen<HTMLButtonElement>(".chat-header .find-trigger")?.click();
 }
 
+/** The shown page's find button, which the canvas bar holds only while a page is on it. */
+const pageFindButton = () => onScreen<HTMLElement>(".canvas-header .page-find-toggle");
+
+export function findInCanvasPage() {
+  pageFindButton()?.click();
+}
+
+/** Whether focus sits in the canvas panel that has a shown page, where ⌘F finds on the page rather than in the conversation. */
+export const canvasPageHasFocus = () => {
+  const panel = onScreen<HTMLElement>(".canvas-panel");
+  return Boolean(panel && pageFindButton() && panel.contains(document.activeElement));
+};
+
 export function startRenamingOpenConversation() {
   onScreen<HTMLElement>('.chat-header [data-rename-trigger="click"]')?.click();
 }

@@ -158,6 +158,7 @@ export const shell: Messages["shell"] = {
       find: "In dieser Unterhaltung suchen, auch in früheren Einträgen und eingeklappten Karten; Aa beachtet Groß- und Kleinschreibung (Enter: älterer Treffer, Shift+Enter: neuerer)",
       findInReview:
         "In einem Review oder Rundgang: im Code der geänderten Dateien suchen, mit Schaltern für Groß- und Kleinschreibung, ganzes Wort und regulären Ausdruck (Enter: nächster Treffer, Shift+Enter: vorheriger)",
+      findInCanvas: "Auf einer Canvas-Seite: in ihrem Text suchen; Aa beachtet Groß-/Kleinschreibung (Enter: nächster Treffer, Shift+Enter: vorheriger)",
       findInTerminal:
         "In einem Terminal: in seiner Ausgabe suchen, mit Schaltern für Groß- und Kleinschreibung, ganzes Wort und regulären Ausdruck (Enter: Treffer weiter oben, Shift+Enter: weiter unten)",
       pasteImage: "Im Nachrichtenfeld wird ein Bild aus der Zwischenablage als [Image #1] eingefügt (eine abgelegte Bilddatei ebenso)",

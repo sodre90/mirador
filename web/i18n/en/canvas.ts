@@ -46,6 +46,7 @@ export const canvas = {
     historyCount: (count: number) => `History (${count})`,
     clear: "Clear",
     pointAndAsk: "Point and ask",
+    findOnPage: "Find on this page",
     showApp: (app: string) => `Show ${app}`,
     agentsPlan: "Agent's plan",
     closeChecklist: "Close the checklist",
@@ -131,6 +132,14 @@ export const canvas = {
     noMatches: "No matches",
     older: "Older match",
     newer: "Newer match",
+    close: "Close find",
+  },
+  pageFind: {
+    placeholder: "Find on this page",
+    position: (position: number, total: number) => `${position} of ${total}`,
+    noMatches: "No matches",
+    previous: "Previous match",
+    next: "Next match",
     close: "Close find",
   },
   pageExport: {

@@ -316,6 +316,7 @@ export const hints: Messages["hints"] = {
   canvasPageExport: "Az oldal másolása képként vagy HTML-ként, az ágens megkérése, hogy írja meg Markdownként, vagy mentés külön fájlba.",
   canvasPoint:
     "Mutass rá valamire az oldalon, hogy kérdezz róla az ágenstől, vagy módosíttasd: egy kattintás kiválasztja az egér alatti körvonalazott elemet, ahelyett hogy azt tenné, amit az oldal, egy húzás pedig keretet rajzol egy terület köré, amely képként megy el. Az Esc leállítja. Szövegről úgy kérdezhetsz, hogy egyszerűen kijelölöd.",
+  canvasPageFind: "Keresés az ágens által mutatott oldalon: minden találat kiemelve az oldalon, az aktuális a látható részre görgetve.",
   pageMarkChange: "Mondd meg az ágensnek, mit változtasson ott: újra megmutatja az oldalt a változtatással.",
   canvasEditsWaiting: "Annak a szerkesztésnek a megjelenítése, amelynek engedélyezésére vagy elutasítására az ágens vár.",
   canvasChanges: "A kör által módosított fájlok, vagy az összes nem commitolt változás, a sorváltozásaikkal.",

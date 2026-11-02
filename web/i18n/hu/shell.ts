@@ -153,6 +153,7 @@ export const shell: Messages["shell"] = {
       find: "Keresés ebben a beszélgetésben, a korábbi bejegyzésekkel és az összecsukott kártyákkal együtt; az Aa megkülönbözteti a kis- és nagybetűt (Enter: régebbi találat, Shift+Enter: újabb)",
       findInReview:
         "Átnézésben vagy bejárásban: keresés a módosított fájlok kódjában, kis- és nagybetű, egész szó és reguláris kifejezés kapcsolóval (Enter: következő találat, Shift+Enter: előző)",
+      findInCanvas: "A vászon oldalán: keresés a szövegében; az Aa a kis- és nagybetűkre is figyel (Enter: következő találat, Shift+Enter: előző)",
       findInTerminal:
         "Terminálban: keresés a kimenetében, kis- és nagybetű, egész szó és reguláris kifejezés kapcsolóval (Enter: feljebb, Shift+Enter: lejjebb)",
       pasteImage: "Az üzenetmezőben a vágólapon lévő kép [Image #1]-ként kerül be (egy képfájl behúzása is így teszi be)",

@@ -70,6 +70,14 @@ describe("buildCanvasDocument", () => {
     const document = buildCanvasDocument("<p>", '"; alert(1); "', assetsOrigin, "light");
     expect(document).toContain(JSON.stringify('"; alert(1); "'));
   });
+
+  test("carries the text finder, which marks its matches with highlights of their own, not the page's DOM", () => {
+    const document = buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light");
+    expect(document).toContain('if (data.kind === "find") runFind(data);');
+    expect(document).toContain('if (data.kind === "find-clear") clearFind();');
+    expect(document).toContain("::highlight(mirador-find){background:#fde68a;color:#000}");
+    expect(document).toContain("::highlight(mirador-find-current){background:#f97316;color:#000}");
+  });
 });
 
 interface PageScript {

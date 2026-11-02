@@ -45,6 +45,7 @@ export const canvas: Messages["canvas"] = {
     historyCount: (count) => `Historial (${count})`,
     clear: "Borrar",
     pointAndAsk: "Señala y pregunta",
+    findOnPage: "Buscar en esta página",
     showApp: (app) => `Mostrar ${app}`,
     agentsPlan: "Plan del agente",
     closeChecklist: "Cerrar la checklist",
@@ -132,6 +133,14 @@ export const canvas: Messages["canvas"] = {
     noMatches: "Sin coincidencias",
     older: "Coincidencia anterior",
     newer: "Coincidencia siguiente",
+    close: "Cerrar la búsqueda",
+  },
+  pageFind: {
+    placeholder: "Buscar en esta página",
+    position: (position, total) => `${position} de ${total}`,
+    noMatches: "Sin coincidencias",
+    previous: "Coincidencia anterior",
+    next: "Coincidencia siguiente",
     close: "Cerrar la búsqueda",
   },
   pageExport: {

@@ -157,6 +157,7 @@ export const shell = {
       find: "Find in this conversation, earlier entries and folded cards included; Aa matches case (Enter: older match, Shift+Enter: newer)",
       findInReview:
         "In a review or tour: find in the code of its changed files, with match case, whole word and regular expression toggles (Enter: next match, Shift+Enter: previous)",
+      findInCanvas: "On a canvas page: find its text; Aa matches case (Enter: next match, Shift+Enter: previous)",
       findInTerminal:
         "In a terminal: find in its output, with match case, whole word and regular expression toggles (Enter: match further up, Shift+Enter: further down)",
       pasteImage: "In the message box, an image on the clipboard goes in as [Image #1] (dropping an image file does too)",

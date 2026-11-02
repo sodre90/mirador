@@ -14,6 +14,7 @@ import { EditApproval } from "./EditApproval.tsx";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
+import { usePageFind } from "./PageFind.tsx";
 import { usePageMarks } from "./PageMarks.tsx";
 import { canOpenItemWindows, openItemWindow } from "./item-window.ts";
 import { PluginItemView } from "./PluginItemView.tsx";
@@ -821,6 +822,11 @@ export function CanvasPanel({
   const shownPage = !tab && selected?.kind === "show" ? selected : undefined;
   const pageExport = usePageExport(shownPage, shownPageFrame);
   const pageMarks = usePageMarks(shownPage, shownPageFrame);
+  const pageFind = usePageFind(shownPage, shownPageFrame);
+  const receiveShownPageMessage = (message: CanvasFrameMessage) => {
+    pageMarks.received(message);
+    pageFind.received(message);
+  };
   const bar = useRef<HTMLDivElement>(null);
   const foldLevel = useFoldLevel(bar);
   const checklistCountText = (tabItem || plan) && words.bar.checklist(String(tabCount(tabItem, plan)));
@@ -841,6 +847,7 @@ export function CanvasPanel({
           { label: words.bar.clear, disabled: !somethingElseShown && !checklistOpen, onChoose: clear },
           ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
           ...(shownPage ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, separatorBefore: true, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
+          ...(shownPage ? [{ label: words.bar.findOnPage, onChoose: pageFind.openFind }] : []),
           ...pageExport.entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
         ]
       : []),
@@ -926,6 +933,18 @@ export function CanvasPanel({
             {words.bar.pointAndAsk}
           </button>
         )}
+        {shownPage && (
+          <button
+            type="button"
+            className="icon page-find-toggle"
+            aria-label={words.bar.findOnPage}
+            data-hint={hints.canvasPageFind}
+            data-shortcut={shortcutKeys().find}
+            onClick={pageFind.openFind}
+          >
+            ⌕
+          </button>
+        )}
         {poppable && (
           <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
             ⧉
@@ -1005,6 +1024,7 @@ export function CanvasPanel({
         </button>
       </div>
       {pageExport.opened}
+      {pageFind.opened}
       {historyOpen && <CanvasHistory items={newestFirst} selectedId={selected?.id ?? null} onPick={pick} />}
       <div className="canvas-body">
         {changesShown && (
@@ -1043,7 +1063,7 @@ export function CanvasPanel({
             markable
             frameRef={shownPageFrame}
             onRendered={reportRender(selected.id)}
-            onMessage={pageMarks.received}
+            onMessage={receiveShownPageMessage}
           />
         )}
         {pageMarks.opened}

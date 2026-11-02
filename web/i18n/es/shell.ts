@@ -158,6 +158,7 @@ export const shell: Messages["shell"] = {
       find: "Buscar en esta conversación, incluidas las entradas anteriores y las tarjetas contraídas; Aa distingue mayúsculas y minúsculas (Enter: coincidencia anterior, Shift+Enter: siguiente)",
       findInReview:
         "En una revisión o recorrido: buscar en el código de sus archivos modificados, con opciones para distinguir mayúsculas, palabra completa y expresión regular (Enter: siguiente coincidencia, Shift+Enter: anterior)",
+      findInCanvas: "En una página del lienzo: buscar en su texto; Aa distingue mayúsculas y minúsculas (Enter: siguiente coincidencia, Shift+Enter: anterior)",
       findInTerminal:
         "En una terminal: buscar en su salida, con opciones para distinguir mayúsculas, palabra completa y expresión regular (Enter: coincidencia más arriba, Shift+Enter: más abajo)",
       pasteImage: "En el cuadro de mensaje, una imagen del portapapeles entra como [Image #1] (soltar un archivo de imagen también funciona)",

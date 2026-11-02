@@ -66,7 +66,9 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "mark-failed"; message: unknown }
   /** The page drawn as a PNG, as the panel asked for it to copy. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "captured"; requestId: string; image: Blob }
-  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "capture-failed"; requestId: string; message: string };
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "capture-failed"; requestId: string; message: string }
+  /** Matches of the find query on the page: how many there are, and which is current, 1-based, 0 when there are none. */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "found"; total: number; current: number };
 
 export function isCanvasFrameMessage(data: unknown): data is CanvasFrameMessage {
   return typeof data === "object" && data !== null && (data as { source?: unknown }).source === CANVAS_MESSAGE_SOURCE;
@@ -101,6 +103,16 @@ export function canvasMarkDoneMessage() {
 /** Tells a canvas page it went out of sight behind another conversation's canvas, where its videos and sounds must not play on. */
 export function canvasHiddenMessage() {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "hidden" };
+}
+
+/** Asks a canvas page to find text: "first" searches again and makes the first match current, "next" and "previous" step through the matches, searching again only when the query or its case changed; the page answers each time with a "found" message. */
+export function canvasFindMessage(query: string, matchCase: boolean, step: "first" | "next" | "previous") {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "find", query, matchCase, step };
+}
+
+/** Tells a canvas page to stop finding and take its highlights away. */
+export function canvasFindClearMessage() {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "find-clear" };
 }
 
 /**
@@ -573,6 +585,79 @@ export const TEXT_CONTRAST_SCRIPT = `
 `;
 
 /**
+ * Finding text on a page, on the panel's word, as plain JS for the frame: matches are marked with the CSS Custom
+ * Highlight API, so the page's own scripts and the text-contrast watcher see no DOM the finder made, and the current
+ * match is scrolled into view. Where the browser has no highlight registry, the current match is only selected.
+ * It uses `post` from the frame script around it.
+ */
+const PAGE_FIND_SCRIPT = `
+  const findStyle = document.createElement("style");
+  findStyle.textContent = "::highlight(mirador-find){background:#fde68a;color:#000}::highlight(mirador-find-current){background:#f97316;color:#000}";
+  document.head.append(findStyle);
+  const canHighlightFind = typeof CSS !== "undefined" && CSS.highlights;
+  const findableTextNodes = () => {
+    if (!document.body) return [];
+    const nodes = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    while (walker.nextNode()) {
+      const parent = walker.currentNode.parentElement;
+      if (!parent || parent.closest("script, style, noscript, template, textarea") || !parent.getClientRects().length) continue;
+      nodes.push(walker.currentNode);
+    }
+    return nodes;
+  };
+  const rangesForFind = (query, matchCase) => {
+    const needle = matchCase ? query : query.toLowerCase();
+    if (!needle) return [];
+    const ranges = [];
+    for (const node of findableTextNodes()) {
+      const text = matchCase ? node.data : node.data.toLowerCase();
+      for (let at = text.indexOf(needle); at !== -1; at = text.indexOf(needle, at + needle.length)) {
+        const range = document.createRange();
+        range.setStart(node, at);
+        range.setEnd(node, at + needle.length);
+        ranges.push(range);
+      }
+    }
+    return ranges;
+  };
+  let finding = null;
+  const clearFind = () => {
+    finding = null;
+    if (canHighlightFind) {
+      CSS.highlights.delete("mirador-find");
+      CSS.highlights.delete("mirador-find-current");
+    } else getSelection().removeAllRanges();
+  };
+  const runFind = (data) => {
+    const searchAgain = data.step === "first" || !finding || finding.query !== data.query || finding.matchCase !== data.matchCase;
+    if (searchAgain) {
+      const ranges = rangesForFind(data.query, data.matchCase);
+      if (!ranges.length) {
+        clearFind();
+        post({ kind: "found", total: 0, current: 0 });
+        return;
+      }
+      finding = { query: data.query, matchCase: data.matchCase, ranges, current: 0 };
+    } else {
+      const stepTo = data.step === "next" ? 1 : -1;
+      finding.current = (finding.current + stepTo + finding.ranges.length) % finding.ranges.length;
+    }
+    const { ranges, current } = finding;
+    if (canHighlightFind) {
+      CSS.highlights.set("mirador-find", new Highlight(...ranges));
+      CSS.highlights.set("mirador-find-current", new Highlight(ranges[current]));
+    } else {
+      const selection = getSelection();
+      selection.removeAllRanges();
+      selection.addRange(ranges[current]);
+    }
+    ranges[current].startContainer.parentElement.scrollIntoView({ block: "center", inline: "nearest" });
+    post({ kind: "found", total: ranges.length, current: current + 1 });
+  };
+`;
+
+/**
  * `drawnPage()` draws the whole page, not only what the frame shows, in the colours it is shown in and without Mirador's
  * marks on it, as plain JS for the frame: it resolves to a canvas at the screen's pixel density.
  */
@@ -1001,6 +1086,7 @@ ${pageDrawing(assetsOrigin)}
       post({ kind: "capture-failed", requestId, message: String((error && error.message) || error) });
     }
   };
+${PAGE_FIND_SCRIPT}
   addEventListener("message", (event) => {
     const data = event.data;
     if (event.source !== parent || !data || data.source !== ${JSON.stringify(CANVAS_MESSAGE_SOURCE)}) return;
@@ -1010,6 +1096,8 @@ ${pageDrawing(assetsOrigin)}
     }
     if (data.kind === "capture") capture(data.requestId);
     if (data.kind === "hidden") document.querySelectorAll("video, audio").forEach((media) => media.pause());
+    if (data.kind === "find") runFind(data);
+    if (data.kind === "find-clear") clearFind();
   });
   // The frame never leaves its page: a link within it, such as #section, goes where it points there, one to another site
   // opens outside, and any other link does nothing.
@@ -1133,8 +1221,12 @@ ${HIDDEN_ERROR_SCRIPT}
     post({ kind: "key", key, code, metaKey, ctrlKey, altKey, shiftKey, typing });
   };
   const withModifier = (event) => event.metaKey || event.ctrlKey || event.altKey;
+  const findKeys = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.code === "KeyF";
   addEventListener("keydown", (event) => {
-    if (event.isTrusted && withModifier(event)) forwardKey(event);
+    if (!event.isTrusted || !withModifier(event)) return;
+    // The panel finds on the page instead, so the browser's own find must not open.
+    if (findKeys(event)) event.preventDefault();
+    forwardKey(event);
   }, true);
   // Listened to after the page's own handlers, so an Esc that closes something on the page stays with the page.
   addEventListener("keydown", (event) => {

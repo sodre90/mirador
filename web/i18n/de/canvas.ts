@@ -45,6 +45,7 @@ export const canvas: Messages["canvas"] = {
     historyCount: (count) => `Verlauf (${count})`,
     clear: "Leeren",
     pointAndAsk: "Zeigen und fragen",
+    findOnPage: "Auf dieser Seite suchen",
     showApp: (app) => `Zeigen: ${app}`,
     agentsPlan: "Plan des Agenten",
     closeChecklist: "Checkliste schließen",
@@ -132,6 +133,14 @@ export const canvas: Messages["canvas"] = {
     noMatches: "Keine Treffer",
     older: "Älterer Treffer",
     newer: "Neuerer Treffer",
+    close: "Suche schließen",
+  },
+  pageFind: {
+    placeholder: "Auf dieser Seite suchen",
+    position: (position, total) => `${position} von ${total}`,
+    noMatches: "Keine Treffer",
+    previous: "Voriger Treffer",
+    next: "Nächster Treffer",
     close: "Suche schließen",
   },
   pageExport: {

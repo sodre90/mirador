@@ -43,6 +43,7 @@ export const canvas: Messages["canvas"] = {
     historyCount: (count) => `历史（${count}）`,
     clear: "清除",
     pointAndAsk: "指着问",
+    findOnPage: "在此页面中查找",
     showApp: (app) => `显示 ${app}`,
     agentsPlan: "Agent 的计划",
     closeChecklist: "关闭清单",
@@ -127,6 +128,14 @@ export const canvas: Messages["canvas"] = {
     noMatches: "没有匹配项",
     older: "上一个匹配项",
     newer: "下一个匹配项",
+    close: "关闭查找",
+  },
+  pageFind: {
+    placeholder: "在此页面中查找",
+    position: (position, total) => `${position} / ${total}`,
+    noMatches: "没有匹配项",
+    previous: "上一个匹配项",
+    next: "下一个匹配项",
     close: "关闭查找",
   },
   pageExport: {

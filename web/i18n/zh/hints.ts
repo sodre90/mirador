@@ -295,6 +295,7 @@ export const hints: Messages["hints"] = {
   canvasPageExport: "把这个页面复制为图片或 HTML，请 Agent 把它写成 Markdown，或者另存为单独的文件。",
   canvasPoint:
     "指向页面上的某处，向 Agent 提问或让它修改：点击会选中鼠标下带轮廓的元素，而不是执行页面本身的操作；拖动会在一个区域周围画框，作为图片发送。按 Esc 停止。要询问文字，直接选中它即可。",
+  canvasPageFind: "在 Agent 显示的页面里查找文字：每个匹配项都会在页面上标出，当前的那个会滚动到视野中。",
   pageMarkChange: "告诉 Agent 那里要改什么：它会重新显示改好后的页面。",
   canvasEditsWaiting: "显示 Agent 等你允许或拒绝的编辑。",
   canvasChanges: "这一轮改动的文件，或所有未提交的更改，附带各自的行更改。",

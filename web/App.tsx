@@ -4,7 +4,7 @@ import { harnessRewinds, type Conversation, type Machine, type Workspace } from 
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { sidebarItems } from "../shared/sidebar-order.ts";
 import { countWaiting } from "../shared/waiting.ts";
-import { findInOpenConversation, focusPane, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
+import { canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
 import { connection, type ConnectionStatus } from "./connection.ts";
@@ -35,7 +35,7 @@ import { FirstProfile, ProfilesDialog } from "./Profiles.tsx";
 import { AskToRevert, RevertDialog } from "./Revert.tsx";
 import { SessionsDialog } from "./Sessions.tsx";
 import { SettingsDialog } from "./Settings.tsx";
-import { shortcutKeys, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
+import { findsInCanvasPage, shortcutKeys, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
 import { setFontScale, stepFontScale } from "./font-scale.ts";
 import { resetTerminalFontSize, stepTerminalFontSize } from "./terminal-settings.ts";
 import { ShowSidebarButton, Sidebar } from "./Sidebar.tsx";
@@ -388,7 +388,7 @@ export function App() {
   const select = (conversationId: string | null) => conversationId && dispatch({ type: "select", conversationId });
 
   useShortcuts((command, fromCanvas) => {
-    if (fromCanvas && (outOfCanvasPagesReach(command) || command.type === "find")) return;
+    if (fromCanvas && outOfCanvasPagesReach(command)) return;
     if (command.type === "reload-page") return location.reload();
     if (command.type === "restart-host") return restartHost();
     if (isModal(state)) {
@@ -420,7 +420,7 @@ export function App() {
       case "toggle-terminal":
         return toggleTerminal();
       case "find":
-        return findInOpenConversation();
+        return findsInCanvasPage(fromCanvas, canvasPageHasFocus()) ? findInCanvasPage() : findInOpenConversation();
       case "mark-unread": {
         const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId);
         return conversation && canMarkUnread(conversation) && markUnread(conversation.id, dispatch);
