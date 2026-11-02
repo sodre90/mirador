@@ -67,7 +67,7 @@ The palette command "Elrendezés visszaállítása az alapértelmezettre" is `t.
 
 The website (`site/words/hu.ts`) is written freely, the way Hungarian developers talk, not word for word, and unlike
 the app it keeps developer words English with Hungarian suffixes: coding agent, agent, canvas, review, plugin, session,
-build, mockup, diff. Its Show / Ask / Tour / Review kickers are tool names and stay English.
+build, mockup, diff. Its feature kickers are verbs: Rajzol / Kérdez / Végigvezet / Átnéz.
 
 ## Spanish
 

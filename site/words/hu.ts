@@ -38,22 +38,22 @@ export const hu: SiteWords = {
     body: "Egy agent pár perc alatt átnéz egy kódbázist, átír tíz fájlt, aztán egy hosszú szövegfolyamban elmagyarázza, mit csinált: egyetlen betűtípussal, abban a tempóban, ahogy gépel. A képet sokkal gyorsabban értjük meg, mint a szöveget: egy szekvenciadiagramról első ránézésre látszik egy kérés útja, ami szövegben egy teljes oldal. A Mirador nem egy újabb agent: azokat futtatja, amelyeket most is használsz, a saját beállításaiddal, és ad nekik egy helyet, ahol meg is mutathatják neked.",
   },
   show: {
-    kicker: "Show",
+    kicker: "Rajzol",
     title: "Az agented lerajzolja, mire gondol.",
     body: "Diagramok, mockupok, grafikonok, összehasonlítások, akár 3D-s jelenetek egy canvason a chat mellett, egy oldalnyi szöveg helyett. A Mermaid, a D3 és a three.js beépített, és offline is megy. Ha egy oldal szkriptje hibára fut, az agent értesül róla, és kijavítja.",
   },
   ask: {
-    kicker: "Ask",
+    kicker: "Kérdez",
     title: "Döntések képekkel.",
     body: "Számozott lista helyett az agent a canvason kérdez: legfeljebb nyolc opció, mindegyik előnézettel. Kattints egyre, vagy írd meg a saját válaszodat, és fűzz hozzá megjegyzést. Ha több kérdése van, egyszerre jönnek, mindegyik külön oldalon, és küldés előtt még egyszer átnézheted őket.",
   },
   tour: {
-    kicker: "Tour",
+    kicker: "Végigvezet",
     title: "Végigvezet a kódon, abban a sorrendben, ahogy fut.",
     body: "Hogyan működik valami, vagy mit változtatott épp az agent: egy rövid összefoglaló, aztán lépésről lépésre a kód, mindegyik lépés a saját soraival, a változásokat kiemelve. Bármelyik sorról kérdezhetsz, vagy megnyithatod IntelliJ IDEA-ban.",
   },
   review: {
-    kicker: "Review",
+    kicker: "Átnéz",
     title: "Code review, amin végig tudsz menni.",
     body: "Verdikt és összefoglaló, végigvezetés a változáson, minden diff, és a sorokhoz tűzött észrevételek, mindegyiknél jelölve, hogy biztos vagy csak gyanús. Tartsd meg, amivel egyetértesz, fogalmazd át, és küldd el pending review-ként a GitHub pull requestre.",
   },
