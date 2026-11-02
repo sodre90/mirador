@@ -322,6 +322,24 @@ test("a pi that dies in the middle of a turn ends the turn with its error, and t
   await expect.poll(piSessionProcesses).toHaveLength(1);
 });
 
+test("a pi turn the model refuses ends with the model's error and Try again, not a silent empty reply", async () => {
+  const refusal = "key not allowed to access model. Tried to access scripted";
+  model.failure = { status: 403, body: { message: refusal, type: "key_model_access_denied" } };
+  try {
+    await sendMessage(page, "Refused by the gateway");
+    const failedTurn = page.locator(".timeline:visible .try-again-line");
+    await expect(failedTurn).toContainText(refusal, { timeout: 60_000 });
+    await expect(failedTurn.getByRole("button", { name: "Try again" })).toBeVisible();
+    await waitForTurnToEnd(page);
+  } finally {
+    model.failure = null;
+  }
+
+  await sendMessage(page, "After the refusal");
+  await waitForTurnToEnd(page);
+  await expect(lastAgentMessage(page)).toContainText("Echo: After the refusal");
+});
+
 test("a message that joined a pi turn goes out again after Stop if pi had not read it yet, as the next turn", async () => {
   model.hold();
   await sendMessage(page, "Before the stop");
