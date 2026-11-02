@@ -19,7 +19,7 @@ const focusMessageBox = (page: Page) => page.locator(".composer textarea:visible
 
 /** From the sidebar's button: a macOS terminal keeps ⌘K to clear itself, and a fullscreen pane covers the message box. */
 async function runFromPalette(page: Page, label: string) {
-  await page.locator(".sidebar").getByRole("button", { name: /^Palette/ }).click();
+  await page.locator(".sidebar").getByRole("button", { name: /^Conversations and actions/ }).click();
   await page.getByPlaceholder(/Go to a conversation/).fill(label);
   await page.keyboard.press("Enter");
 }
