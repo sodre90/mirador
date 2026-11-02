@@ -2,7 +2,7 @@
 
 **See what your coding agent means.**
 
-Mirador runs your coding agents (Claude Code, opencode and pi) and gives them a **canvas** beside the conversation. On the canvas they draw what they mean, ask you with pictures, walk you through code, and hand you code reviews you can walk through. It runs on your own computer, with your own agent settings.
+Mirador runs your coding agents (Claude Code, opencode, pi and Codex) and gives them a **canvas** beside the conversation. On the canvas they draw what they mean, ask you with pictures, walk you through code, and hand you code reviews you can walk through. It runs on your own computer, with your own agent settings.
 
 [![The trailer: no more walls of text, your agent draws now. A chat transcript crossed out beside a checkout sequence diagram on the canvas](docs/screenshots/trailer.jpg)](https://youtu.be/ZMpbOZdF4bU)
 
@@ -22,7 +22,7 @@ Coding agents changed the pace of our work. In a few minutes an agent reads a co
 
 And we do that reading in a terminal. A terminal is a wall of text scrolling by: tool calls, diffs and explanations, all in one font, all at the speed the agent types. But people understand pictures far faster than text. A sequence diagram explains a request path at a glance, where the same in prose takes a page. A mockup settles a layout question in a second, where three paragraphs describing the options don't.
 
-Mirador was born from that gap. It keeps everything that makes a coding agent powerful (the real Claude Code, opencode and pi, with your own settings, hooks, extensions and MCP servers) and gives the agent a canvas next to the conversation:
+Mirador was born from that gap. It keeps everything that makes a coding agent powerful (the real Claude Code, opencode, pi and Codex, with your own settings, hooks, extensions and MCP servers) and gives the agent a canvas next to the conversation:
 
 - **It shows you** what it means: architecture, flows, data, mockups, charts, even 3D scenes, instead of describing them.
 - **It asks you** with pictures: two to eight options, each with a preview, and you click one.
@@ -91,7 +91,7 @@ irm https://github.com/sodre90/mirador/releases/latest/download/install.ps1 | ie
 
 The app goes in `%LOCALAPPDATA%\com.sodre90.mirador`, and starts. To run the script again, quit Mirador from its tray icon first, with *Run host in the background* off.
 
-The app carries Mirador and the Bun it runs on, so it doesn't require Bun or a checkout. It runs the agents you have installed: Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`, or `irm https://claude.ai/install.ps1 | iex` on Windows), opencode and pi (`npm install -g @earendil-works/pi-coding-agent`, on Node 22.19 or later). The script tells you when none of them is there.
+The app carries Mirador and the Bun it runs on, so it doesn't require Bun or a checkout. It runs the agents you have installed: Claude Code (`curl -fsSL https://claude.ai/install.sh | bash`, or `irm https://claude.ai/install.ps1 | iex` on Windows), opencode, pi (`npm install -g @earendil-works/pi-coding-agent`, on Node 22.19 or later) and Codex (`npm install -g @openai/codex`). The script tells you when none of them is there.
 
 **With Homebrew**, on macOS or Linux:
 
@@ -122,7 +122,7 @@ The installer starts Mirador, and puts it in your applications menu.
 
 **Windows**: `Mirador-windows-x64-Setup.zip`. Extract it and run `Mirador-Setup.exe`. The app is not signed yet, so SmartScreen warns when the installer first runs: *More info*, then *Run anyway*. The installer installs without a click, then waits at "Installation complete" for *Close*, and starts Mirador.
 
-**Signing in**: Mirador runs the `claude` on your PATH (or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`; on Windows in `%USERPROFILE%\.local\bin`), or the program set in *Settings › Agents*, so it uses the sign-in and version you already have. Without a sign-in, a conversation offers *Log in*, which opens that Claude Code's own sign-in in a terminal tab. For opencode, install [opencode](https://opencode.ai) and Mirador finds it. For pi, install it (`npm install -g @earendil-works/pi-coding-agent`) and Mirador finds it on your `PATH`; *Log in* opens pi itself in a terminal tab, where `/login` signs in.
+**Signing in**: Mirador runs the `claude` on your PATH (or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`; on Windows in `%USERPROFILE%\.local\bin`), or the program set in *Settings › Agents*, so it uses the sign-in and version you already have. Without a sign-in, a conversation offers *Log in*, which opens that Claude Code's own sign-in in a terminal tab. For opencode, install [opencode](https://opencode.ai) and Mirador finds it. For pi, install it (`npm install -g @earendil-works/pi-coding-agent`) and Mirador finds it on your `PATH`; *Log in* opens pi itself in a terminal tab, where `/login` signs in. For Codex, install it (`npm install -g @openai/codex`) and Mirador finds it on your `PATH` or in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`; *Log in* runs Codex's own sign-in in a terminal tab.
 
 ### From source
 
@@ -190,7 +190,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 - **As you left it**: coming back to a conversation brings its canvas back as it was, with *Changes* still open or the page still shown.
 - **History**: everything shown or asked is kept per conversation, across reloads and restarts. *Older* and *Newer* step through it, and *History* lists it newest first, with each question's outcome. *Clear* empties the canvas without deleting anything.
 - **Hide, show and full screen**: the canvas keeps receiving pages while hidden.
-- **Claude Code and pi use the canvas** (*Settings → Canvas*): *As needed*, or *Often* (the default), which adds guidance to Claude Code's and pi's system prompts, such as ending a larger coding task with a tour of what changed. The canvas tools are always loaded, so Claude Code's tool search never hides them. opencode follows the canvas's own instructions, without this guidance.
+- **Claude Code, pi and Codex use the canvas** (*Settings → Canvas*): *As needed*, or *Often* (the default), which adds guidance to Claude Code's, pi's and Codex's system prompts, such as ending a larger coding task with a tour of what changed. The canvas tools are always loaded, so Claude Code's tool search never hides them. opencode follows the canvas's own instructions, without this guidance.
 
 ### Questions
 
@@ -241,8 +241,8 @@ Windows support is new and experimental: expect rough edges, and please report w
 
 ### Conversations and agents
 
-- **Claude Code, opencode and pi** over ACP, in the workspace's folder, with your normal settings: Claude Code with `~/.claude` (settings, hooks, MCP servers; claude-notifier is muted for Mirador's sessions), opencode with `~/.config/opencode` (providers, agents, plugins, MCP servers, and its permission settings: Mirador forces nothing, so with opencode's defaults most tools run without asking). opencode is found on `PATH`, else in `/opt/homebrew/bin`, `/usr/local/bin` or `~/.opencode/bin`. pi with `~/.pi/agent` (settings, models, extensions, skills), through [pi-acp](https://github.com/svkozak/pi-acp), which Mirador carries; pi is found on `PATH`. pi support is new and experimental.
-- **Profiles** (*Profiles…*): an agent plus the environment it starts with, e.g. Claude Code through a work gateway or a local llama.cpp server, or opencode with another config (`OPENCODE_CONFIG=…`, or inline `OPENCODE_CONFIG_CONTENT='{…}'`), or pi with another agent folder (`PI_CODING_AGENT_DIR=…`) or another pi (`PI_ACP_PI_COMMAND=…`).
+- **Claude Code, opencode, pi and Codex** over ACP, in the workspace's folder, with your normal settings: Claude Code with `~/.claude` (settings, hooks, MCP servers; claude-notifier is muted for Mirador's sessions), opencode with `~/.config/opencode` (providers, agents, plugins, MCP servers, and its permission settings: Mirador forces nothing, so with opencode's defaults most tools run without asking). opencode is found on `PATH`, else in `/opt/homebrew/bin`, `/usr/local/bin` or `~/.opencode/bin`. pi with `~/.pi/agent` (settings, models, extensions, skills), through [pi-acp](https://github.com/svkozak/pi-acp), which Mirador carries; pi is found on `PATH`. Codex with `~/.codex` (config, sign-in, MCP servers), through [codex-acp](https://github.com/agentclientprotocol/codex-acp), which Mirador carries; Codex is found on `PATH`, else in `~/.local/bin`, `/opt/homebrew/bin` or `/usr/local/bin`. pi and Codex support are new and experimental.
+- **Profiles** (*Profiles…*): an agent plus the environment it starts with, e.g. Claude Code through a work gateway or a local llama.cpp server, or opencode with another config (`OPENCODE_CONFIG=…`, or inline `OPENCODE_CONFIG_CONTENT='{…}'`), or pi with another agent folder (`PI_CODING_AGENT_DIR=…`) or another pi (`PI_ACP_PI_COMMAND=…`), or Codex with another home (`CODEX_HOME=…`) or settings (`CODEX_CONFIG='{…}'`).
   - Every conversation runs on a profile. On first start Mirador offers one filled in: an installed agent as it is set up on this machine, with an empty environment. Conversations from before profiles move onto such a profile per agent.
   - The last profile stays until you create another; the workspaces of a deleted profile move to another one.
   - A profile can take a colour. A dot in it goes before the profile's name on a workspace's chip, in a conversation's header and in the statusline, and its conversations get an edge of it in the sidebar, so a workspace or conversation on the wrong profile stands out.
@@ -277,7 +277,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 - **`!` shell commands**: run in the workspace's folder with your login shell. The output shows inline with Run/Stop, and goes to the agent with your next message unless you drop it.
 - **Prompt history**: ↑/↓ step through earlier messages, this conversation's first and then the workspace's, images included.
 - **Prompt templates** with `{{parameters}}`: *Templates* sends one or inserts it, with a form for the parameters. Or press `⌘J` in the message box: typing narrows the list, Enter puts the template in at the caret with its first value selected, and Tab / Shift+Tab go through its values. Add, edit and delete them in *Settings → Conversations*; *Deep PR review*, *Start on a ticket* and *Code tour* come with Mirador, and a template added to Mirador later shows up once on an existing install too.
-- **Queue while the agent works**: with Claude Code and pi each message either joins the running turn (steering: at once, or once the tools it runs finish) or waits until after the turn; Enter and ⌥Enter pick, and Settings can swap them. opencode can't be steered, so its messages wait. Drag queued messages to reorder them, *Edit* one back into the box, or press ↑ in an empty box to pull back the last. The queue lives in the database, so it survives reloads and restarts.
+- **Queue while the agent works**: with Claude Code, pi and Codex each message either joins the running turn (steering: at once, or once the tools it runs finish) or waits until after the turn; Enter and ⌥Enter pick, and Settings can swap them. opencode can't be steered, so its messages wait. Drag queued messages to reorder them, *Edit* one back into the box, or press ↑ in an empty box to pull back the last. The queue lives in the database, so it survives reloads and restarts.
 - **Drafts**: text and images are kept per conversation.
 - **Resizable**: drag the box's top edge; double-click resets it.
 - **macOS keys**: fn+←/→ go to the start and end of the line; spelling autocorrection and inline predictions are off by default and can be switched on.
@@ -443,7 +443,7 @@ A native window around Mirador, for macOS, Linux and Windows ([full details](des
 ```bash
 bun run typecheck
 bun run test            # unit tests
-bunx playwright test    # e2e: a real Claude Code on haiku against your model server, opencode and pi against a scripted fake model (installed Google Chrome on macOS, Playwright's Chromium elsewhere)
+bunx playwright test    # e2e: a real Claude Code on haiku against your model server, opencode and pi (and Codex with `MIRADOR_E2E_CODEX=1`) against a scripted fake model (installed Google Chrome on macOS, Playwright's Chromium elsewhere)
 MIRADOR_E2E_MINIMAL_ENV=1 bunx playwright test e2e/agent-flow.spec.ts   # host started with a bare environment
 MIRADOR_EXPERIMENT=1 MIRADOR_TEST_MODEL=default MIRADOR_TEST_EFFORT=default bunx playwright test e2e/experiment-unprompted.spec.ts
 MIRADOR_SCREENSHOTS=1 bunx playwright test e2e/readme-screenshots.spec.ts   # retakes this README's screenshots from a demo

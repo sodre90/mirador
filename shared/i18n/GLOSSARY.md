@@ -78,7 +78,7 @@ Full-width punctuation in Chinese text (，。：？！), “” for quotes and 
 words or numbers ("3 个文件", "打开 Mirador"). Chinese has no plural: drop the English `plural` helper. Values filled
 in at runtime need no grammar around them, but keep each sentence natural with the value where Chinese puts it.
 Button and menu labels are short verbs or nouns ("发送", "停止", "历史"). Keys keep their English names (Enter, Tab, Esc).
-Mirador, Claude Code, opencode, pi, git, Tailscale and other product names stay as they are.
+Mirador, Claude Code, opencode, pi, Codex, git, Tailscale and other product names stay as they are.
 
 ## Every language
 

@@ -80,8 +80,8 @@ export const settings = {
   },
   canvas: {
     title: "Canvas",
-    hint: "Kept by the host for every browser. A conversation picks up a change when its session next starts: a new one at once, an open one after the host restarts. Claude Code and pi; opencode follows the canvas's own instructions.",
-    use: "Claude Code and pi use the canvas",
+    hint: "Kept by the host for every browser. A conversation picks up a change when its session next starts: a new one at once, an open one after the host restarts. Claude Code, pi and Codex; opencode follows the canvas's own instructions.",
+    use: "Claude Code, pi and Codex use the canvas",
   },
   savedPages: {
     title: "Copied and saved pages",

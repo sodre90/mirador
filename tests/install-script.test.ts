@@ -88,7 +88,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     packageManager?: "apt-get" | "dnf";
     display?: boolean;
     /** The agent on PATH, if any. */
-    agent?: "claude" | "pi" | false;
+    agent?: "claude" | "pi" | "codex" | false;
     /** MIRADOR_APP_DIR, or null for the script to choose. */
     appDir?: string | null;
   };
@@ -110,6 +110,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     stub("dnf", "dnf");
     stub("agent", "claude");
     stub("pi-agent", "pi");
+    stub("codex-agent", "codex");
     REAL_TOOLS.forEach((tool) => {
       mkdirSync(join(root, "tools"), { recursive: true });
       symlinkSync(Bun.which(tool)!, join(root, "tools", tool));
@@ -125,7 +126,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     [home, temp].forEach((path) => mkdirSync(path, { recursive: true }));
     const calls = join(folder, "calls.log");
     writeFileSync(calls, "");
-    const path = ["stubs", ...(packageManager ? [packageManager] : []), ...(agent ? [agent === "pi" ? "pi-agent" : "agent"] : []), "tools"].map((name) => join(root, name));
+    const path = ["stubs", ...(packageManager ? [packageManager] : []), ...(agent ? [agent === "claude" ? "agent" : `${agent}-agent`] : []), "tools"].map((name) => join(root, name));
     const environment = {
       PATH: path.join(":"),
       HOME: home,
@@ -153,7 +154,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
   }
 
   const callsTo = (calls: string[], program: string) => calls.filter((call) => call.startsWith(`${program} `));
-  const systemHasAnAgent = ["/opt/homebrew/bin", "/usr/local/bin"].some((directory) => ["claude", "opencode", "pi"].some((program) => existsSync(join(directory, program))));
+  const systemHasAnAgent = ["/opt/homebrew/bin", "/usr/local/bin"].some((directory) => ["claude", "opencode", "pi", "codex"].some((program) => existsSync(join(directory, program))));
 
   test("on an Apple Silicon Mac it replaces the app in the folder with the latest release's, clears the quarantine and opens it", async () => {
     const machine = machineOf({ os: "Darwin" });
@@ -299,13 +300,15 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     }
   });
 
-  test("with only pi installed it says nothing about installing an agent", async () => {
-    const result = await install(machineOf({ os: "Linux", arch: "x86_64", agent: "pi" }));
-    expect(result.exitCode).toBe(0);
-    expect(result.output).not.toContain("none of them is installed");
+  test("with only pi or only Codex installed it says nothing about installing an agent", async () => {
+    for (const agent of ["pi", "codex"] as const) {
+      const result = await install(machineOf({ os: "Linux", arch: "x86_64", agent }));
+      expect(result.exitCode).toBe(0);
+      expect(result.output).not.toContain("none of them is installed");
+    }
   });
 
-  test.skipIf(systemHasAnAgent)("without Claude Code, opencode or pi it says how to install Claude Code", async () => {
+  test.skipIf(systemHasAnAgent)("without Claude Code, opencode, pi or Codex it says how to install Claude Code", async () => {
     const result = await install(machineOf({ os: "Linux", arch: "x86_64", agent: false }));
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("curl -fsSL https://claude.ai/install.sh | bash");
@@ -438,7 +441,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
 
   const startsOf = (machine: ReturnType<typeof windowsMachine>) => readFileSync(join(machine.app, "bin", "starts.log"), "utf8").trim().split("\n");
   const setupsLeftIn = (temp: string) => readdirSync(temp).filter((name) => name.startsWith("mirador-install-"));
-  const windowsHasAnAgent = ["claude", "opencode", "pi"].some((program) => Bun.which(program) !== null);
+  const windowsHasAnAgent = ["claude", "opencode", "pi", "codex"].some((program) => Bun.which(program) !== null);
 
   test(
     "runs the release's installer, which closes itself once it has installed and started the app, and leaves nothing behind",
@@ -516,7 +519,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
   );
 
   test.skipIf(windowsHasAnAgent)(
-    "without Claude Code, opencode or pi it says how to install Claude Code",
+    "without Claude Code, opencode, pi or Codex it says how to install Claude Code",
     async () => {
       const result = await installOnWindows(windowsMachine({ agent: false }));
       expect(result.output).toContain("Mirador is starting.");

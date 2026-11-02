@@ -82,8 +82,8 @@ export const settings: Messages["settings"] = {
   },
   canvas: {
     title: "Lienzo",
-    hint: "Lo guarda el host para todos los navegadores. Una conversación recoge el cambio la próxima vez que empieza su sesión: una nueva, de inmediato; una abierta, tras reiniciar el host. Para Claude Code y pi; opencode sigue las instrucciones propias del lienzo.",
-    use: "Claude Code y pi usan el lienzo",
+    hint: "Lo guarda el host para todos los navegadores. Una conversación recoge el cambio la próxima vez que empieza su sesión: una nueva, de inmediato; una abierta, tras reiniciar el host. Para Claude Code, pi y Codex; opencode sigue las instrucciones propias del lienzo.",
+    use: "Claude Code, pi y Codex usan el lienzo",
   },
   savedPages: {
     title: "Páginas copiadas y guardadas",

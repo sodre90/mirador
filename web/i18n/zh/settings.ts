@@ -82,8 +82,8 @@ export const settings: Messages["settings"] = {
   },
   canvas: {
     title: "画布",
-    hint: "由 host 保存，对每个浏览器生效。对话会在其会话下次启动时采用更改：新对话立即采用，已打开的在 host 重启后采用。适用于 Claude Code 和 pi；opencode 遵循画布自己的说明。",
-    use: "Claude Code 和 pi 使用画布",
+    hint: "由 host 保存，对每个浏览器生效。对话会在其会话下次启动时采用更改：新对话立即采用，已打开的在 host 重启后采用。适用于 Claude Code、pi 和 Codex；opencode 遵循画布自己的说明。",
+    use: "Claude Code、pi 和 Codex 使用画布",
   },
   savedPages: {
     title: "复制和保存的页面",

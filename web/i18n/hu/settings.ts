@@ -82,8 +82,8 @@ export const settings: Messages["settings"] = {
   },
   canvas: {
     title: "Vászon",
-    hint: "A host őrzi meg minden böngészőnek. Egy beszélgetés akkor veszi át a változást, amikor legközelebb elindul a munkamenete: egy új azonnal, egy megnyitott a host újraindulása után. Claude Code és pi esetén; az opencode a vászon saját utasításait követi.",
-    use: "A Claude Code és a pi a vásznat használja",
+    hint: "A host őrzi meg minden böngészőnek. Egy beszélgetés akkor veszi át a változást, amikor legközelebb elindul a munkamenete: egy új azonnal, egy megnyitott a host újraindulása után. Claude Code, pi és Codex esetén; az opencode a vászon saját utasításait követi.",
+    use: "A Claude Code, a pi és a Codex a vásznat használja",
   },
   savedPages: {
     title: "Másolt és mentett oldalak",
