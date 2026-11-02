@@ -4,8 +4,8 @@ export const hu: SiteWords = {
   attributes: {
     title: "Mirador: vászon a coding agented mellé",
     description:
-      "A Mirador egy vásznat ad a coding agented mellé: rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in. Ingyenes, nyílt forráskódú, macOS-re, Linuxra és Windowsra.",
-    ogDescription: "A coding agented rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in, közvetlenül a chat mellett.",
+      "A Mirador egy vásznat ad a coding agented mellé: rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásokon. Ingyenes, nyílt forráskódú, macOS-re, Linuxra és Windowsra.",
+    ogDescription: "A coding agented rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásokon, közvetlenül a chat mellett.",
     sections: "Szakaszok",
     language: "Nyelv",
     copy: "Másolás",
@@ -26,7 +26,7 @@ export const hu: SiteWords = {
   hero: {
     eyebrow: "Ingyenes és nyílt forráskódú · macOS, Linux és Windows",
     title: 'Végre látod, <span class="gradient">mire gondol az agented.</span>',
-    lede: "A Mirador egy vásznat ad a coding agented mellé. Rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in, így egy pillantás alatt átlátod őket.",
+    lede: "A Mirador egy vásznat ad a coding agented mellé. Rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásokon, így egy pillantás alatt átlátod őket.",
     or: "vagy",
     windows: "Windows",
     download: "Letöltés",
