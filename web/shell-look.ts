@@ -66,7 +66,7 @@ export function applyShellAppearance({ look, custom, font, size }: ShellAppearan
   root.style.setProperty("--shell-custom-background", custom.background);
   root.style.setProperty("--shell-custom-text", custom.text);
   root.style.setProperty("--shell-custom-prompt", custom.prompt);
-  root.style.setProperty("--shell-custom-scheme", isDarkBackground(custom.background) ? "dark" : "light");
+  root.dataset.shellScheme = isDarkBackground(custom.background) ? "dark" : "light";
   root.style.setProperty("--shell-size", String(Number(size) / 100));
   if (font) root.style.setProperty("--shell-font", `${font}, var(--mono)`);
   else root.style.removeProperty("--shell-font");

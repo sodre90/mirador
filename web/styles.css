@@ -4377,8 +4377,6 @@ input.rename {
   --shell-muted: var(--muted);
   --shell-prompt: light-dark(#2f8a46, #7fd38a);
   --shell-link: var(--accent);
-  /* Unset, so the block's color-scheme inherits the page's. */
-  --shell-scheme: initial;
 }
 
 [data-shell-look="terminal-dark"] {
@@ -4388,7 +4386,6 @@ input.rename {
   --shell-muted: #868a96;
   --shell-prompt: #7fd38a;
   --shell-link: #a5a8ff;
-  --shell-scheme: dark;
 }
 
 [data-shell-look="soft-dark"] {
@@ -4398,7 +4395,6 @@ input.rename {
   --shell-muted: #8e919a;
   --shell-prompt: #8fcf98;
   --shell-link: #b3b5f5;
-  --shell-scheme: dark;
 }
 
 [data-shell-look="paper"] {
@@ -4408,7 +4404,6 @@ input.rename {
   --shell-muted: #7a766b;
   --shell-prompt: #4f8a3a;
   --shell-link: #6a5fc4;
-  --shell-scheme: light;
 }
 
 [data-shell-look="custom"] {
@@ -4418,17 +4413,24 @@ input.rename {
   --shell-muted: color-mix(in srgb, var(--shell-custom-text) 60%, var(--shell-custom-background));
   --shell-prompt: var(--shell-custom-prompt);
   --shell-link: var(--shell-custom-prompt);
-  --shell-scheme: var(--shell-custom-scheme);
 }
 
 .shell-body {
   background: var(--shell-background);
   color: var(--shell-text);
-  color-scheme: var(--shell-scheme);
   font-family: var(--shell-font, var(--mono));
   font-size: calc(12.5px * var(--font-scale) * var(--shell-size, 1));
   line-height: 1.5;
   padding: 8px 12px;
+}
+
+/* Keywords, not a variable: the bundler turns light-dark() into variables it flips only where color-scheme is a keyword. */
+:is([data-shell-look="terminal-dark"], [data-shell-look="soft-dark"], [data-shell-look="custom"][data-shell-scheme="dark"]) .shell-body {
+  color-scheme: dark;
+}
+
+:is([data-shell-look="paper"], [data-shell-look="custom"][data-shell-scheme="light"]) .shell-body {
+  color-scheme: light;
 }
 
 .permission .shell-body {

@@ -112,6 +112,9 @@ test("shell blocks follow the theme until Settings give them other colours, a fo
   const block = page.locator(".timeline .shell", { hasText: "Run the unit tests" }).locator(".shell-body").first();
   const shown = (property: "backgroundColor" | "color" | "fontFamily" | "fontSize") => block.evaluate((element, name) => getComputedStyle(element)[name], property);
   const promptColour = () => block.locator(".shell-prompt").evaluate((element) => getComputedStyle(element).color);
+  const quotedColour = () =>
+    page.locator(".timeline .shell", { hasText: "Count the specs" }).locator(".shell-typed .token.string").evaluate((element) => getComputedStyle(element).color);
+  const [lightPagesString, darkPagesString] = ["rgb(10, 48, 105)", "rgb(165, 214, 255)"];
 
   await test.step("with nothing chosen, a block takes the theme's colours, light and dark", async () => {
     await expect(block).toBeVisible();
@@ -127,8 +130,14 @@ test("shell blocks follow the theme until Settings give them other colours, a fo
     await chooseInSettings(page, "Shell colours", "Terminal dark");
     await expect.poll(() => shown("backgroundColor")).toBe("rgb(22, 23, 28)");
     expect(await shown("color")).toBe("rgb(215, 217, 224)");
+    expect(await quotedColour()).toBe(darkPagesString);
+    await chooseInSettings(page, "Shell colours", "Soft dark");
+    await expect.poll(quotedColour).toBe(darkPagesString);
+    await chooseInSettings(page, "Theme", "Dark");
     await chooseInSettings(page, "Shell colours", "Paper");
     await expect.poll(() => shown("backgroundColor")).toBe("rgb(251, 248, 241)");
+    expect(await quotedColour()).toBe(lightPagesString);
+    await chooseInSettings(page, "Theme", "Light");
   });
 
   await test.step("Custom takes the colours picked, and Reset colours goes back to its starting ones", async () => {
@@ -141,6 +150,7 @@ test("shell blocks follow the theme until Settings give them other colours, a fo
     await expect.poll(() => shown("backgroundColor")).toBe("rgb(32, 48, 64)");
     expect(await shown("color")).toBe("rgb(240, 224, 208)");
     expect(await promptColour()).toBe("rgb(255, 136, 0)");
+    expect(await quotedColour()).toBe(darkPagesString);
     await settings.getByRole("button", { name: "Reset colours" }).click();
     await expect.poll(() => shown("backgroundColor")).toBe("rgb(42, 44, 51)");
     await settings.getByLabel("Background").fill("#203040");
