@@ -51,3 +51,12 @@ test("buttons name the editor they open in, or none when the first one found is 
   expect(editorState({ editor: "zed" }, installed()).opensIn).toBe("Zed");
   expect(editorState({ editor: "custom", command: "/usr/local/bin/nvim.exe +{line} {file}" }, installed()).opensIn).toBe("nvim");
 });
+
+test("on Windows, a launcher that runs through cmd.exe doesn't get a file name cmd.exe could take for a command", () => {
+  const batchLaunchers: FindProgram = (name) => (name === "code" ? "C:\\VS Code\\bin\\code.cmd" : name === "subl" ? "C:\\Sublime\\subl.exe" : null);
+  expect(() => editorCommand({ editor: "code" }, "C:\\w\\a&calc.ts", 1, batchLaunchers, "win32")).toThrow("runs through cmd.exe");
+  expect(() => editorCommand({ editor: "code" }, "C:\\w\\100%.ts", 1, batchLaunchers, "win32")).toThrow("runs through cmd.exe");
+  expect(editorCommand({ editor: "code" }, "C:\\w\\my file (1).ts", 1, batchLaunchers, "win32")).toEqual(["C:\\VS Code\\bin\\code.cmd", "--goto", "C:\\w\\my file (1).ts:1"]);
+  expect(editorCommand({ editor: "subl" }, "C:\\w\\a&b.ts", 1, batchLaunchers, "win32")).toEqual(["C:\\Sublime\\subl.exe", "C:\\w\\a&b.ts:1"]);
+  expect(editorCommand({ editor: "code" }, "/w/a&b.ts", 1, batchLaunchers, "darwin")[2]).toBe("/w/a&b.ts:1");
+});

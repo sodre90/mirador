@@ -171,6 +171,8 @@ export const problems: Messages["problems"] = {
   editorLauncherMissing: (editor, launcher) =>
     `A(z) ${editor} parancssori indítója (${launcher}) nem található a host PATH-ján. Állítsd be, vagy válassz másik szerkesztőt a Beállítások › Beszélgetések alatt.`,
   editorCommandNotFound: (program) => `A Mirador nem találja a host PATH-ján a Beállítások › Beszélgetések alatt megadott szerkesztőt: ${program}`,
+  fileNameUnsafeThroughCmd: (path, program) =>
+    `A(z) ${program} a cmd.exe-n keresztül fut, amely a(z) ${path} nevének egy részét parancsnak vehetné, ezért a Mirador nem nyitja meg vele. Nevezd át a fájlt, vagy adj meg egy szerkesztő .exe fájlját a Beállítások › Beszélgetések alatt, például a VS Code-hoz a Code.exe-t.`,
   scriptProgramNotFound: (program) =>
     `A Mirador nem találja a host PATH-ján a Beállítások › Beszélgetések alatt megadott, szkriptek megnyitására szolgáló programot: ${program}`,
   scriptProgramThroughCmd: (program) =>

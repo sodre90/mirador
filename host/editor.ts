@@ -72,13 +72,28 @@ function knownEditorCommand(editor: KnownEditorId, file: string, line: number, f
   return [executable, ...knownEditors[editor].argumentsFor(file, line)];
 }
 
-/** What runs to open the file at the line: the program itself, with no shell to read the file's name. */
-export function editorCommand(setting: EditorSetting, file: string, line: number, find: FindProgram = onPathOrInstalled): string[] {
+function commandFor(setting: EditorSetting, file: string, line: number, find: FindProgram) {
   if (setting.editor === "custom") return customCommand(setting.command, file, line, find);
   if (setting.editor !== "first-found") return knownEditorCommand(setting.editor, file, line, find);
   const [firstFound] = foundEditors(find);
   if (!firstFound) throw new HostProblemError({ code: "no-editor-found" });
   return knownEditorCommand(firstFound, file, line, find);
+}
+
+const BATCH_FILE_EXTENSIONS = [".cmd", ".bat"];
+
+/** cmd.exe reads these in a batch file's arguments however they are quoted, so a file's name could run a command. */
+const CMD_SPECIAL_CHARACTERS = /[&|<>^%!"]/;
+
+/** What runs to open the file at the line: the program itself, with no shell to read the file's name, and no cmd.exe to read one that could run a command. */
+export function editorCommand(setting: EditorSetting, file: string, line: number, find: FindProgram = onPathOrInstalled, platform: NodeJS.Platform = process.platform): string[] {
+  const command = commandFor(setting, file, line, find);
+  const [program] = command;
+  const runsThroughCmd = platform === "win32" && BATCH_FILE_EXTENSIONS.includes(extname(program!).toLowerCase());
+  if (runsThroughCmd && command.slice(1).some((word) => CMD_SPECIAL_CHARACTERS.test(word))) {
+    throw new HostProblemError({ code: "file-name-unsafe-through-cmd", path: file, program: program! });
+  }
+  return command;
 }
 
 export function editorState(setting: EditorSetting, find: FindProgram = onPathOrInstalled): EditorState {

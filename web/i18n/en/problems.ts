@@ -169,6 +169,8 @@ export const problems = {
   editorLauncherMissing: (editor: string, launcher: string) =>
     `${editor}'s command-line launcher (${launcher}) was not found on the host's PATH. Set it up, or pick another editor in Settings › Conversations.`,
   editorCommandNotFound: (program: string) => `Mirador cannot find ${program}, the editor Settings › Conversations name, on the host's PATH.`,
+  fileNameUnsafeThroughCmd: (path: string, program: string) =>
+    `${program} runs through cmd.exe, which could take part of ${path}'s name for a command, so Mirador does not open it with it. Rename the file, or name an editor's .exe in Settings › Conversations, such as Code.exe for VS Code.`,
   scriptProgramNotFound: (program: string) =>
     `Mirador cannot find ${program}, the program Settings › Conversations name to open scripts in, on the host's PATH.`,
   scriptProgramThroughCmd: (program: string) =>

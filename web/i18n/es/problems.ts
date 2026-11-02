@@ -171,6 +171,8 @@ export const problems: Messages["problems"] = {
   editorLauncherMissing: (editor, launcher) =>
     `No se encontró en el PATH del host el lanzador de línea de comandos de ${editor} (${launcher}). Configúralo, o elige otro editor en Configuración › Conversaciones.`,
   editorCommandNotFound: (program) => `Mirador no encuentra en el PATH del host ${program}, el editor que indica Configuración › Conversaciones.`,
+  fileNameUnsafeThroughCmd: (path, program) =>
+    `${program} se ejecuta a través de cmd.exe, que podría tomar parte del nombre de ${path} por un comando, así que Mirador no lo abre con él. Cambia el nombre del archivo, o indica el .exe de un editor en Configuración › Conversaciones, como Code.exe para VS Code.`,
   scriptProgramNotFound: (program) =>
     `Mirador no encuentra en el PATH del host ${program}, el programa que Configuración › Conversaciones indica para abrir scripts.`,
   scriptProgramThroughCmd: (program) =>

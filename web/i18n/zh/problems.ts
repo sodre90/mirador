@@ -166,6 +166,8 @@ export const problems: Messages["problems"] = {
   executableNotOpened: (file) => `${file} 是可执行文件，xdg-open 可能会运行它，因此 Mirador 不会打开它。你可以在“设置 › 对话”中指定用来打开脚本的程序。`,
   editorLauncherMissing: (editor, launcher) => `在 host 的 PATH 中找不到 ${editor} 的命令行启动器（${launcher}）。请先设置它，或在“设置 › 对话”中选择其他编辑器。`,
   editorCommandNotFound: (program) => `Mirador 在 host 的 PATH 中找不到 ${program}，即“设置 › 对话”中指定的编辑器。`,
+  fileNameUnsafeThroughCmd: (path, program) =>
+    `${program} 通过 cmd.exe 运行，而 cmd.exe 可能把 ${path} 文件名的一部分当作命令，因此 Mirador 不用它打开该文件。请重命名该文件，或在“设置 › 对话”中指定编辑器的 .exe，例如 VS Code 的 Code.exe。`,
   scriptProgramNotFound: (program) => `Mirador 在 host 的 PATH 中找不到 ${program}，即“设置 › 对话”中指定用来打开脚本的程序。`,
   scriptProgramThroughCmd: (program) =>
     `${program} 通过 cmd.exe 运行，而 cmd.exe 可能把文件名的一部分当作命令，因此 Mirador 不用它打开脚本。请改为在“设置 › 对话”中指定该程序的 .exe，例如 VS Code 的 Code.exe。`,

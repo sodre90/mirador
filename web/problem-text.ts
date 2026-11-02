@@ -131,6 +131,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.editorLauncherMissing(problem.editor, problem.launcher);
     case "editor-command-not-found":
       return words.editorCommandNotFound(problem.program);
+    case "file-name-unsafe-through-cmd":
+      return words.fileNameUnsafeThroughCmd(problem.path, problem.program);
     case "script-program-through-cmd":
       return words.scriptProgramThroughCmd(problem.program);
     case "git-failed":

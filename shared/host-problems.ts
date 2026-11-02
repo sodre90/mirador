@@ -70,6 +70,7 @@ export type HostProblem =
   | { code: "script-program-not-found"; program: string }
   | { code: "editor-launcher-missing"; editor: string; launcher: string }
   | { code: "editor-command-not-found"; program: string }
+  | { code: "file-name-unsafe-through-cmd"; path: string; program: string }
   | { code: "script-program-through-cmd"; program: string }
   | { code: "git-failed"; command: string; directory: string; output: string }
   | { code: "snapshot-blob-unreadable"; blob: string; directory: string }
