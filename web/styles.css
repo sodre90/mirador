@@ -6734,7 +6734,7 @@ body.reordering * {
   display: block;
   width: auto;
   height: 280px;
-  max-width: none;
+  max-width: 560px;
   aspect-ratio: auto 16 / 10;
   object-fit: contain;
   object-position: top left;

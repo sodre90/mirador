@@ -86,6 +86,10 @@ test("the agent recommends an official plugin, and Mirador installs it only once
     await expect(plugins(page).locator(".restart-needed")).toBeVisible();
   });
 
+  await page.route(`**/plugin-screenshot?url=${encodeURIComponent(TALLY_TOTALS.url)}`, (route) =>
+    route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="642" height="72"><rect width="642" height="72" fill="#888"/></svg>' }),
+  );
+
   await test.step("a tile's Install asks first too: Don't install leaves it to install, and Install then installs it", async () => {
     await pluginTile(plugins(page), "Discover", "Tally").getByRole("button", { name: "Install Tally" }).click();
     const tally = plugins(page).getByRole("region", { name: "Tally" });
@@ -94,6 +98,9 @@ test("the agent recommends an official plugin, and Mirador installs it only once
     await expect(tally.getByRole("list", { name: "Pictures of Tally" })).toContainText("Tallying votes");
     const thumbnail = await tally.getByRole("img", { name: "Tallying votes" }).boundingBox();
     expect(thumbnail?.width, "a picture not loaded yet keeps its place, rather than showing as a thin line").toBeGreaterThan(300);
+    await expect(tally.getByRole("img", { name: "The totals" })).toHaveJSProperty("complete", true);
+    const wideThumbnail = await tally.getByRole("img", { name: "The totals" }).boundingBox();
+    expect(wideThumbnail?.width, "a wide, short picture fits its box rather than being blown up to the box's height").toBeLessThanOrEqual(560);
     await tally.getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Don't install" }).click();
     await expect(tally.getByRole("group", { name: "Install Tally?" })).toHaveCount(0);
     await tally.getByRole("img", { name: "Tallying votes" }).click();
