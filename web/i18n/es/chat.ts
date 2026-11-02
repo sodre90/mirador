@@ -260,7 +260,6 @@ export const chat: Messages["chat"] = {
     addNew: "+ Plantilla nueva",
   },
   pluginCommand: {
-    takesNoArguments: (command) => `/${command} no admite nada después de su nombre.`,
     dismiss: "Descartar",
   },
   menus: {

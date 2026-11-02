@@ -309,9 +309,21 @@ describe("CanvasPlugins", () => {
   test("the tools a plugin made commands are the slash menu's /<plugin>:<tool>, with their own descriptions", async () => {
     const { plugins } = await setUp();
     expect(plugins.commands()).toEqual([
-      { name: "board:pin_card", description: "Pin a card that says who pinned it", hint: null },
+      { name: "board:show_card", description: "Show a card", hint: "title=… text=…" },
+      { name: "board:pin_card", description: "Pin a card that says who pinned it", hint: "[text=…]" },
       { name: "board:finish_step", description: "Tick off the next step", hint: null },
     ]);
+  });
+
+  test("a command takes its tool's arguments as key=value, checked against the tool's schema as an agent's call is", async () => {
+    const { plugins, items } = await setUp();
+    expect(await plugins.runCommand("c1", "board:show_card", `title="Two words" text='it is' `)).toMatch(/^Shown as /);
+    expect(items()[0]).toMatchObject({ title: "Two words", data: { text: "it is" } });
+    await expect(plugins.runCommand("c1", "board:show_card", "text=x")).rejects.toThrow("The command needs title=….");
+    await expect(plugins.runCommand("c1", "board:show_card", 'title="" text=x')).rejects.toThrow("title");
+    await expect(plugins.runCommand("c1", "board:show_card", "title=a text=b colour=red")).rejects.toThrow("The command takes title, text, not colour.");
+    await expect(plugins.runCommand("c1", "board:finish_step", "now")).rejects.toThrow("Write what follows the command as key=value");
+    expect(items()).toHaveLength(1);
   });
 
   test("the user runs a command's tool as its caller, with the input the agent's call without arguments gets, and the agent hears nothing of it", async () => {
@@ -333,7 +345,7 @@ describe("CanvasPlugins", () => {
 
   test("refuses a tool that isn't a command, one of no plugin, and a conversation that doesn't exist, and passes on what the tool throws", async () => {
     const { plugins } = await setUp();
-    await expect(plugins.runCommand("c1", "board:show_card")).rejects.toThrow("No plugin has a command /board:show_card.");
+    await expect(plugins.runCommand("c1", "board:change_card")).rejects.toThrow("No plugin has a command /board:change_card.");
     await expect(plugins.runCommand("c1", "elsewhere:pin_card")).rejects.toThrow("No plugin has a command /elsewhere:pin_card.");
     await expect(plugins.runCommand("nope", "board:pin_card")).rejects.toThrow();
     await expect(plugins.runCommand("c1", "board:finish_step")).rejects.toThrow("There are no steps to tick off.");
@@ -382,16 +394,11 @@ describe("loading canvas plugins", () => {
     ]);
   });
 
-  test("refuses a command on a tool whose input requires something, a command without a description, and one in a plugin for an API before them", async () => {
+  test("refuses a command without a description, and one in a plugin for an API before commands", async () => {
     const commandOn = (input: string, command = `{ description: "Do it" }`) =>
       `export default { items: {}, tools: { do_it: { description: "d", input: ${input}, command: ${command}, run: () => "" } } };`;
-    const requiring = boardCopy((manifest) => manifest, commandOn(`{ type: "object", properties: { a: { type: "string" } }, required: ["a"] }`));
     const undescribed = boardCopy((manifest) => manifest, commandOn(`{ type: "object" }`, `{ description: " " }`));
-    for (const folder of [requiring, undescribed]) {
-      expect((await loadPlugins(folder)).problems.map(({ message }) => message)).toEqual([
-        "the canvas host module needs tools.do_it.command only as { description }, on a tool whose input requires nothing",
-      ]);
-    }
+    expect((await loadPlugins(undescribed)).problems.map(({ message }) => message)).toEqual(["the canvas host module needs tools.do_it.command only as { description }"]);
     const older = boardCopy((manifest) => ({ ...manifest, api: 5 }), commandOn(`{ type: "object" }`));
     expect((await loadPlugins(older)).problems.map(({ message }) => message)).toEqual(["a canvas tool is a slash command, which plugin API 6 brought; plugin.json names API 5"]);
   });

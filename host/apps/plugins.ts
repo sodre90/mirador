@@ -236,7 +236,7 @@ function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }:
     const { description, input, run, command } = (isObject(tool) ? tool : {}) as Record<string, unknown>;
     if (!TOOL_NAME.test(name)) needs.push({ code: "canvas-need-tool-name", tool: name });
     if (typeof description !== "string" || !isObject(input) || !isFunction(run)) needs.push({ code: "canvas-need-tool-shape", tool: name });
-    if (command !== undefined && !(isCommandShape(command) && requiresNothing(input))) needs.push({ code: "canvas-need-command-shape", tool: name });
+    if (command !== undefined && !isCommandShape(command)) needs.push({ code: "canvas-need-command-shape", tool: name });
   }
   if (host.action !== undefined && !isFunction(host.action)) needs.push({ code: "canvas-need-action-function" });
   if (host.note !== undefined && !isFunction(host.note)) needs.push({ code: "canvas-need-note-function" });
@@ -256,5 +256,3 @@ function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }:
 }
 
 const isCommandShape = (command: unknown) => isObject(command) && typeof command.description === "string" && command.description.trim() !== "";
-
-const requiresNothing = (input: unknown) => !isObject(input) || input.required === undefined || (Array.isArray(input.required) && input.required.length === 0);

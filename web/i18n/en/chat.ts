@@ -263,7 +263,6 @@ export const chat = {
     addNew: "+ New template",
   },
   pluginCommand: {
-    takesNoArguments: (command: string) => `/${command} takes nothing after its name.`,
     dismiss: "Dismiss",
   },
   menus: {

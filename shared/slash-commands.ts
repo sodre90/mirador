@@ -52,9 +52,9 @@ export const toSlashCommand = ({ name, description, input }: AvailableCommand): 
   hint: input?.hint ?? null,
 });
 
-/** The one of `commands` a message names first, and whether anything follows its name; null when it names none of them. */
-export function commandNamedIn(message: string, commands: SlashCommand[]): { command: SlashCommand; withArguments: boolean } | null {
-  const [first = "", ...rest] = message.trim().split(/\s+/);
+/** The one of `commands` a message names first, and what follows its name; null when it names none of them. */
+export function commandNamedIn(message: string, commands: SlashCommand[]): { command: SlashCommand; writtenArguments: string } | null {
+  const [, first = "", rest = ""] = /^\s*(\S+)\s*([\s\S]*?)\s*$/.exec(message) ?? [];
   const command = commands.find(({ name }) => `/${name}` === first);
-  return command ? { command, withArguments: rest.length > 0 } : null;
+  return command ? { command, writtenArguments: rest } : null;
 }

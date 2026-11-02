@@ -323,6 +323,12 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginCommandNeedsNewerApi(problem.brought, problem.named);
     case "plugin-command-unknown":
       return words.pluginCommandUnknown(problem.command);
+    case "command-arguments-syntax":
+      return words.commandArgumentsSyntax(problem.near);
+    case "command-argument-unknown":
+      return problem.known.length === 0 ? words.commandTakesNothing(problem.argument) : words.commandArgumentUnknown(problem.argument, problem.known);
+    case "command-arguments-missing":
+      return words.commandArgumentsMissing(problem.missing.map((name) => `${name}=…`));
     case "agent-gone":
       return words.agentGone(problem.agent, goneText(problem.gone, words));
     case "prelaunch-failed":

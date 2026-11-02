@@ -13,9 +13,9 @@ connection.onMessage((message) => {
 /** The plugins' tools the user runs from the slash menu, as the host last said; plugins change only with a restart, which sends a new snapshot. */
 export const pluginCommands = () => commands;
 
-async function runPluginCommand(conversationId: string, command: string): Promise<string> {
+async function runPluginCommand(conversationId: string, command: string, writtenArguments: string): Promise<string> {
   const ran = await connection.sendAndAwait(
-    (requestId) => ({ type: "canvas.run-command", requestId, conversationId, command }),
+    (requestId) => ({ type: "canvas.run-command", requestId, conversationId, command, arguments: writtenArguments }),
     (message, requestId) => (message.type === "canvas.command-ran" && message.requestId === requestId ? message : undefined),
   );
   const problem = replyProblemText(ran);
@@ -47,15 +47,12 @@ export function usePluginCommands(conversationId: string) {
       setOutcome(null);
       return false;
     }
-    const name = named.command.name;
-    if (named.withArguments) {
-      setOutcome({ problem: t.chat.pluginCommand.takesNoArguments(name) });
-      return true;
-    }
     setOutcome(null);
-    sent();
-    runPluginCommand(conversationId, name).then(
-      (reply) => setOutcome(reply.trim() ? { reply } : null),
+    runPluginCommand(conversationId, named.command.name, named.writtenArguments).then(
+      (reply) => {
+        sent();
+        setOutcome(reply.trim() ? { reply } : null);
+      },
       (error: unknown) => setOutcome({ problem: error instanceof Error ? error.message : String(error) }),
     );
     return true;

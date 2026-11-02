@@ -166,6 +166,9 @@ export type HostProblem =
   | { code: "canvas-need-command-shape"; tool: string }
   | { code: "plugin-command-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-command-unknown"; command: string }
+  | { code: "command-arguments-syntax"; near: string }
+  | { code: "command-argument-unknown"; argument: string; known: string[] }
+  | { code: "command-arguments-missing"; missing: string[] }
   | { code: "agent-gone"; agent: string; gone: AgentGone }
   | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string };
 

@@ -257,7 +257,6 @@ export const chat: Messages["chat"] = {
     addNew: "+ 新模板",
   },
   pluginCommand: {
-    takesNoArguments: (command) => `/${command} 的名称后面不能再跟内容。`,
     dismiss: "忽略",
   },
   menus: {

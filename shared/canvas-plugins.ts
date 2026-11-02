@@ -165,8 +165,8 @@ export interface CanvasTool<Data = unknown> {
   /** Left out of every request until the agent searches for it, for a tool rarely called: Claude Code with tool search on. */
   onDemand?: boolean;
   /**
-   * Lists the tool in the slash menu as /<plugin>:<tool>, with this description, for the user to run without the agent;
-   * only a tool whose input requires nothing. What run resolves to shows above the composer, and the agent hears nothing of it.
+   * Lists the tool in the slash menu as /<plugin>:<tool>, with this description, for the user to run without the agent,
+   * its arguments written as key=value after the name. What run resolves to shows above the composer, and the agent hears nothing of it.
    */
   command?: { description: string };
 }

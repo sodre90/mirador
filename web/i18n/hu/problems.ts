@@ -284,7 +284,11 @@ export const problems: Messages["problems"] = {
     `items.${item}, amelynek opensWithRoom értéke csak true vagy false, vagy egy { setting }, amely a plugin.json egy olyan beállítását nevezi meg, amelynek választásai: ${rooms.join(" és ")}`,
   canvasNeedToolName: (tool) => `kisbetűkből, számjegyekből és aláhúzásjelekből álló nevű tools, nem ${tool}`,
   canvasNeedToolShape: (tool) => `tools.${tool} leírással (description), bemeneti sémával (input) és run függvénnyel`,
-  canvasNeedCommandShape: (tool) => `tools.${tool}.command csak { description } alakban, olyan eszközön, amelynek a bemenete semmit sem követel meg`,
+  canvasNeedCommandShape: (tool) => `tools.${tool}.command csak { description } alakban`,
+  commandArgumentsSyntax: (near) => `A parancs után kulcs=érték alakban írj, szóközös értéket idézőjelek között; ez nem ilyen: ${near}.`,
+  commandTakesNothing: (argument) => `A parancs neve után nem állhat semmi, ${argument} sem.`,
+  commandArgumentUnknown: (argument, known) => `A parancs ezeket fogadja: ${known.join(", ")}; ${argument} nincs köztük.`,
+  commandArgumentsMissing: (missing) => `A parancshoz kell: ${missing.join(" ")}.`,
   pluginCommandNeedsNewerApi: (brought, named) =>
     `egy vászoneszköz perjeles parancs, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   pluginCommandUnknown: (command) => `Egyik bővítménynek sincs /${command} parancsa. Ha most telepítettél vagy frissítettél bővítményt, indítsd újra a Miradort.`,

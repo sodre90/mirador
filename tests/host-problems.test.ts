@@ -264,6 +264,10 @@ const problems: HostProblem[] = [
   { code: "plugin-window-needs-newer-api", brought: 4, named: 3 },
   { code: "plugin-command-needs-newer-api", brought: 6, named: 5 },
   { code: "plugin-command-unknown", command: "board:pin_card" },
+  { code: "command-arguments-syntax", near: "now" },
+  { code: "command-argument-unknown", argument: "colour", known: ["title", "text"] },
+  { code: "command-argument-unknown", argument: "colour", known: [] },
+  { code: "command-arguments-missing", missing: ["title", "text"] },
   {
     code: "canvas-host-module-needs",
     needs: [
@@ -545,10 +549,14 @@ const englishBeforeCodes = [
   "the canvas host module has a window or hears activity, which plugin API 4 brought; plugin.json names API 3",
   "a canvas tool is a slash command, which plugin API 6 brought; plugin.json names API 5",
   "No plugin has a command /board:pin_card. Restart Mirador if a plugin was just installed or updated.",
+  "Write what follows the command as key=value, in quotes where a value has spaces, not now.",
+  "The command takes title, text, not colour.",
+  "The command takes nothing after its name, not colour.",
+  "The command needs title=… text=….",
   "the canvas host module needs items, by name; tools, by name; items.card with an icon, a placement of page or tab, and count, outcome and listed only as functions; " +
     "items.report with opensWithRoom only as true or false, or as { setting } naming a setting of plugin.json whose choices are fullscreen and pane; " +
     "tools named in lower case, digits and underscores, not Show-Card; tools.show_card with a description, an input schema and a run function; " +
-    "tools.pin_card.command only as { description }, on a tool whose input requires nothing; " +
+    "tools.pin_card.command only as { description }; " +
     "action only as a function; note only as a function; activity only as a function; window only as { state, action } with state a function and action, if any, one too",
 ];
 

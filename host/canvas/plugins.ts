@@ -16,6 +16,7 @@ import {
   type ToolCaller,
 } from "../../shared/canvas-plugins.ts";
 import type { SlashCommand } from "../../shared/slash-commands.ts";
+import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
 import type { PluginCanvasItem, StartedBy } from "../../shared/model.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue } from "../../shared/apps.ts";
@@ -237,18 +238,20 @@ export class CanvasPlugins {
   /** The tools the user may run from the slash menu, as /<plugin>:<tool>. */
   commands(): SlashCommand[] {
     return this.plugins.flatMap((plugin) =>
-      Object.entries(plugin.host.tools).flatMap(([tool, { command }]) => (command ? [{ name: commandName(plugin, tool), description: command.description, hint: null }] : [])),
+      Object.entries(plugin.host.tools).flatMap(([tool, { command, input }]) =>
+        command ? [{ name: commandName(plugin, tool), description: command.description, hint: argumentsHint(input) }] : [],
+      ),
     );
   }
 
   /**
-   * Runs a command's tool for the user in the conversation, with the input an agent's call without arguments would get;
-   * resolves to what the tool says, and throws what went wrong.
+   * Runs a command's tool for the user in the conversation, with the `key=value` arguments written after its name, checked
+   * as an agent's call is; resolves to what the tool says, and throws what went wrong.
    */
-  async runCommand(conversationId: string, name: string): Promise<string> {
+  async runCommand(conversationId: string, name: string, writtenArguments = ""): Promise<string> {
     if (!this.store.findConversation(conversationId)) throw new HostProblemError({ code: "no-such-conversation", id: conversationId });
     const { plugin, tool } = this.commandTool(name);
-    const parsed = await fromJsonSchema(tool.input)["~standard"].validate({});
+    const parsed = await fromJsonSchema(tool.input)["~standard"].validate(commandInput(writtenArguments, tool.input));
     if (parsed.issues) throw new Error(parsed.issues.map(({ message }) => message).join("; "));
     return String(await tool.run(parsed.value, this.toolContext(plugin, conversationId, "user")));
   }

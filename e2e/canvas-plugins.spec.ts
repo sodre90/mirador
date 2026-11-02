@@ -171,7 +171,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(canvasKind(page)).toHaveText("▤");
   });
 
-  await test.step("the user runs a plugin's command from the slash menu, on any agent, without the agent hearing of it", async () => {
+  await test.step("the user runs a plugin's command from the slash menu, with its arguments as key=value, on any agent, without the agent hearing of it", async () => {
     const composer = page.locator(".composer:visible textarea");
     const userMessages = page.locator(".timeline:visible .message.user");
     const messagesBefore = await userMessages.count();
@@ -180,6 +180,9 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     const picked = page.getByRole("listbox", { name: "Slash commands" }).locator('[aria-selected="true"]');
     await expect(picked.locator(".slash-command-name")).toHaveText("/board:pin_card");
     await expect(picked.locator(".slash-command-description")).toHaveText("Pin a card that says who pinned it");
+    await expect(picked.locator(".slash-command-hint")).toHaveText("[text=…]");
+    await composer.press("Enter");
+    await expect(composer, "a command that takes arguments is written out for them").toHaveValue("/board:pin_card ");
     await composer.press("Enter");
 
     await expect(page.locator(".plugin-command-reply:visible")).toContainText("Pinned a card for you.");
@@ -195,12 +198,17 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(page.locator(".composer-problem:visible")).toContainText("There are no steps to tick off.");
     await expect(page.locator(".plugin-command-reply:visible")).toHaveCount(0);
 
-    await composer.fill("/board:pin_card now");
+    await composer.fill("/board:show_card text=Typed");
     await composer.press("Enter");
-    await expect(page.locator(".composer-problem:visible")).toContainText("/board:pin_card takes nothing after its name.");
-    await expect(composer, "the message stays, so the user can take the words out").toHaveValue("/board:pin_card now");
+    await expect(page.locator(".composer-problem:visible")).toContainText("The command needs title=….");
+    await expect(composer, "the message stays, so the user can put it right").toHaveValue("/board:show_card text=Typed");
     await page.locator(".composer-problem:visible").getByRole("button", { name: "Dismiss" }).click();
     await expect(page.locator(".composer-problem:visible")).toHaveCount(0);
+    await composer.fill('/board:show_card title="From the menu" text=Typed');
+    await composer.press("Enter");
+    await expect(composer).toHaveValue("");
+    await expect(canvasTitle(page)).toHaveText("From the menu");
+    await expect(pageView(page).locator("#text")).toHaveText("Typed (pressed 0 times)");
     await expect(userMessages).toHaveCount(messagesBefore);
     expect(agentSaw()).toBe(promptsBefore);
 

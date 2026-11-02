@@ -217,8 +217,8 @@ export type ClientMessage =
   | { type: "app.stop-task"; workspaceId: string; app: string }
   /** What the user did in a plugin item's view, for the plugin's host code; answered with "canvas.item-acted". */
   | { type: "canvas.item-action"; requestId: string; itemId: string; action: unknown }
-  /** The user runs a plugin's tool from the slash menu, by its command's name; answered with "canvas.command-ran". */
-  | { type: "canvas.run-command"; requestId: string; conversationId: string; command: string }
+  /** The user runs a plugin's tool from the slash menu, by its command's name, with what follows the name; answered with "canvas.command-ran". */
+  | { type: "canvas.run-command"; requestId: string; conversationId: string; command: string; arguments?: string }
   /** A plugin's own window opened: it gets the window's state now, and again whenever the plugin changes it. */
   | { type: "plugin-window.subscribe"; plugin: string }
   /** What the user did in a plugin's own window, for its host code; answered with "plugin-window.acted". */

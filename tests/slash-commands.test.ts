@@ -47,8 +47,8 @@ describe("slash commands", () => {
 
   test("a message names one of the commands by its whole first word, with or without anything after it", () => {
     const pin = command("board:pin");
-    expect(commandNamedIn("  /board:pin ", [pin])).toEqual({ command: pin, withArguments: false });
-    expect(commandNamedIn("/board:pin now", [pin])).toEqual({ command: pin, withArguments: true });
+    expect(commandNamedIn("  /board:pin ", [pin])).toEqual({ command: pin, writtenArguments: "" });
+    expect(commandNamedIn('/board:pin text="a  b"\n size=2 ', [pin])).toEqual({ command: pin, writtenArguments: 'text="a  b"\n size=2' });
     expect(commandNamedIn("/board:pinned", [pin])).toBeNull();
     expect(commandNamedIn("please /board:pin", [pin])).toBeNull();
   });

@@ -47,6 +47,7 @@ const host: CanvasHost<BoardData> = {
   tools: {
     show_card: {
       description: "Show a card the user can press.",
+      command: { description: "Show a card" },
       input: { type: "object", properties: { title: { type: "string", minLength: 1 }, text: { type: "string" } }, required: ["title", "text"] },
       run(input, { publish }) {
         const { title, text } = input as { title: string; text: string };

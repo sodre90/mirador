@@ -1220,7 +1220,7 @@ export function startServer(services: HostServices) {
           (error) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: null, ...problemFieldsOf(error, messageOf(error)) }),
         );
       case "canvas.run-command":
-        return void canvasPlugins.runCommand(message.conversationId, message.command).then(
+        return void canvasPlugins.runCommand(message.conversationId, message.command, message.arguments).then(
           (answer) => reply({ type: "canvas.command-ran", requestId: message.requestId, reply: answer, problem: null }),
           (error) => reply({ type: "canvas.command-ran", requestId: message.requestId, reply: null, ...problemFieldsOf(error, messageOf(error)) }),
         );
