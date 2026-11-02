@@ -257,6 +257,9 @@ export const chat: Messages["chat"] = {
     addNew: "+ 新模板",
   },
   pluginCommand: {
+    openApp: (app) => `用 ${app} 打开此工作区中的文件`,
+    fileHint: "<文件>",
+    needsFile: (command) => `请在 /${command} 后面写要打开的文件。`,
     dismiss: "忽略",
   },
   menus: {

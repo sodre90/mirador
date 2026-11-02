@@ -386,6 +386,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "plugins.settings":
     case "canvas.item-acted":
     case "canvas.command-ran":
+    case "app.file-opened":
     case "plugin-window.state":
     case "plugin-window.acted":
     case "conversation.revert-previewed":

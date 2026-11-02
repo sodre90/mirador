@@ -1,6 +1,7 @@
 import { useEffect, useState, type KeyboardEvent, type RefObject } from "react";
 import { mentionAt, withMention, type MentionSuggestion } from "../shared/mentions.ts";
 import { connection } from "./connection.ts";
+import { pathCommands } from "./plugin-commands.tsx";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { t } from "./i18n/index.ts";
 
@@ -36,7 +37,7 @@ function MentionPath({ suggestion }: { suggestion: MentionSuggestion }) {
 }
 
 /**
- * Suggests paths for the @mention being written, as Claude Code does: ↑/↓ pick, Tab or Enter take one (a directory
+ * Suggests paths for the @mention being written, or the path after an app's /<app>:open, as Claude Code does: ↑/↓ pick, Tab or Enter take one (a directory
  * stays open to go on into it), Esc puts them away.
  */
 export function useMentionMenu({
@@ -54,14 +55,14 @@ export function useMentionMenu({
   setCaret: (caret: number) => void;
   textarea: RefObject<HTMLTextAreaElement | null>;
 }) {
-  const query = mentionAt(text, caret)?.query ?? null;
+  const query = mentionAt(text, caret, pathCommands())?.query ?? null;
   const suggestions = useMentionSuggestions(conversationId, query);
   const [dismissedAt, setDismissedAt] = useState<string | null>(null);
   const { pickedIndex, move } = usePickedSuggestion(suggestions.length, query);
   const open = suggestions.length > 0 && dismissedAt !== text;
 
   const take = (suggestion: MentionSuggestion) => {
-    const next = withMention(text, caret, suggestion);
+    const next = withMention(text, caret, suggestion, pathCommands());
     setText(next.text);
     setCaret(next.caret);
     requestAnimationFrame(() => {

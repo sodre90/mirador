@@ -257,6 +257,9 @@ export const chat: Messages["chat"] = {
     addNew: "+ Új sablon",
   },
   pluginCommand: {
+    openApp: (app) => `A(z) ${app} megnyitása a munkaterület egy fájlján`,
+    fileHint: "<fájl>",
+    needsFile: (command) => `Írd a /${command} után a megnyitandó fájlt.`,
     dismiss: "Elvetés",
   },
   menus: {

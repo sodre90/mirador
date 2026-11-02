@@ -22,8 +22,8 @@ const paths = async (query: string) => (await mentionSuggestions(workspace, quer
 
 describe("@mentions", () => {
   test("are found where the caret is, after a space or at the start, and not in an email address", () => {
-    expect(mentionAt("look at @src/ma", 15)).toEqual({ start: 8, query: "src/ma" });
-    expect(mentionAt("@", 1)).toEqual({ start: 0, query: "" });
+    expect(mentionAt("look at @src/ma", 15)).toEqual({ start: 8, query: "src/ma", bare: false });
+    expect(mentionAt("@", 1)).toEqual({ start: 0, query: "", bare: false });
     expect(mentionAt("mail me@example.com", 19)).toBeNull();
     expect(mentionAt("@done and more", 14)).toBeNull();
   });
@@ -31,6 +31,18 @@ describe("@mentions", () => {
   test("taking a suggestion replaces the whole word; a file gets a space after it, a directory stays open for more", () => {
     expect(withMention("see @src/ma now", 11, { path: "src/main.ts", directory: false })).toEqual({ text: "see @src/main.ts now", caret: 17 });
     expect(withMention("see @sr", 7, { path: "src/", directory: true })).toEqual({ text: "see @src/", caret: 9 });
+  });
+
+  test("after a command that takes a path, the path written after it is one without an @, and taking a suggestion writes no @", () => {
+    const pathCommands = ["planner:open"];
+    expect(mentionAt("/planner:open plans/fl", 22, pathCommands)).toEqual({ start: 14, query: "plans/fl", bare: true });
+    expect(mentionAt("/planner:open ", 14, pathCommands)).toEqual({ start: 14, query: "", bare: true });
+    expect(mentionAt("/planner:open @pl", 17, pathCommands)).toEqual({ start: 14, query: "pl", bare: false });
+    expect(mentionAt("/planner:open plans/fl", 22)).toBeNull();
+    expect(mentionAt("/other:open plans", 17, pathCommands)).toBeNull();
+    expect(mentionAt("/planner:open a b", 17, pathCommands)).toBeNull();
+    expect(withMention("/planner:open pl", 16, { path: "plans/flat.json", directory: false }, pathCommands)).toEqual({ text: "/planner:open plans/flat.json ", caret: 30 });
+    expect(withMention("/planner:open pl", 16, { path: "plans/", directory: true }, pathCommands)).toEqual({ text: "/planner:open plans/", caret: 20 });
   });
 
   test("a bare @ lists the workspace's top level, hiding dotfiles until a dot is typed", async () => {

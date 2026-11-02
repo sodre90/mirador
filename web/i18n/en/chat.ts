@@ -263,6 +263,9 @@ export const chat = {
     addNew: "+ New template",
   },
   pluginCommand: {
+    openApp: (app: string) => `Open ${app} on a file of this workspace`,
+    fileHint: "<file>",
+    needsFile: (command: string) => `Write the file to open after /${command}.`,
     dismiss: "Dismiss",
   },
   menus: {

@@ -1197,6 +1197,13 @@ export function startServer(services: HostServices) {
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }
+      case "app.open-file":
+        return void Promise.resolve()
+          .then(() => apps.open(conversations.get(message.conversationId).workspaceId, message.app, message.file, message.conversationId))
+          .then(
+            () => reply({ type: "app.file-opened", requestId: message.requestId, problem: null }),
+            (error) => reply({ type: "app.file-opened", requestId: message.requestId, ...problemFieldsOf(error, messageOf(error)) }),
+          );
       case "app.stop-task":
         try {
           return apps.stopTask(message.workspaceId, message.app);

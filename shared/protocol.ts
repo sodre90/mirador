@@ -213,6 +213,8 @@ export type ClientMessage =
   | { type: "app.storage-set"; workspaceId: string; app: string; key: string; value: string | null }
   /** The user runs one of the app's tasks from its view; its progress and end come in the app's state. */
   | { type: "app.run"; workspaceId: string; app: string; task: string }
+  /** The user opens an app on a file of the conversation's workspace, shown in that conversation, with /<app>:open; answered with "app.file-opened". */
+  | { type: "app.open-file"; requestId: string; conversationId: string; app: string; file: string }
   /** The user stops the app's task under way. */
   | { type: "app.stop-task"; workspaceId: string; app: string }
   /** What the user did in a plugin item's view, for the plugin's host code; answered with "canvas.item-acted". */
@@ -489,6 +491,7 @@ export type ServerMessage =
   | { type: "plugins.offered"; requestId: string; offer: PluginOffer | null; problem: string | null; problemAbout?: HostProblem }
   /** The plugin's reply to an item's action, or why there is none. */
   | { type: "canvas.item-acted"; requestId: string; reply: unknown; problem: string | null; problemAbout?: HostProblem }
+  | { type: "app.file-opened"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   /** What the command's tool said, or why it failed. */
   | { type: "canvas.command-ran"; requestId: string; reply: string | null; problem: string | null; problemAbout?: HostProblem }
   /** A plugin window's state, or why there is none, such as a plugin with no window. */

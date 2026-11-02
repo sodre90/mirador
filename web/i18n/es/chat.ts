@@ -260,6 +260,9 @@ export const chat: Messages["chat"] = {
     addNew: "+ Plantilla nueva",
   },
   pluginCommand: {
+    openApp: (app) => `Abrir ${app} con un archivo de este espacio de trabajo`,
+    fileHint: "<archivo>",
+    needsFile: (command) => `Escribe el archivo que abrir después de /${command}.`,
     dismiss: "Descartar",
   },
   menus: {

@@ -262,6 +262,9 @@ export const chat: Messages["chat"] = {
     addNew: "+ Neue Vorlage",
   },
   pluginCommand: {
+    openApp: (app) => `${app} mit einer Datei dieses Arbeitsbereichs öffnen`,
+    fileHint: "<Datei>",
+    needsFile: (command) => `Schreib die zu öffnende Datei nach /${command}.`,
     dismiss: "Verwerfen",
   },
   menus: {
