@@ -66,8 +66,10 @@ test("Codex hears the canvas server's instructions with the canvas tools", () =>
 test("a command Codex runs messages its own conversation with mirador message, and Codex reads it", async () => {
   const fromCodexCommand = "The Codex build finished.";
   /** By its path: an agent's PATH has Mirador's own bin last, after any mirador the user installed. */
-  const mirador = resolve("bin/mirador");
-  await sendMessage(page, `RUN '${mirador}' message "${fromCodexCommand}"`);
+  const mirador = resolve(process.platform === "win32" ? "bin/mirador.cmd" : "bin/mirador");
+  /** Codex runs commands in PowerShell on Windows, where a quoted path is a string until & calls it. */
+  const call = process.platform === "win32" ? "& " : "";
+  await sendMessage(page, `RUN ${call}'${mirador}' message "${fromCodexCommand}"`);
   const messagesFromScripts = page.locator(".timeline-entry", { has: page.locator(".author", { hasText: "From a script" }) }).locator(".message.user");
   await expect(messagesFromScripts).toHaveText([fromCodexCommand], { timeout: 30_000 });
   await expect(lastAgentMessage(page)).toContainText(`Echo: ${fromCodexCommand}`, { timeout: 30_000 });

@@ -55,6 +55,12 @@ jobs:
           npm install --global @opencode/cli@2.0.27
           npm prefix --global | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
           & (Join-Path (npm prefix --global) "opencode.cmd") --version
+      # The Codex codex-acp carries, on PATH as codex.cmd. The Codex spec runs against the scripted model, so it needs no sign-in.
+      - name: Install Codex
+        shell: pwsh
+        run: |
+          npm install --global @openai/codex@0.165.0
+          & (Join-Path (npm prefix --global) "codex.cmd") --version
       # A test host waits for the processes it started and kills those that outlive it. Windows keeps a parent pid after
       # that parent exits and gives the pid to later processes: these are the runner's processes a host could take for its own.
       - name: Processes with a stale parent
@@ -85,6 +91,7 @@ jobs:
           ANTHROPIC_DEFAULT_OPUS_MODEL: radiance-qwen3.8-flash-next
           ANTHROPIC_SMALL_FAST_MODEL: radiance-qwen3.8-flash-next
           ENABLE_TOOL_SEARCH: "false"
+          MIRADOR_E2E_CODEX: "1"
           SPECS: ${{ inputs.specs }}
           REPEAT: ${{ inputs.repeat || '1' }}
         run: |
@@ -95,7 +102,7 @@ jobs:
           $unixTools = "sh.exe", "sleep.exe", "openssl.exe"
           $env:Path = ($env:Path -split ";" | Where-Object { $folder = $_; $folder -and -not ($unixTools | Where-Object { Test-Path -LiteralPath (Join-Path $folder $_) }) }) -join ";"
           "::group::What the specs run with"
-          where.exe git bun node pwsh powershell bash claude opencode
+          where.exe git bun node pwsh powershell bash claude opencode codex
           claude --version
           "::endgroup::"
           $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $env:SURVEY
