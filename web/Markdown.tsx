@@ -1,5 +1,5 @@
 import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import Markdown, { type Components, type ExtraProps } from "react-markdown";
+import Markdown, { defaultUrlTransform, type Components, type ExtraProps, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isFromAnotherSite, siteOf, useExternalImagesBlocked } from "./external-images.ts";
 import { isLocalImagePath, localImageUrl } from "../shared/images.ts";
@@ -60,6 +60,9 @@ function MarkdownLink({ node: _node, children, ...props }: ComponentProps<"a"> &
     </a>
   );
 }
+
+/** The default takes a Windows path's drive, as in C:\shots\a.png, for an unsafe protocol and drops the address. */
+const keepingLocalImagePaths: UrlTransform = (url, key) => (key === "src" && isLocalImagePath(url) ? url : defaultUrlTransform(url));
 
 function MarkdownImage({ node: _node, ...props }: ComponentProps<"img"> & ExtraProps) {
   const blockedByThisPage = useExternalImagesBlocked();
@@ -143,7 +146,7 @@ function useThrottledText(text: string) {
 /** Parsing is the costly part, so a re-render with the same text reuses the last result. */
 const RenderedMarkdown = memo(function RenderedMarkdown({ text }: { text: string }) {
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+    <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} urlTransform={keepingLocalImagePaths}>
       {text}
     </Markdown>
   );

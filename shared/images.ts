@@ -23,8 +23,10 @@ export const imageUrl = (conversationId: string, imageId: string) => `/conversat
 export const carriedImageSource = ({ mimeType, data }: { mimeType: string; data: string }) =>
   extensionFor(mimeType) && data ? `data:${mimeType};base64,${data}` : null;
 
+const windowsDrivePath = /^[A-Za-z]:[\\/]/;
+
 /** An absolute path on the host's machine, as an agent names a screenshot it took; not an address on another site. */
-export const isLocalImagePath = (source: string) => source.startsWith("/") && !source.startsWith("//");
+export const isLocalImagePath = (source: string) => (source.startsWith("/") && !source.startsWith("//")) || windowsDrivePath.test(source);
 
 /** Markdown percent-encodes an image's address, so a path with spaces or accents arrives encoded. */
 const decodedPath = (source: string) => {

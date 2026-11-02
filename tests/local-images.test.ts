@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { imageTypeOf, localImage } from "../host/local-images.ts";
+import { isLocalImagePath } from "../shared/images.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "local-images-"));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
@@ -38,5 +39,21 @@ describe("localImage", () => {
     expect(await localImage(folder)).toBeNull();
     expect(await localImage(join(folder, "missing.png"))).toBeNull();
     expect(await localImage("shot.png")).toBeNull();
+  });
+});
+
+describe("isLocalImagePath", () => {
+  test("takes absolute paths on macOS, Linux and Windows", () => {
+    expect(isLocalImagePath("/Users/me/shot.png")).toBe(true);
+    expect(isLocalImagePath("C:\\Users\\me\\shot.png")).toBe(true);
+    expect(isLocalImagePath("d:/shots/shot.png")).toBe(true);
+  });
+
+  test("takes no address on another site, relative path or other protocol", () => {
+    expect(isLocalImagePath("//example.com/shot.png")).toBe(false);
+    expect(isLocalImagePath("https://example.com/shot.png")).toBe(false);
+    expect(isLocalImagePath("shots/shot.png")).toBe(false);
+    expect(isLocalImagePath("javascript:alert(1)")).toBe(false);
+    expect(isLocalImagePath("C:shot.png")).toBe(false);
   });
 });
