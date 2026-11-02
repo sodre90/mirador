@@ -63,7 +63,7 @@ export interface CanvasPluginContext<Data = unknown> {
   conversationId: string;
   /** The plugin's items in the conversation, oldest first. */
   items(): PluginItem<Data>[];
-  /** Changes one of them in place. Made while a tool runs, it is the agent's change, and the tab's toggle flashes for it. */
+  /** Changes one of them in place. Made while a tool runs for the agent, it is the agent's change, and the tab's toggle flashes for it. */
   change(itemId: string, change: { title?: string; data?: Data }): PluginItem<Data>;
   /** What the plugin keeps across conversations and restarts, such as how its views were laid out; values are JSON. */
   storage: CanvasPluginStorage;
@@ -91,6 +91,8 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
 }
 
 export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<Data> {
+  /** Who called the tool: the agent, or the user from the slash menu, for a tool with a `command`. */
+  caller: ToolCaller;
   /** Shows a new item, of one of the plugin's types, in the canvas. */
   publish(item: { type: string; title: string; data: Data }): PluginItem<Data>;
   /** Sends the agent a message, as if the user wrote it; `afterTurn` keeps it queued until the agent's turn ends. */
@@ -153,16 +155,23 @@ export interface PluginWindow<State = unknown> {
   action?(action: unknown, context: PluginWindowContext): unknown;
 }
 
-/** A tool the agent calls on the canvas server, next to show, ask and the rest. */
+/** A tool the agent calls on the canvas server, next to show, ask and the rest, or the user runs from the slash menu. */
 export interface CanvasTool<Data = unknown> {
   description: string;
   /** JSON Schema of an object: the tool's arguments, which Mirador checks before calling run. */
   input: Record<string, unknown>;
-  /** Resolves to the text the agent gets. What it throws reaches the agent as a tool error, so its message should say what would work. */
+  /** Resolves to the text its caller gets. What it throws reaches the caller as an error, so its message should say what would work. */
   run(input: unknown, context: CanvasToolContext<Data>): string | Promise<string>;
   /** Left out of every request until the agent searches for it, for a tool rarely called: Claude Code with tool search on. */
   onDemand?: boolean;
+  /**
+   * Lists the tool in the slash menu as /<plugin>:<tool>, with this description, for the user to run without the agent;
+   * only a tool whose input requires nothing. What run resolves to shows above the composer, and the agent hears nothing of it.
+   */
+  command?: { description: string };
 }
+
+export type ToolCaller = "agent" | "user";
 
 /** What the agent hears with the user's next message; heard() runs once that message went. */
 export interface CanvasPluginNote {

@@ -4,6 +4,7 @@ import { panelSlashCommands } from "../shared/panel-commands.ts";
 import { clearSlashCommand, latestSlashCommands, matchingCommands, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { loginSlashCommand } from "./login-request.ts";
+import { pluginCommands } from "./plugin-commands.tsx";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { t } from "./i18n/index.ts";
 
@@ -36,7 +37,11 @@ const inPageLanguage = (command: SlashCommand) => ({ ...command, description: t.
 const miradorCommands = [clearSlashCommand, loginSlashCommand].map(inPageLanguage);
 
 /** The commands Mirador runs itself, so they stand even where the agent does not list them. */
-const miradorCommandsFor = (harness: HarnessId) => (harness === "claude" ? [...miradorCommands, ...panelSlashCommands.map(inPageLanguage)] : miradorCommands);
+const miradorCommandsFor = (harness: HarnessId) => [
+  ...miradorCommands,
+  ...(harness === "claude" ? panelSlashCommands.map(inPageLanguage) : []),
+  ...pluginCommands(),
+];
 
 const withMiradorCommands = (commands: SlashCommand[], own: SlashCommand[]) => [
   ...commands.filter(({ name }) => !own.some((same) => same.name === name)),

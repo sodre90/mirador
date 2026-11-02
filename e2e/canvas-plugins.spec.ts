@@ -171,6 +171,46 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(canvasKind(page)).toHaveText("▤");
   });
 
+  await test.step("the user runs a plugin's command from the slash menu, on any agent, without the agent hearing of it", async () => {
+    const composer = page.locator(".composer:visible textarea");
+    const userMessages = page.locator(".timeline:visible .message.user");
+    const messagesBefore = await userMessages.count();
+    const promptsBefore = agentSaw();
+    await composer.fill("/board:p");
+    const picked = page.getByRole("listbox", { name: "Slash commands" }).locator('[aria-selected="true"]');
+    await expect(picked.locator(".slash-command-name")).toHaveText("/board:pin_card");
+    await expect(picked.locator(".slash-command-description")).toHaveText("Pin a card that says who pinned it");
+    await composer.press("Enter");
+
+    await expect(page.locator(".plugin-command-reply:visible")).toContainText("Pinned a card for you.");
+    await expect(composer).toHaveValue("");
+    await expect(canvasTitle(page)).toHaveText("Pinned");
+    await expect(pageView(page).locator("#text")).toHaveText("Pinned by the user (pressed 0 times)");
+    await expect(userMessages).toHaveCount(messagesBefore);
+    expect(agentSaw()).toBe(promptsBefore);
+    await expect(page.locator(".plugin-command-reply:visible"), "the reply shows only for a few seconds").toHaveCount(0, { timeout: 15_000 });
+
+    await composer.fill("/board:finish_step");
+    await composer.press("Enter");
+    await expect(page.locator(".composer-problem:visible")).toContainText("There are no steps to tick off.");
+    await expect(page.locator(".plugin-command-reply:visible")).toHaveCount(0);
+
+    await composer.fill("/board:pin_card now");
+    await composer.press("Enter");
+    await expect(page.locator(".composer-problem:visible")).toContainText("/board:pin_card takes nothing after its name.");
+    await expect(composer, "the message stays, so the user can take the words out").toHaveValue("/board:pin_card now");
+    await page.locator(".composer-problem:visible").getByRole("button", { name: "Dismiss" }).click();
+    await expect(page.locator(".composer-problem:visible")).toHaveCount(0);
+    await expect(userMessages).toHaveCount(messagesBefore);
+    expect(agentSaw()).toBe(promptsBefore);
+
+    await composer.fill("/board:finish_step");
+    await composer.press("Enter");
+    await expect(page.locator(".composer-problem:visible")).toHaveCount(1);
+    await sendAndWait(page, "SAY Carry on.");
+    await expect(page.locator(".composer-problem:visible"), "a message the user sends takes what the command said away").toHaveCount(0);
+  });
+
   await test.step("an item that opens with room takes the full screen as a review does, with what came of it in the bar", async () => {
     await callCanvasTool(host, conversationId, "show_report", { title: "Report", verdict: "Approve" });
     await expect(canvasPane(page)).toHaveClass(/fullscreen/);

@@ -317,6 +317,12 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.canvasNeedToolName(problem.tool);
     case "canvas-need-tool-shape":
       return words.canvasNeedToolShape(problem.tool);
+    case "canvas-need-command-shape":
+      return words.canvasNeedCommandShape(problem.tool);
+    case "plugin-command-needs-newer-api":
+      return words.pluginCommandNeedsNewerApi(problem.brought, problem.named);
+    case "plugin-command-unknown":
+      return words.pluginCommandUnknown(problem.command);
     case "agent-gone":
       return words.agentGone(problem.agent, goneText(problem.gone, words));
     case "prelaunch-failed":

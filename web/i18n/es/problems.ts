@@ -284,6 +284,10 @@ export const problems: Messages["problems"] = {
     `items.${item} con opensWithRoom solo como true o false, o como { setting } que nombre un ajuste de plugin.json cuyas opciones sean ${rooms.join(" y ")}`,
   canvasNeedToolName: (tool) => `tools con nombres en minúsculas, dígitos y guiones bajos, no ${tool}`,
   canvasNeedToolShape: (tool) => `tools.${tool} con una description, un esquema input y una función run`,
+  canvasNeedCommandShape: (tool) => `tools.${tool}.command solo como { description }, en una herramienta cuya entrada no exige nada`,
+  pluginCommandNeedsNewerApi: (brought, named) =>
+    `una herramienta del lienzo es un comando con barra, que llegó con la API de complementos ${brought}; plugin.json indica la API ${named}`,
+  pluginCommandUnknown: (command) => `Ningún complemento tiene el comando /${command}. Reinicia Mirador si acabas de instalar o actualizar un complemento.`,
   agentGone: (agent, gone) => `El proceso del agente ${agent} ${gone}.`,
   gone: {
     "not-running": "no está en marcha",

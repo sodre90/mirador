@@ -261,6 +261,10 @@ export const chat: Messages["chat"] = {
     example: "{{Pull request}}",
     addNew: "+ Neue Vorlage",
   },
+  pluginCommand: {
+    takesNoArguments: (command) => `Nach /${command} darf nichts folgen.`,
+    dismiss: "Verwerfen",
+  },
   menus: {
     slashCommands: "Slash-Befehle",
     paths: "Pfade",

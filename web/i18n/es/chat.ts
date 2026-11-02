@@ -259,6 +259,10 @@ export const chat: Messages["chat"] = {
     example: "{{Pull request}}",
     addNew: "+ Plantilla nueva",
   },
+  pluginCommand: {
+    takesNoArguments: (command) => `/${command} no admite nada después de su nombre.`,
+    dismiss: "Descartar",
+  },
   menus: {
     slashCommands: "Comandos con barra",
     paths: "Rutas",

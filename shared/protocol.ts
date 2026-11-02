@@ -217,6 +217,8 @@ export type ClientMessage =
   | { type: "app.stop-task"; workspaceId: string; app: string }
   /** What the user did in a plugin item's view, for the plugin's host code; answered with "canvas.item-acted". */
   | { type: "canvas.item-action"; requestId: string; itemId: string; action: unknown }
+  /** The user runs a plugin's tool from the slash menu, by its command's name; answered with "canvas.command-ran". */
+  | { type: "canvas.run-command"; requestId: string; conversationId: string; command: string }
   /** A plugin's own window opened: it gets the window's state now, and again whenever the plugin changes it. */
   | { type: "plugin-window.subscribe"; plugin: string }
   /** What the user did in a plugin's own window, for its host code; answered with "plugin-window.acted". */
@@ -344,6 +346,8 @@ export type ServerMessage =
       canvasViews: Record<string, string>;
       /** Each plugin's tools by their name on the canvas server, with the plugin's title; missing from an older host. */
       pluginToolTitles?: Record<string, string>;
+      /** The plugins' tools the user runs from the slash menu, by their command's name; missing from an older host. */
+      pluginCommands?: SlashCommand[];
       /** The plugins that have a window of their own: their titles by name. Missing from a host older than plugin windows. */
       pluginWindows?: Record<string, string>;
       /** Missing from a host older than plugin settings. */
@@ -485,6 +489,8 @@ export type ServerMessage =
   | { type: "plugins.offered"; requestId: string; offer: PluginOffer | null; problem: string | null; problemAbout?: HostProblem }
   /** The plugin's reply to an item's action, or why there is none. */
   | { type: "canvas.item-acted"; requestId: string; reply: unknown; problem: string | null; problemAbout?: HostProblem }
+  /** What the command's tool said, or why it failed. */
+  | { type: "canvas.command-ran"; requestId: string; reply: string | null; problem: string | null; problemAbout?: HostProblem }
   /** A plugin window's state, or why there is none, such as a plugin with no window. */
   | { type: "plugin-window.state"; plugin: string; state: unknown; problem: string | null }
   | { type: "plugin-window.acted"; requestId: string; reply: unknown; problem: string | null }

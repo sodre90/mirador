@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, watch } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
+import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_COMMAND_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
 import { itemRooms, pluginItemPlacements, type CanvasHost } from "../../shared/canvas-plugins.ts";
 import { BUILT_IN_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { HostProblemError, type HostProblem } from "../../shared/host-problems.ts";
@@ -233,9 +233,10 @@ function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }:
     }
   }
   for (const [name, tool] of Object.entries(tools)) {
-    const { description, input, run } = (isObject(tool) ? tool : {}) as Record<string, unknown>;
+    const { description, input, run, command } = (isObject(tool) ? tool : {}) as Record<string, unknown>;
     if (!TOOL_NAME.test(name)) needs.push({ code: "canvas-need-tool-name", tool: name });
     if (typeof description !== "string" || !isObject(input) || !isFunction(run)) needs.push({ code: "canvas-need-tool-shape", tool: name });
+    if (command !== undefined && !(isCommandShape(command) && requiresNothing(input))) needs.push({ code: "canvas-need-command-shape", tool: name });
   }
   if (host.action !== undefined && !isFunction(host.action)) needs.push({ code: "canvas-need-action-function" });
   if (host.note !== undefined && !isFunction(host.note)) needs.push({ code: "canvas-need-note-function" });
@@ -247,6 +248,13 @@ function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }:
   if ((host.activity !== undefined || window !== undefined) && api < PLUGIN_WINDOW_API) {
     throw new HostProblemError({ code: "plugin-window-needs-newer-api", brought: PLUGIN_WINDOW_API, named: api });
   }
+  if (Object.values(tools).some((tool) => isObject(tool) && tool.command !== undefined) && api < PLUGIN_COMMAND_API) {
+    throw new HostProblemError({ code: "plugin-command-needs-newer-api", brought: PLUGIN_COMMAND_API, named: api });
+  }
   if (needs.length > 0) throw new HostProblemError({ code: "canvas-host-module-needs", needs });
   return host as unknown as CanvasHost;
 }
+
+const isCommandShape = (command: unknown) => isObject(command) && typeof command.description === "string" && command.description.trim() !== "";
+
+const requiresNothing = (input: unknown) => !isObject(input) || input.required === undefined || (Array.isArray(input.required) && input.required.length === 0);

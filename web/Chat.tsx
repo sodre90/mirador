@@ -52,6 +52,7 @@ import { joinDrafts, useDraft } from "./drafts.ts";
 import { useStoppedMessageEdit } from "./edit-stopped.ts";
 import { isLoginCommand, requestLogin } from "./login-request.ts";
 import { requestProgram } from "./program-request.ts";
+import { usePluginCommands } from "./plugin-commands.tsx";
 import { AskToRevert, UndoButton } from "./Revert.tsx";
 import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
 import { FormattedBox, type FormattedBoxExtras } from "./FormattedBox.tsx";
@@ -1709,6 +1710,7 @@ function Composer({
   const enterWhileBusy = useEnterWhileBusy();
   const canSteer = harnessSteers[conversation.harness];
   const stoppedEdit = useStoppedMessageEdit({ conversation, events, holdsEarliest, busy });
+  const pluginCommands = usePluginCommands(conversation.id);
   useEffect(() => textarea.current?.focus(), []);
 
   const sendPrompt = (message: string, imageIds: string[], afterTurn: boolean) => {
@@ -1733,6 +1735,7 @@ function Composer({
       setText("");
       return;
     }
+    if (pluginCommands.run(message, () => setText(""))) return;
     if (command !== null) {
       if (connection.send({ type: "conversation.run-command", conversationId: conversation.id, command })) setText("");
       return;
@@ -1892,6 +1895,7 @@ function Composer({
           {dictation.problem}
         </div>
       )}
+      {pluginCommands.shown}
       {stoppedEdit.editing && (
         <div className="editing-stopped" role="status">
           {words.composer.editingStopped}

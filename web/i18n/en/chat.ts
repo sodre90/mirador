@@ -262,6 +262,10 @@ export const chat = {
     example: "{{Pull request}}",
     addNew: "+ New template",
   },
+  pluginCommand: {
+    takesNoArguments: (command: string) => `/${command} takes nothing after its name.`,
+    dismiss: "Dismiss",
+  },
   menus: {
     slashCommands: "Slash commands",
     paths: "Paths",

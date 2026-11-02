@@ -1219,6 +1219,11 @@ export function startServer(services: HostServices) {
           (answer) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: answer, problem: null }),
           (error) => reply({ type: "canvas.item-acted", requestId: message.requestId, reply: null, ...problemFieldsOf(error, messageOf(error)) }),
         );
+      case "canvas.run-command":
+        return void canvasPlugins.runCommand(message.conversationId, message.command).then(
+          (answer) => reply({ type: "canvas.command-ran", requestId: message.requestId, reply: answer, problem: null }),
+          (error) => reply({ type: "canvas.command-ran", requestId: message.requestId, reply: null, ...problemFieldsOf(error, messageOf(error)) }),
+        );
       case "canvas.dismiss":
         return canvasPlugins.dismiss(message.itemId);
       case "plugin-window.subscribe":
@@ -1503,6 +1508,7 @@ export function startServer(services: HostServices) {
       openApps: apps.openApps(),
       canvasViews: canvasPlugins.viewPaths(),
       pluginToolTitles: canvasPlugins.toolTitles(),
+      pluginCommands: canvasPlugins.commands(),
       pluginWindows: canvasPlugins.windowTitles(),
       pluginSettings: pluginSettings.all(),
     });

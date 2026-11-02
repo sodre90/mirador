@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredEvent } from "../shared/model.ts";
-import { latestSlashCommands, matchingCommands, slashQuery } from "../shared/slash-commands.ts";
+import { commandNamedIn, latestSlashCommands, matchingCommands, slashQuery } from "../shared/slash-commands.ts";
 
 const command = (name: string) => ({ name, description: `${name} it`, hint: null });
 
@@ -43,5 +43,13 @@ describe("slash commands", () => {
     const changed = (agent?: "opencode"): StoredEvent => ({ seq: 2, at: 2, event: { type: "profile-changed", profileName: "Other", ...(agent && { agent }) } });
     expect(latestSlashCommands([listing, changed()])).toEqual([{ name: "init", description: "", hint: null }]);
     expect(latestSlashCommands([listing, changed("opencode")])).toBeNull();
+  });
+
+  test("a message names one of the commands by its whole first word, with or without anything after it", () => {
+    const pin = command("board:pin");
+    expect(commandNamedIn("  /board:pin ", [pin])).toEqual({ command: pin, withArguments: false });
+    expect(commandNamedIn("/board:pin now", [pin])).toEqual({ command: pin, withArguments: true });
+    expect(commandNamedIn("/board:pinned", [pin])).toBeNull();
+    expect(commandNamedIn("please /board:pin", [pin])).toBeNull();
   });
 });

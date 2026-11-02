@@ -256,6 +256,10 @@ export const chat: Messages["chat"] = {
     example: "{{Pull request}}",
     addNew: "+ Új sablon",
   },
+  pluginCommand: {
+    takesNoArguments: (command) => `A /${command} parancs neve után nem állhat semmi.`,
+    dismiss: "Elvetés",
+  },
   menus: {
     slashCommands: "Perjeles parancsok",
     paths: "Útvonalak",

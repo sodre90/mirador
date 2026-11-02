@@ -284,6 +284,10 @@ export const problems: Messages["problems"] = {
     `items.${item}, amelynek opensWithRoom értéke csak true vagy false, vagy egy { setting }, amely a plugin.json egy olyan beállítását nevezi meg, amelynek választásai: ${rooms.join(" és ")}`,
   canvasNeedToolName: (tool) => `kisbetűkből, számjegyekből és aláhúzásjelekből álló nevű tools, nem ${tool}`,
   canvasNeedToolShape: (tool) => `tools.${tool} leírással (description), bemeneti sémával (input) és run függvénnyel`,
+  canvasNeedCommandShape: (tool) => `tools.${tool}.command csak { description } alakban, olyan eszközön, amelynek a bemenete semmit sem követel meg`,
+  pluginCommandNeedsNewerApi: (brought, named) =>
+    `egy vászoneszköz perjeles parancs, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
+  pluginCommandUnknown: (command) => `Egyik bővítménynek sincs /${command} parancsa. Ha most telepítettél vagy frissítettél bővítményt, indítsd újra a Miradort.`,
   agentGone: (agent, gone) => `Az ágens folyamata (${agent}) ${gone}.`,
   gone: {
     "not-running": "nem fut",

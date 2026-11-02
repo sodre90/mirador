@@ -3,8 +3,8 @@ import type { HostProblem } from "./host-problems.ts";
  * The plugin API version this Mirador speaks; a plugin.json names the one it was written for, and Mirador loads every
  * version up to its own. API 2 brought host tasks, streamed files and images in a view's message; API 3 brought canvas
  * tools and items; API 4 tells apply who made the change; API 5 lets a canvas tool message its agent and start a
- * conversation on another profile, and brings profile settings; API 6 brings a canvas plugin's own window and the
- * conversations' activity.
+ * conversation on another profile, and brings profile settings; API 6 brings a canvas plugin's own window, the
+ * conversations' activity and canvas tools the user runs from the slash menu.
  */
 export const APP_PLUGIN_API = 6;
 
@@ -16,6 +16,9 @@ export const PROFILE_SETTINGS_PLUGIN_API = 5;
 
 /** The first plugin API whose canvas host may have a window and hear activity. */
 export const PLUGIN_WINDOW_API = 6;
+
+/** The first plugin API whose canvas tools may be slash commands. */
+export const PLUGIN_COMMAND_API = 6;
 
 /**
  * A plugin's plugin.json. A plugin brings an app, a document that the agent and the user change together; canvas tools

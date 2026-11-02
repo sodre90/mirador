@@ -256,6 +256,10 @@ export const chat: Messages["chat"] = {
     example: "{{Pull request}}",
     addNew: "+ 新模板",
   },
+  pluginCommand: {
+    takesNoArguments: (command) => `/${command} 的名称后面不能再跟内容。`,
+    dismiss: "忽略",
+  },
   menus: {
     slashCommands: "斜杠命令",
     paths: "路径",

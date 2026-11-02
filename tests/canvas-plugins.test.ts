@@ -24,7 +24,7 @@ describe("CanvasPlugins", () => {
     expect(tools.find(({ name }: { name: string }) => name === "change_card")._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
 
     const { guidance } = plugins;
-    expect(guidance.toolNames).toEqual(["show_card", "change_card", "show_report", "change_verdict", "track_steps", "finish_step", "hand_over"]);
+    expect(guidance.toolNames).toEqual(["show_card", "change_card", "show_report", "change_verdict", "track_steps", "pin_card", "finish_step", "hand_over"]);
     expect(canvasInstructions("http://127.0.0.1:4601", guidance)).toContain("\"change some answers\" as options.\n- show_card: show a card the user can press.\n\nRendering environment:");
     expect(canvasUseGuidance(guidance)).toContain("add a preview when it helps.\n- show_card: when a card says it better than words.\n- Keep pages lean");
     expect(claudeSessionMeta("often", { canvasPlugins: guidance }).claudeCode.options.allowedTools).toContain("mcp__canvas__show_card");
@@ -306,6 +306,39 @@ describe("CanvasPlugins", () => {
     expect(() => plugins.dismiss(card!.id)).toThrow("Only an item in the tab can be dismissed.");
   });
 
+  test("the tools a plugin made commands are the slash menu's /<plugin>:<tool>, with their own descriptions", async () => {
+    const { plugins } = await setUp();
+    expect(plugins.commands()).toEqual([
+      { name: "board:pin_card", description: "Pin a card that says who pinned it", hint: null },
+      { name: "board:finish_step", description: "Tick off the next step", hint: null },
+    ]);
+  });
+
+  test("the user runs a command's tool as its caller, with the input the agent's call without arguments gets, and the agent hears nothing of it", async () => {
+    const { plugins, callTool, items, prompts } = await setUp();
+    expect(await plugins.runCommand("c1", "board:pin_card")).toBe("Pinned a card for you.");
+    expect(await callTool("pin_card", {})).toEqual({ text: "Pinned.", isError: false });
+    expect(items().map(({ data }) => (data as { text: string }).text)).toEqual(["Pinned by the user", "Pinned by the agent"]);
+    expect(plugins.notesForAgent("c1")).toEqual([]);
+    expect(prompts).toEqual([]);
+  });
+
+  test("a change a command makes is the user's, not the agent's", async () => {
+    const { plugins, callTool, items } = await setUp();
+    await callTool("track_steps", { title: "Plan", steps: ["a", "b"] });
+    expect(await plugins.runCommand("c1", "board:finish_step")).toBe("1 done.");
+    expect(items()[0]).toMatchObject({ data: { done: 1 } });
+    expect(items()[0]).not.toHaveProperty("agentEditedAt");
+  });
+
+  test("refuses a tool that isn't a command, one of no plugin, and a conversation that doesn't exist, and passes on what the tool throws", async () => {
+    const { plugins } = await setUp();
+    await expect(plugins.runCommand("c1", "board:show_card")).rejects.toThrow("No plugin has a command /board:show_card.");
+    await expect(plugins.runCommand("c1", "elsewhere:pin_card")).rejects.toThrow("No plugin has a command /elsewhere:pin_card.");
+    await expect(plugins.runCommand("nope", "board:pin_card")).rejects.toThrow();
+    await expect(plugins.runCommand("c1", "board:finish_step")).rejects.toThrow("There are no steps to tick off.");
+  });
+
   test("serves each plugin's canvas view under a hash of its code", async () => {
     const { plugins } = await setUp();
     const path = plugins.viewPaths().board!;
@@ -347,6 +380,20 @@ describe("loading canvas plugins", () => {
     expect((await loadPlugins(lacking)).problems.map(({ message }) => message)).toEqual([
       "the canvas host module needs items.card with an icon, a placement of page or tab, and count, outcome and listed only as functions; tools named in lower case, digits and underscores, not Show-Card; tools.Show-Card with a description, an input schema and a run function; note only as a function",
     ]);
+  });
+
+  test("refuses a command on a tool whose input requires something, a command without a description, and one in a plugin for an API before them", async () => {
+    const commandOn = (input: string, command = `{ description: "Do it" }`) =>
+      `export default { items: {}, tools: { do_it: { description: "d", input: ${input}, command: ${command}, run: () => "" } } };`;
+    const requiring = boardCopy((manifest) => manifest, commandOn(`{ type: "object", properties: { a: { type: "string" } }, required: ["a"] }`));
+    const undescribed = boardCopy((manifest) => manifest, commandOn(`{ type: "object" }`, `{ description: " " }`));
+    for (const folder of [requiring, undescribed]) {
+      expect((await loadPlugins(folder)).problems.map(({ message }) => message)).toEqual([
+        "the canvas host module needs tools.do_it.command only as { description }, on a tool whose input requires nothing",
+      ]);
+    }
+    const older = boardCopy((manifest) => ({ ...manifest, api: 5 }), commandOn(`{ type: "object" }`));
+    expect((await loadPlugins(older)).problems.map(({ message }) => message)).toEqual(["a canvas tool is a slash command, which plugin API 6 brought; plugin.json names API 5"]);
   });
 
   const roomSetting = { id: "open-reports", label: "Open reports", choices: [{ value: "fullscreen", label: "Full screen" }, { value: "beside", label: "Beside" }], default: "beside" };

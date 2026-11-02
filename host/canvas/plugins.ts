@@ -13,7 +13,9 @@ import {
   type ConversationReply,
   type PluginItemType,
   type StartedConversation,
+  type ToolCaller,
 } from "../../shared/canvas-plugins.ts";
+import type { SlashCommand } from "../../shared/slash-commands.ts";
 import type { PluginCanvasItem, StartedBy } from "../../shared/model.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue } from "../../shared/apps.ts";
@@ -24,6 +26,8 @@ import type { PluginCatalog } from "../plugin-catalog.ts";
 import { offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
 import type { CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
+
+const commandName = (plugin: CanvasPlugin, tool: string) => `${plugin.manifest.name}:${tool}`;
 
 /** With tool search on, Claude Code hides MCP tools until the agent searches for them; a plugin's tools are offered as the canvas's own are. */
 const loadedUpFront = { "anthropic/alwaysLoad": true };
@@ -230,6 +234,33 @@ export class CanvasPlugins {
     return Object.fromEntries(this.plugins.flatMap(({ manifest, host }) => Object.keys(host.tools).map((tool) => [tool, manifest.title])));
   }
 
+  /** The tools the user may run from the slash menu, as /<plugin>:<tool>. */
+  commands(): SlashCommand[] {
+    return this.plugins.flatMap((plugin) =>
+      Object.entries(plugin.host.tools).flatMap(([tool, { command }]) => (command ? [{ name: commandName(plugin, tool), description: command.description, hint: null }] : [])),
+    );
+  }
+
+  /**
+   * Runs a command's tool for the user in the conversation, with the input an agent's call without arguments would get;
+   * resolves to what the tool says, and throws what went wrong.
+   */
+  async runCommand(conversationId: string, name: string): Promise<string> {
+    if (!this.store.findConversation(conversationId)) throw new HostProblemError({ code: "no-such-conversation", id: conversationId });
+    const { plugin, tool } = this.commandTool(name);
+    const parsed = await fromJsonSchema(tool.input)["~standard"].validate({});
+    if (parsed.issues) throw new Error(parsed.issues.map(({ message }) => message).join("; "));
+    return String(await tool.run(parsed.value, this.toolContext(plugin, conversationId, "user")));
+  }
+
+  private commandTool(name: string) {
+    for (const plugin of this.plugins) {
+      const tool = Object.entries(plugin.host.tools).find(([toolName, { command }]) => command && commandName(plugin, toolName) === name)?.[1];
+      if (tool) return { plugin, tool };
+    }
+    throw new HostProblemError({ code: "plugin-command-unknown", command: name });
+  }
+
   /** Where the canvas assets serve each plugin's canvas view, by plugin name. */
   viewPaths(): Record<string, string> {
     return Object.fromEntries(this.plugins.map((plugin) => [plugin.manifest.name, canvasViewPath(plugin)]));
@@ -246,7 +277,7 @@ export class CanvasPlugins {
         const loading = tool.onDemand ? {} : { _meta: loadedUpFront };
         server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading, ...reviewFree }, async (input, ctx) => {
           try {
-            const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx)));
+            const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx), "agent"));
             return { content: [{ type: "text" as const, text: String(text) }] };
           } catch (error) {
             return { isError: true, content: [{ type: "text" as const, text: messageOf(error) }] };
@@ -293,9 +324,10 @@ export class CanvasPlugins {
     return [...this.settingNotesFor(conversationId), ...fromPlugins];
   }
 
-  private toolContext(plugin: CanvasPlugin, conversationId: string): CanvasToolContext {
+  private toolContext(plugin: CanvasPlugin, conversationId: string, caller: ToolCaller): CanvasToolContext {
     return {
-      ...this.context(plugin, conversationId, { byAgent: true }),
+      ...this.context(plugin, conversationId, { byAgent: caller === "agent" }),
+      caller,
       publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
       prompt: this.promptOfItsOwn(plugin, conversationId),
       startConversation: async ({ profile, prompt }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt),

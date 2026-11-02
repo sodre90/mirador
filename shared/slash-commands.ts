@@ -51,3 +51,10 @@ export const toSlashCommand = ({ name, description, input }: AvailableCommand): 
   description,
   hint: input?.hint ?? null,
 });
+
+/** The one of `commands` a message names first, and whether anything follows its name; null when it names none of them. */
+export function commandNamedIn(message: string, commands: SlashCommand[]): { command: SlashCommand; withArguments: boolean } | null {
+  const [first = "", ...rest] = message.trim().split(/\s+/);
+  const command = commands.find(({ name }) => `/${name}` === first);
+  return command ? { command, withArguments: rest.length > 0 } : null;
+}

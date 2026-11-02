@@ -283,6 +283,9 @@ export const problems = {
     `items.${item} with opensWithRoom only as true or false, or as { setting } naming a setting of plugin.json whose choices are ${rooms.join(" and ")}`,
   canvasNeedToolName: (tool: string) => `tools named in lower case, digits and underscores, not ${tool}`,
   canvasNeedToolShape: (tool: string) => `tools.${tool} with a description, an input schema and a run function`,
+  canvasNeedCommandShape: (tool: string) => `tools.${tool}.command only as { description }, on a tool whose input requires nothing`,
+  pluginCommandNeedsNewerApi: (brought: number, named: number) => `a canvas tool is a slash command, which plugin API ${brought} brought; plugin.json names API ${named}`,
+  pluginCommandUnknown: (command: string) => `No plugin has a command /${command}. Restart Mirador if a plugin was just installed or updated.`,
   agentGone: (agent: string, gone: string) => `The ${agent} agent process ${gone}.`,
   gone: {
     "not-running": "is not running",

@@ -5070,6 +5070,21 @@ button.shell-more:hover {
   font-size: calc(12px * var(--font-scale));
 }
 
+.plugin-command-reply {
+  margin: 0 0 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: calc(12px * var(--font-scale));
+  white-space: pre-wrap;
+}
+
+.plugin-command-reply button,
+.composer-problem button {
+  margin-left: 8px;
+}
+
 .editing-stopped {
   margin: 0 0 6px;
   padding: 4px 10px;

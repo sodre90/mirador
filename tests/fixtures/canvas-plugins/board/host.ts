@@ -92,8 +92,19 @@ const host: CanvasHost<BoardData> = {
         return `Tracking ${steps.length} steps.`;
       },
     },
+    pin_card: {
+      description: "Pin a card that says who pinned it.",
+      command: { description: "Pin a card that says who pinned it" },
+      input: { type: "object", properties: { text: { type: "string" } } },
+      run(input, { publish, caller }) {
+        const { text = `Pinned by the ${caller}` } = input as { text?: string };
+        publish({ type: "card", title: "Pinned", data: { text, presses: 0, heardPresses: 0 } });
+        return caller === "user" ? "Pinned a card for you." : "Pinned.";
+      },
+    },
     finish_step: {
       description: "Tick off the next step.",
+      command: { description: "Tick off the next step" },
       input: { type: "object", properties: {} },
       run(_input, context) {
         const steps = newest(context, "steps");

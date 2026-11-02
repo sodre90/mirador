@@ -262,6 +262,8 @@ const problems: HostProblem[] = [
   { code: "engine-download-broke-off", url: "https://huggingface.co/m/model.safetensors" },
   { code: "engine-download-wrong-size", url: "https://huggingface.co/m/model.safetensors", bytes: 1024 },
   { code: "plugin-window-needs-newer-api", brought: 4, named: 3 },
+  { code: "plugin-command-needs-newer-api", brought: 6, named: 5 },
+  { code: "plugin-command-unknown", command: "board:pin_card" },
   {
     code: "canvas-host-module-needs",
     needs: [
@@ -271,6 +273,7 @@ const problems: HostProblem[] = [
       { code: "canvas-need-item-opens-with-room", item: "report", rooms: ["fullscreen", "pane"] },
       { code: "canvas-need-tool-name", tool: "Show-Card" },
       { code: "canvas-need-tool-shape", tool: "show_card" },
+      { code: "canvas-need-command-shape", tool: "pin_card" },
       { code: "canvas-need-action-function" },
       { code: "canvas-need-note-function" },
       { code: "canvas-need-activity-function" },
@@ -540,9 +543,12 @@ const englishBeforeCodes = [
   "The download of https://huggingface.co/m/model.safetensors broke off.",
   "https://huggingface.co/m/model.safetensors came in at a size other than 1024 bytes.",
   "the canvas host module has a window or hears activity, which plugin API 4 brought; plugin.json names API 3",
+  "a canvas tool is a slash command, which plugin API 6 brought; plugin.json names API 5",
+  "No plugin has a command /board:pin_card. Restart Mirador if a plugin was just installed or updated.",
   "the canvas host module needs items, by name; tools, by name; items.card with an icon, a placement of page or tab, and count, outcome and listed only as functions; " +
     "items.report with opensWithRoom only as true or false, or as { setting } naming a setting of plugin.json whose choices are fullscreen and pane; " +
     "tools named in lower case, digits and underscores, not Show-Card; tools.show_card with a description, an input schema and a run function; " +
+    "tools.pin_card.command only as { description }, on a tool whose input requires nothing; " +
     "action only as a function; note only as a function; activity only as a function; window only as { state, action } with state a function and action, if any, one too",
 ];
 
