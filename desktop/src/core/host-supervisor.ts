@@ -2,8 +2,9 @@ import { isHostCommandLine } from "./host-command.ts";
 import type { BackgroundHost } from "./background-host.ts";
 import type { PidFile, ProcessTable } from "./processes.ts";
 import type { DesktopSettings } from "./settings.ts";
+import type { HostStatus } from "../../../shared/host-status.ts";
 
-export type HostStatus = "stopped" | "owned" | "external" | "background";
+export type { HostStatus };
 
 export interface SupervisorPorts {
   port: number;

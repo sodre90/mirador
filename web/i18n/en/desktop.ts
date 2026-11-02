@@ -1,4 +1,4 @@
-import type { HostStatus } from "../../../desktop/src/core/host-supervisor.ts";
+import type { HostStatus } from "../../../shared/host-status.ts";
 import type { WaitingTone } from "../../../shared/waiting.ts";
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
