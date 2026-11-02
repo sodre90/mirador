@@ -192,10 +192,11 @@ test("a plugin added from a git repo is built only once the user agrees, works a
 
     await counter.getByRole("button", { name: "← All plugins" }).click();
     await counterTile(plugins).getByRole("button", { name: "Update Counter" }).click();
-    counter = plugins.getByRole("region", { name: "Counter" });
-    await consent(counter, "Update Counter?").getByRole("button", { name: "Update", exact: true }).click();
-    await expect(counter.getByText("used from the next start")).toBeVisible();
-    await counter.getByText("Details", { exact: true }).click();
+    await consent(plugins, "Update Counter?").getByRole("button", { name: "Update", exact: true }).click();
+    await expect(counterTile(plugins), "a tile's Update updates in the gallery, without opening the plugin").toContainText("used from the next start");
+    await expect(plugins.getByRole("region", { name: "Counter" })).toHaveCount(0);
+    await expect(counterTile(plugins).getByRole("button", { name: "Update Counter" })).toHaveCount(0);
+    counter = await counterDetails(plugins);
     await expect(counter.locator(".plugin-source")).toContainText("Count by three");
     await restartFromPlugins(page);
     await appToggle(page).click();

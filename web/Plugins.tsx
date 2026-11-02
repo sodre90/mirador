@@ -639,8 +639,8 @@ function newsFor(plugin: PluginInfo, pluginUpdates: FoundUpdate[]): PluginNews |
   return found && plugin.source.kind === "git" && plugin.source.commit === found.from ? found : undefined;
 }
 
-/** Clones every plugin's update, then asks once for all of them; stops at the first clone or build that fails. */
-function UpdateAll({ updates }: { updates: FoundUpdate[] }) {
+/** Clones every plugin's update, then asks once for all of them; stops at the first clone or build that fails. A tile's Update starts it right away for just that plugin. */
+function UpdateAll({ updates, startNow = false, onDone }: { updates: FoundUpdate[]; startNow?: boolean; onDone?: () => void }) {
   const [cloning, setCloning] = useState<string | null>(null);
   const [offers, setOffers] = useState<PluginOffer[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -660,19 +660,25 @@ function UpdateAll({ updates }: { updates: FoundUpdate[] }) {
     setCloning(null);
     setOffers(offered);
   };
+  useStartOnce(startNow, offerAll);
+  const shownAtTheTop = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (startNow) shownAtTheTop.current?.scrollIntoView({ block: "nearest" });
+  }, [startNow]);
   const settled = (outcome: Settled) => {
     setOffers(null);
     setProblem(outcome.problem);
+    if (!outcome.problem) onDone?.();
   };
   return (
-    <div className="plugin-update-all">
+    <div className="plugin-update-all" ref={shownAtTheTop}>
       {cloning ? (
         <span className="plugin-status">{words.cloningPlugin(cloning)}</span>
       ) : offers ? (
         <PluginConsent
           question={offers.length === 1 ? words.updateQuestion(offers[0]!.title) : words.updateSeveralQuestion(offers.length)}
           offers={offers}
-          agree={words.updateAll}
+          agree={startNow ? words.update : words.updateAll}
           decline={words.dontUpdate}
           onSettled={settled}
         />
@@ -709,7 +715,12 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
   const newsOf = ({ installed }: GalleryPlugin) => (installed ? newsFor(installed, pluginUpdates) : undefined);
   const waiting = pluginUpdates.filter(({ folder }) => listed?.plugins.some((plugin) => plugin.folder === folder && newsFor(plugin, pluginUpdates)));
   const openedPlugin = opened && [...gallery.installed, ...gallery.discover].find(({ key }) => key === opened.key);
-  const open = (plugin: GalleryPlugin, start: Start) => setOpened({ key: plugin.key, start });
+  const [updatingFromTile, setUpdatingFromTile] = useState<FoundUpdate | null>(null);
+  const open = (plugin: GalleryPlugin, start: Start) => {
+    const found = start === "update" && newsOf(plugin) ? pluginUpdates.find(({ folder }) => folder === plugin.installed?.folder) : undefined;
+    if (found) return setUpdatingFromTile(found);
+    setOpened({ key: plugin.key, start });
+  };
   const openedIsGone = opened !== null && listed !== null && !openedPlugin;
   useEffect(() => {
     if (openedIsGone) setOpened(null);
@@ -738,7 +749,11 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
           ) : (
             <>
               <p className="hint">{words.intro}</p>
-              {waiting.length > 0 && <UpdateAll updates={waiting} />}
+              {updatingFromTile ? (
+                <UpdateAll key={updatingFromTile.folder} updates={[updatingFromTile]} startNow onDone={() => setUpdatingFromTile(null)} />
+              ) : (
+                waiting.length > 0 && <UpdateAll updates={waiting} />
+              )}
               <h3>{words.installed}</h3>
               {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
               {gallery.discover.length > 0 && (
