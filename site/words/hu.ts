@@ -2,9 +2,9 @@ import type { SiteWords } from "./en.ts";
 
 export const hu: SiteWords = {
   attributes: {
-    title: "Mirador: canvas a coding agented mellé",
+    title: "Mirador: vászon a coding agented mellé",
     description:
-      "A Mirador egy canvast ad a coding agented mellé: rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in. Ingyenes, nyílt forráskódú, macOS-re, Linuxra és Windowsra.",
+      "A Mirador egy vásznat ad a coding agented mellé: rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in. Ingyenes, nyílt forráskódú, macOS-re, Linuxra és Windowsra.",
     ogDescription: "A coding agented rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in, közvetlenül a chat mellett.",
     sections: "Szakaszok",
     language: "Nyelv",
@@ -13,7 +13,7 @@ export const hu: SiteWords = {
     trailer: "Előzetes",
     trailerAlt: "Az előzetes: elég a szövegfalakból, az agented mostantól rajzol",
     trailerPlayer: "A Mirador előzetese",
-    canvasAlt: "Chat egy checkout folyamatról, mellette a canvason az agent szekvenciadiagramja",
+    canvasAlt: "Chat egy checkout folyamatról, mellette a vásznon az agent szekvenciadiagramja",
     askAlt: "Az agent megkérdezi, melyik beállításoldal-elrendezést építse meg, mindegyik opcióhoz egy mockuppal",
     tourAlt: "Az agent végigvezet a javításán: balra a lépések, jobbra az src/checkout.ts megváltozott sora kiemelve",
     reviewAlt: "Egy code review végigvezetés nézetben: a lépések az aktuális lépés magyarázata mellett, alattuk a diff, a lépés sorai kiemelve",
@@ -26,7 +26,7 @@ export const hu: SiteWords = {
   hero: {
     eyebrow: "Ingyenes és nyílt forráskódú · macOS, Linux és Windows",
     title: 'Végre látod, <span class="gradient">mire gondol az agented.</span>',
-    lede: "A Mirador egy canvast ad a coding agented mellé. Rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in, így egy pillantás alatt átlátod őket.",
+    lede: "A Mirador egy vásznat ad a coding agented mellé. Rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásain és a review-in, így egy pillantás alatt átlátod őket.",
     or: "vagy",
     windows: "Windows",
     download: "Letöltés",
@@ -40,12 +40,12 @@ export const hu: SiteWords = {
   show: {
     kicker: "Rajzol",
     title: "Az agented lerajzolja, mire gondol.",
-    body: "Diagramok, mockupok, grafikonok, összehasonlítások, akár 3D-s jelenetek egy canvason a chat mellett, egy oldalnyi szöveg helyett. A Mermaid, a D3 és a three.js beépített, és offline is megy. Ha egy oldal szkriptje hibára fut, az agent értesül róla, és kijavítja.",
+    body: "Diagramok, mockupok, grafikonok, összehasonlítások, akár 3D-s jelenetek egy vásznon a chat mellett, egy oldalnyi szöveg helyett. A Mermaid, a D3 és a three.js beépített, és offline is megy. Ha egy oldal szkriptje hibára fut, az agent értesül róla, és kijavítja.",
   },
   ask: {
     kicker: "Kérdez",
     title: "Döntések képekkel.",
-    body: "Számozott lista helyett az agent a canvason kérdez: legfeljebb nyolc opció, mindegyik előnézettel. Kattints egyre, vagy írd meg a saját válaszodat, és fűzz hozzá megjegyzést. Ha több kérdése van, egyszerre jönnek, mindegyik külön oldalon, és küldés előtt még egyszer átnézheted őket.",
+    body: "Számozott lista helyett az agent a vásznon kérdez: legfeljebb nyolc opció, mindegyik előnézettel. Kattints egyre, vagy írd meg a saját válaszodat, és fűzz hozzá megjegyzést. Ha több kérdése van, egyszerre jönnek, mindegyik külön oldalon, és küldés előtt még egyszer átnézheted őket.",
   },
   tour: {
     kicker: "Végigvezet",
@@ -64,9 +64,9 @@ export const hu: SiteWords = {
       body: "Mit változtatott ez a kör vagy ez a beszélgetés, vagy az összes nem commitolt munka, minden fájl diffje egy kattintásra.",
     },
     terminals: { title: "Shell minden beszélgetés mellett", body: "Fülek és split nézetek, amelyek tovább futnak, amíg máshol vagy, és újraindítás után is megmaradnak." },
-    approve: { title: "Minden módosítást a diffjével hagysz jóvá", body: "A kért módosítás a fájl saját sorszámaival jelenik meg a canvason, mielőtt engedélyezed." },
+    approve: { title: "Minden módosítást a diffjével hagysz jóvá", body: "A kért módosítás a fájl saját sorszámaival jelenik meg a vásznon, mielőtt engedélyezed." },
     needsYou: { title: "Látod, hol van rád szükség", body: "Minden projekt egy oldalsávban, és látszik, melyik beszélgetés vár rád, melyik kész, és melyik hasalt el." },
-    resume: { title: "Ott folytatod, ahol a terminálban abbahagytad", body: "Egy terminálban indított sessiont is folytathatsz, a teljes előzményeivel." },
+    resume: { title: "Ott folytatod, ahol a terminálban abbahagytad", body: "Egy terminálban indított munkamenetet is folytathatsz, a teljes előzményeivel." },
     point: { title: "Mutass rá és kérdezz", body: "Mutass rá bármire egy oldalon, amit az agent rajzolt, és kérdezz róla, vagy kérd meg, hogy változtassa meg." },
     agents: {
       title: "Az összes agented, együtt",
@@ -77,8 +77,8 @@ export const hu: SiteWords = {
       body: "Az agent elindít egy buildet vagy egy tesztfuttatást, akár egy buildszerveren ssh-n át vagy egy konténerben, és a Mirador felébreszti, amikor végzett.",
     },
     plugins: {
-      title: "Pluginek",
-      body: "A hivatalos pluginek új eszközöket adnak a canvashoz, például a Media: jelöld meg egy videó képkockáján, mi a gond, és az agent kivágja és rendereli.",
+      title: "Bővítmények",
+      body: "A hivatalos bővítmények új eszközöket adnak a vászonhoz, például a Media: jelöld meg egy videó képkockáján, mi a gond, és az agent kivágja és rendereli.",
     },
     talk: { title: "Beszélj hozzá", body: "Diktáld be az üzenetet, hallgasd meg a válasz lényegét, és beszélj tovább, kéz nélkül." },
   },
@@ -107,7 +107,7 @@ export const hu: SiteWords = {
     },
     terminal: {
       question: "Kiváltja a terminált?",
-      answer: "Nem. Ugyanazt az agentet futtatja a beállításaiddal, hookjaiddal és MCP-szervereiddel, és egy terminálban indított sessiont is tud folytatni.",
+      answer: "Nem. Ugyanazt az agentet futtatja a beállításaiddal, hookjaiddal és MCP-szervereiddel, és egy terminálban indított munkamenetet is tud folytatni.",
     },
     phones: { question: "És telefonon?", answer: "Androidos és iOS-es app is készül." },
   },
@@ -120,7 +120,7 @@ export const hu: SiteWords = {
       "Ezek az irányelvek a Miradorra, a számítógépeden futtatott alkalmazásra, és az androidos Miradorra, a hozzá csatlakozó telefonos alkalmazásra vonatkoznak. Mindkettőt Erdős Péter készíti. Röviden: az adataid a saját készülékeiden maradnak. Egyik alkalmazásban sincs fiók, analitika, hirdetés vagy hibajelentés-küldés. Az általunk üzemeltetett szervereken csak az alább leírt, opcionális értesítési és peer-to-peer szolgáltatások forgalma halad át, és ezek nem tudják elolvasni, amit küldesz.",
     computerTitle: "A Mirador a számítógépeden",
     computer:
-      "A Mirador a beszélgetéseidet, a beállításaidat és a meghívott készülékeidet egy adatbázisban tárolja a számítógépeden. A vele futtatott coding agentek a saját modellszolgáltatóikkal kommunikálnak, azok feltételei szerint, ugyanúgy, mint Mirador nélkül. Maga a Mirador csak a GitHubot éri el: hogy megnézze, van-e újabb kiadás, és hogy letöltse az általa telepített plugineket.",
+      "A Mirador a beszélgetéseidet, a beállításaidat és a meghívott készülékeidet egy adatbázisban tárolja a számítógépeden. A vele futtatott coding agentek a saját modellszolgáltatóikkal kommunikálnak, azok feltételei szerint, ugyanúgy, mint Mirador nélkül. Maga a Mirador csak a GitHubot éri el: hogy megnézze, van-e újabb kiadás, és hogy letöltse az általa telepített bővítményeket.",
     androidTitle: "Androidos Mirador",
     android:
       "A telefonos alkalmazás csak azokhoz a Mirador-számítógépekhez csatlakozik, amelyekkel párosítod: közvetlenül, egy általad választott hálózaton, például Tailscale-en át, vagy peer-to-peer módon, ahogy alább leírjuk. Minden kapcsolat titkosított a telefon és a számítógéped között. Amit mutat, azoktól érkezik, és amit küldesz, hozzájuk kerül:",
