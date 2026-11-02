@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { imageTypeOf, localImage } from "../host/local-images.ts";
-import { isLocalImagePath } from "../shared/images.ts";
+import { isLocalImagePath, localImageUrl } from "../shared/images.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "local-images-"));
 afterAll(() => rmSync(folder, { recursive: true, force: true }));
@@ -47,6 +47,11 @@ describe("isLocalImagePath", () => {
     expect(isLocalImagePath("/Users/me/shot.png")).toBe(true);
     expect(isLocalImagePath("C:\\Users\\me\\shot.png")).toBe(true);
     expect(isLocalImagePath("d:/shots/shot.png")).toBe(true);
+  });
+
+  test("takes a Windows path as Markdown hands it over, its backslashes percent-encoded", () => {
+    expect(isLocalImagePath("C:%5CUsers%5Cme%5CK%C3%A9perny%C5%91k%C3%A9p%201.png")).toBe(true);
+    expect(localImageUrl("c1", "C:%5CUsers%5Cme%5Cshot.png")).toBe(`/conversations/c1/local-image?path=${encodeURIComponent("C:\\Users\\me\\shot.png")}`);
   });
 
   test("takes no address on another site, relative path or other protocol", () => {
