@@ -23,6 +23,7 @@ export const problems: Messages["problems"] = {
     "rewind-only-to-own-message": "Una conversación solo puede volver a uno de tus propios mensajes.",
     "agent-cannot-go-back-in-session": "No se puede devolver al agente a un punto anterior de su sesión.",
     "no-mark-to-go-back-to": "Las respuestas del agente anteriores a este turno no marcan adónde debería volver su sesión, así que no se puede volver ahí.",
+    "codex-rewinds-whole-turns": "Codex solo vuelve al comienzo de un turno, y este mensaje se unió a un turno que ya estaba en curso. Rebobina mejor hasta el mensaje que comenzó ese turno.",
     "job-wait-gone": "Mirador ya no espera ese trabajo.",
     "conversation-workspace-gone": "El espacio de trabajo de esta conversación ya no existe.",
     "permission-no-longer-pending": "Esta solicitud de permiso ya no está pendiente.",

@@ -89,11 +89,14 @@ export function joinedRunningTurn(events: StoredEvent[], seq: number): boolean {
 
 /**
  * Why the agent's session can't go back to before the turn at `seq`, if it can't. With nothing marked to go back to, a
- * fresh session stands in only for a first turn: after earlier turns it would silently forget them.
+ * fresh session stands in only for a first turn: after earlier turns it would silently forget them. Codex forks whole
+ * turns, so it can't go back to a message that joined a turn already running.
  */
 export function whyNoRewindTo(harness: HarnessId, events: StoredEvent[], seq: number): HostProblem | undefined {
   if (rewindPointBefore(events, seq) === null) return events.some(({ seq: at, event }) => at < seq && event.type === "user-message") ? { code: "no-mark-to-go-back-to" } : undefined;
-  return harnessRewinds[harness] ? undefined : { code: "agent-cannot-leave-session-behind", agent: harnessLabels[harness] };
+  if (!harnessRewinds[harness]) return { code: "agent-cannot-leave-session-behind", agent: harnessLabels[harness] };
+  if (harness === "codex" && joinedRunningTurn(events, seq)) return { code: "codex-rewinds-whole-turns" };
+  return undefined;
 }
 
 /** The agent's latest message in the conversation, where turns taken elsewhere since pick up. */

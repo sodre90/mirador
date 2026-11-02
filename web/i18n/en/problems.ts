@@ -21,6 +21,7 @@ export const problems = {
     "rewind-only-to-own-message": "A conversation can be taken back only to one of your own messages.",
     "agent-cannot-go-back-in-session": "The agent cannot be sent back to an earlier point in its session.",
     "no-mark-to-go-back-to": "The agent's replies before this turn carry no mark of where its session should go back to, so it can't be taken back there.",
+    "codex-rewinds-whole-turns": "Codex goes back only to where a turn began, and this message joined a turn that was already running. Rewind to the message that began that turn instead.",
     "job-wait-gone": "Mirador no longer waits for that job.",
     "conversation-workspace-gone": "This conversation's workspace no longer exists.",
     "permission-no-longer-pending": "This permission request is no longer pending.",

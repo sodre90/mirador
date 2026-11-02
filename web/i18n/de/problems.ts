@@ -23,6 +23,7 @@ export const problems: Messages["problems"] = {
     "rewind-only-to-own-message": "Eine Unterhaltung lässt sich nur zu einer deiner eigenen Nachrichten zurückversetzen.",
     "agent-cannot-go-back-in-session": "Der Agent lässt sich nicht zu einem früheren Punkt seiner Sitzung zurückversetzen.",
     "no-mark-to-go-back-to": "Die Antworten des Agenten vor dieser Runde tragen keine Markierung, wohin seine Sitzung zurückgehen soll, daher lässt sie sich nicht dorthin zurückversetzen.",
+    "codex-rewinds-whole-turns": "Codex geht nur an den Anfang einer Runde zurück, und diese Nachricht kam zu einer Runde hinzu, die schon lief. Spule stattdessen zu der Nachricht zurück, mit der diese Runde begann.",
     "job-wait-gone": "Mirador wartet nicht mehr auf diesen Job.",
     "conversation-workspace-gone": "Der Arbeitsbereich dieser Unterhaltung existiert nicht mehr.",
     "permission-no-longer-pending": "Diese Berechtigungsanfrage steht nicht mehr aus.",

@@ -146,6 +146,13 @@ test("an agent that can go back to a marked reply can take a conversation back t
   expect(whyNoRewindTo("opencode", events, 3)).toEqual({ code: "agent-cannot-leave-session-behind", agent: "opencode" });
 });
 
+test("Codex, which forks whole turns, can go back to a message that began a turn but not to one that joined a running turn", () => {
+  const events = stored(userMessage("first"), said("msg_1"), { type: "turn-end", stopReason: "end_turn" }, userMessage("second"), userMessage("joined"), said("msg_2"));
+  expect(whyNoRewindTo("codex", events, 4)).toBeUndefined();
+  expect(whyNoRewindTo("codex", events, 5)).toEqual({ code: "codex-rewinds-whole-turns" });
+  expect(whyNoRewindTo("claude", events, 5)).toBeUndefined();
+});
+
 test("with no reply marked, only a first turn can be taken back, by starting the agent afresh", () => {
   expect(whyNoRewindTo("opencode", stored(said(), userMessage("first"), said()), 2)).toBeUndefined();
   const unmarkedTurns = stored(userMessage("first"), said(), userMessage("second"), said());

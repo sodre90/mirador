@@ -261,7 +261,7 @@ export const hints: Messages["hints"] = {
   keepAwake:
     "Verhindert, dass der Computer, auf dem Mirador läuft, im Leerlauf in den Ruhezustand geht.\n\nWährend Agenten arbeiten: bis jede laufende Runde endet, damit lange Jobs fertig werden.\n\nImmer: solange Mirador läuft, damit dein Handy und andere Geräte es jederzeit erreichen.\n\nUnter macOS und Linux.",
   canvasUse:
-    "Bei Bedarf: Der Agent entscheidet anhand der eigenen Anweisungen des Canvas.\n\nOft: Die System-Prompts von Claude Code und pi sagen ihnen außerdem, Erklärungen, Vergleiche, Pläne und die Zusammenfassung einer größeren Arbeit auf den Canvas zu bringen und dich dort nach Entscheidungen zu fragen.\n\nSeiten kosten mehr Token als dieselbe Antwort als Text.",
+    "Bei Bedarf: Der Agent entscheidet anhand der eigenen Anweisungen des Canvas.\n\nOft: Die System-Prompts von Claude Code, pi und Codex sagen ihnen außerdem, Erklärungen, Vergleiche, Pläne und die Zusammenfassung einer größeren Arbeit auf den Canvas zu bringen und dich dort nach Entscheidungen zu fragen.\n\nSeiten kosten mehr Token als dieselbe Antwort als Text.",
   terminalCommand:
     "Claude Code zeigt das nur in seinem eigenen Terminal, deshalb öffnet dies es dort: in einem Terminal-Tab dieser Unterhaltung, ausgeführt von dem Claude Code, das das Profil dieser Unterhaltung nutzt. Dort im Terminal passiert der Befehl; die Antwort des Agenten oben ist nur seine Ablehnung.",
   logIn:

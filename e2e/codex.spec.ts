@@ -128,6 +128,56 @@ test("in Plan mode Codex's questions show as a canvas question, and Codex hears 
   await expect(toolResult).toContainText('"finish":{"answers":["None of the above","user_note: Matte","user_note: for the kitchen"]}');
 });
 
+async function rewindTo(message: string) {
+  const turn = page.locator(".timeline:visible .timeline-entry").filter({ has: page.locator(".message.user").getByText(message, { exact: true }) });
+  await turn.hover();
+  await turn.locator(".undo-files").click();
+  const dialog = page.getByRole("dialog", { name: "Rewind to here" });
+  await dialog.getByRole("button", { name: "Rewind", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(turn).toHaveCount(0);
+}
+
+test("rewinding a Codex conversation to a turn leaves Codex with only what came before it", async () => {
+  await startConversation(page);
+  for (const message of ["First turn", "Second turn", "Third turn"]) {
+    await sendMessage(page, message);
+    await waitForTurnToEnd(page);
+  }
+  await rewindTo("Second turn");
+  await expect(page.locator(".timeline:visible .message.user")).toHaveText(["First turn"]);
+  await sendMessage(page, "After rewinding");
+  await waitForTurnToEnd(page);
+  await expect(lastAgentMessage(page)).toContainText("Echo: After rewinding");
+  expect(model.userMessagesInContext()).toEqual(["First turn", "After rewinding"]);
+});
+
+test("Codex goes back only to where a turn began, so a message that joined a running turn says to rewind to the turn's own message", async () => {
+  await startConversation(page);
+  await sendMessage(page, "Before the steer");
+  await waitForTurnToEnd(page);
+  await sendMessage(page, "RUN sleep 5; echo slept");
+  await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress").first()).toBeVisible({ timeout: 60_000 });
+  const composer = page.locator(".composer:visible textarea");
+  await composer.fill("Steered in");
+  await composer.press("Enter");
+  await expect(page.locator(".timeline:visible .message.user").last()).toHaveText("Steered in", { timeout: 60_000 });
+  await waitForTurnToEnd(page);
+
+  const steeredTurn = page.locator(".timeline:visible .timeline-entry").filter({ has: page.locator(".message.user").getByText("Steered in", { exact: true }) });
+  await steeredTurn.hover();
+  await steeredTurn.locator(".undo-files").click();
+  const dialog = page.getByRole("dialog", { name: "Rewind to here" });
+  await expect(dialog).toContainText("Codex goes back only to where a turn began");
+  await expect(dialog.getByRole("button", { name: "Rewind", exact: true })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await rewindTo("RUN sleep 5; echo slept");
+  await sendMessage(page, "After rewinding");
+  await waitForTurnToEnd(page);
+  expect(model.userMessagesInContext()).toEqual(["Before the steer", "After rewinding"]);
+});
+
 const codexEnvironment = () => applyEnvironment(agentEnvironment(), parseEnvironment(scriptedCodexEnvironment(model, host.root)));
 
 /** A session of the profile's Codex started in a terminal in the workspace, which Codex is told it may trust, as a user answers on first start. */

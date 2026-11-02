@@ -23,6 +23,7 @@ export const problems: Messages["problems"] = {
     "rewind-only-to-own-message": "对话只能回到你自己发送的某条消息。",
     "agent-cannot-go-back-in-session": "无法让智能体回到其会话中较早的某个时间点。",
     "no-mark-to-go-back-to": "智能体在这一轮之前的回复没有标记其会话应回到哪里，因此无法回到那里。",
+    "codex-rewinds-whole-turns": "Codex 只能回到某一轮的开头，而这条消息加入的是一轮已在进行中的回合。请改为回退到开始那一轮的消息。",
     "job-wait-gone": "Mirador 已不再等待该任务。",
     "conversation-workspace-gone": "此对话的工作区已不存在。",
     "permission-no-longer-pending": "此权限请求已不再等待处理。",

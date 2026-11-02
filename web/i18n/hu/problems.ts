@@ -23,6 +23,7 @@ export const problems: Messages["problems"] = {
     "rewind-only-to-own-message": "Egy beszélgetést csak a saját üzeneteid egyikéhez lehet visszavinni.",
     "agent-cannot-go-back-in-session": "Az ágenst nem lehet visszaküldeni a munkamenete egy korábbi pontjára.",
     "no-mark-to-go-back-to": "Az ágens e kör előtti válaszai nem jelölik, hová kellene visszalépnie a munkamenetének, ezért oda nem lehet visszavinni.",
+    "codex-rewinds-whole-turns": "A Codex csak egy kör elejére tud visszamenni, ez az üzenet pedig egy már futó körhöz csatlakozott. Inkább ahhoz az üzenethez térj vissza, amely azt a kört elindította.",
     "job-wait-gone": "A Mirador már nem vár erre a feladatra.",
     "conversation-workspace-gone": "Ennek a beszélgetésnek a munkaterülete már nem létezik.",
     "permission-no-longer-pending": "Ez az engedélykérés már nem vár válaszra.",
