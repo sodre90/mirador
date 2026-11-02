@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { InstalledApp } from "../shared/apps.ts";
+import { appOpenCommandName, fileToOpen, pluginSlashCommands } from "../shared/plugin-commands.ts";
 import { commandNamedIn, type SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { replyProblemText } from "./host-error.ts";
@@ -16,21 +17,11 @@ connection.onMessage((message) => {
   if (message.type === "plugins.views") installedApps = message.installedApps;
 });
 
-const openCommandName = (app: InstalledApp) => `${app.name}:open`;
-
-const openCommand = (app: InstalledApp): SlashCommand => ({ name: openCommandName(app), description: t.chat.pluginCommand.openApp(app.title), hint: t.chat.pluginCommand.fileHint });
-
-/**
- * What the user runs from the slash menu without the agent: each installed app's /<app>:open, and the plugins' tools,
- * as the host last said; plugins change only with a restart, which sends a new snapshot.
- */
-export function pluginCommands(): SlashCommand[] {
-  const opening = installedApps.map(openCommand);
-  return [...opening, ...toolCommands.filter(({ name }) => !opening.some((open) => open.name === name))];
-}
+/** What the user runs from the slash menu without the agent, as the host last said; plugins change only with a restart, which sends a new snapshot. */
+export const pluginCommands = () => pluginSlashCommands(installedApps, toolCommands, t.chat.pluginCommand);
 
 /** The commands followed by a path, for the path menu to suggest one without an @. */
-export const pathCommands = () => installedApps.map(openCommandName);
+export const pathCommands = () => installedApps.map(appOpenCommandName);
 
 async function runPluginCommand(conversationId: string, command: string, writtenArguments: string): Promise<string> {
   const ran = await connection.sendAndAwait(
@@ -54,9 +45,9 @@ async function openApp(conversationId: string, app: string, file: string): Promi
 
 /** What the command does on the host, resolving to what it says; an app's open takes the rest of the line as the file, an @ before it too. */
 function commandRun(conversationId: string, command: string, writtenArguments: string): Promise<string> {
-  const app = installedApps.find((installed) => openCommandName(installed) === command);
+  const app = installedApps.find((installed) => appOpenCommandName(installed) === command);
   if (!app) return runPluginCommand(conversationId, command, writtenArguments);
-  const file = writtenArguments.replace(/^@/, "");
+  const file = fileToOpen(writtenArguments);
   return file ? openApp(conversationId, app.name, file) : Promise.reject(new Error(t.chat.pluginCommand.needsFile(command)));
 }
 
