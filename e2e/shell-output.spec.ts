@@ -31,6 +31,7 @@ const checkedTheBuild = [
   { type: "user-message", text: "Check the build" },
   shellCommand("toolu_tests", "Run the unit tests", "bun test", "completed", "12 pass"),
   shellCommand("toolu_types", "Type check", "bunx tsc --noEmit", "failed", "error TS2322"),
+  shellCommand("toolu_grep", "Count the specs", 'grep -c "test(" e2e/*.ts | tail -1', "completed", "e2e/zoom.spec.ts:3"),
   { type: "turn-end", stopReason: "end_turn" },
 ];
 
@@ -62,6 +63,20 @@ test("a shell command the agent ran shows what ran with its output a click away,
     const command = (await tests.locator("summary").boundingBox())!;
     const output = (await tests.locator(".shell-body.below-command").boundingBox())!;
     expect(output.y).toBeCloseTo(command.y + command.height, 0);
+  });
+
+  await test.step("the command is colored as shell code, its output left as printed", async () => {
+    const grep = card("Count the specs");
+    await expect(grep.locator(".shell-typed")).toHaveText('grep -c "test(" e2e/*.ts | tail -1');
+    const quoted = grep.locator(".shell-typed .token.string");
+    await expect(quoted).toHaveText('"test("');
+    const pipe = grep.locator(".shell-typed .token.operator", { hasText: "|" });
+    await expect(pipe).toHaveCount(1);
+    const colorOf = (element: typeof quoted) => element.evaluate((node) => getComputedStyle(node).color);
+    expect(await colorOf(quoted)).not.toBe(await colorOf(grep.locator(".shell-typed")));
+    await grep.locator("summary").click();
+    await expect(grep.locator(".shell-output")).toHaveText("e2e/zoom.spec.ts:3");
+    await expect(grep.locator(".shell-output .token")).toHaveCount(0);
   });
 
   await test.step("output open when it failed opens the failed command", async () => {

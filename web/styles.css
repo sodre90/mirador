@@ -6089,37 +6089,49 @@ button.picture-option.chosen {
   background: var(--removed-word);
 }
 
-.code-text .token:is(.comment, .prolog, .doctype, .cdata) {
+:is(.code-text, .highlighted-code) .token:is(.comment, .prolog, .doctype, .cdata) {
   color: light-dark(#6e7781, #8b949e);
   font-style: italic;
 }
 
-.code-text .token:is(.keyword, .atrule, .important, .rule) {
+:is(.code-text, .highlighted-code) .token:is(.keyword, .atrule, .important, .rule) {
   color: light-dark(#cf222e, #ff7b72);
 }
 
-.code-text .token:is(.string, .char, .attr-value, .template-string, .regex, .url) {
+:is(.code-text, .highlighted-code) .token:is(.string, .char, .attr-value, .template-string, .regex, .url) {
   color: light-dark(#0a3069, #a5d6ff);
 }
 
-.code-text .token:is(.number, .boolean, .constant, .symbol, .property, .key) {
+:is(.code-text, .highlighted-code) .token:is(.number, .boolean, .constant, .symbol, .property, .key) {
   color: light-dark(#0550ae, #79c0ff);
 }
 
-.code-text .token:is(.function, .method) {
+:is(.code-text, .highlighted-code) .token:is(.function, .method) {
   color: light-dark(#8250df, #d2a8ff);
 }
 
-.code-text .token:is(.class-name, .builtin, .namespace, .generics) {
+:is(.code-text, .highlighted-code) .token:is(.class-name, .builtin, .namespace, .generics) {
   color: light-dark(#953800, #ffa657);
 }
 
-.code-text .token:is(.annotation, .decorator, .tag, .selector, .attr-name, .variable) {
+:is(.code-text, .highlighted-code) .token:is(.annotation, .decorator, .tag, .selector, .attr-name, .variable) {
   color: light-dark(#116329, #7ee787);
 }
 
-.code-text .token:is(.punctuation, .operator) {
+:is(.code-text, .highlighted-code) .token:is(.punctuation, .operator) {
   color: light-dark(#4b4f58, #a8abb4);
+}
+
+:is(.code-text, .highlighted-code) .token:is(.inserted, .inserted-sign) {
+  color: light-dark(#116329, #7ee787);
+}
+
+:is(.code-text, .highlighted-code) .token:is(.deleted, .deleted-sign) {
+  color: light-dark(#82071e, #ffa198);
+}
+
+:is(.code-text, .highlighted-code) .token.coord {
+  color: light-dark(#0550ae, #79c0ff);
 }
 
 .agent-edited {

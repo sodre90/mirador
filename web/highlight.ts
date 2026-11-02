@@ -27,6 +27,7 @@ import "prismjs/components/prism-swift.js";
 import "prismjs/components/prism-hcl.js";
 import "prismjs/components/prism-ini.js";
 import "prismjs/components/prism-makefile.js";
+import "prismjs/components/prism-diff.js";
 import type { DiffRow } from "../shared/review.ts";
 
 // Prism checks this when its page load handler runs; left on, it rewrites every `language-*` code block on the page,
@@ -96,6 +97,45 @@ function grammarFor(path: string) {
   return language ? Prism.languages[language] : undefined;
 }
 
+/** The names written after a code fence's backticks that differ from a file extension, e.g. "```shell". */
+const languageByFenceName: Record<string, string> = {
+  shell: "bash",
+  console: "bash",
+  javascript: "javascript",
+  typescript: "typescript",
+  python: "python",
+  golang: "go",
+  rust: "rust",
+  kotlin: "kotlin",
+  ruby: "ruby",
+  dockerfile: "docker",
+  docker: "docker",
+  containerfile: "docker",
+  makefile: "makefile",
+  make: "makefile",
+  diff: "diff",
+  patch: "diff",
+  jsonc: "json",
+  markdown: "markdown",
+  terraform: "hcl",
+  "c++": "cpp",
+  "c#": "csharp",
+  protobuf: "protobuf",
+  java: "java",
+  scala: "scala",
+  groovy: "groovy",
+  swift: "swift",
+  csharp: "csharp",
+  cpp: "cpp",
+  sql: "sql",
+};
+
+function grammarForFence(fenceName: string) {
+  const name = fenceName.toLowerCase();
+  const language = languageByFenceName[name] ?? languageByExtension[name];
+  return language ? Prism.languages[language] : undefined;
+}
+
 const typeOf = (token: Prism.Token) => [token.type, ...[token.alias ?? []].flat()].join(" ");
 
 function flatten(tokens: Prism.TokenStream, type: string | null): CodeSpan[] {
@@ -112,6 +152,20 @@ function splitIntoLines(spans: CodeSpan[]): CodeSpan[][] {
     }),
   );
   return lines;
+}
+
+/** Colors a code block whose fence names its language, e.g. "ts" or "python", or returns null when it is not one this knows. */
+export function highlightCode(code: string, fenceName: string): CodeSpan[] | null {
+  const grammar = grammarForFence(fenceName);
+  if (!grammar) return null;
+  const spans = flatten(Prism.tokenize(code, grammar), null);
+  return grammar === Prism.languages.diff ? spans.map(wholeDiffLineColored) : spans;
+}
+
+/** Prism marks only a diff line's sign as added or removed, and the rest of the line as just "line". */
+function wholeDiffLineColored(span: CodeSpan, index: number, spans: CodeSpan[]): CodeSpan {
+  const sign = spans[index - 1]?.type?.match(/\b(inserted|deleted)\b/)?.[1];
+  return span.type === "line" && sign ? { ...span, type: `line ${sign}` } : span;
 }
 
 /** The rows between gaps, each with its place in `rows`. */

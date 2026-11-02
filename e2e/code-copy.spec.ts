@@ -16,11 +16,16 @@ const LINK = "https://chrome-devtools-frontend.appspot.com/serve_rev/@d04cdb24/i
 const COMMANDS = "./infra/cdp_tls.sh\ntools/pod_devtools.sh 9555";
 /** Chromium on Windows puts text on the clipboard with Windows line breaks, as pasting there expects. */
 const COMMANDS_AS_COPIED = process.platform === "win32" ? COMMANDS.replaceAll("\n", "\r\n") : COMMANDS;
+const PORT_CODE = 'const port = 9555; // the pod\'s\nconnect("devtools", port);';
 const reply = ["Open the link:", "", "```", LINK, "```", "", "Then run `tools/pod_devtools.sh 9333`, or copy both at once:", "", "```bash", COMMANDS, "```"].join("\n");
+const later = ["The port is set here:", "", "```ts", PORT_CODE, "```"].join("\n");
 
 const turn = [
   { type: "user-message", text: "how do I open DevTools on the pod" },
   { type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: reply } } },
+  { type: "turn-end", stopReason: "end_turn" },
+  { type: "user-message", text: "where is this set?\n```ts\nconst port = 9555;\n```" },
+  { type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: later } } },
   { type: "turn-end", stopReason: "end_turn" },
 ];
 
@@ -41,7 +46,7 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
   await host.start();
   await reloadFromRestartedHost(page);
 
-  const message = page.locator(".message.agent");
+  const message = page.locator(".message.agent").first();
   const [linkBlock, commandsBlock] = [0, 1].map((index) => message.locator(".copyable-code").nth(index));
   const [linkCopy, commandsCopy] = [linkBlock, commandsBlock].map((block) => block.locator(".code-copy"));
   await expect(message).toContainText("tools/pod_devtools.sh 9333");
@@ -88,13 +93,31 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
     await page.keyboard.press("Escape");
   });
 
+  await test.step("a code block whose fence names its language is colored as code, in replies and in the person's messages, and copies as written", async () => {
+    const tsBlock = page.locator(".message.agent").nth(1).locator(".copyable-code");
+    const keyword = tsBlock.locator(".token.keyword", { hasText: "const" });
+    const comment = tsBlock.locator(".token.comment");
+    await expect(keyword).toHaveCount(1);
+    await expect(comment).toHaveText("// the pod's");
+    const colorOf = (element: Locator) => element.evaluate((node) => getComputedStyle(node).color);
+    expect(await colorOf(keyword)).not.toBe(await colorOf(tsBlock.locator("code")));
+    expect(await colorOf(comment)).not.toBe(await colorOf(keyword));
+    await expect(linkBlock.locator(".token"), "a block without a language stays plain").toHaveCount(0);
+    await expect(page.locator(".message.user .copyable-code .token.keyword", { hasText: "const" })).toHaveCount(1);
+
+    await tsBlock.hover();
+    await tsBlock.locator(".code-copy").click();
+    const asCopied = process.platform === "win32" ? PORT_CODE.replaceAll("\n", "\r\n") : PORT_CODE;
+    await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(asCopied);
+  });
+
   await test.step("a touch screen, with no pointer to hover, always shows the buttons", async () => {
     const touchContext = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 1280, height: 800 } });
     const touchPage = await touchContext.newPage();
     await signIn(touchPage, host);
     await touchPage.goto(`${host.origin}/#/c/${conversationId}`);
     expect(await touchPage.evaluate(() => matchMedia("(hover: none)").matches)).toBe(true);
-    const buttons = touchPage.locator(".message.agent .code-copy");
+    const buttons = touchPage.locator(".message.agent").first().locator(".code-copy");
     await expect(buttons).toHaveCount(2);
     for (const button of await buttons.all()) await shown(button);
     await touchContext.close();
