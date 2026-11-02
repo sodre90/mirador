@@ -114,7 +114,7 @@ export const pluginTile = (plugins: Locator, section: "Installed" | "Discover", 
 
 /** Opens an installed plugin's own view by clicking its tile, which starts nothing. */
 export async function openPluginDetail(plugins: Locator, title: string) {
-  await pluginTile(plugins, "Installed", title).locator(".plugin-title").click();
+  await pluginTile(plugins, "Installed", title).getByRole("button", { name: title, exact: true }).click();
   return plugins.getByRole("region", { name: title });
 }
 

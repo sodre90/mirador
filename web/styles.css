@@ -6576,6 +6576,7 @@ body.reordering * {
 }
 
 .modal.plugins {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: min(860px, 100%);
@@ -6617,8 +6618,28 @@ body.reordering * {
   cursor: pointer;
 }
 
-.plugin-tile:hover {
+.plugin-tile:hover,
+.plugin-tile:has(.plugin-title:focus-visible) {
   border-color: var(--accent);
+}
+
+.plugin-tile .plugin-title {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-align: start;
+  cursor: pointer;
+}
+
+.plugin-tile .plugin-title:focus-visible {
+  outline: none;
+}
+
+.plugin-tile:has(.plugin-title:focus-visible) {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 .plugin-tile.failed {
@@ -6632,9 +6653,29 @@ body.reordering * {
   gap: 10px;
 }
 
+.plugin-detail-head {
+  justify-self: stretch;
+  gap: 14px;
+}
+
+.plugin-detail-head .plugin-icon,
+.plugin-detail-head .plugin-monogram {
+  width: 56px;
+  height: 56px;
+  border-radius: 13px;
+  font-size: calc(24px * var(--font-scale));
+}
+
+.plugin-detail-name {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+}
+
 .modal.plugins .plugin-detail-head h3 {
   margin: 0;
-  font-size: calc(17px * var(--font-scale));
+  font-size: calc(18px * var(--font-scale));
 }
 
 .plugin-monogram {
@@ -6677,12 +6718,67 @@ body.reordering * {
 .plugin-screenshots img {
   display: block;
   height: 280px;
-  max-width: 100%;
+  max-width: none;
   object-fit: contain;
   object-position: top left;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel-2);
+}
+
+.plugin-screenshot {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+}
+
+.plugin-viewer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  padding: 40px 20px 16px;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+}
+
+.plugin-viewer figure {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  max-width: 100%;
+  max-height: 100%;
+  min-height: 0;
+  margin: 0;
+}
+
+.plugin-viewer img {
+  max-width: 100%;
+  max-height: calc(min(680px, 100vh) - 120px);
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.plugin-viewer figcaption {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+
+.plugin-viewer-close {
+  position: absolute;
+  top: 10px;
+  right: 14px;
+}
+
+.plugin-folder {
+  margin-top: 6px;
 }
 
 .plugin-screenshots span {

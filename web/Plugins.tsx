@@ -308,17 +308,64 @@ function PluginIcon({ plugin }: { plugin: GalleryPlugin }) {
 const throughTheHost = (url: string) => `/plugin-screenshot?url=${encodeURIComponent(url)}`;
 
 function Screenshots({ title, screenshots }: { title: string; screenshots: PluginScreenshot[] }) {
+  const [shown, setShown] = useState<number | null>(null);
   return (
-    <ul className="plugin-screenshots" aria-label={words.screenshotsOf(title)}>
-      {screenshots.map(({ url, caption }) => (
-        <li key={url}>
-          <a href={throughTheHost(url)} target="_blank" rel="noreferrer">
-            <img src={throughTheHost(url)} alt={caption} loading="lazy" />
-          </a>
+    <>
+      <ul className="plugin-screenshots" aria-label={words.screenshotsOf(title)}>
+        {screenshots.map(({ url, caption }, index) => (
+          <li key={url}>
+            <button type="button" className="plugin-screenshot" onClick={() => setShown(index)}>
+              <img src={throughTheHost(url)} alt={caption} loading="lazy" />
+            </button>
+            <span>{caption}</span>
+          </li>
+        ))}
+      </ul>
+      {shown !== null && <PictureViewer screenshots={screenshots} shown={shown} onShow={setShown} onClose={() => setShown(null)} />}
+    </>
+  );
+}
+
+/** A picture large, over the plugin's page; the arrow keys step through them, Escape closes just the picture. */
+function PictureViewer({ screenshots, shown, onShow, onClose }: { screenshots: PluginScreenshot[]; shown: number; onShow: (index: number) => void; onClose: () => void }) {
+  const count = screenshots.length;
+  const step = (by: number) => onShow((shown + by + count) % count);
+  const keys: Record<string, () => void> = { Escape: onClose, ArrowLeft: () => step(-1), ArrowRight: () => step(1) };
+  const latestKeys = useRef(keys);
+  latestKeys.current = keys;
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      const handle = latestKeys.current[event.key];
+      if (!handle) return;
+      event.preventDefault();
+      handle();
+    };
+    window.addEventListener("keydown", handleKey, { capture: true });
+    return () => window.removeEventListener("keydown", handleKey, { capture: true });
+  }, []);
+  const { url, caption } = screenshots[shown]!;
+  return (
+    <div className="plugin-viewer" role="group" aria-label={words.pictureOf(shown + 1, count)} onClick={(event) => event.target === event.currentTarget && onClose()}>
+      <button type="button" className="icon plugin-viewer-close" title={words.closePicture} aria-label={words.closePicture} onClick={onClose}>
+        ×
+      </button>
+      <figure>
+        <img src={throughTheHost(url)} alt={caption} />
+        <figcaption>
+          {count > 1 && (
+            <button type="button" className="icon" title={words.previousPicture} aria-label={words.previousPicture} onClick={() => step(-1)}>
+              ‹
+            </button>
+          )}
           <span>{caption}</span>
-        </li>
-      ))}
-    </ul>
+          {count > 1 && (
+            <button type="button" className="icon" title={words.nextPicture} aria-label={words.nextPicture} onClick={() => step(1)}>
+              ›
+            </button>
+          )}
+        </figcaption>
+      </figure>
+    </div>
   );
 }
 
@@ -326,7 +373,7 @@ function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: PluginNew
   const { installed, official } = plugin;
   return (
     <span className="plugin-badges">
-      {installed?.kinds?.map((kind) => (
+      {(installed?.kinds ?? official?.kinds)?.map((kind) => (
         <span key={kind} className="plugin-badge">
           {words.kind[kind]}
         </span>
@@ -345,28 +392,28 @@ function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: PluginNew
 
 type Start = "install" | "update" | null;
 
+const mainActionOf = (plugin: GalleryPlugin, news: PluginNews | undefined) =>
+  !plugin.installed ? { label: words.install, start: "install" as const } : news ? { label: words.update, start: "update" as const } : null;
+
+/** The whole tile opens the plugin's page; its title is the button that does so for the keyboard. */
 function PluginTile({ plugin, news, onOpen }: { plugin: GalleryPlugin; news: PluginNews | undefined; onOpen: (start: Start) => void }) {
-  const action = !plugin.installed ? { label: words.install, start: "install" as const } : news ? { label: words.update, start: "update" as const } : { label: words.open, start: null };
+  const action = mainActionOf(plugin, news);
   return (
     <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
       <span className="plugin-tile-top">
         <PluginIcon plugin={plugin} />
-        <span className="plugin-title">{plugin.title}</span>
+        <button type="button" className="plugin-title" onClick={(event) => (event.stopPropagation(), onOpen(null))}>
+          {plugin.title}
+        </button>
       </span>
-      <span className="plugin-tagline">{plugin.official?.description}</span>
+      <span className="plugin-tagline">{plugin.official?.tagline ?? plugin.official?.description}</span>
       <span className="plugin-tile-bottom">
         <PluginBadges plugin={plugin} news={news} />
-        <button
-          type="button"
-          className={action.start ? "primary" : undefined}
-          aria-label={`${action.label} ${plugin.title}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onOpen(action.start);
-          }}
-        >
-          {action.label}
-        </button>
+        {action && (
+          <button type="button" className="primary" aria-label={`${action.label} ${plugin.title}`} onClick={(event) => (event.stopPropagation(), onOpen(action.start))}>
+            {action.label}
+          </button>
+        )}
       </span>
     </li>
   );
@@ -387,32 +434,42 @@ function ToolList({ title, tools }: { title: string; tools: PluginTool[] }) {
   );
 }
 
-function InstallOfficial({ plugin, startInstalling }: { plugin: CatalogPlugin; startInstalling: boolean }) {
+function useInstallOfficial(plugin: CatalogPlugin | null, startInstalling: boolean) {
   const [step, setStep] = useState<"idle" | "cloning" | PluginOffer>("idle");
   const [problem, setProblem] = useState<string | null>(null);
   const offer = async () => {
+    if (!plugin) return;
     setStep("cloning");
     setProblem(null);
     const offered = await offerPlugin((requestId) => ({ type: "plugins.offer", requestId, url: plugin.repo, branch: plugin.branch ?? null }));
     setStep(offered.offer ?? "idle");
     setProblem(offered.problem);
   };
-  useStartOnce(startInstalling, offer);
+  useStartOnce(startInstalling && plugin !== null, offer);
   const settled = (outcome: Settled) => {
     setStep("idle");
     setProblem(outcome.problem);
   };
+  return { step, problem, offer, settled };
+}
+
+type Installing = ReturnType<typeof useInstallOfficial>;
+
+function InstallButton({ installing }: { installing: Installing }) {
+  const { step, offer } = installing;
+  if (typeof step === "object") return null;
+  return (
+    <button type="button" className="primary" data-hint={hints.installOfficialPlugin} disabled={step === "cloning"} onClick={offer}>
+      {step === "cloning" ? words.cloning : words.install}
+    </button>
+  );
+}
+
+function InstallConsent({ installing }: { installing: Installing }) {
+  const { step, problem, settled } = installing;
   return (
     <>
-      {typeof step === "object" ? (
-        <PluginConsent question={words.installQuestion(step.title)} offers={[step]} agree={words.install} decline={words.dontInstall} onSettled={settled} />
-      ) : (
-        <span className="plugin-actions">
-          <button type="button" className="primary" data-hint={hints.installOfficialPlugin} disabled={step === "cloning"} onClick={offer}>
-            {step === "cloning" ? words.cloning : words.install}
-          </button>
-        </span>
-      )}
+      {typeof step === "object" && <PluginConsent question={words.installQuestion(step.title)} offers={[step]} agree={words.install} decline={words.dontInstall} onSettled={settled} />}
       {problem && <pre className="plugin-output">{problem}</pre>}
     </>
   );
@@ -470,6 +527,7 @@ function InstalledDetail({ plugin, title, news, startUpdating }: { plugin: Plugi
 }
 
 function PluginDetail({ plugin, news, start, onBack }: { plugin: GalleryPlugin; news: PluginNews | undefined; start: Start; onBack: () => void }) {
+  const installing = useInstallOfficial(plugin.installed ? null : plugin.official, start === "install");
   return (
     <section className="plugin-detail" aria-label={plugin.title}>
       <button type="button" className="link" onClick={onBack}>
@@ -477,27 +535,37 @@ function PluginDetail({ plugin, news, start, onBack }: { plugin: GalleryPlugin; 
       </button>
       <header className="plugin-detail-head">
         <PluginIcon plugin={plugin} />
-        <h3>{plugin.title}</h3>
+        <span className="plugin-detail-name">
+          <h3>{plugin.title}</h3>
+          <PluginBadges plugin={plugin} news={news} />
+        </span>
+        {!plugin.installed && plugin.official && <InstallButton installing={installing} />}
       </header>
-      <PluginBadges plugin={plugin} news={news} />
       {plugin.official && <p className="plugin-description">{plugin.official.description}</p>}
+      {!plugin.installed && <InstallConsent installing={installing} />}
       {plugin.official?.screenshots && <Screenshots title={plugin.title} screenshots={plugin.official.screenshots} />}
-      {plugin.installed ? (
-        <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} startUpdating={start === "update"} />
-      ) : (
-        plugin.official && <InstallOfficial plugin={plugin.official} startInstalling={start === "install"} />
-      )}
+      {plugin.installed && <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} startUpdating={start === "update"} />}
     </section>
   );
 }
 
-function AddFromGit() {
+function AddFromGit({ folder }: { folder: string | null }) {
   const [open, setOpen] = useState(false);
+  const whereTheyLive = (
+    <p className="hint plugin-folder">
+      {words.folderBefore}
+      {folder ? <code>{folder}</code> : words.pluginsFolder}
+      {words.folderAfter}
+    </p>
+  );
   if (!open) {
     return (
-      <button type="button" className="link plugin-add-from-git" data-hint={hints.addPlugin} onClick={() => setOpen(true)}>
-        {words.addFromGitOpen}
-      </button>
+      <>
+        <button type="button" className="link plugin-add-from-git" data-hint={hints.addPlugin} onClick={() => setOpen(true)}>
+          {words.addFromGitOpen}
+        </button>
+        {whereTheyLive}
+      </>
     );
   }
   return (
@@ -505,6 +573,7 @@ function AddFromGit() {
       <h3>{words.addFromGit}</h3>
       <p className="hint">{words.addFromGitHint}</p>
       <AddPlugin />
+      {whereTheyLive}
     </>
   );
 }
@@ -632,7 +701,7 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
   const listed = usePluginsListed();
   const [opened, setOpened] = useState<{ key: string; start: Start } | null>(null);
   useEffect(() => {
-    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && !event.defaultPrevented && onClose();
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [onClose]);
@@ -668,11 +737,7 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
             <PluginDetail key={openedPlugin.key} plugin={openedPlugin} news={newsOf(openedPlugin)} start={opened.start} onBack={() => setOpened(null)} />
           ) : (
             <>
-              <p className="hint">
-                {words.introBeforeFolder}
-                {listed ? <code>{listed.folder}</code> : words.pluginsFolder}
-                {words.introAfterFolder}
-              </p>
+              <p className="hint">{words.intro}</p>
               {waiting.length > 0 && <UpdateAll updates={waiting} />}
               <h3>{words.installed}</h3>
               {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
@@ -683,7 +748,7 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
                   <TileList label={words.discover} plugins={gallery.discover} newsOf={newsOf} onOpen={open} />
                 </>
               )}
-              <AddFromGit />
+              <AddFromGit folder={listed?.folder ?? null} />
             </>
           )}
         </div>

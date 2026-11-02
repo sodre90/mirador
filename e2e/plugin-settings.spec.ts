@@ -41,7 +41,7 @@ test.afterAll(async () => {
 test("Plugins… shows the installed plugins as tiles, and a tile opens the tools it gives the agent, where it came from, and why it didn't load", async ({ page }) => {
   await signIn(page, host);
   const plugins = await openPlugins(page);
-  await expect(plugins.getByRole("list", { name: "Installed" }).getByRole("listitem")).toHaveText(["BoardCanvas toolsOpen", "CCounterAppOpen", "UUnbuiltAppDidn't loadOpen"]);
+  await expect(plugins.getByRole("list", { name: "Installed" }).getByRole("listitem")).toHaveText(["BoardCanvas tools", "CCounterApp", "UUnbuiltAppDidn't load"]);
   await expect(pluginTile(plugins, "Installed", "Board").locator("img.plugin-icon")).toHaveAttribute("src", `data:image/svg+xml;charset=utf-8,${encodeURIComponent(BOARD_ICON)}`);
   await expect(plugins.getByText(join(host.dataDir, "plugins"), { exact: true })).toBeVisible();
 
@@ -57,7 +57,7 @@ test("Plugins… shows the installed plugins as tiles, and a tile opens the tool
   await expect(counter.getByRole("button", { name: "Remove Counter" })).toBeVisible();
   await counter.getByRole("button", { name: "← All plugins" }).click();
 
-  await pluginTile(plugins, "Installed", "Unbuilt").getByRole("button", { name: "Open Unbuilt" }).click();
+  await pluginTile(plugins, "Installed", "Unbuilt").getByRole("button", { name: "Unbuilt", exact: true }).click();
   await expect(plugins.getByRole("region", { name: "Unbuilt" }).locator(".plugin-problem")).toHaveText("Didn't load: host.ts doesn't exist; build the plugin first?");
 
   await test.step("in Hungarian, why the plugin didn't load is in Hungarian", async () => {

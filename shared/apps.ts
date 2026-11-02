@@ -221,6 +221,10 @@ export interface CatalogPlugin {
   branch?: string;
   /** The plugin's icon, as SVG text. */
   icon?: string;
+  /** A line on what it does, for its tile; the description stands in without one. */
+  tagline?: string;
+  /** What its plugin.json brings, for the badges of a plugin not installed yet. */
+  kinds?: PluginKind[];
   /** Pictures of the plugin at work, shown on its page in Plugins…. */
   screenshots?: PluginScreenshot[];
 }
@@ -241,10 +245,21 @@ const isScreenshot = (value: unknown): value is PluginScreenshot => {
   return typeof url === "string" && url.startsWith("https://") && typeof caption === "string";
 };
 
-/** A catalog entry with only the images this Mirador can show: a bad icon or picture is left out, not the plugin. */
-function withShowableImages({ icon, screenshots, ...plugin }: CatalogPlugin): CatalogPlugin {
+const MAX_TAGLINE_LENGTH = 120;
+
+const PLUGIN_KINDS: readonly PluginKind[] = ["app", "canvas"];
+
+/** A catalog entry with only the extras this Mirador can show: a bad icon, picture, tagline or kind is left out, not the plugin. */
+function withShowableExtras({ icon, screenshots, tagline, kinds, ...plugin }: CatalogPlugin): CatalogPlugin {
   const showable = Array.isArray(screenshots) ? screenshots.filter(isScreenshot) : [];
-  return { ...plugin, ...(isPluginIcon(icon) ? { icon } : {}), ...(showable.length > 0 ? { screenshots: showable } : {}) };
+  const knownKinds = Array.isArray(kinds) ? PLUGIN_KINDS.filter((kind) => kinds.includes(kind)) : [];
+  return {
+    ...plugin,
+    ...(isPluginIcon(icon) ? { icon } : {}),
+    ...(showable.length > 0 ? { screenshots: showable } : {}),
+    ...(typeof tagline === "string" && tagline.trim() !== "" && tagline.length <= MAX_TAGLINE_LENGTH ? { tagline } : {}),
+    ...(knownKinds.length > 0 ? { kinds: knownKinds } : {}),
+  };
 }
 
 function isCatalogPlugin(value: unknown): value is CatalogPlugin {
@@ -263,7 +278,7 @@ function isCatalogPlugin(value: unknown): value is CatalogPlugin {
 /** The catalog's plugins, leaving out entries this Mirador can't read, as a newer catalog may have. */
 export function catalogPluginsOf(catalog: unknown): CatalogPlugin[] | null {
   const plugins = (catalog as { plugins?: unknown } | null)?.plugins;
-  return Array.isArray(plugins) ? plugins.filter(isCatalogPlugin).map(withShowableImages) : null;
+  return Array.isArray(plugins) ? plugins.filter(isCatalogPlugin).map(withShowableExtras) : null;
 }
 
 /** A commit an update would bring. */

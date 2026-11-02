@@ -141,7 +141,7 @@ test("a plugin added from a git repo is built only once the user agrees, works a
     const plugins = page.getByRole("dialog", { name: "Plugins" });
     await plugins.getByRole("button", { name: "Add" }).click();
     await consent(plugins, "Install Counter?").getByRole("button", { name: "Install", exact: true }).click();
-    await expect(counterTile(plugins)).toHaveText("CCounterAppused from the next startOpen");
+    await expect(counterTile(plugins)).toHaveText("CCounterAppused from the next start");
     await expect(plugins.getByText("Mirador uses the changed plugins from its next start.")).toBeVisible();
     await expect(plugins.getByLabel("Git URL or path")).toHaveValue("");
     const counter = await counterDetails(plugins);
@@ -165,7 +165,7 @@ test("a plugin added from a git repo is built only once the user agrees, works a
     const asked = consent(plugins, "Update Counter?");
     await expect(asked.getByRole("list", { name: "Commits the update of Counter brings" })).toHaveText(`${git(repo(), "rev-parse", "--short", "HEAD")} Count by two`);
     await asked.getByRole("button", { name: "Update all", exact: true }).click();
-    await expect(counterTile(plugins)).toHaveText("CCounterAppused from the next startOpen");
+    await expect(counterTile(plugins)).toHaveText("CCounterAppused from the next start");
     await expect(pluginsButton(page).locator(".updates-waiting")).toHaveCount(0);
     const counter = await counterDetails(plugins);
     await expect(counter.locator(".plugin-source")).toContainText("Count by two");
