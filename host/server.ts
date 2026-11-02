@@ -54,7 +54,7 @@ import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join
 import type { ConversationSearch } from "./search.ts";
 import { machineAddress } from "../shared/machines.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
-import { socketData, webSocketCompression, type BrowserSocket, type Hub, type SocketData } from "./hub.ts";
+import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SocketData } from "./hub.ts";
 import { newestOnly } from "./newest-only.ts";
 import type { MachineRelays } from "./machine-relays.ts";
 import type { MachineWatch } from "./machine-watch.ts";
@@ -151,8 +151,6 @@ const parsedJson = (text: string): unknown => {
     return null;
   }
 };
-
-const isLoopback = (address: string) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address);
 
 const tokenCookie = (token: string, secure: boolean) =>
   `${TOKEN_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=31536000${secure ? "; Secure" : ""}`;
@@ -1298,7 +1296,7 @@ export function startServer(services: HostServices) {
       case "terminal.open":
         return reply({ type: "terminal.opened", requestId: message.requestId, ...terminals.open(message.conversationId, message.columns, message.rows, message.split) });
       case "terminal.open-login": {
-        const program = conversations.loginProgram(message.conversationId);
+        const program = conversations.loginProgram(message.conversationId, pageOnHost(socket.data));
         const { exited, ...opened } = terminals.openProgram(message.conversationId, message.columns, message.rows, program);
         void exited.then((exitCode) => conversations.loginEnded(message.conversationId, exitCode === 0));
         return reply({ type: "terminal.opened", requestId: message.requestId, ...opened });

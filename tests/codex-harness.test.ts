@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { harnessSpec, launchEnvironment, loginCommand, sessionMeta, sessionSystemPrompt } from "../host/acp/harnesses.ts";
 import { CanvasMcpEndpoints } from "../host/canvas/mcp.ts";
+import { pageOnHost } from "../host/hub.ts";
 import type { CanvasService } from "../host/canvas/service.ts";
 import { canvasUseGuidance } from "../host/canvas/guidance.ts";
 import type { ConversationService } from "../host/conversations.ts";
@@ -36,9 +37,20 @@ test("a profile's own CODEX_PATH picks the Codex codex-acp runs", () => {
   expect(launchEnvironment("codex", { ...codexProfile, environment: "CODEX_PATH=/opt/codex-beta/codex" }, "").CODEX_PATH).toBe("/opt/codex-beta/codex");
 });
 
-test("signing in to Codex runs codex-acp's own login, which signs in the Codex it runs", () => {
-  const command = loginCommand("codex", {}, { kind: "posix", program: "/bin/sh" });
-  expect(command.slice(-3)).toEqual([process.execPath, expect.stringMatching(/codex-acp[/\\]dist[/\\]index\.js$/), "login"]);
+test("signing in to Codex runs the user's codex: its browser sign-in on the host's own machine, a code from anywhere else", () => {
+  const environment = { CODEX_PATH: "/opt/codex/bin/codex" };
+  const shell = { kind: "posix", program: "/bin/sh" } as const;
+  expect(loginCommand("codex", environment, shell).slice(-2)).toEqual(["/opt/codex/bin/codex", "login"]);
+  expect(loginCommand("codex", environment, shell, false).slice(-3)).toEqual(["/opt/codex/bin/codex", "login", "--device-auth"]);
+});
+
+test("a page is on the host's machine when it reached the host on loopback, not through a joined device", () => {
+  const local = { fromAddress: "127.0.0.1", tailscaleUser: null };
+  expect(pageOnHost({ deviceId: null, from: local })).toBe(true);
+  expect(pageOnHost({ deviceId: null, from: { fromAddress: "::1", tailscaleUser: null } })).toBe(true);
+  expect(pageOnHost({ deviceId: "phone-1", from: local })).toBe(false);
+  expect(pageOnHost({ deviceId: null, from: { fromAddress: "100.64.0.7", tailscaleUser: "me@example.com" } })).toBe(false);
+  expect(pageOnHost({ deviceId: null, from: { fromAddress: "127.0.0.1", tailscaleUser: "me@example.com" } })).toBe(false);
 });
 
 test("Codex hears the canvas guidance through ACP's appended system prompt, and nothing through _meta", () => {

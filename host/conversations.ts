@@ -1136,10 +1136,10 @@ export class ConversationService {
   }
 
   /** The agent's own sign-in, with the environment of the conversation's profile, so a profile with its own account signs that one in. */
-  loginProgram(conversationId: string): TerminalProgram {
+  loginProgram(conversationId: string, pageOnHost: boolean): TerminalProgram {
     const conversation = this.get(conversationId);
     const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
-    return { tabName: `${harnessLabels[conversation.harness]} sign-in`, command: loginCommand(conversation.harness, environment), environment };
+    return { tabName: `${harnessLabels[conversation.harness]} sign-in`, command: loginCommand(conversation.harness, environment, undefined, pageOnHost), environment };
   }
 
   /** A command Claude Code shows a panel for only in its own terminal, run in a tab of the conversation's terminals. */

@@ -69,12 +69,16 @@ const AUTH_REQUIRED_CODE = RequestError.authRequired().code;
 export const isAuthRequiredError = (error: unknown) =>
   typeof error === "object" && error !== null && (error as { code?: unknown }).code === AUTH_REQUIRED_CODE;
 
-/** Each harness's own sign-in, run by the program the agent runs, so it signs in that installation. */
-const loginCommandFor: Record<HarnessId, (environment: Record<string, string>) => string[]> = {
+/**
+ * Each harness's own sign-in, run by the program the agent runs, so it signs in that installation. Codex's browser
+ * sign-in finishes on the host's localhost, which a browser on another machine can't reach; from there it signs in with
+ * a code instead.
+ */
+const loginCommandFor: Record<HarnessId, (environment: Record<string, string>, pageOnHost: boolean) => string[]> = {
   claude: (environment) => [environment.CLAUDE_CODE_EXECUTABLE!, "auth", "login"],
   opencode: () => [opencodeCommand()[0]!, "auth", "login"],
   pi: (environment) => [environment.PI_ACP_PI_COMMAND!],
-  codex: () => [process.execPath, codexAcpEntry(), "login"],
+  codex: (environment, pageOnHost) => [environment.CODEX_PATH!, "login", ...(pageOnHost ? [] : ["--device-auth"])],
 };
 
 const powershellKeepOpenOnFailure = (command: string[]) =>
@@ -91,8 +95,8 @@ const powershellKeepOpenOnFailure = (command: string[]) =>
  * A failed sign-in keeps its tab open until Enter, so its output can be read; one that worked closes it. The command
  * comes in as arguments, so nothing in it is quoted for the shell.
  */
-export function loginCommand(harness: HarnessId, environment: Record<string, string>, shell = commandShell(() => "/bin/sh", environment)): string[] {
-  const signIn = loginCommandFor[harness](environment);
+export function loginCommand(harness: HarnessId, environment: Record<string, string>, shell = commandShell(() => "/bin/sh", environment), pageOnHost = true): string[] {
+  const signIn = loginCommandFor[harness](environment, pageOnHost);
   if (shell.kind === "powershell") return [shell.program, "-NoLogo", "-NoProfile", "-Command", powershellKeepOpenOnFailure(signIn)];
   const keepOpenOnFailure = '"$@" && exit 0; status=$?; printf "\\nSigning in ended with status %s. Press Enter to close this tab." "$status"; read -r _; exit "$status"';
   return [shell.program, "-c", keepOpenOnFailure, "mirador-login", ...signIn];

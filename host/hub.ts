@@ -41,6 +41,12 @@ export interface SocketData {
 
 const thisMachine: ClientAddress = { fromAddress: "127.0.0.1", tailscaleUser: null };
 
+/** The page runs in a browser on the host's own machine, not on a joined device or another machine on the network. */
+export const pageOnHost = ({ deviceId, from }: Pick<SocketData, "deviceId" | "from">) =>
+  deviceId === null && from.tailscaleUser === null && isLoopback(from.fromAddress);
+
+export const isLoopback = (address: string) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address);
+
 export const socketData = (
   role: SocketData["role"],
   deviceId: string | null = null,
