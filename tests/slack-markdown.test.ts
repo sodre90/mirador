@@ -183,10 +183,20 @@ describe("what the box writes", () => {
   });
 });
 
-test("a long line of openers that never close, or of ordinary formatting, is read in one pass", () => {
-  for (const line of ["x *a ".repeat(20_000), " **a".repeat(20_000), "some **bold** and *it* text ".repeat(3_000)]) {
+/** The fastest of a few reads, so a pause of the runner doesn't count. */
+function fastestRead(line: string) {
+  const times = [1, 2, 3].map(() => {
     const start = performance.now();
     expect(markdownOf(parseMessage(line))).toBe(line);
-    expect(performance.now() - start).toBeLessThan(300);
+    return performance.now() - start;
+  });
+  return Math.min(...times);
+}
+
+test("a long line of openers that never close, or of ordinary formatting, is read in one pass", () => {
+  for (const [piece, times] of [["x *a ", 2_500], [" **a", 2_500], ["some **bold** and *it* text ", 400]] as const) {
+    const short = fastestRead(piece.repeat(times));
+    const eightTimesLonger = fastestRead(piece.repeat(times * 8));
+    expect(eightTimesLonger / Math.max(short, 0.5)).toBeLessThan(24);
   }
 });
