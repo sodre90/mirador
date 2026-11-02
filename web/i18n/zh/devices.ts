@@ -4,7 +4,7 @@ export const devices: Messages["devices"] = {
   guessedName: {
     desktopApp: "Mirador 应用",
     browser: "浏览器",
-    browserOn: (browser, system) => `${system} 上的${browser}`,
+    browserOn: (browser, system) => `${system} 上的 ${browser}`,
   },
   joinMachine: {
     title: "加入这台机器",

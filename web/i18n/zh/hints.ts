@@ -20,7 +20,7 @@ export const hints: Messages["hints"] = {
   removeVoiceEngineArmed: "再次点击，将从这台 Mac 删除语音引擎及其模型。重新设置会再次下载它们。",
   removeVoiceEngineModelArmed: "再次点击，将从这台 Mac 删除这个模型。再次选择它会重新下载。",
   voiceModelProfile: "Mirador 用这个配置的密钥调用它的 API。它的智能体不会启动。",
-  voiceAddress: "API 的地址，包含版本号为止，例如 https://api.openai.com/v1。Mirador 会补上每次调用的路径。",
+  voiceAddress: "API 的地址，到版本号为止（含版本号），例如 https://api.openai.com/v1。Mirador 会补上每次调用的路径。",
   voiceLanguage:
     "你说的语言。指定语言对短音频有帮助，因为仅凭声音区分语言常常出错；这台 Mac 的引擎仍会把英语当作英语来听。选择任意语言时，由语音服务器决定，语音模型会翻译所有不是英语的内容。",
   translateToEnglish: "你说的话会以英文放进消息框，原话显示在下方，方便你发送前核对。",
@@ -42,7 +42,7 @@ export const hints: Messages["hints"] = {
     "智能体运行时使用的配置（环境变量和启动前命令）。\n\n每个配置运行各自的智能体进程。切换时会在当前进程上关闭这个会话，并在新进程上恢复，因此智能体会保留整个对话。模型会回到新配置的默认值。\n\n在智能体工作时切换，会中止它的当前轮次、迁移会话，并请智能体从中断处继续；你排队的消息随后发出。\n\n其他智能体的配置只能在发出第一条消息之前选择：该智能体会开启一个全新的会话。对话开始后，请新建对话来使用它们。",
   questions:
     "智能体在画布上向你提问时会怎样。\n\n智能体等待：智能体的 ask 调用保持打开，直到你点击提交，你的回答会作为结果在轮次中途返回。\n\n下一条消息：ask 调用立即返回，智能体结束它的轮次，你的回答稍后作为你的下一条消息发出。适合需要你好好想想的问题。",
-  conversationPluginSetting: "仅对这个对话生效。“跟随配置”沿用其配置在“配置”中的设置；切换配置会回到它。",
+  conversationPluginSetting: "仅对这个对话生效。“配置的默认值”沿用其配置在“配置”中的设置；切换配置会回到它。",
   configOption:
     "智能体为这个会话提供的设置。更改它会把新值发送给智能体（ACP session/set_config_option），由智能体应用到这个对话。",
   dismissNewerVersion: "隐藏此提示，直到出现更新的版本。设置 › 关于 仍会继续显示它。",
@@ -60,13 +60,13 @@ export const hints: Messages["hints"] = {
   canvasAddress:
     "画布页面加载 D3、Mermaid 和 three 的地址。Mirador 在它们自己的端口（4601）上提供这些库，这是与应用分开的源，所以智能体写的页面无法访问这个 Mirador 自己的存储。代理也必须转发这个端口：https://macbook.example.ts.net:4601。",
   reachRoute:
-    "Mirador 一次只通过一种方式连接其他设备。选一个选项只是预览；它的“使用此项”或“保存地址”按钮才会应用并取消另一个，所以这里不会出现 host 没有使用的设置。host 从下次启动起读取它。可访问的地址必须由代理提供，例如 tailscale serve，或者由 host 自己在网络上用它生成的证书提供 HTTPS。",
+    "Mirador 一次只通过一种方式连接其他设备。选一个选项只是预览；它的“使用这个”或“保存地址”按钮才会应用并取消另一个，所以这里不会出现 host 没有使用的设置。host 从下次启动起读取它。可访问的地址必须由代理提供，例如 tailscale serve，或者由 host 自己在网络上用它生成的证书提供 HTTPS。",
   proxyElsewhere:
     "适用于你网络中另一台机器上的代理，例如 Nginx Proxy Manager，它无法访问这台机器自己的端口。保存地址后，Mirador 也会在网络上提供 HTTPS，由代理转发到这些端口。",
   networkReachability:
     "Mirador 在这个端口上自己提供 HTTPS，使用它生成的证书颁发机构，所以同一网络上的设备不需要代理，也不需要地址。每个浏览器会对证书警告一次（安装 mirador-ca.pem 后则永久信任）。",
   inviteDevice:
-    "生成一次性代码，另一个浏览器或应用可在 15 分钟内用它加入这个 Mirador。加入的设备可以在这里做任何事，包括在终端里运行命令。",
+    "生成一次性邀请码，另一个浏览器或应用可在 15 分钟内用它加入这个 Mirador。加入的设备可以在这里做任何事，包括在终端里运行命令。",
   inviteRoute:
     "点对点方式可以从任何地方连接这台 Mac，无需 VPN，需通过手机上的 Mirador 应用；浏览器只能通过地址加入。二维码和链接会随选择而变化。",
   removeMachineArmed: "再次点击，将从列表中移除这台机器。它会继续运行，这台电脑仍留在它的设备中，直到你在那里撤销。",
@@ -131,7 +131,7 @@ export const hints: Messages["hints"] = {
   terminalNewTab: "在这个对话终端的新标签页中打开一个 shell，位于其工作区的文件夹。每个窗口显示的这个对话的标签页都相同。",
   terminalSplit: "在同一个标签页中，在获得焦点的 shell 旁边再打开一个 shell（最多 4 个）。",
   terminalSplitDown: "在同一个标签页中，在获得焦点的 shell 下方再打开一个 shell（最多 4 个）。",
-  terminalFindWholeWord: "全字匹配：只匹配独立成词的文本，不匹配较长单词的一部分。",
+  terminalFindWholeWord: "全词匹配：只匹配独立成词的文本，不匹配较长单词的一部分。",
   terminalFindRegex: "使用正则表达式：文本按 JavaScript 正则表达式处理，例如 error|warn。",
   terminalShowAll: "再次显示此标签页的其他终端；这一个不再占满整个标签页。",
   terminalCloseBusy: (command: string) => `${command} 正在这个终端中运行。再次点击，或按 Enter 或 ⌘W，结束它并关闭终端；按 Esc 则保留。`,
@@ -319,7 +319,7 @@ export const hints: Messages["hints"] = {
   changesEditedByAgent: "这一轮中，这个对话的智能体用编辑工具改动的项目文件。",
   changesChangedOtherwise: "这一轮中，不是通过智能体的编辑工具改动的项目文件：由智能体运行的命令、你，或者在这个文件夹中工作的另一个对话或工具造成。",
   changesOthersMayHaveWritten:
-    "在这个对话的命令运行期间写入，但另一个对话在这个文件夹中运行命令或编辑时也在写入，而两者运行的内容无法判断是谁写的。只有另一个对话的工具调用提到的文件不会列出。",
+    "在这个对话的命令运行期间写入，但另一个对话在这个文件夹中运行命令或编辑时也在写入，而两者运行的内容无法判断是谁写的。仅被另一个对话的工具调用提到的文件不会列出。",
   changesFromCommit: "这一轮开始后的某个提交改动了这个文件，例如 pull 带来的，或智能体自己的提交。",
   changesRefresh: "重新加载列表。智能体每完成一次工具调用和轮次结束时也会重新加载。",
   changesByAgent: "这个对话的智能体用编辑工具改动了这个文件。",

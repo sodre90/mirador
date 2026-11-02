@@ -2,7 +2,7 @@ import type { Messages } from "../en/index.ts";
 
 export const problems: Messages["problems"] = {
   fixed: {
-    "usage-limit-reached": "Das Nutzungslimit von Claude ist erreicht.",
+    "usage-limit-reached": "Claudes Nutzungslimit ist erreicht.",
     "conversation-has-no-profile": "Diese Unterhaltung hat kein Profil, oder ihr Profil wurde gelöscht. Wähle oben in der Unterhaltung ein Profil.",
     "workspace-gone": "Der Arbeitsbereich existiert nicht mehr.",
     "conversation-deleted-while-opening": "Die Unterhaltung wurde gelöscht, während sich die Sitzung ihres Agenten öffnete.",
@@ -66,7 +66,7 @@ export const problems: Messages["problems"] = {
     "push-relay-not-web-address": "Die Adresse des Push-Relays ist keine Webadresse.",
     "push-relay-needs-https": "Die Adresse des Push-Relays muss mit https:// beginnen.",
     "push-relay-is-origin": "Die Adresse des Push-Relays ist nur sein Origin, etwa https://push.example.com.",
-    "push-relay-needs-token": "Das Push-Relay braucht den Token dieses Macs.",
+    "push-relay-needs-token": "Das Push-Relay braucht das Token dieses Macs.",
     "join-number-wrong": "Das ist nicht die Zahl, die das Gerät anzeigt, daher wurde seine Anfrage abgelehnt. Es kann erneut fragen.",
     "plugin-clone-gone": "Mirador hat den Klon dieses Plugins nicht mehr, etwa nach einem Neustart; füge es erneut hinzu, um zu sehen, was es mitbringt.",
     "plugin-needs-repo-address": "Gib die git-URL oder den Pfad des Repos des Plugins an.",
@@ -84,10 +84,10 @@ export const problems: Messages["problems"] = {
     "sentence-too-long-to-speak": "Der Satz ist zu lang, um ihn vorzulesen.",
     "invite-code-missing": "Der Einladungscode fehlt.",
     "invite-code-wrong": "Dieser Einladungscode ist falsch, schon benutzt oder abgelaufen. Bitte um einen neuen.",
-    "voice-not-set-up": "Die Stimme ist auf diesem Mac noch nicht eingerichtet.",
-    "voice-not-set-up-here": "Die Stimme ist auf diesem Mac noch nicht eingerichtet. Unter Einstellungen → Stimme lässt sie sich einrichten.",
-    "voice-being-removed": "Die Stimme wird gerade von diesem Mac entfernt.",
-    "voice-off": "Die Stimme ist aus. Unter Einstellungen → Stimme lässt sie sich einschalten.",
+    "voice-not-set-up": "Die Sprachfunktionen sind auf diesem Mac noch nicht eingerichtet.",
+    "voice-not-set-up-here": "Die Sprachfunktionen sind auf diesem Mac noch nicht eingerichtet. Unter Einstellungen → Stimme lassen sie sich einrichten.",
+    "voice-being-removed": "Die Sprachfunktionen werden gerade von diesem Mac entfernt.",
+    "voice-off": "Die Sprachfunktionen sind aus. Unter Einstellungen → Stimme lassen sie sich einschalten.",
     "spoken-replies-need-voice-model": "Gesprochene Antworten brauchen ein Sprachmodell. Unter Einstellungen → Stimme lässt sich eines festlegen.",
     "spoken-replies-off": "Gesprochene Antworten sind aus. Unter Einstellungen → Stimme lassen sie sich einschalten.",
     "voice-model-profile-gone": "Das Profil des Sprachmodells existiert nicht mehr. Unter Einstellungen → Stimme lässt sich ein anderes wählen.",
@@ -299,7 +299,7 @@ export const problems: Messages["problems"] = {
     exited: (how) => `endete mit ${how}`,
     couldNotStart: (cause) => `konnte nicht starten: ${cause}`,
   },
-  prelaunchFailed: (agent, failure, output) => `Der Vorstartbefehl von ${agent} ${failure}${output ? `: ${output}` : ""}`,
+  prelaunchFailed: (agent, failure, output) => `Der Befehl vor dem Start von ${agent} ${failure}${output ? `: ${output}` : ""}`,
   prelaunch: {
     timedOut: (seconds) => `brach nach ${seconds} s wegen Zeitüberschreitung ab`,
     exited: (how) => `endete mit ${how}`,

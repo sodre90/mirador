@@ -17,7 +17,7 @@ export const hints: Messages["hints"] = {
   voiceEngineUnloaded: "Most nem foglal memóriát. Akkor töltődik be, amikor legközelebb szükség van rá, általában 5–15 másodperc alatt.",
   voiceEngineDownloadWaits: "Egy másik letöltés folyik. Ez akkor indulhat, ha az véget ért.",
   voiceEngineRemoveWaits: "Egy letöltés folyik. Az eltávolítás akkor indulhat, ha az véget ért.",
-  spokenVoiceKept: "A Kokoro a Mac hangjával együtt érkezik az angol válaszokhoz, és csak az Összes eltávolítása viszi el.",
+  spokenVoiceKept: "A Kokoro a „Hang ezen a Macen” részeként érkezik az angol válaszokhoz, és csak az Összes eltávolítása viszi el.",
   removeVoiceEngineArmed: "Kattints újra, hogy töröld a beszédmotort és a modelljeit erről a Macről. Újbóli beállításkor újra letöltődnek.",
   removeVoiceEngineModelArmed: "Kattints újra, hogy töröld ezt a modellt erről a Macről. Ha újra kiválasztod, újra letöltődik.",
   voiceModelProfile: "A Mirador ennek a profilnak az API-ját hívja a kulcsaival. Az ágense nem indul el.",
@@ -132,7 +132,7 @@ export const hints: Messages["hints"] = {
   commandDelivery: "A !-lel futtatott parancsok a következő üzeneteddel kerülnek az ágenshez, azokban a tagekben, amelyeket a Claude Code a saját ! parancsaihoz használ.",
   commandOutputsAttached: "A !-lel futtatott parancsok ezen kimenetei a következő üzeneted előtt mennek az ágenshez. A ✕ kihagyja őket.",
   terminalToggle:
-    "Ennek a beszélgetésnek a termináljai, amelyek a munkaterülete mappájában futnak, elrejtése vagy megjelenítése. A shelljeik tovább futnak, amíg a panel rejtve van vagy másik beszélgetés látszik, és az oldal újratöltésekor újra csatlakozik hozzájuk.",
+    "A beszélgetés termináljainak elrejtése vagy megjelenítése; ezek a munkaterülete mappájában futnak. A shelljeik tovább futnak, amíg a panel rejtve van vagy másik beszélgetés látszik, és az oldal újratöltésekor újra csatlakozik hozzájuk.",
   terminalHide: "A terminálok elrejtése. A shelljeik tovább futnak; a beszélgetés fejlécéből vagy a parancspalettáról jelenítheted meg őket újra.",
   terminalNewTab:
     "Shell nyitása a beszélgetés termináljainak egy új lapján, a munkaterülete mappájában. Minden ablak ugyanazokat a lapokat mutatja ehhez a beszélgetéshez.",
@@ -174,7 +174,7 @@ export const hints: Messages["hints"] = {
   shellOutputStyle:
     "Hogyan jelenik meg egy beszélgetésben az ágens által futtatott minden shell-parancs, amíg ki nem nyitod vagy be nem csukod: a parancsa a kimenettel egy kattintásnyira, a kimenet csak akkor nyitva, ha a parancs hibázott, egyetlen sor, amelyből a parancs is egy kattintásnyira van, vagy minden nyitva. A !-lel futtatott parancsaid kimenete mindig látszik.",
   shellLook:
-    "A shell-blokkok színei egy beszélgetésben: az ágens parancsai, a tieid és a jóváhagyásodra váró parancsok. A témát követi az alkalmazás többi részéhez igazodik; az Egyéni az általad választott háttér-, szöveg- és promptszínt használja.",
+    "A shell-blokkok színei egy beszélgetésben: az ágens parancsai, a tieid és a jóváhagyásodra váró parancsok. „A témát követi” esetén az alkalmazás többi részéhez igazodik; az Egyéni az általad választott háttér-, szöveg- és promptszínt használja.",
   shellFont: "Bármely ezen a gépen telepített betűtípus a neve alapján, például JetBrains Mono. Ha üres, vagy a gépen nincs ilyen betűtípus, az alkalmazás monospace betűtípusa látszik.",
   shellFontSize: "A shell-blokkok szövegének mérete az alkalmazás szövegméretéhez képest.",
   timestamps: "Kikapcsolva: az idő minden szerző neve mellett látszik, egy későbbi soron pedig akkor, ha fölé viszed az egeret.\nBekapcsolva: minden sor mutatja az idejét.",
@@ -188,7 +188,7 @@ export const hints: Messages["hints"] = {
   workspaceColor: "Adj színt ennek a munkaterületnek, hogy megkülönböztesd az oldalsávban. Minden ablak mutatja.",
   workspaceColorStyle:
     "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára, hogy színt adj neki.",
-  newConversation: "Beszélgetés indítása ebben a munkaterületben, a gomb mellett kiválasztott profilon.",
+  newConversation: "Beszélgetés indítása ezen a munkaterületen, a gomb mellett kiválasztott profilon.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",
   hideSidebar: "Elrejti az oldalsávot, hogy a beszélgetés, a vászon és a terminál kapja a teljes szélességet. Ez a böngésző megjegyzi.",
   showSidebar: "Újra megjeleníti az oldalsávot a munkaterületekkel és a beszélgetésekkel.",
@@ -261,7 +261,7 @@ export const hints: Messages["hints"] = {
     "Az üzenetet a futó körhöz adja: a Claude Code azonnal elolvassa, megszakítva, amit éppen ír, vagy ha eszközöket futtat, amint azok végeztek. A pi akkor olvassa el, amikor befejezte az írást vagy az eszközei futtatását.",
   afterTurnMessage: "Megtartja az üzenetet, amíg a futó kör véget nem ér (vagy meg nem nyomod a Leállítás gombot), majd a következő üzenetedként küldi el.",
   messageBox:
-    "A Formáz gépelés közben a **félkövér**, *dőlt*, ~~áthúzott~~, `kód`, ``` kódblokk, > idézet és - lista jelöléseket gépelés közben formázássá alakítja, mint a Slackben; a ⌘B, ⌘I, ⌘⇧X és ⌘E egy kijelölést formáz. Az ágens mindkét esetben ugyanazt a markdownt kapja.",
+    "A „Formáz gépelés közben” a **félkövér**, *dőlt*, ~~áthúzott~~, `kód`, ``` kódblokk, > idézet és - lista jelöléseket menet közben formázássá alakítja, mint a Slackben; a ⌘B, ⌘I, ⌘⇧X és ⌘E egy kijelölést formáz. Az ágens mindkét esetben ugyanazt a markdownt kapja.",
   formatBar: "Formázógombok az üzenetmező fölött. A Beállítások › Beszélgetések részben állandóan láthatóvá teheted őket.",
   formatBarSetting:
     "A formázógombok kezdettől látszanak-e a formázott üzenetmező fölött, vagy csak a mellette lévő Aa-ra kattintás után. Az Aa mindkét esetben megjeleníti és elrejti őket.",
@@ -285,7 +285,7 @@ export const hints: Messages["hints"] = {
   scriptProgram:
     "Ahol egy szkriptre mutató fájllink megnyílik, szövegként, a host gépén. A típusához tartozó program le is futtathatná: a Git for Windows a .sh fájlokat futtatja, a Python indítója a .py fájlokat.\n\nA rendszer szövegszerkesztője: macOS-en az, amelyet a szöveghez választottál, Windowson a Jegyzettömb. A Linuxnak nincs sajátja, így ott az xdg-open választja ki a programot a szkript típusához, egy futtatható szkript pedig – amelyet az a program futtathatna – nem nyílik meg.\n\nEgy általad megadott program: a neve a host PATH-ján, például code vagy subl, vagy a teljes útvonala. A fájl útvonalát kapja meg. Windowson .exe-t adj meg, például Code.exe-t: egy .cmd vagy .bat a cmd.exe-n keresztül futna, amely egy fájlnév egy részét parancsnak vehetné.",
   editor:
-    "A szerkesztő, amelyben a Megnyitás gomb megnyit a host gépén. A Mirador mindegyik parancssori indítóját (idea, code, cursor, zed, subl) keresi a host PATH-ján és ott, ahová a telepítője teszi. Az első megtalált ebben a sorrendben dől el.",
+    "A szerkesztő, amelyben a Megnyitás gomb megnyit a host gépén. A Mirador mindegyik parancssori indítóját (idea, code, cursor, zed, subl) keresi a host PATH-ján és ott, ahová a telepítője teszi. Ebben a sorrendben az első megtalált lesz az.",
   editorCommand:
     "Egy program és argumentumai, shell nélkül futtatva. A {file} helyére a fájl útvonala, a {line} helyére a sora kerül; {file} nélkül az útvonal a végére. A szóközt tartalmazó programútvonalat tedd idézőjelbe.",
   profilePicture:
@@ -313,7 +313,7 @@ export const hints: Messages["hints"] = {
   canvasClear: "A vászon kiürítése. Semmi sem törlődik: az elem az Előzményekben marad.",
   canvasOpenInWindow: "Az elem megjelenítése egy saját, mindig naprakész ablakban, például egy második képernyőn. Ha újra megnyitod, az ablak előre jön.",
   canvasMore: "A sáv további gombjai, amelyeknek egy keskeny panelen nincs hely, és a munkaterület más beszélgetései által használt alkalmazások, hogy itt is megjelenjenek.",
-  canvasPageExport: "Az oldal másolása képként vagy HTML-ként, megkérni az ágenst, hogy írja meg Markdownként, vagy mentés külön fájlba.",
+  canvasPageExport: "Az oldal másolása képként vagy HTML-ként, az ágens megkérése, hogy írja meg Markdownként, vagy mentés külön fájlba.",
   canvasPoint:
     "Mutass rá valamire az oldalon, hogy kérdezz róla az ágenstől, vagy módosíttasd: egy kattintás kiválasztja az egér alatti körvonalazott elemet, ahelyett hogy azt tenné, amit az oldal, egy húzás pedig keretet rajzol egy terület köré, amely képként megy el. Az Esc leállítja. Szövegről úgy kérdezhetsz, hogy egyszerűen kijelölöd.",
   pageMarkChange: "Mondd meg az ágensnek, mit változtasson ott: újra megmutatja az oldalt a változtatással.",
@@ -340,7 +340,7 @@ export const hints: Messages["hints"] = {
   changesIgnored: "A git által figyelmen kívül hagyott, az ágens parancsai által írt fájlok, például a build-kimenet megjelenítése vagy elrejtése. Ez a böngésző megjegyzi.",
   changesEditedByAgent: "A projekt fájljai, amelyeket ennek a beszélgetésnek az ágense a szerkesztőeszközeivel módosított ebben a körben.",
   changesChangedOtherwise:
-    "A projekt fájljai, amelyek ebben a körben az ágens szerkesztőeszközei nélkül változtak: az ágens által futtatott parancsok, te, vagy egy ebben a mappában dolgozó másik beszélgetés vagy eszköz által.",
+    "A projekt fájljai, amelyek ebben a körben az ágens szerkesztőeszközei nélkül változtak: az ágens által futtatott parancsok, te magad, vagy egy ebben a mappában dolgozó másik beszélgetés vagy eszköz révén.",
   changesOthersMayHaveWritten:
     "A beszélgetés parancsai futása közben íródott, de akkor is, amikor egy másik beszélgetés ebben a mappában parancsot vagy szerkesztést futtatott, és abból, amit a kettő futtatott, nem derül ki, melyik írta. Azok a fájlok, amelyeket csak egy másik beszélgetés eszközhívásai neveznek meg, kimaradnak.",
   changesFromCommit: "A kör kezdete óta egy commit módosította ezt a fájlt, például egy pullé vagy az ágens sajátja.",

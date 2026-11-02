@@ -14,9 +14,9 @@ export const dictation: Messages["dictation"] = {
   readingAloudFailed: (status) => `朗读回复失败（${status}）。`,
   startingMicrophone: "正在启动麦克风…",
   listening: {
-    message: "正在聆听… 你停顿或松开后会自动停止。按 Esc 取消。",
-    conversation: "正在聆听… 说“stop”结束，说“repeat that”再听一遍，说“help”查看更多。",
-    answer: "正在聆听… 说“yes”、“the others”、一个数字，或用你自己的话回答。",
+    message: "正在聆听…你停顿或松开后会自动停止。按 Esc 取消。",
+    conversation: "正在聆听…说“stop”结束，说“repeat that”再听一遍，说“help”查看更多。",
+    answer: "正在聆听…说“yes”、“the others”、一个数字，或用你自己的话回答。",
   },
   loadingRecognition: "正在这台 Mac 上加载语音识别…",
   loadingVoiceModel: "正在这台 Mac 上加载语音模型…",

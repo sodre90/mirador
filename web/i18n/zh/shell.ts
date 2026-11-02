@@ -71,7 +71,7 @@ export const shell: Messages["shell"] = {
     fork: "分叉",
     startedInBefore: (agent) => `${agent} 会话，启动于`,
     startedInMiddle: "，最新的在前，包括从终端启动的。它们将使用：",
-    startedInAfter: "，这是工作区的选择，另一个选择是",
+    startedInAfter: "，即工作区在此按钮旁所选的配置：",
     newConversation: "新建对话",
     continueKeepsBefore: "沿用同一个会话。如果它还在某个终端里打开着，两边都会往里写，所以请先在那边关掉它。",
     forkCopies: "把历史复制到一个新对话里，原会话保持不变。",

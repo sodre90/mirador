@@ -19,7 +19,7 @@ export const voice: Messages["voice"] = {
   withProfileApi: "使用某个配置的 API",
   speechRecognition: "语音识别",
   voiceModel: "语音模型",
-  askNotToThink: "让它先不要思考",
+  askNotToThink: "让它不要先思考",
   spokenBy: (name) => `朗读者：${name}`,
   forNonCommercialUseOnly: "，仅限非商业用途",
   nonCommercialUseOnly: " · 仅限非商业用途",

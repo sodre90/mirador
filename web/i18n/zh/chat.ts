@@ -67,7 +67,7 @@ export const chat: Messages["chat"] = {
   busyWith: {
     "switching-profile": "正在切换配置…",
     "clearing-context": "正在清除上下文…",
-    "going-back": "正在返回…",
+    "going-back": "正在回退…",
     "loading-history": "正在加载会话历史…",
     "reading-terminal-turns": "正在读取在终端中进行的轮次…",
   },
@@ -248,7 +248,7 @@ export const chat: Messages["chat"] = {
     save: "保存",
     create: "创建模板",
     deleteLabel: "删除模板",
-    deleteArmed: "确定删除？",
+    deleteArmed: "删除？",
     delete: "删除",
     title: "提示词模板",
     hintBefore: "你常发的消息，可通过发送旁边的“模板”按钮使用。在需要填值的地方写",

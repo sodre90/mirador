@@ -69,7 +69,7 @@ export const chat: Messages["chat"] = {
   busyWith: {
     "switching-profile": "Profil wird gewechselt…",
     "clearing-context": "Kontext wird geleert…",
-    "going-back": "Wird zurückgesetzt…",
+    "going-back": "Wird zurückgespult…",
     "loading-history": "Verlauf der Sitzung wird geladen…",
     "reading-terminal-turns": "Runden aus dem Terminal werden gelesen…",
   },

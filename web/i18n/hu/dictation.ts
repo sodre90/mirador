@@ -3,7 +3,7 @@ import type { Messages } from "../en/index.ts";
 export const dictation: Messages["dictation"] = {
   dictate: "Diktálás",
   youSaid: (said) => `Ezt mondtad: ${said}`,
-  hideWhatYouSaid: "Amit mondtál, elrejtése",
+  hideWhatYouSaid: "Az elmondottak elrejtése",
   recognitionOff: "A diktáláshoz beszédfelismerés kell. A Beállítások → Hang részben kapcsolhatod be.",
   nothingHeard: "Semmi sem hallatszott, ezért a diktálás leállt.",
   noWords: "A beszédfelismerés nem hallott szavakat.",

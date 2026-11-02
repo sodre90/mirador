@@ -44,7 +44,7 @@ export const settings: Messages["settings"] = {
     box: "Mező",
     formattingButtons: "Formázógombok",
     whileAgentWorks: "Küldés, amíg az ágens dolgozik",
-    whileAgentWorksHint: "Az ⌥Enter (Alt+Enter) a másikat teszi; minden sorban álló üzenetnél látszik, melyik módon megy ki. Ez a böngésző megjegyzi.",
+    whileAgentWorksHint: "Az ⌥Enter (Alt+Enter) a másikat teszi; minden sorba állított üzenetnél látszik, melyik módon megy ki. Ez a böngésző megjegyzi.",
     enter: "Enter",
   },
   terminal: {

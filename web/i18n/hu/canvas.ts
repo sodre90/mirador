@@ -104,7 +104,7 @@ export const canvas: Messages["canvas"] = {
     openInEditor: "Megnyitás szerkesztőben",
     agentsOwnEdits: "Az ágens saját szerkesztései ebben a fájlban, egyenként, sorszámok nélkül.",
     noLineChanges: "Nincs sorváltozás.",
-    since: "Változások ez óta",
+    since: "Változások ettől kezdve",
     ignoredFiles: "Git által figyelmen kívül hagyott fájlok",
     foldAll: "Mind összecsukása",
     showAs: "Megjelenítés",

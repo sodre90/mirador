@@ -10,8 +10,8 @@ export const devices: Messages["devices"] = {
   },
   joinMachine: {
     title: "Diesem Rechner beitreten",
-    waitingForApproval: "Warte auf Genehmigung",
-    waitingOn: "Warte auf Genehmigung auf",
+    waitingForApproval: "Wartet auf Genehmigung",
+    waitingOn: "Genehmigung ausstehend auf",
     typeNumberThere: ". Gib dort diese Zahl ein:",
     requestShowsBefore: "Sein Mirador zeigt die Anfrage auf seinem eigenen Bildschirm und auf den Geräten, die ihm beigetreten sind; oder führe",
     requestShowsAfter: " dort aus.",

@@ -41,7 +41,7 @@ export const settings: Messages["settings"] = {
   },
   sending: {
     messageBox: "消息框",
-    box: "输入框",
+    box: "消息框",
     formattingButtons: "格式按钮",
     whileAgentWorks: "智能体工作时发送",
     whileAgentWorksHint: "⌥Enter（Alt+Enter）执行另一种方式；每条已排队的消息都会显示它将以哪种方式发出。保存在这个浏览器中。",
@@ -122,7 +122,7 @@ export const settings: Messages["settings"] = {
   },
   editor: {
     title: "编辑器",
-    hint: "“在 … 中打开”在其所在行打开文件的地方：变更、代码审查和导览中。由 host 为所有浏览器保存。",
+    hint: "“在 … 中打开”决定用哪个程序在对应行打开文件：用于更改、审查和导览。由 host 为所有浏览器保存。",
     opensIn: "文件打开方式",
     firstFound: (editor) => `找到的第一个（${editor}）`,
     firstFoundNone: "找到的第一个（暂无）",
@@ -136,7 +136,7 @@ export const settings: Messages["settings"] = {
     name: "名称",
   },
   pushRelay: {
-    title: "离开 Mirador 的手机",
+    title: "不在 Mirador 上的手机",
     hint: "推送中继会在智能体需要你、而手机上没有打开 Mirador 时通知手机。它无法读取所转发的内容。",
     address: "中继地址",
     token: "这台 Mac 的令牌",
@@ -145,7 +145,7 @@ export const settings: Messages["settings"] = {
   },
   typing: {
     title: "输入",
-    hint: "macOS 在桌面应用中可以对你的文字做什么：输入空格时自动更正，并以灰色提示词的其余部分。无论如何，拼写错误都会保留下划线；右键点击可更正。",
+    hint: "macOS 在桌面应用中可以对你的文字做什么：输入空格时自动更正，并以灰色显示单词的其余部分。无论如何，拼写错误都会保留下划线；右键点击可更正。",
     autocorrect: "自动更正拼写",
     predictions: "行内预测",
   },

@@ -10,7 +10,7 @@ export const shell: Messages["shell"] = {
     workspaces: "Espacios de trabajo",
     waiting: { decision: "Esperándote", failed: "Falló", done: "Listo", unread: "No leída" },
     connectedDevices: (count) => plural(count, "1 dispositivo conectado", `${count} dispositivos conectados`),
-    otherDevicesConnected: (count) => plural(count, "1 otro dispositivo conectado", `${count} otros dispositivos conectados`),
+    otherDevicesConnected: (count) => plural(count, "Otro dispositivo conectado", `${count} otros dispositivos conectados`),
     process: (pid) => `proceso ${pid}`,
     container: (name) => `contenedor ${name}`,
     jobOnHost: (job, host) => `${job} en ${host}`,

@@ -3,7 +3,7 @@ import type { Messages } from "../en/index.ts";
 export const plugins: Messages["plugins"] = {
   title: "插件",
   commitsOfUpdate: (plugin) => `${plugin} 更新带来的提交`,
-  whatRuns: (plugin) => `${plugin} 会运行的内容`,
+  whatRuns: (plugin) => `${plugin} 中会运行的内容`,
   consentHint: "Mirador 已克隆它，但没有运行它的任何代码。只同意你信任的代码。",
   building: (plugin) => `正在构建 ${plugin}…`,
   noRemote: "无远程仓库",
@@ -44,7 +44,7 @@ export const plugins: Messages["plugins"] = {
   intro: "插件可以在画布上给智能体提供专属工具，或带来一个应用：一份你和智能体一起修改的文档。",
   folderBefore: "插件是位于 ",
   pluginsFolder: "Mirador 的插件文件夹",
-  folderAfter: " 中的文件夹，会在 Mirador 启动时加载。Mirador 会更新它从 git 仓库安装的插件；链接的文件夹是你自己的检出副本，需要你在那里更新。",
+  folderAfter: "中的文件夹，会在 Mirador 启动时加载。Mirador 会更新它从 git 仓库安装的插件；链接的文件夹是你自己的检出副本，需要你在那里更新。",
   restartNeeded: "Mirador 从下次启动起使用更改后的插件。",
   noPlugins: "没有安装任何插件。",
   moreOfficialHint: "专为 Mirador 制作。智能体会在有帮助时推荐其中一个，并且只在你同意时才安装。",

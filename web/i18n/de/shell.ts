@@ -218,7 +218,7 @@ export const shell: Messages["shell"] = {
     notJoinedBefore: "Dieser Computer ist",
     notJoinedAfter: (host) =>
       ` unter ${host} noch nicht beigetreten. Bitte um Beitritt und genehmige ihn dort, indem du die Zahl eingibst, die dieser Computer dann anzeigt.`,
-    askToJoin: "Um Beitritt bitten",
+    askToJoin: "Beitritt anfragen",
     inviteBefore:
       "Oder tritt mit einem Einladungscode bei. Hol dir einen in seinen Einstellungen → Geräte, auf einem Gerät, das ihm beigetreten ist, oder führe",
     inviteAfter: " darauf aus.",
@@ -253,7 +253,7 @@ export const shell: Messages["shell"] = {
   statusline: {
     label: "Statuszeile",
     commandFailed: "Befehl der Statuszeile fehlgeschlagen",
-    builtIn: "Integriert",
+    builtIn: "Eingebaut",
     yours: "Deine Statuszeile",
     context: (percent) => `Kontext: ${percent} belegt`,
     contextInUse: (used, size, percent) => `Kontextfenster: ${used} von ${size} Token belegt (${percent}).`,

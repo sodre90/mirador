@@ -40,7 +40,7 @@ export const hints: Messages["hints"] = {
     "Sprechen statt tippen. Tippe darauf, um zu starten; es stoppt, wenn du eine Pause machst oder erneut darauf tippst. Oder halte es gedrückt, während du sprichst. Was du gesagt hast, kommt an die Cursorposition.",
   dictateOff: "Zum Diktieren braucht es die Spracherkennung. Du kannst sie unter Einstellungen → Stimme einschalten.",
   yolo:
-    "Alles ohne Nachfrage genehmigen.\n\nWenn der Agent um Erlaubnis bittet, ein Tool auszuführen, antwortet der Host sofort mit der eigenen „allow“-Option des Agenten, statt dir eine Karte zu zeigen. Das Einschalten genehmigt auch eine Anfrage, die schon wartet. Anfragen ohne Erlaubnis-Option fragen dich weiterhin.\n\nDas ist unabhängig vom Modus des Agenten: Tools, die der Modus schon erlaubt, fragen gar nicht erst. Wird pro Unterhaltung gespeichert.",
+    "Alles ohne Nachfrage genehmigen.\n\nWenn der Agent um Erlaubnis bittet, ein Tool auszuführen, antwortet der Host sofort mit der eigenen „allow“-Option des Agenten, statt dir eine Karte zu zeigen. Das Einschalten genehmigt auch eine Anfrage, die schon wartet. Anfragen ohne „allow“-Option fragen dich weiterhin.\n\nDas ist unabhängig vom Modus des Agenten: Tools, die der Modus schon erlaubt, fragen gar nicht erst. Wird pro Unterhaltung gespeichert.",
   profile:
     "Das Profil (Umgebungsvariablen und Befehl vor dem Start), mit dem der Agent läuft.\n\nJedes Profil führt seinen eigenen Agent-Prozess aus. Ein Wechsel schließt diese Sitzung auf dem aktuellen Prozess und setzt sie auf dem neuen fort, sodass der Agent die ganze Unterhaltung behält. Das Modell geht auf den Standard des neuen Profils zurück.\n\nEin Wechsel, während der Agent arbeitet, stoppt seine Runde, verschiebt die Sitzung und bittet den Agenten, dort weiterzumachen, wo er aufgehört hat; Nachrichten in der Warteschlange gehen danach raus.\n\nProfile eines anderen Agenten lassen sich nur vor der ersten Nachricht wählen: Dieser Agent startet eine neue Sitzung. Hat die Unterhaltung schon begonnen, starte eine neue Unterhaltung, um sie zu nutzen.",
   questions:
@@ -61,7 +61,7 @@ export const hints: Messages["hints"] = {
   exposeOnTailscale:
     "Führt tailscale serve für die beiden Ports von Mirador aus, gespiegelt, sodass das Tailnet Mirador über HTTPS unter https://<dieser Rechner im Tailnet>:<sein Port> erreicht und die Canvas-Bibliotheken unter demselben Namen auf dem Canvas-Port. Sonst wird im Tailnet nichts geändert; der Host nutzt die Adressen ab seinem nächsten Start.",
   address:
-    "Wo andere Geräte Mirador öffnen: http://127.0.0.1:4600 nur auf diesem Rechner, oder eine Adresse, die ein Proxy an ihn weiterleitet, etwa https://macbook.example.ts.net:4600. Der Port ist der von Mirador, 4600, außer der Host wurde mit einem anderen gestartet.",
+    "Wo andere Geräte Mirador öffnen: http://127.0.0.1:4600 nur auf diesem Rechner, oder eine Adresse, die ein Proxy an Mirador weiterleitet, etwa https://macbook.example.ts.net:4600. Der Port ist der von Mirador, 4600, außer der Host wurde mit einem anderen gestartet.",
   canvasAddress:
     "Woher eine Canvas-Seite D3, Mermaid und three lädt. Mirador stellt sie auf einem eigenen Port (4601) bereit, einem anderen Origin als dem der App, damit eine Seite, die ein Agent geschrieben hat, nicht an den Speicher dieses Mirador herankommt. Ein Proxy muss auch diesen Port weiterleiten: https://macbook.example.ts.net:4601.",
   reachRoute:
@@ -121,7 +121,7 @@ export const hints: Messages["hints"] = {
     "An: Eine Änderung, deren Erlaubnis der Agent von dir erwartet, nimmt den Canvas ein, mit einem Umschalter Vereint / Geteilt und den Zeilennummern der Datei, und der Chat behält eine kleine Karte. Aus: Die Karte im Chat zeigt den Diff, und der Canvas bleibt, wie er ist.",
   askPageBefore:
     "Der Agent hat diese Seite direkt vor der Frage gezeigt, in derselben Runde. Sie bleibt über der Frage, damit du beides lesen kannst; sie steht auch für sich im Verlauf.",
-  canvasToggle: "Blendet den Canvas-Bereich aus oder ein. Zeichnungen und Fragen kommen weiter an, solange es ausgeblendet ist, und bleiben im Verlauf.",
+  canvasToggle: "Blendet den Canvas-Bereich aus oder ein. Zeichnungen und Fragen kommen weiter an, solange er ausgeblendet ist, und bleiben im Verlauf.",
   runCommand:
     "Führt den Befehl nach ! im Ordner dieses Arbeitsbereichs mit deiner Login-Shell aus, ohne Eingabe. Seine Ausgabe erscheint hier und geht mit deiner nächsten Nachricht an den Agenten, wie bei ! in Claude Code. Für interaktive Programme nutze das Terminal.",
   undoFiles:
@@ -139,7 +139,7 @@ export const hints: Messages["hints"] = {
   commandDelivery: "Befehle, die du mit ! ausführst, gehen mit deiner nächsten Nachricht an den Agenten, in den Tags, die Claude Code für seine eigenen !-Befehle nutzt.",
   commandOutputsAttached: "Diese Ausgaben von Befehlen, die du mit ! ausgeführt hast, gehen deiner nächsten Nachricht an den Agenten voraus. ✕ lässt sie weg.",
   terminalToggle:
-    "Blendet die Terminals dieser Unterhaltung aus oder ein; sie laufen im Ordner ihres Arbeitsbereichs. Ihre Shells laufen weiter, während der Bereich ausgeblendet ist oder eine andere Unterhaltung angezeigt wird, und beim Neuladen der Seite verbindet es sich wieder mit ihnen.",
+    "Blendet die Terminals dieser Unterhaltung aus oder ein; sie laufen im Ordner ihres Arbeitsbereichs. Ihre Shells laufen weiter, während der Bereich ausgeblendet ist oder eine andere Unterhaltung angezeigt wird, und nach dem Neuladen verbindet sich die Seite wieder mit ihnen.",
   terminalHide: "Blendet die Terminals aus. Ihre Shells laufen weiter; zeige sie wieder über die Kopfzeile der Unterhaltung oder die Befehlspalette.",
   terminalNewTab:
     "Öffnet eine Shell in einem neuen Tab der Terminals dieser Unterhaltung, im Ordner ihres Arbeitsbereichs. Jedes Fenster zeigt für diese Unterhaltung dieselben Tabs.",
@@ -250,7 +250,7 @@ export const hints: Messages["hints"] = {
   dismissAsyncTask: "Verwirf diese Aufgabe: Sie verschwindet über dem Nachrichtenfeld.",
   clearFinishedAsyncTasks: "Entferne alle fertigen Aufgaben über dem Nachrichtenfeld.",
   delegatedTask:
-    "Das Tool eines Plugins, etwa delegate, hat diese Unterhaltung mit einem anderen Profil gestartet, um an einer Aufgabe für diese hier zu arbeiten. Wenn ihre erste Runde endet, kommt die letzte Nachricht ihres Agenten als deine nächste Nachricht beim Agent dieser Unterhaltung an.\n\nDie Antwort übersteht einen Neustart des Hosts.",
+    "Das Tool eines Plugins, etwa delegate, hat diese Unterhaltung mit einem anderen Profil gestartet, um an einer Aufgabe für diese hier zu arbeiten. Wenn ihre erste Runde endet, kommt die letzte Nachricht ihres Agenten als deine nächste Nachricht beim Agenten dieser Unterhaltung an.\n\nDie Antwort übersteht einen Neustart des Hosts.",
   openDelegatedTask: "Öffne die Unterhaltung, die an dieser Aufgabe arbeitet, um zuzusehen oder zu beantworten, was sie fragt.",
   stopDelegatedTask: "Stoppe ihre Runde. Der Agent hier erfährt, dass die Aufgabe gestoppt wurde, mit dem, was der andere Agent bis dahin gesagt hat.",
   dismissDelegatedTask:
@@ -315,7 +315,7 @@ export const hints: Messages["hints"] = {
   cost: "Was die Unterhaltung bisher gekostet hat, wie der Agent es meldet.",
   profileChip: "Das Profil, mit dem der Agent dieser Unterhaltung läuft.",
   quota: (limit, percent, resetsIn) =>
-    `Nutzungslimit deines Claude-Plans (${limit}): ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
+    `${limit}-Nutzungslimit deines Claude-Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
   statuslineCommand: (command) =>
     `Deine Statuszeile, ausgegeben von: ${command}.\n\nDer Host führt sie aus wie Claude Code: das Statuszeilen-JSON von Claude Code auf stdin (Modell, cwd, Sitzung, Transkript, Kontextfenster, Kosten) und die Profilumgebung der Unterhaltung. Wechsle hier zur eingebauten Statuszeile.`,
   statuslineBuiltIn: (command) =>
@@ -333,7 +333,7 @@ export const hints: Messages["hints"] = {
   pageMarkChange: "Sag dem Agenten, was er dort ändern soll: Er zeigt die Seite mit der Änderung erneut.",
   canvasEditsWaiting: "Zeige die Änderung, bei der der Agent darauf wartet, dass du sie erlaubst oder ablehnst.",
   canvasChanges: "Die Dateien, die diese Runde geändert hat, oder alle nicht committeten Änderungen, mit ihren Zeilenänderungen.",
-  canvasApp: "Die App, die in diesem Arbeitsbereich offen ist und die du und der Agent gemeinsam ändern. Jede Unterhaltung, die sie zeigt, arbeitet am selben Dokument.",
+  canvasApp: "Die App, die in diesem Arbeitsbereich offen ist und die du und der Agent gemeinsam ändert. Jede Unterhaltung, die sie zeigt, arbeitet am selben Dokument.",
   canvasChecklist:
     "Die Schritte der Arbeit des Agenten, abgehakt, sobald er sie erledigt. Du kannst auch jeden davon abhaken: Der Agent erfährt mit deiner nächsten Nachricht von deinen Haken.",
   checklistClose: "Zurück zu dem, was der Canvas gezeigt hat. Der Button Checkliste öffnet sie wieder.",
@@ -374,7 +374,7 @@ export const waitingHints: Messages["waitingHints"] = {
 };
 
 export const statusHints: Messages["statusHints"] = {
-  idle: "Bereit: wartet auf deine nächste Nachricht.",
+  idle: "Inaktiv: wartet auf deine nächste Nachricht.",
   starting: "Startet: Der Host startet den Agent-Prozess oder setzt die Sitzung darauf fort.",
   running: "Läuft: Der Agent arbeitet an deiner Nachricht. Esc oder Stoppen bricht die Runde ab.",
   error: "Fehler: Der Agent konnte nicht starten oder fortsetzen. Die Details stehen unter der Kopfzeile.",

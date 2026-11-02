@@ -172,7 +172,7 @@ export const chat: Messages["chat"] = {
     commandOutputs: (count) => `${count} parancskimenet megy a következő üzeneteddel`,
     dropCommandOutputs: "Ne küldje el a parancskimeneteket",
     busyNoSteer: "Az ágens dolgozik… Az Enter a köre utánra sorba állítja az üzenetedet, az Esc leállítja az ágenst",
-    busy: (enterDoes, otherKey, otherDoes) => `Az ágens dolgozik… Az Enter ${enterDoes}, az ${otherKey}Enter ${otherDoes}, az Esc leállítja`,
+    busy: (enterDoes, otherKey, otherDoes) => `Az ágens dolgozik… Enter: ${enterDoes}, ${otherKey}Enter: ${otherDoes}, Esc: leállítja`,
     busySteer: "a köréhez adja az üzenetedet",
     busyAfterTurn: "a köre után küldi el az üzenetedet",
     notResponding: "Az ágens nem válaszol. A Kényszerített leállítás leállítja a folyamatát; a profil többi beszélgetése folytatódik",

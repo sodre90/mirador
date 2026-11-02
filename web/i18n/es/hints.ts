@@ -12,9 +12,9 @@ export const hints: Messages["hints"] = {
   thisMacModel:
     "Los modelos de Mirador para este servicio. Mejor, bueno y aceptable indican cómo le fue a cada uno en la comparación de Mirador en un Mac; el que aún no está en este Mac se descarga con el botón que tiene al lado. Mirador ofrece los que, una vez cargados, ocupan como máximo la mitad de la memoria de este Mac.",
   voiceEngineIdle:
-    "Un modelo cargado ocupa memoria, un modelo de voz hasta 15 GB, así que cada uno se descarga de la memoria si no se usa durante este tiempo. Volver a cargarlo hace que el siguiente dictado tenga que esperar.",
+    "Un modelo cargado ocupa memoria, un modelo de voz hasta 15 GB, así que cada uno se libera de la memoria si no se usa durante este tiempo. Volver a cargarlo hace que el siguiente dictado tenga que esperar.",
   voiceEngineLoaded: (minutes) =>
-    `Cargado, así que responde al instante. Se descarga de la memoria tras ${minutes} ${minutes === 1 ? "minuto" : "minutos"} sin usarse; se ajusta en Modelos en este Mac.`,
+    `Cargado, así que responde al instante. Se libera de la memoria tras ${minutes} ${minutes === 1 ? "minuto" : "minutos"} sin usarse; se ajusta en Modelos en este Mac.`,
   voiceEngineUnloaded: "Ahora no ocupa memoria. Se carga la próxima vez que haga falta, normalmente en 5 a 15 segundos.",
   voiceEngineDownloadWaits: "Hay otra descarga en curso. Esta podrá empezar cuando termine.",
   voiceEngineRemoveWaits: "Hay una descarga en curso. Quitar podrá empezar cuando termine.",
@@ -260,7 +260,7 @@ export const hints: Messages["hints"] = {
   canvasUse:
     "Si hace falta: el agente decide según las propias instrucciones del lienzo.\n\nA menudo: los prompts de sistema de Claude Code y pi también les indican que pongan en el lienzo las explicaciones, comparaciones, planes y el resumen de un trabajo más grande, y que te pregunten allí las opciones.\n\nLas páginas cuestan más tokens que la misma respuesta como texto.",
   terminalCommand:
-    "Claude Code muestra este solo en su propia terminal, así que esto lo abre allí: una pestaña de terminal de esta conversación, ejecutada por el Claude Code que usa el perfil de esta conversación. El panel es donde ocurre el comando; la respuesta del agente de arriba es solo su negativa.",
+    "Claude Code muestra este comando solo en su propia terminal, así que esto lo abre allí: una pestaña de terminal de esta conversación, ejecutada por el Claude Code que usa el perfil de esta conversación. El panel es donde ocurre el comando; la respuesta del agente de arriba es solo su negativa.",
   logIn:
     "Abre el inicio de sesión propio del agente en una pestaña de terminal de esta conversación, con su perfil, de modo que un perfil con cuenta propia inicie sesión con esa. Cuando diga que has iniciado sesión, envía tu mensaje de nuevo.",
   queuedGrip: "Arrastra para cambiar el orden en que salen los mensajes en cola: salen desde arriba.",
