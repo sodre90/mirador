@@ -101,14 +101,14 @@ Mirador is a localhost web app that drives coding agents (Claude Code through `c
 - **`web/`** is the React UI, bundled by Bun. It talks to the host over one WebSocket. Messages are typed in `shared/protocol.ts`.
 - **`shared/`** holds the types and logic both sides use.
 - **`desktop/`** is the Electrobun tray app that wraps it.
-- **`site/`** is the website, mirador.sodre90.com. `bun scripts/build-site.ts` assembles it with the README's screenshots, and `.github/workflows/site.yml` publishes it; `e2e/site.spec.ts` checks it.
+- **`site/`** is the website, mirador.sodre90.com. Its `index.html` and `privacy.html` are templates whose text is in `site/words/`, one dictionary per language typed against English; `bun scripts/build-site.ts` renders English at the root and each other language in its own folder, with the README's screenshots, and `.github/workflows/site.yml` publishes it; `e2e/site.spec.ts` checks it.
 - **`e2e/`** holds the Playwright specs. Their helper hosts are in `e2e/test-host.ts`. **`tests/`** holds the unit tests.
 
 ## Conventions & Patterns
 
 - **Names over comments.** Keep comments for a genuine "why" that a name cannot carry.
 - **Tests come with every change.** Every user-visible change gets e2e coverage, and logic gets unit tests.
-- **UI text is translated:** English in `web/i18n/en/`, Hungarian in `web/i18n/hu/`, Spanish in `web/i18n/es/`, Simplified Chinese in `web/i18n/zh/` and German in `web/i18n/de/` (typed against English, so a missing key fails `tsc`), read through `t` from `web/i18n/index.ts`. Tooltips are `hints` there. New text goes into every language; `shared/i18n/GLOSSARY.md` holds the terms of each. Text for agents, the voice model or spoken commands stays English.
+- **UI text is translated:** English in `web/i18n/en/`, Hungarian in `web/i18n/hu/`, Spanish in `web/i18n/es/`, Simplified Chinese in `web/i18n/zh/` and German in `web/i18n/de/` (typed against English, so a missing key fails `tsc`), read through `t` from `web/i18n/index.ts`. Tooltips are `hints` there. New text goes into every language, on the website too (`site/words/`); `shared/i18n/GLOSSARY.md` holds the terms of each. Text for agents, the voice model or spoken commands stays English.
 - **UI wording:** plain words and sentence case.
 - **Secrets:** never print the `/auth?token=…` link, tokens or profile environment values. Host logs contain them, so filter `auth?token` out of anything you show.
 - **The owner's own Mirador runs from this checkout.**

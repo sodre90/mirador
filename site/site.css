@@ -3,6 +3,15 @@
   src: url("inter.woff2") format("woff2");
   font-weight: 100 900;
   font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: Inter;
+  src: url("inter-latin-ext.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
 }
 
 :root {
@@ -63,9 +72,47 @@ code { font-family: var(--mono); font-size: 0.86em; }
   text-decoration: none;
 }
 
-.top nav { display: flex; gap: clamp(12px, 3vw, 28px); }
+.top nav { display: flex; gap: clamp(12px, 3vw, 28px); margin-left: auto; }
 .top nav a { color: var(--muted); text-decoration: none; font-weight: 600; font-size: 15px; }
 .top nav a:hover { color: var(--ink); }
+
+.languages { position: relative; }
+.languages summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 15px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.languages summary::-webkit-details-marker { display: none; }
+.languages summary::after { content: " ▾"; }
+.languages summary:hover, .languages[open] summary { color: var(--ink); }
+.languages ul {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  min-width: 160px;
+}
+.languages a { display: block; padding: 6px 12px; border-radius: 8px; color: var(--ink); text-decoration: none; font-size: 15px; }
+.languages a:hover { background: rgba(255, 255, 255, 0.06); }
+.languages a[aria-current="page"] { color: var(--violet); font-weight: 650; }
+
+.translation-note { color: var(--muted); font-size: 15px; }
+
+h1, h2, h3 { overflow-wrap: break-word; hyphens: auto; }
+
+html:lang(zh) body { font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif; }
+html:lang(zh) h1, html:lang(zh) h2, html:lang(zh) h3 { letter-spacing: 0; }
 
 main { max-width: 1160px; margin: 0 auto; padding: 0 clamp(16px, 4vw, 40px); }
 

@@ -9,6 +9,7 @@ on:
       - desktop/assets/app-icon.svg
       - web/favicon.svg
       - scripts/build-site.ts
+      - shared/i18n/languages.ts
       - .github/workflows/site.yml
   workflow_dispatch:
 

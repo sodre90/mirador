@@ -13,5 +13,5 @@
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": false
   },
-  "include": ["host", "web", "shared", "plugins", "tests", "e2e", "push-relay"]
+  "include": ["host", "web", "shared", "plugins", "tests", "e2e", "push-relay", "site", "scripts/build-site.ts"]
 }

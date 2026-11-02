@@ -1,69 +1,71 @@
 <!doctype html>
-<html lang="en">
+<html lang="{{@lang}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Privacy policy · Mirador</title>
-  <meta name="description" content="What Mirador and Mirador for Android do with your data: it stays on your own devices.">
-  <link rel="canonical" href="https://mirador.sodre90.com/privacy.html">
-  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <title>{{attributes.privacyTitle}}</title>
+  <meta name="description" content="{{attributes.privacyDescription}}">
+  <link rel="canonical" href="{{@canonical}}">
+  {{@alternates}}
+  <link rel="icon" href="{{@root}}favicon.svg" type="image/svg+xml">
   <meta name="theme-color" content="#0c0b16">
-  <link rel="preload" href="inter.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="site.css">
+  <link rel="preload" href="{{@root}}inter.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{@root}}site.css">
 </head>
 <body>
   <header class="top">
-    <a class="brand" href="./"><img src="icon.svg" alt="" width="32" height="32">Mirador</a>
-    <nav aria-label="Sections">
-      <a href="./#features">Features</a>
-      <a href="./#install">Install</a>
+    <a class="brand" href="./"><img src="{{@root}}icon.svg" alt="" width="32" height="32">Mirador</a>
+    <nav aria-label="{{attributes.sections}}">
+      <a href="./#features">{{nav.features}}</a>
+      <a href="./#install">{{nav.install}}</a>
       <a href="https://github.com/sodre90/mirador">GitHub</a>
     </nav>
+    {{@picker}}
   </header>
 
   <main>
     <article class="policy">
-      <h1>Privacy policy</h1>
-      <p class="updated">Last updated 1 November 2026</p>
+      <h1>{{privacy.title}}</h1>
+      <p class="updated">{{privacy.updated}}</p>{{@englishPrevails}}
 
-      <p>This policy covers Mirador, the app you run on your computer, and Mirador for Android, the phone app that connects to it. Both are made by Péter Erdős. In short: your data stays on your own devices. Neither app has accounts, analytics, advertising or crash reporting. The only things that pass through servers we run are the optional notification and peer-to-peer services below, and they can't read what you send.</p>
+      <p>{{privacy.intro}}</p>
 
-      <h2>Mirador on your computer</h2>
-      <p>Mirador keeps your conversations, settings and the devices you invited in a database on your computer. The coding agents you run with it talk to their own model providers, under those providers' terms, as they do without Mirador. Mirador itself only reaches GitHub, to see whether a newer release is out and to download the plugins it installs.</p>
+      <h2>{{privacy.computerTitle}}</h2>
+      <p>{{privacy.computer}}</p>
 
-      <h2>Mirador for Android</h2>
-      <p>The phone app connects only to the Mirador computers you pair it with, directly, through a network you choose, such as Tailscale, or peer to peer as described below. Every connection is encrypted between the phone and your computer. What it shows comes from them, and what you send goes to them:</p>
+      <h2>{{privacy.androidTitle}}</h2>
+      <p>{{privacy.android}}</p>
       <ul>
-        <li><strong>Messages and answers</strong> you write go to the computer the conversation runs on.</li>
-        <li><strong>Photos and screenshots</strong> you attach, from the camera, your gallery or another app's share, are uploaded to that computer.</li>
-        <li><strong>The camera</strong> scans the QR code that pairs the phone with a computer, and takes photos you choose to attach.</li>
-        <li><strong>The microphone</strong> is used only while you hold the send button to dictate. Where the phone has its own speech recognition, what you say stays on the phone. Otherwise Android's voice typing service turns it into text, and that service may process it on its servers under its own privacy policy.</li>
-        <li><strong>Replies read aloud</strong> are made on your computer and played on the phone.</li>
+        <li>{{privacy.messages}}</li>
+        <li>{{privacy.photos}}</li>
+        <li>{{privacy.camera}}</li>
+        <li>{{privacy.microphone}}</li>
+        <li>{{privacy.replies}}</li>
       </ul>
-      <p>The phone keeps the computers it is paired with, your settings and unsent drafts in its own storage, with the computers' access tokens in Android's secure storage. Fingerprint or face unlock, when you turn the app lock on, is checked by Android; the app never sees it.</p>
-      <h2>Notifications while the app is closed</h2>
-      <p>This is off unless you set a push relay in Mirador on your computer. When it is on, the phone gives your computer its notification token from Firebase Cloud Messaging, Google's push service, and your computer keeps it. To notify you, your computer sends the token and the notification, sealed with a key only your phone and your computer hold, to the push relay, which passes them on to Google to deliver. The relay, ours or one you run yourself, doesn't store or log tokens or notifications. The relay and Google see the token and when a notification was sent, but can't read what it says. Google handles the token under its own privacy policy.</p>
+      <p>{{privacy.phoneStorage}}</p>
+      <h2>{{privacy.notificationsTitle}}</h2>
+      <p>{{privacy.notifications}}</p>
 
-      <h2>Peer to peer</h2>
-      <p>This is off unless Mirador on your computer is set up to use it. Then the phone and the computer find each other through a broker, which sees their public keys and network addresses while they are connected. When they can't reach each other directly, their traffic passes through the broker, encrypted so that it can't read it.</p>
+      <h2>{{privacy.peerToPeerTitle}}</h2>
+      <p>{{privacy.peerToPeer}}</p>
 
-      <h2>Deleting your data</h2>
-      <p>Uninstalling the app deletes everything it stored. To stop a phone reaching a computer, remove it in Mirador's <strong>Settings → Devices</strong>; that also deletes the phone's notification token from that computer.</p>
+      <h2>{{privacy.deletingTitle}}</h2>
+      <p>{{privacy.deleting}}</p>
 
-      <h2>Sharing and selling</h2>
-      <p>We don't sell your data or share it with anyone, and we don't use it for anything but delivering notifications and connections. Google Play may collect data about installs and app crashes under Google's own privacy policy.</p>
+      <h2>{{privacy.sharingTitle}}</h2>
+      <p>{{privacy.sharing}}</p>
 
-      <h2>Children</h2>
-      <p>Mirador is a tool for software developers and isn't meant for children.</p>
+      <h2>{{privacy.childrenTitle}}</h2>
+      <p>{{privacy.children}}</p>
 
-      <h2>Changes and questions</h2>
-      <p>Changes to this policy are published on this page with a new date. For questions, open an issue at <a href="https://github.com/sodre90/mirador/issues">github.com/sodre90/mirador/issues</a>.</p>
+      <h2>{{privacy.changesTitle}}</h2>
+      <p>{{privacy.changes}}</p>
     </article>
   </main>
 
   <footer>
-    <p><img src="icon.svg" alt="" width="20" height="20"> Mirador · MIT license · Made by Péter Erdős</p>
-    <p><a href="https://github.com/sodre90/mirador">GitHub</a> · <a href="https://github.com/sodre90/mirador/releases/latest">Releases</a> · <a href="privacy.html">Privacy</a></p>
+    <p><img src="{{@root}}icon.svg" alt="" width="20" height="20"> {{footer.madeBy}}</p>
+    <p><a href="https://github.com/sodre90/mirador">GitHub</a> · <a href="https://github.com/sodre90/mirador/releases/latest">{{footer.releases}}</a> · <a href="privacy.html">{{footer.privacy}}</a></p>
   </footer>
-</body>
+{{@scripts}}</body>
 </html>
