@@ -670,10 +670,8 @@ export function App() {
           profiles={state.profiles}
           version={state.version}
           newerVersion={state.newerVersion}
-          pluginUpdates={state.pluginUpdates}
           layoutDefault={conversationLayouts.layoutDefault}
           onChange={conversationLayouts.setLayoutDefault}
-          onOpenPlugins={() => dispatch({ type: "open-overlay", overlay: { kind: "plugins" } })}
           onClose={closeOverlay}
         />
       )}

@@ -70,8 +70,6 @@ export const plugins: Messages["plugins"] = {
   addFromGitOpen: "Aus git hinzufügen…",
   installed: "Installiert",
   discover: "Entdecken",
-  movedHint: "Plugins haben jetzt einen eigenen Platz: Plugins… unten in der Seitenleiste.",
-  openPlugins: "Plugins… öffnen",
   screenshotsOf: (plugin: string) => `Bilder: ${plugin}`,
   pictureOf: (index, count) => `Bild ${index} von ${count}`,
   previousPicture: "Vorheriges Bild",

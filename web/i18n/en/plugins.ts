@@ -65,8 +65,6 @@ export const plugins = {
   addFromGitOpen: "Add from git…",
   installed: "Installed",
   discover: "Discover",
-  movedHint: "Plugins have a place of their own: Plugins… at the bottom of the sidebar.",
-  openPlugins: "Open Plugins…",
   screenshotsOf: (plugin: string) => `Pictures of ${plugin}`,
   pictureOf: (index: number, count: number) => `Picture ${index} of ${count}`,
   previousPicture: "Previous picture",

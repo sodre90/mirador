@@ -67,8 +67,6 @@ export const plugins: Messages["plugins"] = {
   addFromGitOpen: "Hozzáadás git-ből…",
   installed: "Telepítve",
   discover: "Felfedezés",
-  movedHint: "A bővítményeknek saját helyük van: Bővítmények… az oldalsáv alján.",
-  openPlugins: "Bővítmények megnyitása…",
   screenshotsOf: (plugin: string) => `Képek: ${plugin}`,
   pictureOf: (index, count) => `${index}. kép (összesen ${count})`,
   previousPicture: "Előző kép",

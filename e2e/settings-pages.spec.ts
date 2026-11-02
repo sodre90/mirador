@@ -17,7 +17,7 @@ test("Settings shows one page at a time, chosen from the list on the left by cli
   const pages = settings.getByRole("tablist", { name: "Settings pages" });
   const tab = (name: string) => pages.getByRole("tab", { name });
 
-  await expect(pages.getByRole("tab")).toHaveText(["Appearance", "Conversations", "Agents", "Voice", "Terminal", "Canvas", "Plugins", "Layout", "Devices", "Notifications", "About"]);
+  await expect(pages.getByRole("tab")).toHaveText(["Appearance", "Conversations", "Agents", "Voice", "Terminal", "Canvas", "Layout", "Devices", "Notifications", "About"]);
   await expect(tab("Appearance")).toHaveAttribute("aria-selected", "true");
   await expect(settings.getByRole("radiogroup", { name: "Theme" })).toBeVisible();
 

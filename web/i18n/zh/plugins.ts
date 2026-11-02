@@ -67,8 +67,6 @@ export const plugins: Messages["plugins"] = {
   addFromGitOpen: "从 git 添加…",
   installed: "已安装",
   discover: "发现",
-  movedHint: "插件有了自己的位置：侧边栏底部的“插件…”。",
-  openPlugins: "打开插件…",
   screenshotsOf: (plugin: string) => `${plugin} 的截图`,
   pictureOf: (index, count) => `第 ${index} 张，共 ${count} 张`,
   previousPicture: "上一张",

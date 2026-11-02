@@ -51,7 +51,6 @@ export const labels: Messages["labels"] = {
     voice: "语音",
     terminal: "终端",
     canvas: "画布",
-    plugins: "插件",
     layout: "布局",
     devices: "设备",
     notifications: "通知",

@@ -63,7 +63,6 @@ export const labels = {
     voice: "Voice",
     terminal: "Terminal",
     canvas: "Canvas",
-    plugins: "Plugins",
     layout: "Layout",
     devices: "Devices",
     notifications: "Notifications",

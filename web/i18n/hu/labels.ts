@@ -42,7 +42,6 @@ export const labels: Messages["labels"] = {
     voice: "Hang",
     terminal: "Terminál",
     canvas: "Vászon",
-    plugins: "Bővítmények",
     layout: "Elrendezés",
     devices: "Készülékek",
     notifications: "Értesítések",

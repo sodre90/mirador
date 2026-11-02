@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { openPluginDetail, openPlugins, openSettings, pluginTile, signIn } from "./helpers.ts";
+import { openPluginDetail, openPlugins, pluginTile, signIn } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -71,12 +71,4 @@ test("Plugins… shows the installed plugins as tiles, and a tile opens the tool
     );
     await page.evaluate(() => localStorage.removeItem("mirador-language"));
   });
-});
-
-test("Settings → Plugins leads to Plugins…", async ({ page }) => {
-  await signIn(page, host);
-  const settings = await openSettings(page, "Plugins");
-  await settings.getByRole("button", { name: "Open Plugins…" }).click();
-  await expect(settings).toHaveCount(0);
-  await expect(pluginTile(page.getByRole("dialog", { name: "Plugins" }), "Installed", "Counter")).toBeVisible();
 });

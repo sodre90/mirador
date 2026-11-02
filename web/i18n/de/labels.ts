@@ -51,7 +51,6 @@ export const labels: Messages["labels"] = {
     voice: "Stimme",
     terminal: "Terminal",
     canvas: "Canvas",
-    plugins: "Plugins",
     layout: "Layout",
     devices: "Geräte",
     notifications: "Benachrichtigungen",

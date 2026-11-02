@@ -2,7 +2,6 @@ import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
-import type { PluginUpdate } from "../shared/apps.ts";
 import { type CanvasUse, type KeepAwake, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
@@ -13,7 +12,6 @@ import { formatBarLabels, messageBoxLabels, setFormatBar, setMessageBox, useForm
 import { connection } from "./connection.ts";
 import { inDesktopApp } from "./desktop-bridge.ts";
 import { DeviceSettings } from "./Devices.tsx";
-import { UpdatesWaiting } from "./Plugins.tsx";
 import { externalImages, setExternalImages, useExternalImagesBlocked } from "./external-images.ts";
 import { setEditsInCanvas, useEditsInCanvas } from "./edits-in-canvas.ts";
 import { fontScaleLabels, useFontScale } from "./font-scale.ts";
@@ -116,10 +114,8 @@ export function SettingsDialog({
   profiles,
   version,
   newerVersion,
-  pluginUpdates,
   layoutDefault,
   onChange,
-  onOpenPlugins,
   onClose,
 }: {
   page: SettingsPage | undefined;
@@ -139,10 +135,8 @@ export function SettingsDialog({
   profiles: Profile[];
   version: string;
   newerVersion: NewerVersion | null;
-  pluginUpdates: PluginUpdate[];
   layoutDefault: LayoutDefault;
   onChange: (layoutDefault: LayoutDefault) => void;
-  onOpenPlugins: () => void;
   onClose: () => void;
 }) {
   const [page, setPage] = useState<SettingsPage>(openedAt ?? "appearance");
@@ -184,16 +178,6 @@ export function SettingsDialog({
         <SavedPageSettings />
       </>
     ),
-    plugins: () => (
-      <>
-        <h3>{t.plugins.title}</h3>
-        <p className="hint">{t.plugins.movedHint}</p>
-        <button type="button" onClick={onOpenPlugins}>
-          {t.plugins.openPlugins}
-          <UpdatesWaiting count={pluginUpdates.length} />
-        </button>
-      </>
-    ),
     layout: () => <LayoutSettings layoutDefault={layoutDefault} onChange={onChange} />,
     devices: () => (
       <>
@@ -220,7 +204,7 @@ export function SettingsDialog({
           </button>
         </header>
         <div className="settings-body">
-          <PageList page={page} onChoose={setPage} pluginUpdates={pluginUpdates.length} />
+          <PageList page={page} onChoose={setPage} />
           <div className="settings-page" role="tabpanel" id="settings-page" aria-labelledby={`settings-tab-${page}`}>
             {pages[page]()}
           </div>
@@ -231,7 +215,7 @@ export function SettingsDialog({
 }
 
 /** Up and Down move between the pages, as in a list of tabs. */
-function PageList({ page, onChoose, pluginUpdates }: { page: SettingsPage; onChoose: (page: SettingsPage) => void; pluginUpdates: number }) {
+function PageList({ page, onChoose }: { page: SettingsPage; onChoose: (page: SettingsPage) => void }) {
   const chooseWithArrows = (event: ReactKeyboardEvent<HTMLElement>) => {
     const step = pageSteps[event.key];
     if (!step) return;
@@ -254,7 +238,6 @@ function PageList({ page, onChoose, pluginUpdates }: { page: SettingsPage; onCho
           onClick={() => onChoose(id)}
         >
           {pageLabels[id]}
-          {id === "plugins" && <UpdatesWaiting count={pluginUpdates} />}
         </button>
       ))}
     </nav>
