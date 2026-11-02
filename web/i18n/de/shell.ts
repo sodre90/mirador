@@ -182,7 +182,7 @@ export const shell: Messages["shell"] = {
       terminalTabs: "In einem Terminal: vorheriger / nächster Terminal-Tab · Terminal-Tab nach Nummer",
       terminalNewTabOrClose:
         "In einem Terminal: neuer Terminal-Tab / dieses Terminal schließen; läuft darin ein Befehl, wird vorher nachgefragt",
-      terminalZoom: "In einem Terminal: es seinen Tab ausfüllen lassen, und zurück",
+      terminalZoom: "In einem Terminal: es auf den ganzen Tab vergrößern, und zurück",
     },
   },
   machines: {
@@ -223,7 +223,7 @@ export const shell: Messages["shell"] = {
       "Oder tritt mit einem Einladungscode bei. Hol dir einen in seinen Einstellungen → Geräte, auf einem Gerät, das ihm beigetreten ist, oder führe",
     inviteAfter: " darauf aus.",
     inviteCode: "Einladungscode oder -link",
-    joining: "Trete bei…",
+    joining: "Beitritt läuft…",
     joinButton: "Beitreten",
   },
   conversationTitle: {
@@ -234,8 +234,8 @@ export const shell: Messages["shell"] = {
   },
   app: {
     restartingHost: "Host wird neu gestartet…",
-    connecting: "Verbinde…",
-    reconnecting: "Verbindung verloren, verbinde neu…",
+    connecting: "Verbindung wird hergestellt…",
+    reconnecting: "Verbindung verloren, wird neu verbunden…",
     hostCodeChanged: "Der Code des Hosts hat sich seit seinem Start geändert.",
     restartHost: "Host neu starten",
     desktopAppOutdatedBefore: "Die Mirador-App ist älter als ihr Code. Beende sie und führe Folgendes aus:",
@@ -269,7 +269,7 @@ export const shell: Messages["shell"] = {
   newerVersion: {
     releaseOut: (version) => `Mirador ${version} ist erschienen`,
     newCommits: (count, upstream) => plural(count, `1 neuer Commit auf ${upstream}`, `${count} neue Commits auf ${upstream}`),
-    pullToUpdate: "Hol sie per pull, um zu aktualisieren.",
+    pullToUpdate: "Zum Aktualisieren pullen.",
     downloading: "Wird heruntergeladen…",
     download: "Herunterladen",
     restartToUpdate: "Zum Aktualisieren neu starten",

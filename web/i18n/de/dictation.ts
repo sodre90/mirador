@@ -30,7 +30,7 @@ export const dictation: Messages["dictation"] = {
     desktopAppNotAllowed: (systemSetting) =>
       `Mirador darf das Mikrofon nicht nutzen. Erlaube es, wenn die Desktop-App fragt${systemSetting}. Eine Sperre in der App gilt, bis die App beendet wird.`,
     notAllowed: "Mirador darf das Mikrofon nicht nutzen. Die Einstellungen des Browsers für diese Seite können es erlauben.",
-    notFound: "Es gibt kein Mikrofon, mit dem zugehört werden kann.",
+    notFound: "Es wurde kein Mikrofon gefunden.",
     didNotStart: (detail) => `Das Mikrofon ist nicht gestartet: ${detail}`,
   },
   readAloud: "Vorlesen",

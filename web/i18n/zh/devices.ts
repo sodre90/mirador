@@ -36,7 +36,7 @@ export const devices: Messages["devices"] = {
     proxyElsewhereAfter: " 用于画布。",
     ownPortBefore: "其他设备打开 Mirador 的地址（它自己的端口",
     ownPortMiddle: "），以及它的画布页面加载绘制所需库的地址（单独的端口",
-    ownPortAfter: "）：这是另一个独立的源，所以智能体写的页面无法访问 Mirador 自己的存储。",
+    ownPortAfter: "）：这是另一个独立的源，所以 Agent 写的页面无法访问 Mirador 自己的存储。",
     proxyElsewhere: "代理运行在另一台机器上",
     address: "地址",
     canvasAddress: "画布地址",

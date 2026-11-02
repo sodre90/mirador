@@ -2,7 +2,7 @@ import type { Messages } from "../en/index.ts";
 
 export const plugins: Messages["plugins"] = {
   title: "Bővítmények",
-  commitsOfUpdate: (plugin) => `A frissítés által hozott commitok: ${plugin}`,
+  commitsOfUpdate: (plugin) => `A frissítéssel érkező commitok: ${plugin}`,
   whatRuns: (plugin) => `Ami fut belőle: ${plugin}`,
   consentHint: "A Mirador leklónozta, és semmit sem futtatott a kódjából. Csak olyan kódba egyezz bele, amelyben megbízol.",
   building: (plugin) => `Buildelés: ${plugin}…`,
@@ -10,7 +10,7 @@ export const plugins: Messages["plugins"] = {
   releases: "kiadások",
   noBranch: "nincs ág",
   linkedTo: (target) => `Link ide: ${target}`,
-  folderByHand: "Kézzel odatett mappa",
+  folderByHand: "Kézzel odamásolt mappa",
   updatesWaiting: (count) => `${count} bővítményfrissítés`,
   checkForUpdates: "Frissítések keresése",
   checking: "Frissítések keresése…",

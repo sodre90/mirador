@@ -13,7 +13,7 @@ export const hints: Messages["hints"] = {
     "A Mirador modelljei ehhez a szolgáltatáshoz. A legjobb, jó és elfogadható azt jelzi, hogyan teljesítettek a Mirador összehasonlításában egy Macen; amelyik még nincs ezen a Macen, az a mellette lévő gombbal letölthető. A Mirador azokat kínálja, amelyek betöltve legfeljebb a Mac memóriájának felét foglalják.",
   voiceEngineIdle:
     "Egy betöltött modell memóriát foglal, egy hangmodell akár 15 GB-ot is, ezért mindegyik kirakódik, ha ennyi ideig nem használják. Az újbóli betöltés miatt a következő diktálás várni fog.",
-  voiceEngineLoaded: (minutes) => `Betöltve, így azonnal válaszol. ${minutes} perc használaton kívül töltött idő után kirakódik; ezt a Modellek ezen a Macen részben állíthatod.`,
+  voiceEngineLoaded: (minutes) => `Betöltve, így azonnal válaszol. Ha ${minutes} percig nem használod, kirakódik; ezt a Modellek ezen a Macen részben állíthatod.`,
   voiceEngineUnloaded: "Most nem foglal memóriát. Akkor töltődik be, amikor legközelebb szükség van rá, általában 5–15 másodperc alatt.",
   voiceEngineDownloadWaits: "Egy másik letöltés folyik. Ez akkor indulhat, ha az véget ért.",
   voiceEngineRemoveWaits: "Egy letöltés folyik. Az eltávolítás akkor indulhat, ha az véget ért.",
@@ -61,7 +61,7 @@ export const hints: Messages["hints"] = {
   canvasAddress:
     "Ahonnan egy vászonoldal betölti a D3-at, a Mermaidot és a three-t. A Mirador saját porton szolgálja ki őket (4601), az alkalmazásétól eltérő originen, így egy ágens által írt oldal nem fér hozzá a Mirador saját tárolójához. Egy proxynak ezt a portot is továbbítania kell: https://macbook.example.ts.net:4601.",
   reachRoute:
-    "A Mirador egyszerre egyféleképpen éri el a többi készüléket. Egy lehetőség kiválasztása csak megmutatja; a Használat vagy a Cím mentése gombja alkalmazza, és visszavonja a másikat, így itt semmi nincs beállítva, amit a host nem használ. A host a következő indulásakor olvassa be. Egy elérhető címet egy proxynak kell adnia, például a tailscale serve-nek, különben a host maga szolgál ki HTTPS-t a hálózaton egy általa készített tanúsítvánnyal.",
+    "A Mirador egyszerre csak egyféleképpen éri el a többi készüléket. A kiválasztás önmagában csak megmutatja a lehetőséget; a Használat vagy a Cím mentése gomb alkalmazza, és visszavonja a másikat, így itt nem marad olyan beállítás, amelyet a host nem használ. A host a következő indulásakor olvassa be. Egy elérhető címet egy proxynak kell adnia, például a tailscale serve-nek, különben a host maga szolgál ki HTTPS-t a hálózaton egy általa készített tanúsítvánnyal.",
   proxyElsewhere:
     "Egy másik gépen futó proxyhoz a hálózatodon, például Nginx Proxy Managerhez, amely nem éri el ennek a gépnek a saját portjait. A cím mentésekor a Mirador ilyenkor HTTPS-t is kiszolgál a hálózaton, és a proxy ezekre a portokra továbbít.",
   networkReachability:
@@ -239,7 +239,7 @@ export const hints: Messages["hints"] = {
   dismissAsyncTask: "A feladat elvetése: eltávolítja az üzenetmező fölül.",
   clearFinishedAsyncTasks: "Az összes befejezett feladat eltávolítása az üzenetmező fölül.",
   delegatedTask:
-    "Egy bővítmény eszköze, például a delegate, egy másik profilon indította ezt a beszélgetést, hogy egy feladaton dolgozzon ennek a beszélgetésnek. Amikor az első köre véget ér, az ágensének utolsó üzenete a következő üzenetedként érkezik ennek a beszélgetésnek az ágenséhez.\n\nA válasz túléli a host újraindítását.",
+    "Egy bővítmény eszköze, például a delegate, egy másik profilon indította ezt a beszélgetést, hogy ennek a beszélgetésnek dolgozzon egy feladaton. Amikor az első köre véget ér, az ágensének utolsó üzenete a következő üzenetedként érkezik ennek a beszélgetésnek az ágenséhez.\n\nA válasz túléli a host újraindítását.",
   openDelegatedTask: "A feladaton dolgozó beszélgetés megnyitása, hogy figyeld, vagy válaszolj arra, amit kérdez.",
   stopDelegatedTask: "A köre leállítása. Az itteni ágens megtudja, hogy a feladat leállt, azzal együtt, amit a másik ágens addig mondott.",
   dismissDelegatedTask:
@@ -252,7 +252,7 @@ export const hints: Messages["hints"] = {
   canvasUse:
     "Szükség szerint: az ágens a vászon saját utasításai alapján dönt.\n\nGyakran: a Claude Code, a pi és a Codex rendszerpromptja arra is utasítja őket, hogy a magyarázatokat, összehasonlításokat, terveket és egy nagyobb munka összefoglalóját a vászonra tegyék, és a választásokat ott kérdezzék meg tőled.\n\nAz oldalak több tokenbe kerülnek, mint ugyanaz a válasz szövegként.",
   terminalCommand:
-    "A Claude Code ezt csak a saját termináljában mutatja, ezért ez ott nyitja meg: a beszélgetés egy terminállapján, azzal a Claude Code-dal, amelyet a beszélgetés profilja használ. A panelen történik a parancs; az ágens fenti válasza csak az elutasítása.",
+    "A Claude Code ezt csak a saját termináljában mutatja, ezért ez ott nyitja meg: a beszélgetés egy terminállapján, azzal a Claude Code-dal, amelyet a beszélgetés profilja használ. Maga a parancs a panelen zajlik; az ágens fenti válasza csak annyi, hogy elutasította.",
   logIn:
     "Megnyitja az ágens saját bejelentkezését a beszélgetés egy terminállapján, a profiljával, így egy saját fiókkal rendelkező profil abba jelentkezik be. Ha kiírja, hogy bejelentkeztél, küldd el újra az üzenetedet.",
   queuedGrip: "Húzd, hogy módosítsd a sorba állított üzenetek kimenési sorrendjét: felülről indulnak.",
@@ -277,7 +277,7 @@ export const hints: Messages["hints"] = {
   formatCodeBlock: "Kódblokk, vagy gépelj ```-t egy sor elején. Az Enter új sort ad hozzá, a végén a ↓ kilép belőle, a ⌘Enter (Ctrl+Enter) elküldi.",
   enterWhileBusy: "Mit tesz az Enter egy üzenettel, amíg az ágens dolgozik; az ⌥Enter (Alt+Enter) a másikat teszi. Az opencode-dal az üzenetek mindig a kör végéig várnak.",
   openFile:
-    "Megnyitja a fájlt abban a programban, amelyet a host rendszere használ hozzá, azon a gépen, amelyen a Mirador fut. Egy szkript szövegként nyílik meg, abban a programban, amelyet a Beállítások › Beszélgetések részben választasz. Egy program nem nyílik meg.",
+    "Megnyitja a fájlt abban a programban, amelyet a host rendszere használ hozzá, azon a gépen, amelyen a Mirador fut. Egy szkript szövegként nyílik meg, abban a programban, amelyet a Beállítások › Beszélgetések részben választasz. Egy programfájl nem nyílik meg.",
   pushRelayAddress: "Ahová ez a Mac a telefonjaidnak szóló push-értesítéseket küldi; üresen nem küld. A telefonok csak akkor kapnak értesítést, ha regisztráltak ennél a Macnél.",
   pushRelayToken: "A token, amelyet a továbbító gazdája készített ennek a Macnek. A Mirador megőrzi, és többé nem mutatja; hagyd üresen, hogy a beállított megmaradjon.",
   machineName:
@@ -285,7 +285,7 @@ export const hints: Messages["hints"] = {
   scriptProgram:
     "Ahol egy szkriptre mutató fájllink megnyílik, szövegként, a host gépén. A típusához tartozó program le is futtathatná: a Git for Windows a .sh fájlokat futtatja, a Python indítója a .py fájlokat.\n\nA rendszer szövegszerkesztője: macOS-en az, amelyet a szöveghez választottál, Windowson a Jegyzettömb. A Linuxnak nincs sajátja, így ott az xdg-open választja ki a programot a szkript típusához, egy futtatható szkript pedig – amelyet az a program futtathatna – nem nyílik meg.\n\nEgy általad megadott program: a neve a host PATH-ján, például code vagy subl, vagy a teljes útvonala. A fájl útvonalát kapja meg. Windowson .exe-t adj meg, például Code.exe-t: egy .cmd vagy .bat a cmd.exe-n keresztül futna, amely egy fájlnév egy részét parancsnak vehetné.",
   editor:
-    "A szerkesztő, amelyben a Megnyitás gomb megnyit a host gépén. A Mirador mindegyik parancssori indítóját (idea, code, cursor, zed, subl) keresi a host PATH-ján és ott, ahová a telepítője teszi. Ebben a sorrendben az első megtalált lesz az.",
+    "A szerkesztő, amelyet a Megnyitás gomb használ a host gépén. A Mirador mindegyik parancssori indítóját (idea, code, cursor, zed, subl) keresi a host PATH-ján és ott, ahová a telepítője teszi. Az elsőt használja, amelyet ebben a sorrendben megtalál.",
   editorCommand:
     "Egy program és argumentumai, shell nélkül futtatva. A {file} helyére a fájl útvonala, a {line} helyére a sora kerül; {file} nélkül az útvonal a végére. A szóközt tartalmazó programútvonalat tedd idézőjelbe.",
   profilePicture:
@@ -312,7 +312,7 @@ export const hints: Messages["hints"] = {
   canvasHistory: "Minden, amit az ágens ebben a beszélgetésben rajzolt vagy kérdezett, a legújabbal kezdve.",
   canvasClear: "A vászon kiürítése. Semmi sem törlődik: az elem az Előzményekben marad.",
   canvasOpenInWindow: "Az elem megjelenítése egy saját, mindig naprakész ablakban, például egy második képernyőn. Ha újra megnyitod, az ablak előre jön.",
-  canvasMore: "A sáv további gombjai, amelyeknek egy keskeny panelen nincs hely, és a munkaterület más beszélgetései által használt alkalmazások, hogy itt is megjelenjenek.",
+  canvasMore: "A sáv többi gombja, amelyeknek egy keskeny panelen nem jut hely, valamint az alkalmazások, amelyeket a munkaterület más beszélgetései használnak, hogy itt is megjelenhessenek.",
   canvasPageExport: "Az oldal másolása képként vagy HTML-ként, az ágens megkérése, hogy írja meg Markdownként, vagy mentés külön fájlba.",
   canvasPoint:
     "Mutass rá valamire az oldalon, hogy kérdezz róla az ágenstől, vagy módosíttasd: egy kattintás kiválasztja az egér alatti körvonalazott elemet, ahelyett hogy azt tenné, amit az oldal, egy húzás pedig keretet rajzol egy terület köré, amely képként megy el. Az Esc leállítja. Szövegről úgy kérdezhetsz, hogy egyszerűen kijelölöd.",
@@ -342,7 +342,7 @@ export const hints: Messages["hints"] = {
   changesChangedOtherwise:
     "A projekt fájljai, amelyek ebben a körben az ágens szerkesztőeszközei nélkül változtak: az ágens által futtatott parancsok, te magad, vagy egy ebben a mappában dolgozó másik beszélgetés vagy eszköz révén.",
   changesOthersMayHaveWritten:
-    "A beszélgetés parancsai futása közben íródott, de akkor is, amikor egy másik beszélgetés ebben a mappában parancsot vagy szerkesztést futtatott, és abból, amit a kettő futtatott, nem derül ki, melyik írta. Azok a fájlok, amelyeket csak egy másik beszélgetés eszközhívásai neveznek meg, kimaradnak.",
+    "Olyan fájlok, amelyek ennek a beszélgetésnek a parancsai alatt íródtak, de közben egy másik beszélgetés is futtatott ebben a mappában parancsot vagy szerkesztést, és abból, amit a kettő futtatott, nem derül ki, melyik írta őket. Azok a fájlok, amelyeket csak egy másik beszélgetés eszközhívásai neveznek meg, kimaradnak.",
   changesFromCommit: "A kör kezdete óta egy commit módosította ezt a fájlt, például egy pullé vagy az ágens sajátja.",
   changesRefresh: "A lista újratöltése. Az ágens minden befejezett eszközhívása után és a kör végén is betöltődik.",
   changesByAgent: "Ennek a beszélgetésnek az ágense a szerkesztőeszközeivel módosította ezt a fájlt.",

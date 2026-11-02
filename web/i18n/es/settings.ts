@@ -33,7 +33,7 @@ export const settings: Messages["settings"] = {
     shellCommands: "Comandos de shell",
     shellColours: "Colores del shell",
     showTimestamps: "Mostrar marcas de tiempo",
-    pulseStatusDots: "Hacer pulsar los puntos de estado",
+    pulseStatusDots: "Animar los puntos de estado",
     resetColours: "Restablecer los colores",
     shellFont: "Fuente del shell",
     shellFontPlaceholder: "Monospace",
@@ -73,7 +73,7 @@ export const settings: Messages["settings"] = {
   },
   agents: {
     hint: "Mirador ejecuta el Claude Code instalado en el equipo del host. Un cambio reinicia sus agentes, lo que detiene los turnos en curso.",
-    programPlaceholder: "Se encuentra solo",
+    programPlaceholder: "Se detecta solo",
   },
   sleep: {
     title: "Suspensión",
@@ -107,7 +107,7 @@ export const settings: Messages["settings"] = {
   },
   externalImages: {
     title: "Imágenes de otros sitios",
-    hint: "La respuesta de un agente puede mostrar una imagen de cualquier sitio. Al cargarla, ese sitio recibe la dirección de la imagen, que un agente engañado por lo que leyó puede rellenar con lo que leyó. Se recuerda en este navegador.",
+    hint: "La respuesta de un agente puede mostrar una imagen de cualquier sitio. Al cargarla, ese sitio recibe la dirección de la imagen, que un agente engañado por lo que leyó puede rellenar con ese contenido. Se recuerda en este navegador.",
     asLinks: "Mostrar como enlaces las imágenes de otros sitios",
     loadAfterReload: "Se cargan tras recargar.",
     reload: "Recargar",
@@ -122,7 +122,7 @@ export const settings: Messages["settings"] = {
   },
   editor: {
     title: "Editor",
-    hint: "Dónde abre Abrir en … un archivo en su línea: en Cambios, revisiones y recorridos. Lo guarda el host para todos los navegadores.",
+    hint: "Dónde abre un archivo, en su línea, el botón Abrir en …: en Cambios, revisiones y recorridos. Lo guarda el host para todos los navegadores.",
     opensIn: "Abrir los archivos en",
     firstFound: (editor) => `El primero que se encuentre (${editor})`,
     firstFoundNone: "El primero que se encuentre (ninguno aún)",

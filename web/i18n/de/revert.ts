@@ -24,8 +24,8 @@ export const revert: Messages["revert"] = {
   stayAsCommitted: "Bleiben wie committet",
   andMore: (count) => `und ${count} weitere`,
   turnsLeave: (turns, keptFrom) =>
-    `${turns === 1 ? "1 Runde verlässt" : `${turns} Runden verlassen`} die Unterhaltung, und der eigene Verlauf des Agenten geht mit ${turns === 1 ? "ihr" : "ihnen"} zurück, bis vor „${keptFrom}“.`,
-  everyTurnLeaves: "Alle Runden verlassen die Unterhaltung, und der Agent fängt ohne etwas davon neu an.",
+    `${turns === 1 ? "1 Runde verschwindet" : `${turns} Runden verschwinden`} aus der Unterhaltung, und der eigene Verlauf des Agenten geht mit ${turns === 1 ? "ihr" : "ihnen"} zurück, bis vor „${keptFrom}“.`,
+  everyTurnLeaves: "Alle Runden verschwinden aus der Unterhaltung, und der Agent fängt ohne etwas davon neu an.",
   filesStayBecause: (note) => `Die Dateien bleiben, wie sie sind: ${note}`,
   filesStayNow: "Die Dateien bleiben, wie sie jetzt sind, mit dem, was die entfernten Runden an ihnen geändert haben.",
   filesGoBackToo: (changed) => `Auch die Dateien gehen auf den Stand zurück, den sie zu Beginn dieser Runde hatten: ${changed}.`,

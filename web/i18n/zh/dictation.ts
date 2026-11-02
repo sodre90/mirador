@@ -30,7 +30,7 @@ export const dictation: Messages["dictation"] = {
     desktopAppNotAllowed: (systemSetting) =>
       `Mirador 无权使用麦克风。桌面应用询问时请允许${systemSetting}。在应用中拒绝后，会一直保持到应用退出。`,
     notAllowed: "Mirador 无权使用麦克风。可以在浏览器针对此网站的设置中允许。",
-    notFound: "没有可用来聆听的麦克风。",
+    notFound: "没有可用的麦克风。",
     didNotStart: (detail) => `麦克风没有启动：${detail}`,
   },
   readAloud: "朗读",

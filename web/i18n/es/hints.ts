@@ -51,7 +51,7 @@ export const hints: Messages["hints"] = {
     "El agente ofrece este ajuste para la sesión. Cambiarlo envía el nuevo valor al agente (ACP session/set_config_option), que lo aplica a esta conversación.",
   dismissNewerVersion: "Lo oculta hasta que haya algo aún más nuevo. Configuración › Acerca de lo sigue mostrando.",
   restartHost:
-    "Vuelve a iniciar el host en su sitio, para que ejecute su código tal como está ahora. Los agentes que trabajan se detienen y luego continúan donde se quedaron; los mensajes en cola se conservan. Las terminales vuelven como shells nuevos bajo la salida que tenían. Las páginas abiertas se recargan solas.",
+    "Reinicia el host ahí mismo, para que ejecute su código tal como está ahora. Los agentes que trabajan se detienen y luego continúan donde se quedaron; los mensajes en cola se conservan. Las terminales vuelven como shells nuevos bajo la salida que tenían. Las páginas abiertas se recargan solas.",
   stop:
     "Pide al agente que detenga su turno, como hace Esc. Si no se ha detenido pasados unos segundos, este botón pasa a ser Forzar detención, que termina el proceso del agente; las demás conversaciones del mismo perfil continúan donde se quedaron.",
   promptTemplates: "Mensajes que envías a menudo, con los valores que rellenas cada vez. En Configuración se agregan, cambian y eliminan.",
@@ -82,22 +82,22 @@ export const hints: Messages["hints"] = {
   machineColorStyle:
     "Dónde muestra su color una máquina a la que se lo diste: solo en su botón de la barra, o también como una franja en la parte superior de su vista, para ver de un vistazo en qué máquina trabajas. Dale un color a una máquina en Máquinas….",
   machines: "Otros equipos que ejecutan Mirador, como un servidor cuyos agentes siguen trabajando mientras este equipo duerme.",
-  plugins: "Los complementos dan al agente herramientas propias en el lienzo, o traen aplicaciones como un editor de video o de Google Docs. Instálalos, actualízalos y configúralos aquí.",
+  plugins: "Los plugins dan al agente herramientas propias en el lienzo, o traen aplicaciones como un editor de video o de Google Docs. Instálalos, actualízalos y configúralos aquí.",
   revokeDeviceArmed: "Haz clic de nuevo para cerrar la sesión de este dispositivo. Necesita un código de invitación nuevo para unirse otra vez.",
-  officialPlugin: "Uno de los complementos oficiales de Mirador, incluido en el catálogo sodre90/mirador-plugins.",
-  installOfficialPlugin: "Clona el repositorio del complemento y muestra qué parte de él se ejecuta. Nada se ejecuta hasta que aceptes.",
-  addPlugin: "Clona el repositorio y muestra qué parte de él se ejecuta: su comando de compilación y el código del host. Nada se ejecuta hasta que aceptes.",
+  officialPlugin: "Uno de los plugins oficiales de Mirador, incluido en el catálogo sodre90/mirador-plugins.",
+  installOfficialPlugin: "Clona el repositorio del plugin y muestra qué parte de él se ejecuta. Nada se ejecuta hasta que aceptes.",
+  addPlugin: "Clona el repositorio y muestra qué parte de él se ejecuta: su comando de build y el código del host. Nada se ejecuta hasta que aceptes.",
   agreeToPlugin:
-    "Ejecuta el comando de compilación y luego coloca el complemento en la carpeta de complementos de Mirador. Mirador lo carga, con su código del host, desde su próximo inicio.",
+    "Ejecuta el comando de build y luego coloca el plugin en la carpeta de plugins de Mirador. Mirador lo carga, con su código del host, desde su próximo inicio.",
   checkForUpdates: "Busca ahora una versión más nueva de Mirador, en lugar de esperar a la próxima búsqueda automática, que llega cada 6 horas.",
   checkPluginUpdates:
-    "Busca una versión más nueva del complemento o, si sigue una rama, los commits nuevos de la rama. Nada cambia hasta que actualices.",
+    "Busca una versión más nueva del plugin o, si sigue una rama, los commits nuevos de la rama. Nada cambia hasta que actualices.",
   pluginUpdatesWaiting:
-    "Complementos de repositorios git con una versión más nueva o con commits nuevos. Mirador busca al iniciarse y cada 6 horas, y no instala nada por sí solo: actualízalos en Configuración › Complementos.",
-  updateAllPlugins: "Clona la versión más nueva o los commits nuevos de cada complemento y muestra qué parte de cada uno se ejecuta, y luego pregunta una sola vez por todos.",
+    "Plugins de repositorios git con una versión más nueva o con commits nuevos. Mirador busca al iniciarse y cada 6 horas, y no instala nada por sí solo: actualízalos en Configuración › Plugins.",
+  updateAllPlugins: "Clona la versión más nueva o los commits nuevos de cada plugin y muestra qué parte de cada uno se ejecuta, y luego pregunta una sola vez por todos.",
   updatePlugin:
-    "Clona la versión más reciente, o la rama tal como está ahora, y muestra qué parte se ejecuta. Cuando aceptas, la compila y solo entonces reemplaza el complemento, así que una actualización fallida lo deja como estaba.",
-  removePluginArmed: "Haz clic de nuevo para quitar este complemento. Mirador deja de cargarlo desde su próximo inicio.",
+    "Clona la versión más reciente, o la rama tal como está ahora, y muestra qué parte se ejecuta. Cuando aceptas, hace el build y solo entonces reemplaza el plugin, así que una actualización fallida lo deja como estaba.",
+  removePluginArmed: "Haz clic de nuevo para quitar este plugin. Mirador deja de cargarlo desde su próximo inicio.",
   unlinkPluginArmed: "Haz clic de nuevo para quitar el enlace. La carpeta a la que apunta se queda como está.",
   copyOnSelect:
     "El texto que seleccionas en una terminal, arrastrando o con doble o triple clic, va al portapapeles de inmediato, como en iTerm2 y en las terminales de Linux.",
@@ -175,7 +175,7 @@ export const hints: Messages["hints"] = {
   setUpProfile:
     "Toda conversación se ejecuta con un perfil. Configura el primero en el panel principal; sin nada más definido, ejecuta el agente tal como está configurado en esta máquina.",
   continueSession:
-    "Retoma una sesión de Claude Code, opencode, pi o Codex que se inició en una terminal en este directorio. Continúala en su sitio, o bifurca su historial en una conversación nueva y deja la original como está.",
+    "Retoma una sesión de Claude Code, opencode, pi o Codex que se inició en una terminal en este directorio. Continúala en su sitio, o haz un fork de su historial en una conversación nueva y deja la original como está.",
   sessionSearch:
     "Busca sesiones de este directorio por lo que se dijo en ellas, por antiguas que sean. La búsqueda lee los registros propios del agente de cada sesión de aquí, así que encuentra sesiones que la lista no muestra.",
   profiles:
@@ -248,7 +248,7 @@ export const hints: Messages["hints"] = {
   dismissAsyncTask: "Descarta esta tarea: la quita de encima del cuadro de mensaje.",
   clearFinishedAsyncTasks: "Quita todas las tareas terminadas de encima del cuadro de mensaje.",
   delegatedTask:
-    "Una herramienta de un complemento, como delegate, inició esta conversación con otro perfil para trabajar en una tarea de esta. Cuando termina su primer turno, el último mensaje de su agente llega al agente de esta conversación como tu siguiente mensaje.\n\nLa respuesta sobrevive a un reinicio del host.",
+    "Una herramienta de un plugin, como delegate, inició esta conversación con otro perfil para trabajar en una tarea de esta. Cuando termina su primer turno, el último mensaje de su agente llega al agente de esta conversación como tu siguiente mensaje.\n\nLa respuesta sobrevive a un reinicio del host.",
   openDelegatedTask: "Abre la conversación que trabaja en esta tarea, para verla o responder a lo que pregunta.",
   stopDelegatedTask: "Detiene su turno. El agente de aquí se entera de que la tarea se detuvo, con lo que el otro agente haya dicho hasta ahora.",
   dismissDelegatedTask: "Descarta esta tarea: la quita de encima del cuadro de mensaje, y su conversación de la barra lateral. La búsqueda sigue encontrando la conversación.",
@@ -306,7 +306,7 @@ export const hints: Messages["hints"] = {
   miradorMessage:
     "Mirador envió esto al agente cuando terminó su turno: para seguir con un paso que anunció pero no dio, o para usar el lienzo cuando Configuración lo pide a menudo, como preguntarte con ask en lugar de en el chat.",
   pluginMessage:
-    "Un complemento envió esto como tu siguiente mensaje, como Delegate con la respuesta de una tarea que el agente delegó, para que el agente retome desde ahí.",
+    "Un plugin envió esto como tu siguiente mensaje, como Delegate con la respuesta de una tarea que el agente delegó, para que el agente retome desde ahí.",
   gitBranch: "La rama de git activa en el directorio del espacio de trabajo.",
   model: "El modelo que usa el agente, tal como se eligió en el menú Modelo de arriba.",
   cost: "Lo que ha costado la conversación hasta ahora, según lo informa el agente.",
@@ -329,18 +329,18 @@ export const hints: Messages["hints"] = {
     "Señala algo de la página para preguntarle al agente sobre ello o pedirle que lo cambie: un clic elige el elemento resaltado bajo el ratón, en lugar de hacer lo que hace la página, y arrastrar dibuja un recuadro alrededor de un área, que se envía como imagen. Esc lo detiene. Para preguntar sobre un texto, solo selecciónalo.",
   pageMarkChange: "Dile al agente qué cambiar ahí: vuelve a mostrar la página con el cambio hecho.",
   canvasEditsWaiting: "Muestra la edición que el agente espera que permitas o rechaces.",
-  canvasChanges: "Los archivos que cambió este turno, o todos los cambios sin confirmar, con sus cambios de línea.",
+  canvasChanges: "Los archivos que cambió este turno, o todos los cambios sin commit, con sus cambios de línea.",
   canvasApp: "La aplicación abierta en este espacio de trabajo, que tú y el agente cambian juntos. Todas las conversaciones que la muestran trabajan sobre el mismo documento.",
   canvasChecklist:
     "Los pasos del trabajo del agente, marcados a medida que los termina. Tú también puedes marcar cualquiera: el agente se entera de tus marcas con tu siguiente mensaje.",
-  checklistClose: "Vuelve a lo que mostraba el lienzo. El botón Lista de verificación lo abre de nuevo.",
-  checklistDismiss: "Quita la lista de verificación del lienzo para siempre. No vuelve hasta que el agente publique una nueva.",
+  checklistClose: "Vuelve a lo que mostraba el lienzo. El botón Checklist lo abre de nuevo.",
+  checklistDismiss: "Quita la checklist del lienzo para siempre. No vuelve hasta que el agente publique una nueva.",
   checklistPlan: "La propia lista de tareas del agente, tal como la actualizó por última vez. Solo el agente las marca.",
   changesScope: {
     turn: "Los archivos que difieren de como estaban cuando empezó este turno, tal como los dejó el agente o cualquier otra cosa.",
     uncommitted: "git status: los archivos que difieren del último commit, y los archivos fuera del proyecto que el agente editó en esta conversación.",
     session:
-      "Todos los archivos que el agente cambió con sus herramientas de edición en esta conversación, incluso donde un turno posterior lo revirtió, y los archivos escritos mientras se ejecutaban sus comandos, incluidos la salida de compilación y sus commits. Un archivo que eliminó un comando, o que escribió más tarde un trabajo que dejó en ejecución, no figura en la lista, ni tampoco uno que escribió otra conversación de esta carpeta, según lo indican las llamadas a herramientas que nombran el archivo mientras se ejecutaba.",
+      "Todos los archivos que el agente cambió con sus herramientas de edición en esta conversación, incluso donde un turno posterior lo revirtió, y los archivos escritos mientras se ejecutaban sus comandos, incluidos la salida del build y sus commits. Un archivo que eliminó un comando, o que escribió más tarde un trabajo que dejó en ejecución, no figura en la lista, ni tampoco uno que escribió otra conversación de esta carpeta, según lo indican las llamadas a herramientas que nombran el archivo mientras se ejecutaba.",
   },
   changesView: {
     list: "Cada archivo cambiado en su propia fila, con su ruta completa. Se recuerda en este navegador.",
@@ -348,7 +348,7 @@ export const hints: Messages["hints"] = {
     all: "Todos los archivos del proyecto en sus carpetas, con los cambiados marcados. Solo las carpetas que contienen un cambio empiezan abiertas. Se recuerda en este navegador.",
   },
   changesFoldAll: "Contrae todas las carpetas, para que solo se vea el nivel superior. Haz clic en una carpeta para abrirla de nuevo.",
-  changesIgnored: "Muestra u oculta los archivos que git ignora y que escribieron los comandos del agente, como la salida de compilación. Se recuerda en este navegador.",
+  changesIgnored: "Muestra u oculta los archivos que git ignora y que escribieron los comandos del agente, como la salida del build. Se recuerda en este navegador.",
   changesEditedByAgent: "Los archivos del proyecto que el agente de esta conversación cambió con sus herramientas de edición en este turno.",
   changesChangedOtherwise:
     "Los archivos del proyecto que cambiaron en este turno sin las herramientas de edición del agente: por comandos que ejecutó el agente, por ti, o por otra conversación o herramienta que trabaja en esta carpeta.",

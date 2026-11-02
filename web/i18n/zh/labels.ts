@@ -24,7 +24,7 @@ export const labels: Messages["labels"] = {
   enterWhileBusy: { steer: "把消息并入正在进行的轮次", "after-turn": "轮次结束后再发送消息" },
   cursorStyle: { block: "方块", underline: "下划线", bar: "竖线" },
   canvasUse: { "as-needed": "按需", often: "经常" },
-  keepAwake: { never: "从不", "while-working": "智能体工作时", always: "始终" },
+  keepAwake: { never: "从不", "while-working": "Agent 工作时", always: "始终" },
   pageLibraries: {
     cdn: "来自公共 CDN：文件很小，但绘制时需要联网",
     inline: "内嵌在文件里：可离线使用，但 Mermaid 会增加约 3 MB",
@@ -47,7 +47,7 @@ export const labels: Messages["labels"] = {
   settingsPage: {
     appearance: "外观",
     conversations: "对话",
-    agents: "智能体",
+    agents: "Agent",
     voice: "语音",
     terminal: "终端",
     canvas: "画布",

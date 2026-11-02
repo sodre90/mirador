@@ -6,7 +6,7 @@ export const labels: Messages["labels"] = {
   workspaceColorStyle: { card: "Az egész kártya", heading: "Csak a fejléc", stripe: "Csík és halvány árnyalat" },
   machineColorStyle: { rail: "Csak a sávgomb", strip: "Sávgomb és csík a nézetén" },
   shellOutputStyle: {
-    command: "Parancs, kimenet kinyitva",
+    command: "Parancs, kimenet kattintásra",
     "failures-open": "Parancs, kimenet nyitva, ha hibázott",
     "one-line": "Egy sor",
     open: "Parancs és kimenet",

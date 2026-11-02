@@ -129,13 +129,13 @@ export const hints: Messages["hints"] = {
   undoFilesConfirm:
     "Schreibt die Dateien des Arbeitsbereichs auf den Stand zurück, den sie zu Beginn der Runde hatten. Was die Runde und alles danach an den Dateien gemacht hat, geht verloren; die Unterhaltung behält ihre Aufzeichnung davon. Dateien, die seitdem Commits geändert haben, etwa die eines Pulls, bleiben wie committet. Nutze das Terminal, wenn du die Dateien so willst, wie sie jetzt sind.",
   rewind:
-    "Setzt die Unterhaltung und die Dateien dieses Arbeitsbereichs auf den Stand vor Beginn dieser Runde zurück: Diese Runde und jede danach verlassen die Unterhaltung, und der Agent macht in einer Sitzung weiter, die nur enthält, was davor kam.\n\nDie Runden, die gehen, werden nicht wieder angeboten, weder in der Zeitleiste noch anderswo. Die eigene Sitzungsdatei des Agenten bleibt auf der Festplatte, wo sein eigenes Fortsetzen (--resume von Claude Code, /resume von pi) sie noch erreicht. Deine Commits, Branches und dein Verlauf bleiben unberührt.",
+    "Setzt die Unterhaltung und die Dateien dieses Arbeitsbereichs auf den Stand vor Beginn dieser Runde zurück: Diese Runde und jede danach verschwinden aus der Unterhaltung, und der Agent macht in einer Sitzung weiter, die nur enthält, was davor kam.\n\nDie entfernten Runden tauchen nirgends mehr auf, weder in der Zeitleiste noch anderswo. Die eigene Sitzungsdatei des Agenten bleibt auf der Festplatte, wo sein eigenes Fortsetzen (--resume von Claude Code, /resume von pi) sie noch erreicht. Deine Commits, Branches und dein Verlauf bleiben unberührt.",
   rewindConfirm:
     "Die Unterhaltung verliert diese Runde und jede danach und mit ihnen den eigenen Verlauf des Agenten; die Dateien gehen auf den Stand zu ihrem Beginn zurück, außer du behältst sie, wie sie sind. Dateien, die seitdem Commits geändert haben, etwa die eines Pulls, bleiben wie committet. Beides lässt sich von hier aus nicht zurückholen.",
   revertFiles:
     "Listet die Dateien hinter den Zahlen oben auf: die seitdem erstellten, die gelöscht werden; die, die auf den Stand zu Beginn dieser Runde zurückgehen; und die, die seitdem Commits geändert haben und die bleiben, wie sie sind.",
   rewindPutFilesBack:
-    "An: Die Dateien gehen auf den Stand zu Beginn dieser Runde zurück, außer denen, die seitdem Commits geändert haben. Aus: Nur die Unterhaltung geht zurück, und jede Datei bleibt, wie sie jetzt ist, mit dem, was die gehenden Runden an ihr gemacht haben. Der Agent erfährt nichts davon; er findet die Dateien vor, wie sie sind.",
+    "An: Die Dateien gehen auf den Stand zu Beginn dieser Runde zurück, außer denen, die seitdem Commits geändert haben. Aus: Nur die Unterhaltung geht zurück, und jede Datei bleibt, wie sie jetzt ist, mit dem, was die entfernten Runden an ihr geändert haben. Der Agent erfährt nichts davon; er findet die Dateien vor, wie sie sind.",
   commandDelivery: "Befehle, die du mit ! ausführst, gehen mit deiner nächsten Nachricht an den Agenten, in den Tags, die Claude Code für seine eigenen !-Befehle nutzt.",
   commandOutputsAttached: "Diese Ausgaben von Befehlen, die du mit ! ausgeführt hast, gehen deiner nächsten Nachricht an den Agenten voraus. ✕ lässt sie weg.",
   terminalToggle:
@@ -188,7 +188,7 @@ export const hints: Messages["hints"] = {
   shellFontSize: "Die Textgröße in Shell-Blöcken, im Verhältnis zur Textgröße der App.",
   timestamps: "Aus: Die Uhrzeit steht neben dem Namen jedes Autors und in einer späteren Zeile, solange du darauf zeigst.\nAn: Jede Zeile zeigt ihre Uhrzeit.",
   pulses:
-    "Die Punkte arbeitender Unterhaltungen und solcher, die auf einen Job warten, pulsieren. Unter Linux ändern sie sich einige Male pro Sekunde, da jede Änderung das Fenster neu zeichnen lässt.\nAus: Sie bleiben still. Sie bleiben auch still, wenn dein System um weniger Bewegung bittet.",
+    "Die Punkte arbeitender Unterhaltungen und solcher, die auf einen Job warten, pulsieren. Unter Linux ändern sie sich einige Male pro Sekunde, da jede Änderung das Fenster neu zeichnen lässt.\nAus: Sie bleiben still. Sie bleiben auch still, wenn in deinem System „Bewegung reduzieren“ an ist.",
   textSize: "Textgröße in der ganzen App: 50 %, 70 %, 100 %, 140 % oder 200 %. ⌘+ und ⌘− ändern sie schrittweise, ⌘0 setzt sie zurück.",
   theme: "Hell, dunkel, oder der Systemeinstellung folgen.",
   waitingStyle:
@@ -224,15 +224,15 @@ export const hints: Messages["hints"] = {
     "Ziehe nach oben, um das Nachrichtenfeld höher zu machen, nach unten, um es kleiner zu machen; mit längerem Text wächst es trotzdem. Jede Unterhaltung in diesem Browser nutzt dieselbe Höhe. Doppelklicke, damit es sich wieder an den Text anpasst.",
   paneGrip:
     "Ziehe es auf einen anderen Bereich, um die beiden zu tauschen, oder nutze Tauschen in der Befehlspalette. Jede Unterhaltung merkt sich ihr eigenes Layout; in den Einstellungen wählst du das, mit dem neue Unterhaltungen starten.",
-  paneFullscreen: "Lass diesen Bereich den ganzen Arbeitsbereich füllen. Ein Doppelklick auf die Leiste tut dasselbe.",
+  paneFullscreen: "Lass diesen Bereich den ganzen Platz einnehmen. Ein Doppelklick auf die Leiste tut dasselbe.",
   paneExitFullscreen: "Zurück zu den anderen Bereichen. Esc tut dasselbe, außer in einem Terminal, das Esc für sich behält.",
   canvasHide: "Blende den Canvas aus. Zeichnungen und Fragen kommen weiter an und bleiben im Verlauf; zeige ihn wieder über die Kopfzeile der Unterhaltung oder die Befehlspalette.",
   settings:
     "Das Design, Zeitstempel, das Layout, mit dem neue Unterhaltungen starten, Systembenachrichtigungen und unter macOS, ob deine Rechtschreibung korrigiert wird oder beim Tippen Wörter vorgeschlagen werden.",
   queue:
-    "Nachrichten, die du sendest, während der Agent arbeitet, warten hier.\n\nMit Claude Code, pi und Codex wartet eine Nachricht mit dem Etikett „schließt sich der Runde an“ hier nur, solange der Agent Tools ausführt: Sie kommt in die laufende Runde, sobald diese fertig sind, sodass der Agent sie vor seinem nächsten Schritt liest. Eine mit dem Etikett „nach der Runde“ wartet, bis die Runde endet, und geht dann als deine nächste Nachricht raus. Enter und ⌥Enter (Alt+Enter) senden jeweils auf eine Art; in den Einstellungen wählst du, welche. opencode kann keine Nachrichten in eine laufende Runde aufnehmen, daher warten bei ihm alle.\n\nWartende Nachrichten gehen einzeln raus, jede, wenn die Runde davor endet, auch nachdem du Stoppen gedrückt hast. Ziehe eine Nachricht an ihrem ⋮⋮, um die Reihenfolge zu ändern, in der sie rausgehen. Bearbeiten holt eine Nachricht zurück ins Nachrichtenfeld; ↑ in einem leeren Feld tut dasselbe mit der letzten. Die Warteschlange liegt beim Host, sodass sie ein Neuladen der Seite und einen Neustart des Hosts übersteht.",
+    "Nachrichten, die du sendest, während der Agent arbeitet, warten hier.\n\nMit Claude Code, pi und Codex wartet eine Nachricht mit der Markierung „schließt sich der Runde an“ hier nur, solange der Agent Tools ausführt: Sie kommt in die laufende Runde, sobald diese fertig sind, sodass der Agent sie vor seinem nächsten Schritt liest. Eine mit der Markierung „nach der Runde“ wartet, bis die Runde endet, und geht dann als deine nächste Nachricht raus. Enter und ⌥Enter (Alt+Enter) senden jeweils auf eine Art; in den Einstellungen wählst du, welche. opencode kann keine Nachrichten in eine laufende Runde aufnehmen, daher warten bei ihm alle.\n\nWartende Nachrichten gehen einzeln raus, jede, wenn die Runde davor endet, auch nachdem du Stoppen gedrückt hast. Ziehe eine Nachricht an ihrem ⋮⋮, um die Reihenfolge zu ändern, in der sie rausgehen. Bearbeiten holt eine Nachricht zurück ins Nachrichtenfeld; ↑ in einem leeren Feld tut dasselbe mit der letzten. Die Warteschlange liegt beim Host, sodass sie ein Neuladen der Seite und einen Neustart des Hosts übersteht.",
   usageLimit:
-    "Claude Code hat an seinem Nutzungslimit gestoppt. Statt deine Nachrichten aus der Warteschlange gegen dieselbe Wand zu schicken, behält der Host sie und bittet den Agenten wie Claude Code eine Minute nach dem Zurücksetzen des Limits, dort weiterzumachen, wo er aufgehört hat; deine Nachrichten aus der Warteschlange folgen. Das tut er von selbst höchstens zweimal hintereinander; danach, oder wenn die Meldung keine Zeit für das Zurücksetzen nennt, wartet er auf dich.\n\nDas Warten übersteht einen Neustart des Hosts.",
+    "Claude Code hat an seinem Nutzungslimit gestoppt. Statt deine Nachrichten aus der Warteschlange gegen dieselbe Wand laufen zu lassen, behält der Host sie und bittet den Agenten wie Claude Code eine Minute nach dem Zurücksetzen des Limits, dort weiterzumachen, wo er aufgehört hat; deine Nachrichten aus der Warteschlange folgen. Das tut er von selbst höchstens zweimal hintereinander; danach, oder wenn die Meldung keine Zeit für das Zurücksetzen nennt, wartet er auf dich.\n\nDas Warten übersteht einen Neustart des Hosts.",
   continueAfterUsageLimit:
     "Bitte den Agenten, jetzt dort weiterzumachen, wo er aufgehört hat, z. B. nach dem Wechsel zu einem Profil, das sich bei einem anderen Konto anmeldet. Nachrichten aus der Warteschlange folgen.",
   tryAgain: "Bitte den Agenten, dort weiterzumachen, wo er aufgehört hat. Er hat die Nachricht, mit der die fehlgeschlagene Runde begann, noch.",
@@ -263,7 +263,7 @@ export const hints: Messages["hints"] = {
   canvasUse:
     "Bei Bedarf: Der Agent entscheidet anhand der eigenen Anweisungen des Canvas.\n\nOft: Die System-Prompts von Claude Code, pi und Codex sagen ihnen außerdem, Erklärungen, Vergleiche, Pläne und die Zusammenfassung einer größeren Arbeit auf den Canvas zu bringen und dich dort nach Entscheidungen zu fragen.\n\nSeiten kosten mehr Token als dieselbe Antwort als Text.",
   terminalCommand:
-    "Claude Code zeigt das nur in seinem eigenen Terminal, deshalb öffnet dies es dort: in einem Terminal-Tab dieser Unterhaltung, ausgeführt von dem Claude Code, das das Profil dieser Unterhaltung nutzt. Dort im Terminal passiert der Befehl; die Antwort des Agenten oben ist nur seine Ablehnung.",
+    "Claude Code zeigt das nur in seinem eigenen Terminal, deshalb landet es in einem Terminal-Tab dieser Unterhaltung, ausgeführt von dem Claude Code, das das Profil dieser Unterhaltung nutzt. Der Befehl passiert dort im Terminal; die Antwort des Agenten oben ist nur seine Ablehnung.",
   logIn:
     "Öffnet die eigene Anmeldung des Agenten in einem Terminal-Tab dieser Unterhaltung, mit ihrem Profil, sodass ein Profil mit eigenem Konto genau dieses anmeldet. Sobald dort steht, dass du angemeldet bist, sende deine Nachricht erneut.",
   queuedGrip: "Ziehe, um die Reihenfolge zu ändern, in der Nachrichten aus der Warteschlange rausgehen: Sie gehen von oben weg.",
@@ -289,15 +289,15 @@ export const hints: Messages["hints"] = {
   enterWhileBusy:
     "Was Enter mit einer Nachricht macht, während der Agent arbeitet; ⌥Enter (Alt+Enter) macht das andere. Mit opencode warten Nachrichten immer auf das Ende der Runde.",
   openFile:
-    "Öffnet die Datei in dem Programm, das das System des Hosts dafür nutzt, auf dem Rechner, auf dem Mirador läuft. Ein Skript öffnet sich als Text, in dem Programm, das unter Einstellungen › Unterhaltungen gewählt ist. Ein Programm öffnet sich nicht.",
+    "Öffnet die Datei in dem Programm, das das System des Hosts dafür nutzt, auf dem Rechner, auf dem Mirador läuft. Ein Skript öffnet sich als Text, in dem Programm, das unter Einstellungen › Unterhaltungen gewählt ist. Ein ausführbares Programm wird nicht geöffnet.",
   pushRelayAddress: "Wohin dieser Mac Pushes für deine Handys schickt; leer schickt er keine. Handys bekommen Pushes erst, wenn sie sich bei diesem Mac registriert haben.",
   pushRelayToken: "Das Token, das der Betreiber des Relays für diesen Mac erstellt hat. Mirador speichert es und zeigt es nie wieder; lass das Feld leer, um das gesetzte zu behalten.",
   machineName:
-    "Wie Handys diesen Rechner nennen: Sie übernehmen den Namen beim Verbinden, und ein Handy kann ihm trotzdem einen eigenen geben. Unter diesem Namen tritt er auch anderen Rechnern als Mirador bei. Leer heißt er wie sein Computer.",
+    "Wie Handys diesen Rechner nennen: Sie übernehmen den Namen beim Verbinden, und ein Handy kann ihm trotzdem einen eigenen geben. Unter diesem Namen tritt er auch anderen Rechnern als Mirador bei. Bleibt es leer, heißt er wie sein Computer.",
   scriptProgram:
     "Wo sich ein Dateilink auf ein Skript öffnet, als Text, auf dem Computer des Hosts. Das Programm für seinen Typ könnte es ausführen: Git for Windows führt .sh-Dateien aus, der Python-Launcher .py-Dateien.\n\nDer Texteditor des Systems: unter macOS der, den du für Text gewählt hast, unter Windows der Editor. Linux hat keinen eigenen, daher wählt dort xdg-open das Programm für den Typ des Skripts, und ein ausführbares Skript, das dieses Programm ausführen könnte, öffnet sich nicht.\n\nEin Programm, das du nennst: sein Name im PATH des Hosts, etwa code oder subl, oder sein vollständiger Pfad. Es bekommt den Pfad der Datei. Unter Windows nenne eine .exe, etwa Code.exe: Eine .cmd oder .bat würde über cmd.exe laufen, das einen Teil eines Dateinamens für einen Befehl halten könnte.",
   editor:
-    "Der Editor, den Öffnen in … nutzt, auf dem Computer des Hosts. Mirador sucht den Kommandozeilen-Starter jedes Editors (idea, code, cursor, zed, subl) im PATH des Hosts und dort, wo sein Installer ihn ablegt. Der erste gefundene in dieser Reihenfolge wird genommen.",
+    "Der Editor, den Öffnen in … nutzt, auf dem Computer des Hosts. Mirador sucht den Kommandozeilen-Launcher jedes Editors (idea, code, cursor, zed, subl) im PATH des Hosts und dort, wo sein Installer ihn ablegt. Der erste gefundene in dieser Reihenfolge wird genommen.",
   editorCommand:
     "Ein Programm und seine Argumente, ohne Shell ausgeführt. {file} wird zum Pfad der Datei und {line} zu ihrer Zeile; ohne {file} kommt der Pfad ans Ende. Setze den Pfad eines Programms in Anführungszeichen, wenn er Leerzeichen enthält.",
   profilePicture:
@@ -307,7 +307,7 @@ export const hints: Messages["hints"] = {
   scriptMessage:
     "Ein Skript, das der Agent gestartet hat, hat das als deine nächste Nachricht gesendet, damit der Agent weitermacht, wenn das Skript fertig ist. Skripte senden mit mirador message.",
   miradorMessage:
-    "Mirador hat das an den Agenten gesendet, als seine Runde endete: um mit einem Schritt weiterzumachen, den er angekündigt, aber nicht getan hat, oder um den Canvas zu nutzen, wenn die Einstellungen das oft verlangen, etwa dich mit ask statt im Chat zu fragen.",
+    "Mirador hat das an den Agenten gesendet, als seine Runde endete: um mit einem Schritt weiterzumachen, den er angekündigt, aber nicht getan hat, oder um den Canvas zu nutzen, wenn er in den Einstellungen auf Oft steht, etwa dich mit ask statt im Chat zu fragen.",
   pluginMessage:
     "Ein Plugin hat das als deine nächste Nachricht gesendet, etwa Delegate mit der Antwort einer Aufgabe, die der Agent abgegeben hat, damit der Agent dort weitermacht.",
   gitBranch: "Der git-Branch, der im Verzeichnis des Arbeitsbereichs ausgecheckt ist.",
@@ -368,9 +368,9 @@ export const hints: Messages["hints"] = {
 export const waitingHints: Messages["waitingHints"] = {
   permission: "Wartet auf dich: Der Agent wartet darauf, dass du ein Tool genehmigst.",
   question: "Wartet auf dich: Der Agent hat dir auf dem Canvas eine Frage gestellt.",
-  finished: "Fertig: Die Runde endete, während du woanders hingesehen hast. Öffnen der Unterhaltung entfernt das.",
-  error: "Fehlgeschlagen: Die Runde stoppte mit einem Fehler, während du woanders hingesehen hast. Öffnen der Unterhaltung entfernt das.",
-  unread: "Ungelesen: Du hast sie markiert, um darauf zurückzukommen. Öffnen der Unterhaltung entfernt das.",
+  finished: "Fertig: Die Runde endete, während du woanders hingesehen hast. Verschwindet, sobald du die Unterhaltung öffnest.",
+  error: "Fehlgeschlagen: Die Runde stoppte mit einem Fehler, während du woanders hingesehen hast. Verschwindet, sobald du die Unterhaltung öffnest.",
+  unread: "Ungelesen: Du hast sie markiert, um darauf zurückzukommen. Verschwindet, sobald du die Unterhaltung öffnest.",
 };
 
 export const statusHints: Messages["statusHints"] = {

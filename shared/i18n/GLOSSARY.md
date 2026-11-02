@@ -9,8 +9,8 @@ These terms stay the same everywhere:
 
 | English | Magyar | Español | 简体中文 | Deutsch |
 | --- | --- | --- | --- | --- |
-| agent | ágens | agente | 智能体 | Agent (den Agenten, die Agenten) |
-| subagent | alágens | subagente | 子智能体 | Subagent |
+| agent | ágens | agente | Agent | Agent (den Agenten, die Agenten) |
+| subagent | alágens | subagente | 子 Agent | Subagent |
 | canvas | vászon | lienzo | 画布 | Canvas (der) |
 | host | host | host | host | Host |
 | workspace | munkaterület | espacio de trabajo | 工作区 | Arbeitsbereich |
@@ -23,9 +23,9 @@ These terms stay the same everywhere:
 | prompt | prompt | prompt | 提示词 | Prompt |
 | message box | üzenetmező | cuadro de mensaje | 消息框 | Nachrichtenfeld |
 | terminal | terminál | terminal | 终端 | Terminal |
-| plugin | bővítmény | complemento | 插件 | Plugin |
+| plugin | bővítmény | plugin | 插件 | Plugin |
 | palette | (parancs)paletta | paleta | 命令面板 | Befehlspalette |
-| checklist | ellenőrzőlista | lista de verificación | 清单 | Checkliste |
+| checklist | ellenőrzőlista | checklist (la) | 清单 | Checkliste |
 | History (canvas) | Előzmények | Historial | 历史 | Verlauf |
 | queue / queued | sor / sorba állított | cola / en cola | 队列 / 已排队 | Warteschlange / in der Warteschlange |
 | device | készülék | dispositivo | 设备 | Gerät |
@@ -35,7 +35,7 @@ These terms stay the same everywhere:
 | tool (agent's) | eszköz | herramienta | 工具 | Tool |
 | approve / approval | jóváhagy / jóváhagyás | aprobar / aprobación | 批准 | genehmigen / Genehmigung |
 | statusline | állapotsor | línea de estado | 状态栏 | Statuszeile |
-| fork (a session) | elágaztatás | bifurcar | 分叉 | forken / Fork |
+| fork (a session) | elágaztatás | fork | Fork | forken / Fork |
 | invite code / link | meghívókód / meghívólink | código / enlace de invitación | 邀请码 / 邀请链接 | Einladungscode / Einladungslink |
 | keyboard shortcuts | billentyűparancsok | atajos de teclado | 键盘快捷键 | Tastenkürzel |
 | Changes (canvas) | Változások | Cambios | 更改 | Änderungen |
@@ -44,7 +44,7 @@ These terms stay the same everywhere:
 | window (of its own) | ablak | ventana | 窗口 | Fenster |
 | Settings | Beállítások | Configuración | 设置 | Einstellungen |
 | Add / Remove / Delete | Hozzáadás / Eltávolítás / Törlés | Agregar / Quitar / Eliminar | 添加 / 移除 / 删除 | Hinzufügen / Entfernen / Löschen |
-| uncommitted | nem commitolt | sin confirmar | 未提交 | nicht committet |
+| uncommitted | nem commitolt | sin commit | 未提交 | nicht committet |
 | effort (thinking) | erőfeszítés | esfuerzo | 思考强度 | Denkaufwand |
 | go back / rewind (a turn) | visszalépés / visszatekerés | retroceder | 回退 | zurückspulen |
 | unload (a model from memory) | kirakás | liberar (de la memoria) | 卸载 | entladen |

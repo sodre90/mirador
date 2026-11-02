@@ -53,13 +53,13 @@ export const devices: Messages["devices"] = {
     exposing: "Közzététel…",
     expose: "A Mirador közzététele a Tailscale-en",
     nothingAnswered:
-      "Semmi sem válaszolt: ennek a gépnek egyik címe sem éri még el a Miradort, és Tailscale sincs rajta. Az alábbi választás sorra veszi, mi más lehetséges.",
+      "Semmi sem válaszolt: ennek a gépnek egyik címe sem éri még el a Miradort, és Tailscale sincs rajta. Lent látod, mi más jöhet szóba.",
   },
   reach: {
     useThis: "Használat",
     label: "Hogyan érik el más készülékek ezt a Miradort",
     title: "Hogyan érik el más készülékek a Miradort",
-    intro: "Egyszerre egy. A host a következő indulásától a kiválasztottat használja, a meghívólinkekhez és a már csatlakozott készülékekhez is.",
+    intro: "Egyszerre csak egy. A host a következő indulásától a kiválasztottat használja, a meghívólinkekhez és a már csatlakozott készülékekhez is.",
     noneTitle: "Csak ezen a gépen",
     noneDescription: "Más készülék nem éri el, és a host semmit sem szolgál ki a hálózaton.",
     addressTitle: "Egy proxy által adott címen",
@@ -88,7 +88,7 @@ export const devices: Messages["devices"] = {
     peerToPeer: "Egyenrangú kapcsolat (peer to peer), a Mirador alkalmazással",
     atHost: (host) => `Ezen a címen: ${host}`,
     throughTunnel:
-      "Az alkalmazás a legtöbb hálózatról közvetlenül kapcsolódik ehhez a Machez, mobilneten vagy egy másik Wi-Fi-n át, VPN nélkül. Egy saját szervered csak bemutatja őket egymásnak; amit küldenek, az végig titkosított.",
+      "Az alkalmazás a legtöbb hálózatról közvetlenül kapcsolódik ehhez a Machez, mobilneten vagy egy másik Wi-Fi-n át, VPN nélkül. Egy saját szervered csak összehozza a kettőt; amit küldenek, az végig titkosított.",
     atAddress: (host) =>
       `Böngésző vagy az alkalmazás ezen a címen csatlakozik: ${host}. A készüléknek tehát el kell érnie ezt a címet, például úgy, hogy ugyanazon a tailneten van.`,
     withoutLink:

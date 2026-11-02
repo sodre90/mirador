@@ -40,15 +40,15 @@ export const canvas: Messages["canvas"] = {
     older: "Anteriores",
     newer: "Siguientes",
     changes: "Cambios",
-    checklist: (count) => `Lista de verificación ${count}`,
+    checklist: (count) => `Checklist ${count}`,
     dismiss: "Descartar",
     historyCount: (count) => `Historial (${count})`,
     clear: "Borrar",
     pointAndAsk: "Señala y pregunta",
     showApp: (app) => `Mostrar ${app}`,
     agentsPlan: "Plan del agente",
-    closeChecklist: "Cerrar la lista de verificación",
-    dismissChecklist: "Descartar la lista de verificación",
+    closeChecklist: "Cerrar la checklist",
+    dismissChecklist: "Descartar la checklist",
     canvas: "Lienzo",
     editsWaiting: (count) => `${count} ${plural(count, "edición", "ediciones")} en espera`,
     export: "Exportar ▾",
@@ -65,7 +65,7 @@ export const canvas: Messages["canvas"] = {
     gone: "Este elemento ya no está en el lienzo: se descartó o se eliminó su conversación.",
   },
   pluginWindow: {
-    missing: (plugin) => `No hay instalado ningún complemento llamado ${plugin} con una ventana propia.`,
+    missing: (plugin) => `No hay instalado ningún plugin llamado ${plugin} con una ventana propia.`,
   },
   checklist: {
     agentsPlan: "Plan del agente",
@@ -82,7 +82,7 @@ export const canvas: Messages["canvas"] = {
     answered: (outcome, files) => `${outcome}: edición de ${files}`,
   },
   changes: {
-    scope: { turn: "Este turno", uncommitted: "Sin confirmar", session: "Esta sesión" },
+    scope: { turn: "Este turno", uncommitted: "Sin commit", session: "Esta sesión" },
     view: { list: "Lista", tree: "Árbol", all: "Todos los archivos" },
     notes: {
       session:
@@ -95,7 +95,7 @@ export const canvas: Messages["canvas"] = {
     noTurnYet: "Los archivos que el agente cambie en esta conversación se mostrarán aquí.",
     nothingThisTurn: "Ningún archivo cambió en este turno.",
     nothingThisSession: "El agente no ha cambiado ningún archivo en esta conversación.",
-    nothingUncommitted: "No hay cambios sin confirmar.",
+    nothingUncommitted: "No hay cambios sin commit.",
     status: { added: "agregado", modified: "modificado", deleted: "eliminado" },
     changedByAgent: "Cambiado por el agente",
     commit: "commit",
@@ -186,5 +186,5 @@ export const canvas: Messages["canvas"] = {
     cancel: "Cancelar",
   },
   imagePreview: "Imagen",
-  pluginMissing: (plugin) => `El complemento ${plugin} no está instalado, así que esto es lo que publicó, tal cual.`,
+  pluginMissing: (plugin) => `El plugin ${plugin} no está instalado, así que esto es lo que publicó, tal cual.`,
 };

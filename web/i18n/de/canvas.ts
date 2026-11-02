@@ -119,7 +119,7 @@ export const canvas: Messages["canvas"] = {
     sections: {
       project: "Projekt",
       editedByAgent: "Vom Agenten bearbeitet",
-      changedOtherwise: "Anders geändert",
+      changedOtherwise: "Anderweitig geändert",
       othersMayHaveWritten: "Vielleicht von einer anderen Unterhaltung geschrieben",
       committed: "Aus Commits seit Beginn der Runde",
       outside: "Außerhalb des Projekts",
@@ -186,5 +186,5 @@ export const canvas: Messages["canvas"] = {
     cancel: "Abbrechen",
   },
   imagePreview: "Bild",
-  pluginMissing: (plugin) => `Das Plugin ${plugin} ist nicht installiert, daher siehst du hier, was es veröffentlicht hat, unverändert.`,
+  pluginMissing: (plugin) => `Das Plugin ${plugin} ist nicht installiert, daher siehst du hier unverändert, was es veröffentlicht hat.`,
 };

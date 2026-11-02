@@ -84,11 +84,11 @@ export const canvas: Messages["canvas"] = {
     view: { list: "Lista", tree: "Fa", all: "Minden fájl" },
     notes: {
       session:
-        "A fájlok, amelyeket az ágens a szerkesztőeszközeivel módosított ebben a beszélgetésben, és amelyek a parancsai futása közben íródtak, az általuk készített commitokéval együtt.",
+        "A fájlok, amelyeket az ágens ebben a beszélgetésben a szerkesztőeszközeivel módosított, vagy amelyek a parancsai futása közben íródtak, a parancsok által készített commitok fájljaival együtt.",
       "turn-file-times":
         "Ez a mappa nem git-tároló, ezért a lista a kör kezdete óta írt fájlokat és az ágens szerkesztéseit tartalmazza. A törölt fájlok és a korábbi változatok nem ismertek.",
       "not-a-repository": "Ez a mappa nem git-tároló, ezért a lista csak az ágens által szerkesztett fájlokat tartalmazza.",
-      "turn-not-kept": "A kör elejéről való fájlokat már nem őrizzük, ezért a lista csak az ágens által szerkesztett fájlokat tartalmazza.",
+      "turn-not-kept": "A kör eleji fájlokat a Mirador már nem őrzi, ezért a lista csak az ágens által szerkesztett fájlokat tartalmazza.",
     },
     noTurnYet: "Itt jelennek meg a fájlok, amelyeket az ágens ebben a beszélgetésben módosít.",
     nothingThisTurn: "Ebben a körben nem változott fájl.",
@@ -171,7 +171,7 @@ export const canvas: Messages["canvas"] = {
     boxLabel: "Kérdezd az ágenst arról, amit megjelöltél",
     askAbout: (label) => `Kérdezd az ágenst erről: ${label}, vagy mondd meg, mit változtasson ott`,
     areaAlt: "A megjelölt terület",
-    placeholder: (primary) => `A szavaid (Enter: kérdés, ${primary}Enter: az oldal módosítása, Shift+Enter: új sor, Esc: mégse)`,
+    placeholder: (primary) => `Írd ide (Enter: kérdés, ${primary}Enter: az oldal módosítása, Shift+Enter: új sor, Esc: mégse)`,
     ask: "Kérdés",
     change: "Módosítás",
     cancel: "Mégse",
@@ -183,5 +183,5 @@ export const canvas: Messages["canvas"] = {
     cancel: "Mégse",
   },
   imagePreview: "Kép",
-  pluginMissing: (plugin) => `A bővítmény (${plugin}) nincs telepítve, ezért ez az, amit közzétett, változatlanul.`,
+  pluginMissing: (plugin) => `A bővítmény (${plugin}) nincs telepítve, ezért itt az látszik, amit közzétett, változtatás nélkül.`,
 };

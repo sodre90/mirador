@@ -25,7 +25,7 @@ export const dictation: Messages["dictation"] = {
     macSetting: " y en Configuración del Sistema → Privacidad y seguridad → Micrófono",
     windowsSetting: " y en Configuración de Windows → Privacidad y seguridad → Micrófono, que las aplicaciones de escritorio también necesitan",
     insecure: "Las páginas solo pueden usar el micrófono cuando se abren por https o en localhost. Abre Mirador en una de esas formas para dictar.",
-    desktopAppCannot: "Esta versión de la aplicación de escritorio no puede usar el micrófono. Actualízala o vuelve a compilarla, o dicta en un navegador.",
+    desktopAppCannot: "Esta versión de la aplicación de escritorio no puede usar el micrófono. Actualízala o vuelve a hacer el build, o dicta en un navegador.",
     browserCannot: "Este navegador no permite que las páginas usen el micrófono.",
     desktopAppNotAllowed: (systemSetting) =>
       `Mirador no tiene permiso para usar el micrófono. Permítelo cuando la aplicación de escritorio lo pida${systemSetting}. Si lo bloqueas en la aplicación, el bloqueo dura hasta que se cierre.`,

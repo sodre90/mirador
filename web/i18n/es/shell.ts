@@ -59,7 +59,7 @@ export const shell: Messages["shell"] = {
     settings: "Configuración…",
     profiles: "Perfiles…",
     machines: "Máquinas…",
-    plugins: "Complementos…",
+    plugins: "Plugins…",
     search: "Buscar…",
     paletteBar: "Conversaciones y acciones…",
     shortcuts: "Atajos",
@@ -70,7 +70,7 @@ export const shell: Messages["shell"] = {
     untitled: "(sin título)",
     open: "Abrir",
     continue: "Continuar",
-    fork: "Bifurcar",
+    fork: "Fork",
     startedInBefore: (agent) => `Sesiones de ${agent} iniciadas en`,
     startedInMiddle: ", las más recientes primero, incluidas las iniciadas desde la terminal. Continúan como",
     startedInAfter: ", la opción del espacio de trabajo, junto a",
@@ -122,7 +122,7 @@ export const shell: Messages["shell"] = {
     ofWorkspaces: "de espacios de trabajo",
     profiles: "Perfiles…",
     machines: "Máquinas…",
-    plugins: "Complementos…",
+    plugins: "Plugins…",
     settings: "Configuración…",
     keyboardShortcuts: "Atajos de teclado",
     restartHost: "Reiniciar el host",
@@ -143,7 +143,7 @@ export const shell: Messages["shell"] = {
     workInCanvas: "También funcionan mientras una página del lienzo tiene el foco, excepto los que crean cosas.",
     chromeKeeps: "En Chrome, ⌘T, ⌘W, ⌘⇧[ ⌘⇧] y ⌥⌘← ⌥⌘→ siguen siendo de Chrome.",
     help: {
-      palette: "Paleta: ir a una conversación, iniciar una, abrir un diálogo (en una terminal, la limpia en su lugar)",
+      palette: "Paleta: ir a una conversación, iniciar una, abrir un diálogo (en una terminal, en cambio, la limpia)",
       conversations: "Conversación anterior / siguiente",
       workspaces: "Espacio de trabajo anterior / siguiente",
       conversationByNumber: "Conversación 1–9 de este espacio de trabajo",
@@ -162,7 +162,7 @@ export const shell: Messages["shell"] = {
         "En una terminal: buscar en su salida, con opciones para distinguir mayúsculas, palabra completa y expresión regular (Enter: coincidencia más arriba, Shift+Enter: más abajo)",
       pasteImage: "En el cuadro de mensaje, una imagen del portapapeles entra como [Image #1] (soltar un archivo de imagen también funciona)",
       templates:
-        "En el cuadro de mensaje: busca una plantilla de prompt escribiendo y ponla; Tab / Shift+Tab recorren después sus {{values}}",
+        "En el cuadro de mensaje: escribe para buscar una plantilla de prompt e insertarla; después, Tab / Shift+Tab recorren sus {{values}}",
       format:
         "En el cuadro de mensaje con formato: negrita / cursiva / tachado / código, sobre la selección o sobre lo que escribas a continuación (Aa muestra todos los formatos)",
       dictate:

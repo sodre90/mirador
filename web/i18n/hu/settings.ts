@@ -107,7 +107,7 @@ export const settings: Messages["settings"] = {
   },
   externalImages: {
     title: "Képek más oldalakról",
-    hint: "Egy ágens válaszában bármely oldalról lehet kép. A betöltése elárulja annak az oldalnak a kép címét, amelyet egy olvasmányai által félrevezetett ágens megtölthet azzal, amit olvasott. Ez a böngésző megjegyzi.",
+    hint: "Egy ágens válaszában bármely oldalról lehet kép. A betöltése elárulja az oldalnak a kép címét, és ebbe a címbe egy olvasmányai által félrevezetett ágens belepakolhatja azt, amit olvasott. Ez a böngésző megjegyzi.",
     asLinks: "Más oldalakról származó képek linkként jelenjenek meg",
     loadAfterReload: "Újratöltés után töltődnek be.",
     reload: "Újratöltés",

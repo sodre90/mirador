@@ -53,7 +53,7 @@ export const chat: Messages["chat"] = {
     inBackground: "im Hintergrund",
     now: (step) => `jetzt: ${step}`,
     atWork: "Subagenten bei der Arbeit",
-    tokens: (input, output) => `${input} rein · ${output} raus`,
+    tokens: (input, output) => `${input} Input · ${output} Output`,
   },
   permission: {
     approvalsWaiting: "Wartende Genehmigungen",
@@ -175,7 +175,7 @@ export const chat: Messages["chat"] = {
     commandOutputs: (count) =>
       plural(count, "1 Befehlsausgabe geht mit deiner nächsten Nachricht mit", `${count} Befehlsausgaben gehen mit deiner nächsten Nachricht mit`),
     dropCommandOutputs: "Befehlsausgaben nicht senden",
-    busyNoSteer: "Der Agent arbeitet… Enter reiht deine Nachricht für nach seiner Runde ein, Esc stoppt den Agenten",
+    busyNoSteer: "Der Agent arbeitet… Enter reiht deine Nachricht ein, sie geht nach seiner Runde raus; Esc stoppt den Agenten",
     busy: (enterDoes, otherKey, otherDoes) => `Der Agent arbeitet… Enter ${enterDoes}, ${otherKey}Enter ${otherDoes}, Esc stoppt ihn`,
     busySteer: "fügt deine Nachricht seiner Runde hinzu",
     busyAfterTurn: "sendet deine Nachricht nach seiner Runde",
@@ -183,7 +183,7 @@ export const chat: Messages["chat"] = {
     idle: (agent) =>
       `Nachricht an ${agent} (Enter zum Senden, Shift+Enter für eine neue Zeile, / für seine Befehle, @ für einen Pfad, ! für einen Shell-Befehl)`,
     queue: "Einreihen",
-    steer: "Lenken",
+    steer: "In die Runde",
     afterTurn: "Nach der Runde",
     editingStopped: "Du bearbeitest deine gestoppte Nachricht. Enter ersetzt sie samt Antwort und setzt die Dateien zurück, die sie geändert hat; Esc behält sie.",
     templates: "Vorlagen",

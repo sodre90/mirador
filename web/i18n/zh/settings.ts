@@ -24,7 +24,7 @@ export const settings: Messages["settings"] = {
   appearance: {
     title: "外观",
     language: "语言",
-    languageHint: "Mirador 自身文字使用的语言，默认跟随浏览器的语言（前提是 Mirador 支持）。选择其他语言会重新加载页面。智能体写的内容仍用它们自己的语言。",
+    languageHint: "Mirador 自身文字使用的语言，默认跟随浏览器的语言（前提是 Mirador 支持）。选择其他语言会重新加载页面。Agent 写的内容仍用它们自己的语言。",
     textSize: "文字大小",
     theme: "主题",
     waitingForYou: "等你处理",
@@ -43,7 +43,7 @@ export const settings: Messages["settings"] = {
     messageBox: "消息框",
     box: "消息框",
     formattingButtons: "格式按钮",
-    whileAgentWorks: "智能体工作时发送",
+    whileAgentWorks: "Agent 工作时发送",
     whileAgentWorksHint: "⌥Enter（Alt+Enter）执行另一种方式；每条已排队的消息都会显示它将以哪种方式发出。保存在这个浏览器中。",
     enter: "Enter",
   },
@@ -72,7 +72,7 @@ export const settings: Messages["settings"] = {
     notInstalled: (installCommand) => `未安装 Claude Code。用 ${installCommand} 安装，或输入它的 claude 程序所在位置。`,
   },
   agents: {
-    hint: "Mirador 运行 host 所在电脑上安装的 Claude Code。更改会重启它的智能体，正在进行的轮次会因此中断。",
+    hint: "Mirador 运行 host 所在电脑上安装的 Claude Code。更改会重启它的 Agent，正在进行的轮次会因此中断。",
     programPlaceholder: "自动查找",
   },
   sleep: {
@@ -92,7 +92,7 @@ export const settings: Messages["settings"] = {
   },
   editApprovals: {
     title: "编辑批准",
-    hint: "智能体请求编辑或写入文件时。画布窗格隐藏时，聊天里无论如何都会显示差异。保存在这个浏览器中。",
+    hint: "Agent 请求编辑或写入文件时。画布窗格隐藏时，聊天里无论如何都会显示差异。保存在这个浏览器中。",
     inCanvas: "在画布中显示等待批准的编辑",
   },
   notifications: {
@@ -107,14 +107,14 @@ export const settings: Messages["settings"] = {
   },
   externalImages: {
     title: "来自其他网站的图片",
-    hint: "智能体的回复可以显示任何网站的图片。加载图片会把图片地址告诉那个网站，而被所读内容误导的智能体可能把读到的内容填进这个地址。保存在这个浏览器中。",
+    hint: "Agent 的回复可以显示任何网站的图片。加载图片会把图片地址告诉那个网站，而被所读内容误导的 Agent 可能把读到的内容填进这个地址。保存在这个浏览器中。",
     asLinks: "把来自其他网站的图片显示为链接",
     loadAfterReload: "重新加载后才会加载。",
     reload: "重新加载",
   },
   fileLinks: {
     title: "文件链接",
-    hint: "智能体回复或工具卡片中的文件路径会在 host 所在的电脑上打开。脚本以文本方式打开，因为其类型对应的程序可能会运行它。由 host 保存，对每个浏览器生效。",
+    hint: "Agent 回复或工具卡片中的文件路径会在 host 所在的电脑上打开。脚本以文本方式打开，因为其类型对应的程序可能会运行它。由 host 保存，对每个浏览器生效。",
     scriptsOpenIn: "脚本用以下方式打开",
     textEditor: "系统的文本编辑器",
     programYouName: "你指定的程序",
@@ -136,8 +136,8 @@ export const settings: Messages["settings"] = {
     name: "名称",
   },
   pushRelay: {
-    title: "不在 Mirador 上的手机",
-    hint: "推送中继会在智能体需要你、而手机上没有打开 Mirador 时通知手机。它无法读取所转发的内容。",
+    title: "没打开 Mirador 的手机",
+    hint: "推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。它无法读取所转发的内容。",
     address: "中继地址",
     token: "这台 Mac 的令牌",
     tokenSet: "已设置",

@@ -1,7 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
 export const voice: Messages["voice"] = {
-  intro: "对智能体说话，并听到它们回复的简短摘要。由 host 保存，所有浏览器和手机共用。",
+  intro: "对 Agent 说话，并听到它们回复的简短摘要。由 host 保存，所有浏览器和手机共用。",
   saved: "已保存。",
   save: "保存",
   address: "地址",
@@ -31,7 +31,7 @@ export const voice: Messages["voice"] = {
   translateIntoEnglish: "翻译成英语",
   sendRightAway: "立即发送",
   translatingAndSummingUp: "翻译并概括",
-  whenTheAgentReplies: "当智能体回复时",
+  whenTheAgentReplies: "当 Agent 回复时",
   keepTalking: "继续说话",
   progress: (step, done, total) => `${step}：${done} / ${total}`,
   cancel: "取消",

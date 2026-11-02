@@ -22,7 +22,7 @@ export const devices: Messages["devices"] = {
     name: "Name dieses Geräts",
     askToJoin: "Beitritt anfragen",
     inviteCode: "Einladungscode",
-    joining: "Trete bei…",
+    joining: "Beitritt läuft…",
     join: "Beitreten",
     noAnswer: "Der Rechner hat nicht geantwortet. Läuft sein Mirador?",
     signInLinkBefore:
@@ -61,7 +61,7 @@ export const devices: Messages["devices"] = {
     useThis: "Diese verwenden",
     label: "Wie andere Geräte dieses Mirador erreichen",
     title: "Wie andere Geräte Mirador erreichen",
-    intro: "Immer nur eine. Der Host verwendet die gewählte ab seinem nächsten Start, für Einladungslinks und für die Geräte, die schon beigetreten sind.",
+    intro: "Es gilt immer nur ein Weg. Der Host verwendet die gewählte ab seinem nächsten Start, für Einladungslinks und für die Geräte, die schon beigetreten sind.",
     noneTitle: "Nur auf diesem Rechner",
     noneDescription: "Kein anderes Gerät erreicht es, und der Host stellt nichts im Netzwerk bereit.",
     addressTitle: "Unter einer Adresse, die ein Proxy vergibt",
