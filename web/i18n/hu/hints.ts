@@ -303,7 +303,7 @@ export const hints: Messages["hints"] = {
   cost: "Amennyibe a beszélgetés eddig került, ahogy az ágens jelenti.",
   profileChip: "A profil, amellyel ennek a beszélgetésnek az ágense fut.",
   quota: (limit, percent, resetsIn) =>
-    `A Claude-előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
+    `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
   statuslineCommand: (command) =>
     `Az állapotsorod, amelyet ez ír ki: ${command}.\n\nA host úgy futtatja, mint a Claude Code: a Claude Code állapotsor-JSON-jével a stdin-en (modell, cwd, munkamenet, átirat, kontextusablak, költség) és a beszélgetés profiljának környezetével. Itt válthatsz a beépített állapotsorra.`,
   statuslineBuiltIn: (command) => `A beépített állapotsor.\n\nA Claude Code beállításai egy állapotsor-parancsot neveznek meg (${command}); itt válthatsz rá.`,

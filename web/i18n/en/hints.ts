@@ -280,7 +280,7 @@ export const hints = {
   cost: "What the conversation has cost so far, as the agent reports it.",
   profileChip: "The profile this conversation's agent runs with.",
   quota: (limit: string, percent: string, resetsIn: string) =>
-    `${limit} usage limit of your Claude plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
+    `${limit} usage limit of your plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
   statuslineCommand: (command: string) =>
     `Your statusline, printed by ${command}.\n\nThe host runs it like Claude Code does: Claude Code's statusline JSON on stdin (model, cwd, session, transcript, context window, cost) and the conversation's profile environment. Switch to the built-in statusline here.`,
   statuslineBuiltIn: (command: string) =>

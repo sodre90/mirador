@@ -320,7 +320,7 @@ export interface QuotaWindow {
   resetsAt: number;
 }
 
-/** The usage limits of a Claude subscription: the rolling five-hour window and the weekly one. */
+/** The usage limits of a Claude or ChatGPT subscription: the rolling five-hour window and the weekly one. */
 export interface PlanQuotas {
   fiveHour: QuotaWindow | null;
   sevenDay: QuotaWindow | null;

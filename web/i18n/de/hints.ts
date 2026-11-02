@@ -315,7 +315,7 @@ export const hints: Messages["hints"] = {
   cost: "Was die Unterhaltung bisher gekostet hat, wie der Agent es meldet.",
   profileChip: "Das Profil, mit dem der Agent dieser Unterhaltung läuft.",
   quota: (limit, percent, resetsIn) =>
-    `${limit}-Nutzungslimit deines Claude-Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
+    `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
   statuslineCommand: (command) =>
     `Deine Statuszeile, ausgegeben von: ${command}.\n\nDer Host führt sie aus wie Claude Code: das Statuszeilen-JSON von Claude Code auf stdin (Modell, cwd, Sitzung, Transkript, Kontextfenster, Kosten) und die Profilumgebung der Unterhaltung. Wechsle hier zur eingebauten Statuszeile.`,
   statuslineBuiltIn: (command) =>

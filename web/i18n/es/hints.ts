@@ -312,7 +312,7 @@ export const hints: Messages["hints"] = {
   cost: "Lo que ha costado la conversación hasta ahora, según lo informa el agente.",
   profileChip: "El perfil con el que se ejecuta el agente de esta conversación.",
   quota: (limit, percent, resetsIn) =>
-    `Límite de uso ${limit} de tu plan de Claude: ${percent} usado, se reinicia en ${resetsIn}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
+    `Límite de uso ${limit} de tu plan: ${percent} usado, se reinicia en ${resetsIn}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
   statuslineCommand: (command) =>
     `Tu línea de estado, impresa por: ${command}.\n\nEl host la ejecuta como lo hace Claude Code: el JSON de línea de estado de Claude Code por stdin (modelo, cwd, sesión, transcripción, ventana de contexto, costo) y el entorno del perfil de la conversación. Cambia aquí a la línea de estado integrada.`,
   statuslineBuiltIn: (command) =>

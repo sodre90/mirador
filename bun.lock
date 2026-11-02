@@ -51,6 +51,7 @@
   "patchedDependencies": {
     "@agentclientprotocol/claude-agent-acp@0.88.0": "patches/@agentclientprotocol%2Fclaude-agent-acp@0.88.0.patch",
     "pi-acp@0.0.34": "patches/pi-acp@0.0.34.patch",
+    "@agentclientprotocol/codex-acp@2.5.0": "patches/@agentclientprotocol%2Fcodex-acp@2.5.0.patch",
   },
   "packages": {
     "@agentclientprotocol/claude-agent-acp": ["@agentclientprotocol/claude-agent-acp@0.88.0", "", { "dependencies": { "@agentclientprotocol/sdk": "1.7.0", "@anthropic-ai/claude-agent-sdk": "0.3.293", "diff": "9.0.0", "zod": "4.6.5" }, "bin": { "claude-agent-acp": "dist/index.js" } }, "sha512-o2bfN6S47wHTV7US/0SrDguCQVs7RhgSwA5CzC37oeDvcXTfHJFTlAquglEybIMQXwSk1zYda5Wxa0F17pOlnA=="],
