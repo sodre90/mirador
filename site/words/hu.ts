@@ -26,7 +26,7 @@ export const hu: SiteWords = {
   hero: {
     eyebrow: "Ingyenes és nyílt forráskódú · macOS, Linux és Windows",
     title: 'Lásd, <span class="gradient">mire gondol az agent.</span>',
-    lede: "A Mirador egy vásznat ad a coding agented mellé. Rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásokon, így egy pillantás alatt átlátod őket.",
+    lede: "A Mirador egy vásznat ad a coding agented mellé. Rajzban mutatja meg, mire gondol, képekkel kérdez, és végigvezet a változtatásokon, így egy pillanat alatt átlátod őket.",
     or: "vagy",
     windows: "Windows",
     download: "Letöltés",
