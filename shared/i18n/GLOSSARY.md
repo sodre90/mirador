@@ -65,6 +65,10 @@ Rád vár / Kész / Sikertelen / Olvasatlan, Gépek…, Csere, Egyesített / Osz
 Összes eltávolítása, Modellek ezen a Macen, „a körhöz csatlakozik” / „a kör után”.
 The palette command "Elrendezés visszaállítása az alapértelmezettre" is `t.settings.layout.resetCommand`: reuse it.
 
+The website (`site/words/hu.ts`) is written freely, the way Hungarian developers talk, not word for word, and unlike
+the app it keeps developer words English with Hungarian suffixes: coding agent, agent, canvas, review, plugin, session,
+build, mockup, diff. Its Show / Ask / Tour / Review kickers are tool names and stay English.
+
 ## Spanish
 
 Don't put an article or a gendered word in front of a value filled in at runtime (a name, a file, a version): its
