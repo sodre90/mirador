@@ -172,10 +172,10 @@ export const problems: Messages["problems"] = {
   executableNotOpened: (file) =>
     `Ez futtatható, és az xdg-open elindíthatná, ezért a Mirador nem nyitja meg: ${file}. A Beállítások › Beszélgetések alatt megadhatsz egy programot a szkriptek megnyitásához.`,
   editorLauncherMissing: (editor, launcher) =>
-    `A(z) ${editor} parancssori indítója (${launcher}) nem található a host PATH-ján. Állítsd be, vagy válassz másik szerkesztőt a Beállítások › Beszélgetések alatt.`,
+    `A szerkesztő parancssori indítója (${launcher}) nem található a host PATH-ján: ${editor}. Állítsd be, vagy válassz másik szerkesztőt a Beállítások › Beszélgetések alatt.`,
   editorCommandNotFound: (program) => `A Mirador nem találja a host PATH-ján a Beállítások › Beszélgetések alatt megadott szerkesztőt: ${program}`,
   fileNameUnsafeThroughCmd: (path, program) =>
-    `A(z) ${program} a cmd.exe-n keresztül fut, amely a(z) ${path} nevének egy részét parancsnak vehetné, ezért a Mirador nem nyitja meg vele. Nevezd át a fájlt, vagy adj meg egy szerkesztő .exe fájlját a Beállítások › Beszélgetések alatt, például a VS Code-hoz a Code.exe-t.`,
+    `Ez a program a cmd.exe-n keresztül fut: ${program}. A cmd.exe a fájl nevének egy részét parancsnak vehetné (${path}), ezért a Mirador nem nyitja meg vele. Nevezd át a fájlt, vagy adj meg egy szerkesztő .exe fájlját a Beállítások › Beszélgetések alatt, például a VS Code-hoz a Code.exe-t.`,
   scriptProgramNotFound: (program) =>
     `A Mirador nem találja a host PATH-ján a Beállítások › Beszélgetések alatt megadott, szkriptek megnyitására szolgáló programot: ${program}`,
   scriptProgramThroughCmd: (program) =>
@@ -241,10 +241,10 @@ export const problems: Messages["problems"] = {
   imageTypeUnsupported: (type) => `${type} típusú képet nem lehet elküldeni az ágensnek.`,
   droppedFileAtMost: (megabytes) => `Egy behúzott fájl legfeljebb ${megabytes} MB lehet.`,
   droppedFileNameUnusable: (name) => `Nem lehet átmásolni ezt a fájlt: ${name}.`,
-  voiceEngineModelBeingRemoved: (model) => `A(z) ${model} eltávolítása folyamatban van erről a Macről.`,
-  voiceEngineModelDownloading: (model) => `A(z) ${model} letöltése még tart. A Beállítások → Hang részben látod, hol tart.`,
-  voiceEngineModelNotOnMac: (model) => `A(z) ${model} nincs ezen a Macen. A Beállítások → Hang részben letöltheted.`,
-  voiceProfileHasNoKey: (profile) => `A(z) ${profile} profil környezetében nincs ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN vagy OPENAI_API_KEY.`,
+  voiceEngineModelBeingRemoved: (model) => `Eltávolítása folyamatban van erről a Macről: ${model}.`,
+  voiceEngineModelDownloading: (model) => `Letöltése még tart: ${model}. A Beállítások → Hang részben látod, hol tart.`,
+  voiceEngineModelNotOnMac: (model) => `Nincs ezen a Macen: ${model}. A Beállítások → Hang részben letöltheted.`,
+  voiceProfileHasNoKey: (profile) => `Ennek a profilnak a környezetében nincs ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN vagy OPENAI_API_KEY: ${profile}.`,
   speechServerTimedOut: (minutes) => `A beszédfelismerő szerver ${minutes} percen belül nem válaszolt.`,
   voiceModelTimedOut: (minutes, askNotToThink) =>
     `A hangmodell ${minutes} percen belül nem válaszolt.${askNotToThink ? " Ha előbb gondolkodik, a Beállítások → Hang részben megkérheted, hogy ne tegye." : ""}`,
@@ -263,18 +263,18 @@ export const problems: Messages["problems"] = {
   engineVoiceModelServerStartTimedOut: (seconds) => `A hangmodell szervere ezen a Macen ${seconds} másodpercen belül nem indult el.`,
   engineSpeakingServerStartTimedOut: (seconds) => `A válaszokat felolvasó szerver ezen a Macen ${seconds} másodpercen belül nem indult el.`,
   engineHasNoSuchModel: (model) => `A Miradornak nincs ${model} modellje ehhez a Machez.`,
-  engineFilesListFailed: (host, status, repo) => `A(z) ${host} ${status} kóddal válaszolt, amikor a(z) ${repo} fájljait kérte tőle.`,
+  engineFilesListFailed: (host, status, repo) => `${status} kóddal válaszolt a fájllista kérésére (${repo}): ${host}.`,
   engineNeedsSpace: (needed, free) => `A beállításhoz ${needed} szabad hely kell, ezen a Macen pedig ${free} van.`,
-  engineDownloadAnswered: (host, status, url) => `A(z) ${host} ${status} kóddal válaszolt erre: ${url}.`,
-  engineCommandFailed: (command, lastError, exitCode) => `A(z) ${command} nem sikerült: ${lastError || `${exitCode} kilépési kód`}`,
-  engineDownloadDiffers: (url) => `A(z) ${url} másképp érkezett meg, mint várta, ezért a Mirador eldobta. Újbóli beállításkor újra letölti.`,
+  engineDownloadAnswered: (host, status, url) => `${status} kóddal válaszolt (${url}): ${host}.`,
+  engineCommandFailed: (command, lastError, exitCode) => `Nem sikerült (${command}): ${lastError || `${exitCode} kilépési kód`}`,
+  engineDownloadDiffers: (url) => `Másképp érkezett meg, mint várta, ezért a Mirador eldobta: ${url}. Újbóli beállításkor újra letölti.`,
   engineAddingFailed: (models, cause) => `Nem sikerült hozzáadni: ${models.join(" és ")}. ${cause}`,
   notALanguageCode: (language) => `Ez nem nyelvkód: ${language}.`,
   unloadingMinutes: (most) => `A kirakáshoz 1 és ${most} közötti egész számú perc kell.`,
   engineCouldNotReach: (host, cause) => `Nem sikerült elérni: ${host}: ${cause}`,
-  engineDownloadHostBusy: (host, status) => `A(z) ${host} ${status} kóddal válaszolt.`,
+  engineDownloadHostBusy: (host, status) => `${status} kóddal válaszolt: ${host}.`,
   engineDownloadBrokeOff: (url) => `Megszakadt a letöltés: ${url}.`,
-  engineDownloadWrongSize: (url, bytes) => `A(z) ${url} nem ${bytes} bájtos méretben érkezett meg.`,
+  engineDownloadWrongSize: (url, bytes) => `Nem ${bytes} bájtos méretben érkezett meg: ${url}.`,
   pluginWindowNeedsNewerApi: (brought, named) =>
     `a vászon host moduljának van ablaka, vagy figyeli a tevékenységet, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,

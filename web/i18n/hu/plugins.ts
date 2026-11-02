@@ -70,7 +70,7 @@ export const plugins: Messages["plugins"] = {
   movedHint: "A bővítményeknek saját helyük van: Bővítmények… az oldalsáv alján.",
   openPlugins: "Bővítmények megnyitása…",
   screenshotsOf: (plugin: string) => `Képek: ${plugin}`,
-  pictureOf: (index, count) => `${index}. kép a(z) ${count} közül`,
+  pictureOf: (index, count) => `${index}. kép (összesen ${count})`,
   previousPicture: "Előző kép",
   nextPicture: "Következő kép",
   closePicture: "Kép bezárása",
