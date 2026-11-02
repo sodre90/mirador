@@ -144,12 +144,24 @@ install_linux() {
   fi
 }
 
+# VS Code puts a copilot launcher on PATH that only says how to install Copilot, in a folder named copilot-shim.
+is_agent() {
+  [ "$1" = copilot ] || return 0
+  target=$(readlink -f "$2" 2>/dev/null) || target=$2
+  parent=${target%/*}
+  [ "${parent##*/}" = copilot-shim ] && return 1
+  return 0
+}
+
 has_agent() {
-  for program in claude opencode pi codex; do
-    command -v "$program" >/dev/null 2>&1 && return 0
-    for directory in "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin "$HOME/.opencode/bin"; do
-      [ -x "$directory/$program" ] && return 0
+  for program in claude opencode pi codex copilot; do
+    path_ifs=$IFS
+    IFS=:
+    for directory in $PATH "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin "$HOME/.opencode/bin"; do
+      IFS=$path_ifs
+      [ -n "$directory" ] && [ -x "$directory/$program" ] && is_agent "$program" "$directory/$program" && return 0
     done
+    IFS=$path_ifs
   done
   return 1
 }
@@ -166,7 +178,7 @@ main() {
   esac
   has_agent || {
     say ""
-    say "Mirador runs Claude Code, opencode, pi or Codex, and none of them is installed yet. Claude Code installs with:"
+    say "Mirador runs Claude Code, opencode, pi, Codex or Copilot, and none of them is installed yet. Claude Code installs with:"
     say "  curl -fsSL https://claude.ai/install.sh | bash"
   }
 }

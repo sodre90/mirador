@@ -797,8 +797,8 @@ function PermissionCard({ block, conversationId }: { block: PermissionBlock; con
   );
 }
 
-const agentNames: Record<HarnessId, string> = { claude: "Claude", opencode: "opencode", pi: "pi", codex: "Codex" };
-const agentMarks: Record<HarnessId, string> = { claude: "✳", opencode: "◆", pi: "π", codex: "◎" };
+const agentNames: Record<HarnessId, string> = { claude: "Claude", opencode: "opencode", pi: "pi", codex: "Codex", copilot: "Copilot" };
+const agentMarks: Record<HarnessId, string> = { claude: "✳", opencode: "◆", pi: "π", codex: "◎", copilot: "◈" };
 
 function PersonIcon() {
   return (
@@ -1196,6 +1196,7 @@ const queuedMessagesGoOut: Record<HarnessId, string> = {
   opencode: words.queue.goOutAfterTurn,
   pi: words.queue.goOutWithSteering,
   codex: words.queue.goOutWithSteering,
+  copilot: words.queue.goOutAfterTurn,
 };
 
 function DeliveryTag({ conversationId, message }: { conversationId: string; message: QueuedMessage }) {

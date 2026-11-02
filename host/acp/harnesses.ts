@@ -8,6 +8,7 @@ import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
+import { findCopilot } from "./copilot-program.ts";
 import { agentEnvironment } from "./environment.ts";
 import type { HarnessSpec } from "./harness.ts";
 import { commandShell, powershellInvocation } from "../command-shell.ts";
@@ -45,6 +46,14 @@ function opencodeCommand(): string[] {
   return [executable, "acp"];
 }
 
+/** Copilot asks permission for MCP tools, so the canvas tools that only show things in Mirador are allowed up front, as Claude Code's allowedTools are. */
+const copilotCommand = (environment: Record<string, string>): string[] => [
+  environment.COPILOT_PATH!,
+  "--acp",
+  "--allow-all-mcp-server-instructions",
+  ...PRE_ALLOWED_CANVAS_TOOLS.flatMap((tool) => ["--allow-tool", `${CANVAS_SERVER_NAME}(${tool})`]),
+];
+
 /** The agents this machine has a program for. */
 export function installedHarnesses(claudeProgramSetting: string): HarnessId[] {
   const programOf: Record<HarnessId, () => string | null> = {
@@ -52,15 +61,17 @@ export function installedHarnesses(claudeProgramSetting: string): HarnessId[] {
     opencode: findOpencode,
     pi: () => findPi(),
     codex: () => findCodex(),
+    copilot: () => findCopilot(currentPath()),
   };
   return harnessIds.filter((harness) => programOf[harness]() !== null);
 }
 
-const commandFor: Record<HarnessId, () => string[]> = {
+const commandFor: Record<HarnessId, (environment: Record<string, string>) => string[]> = {
   claude: () => [process.execPath, claudeAgentEntry],
   opencode: opencodeCommand,
   pi: () => [process.execPath, piAcpEntry()],
   codex: () => [process.execPath, codexAcpEntry()],
+  copilot: copilotCommand,
 };
 
 const AUTH_REQUIRED_CODE = RequestError.authRequired().code;
@@ -79,6 +90,7 @@ const loginCommandFor: Record<HarnessId, (environment: Record<string, string>, p
   opencode: () => [opencodeCommand()[0]!, "auth", "login"],
   pi: (environment) => [environment.PI_ACP_PI_COMMAND!],
   codex: (environment, pageOnHost) => [environment.CODEX_PATH!, "login", ...(pageOnHost ? [] : ["--device-auth"])],
+  copilot: (environment) => [environment.COPILOT_PATH!, "login"],
 };
 
 const powershellKeepOpenOnFailure = (command: string[]) =>
@@ -111,13 +123,14 @@ const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").re
  */
 export function harnessSpec(profile: Profile, claudeProgramSetting: string): HarnessSpec {
   const { harness } = profile;
+  const environment = launchEnvironment(harness, profile, claudeProgramSetting);
   return {
     id: harness,
-    command: commandFor[harness](),
+    command: commandFor[harness](environment),
     startsOneAtATime: harness === "opencode",
     label: `${harnessLabels[harness]} (${profile.name})`,
     logName: `${harness}-${slug(profile.name) || "profile"}-${profile.id.slice(0, 8)}`,
-    environment: launchEnvironment(harness, profile, claudeProgramSetting),
+    environment,
     prelaunch: profile.prelaunch,
   };
 }
@@ -154,6 +167,7 @@ export function launchEnvironment(harness: HarnessId, profile: Profile | null, c
   if (harness === "opencode") return withCanvasToolsPlugin(environment);
   if (harness === "pi") return piAcpEnvironment(environment);
   if (harness === "codex") return codexAcpEnvironment(environment);
+  if (harness === "copilot") return copilotEnvironment(environment);
   if (environment.CLAUDE_CODE_EXECUTABLE) return environment;
   const program = findClaudeProgram(claudeProgramSetting, environment.PATH);
   if (!program) throw new HostProblemError(claudeProgramMissing(claudeProgramSetting));
@@ -178,6 +192,14 @@ function codexAcpEnvironment(environment: Record<string, string>): Record<string
   const program = findCodex(environment.PATH);
   if (!program) throw new HostProblemError({ code: "codex-not-installed" });
   return { ...environment, CODEX_PATH: program };
+}
+
+/** Copilot runs the program in COPILOT_PATH, else the Copilot on the profile's PATH, as Codex does CODEX_PATH. */
+function copilotEnvironment(environment: Record<string, string>): Record<string, string> {
+  if (environment.COPILOT_PATH) return environment;
+  const program = findCopilot(environment.PATH);
+  if (!program) throw new HostProblemError({ code: "copilot-not-installed" });
+  return { ...environment, COPILOT_PATH: program };
 }
 
 export function profileEnvironment(profile: Profile | null): Record<string, string> {

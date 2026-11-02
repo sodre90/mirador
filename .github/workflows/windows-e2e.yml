@@ -61,6 +61,12 @@ jobs:
         run: |
           npm install --global @openai/codex@0.165.0
           & (Join-Path (npm prefix --global) "codex.cmd") --version
+      # The Copilot CLI, on PATH as copilot.cmd. The Copilot spec runs against the scripted model, so it needs no sign-in.
+      - name: Install Copilot
+        shell: pwsh
+        run: |
+          npm install --global @github/copilot@1.0.105
+          & (Join-Path (npm prefix --global) "copilot.cmd") --version
       # A test host waits for the processes it started and kills those that outlive it. Windows keeps a parent pid after
       # that parent exits and gives the pid to later processes: these are the runner's processes a host could take for its own.
       - name: Processes with a stale parent
@@ -102,7 +108,7 @@ jobs:
           $unixTools = "sh.exe", "sleep.exe", "openssl.exe"
           $env:Path = ($env:Path -split ";" | Where-Object { $folder = $_; $folder -and -not ($unixTools | Where-Object { Test-Path -LiteralPath (Join-Path $folder $_) }) }) -join ";"
           "::group::What the specs run with"
-          where.exe git bun node pwsh powershell bash claude opencode codex
+          where.exe git bun node pwsh powershell bash claude opencode codex copilot
           claude --version
           "::endgroup::"
           $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $env:SURVEY

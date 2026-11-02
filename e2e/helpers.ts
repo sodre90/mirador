@@ -145,12 +145,13 @@ export async function chooseInSettings(page: Page, label: string, option: string
   await settings.getByRole("button", { name: "Close" }).click();
 }
 
-export async function startConversation(page: Page) {
+/** `withModels` false for an agent that offers no model choice, such as Copilot on a bring-your-own-key provider. */
+export async function startConversation(page: Page, { withModels = true } = {}) {
   const previousUrl = page.url();
   await page.getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
   await expect(page.locator(".chat-header:visible h2")).toHaveText("New conversation");
-  await expect(page.locator(".chat-header:visible").getByLabel("Model", { exact: true })).toBeVisible({ timeout: 60_000 });
+  if (withModels) await expect(page.locator(".chat-header:visible").getByLabel("Model", { exact: true })).toBeVisible({ timeout: 60_000 });
   return page.url().match(/#\/c\/(.+)$/)![1]!;
 }
 

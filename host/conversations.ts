@@ -36,7 +36,7 @@ import {
   type WaitingFor,
   type Workspace,
 } from "../shared/model.ts";
-import { chosenModel, offersValue } from "../shared/config-options.ts";
+import { chosenModel, flatSelectOptions, offersValue } from "../shared/config-options.ts";
 import { MIN_SEARCH_LENGTH } from "../shared/find.ts";
 import { causeOf, englishProblem, HostProblemError, problemOf, type AgentGone, type HostProblem } from "../shared/host-problems.ts";
 import { messageAtEnd, type JobWaitRequest } from "../shared/job-waits.ts";
@@ -64,12 +64,14 @@ import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommand
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
 import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.ts";
 import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
+import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { miradorCommandEnvironment } from "./acp/environment.ts";
 import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { withReportedToolCall } from "./acp/reported-tool-call.ts";
+import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
 import { agentLogsDirectory, type HostConfig } from "./config.ts";
 import type { Hub } from "./hub.ts";
 import type { DroppedFiles } from "./dropped-files.ts";
@@ -260,6 +262,12 @@ interface StoppedTurn {
   conversationId: string;
   sessionId: string | null;
 }
+
+/**
+ * What of an agent's session/load is the session's state rather than its history: the history is in the transcript
+ * already, and the mode it reports comes back with the session's configuration.
+ */
+const SESSION_STATE_UPDATES = new Set<acp.SessionUpdate["sessionUpdate"]>(["available_commands_update", "config_option_update", "session_info_update", "usage_update"]);
 
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
@@ -1446,15 +1454,20 @@ export class ConversationService {
     const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
 
     const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume);
-    if (conversation.acpSessionId && canResume && this.agentHasRecorded(conversationId)) {
+    const canLoad = Boolean(capabilities.agentCapabilities?.loadSession);
+    if (conversation.acpSessionId && (canResume || canLoad) && this.agentHasRecorded(conversationId)) {
       try {
-        const resumed = await harness.resumeSession({ ...sessionRequest, sessionId: conversation.acpSessionId });
+        const replay: acp.SessionNotification[] = [];
+        const resumed = canResume
+          ? await harness.resumeSession({ ...sessionRequest, sessionId: conversation.acpSessionId })
+          : await this.loadWithoutReplay(harness, conversation.acpSessionId, sessionRequest, replay);
         this.bindSession(conversationId, conversation.acpSessionId, resumed.configOptions);
+        replay.filter(({ update }) => SESSION_STATE_UPDATES.has(update.sessionUpdate)).forEach((notification) => this.handleSessionUpdate(notification));
         await this.restoreConfigChoices(conversationId, conversation.acpSessionId, conversation.configOptions);
         return conversation.acpSessionId;
-      } catch (resumeError) {
+      } catch (reopenError) {
         this.closeSessionIfConversationDeleted(conversationId, harness, conversation.acpSessionId);
-        const error = asCodexSessionHeld(resumeError);
+        const error = asCodexSessionHeld(reopenError);
         this.append(conversationId, problemEvent({ code: "could-not-resume", ...causeOf(error, errorMessage(error)) }));
       }
     }
@@ -1468,6 +1481,19 @@ export class ConversationService {
     if (isFirstSession) await this.applyProfileChoices(conversationId, created.sessionId);
     if (this.onUsersOwnSetup(conversation)) await this.applyTestModelOverride(conversationId, created.sessionId);
     return created.sessionId;
+  }
+
+  /**
+   * An agent that can load a session but not resume it replays the whole history on load, which the transcript already
+   * holds; what it sends is kept in `replay`, for the session's state (commands, mode) to be read from once it is bound.
+   */
+  private async loadWithoutReplay(harness: HarnessProcess, sessionId: string, sessionRequest: Omit<Parameters<HarnessProcess["loadSession"]>[0], "sessionId">, replay: acp.SessionNotification[]) {
+    this.replaysBeingRead.set(sessionId, replay);
+    try {
+      return await harness.loadSession({ ...sessionRequest, sessionId });
+    } finally {
+      this.replaysBeingRead.delete(sessionId);
+    }
   }
 
   /** Delete closes the session a conversation has; one the agent was still opening when the conversation went is closed here. */
@@ -1724,8 +1750,16 @@ export class ConversationService {
     if (this.dropsCancelledReplyChunk(conversationId, update)) return;
     if (isTurnsOwnToolCall(update)) this.showHeldBackReply(conversationId);
     this.trackReplyProgress(conversationId, update);
-    this.append(conversationId, { type: "acp", update });
+    this.append(conversationId, { type: "acp", update: this.withModeName(conversationId, update) });
     this.followToolCalls(conversationId, update);
+  }
+
+  /** The mode picker's name for the mode, which the notice shows in place of the agent's id for it. */
+  private withModeName(conversationId: string, update: acp.SessionUpdate): acp.SessionUpdate {
+    if (update.sessionUpdate !== "current_mode_update") return update;
+    const picker = this.get(conversationId).configOptions.find((option) => option.category === "mode" && option.type === "select");
+    const name = picker?.type === "select" ? flatSelectOptions(picker).find(({ value }) => value === update.currentModeId)?.name : undefined;
+    return name ? { ...update, _meta: { ...update._meta, [MODE_NAME_META_KEY]: name } } : update;
   }
 
   /** The reply held back since a stop, once the running turn proves it its own or a steer leaves that untold: it shows where it streamed, before what came next. */
@@ -1915,8 +1949,12 @@ export class ConversationService {
     if (allowOptionId && this.get(conversationId).bypassPermissions) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
+    const reports = this.store.toolCallReports(conversationId, request.toolCall.toolCallId);
+    if (allowOptionId && isPreAllowedCanvasTool(canvasToolAskedFor(request.toolCall, reports), this.canvasPlugins(conversationId).toolNames)) {
+      return { outcome: { outcome: "selected", optionId: allowOptionId } };
+    }
     const runtime = this.runtime(conversationId);
-    const toolCall = withReportedToolCall(request.toolCall, this.store.toolCallReports(conversationId, request.toolCall.toolCallId));
+    const toolCall = withReportedToolCall(request.toolCall, reports);
     const editsRead = this.editsAskedFor(conversationId, toolCall);
     const inArrivalOrder = (runtime.permissionArriving ?? Promise.resolve()).then(() => editsRead);
     runtime.permissionArriving = inArrivalOrder;

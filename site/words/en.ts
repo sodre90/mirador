@@ -100,7 +100,7 @@ export const en = {
     },
     agents: {
       question: "Which coding agents does it work with?",
-      answer: "Claude Code, opencode, pi and Codex (both experimental) today, through the Agent Client Protocol (ACP). More agents are coming.",
+      answer: "Claude Code, opencode, pi, Codex and Copilot (the last three experimental) today, through the Agent Client Protocol (ACP). More agents are coming.",
     },
     privacy: {
       question: "Does my code leave my computer?",

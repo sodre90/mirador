@@ -49,7 +49,7 @@ export const profiles: Messages["profiles"] = {
   restartHint: "Wenn du eine geänderte Umgebung oder einen geänderten Befehl vor dem Start speicherst, startet der Agent dieses Profils neu; eine laufende Runde stoppt.",
   onlyProfile: "Das ist dein einziges Profil, und jede Unterhaltung braucht eines, also bleibt es, bis du ein weiteres erstellst.",
   installAgentTitle: "Installiere einen Agenten, um loszulegen",
-  installAgentText: "Mirador führt Claude Code, opencode, pi oder Codex aus, und auf diesem Rechner ist keiner davon installiert. Installiere einen und lade diese Seite dann neu.",
+  installAgentText: "Mirador führt Claude Code, opencode, pi, Codex oder Copilot aus, und auf diesem Rechner ist keiner davon installiert. Installiere einen und lade diese Seite dann neu.",
   firstProfileTitle: "Richte ein Profil ein, um loszulegen",
   firstProfileText:
     "Jede Unterhaltung läuft auf einem Profil: einem Agenten und der Umgebung, mit der er startet. Ist sonst nichts gesetzt, läuft der Agent so, wie er auf diesem Rechner eingerichtet ist. Profile für andere Konten, Gateways oder lokale Modelle kannst du später unter Profile hinzufügen.",

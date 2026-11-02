@@ -98,7 +98,7 @@ export const zh: SiteWords = {
     },
     agents: {
       question: "支持哪些编程 Agent？",
-      answer: "目前通过 Agent Client Protocol（ACP）支持 Claude Code、opencode、pi 和 Codex（后两者为实验性）。更多 Agent 在路上。",
+      answer: "目前通过 Agent Client Protocol（ACP）支持 Claude Code、opencode、pi、Codex 和 Copilot（后三者为实验性）。更多 Agent 在路上。",
     },
     privacy: {
       question: "我的代码会离开我的电脑吗？",

@@ -12,7 +12,10 @@ export type NoticeAbout =
   | { kind: "job-wait-ended"; wait: JobWait; end: JobWaitEnd }
   | { kind: "context-cleared" }
   | { kind: "profile-changed"; profileName: string | null; agent?: HarnessId }
-  | { kind: "mode"; modeId: string };
+  | { kind: "mode"; modeId: string; modeName?: string };
+
+/** Where the host leaves a mode's display name on the agent's mode update, since the timeline only sees stored events. */
+export const MODE_NAME_META_KEY = "mirador/modeName";
 
 function profileChangedNotice(profileName: string | null, agent: HarnessId | undefined) {
   if (!profileName) return "Now using the agent's own setup, without a profile";
@@ -39,6 +42,6 @@ export function englishNoticeText(about: NoticeAbout) {
     case "profile-changed":
       return profileChangedNotice(about.profileName, about.agent);
     case "mode":
-      return `Mode: ${about.modeId}`;
+      return `Mode: ${about.modeName ?? about.modeId}`;
   }
 }
