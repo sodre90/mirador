@@ -91,7 +91,7 @@ export const chat: Messages["chat"] = {
     jobEnded: (job) => `Beendet: ${job}`,
     jobEndedSaying: (job, message) => `Beendet: ${job}. ${message}`,
     gaveUpOnJob: (job, minutes) =>
-      `Warten beendet: ${job}. Es ließ sich ${minutes} Minuten lang nicht prüfen und läuft vielleicht noch`,
+      `Warten beendet: ${job}. Der Job ließ sich ${minutes} Minuten lang nicht prüfen und läuft vielleicht noch`,
     stoppedWaitingForJob: (job) => `Warten beendet: ${job}`,
     contextCleared: "Kontext geleert: Der Agent fängt von vorn an",
     agentsOwnSetup: "Jetzt mit der eigenen Einrichtung des Agenten, ohne Profil",

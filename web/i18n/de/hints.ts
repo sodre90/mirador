@@ -24,7 +24,7 @@ export const hints: Messages["hints"] = {
   voiceModelProfile: "Mirador ruft die API dieses Profils mit dessen Schlüsseln auf. Sein Agent startet nicht.",
   voiceAddress: "Die Adresse der API bis einschließlich ihrer Version, wie in https://api.openai.com/v1. Mirador hängt den Pfad jedes Aufrufs an.",
   voiceLanguage:
-    "Die Sprache, die du sprichst. Sie anzugeben hilft bei kurzen Aufnahmen, bei denen das Unterscheiden von Sprachen allein am Klang oft danebengeht; die Engine dieses Macs hört Englisch trotzdem als Englisch. Bei „Jede Sprache“ entscheidet der Sprachserver, und das Sprachmodell übersetzt alles, was nicht Englisch ist.",
+    "Die Sprache, die du sprichst. Sie anzugeben hilft bei kurzen Aufnahmen, bei denen das Unterscheiden von Sprachen allein am Klang oft danebengeht; die Engine dieses Macs erkennt Englisch trotzdem als Englisch. Bei „Jede Sprache“ entscheidet der Sprachserver, und das Sprachmodell übersetzt alles, was nicht Englisch ist.",
   translateToEnglish: "Was du sagst, kommt auf Englisch ins Nachrichtenfeld, mit dem, was du gesagt hast, darunter, damit du es vor dem Senden prüfen kannst.",
   translateNeedsVoiceModel: "Zum Übersetzen braucht es ein Sprachmodell. Wähle unten eines.",
   replyVoice:
