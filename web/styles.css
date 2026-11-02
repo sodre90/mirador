@@ -201,7 +201,8 @@ button.icon.show-sidebar {
 }
 
 button.icon.hide-sidebar svg,
-button.icon.show-sidebar svg {
+button.icon.show-sidebar svg,
+button.icon.page-find-toggle svg {
   display: block;
   width: 1em;
   height: 1em;
