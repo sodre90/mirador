@@ -2124,11 +2124,6 @@ input.picker-search {
   white-space: nowrap;
 }
 
-.tool-kind {
-  color: var(--faint);
-  font-size: calc(11px * var(--font-scale));
-}
-
 .tool-status {
   color: var(--faint);
 }

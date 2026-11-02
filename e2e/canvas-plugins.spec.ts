@@ -419,6 +419,8 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await sendAndWait(page, `RUN TOOLS ${JSON.stringify(calls)}`);
     await expect(page.locator(".timeline:visible .tool-title").filter({ hasText: "hand_over" })).toHaveText("Board · hand_over");
     await expect(page.locator(".timeline:visible .tool-title").filter({ hasText: " · show" })).toHaveText("canvas · show");
+    const showCall = page.locator(".timeline:visible .tool summary").filter({ hasText: " · show" });
+    await expect(showCall, "the card leaves out the agent's tool category").not.toContainText("other");
   });
 
   await test.step("with the plugin gone, its item shows what it published instead of a blank page", async () => {

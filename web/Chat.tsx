@@ -546,7 +546,6 @@ function ToolCard({ block, conversationId }: { block: ToolBlock; conversationId:
       <summary>
         <span className="tool-status">{statusIcons[status]}</span>
         <span className="tool-title">{readableToolTitle(block.title)}</span>
-        {block.toolKind && <span className="tool-kind">{block.toolKind}</span>}
       </summary>
       {block.locations.length > 0 && (
         <div className="locations">
