@@ -130,8 +130,9 @@ export class ScriptedModel {
   }
 
   /** The user's messages in the latest request for a reply, not a title: what the agent's context holds of the conversation. */
+  /** Without the environment Codex describes in a message of the user's own at a session's start. */
   userMessagesInContext() {
-    return this.latestReplyRequest().messages.filter(({ role }) => role === "user").map(textOf);
+    return this.latestReplyRequest().messages.filter(({ role }) => role === "user").map(textOf).filter((text) => !text.startsWith("<environment_context>"));
   }
 
   /** The system messages of the latest request for a reply. */

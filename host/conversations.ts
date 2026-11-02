@@ -130,6 +130,9 @@ interface NotesForAgent {
 }
 
 /** Asks the user an agent's form, such as Codex's questions, and answers the agent. */
+/** Codex's app-server daemon, which its terminal UI runs on, holds a session after the UI quits; the problem says how to free it. */
+const asCodexSessionHeld = (error: unknown) => (errorMessage(error).includes("thread_active_writer") ? new HostProblemError({ code: "codex-session-held" }) : error);
+
 type AskForm = (conversationId: string, request: acp.CreateElicitationRequest, signal: AbortSignal) => Promise<acp.CreateElicitationResponse>;
 
 const NO_NOTES: NotesForAgent = { commands: [], reverts: [], canvas: [] };
@@ -230,6 +233,8 @@ interface Runtime {
   /** The latest profile switch; the next one starts after it. */
   profileSwitch?: Promise<void>;
   pendingPermissions: Map<string, PendingPermission>;
+  /** A session Continue found held by Codex's daemon: the next message tries to continue it again, once the user has freed it, so its history replays ahead of that message. */
+  heldCodexSession?: string;
   /** The latest permission request still reading the files it would edit; the next one shows after it. */
   permissionArriving?: Promise<unknown>;
   queuedMessages: QueuedMessage[];
@@ -743,6 +748,7 @@ export class ConversationService {
     this.setStatus(conversationId, "starting");
     this.store.turnStarted(conversationId);
     this.hearActivity(conversationId, { kind: "turn-started" });
+    if (runtime.heldCodexSession) await this.ensureSession(conversationId).catch(() => {});
     const turnSeq = this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) }, notes);
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
@@ -1426,6 +1432,12 @@ export class ConversationService {
   }
 
   private async openSession(conversationId: string): Promise<string> {
+    const runtime = this.runtime(conversationId);
+    const held = runtime.heldCodexSession;
+    if (held) {
+      runtime.heldCodexSession = undefined;
+      return this.loadExternalSession(conversationId, held, "continue");
+    }
     const conversation = this.get(conversationId);
     const isFirstSession = conversation.acpSessionId === null;
     const harness = this.harnessFor(conversation);
@@ -1440,8 +1452,9 @@ export class ConversationService {
         this.bindSession(conversationId, conversation.acpSessionId, resumed.configOptions);
         await this.restoreConfigChoices(conversationId, conversation.acpSessionId, conversation.configOptions);
         return conversation.acpSessionId;
-      } catch (error) {
+      } catch (resumeError) {
         this.closeSessionIfConversationDeleted(conversationId, harness, conversation.acpSessionId);
+        const error = asCodexSessionHeld(resumeError);
         this.append(conversationId, problemEvent({ code: "could-not-resume", ...causeOf(error, errorMessage(error)) }));
       }
     }
@@ -1480,7 +1493,9 @@ export class ConversationService {
     this.sessions.bind(conversationId, loadedId);
     const loaded = await harness.loadSession({ ...sessionRequest, sessionId: loadedId }).catch((error: unknown) => {
       this.closeSessionIfConversationDeleted(conversationId, harness, loadedId);
-      throw error;
+      const problem = asCodexSessionHeld(error);
+      if (problem !== error) this.runtime(conversationId).heldCodexSession = loadedId;
+      throw problem;
     });
     this.closeSessionIfConversationDeleted(conversationId, harness, loadedId);
     this.bindSession(conversationId, loadedId, loaded.configOptions);
