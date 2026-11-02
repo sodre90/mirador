@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import Markdown, { type Components, type ExtraProps } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isFromAnotherSite, siteOf, useExternalImagesBlocked } from "./external-images.ts";
@@ -6,6 +6,7 @@ import { isLocalImagePath, localImageUrl } from "../shared/images.ts";
 import { hints } from "./hints.ts";
 import { looksLikeFilePath } from "../shared/file-paths.ts";
 import { connection } from "./connection.ts";
+import { highlightCode } from "./highlight.ts";
 import { blocksOfMessage, linesOfInlines, type Block, type Inline, type LineInline, type Mark } from "../shared/slack-markdown.ts";
 
 const COPY_OUTCOME_SHOWN_MS = 1_500;
@@ -78,10 +79,37 @@ function MarkdownImage({ node: _node, ...props }: ComponentProps<"img"> & ExtraP
   );
 }
 
+const fenceNameOf = (className: string | undefined) => className?.match(/(?:^|\s)language-(\S+)/)?.[1] ?? null;
+
+/** The code colored as `language`, plain where that is not a language the highlighter knows; for inside a `.highlighted-code` element. */
+export function HighlightedText({ code, language }: { code: string; language: string }) {
+  const spans = useMemo(() => highlightCode(code, language), [code, language]);
+  if (!spans) return code;
+  return spans.map(({ text, type }, index) =>
+    type ? (
+      <span key={index} className={`token ${type}`}>
+        {text}
+      </span>
+    ) : (
+      text
+    ),
+  );
+}
+
+function HighlightedCode({ code, fenceName, className }: { code: string; fenceName: string; className: string | undefined }) {
+  return (
+    <code className={`${className} highlighted-code`}>
+      <HighlightedText code={code} language={fenceName} />
+    </code>
+  );
+}
+
 function MarkdownCode({ node: _node, children, ...props }: ComponentProps<"code"> & ExtraProps) {
   const conversationId = useContext(FilesOfConversation);
   const insideCodeBlock = useContext(InsideCodeBlock);
   const text = typeof children === "string" ? children : "";
+  const fenceName = fenceNameOf(props.className);
+  if (insideCodeBlock && fenceName && typeof children === "string") return <HighlightedCode code={text} fenceName={fenceName} className={props.className} />;
   if (!conversationId || insideCodeBlock || !looksLikeFilePath(text)) return <code {...props}>{children}</code>;
   return (
     <button type="button" className="file-link" data-hint={hints.openFile} onClick={() => connection.send({ type: "files.open", conversationId, path: text })}>
@@ -166,7 +194,7 @@ function SlackBlock({ block }: { block: Block }) {
     case "code":
       return (
         <CodeBlock>
-          <code className={block.language ? `language-${block.language}` : undefined}>{block.code}</code>
+          <MarkdownCode className={block.language ? `language-${block.language}` : undefined}>{block.code}</MarkdownCode>
         </CodeBlock>
       );
     case "quote":

@@ -54,7 +54,7 @@ import { isLoginCommand, requestLogin } from "./login-request.ts";
 import { requestProgram } from "./program-request.ts";
 import { usePluginCommands } from "./plugin-commands.tsx";
 import { AskToRevert, UndoButton } from "./Revert.tsx";
-import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
+import { HighlightedText, MarkdownText, SlackMessageText } from "./Markdown.tsx";
 import { FormattedBox, type FormattedBoxExtras } from "./FormattedBox.tsx";
 import { useMessageBox } from "./message-box.ts";
 import { FormatBarToggle } from "./FormatBar.tsx";
@@ -446,7 +446,9 @@ function CommandLine({ command, directory }: { command: string; directory?: stri
       <span className="shell-prompt" data-hint={directory ?? undefined}>
         {directory ? `${lastPathSegment(directory)} $` : "$"}
       </span>
-      <span className="shell-typed">{command}</span>
+      <span className="shell-typed highlighted-code">
+        <HighlightedText code={command} language="bash" />
+      </span>
     </div>
   );
 }
