@@ -216,7 +216,8 @@ test.describe("with a German browser", () => {
   test("the home page goes to German once, and English picked there stays", async ({ page }) => {
     await openSite(page);
     await expect(page).toHaveURL(`${siteUrl}de/`);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(de.hero.title.replace(/<[^>]+>/g, ""));
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
+    await expect(page).toHaveTitle(de.attributes.title);
 
     await page.locator(".languages summary").click();
     await page.getByRole("link", { name: "English" }).click();
@@ -256,8 +257,17 @@ test.describe("with a Traditional Chinese browser", () => {
   });
 });
 
-test("the Hungarian headline puts Lásd on a line of its own", async ({ page }) => {
-  await openSite(page, "hu/");
-  const lines = await page.locator("h1").evaluate((heading: HTMLElement) => heading.innerText.split("\n"));
-  expect(lines).toEqual(["Lásd,", "mire gondol az agent."]);
-});
+const TWO_LINE_HEADLINES: [Language, string[]][] = [
+  ["hu", ["Lásd,", "mire gondol az agent."]],
+  ["de", ["Sieh,", "was dein Coding-Agent meint."]],
+  ["es", ["Mira", "lo que piensa tu agente."]],
+  ["zh", ["一眼看懂", "你的编程 Agent 在想什么。"]],
+];
+
+for (const [language, expectedLines] of TWO_LINE_HEADLINES) {
+  test(`${languageNames[language]}: the headline puts its first words on a line of their own`, async ({ page }) => {
+    await openSite(page, folderOf(language));
+    const lines = await page.locator("h1").evaluate((heading: HTMLElement) => heading.innerText.split("\n"));
+    expect(lines).toEqual(expectedLines);
+  });
+}

@@ -25,7 +25,7 @@ export const es: SiteWords = {
   nav: { features: "Funciones", install: "Instalar", faq: "Preguntas" },
   hero: {
     eyebrow: "Gratis y open source · macOS, Linux y Windows",
-    title: 'Por fin ves lo que tu agente <span class="gradient">quiere decir.</span>',
+    title: 'Mira<br><span class="gradient">lo que piensa tu agente.</span>',
     lede: "Mirador pone un canvas junto al chat con tu agente de programación. Ahí dibuja lo que quiere decir, te pregunta con imágenes y te guía por sus cambios y sus code reviews, para que los entiendas de un vistazo.",
     or: "o",
     windows: "Windows",

@@ -25,7 +25,7 @@ export const zh: SiteWords = {
   nav: { features: "功能", install: "安装", faq: "常见问题" },
   hero: {
     eyebrow: "免费开源 · macOS、Linux 和 Windows",
-    title: '一眼看懂你的编程 Agent <span class="gradient">在想什么。</span>',
+    title: '一眼看懂<br><span class="gradient">你的编程 Agent 在想什么。</span>',
     lede: "Mirador 在对话旁边给编程 Agent 一块画布。它用图讲思路，用图问问题，还带你过一遍它的改动和代码审查，一眼就能看明白。",
     or: "或",
     windows: "Windows",

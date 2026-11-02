@@ -25,7 +25,7 @@ export const de: SiteWords = {
   nav: { features: "Features", install: "Installieren", faq: "FAQ" },
   hero: {
     eyebrow: "Kostenlos und Open Source · macOS, Linux und Windows",
-    title: 'Sieh, was dein Coding-Agent <span class="gradient">meint.</span>',
+    title: 'Sieh,<br><span class="gradient">was dein Coding-Agent meint.</span>',
     lede: "Mirador stellt deinem Coding-Agenten einen Canvas neben den Chat. Er zeichnet, was er meint, fragt mit Bildern statt mit Text und führt dich durch seine Änderungen und Reviews, sodass du sie auf einen Blick verstehst.",
     or: "oder",
     windows: "Windows",
