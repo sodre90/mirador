@@ -122,11 +122,12 @@ jobs:
           # GitHub's pwsh wrapper would end the step with Playwright's exit code, failing a release on a known issue; the Verdict gates.
           exit 0
       # The gate: a spec that fails other than as e2e/windows-known-issues.json states, or a suite cut short, turns this job
-      # red, and with it any release that waits for it.
+      # red, and with it any release that waits for it. A run of fewer spec files than shards leaves some shards none; the
+      # survey job's own Verdict still holds a run in which no spec ran at all.
       - name: Verdict
         if: always()
         shell: bash
-        run: bun e2e/windows-suite-verdict.ts "$SURVEY" e2e/windows-known-issues.json
+        run: bun e2e/windows-suite-verdict.ts --shard "$SURVEY" e2e/windows-known-issues.json
       # Traces and the kept host folders are left out: they hold the sign-in link, browser tokens and databases. Only their
       # logs go, and each failed test's page as error-context.md writes it, with auth links and the model server's address
       # and key taken out.

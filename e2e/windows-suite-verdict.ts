@@ -115,7 +115,8 @@ function describeUncovered(failure: Failure, stated: KnownIssue[]) {
 }
 
 if (import.meta.main) {
-  const [reportPath = "survey.json", statedPath = "e2e/windows-known-issues.json"] = process.argv.slice(2);
+  const shardOnly = process.argv.includes("--shard");
+  const [reportPath = "survey.json", statedPath = "e2e/windows-known-issues.json"] = process.argv.slice(2).filter((argument) => argument !== "--shard");
   if (!existsSync(reportPath)) {
     console.error(`${reportPath} is missing, so the suite never got as far as writing a report.`);
     process.exit(1);
@@ -127,6 +128,10 @@ if (import.meta.main) {
   const { afterAFailure, unexplained } = specsLeftOut(didNotRun, failing);
   const errors = reportErrors(report);
 
+  if (!seen.length && shardOnly && !errors.length) {
+    console.log(`${reportPath} names no specs and no errors: no specs fell to this shard, and the run's survey judges the whole.`);
+    process.exit(0);
+  }
   if (!seen.length) {
     console.error(`${reportPath} names no specs, so the suite did not get to run.`);
     process.exit(1);

@@ -150,12 +150,12 @@ test("every stated reason names a spec the suite really has", () => {
   }
 });
 
-const gate = (report: unknown, stated: unknown) => {
+const gate = (report: unknown, stated: unknown, options: string[] = []) => {
   const folder = mkdtempSync(join(tmpdir(), "mirador-verdict-"));
   const [reportPath, statedPath] = ["report.json", "stated.json"].map((name) => join(folder, name));
   writeFileSync(reportPath, JSON.stringify(report));
   writeFileSync(statedPath, JSON.stringify(stated));
-  return Bun.spawnSync(["bun", join(repoRoot, "e2e/windows-suite-verdict.ts"), reportPath, statedPath], { cwd: repoRoot });
+  return Bun.spawnSync(["bun", join(repoRoot, "e2e/windows-suite-verdict.ts"), ...options, reportPath, statedPath], { cwd: repoRoot });
 };
 
 test("the gate lets a stated failure through and holds on one nobody explained", () => {
@@ -202,4 +202,13 @@ test("the gate lets through the specs a stated failure stopped its serial file b
 test("the gate holds when the suite never got to run", () => {
   expect(gate({ suites: [] }, []).exitCode).toBe(1);
   expect(Bun.spawnSync(["bun", join(repoRoot, "e2e/windows-suite-verdict.ts"), "nope.json", "e2e/windows-known-issues.json"], { cwd: repoRoot }).exitCode).toBe(1);
+});
+
+test("a shard given no specs passes, as when a run names fewer spec files than there are shards; the joined survey still holds", () => {
+  const nothingFell = { suites: [], errors: [], stats: { expected: 0, skipped: 0, unexpected: 0, flaky: 0 } };
+  const emptyShard = gate(nothingFell, [], ["--shard"]);
+  expect(emptyShard.exitCode).toBe(0);
+  expect(emptyShard.stdout.toString()).toContain("no specs fell to this shard");
+  expect(gate(nothingFell, []).exitCode, "the survey of the whole run").toBe(1);
+  expect(gate({ suites: [], errors: [{ message: "Error: No tests found" }] }, [], ["--shard"]).exitCode, "a shard that couldn't load its specs").toBe(1);
 });
