@@ -307,6 +307,15 @@ function PluginIcon({ plugin }: { plugin: GalleryPlugin }) {
 /** The catalog's pictures load through the host, since the page may block images from other sites. */
 const throughTheHost = (url: string) => `/plugin-screenshot?url=${encodeURIComponent(url)}`;
 
+/** Fetched while the gallery is open, so a plugin's page shows its pictures at once rather than after the host has fetched them. */
+function usePicturesFetchedAhead(official: CatalogPlugin[] | undefined) {
+  const urls = (official ?? []).flatMap(({ screenshots }) => (screenshots ?? []).map(({ url }) => url));
+  const key = urls.join("\n");
+  useEffect(() => {
+    for (const url of urls) new Image().src = throughTheHost(url);
+  }, [key]);
+}
+
 function Screenshots({ title, screenshots }: { title: string; screenshots: PluginScreenshot[] }) {
   const [shown, setShown] = useState<number | null>(null);
   return (
@@ -715,6 +724,7 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
   const newsOf = ({ installed }: GalleryPlugin) => (installed ? newsFor(installed, pluginUpdates) : undefined);
   const waiting = pluginUpdates.filter(({ folder }) => listed?.plugins.some((plugin) => plugin.folder === folder && newsFor(plugin, pluginUpdates)));
   const openedPlugin = opened && [...gallery.installed, ...gallery.discover].find(({ key }) => key === opened.key);
+  usePicturesFetchedAhead(listed?.official);
   const [updatingFromTile, setUpdatingFromTile] = useState<FoundUpdate | null>(null);
   const open = (plugin: GalleryPlugin, start: Start) => {
     const found = start === "update" && newsOf(plugin) ? pluginUpdates.find(({ folder }) => folder === plugin.installed?.folder) : undefined;

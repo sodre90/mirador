@@ -6717,8 +6717,10 @@ body.reordering * {
 
 .plugin-screenshots img {
   display: block;
+  width: auto;
   height: 280px;
   max-width: none;
+  aspect-ratio: auto 16 / 10;
   object-fit: contain;
   object-position: top left;
   border: 1px solid var(--border);
