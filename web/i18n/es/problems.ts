@@ -8,6 +8,7 @@ export const problems: Messages["problems"] = {
     "conversation-deleted-while-opening": "La conversación se eliminó mientras se abría la sesión de su agente.",
     "opencode-not-installed": "opencode no está instalado: no hay un ejecutable opencode en el PATH ni en sus carpetas de instalación habituales.",
     "codex-not-installed": "Codex no está instalado: no hay un ejecutable codex en el PATH ni en sus carpetas de instalación habituales. Instálalo con npm install -g @openai/codex.",
+    "copilot-not-installed": "Copilot no está instalado: no hay un ejecutable copilot en el PATH ni en sus carpetas de instalación habituales. Instálalo con npm install -g @github/copilot.",
     "codex-session-held": "Otro Codex tiene esta sesión. Sal de Codex en la terminal, ejecuta codex app-server daemon stop (el daemon sobre el que se ejecuta Codex sigue reteniendo la sesión después de salir) y vuelve a enviar tu mensaje aquí.",
     "pi-not-installed": "pi no está instalado: no hay un ejecutable pi en el PATH. Instálalo con npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "Falta una imagen de este mensaje; pégala de nuevo.",

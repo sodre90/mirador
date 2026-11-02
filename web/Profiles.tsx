@@ -32,6 +32,9 @@ PI_ACP_PI_COMMAND=/opt/homebrew/bin/pi`,
   codex: `CODEX_HOME=/Users/you/.codex-work
 # or settings over your Codex config, as JSON:
 CODEX_CONFIG='{"model":"gpt-5.6-luna"}'`,
+  copilot: `COPILOT_HOME=/Users/you/.copilot-work
+# or a token instead of copilot login:
+COPILOT_GITHUB_TOKEN=...`,
 };
 
 function useSaveProfile(onSaved: (profileId: string) => void) {

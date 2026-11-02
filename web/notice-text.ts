@@ -38,6 +38,6 @@ export function noticeText(about: NoticeAbout) {
       if (!about.profileName) return words.agentsOwnSetup;
       return about.agent ? words.agentWithProfile(harnessLabels[about.agent], about.profileName) : words.profile(about.profileName);
     case "mode":
-      return words.mode(about.modeId);
+      return words.mode(about.modeName ?? about.modeId);
   }
 }

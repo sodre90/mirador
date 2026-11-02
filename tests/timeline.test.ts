@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
+import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";
 import { pageEvent } from "../host/low-data.ts";
 import { canTryAgain } from "../shared/try-again.ts";
@@ -622,5 +623,14 @@ describe("latestPlan", () => {
     ];
     expect(latestPlan(events)?.map(({ content }) => content)).toEqual(["Read the code", "Write the tool"]);
     expect(latestPlan(events.slice(2, 4))).toBeNull();
+  });
+});
+
+describe("mode notices", () => {
+  const modeChange = (_meta?: { [key: string]: unknown }): ConversationEvent => ({ type: "acp", update: { sessionUpdate: "current_mode_update", currentModeId: "https://example.test/session-modes#plan", ...(_meta && { _meta }) } });
+
+  test("name the mode as the picker does, or by the agent's id when the host found no name", () => {
+    expect(buildTimeline(stored([modeChange({ [MODE_NAME_META_KEY]: "Plan" })]))[0]).toMatchObject({ kind: "notice", text: "Mode: Plan", about: { modeName: "Plan" } });
+    expect(buildTimeline(stored([modeChange()]))[0]).toMatchObject({ kind: "notice", text: "Mode: https://example.test/session-modes#plan" });
   });
 });

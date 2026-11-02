@@ -250,7 +250,7 @@ export const hints: Messages["hints"] = {
   keepAwake:
     "Megakadályozza, hogy a gép, amelyen a Mirador fut, tétlenül elaludjon.\n\nAmíg az ágensek dolgoznak: amíg minden futó kör véget nem ér, hogy a hosszú feladatok befejeződjenek.\n\nMindig: amíg a Mirador fut, hogy a telefonod és a többi készüléked bármikor elérje.\n\nmacOS-en és Linuxon.",
   canvasUse:
-    "Szükség szerint: az ágens a vászon saját utasításai alapján dönt.\n\nGyakran: a Claude Code, a pi és a Codex rendszerpromptja arra is utasítja őket, hogy a magyarázatokat, összehasonlításokat, terveket és egy nagyobb munka összefoglalóját a vászonra tegyék, és a választásokat ott kérdezzék meg tőled.\n\nAz oldalak több tokenbe kerülnek, mint ugyanaz a válasz szövegként.",
+    "Szükség szerint: az ágens a vászon saját utasításai alapján dönt.\n\nGyakran: a Claude Code, a pi és a Codex rendszerpromptja, valamint a Copilot vászonutasításai arra is utasítják őket, hogy a magyarázatokat, összehasonlításokat, terveket és egy nagyobb munka összefoglalóját a vászonra tegyék, és a választásokat ott kérdezzék meg tőled.\n\nAz oldalak több tokenbe kerülnek, mint ugyanaz a válasz szövegként.",
   terminalCommand:
     "A Claude Code ezt csak a saját termináljában mutatja, ezért ez ott nyitja meg: a beszélgetés egy terminállapján, azzal a Claude Code-dal, amelyet a beszélgetés profilja használ. Maga a parancs a panelen zajlik; az ágens fenti válasza csak annyi, hogy elutasította.",
   logIn:

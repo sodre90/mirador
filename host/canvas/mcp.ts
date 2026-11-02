@@ -3,12 +3,12 @@ import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
 import { JobWaitRefused, jobWaitToolDescription } from "../job-waits.ts";
-import { canvasInstructions, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./guidance.ts";
+import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./guidance.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { answerAsToolResult, type CanvasService, type RenderOutcome } from "./service.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
-import type { HarnessId } from "../../shared/model.ts";
+import type { CanvasUse, HarnessId } from "../../shared/model.ts";
 import type { AppDocuments } from "../apps/documents.ts";
 import { appToolsGuidance, registerAppTools } from "../apps/tools.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
@@ -83,6 +83,15 @@ const hasApps = (apps: AppDocuments | null): apps is AppDocuments => apps !== nu
 const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null): CanvasPluginGuidance =>
   hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps)] } : guidance;
 
+/**
+ * Copilot has no system prompt Mirador can append to, so the canvas use guidance Claude Code, pi and Codex get there
+ * comes in the canvas server's instructions.
+ */
+export function canvasServerInstructions(harness: HarnessId | undefined, canvasUse: CanvasUse, assetsOrigin: string, plugins: CanvasPluginGuidance) {
+  const instructions = canvasInstructions(assetsOrigin, plugins);
+  return harness === "copilot" && canvasUse === "often" ? `${instructions}\n\n${canvasUseGuidance(plugins)}` : instructions;
+}
+
 function buildCanvasServer(
   conversationId: string,
   canvas: CanvasService,
@@ -93,10 +102,18 @@ function buildCanvasServer(
   catalog: PluginCatalog | null,
   store: Store | null,
 ) {
-  const reviewFree = reviewFreeFor(store?.findConversation(conversationId)?.harness);
+  const harness = store?.findConversation(conversationId)?.harness;
+  const reviewFree = reviewFreeFor(harness);
   const server = new McpServer(
     { name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION },
-    { instructions: canvasInstructions(assetsOrigin, withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps)) },
+    {
+      instructions: canvasServerInstructions(
+        harness,
+        store?.canvasUse() ?? "often",
+        assetsOrigin,
+        withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps),
+      ),
+    },
   );
 
   /**

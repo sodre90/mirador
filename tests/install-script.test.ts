@@ -8,7 +8,7 @@ setDefaultTimeout(15_000);
 
 const INSTALL_SCRIPT = join(import.meta.dir, "..", "install.sh");
 const LINUX_LIBRARIES = ["libgtk-3.so.0", "libwebkit2gtk-4.1.so.0", "libayatana-appindicator3.so.1", "librsvg-2.so.2"];
-const REAL_TOOLS = ["curl", "tar", "gzip", "mkdir", "rm", "mv", "mktemp", "cat", "env", "chmod"];
+const REAL_TOOLS = ["curl", "tar", "gzip", "mkdir", "rm", "mv", "mktemp", "cat", "env", "chmod", "readlink"];
 
 const root = mkdtempSync(join(tmpdir(), "mirador-install-"));
 const requested: string[] = [];
@@ -88,7 +88,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     packageManager?: "apt-get" | "dnf";
     display?: boolean;
     /** The agent on PATH, if any. */
-    agent?: "claude" | "pi" | "codex" | false;
+    agent?: "claude" | "pi" | "codex" | "copilot" | "vscode-copilot" | false;
     /** MIRADOR_APP_DIR, or null for the script to choose. */
     appDir?: string | null;
   };
@@ -111,6 +111,11 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     stub("agent", "claude");
     stub("pi-agent", "pi");
     stub("codex-agent", "codex");
+    stub("copilot-agent", "copilot");
+    // VS Code's launcher: a copilot on PATH that is a link into its copilot-shim folder
+    stub("vscode-copilot/copilot-shim", "copilot");
+    mkdirSync(join(root, "vscode-copilot-agent"), { recursive: true });
+    symlinkSync(join(root, "vscode-copilot", "copilot-shim", "copilot"), join(root, "vscode-copilot-agent", "copilot"));
     REAL_TOOLS.forEach((tool) => {
       mkdirSync(join(root, "tools"), { recursive: true });
       symlinkSync(Bun.which(tool)!, join(root, "tools", tool));
@@ -154,7 +159,7 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
   }
 
   const callsTo = (calls: string[], program: string) => calls.filter((call) => call.startsWith(`${program} `));
-  const systemHasAnAgent = ["/opt/homebrew/bin", "/usr/local/bin"].some((directory) => ["claude", "opencode", "pi", "codex"].some((program) => existsSync(join(directory, program))));
+  const systemHasAnAgent = ["/opt/homebrew/bin", "/usr/local/bin"].some((directory) => ["claude", "opencode", "pi", "codex", "copilot"].some((program) => existsSync(join(directory, program))));
 
   test("on an Apple Silicon Mac it replaces the app in the folder with the latest release's, clears the quarantine and opens it", async () => {
     const machine = machineOf({ os: "Darwin" });
@@ -300,15 +305,21 @@ describe.skipIf(process.platform === "win32")("install.sh", () => {
     }
   });
 
-  test("with only pi or only Codex installed it says nothing about installing an agent", async () => {
-    for (const agent of ["pi", "codex"] as const) {
+  test("with only pi, only Codex or only Copilot installed it says nothing about installing an agent", async () => {
+    for (const agent of ["pi", "codex", "copilot"] as const) {
       const result = await install(machineOf({ os: "Linux", arch: "x86_64", agent }));
       expect(result.exitCode).toBe(0);
       expect(result.output).not.toContain("none of them is installed");
     }
   });
 
-  test.skipIf(systemHasAnAgent)("without Claude Code, opencode, pi or Codex it says how to install Claude Code", async () => {
+  test.skipIf(systemHasAnAgent)("with only the copilot launcher VS Code puts on PATH it says how to install Claude Code", async () => {
+    const result = await install(machineOf({ os: "Linux", arch: "x86_64", agent: "vscode-copilot" }));
+    expect(result.exitCode).toBe(0);
+    expect(result.output).toContain("none of them is installed");
+  });
+
+  test.skipIf(systemHasAnAgent)("without Claude Code, opencode, pi, Codex or Copilot it says how to install Claude Code", async () => {
     const result = await install(machineOf({ os: "Linux", arch: "x86_64", agent: false }));
     expect(result.exitCode).toBe(0);
     expect(result.output).toContain("curl -fsSL https://claude.ai/install.sh | bash");
@@ -441,7 +452,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
 
   const startsOf = (machine: ReturnType<typeof windowsMachine>) => readFileSync(join(machine.app, "bin", "starts.log"), "utf8").trim().split("\n");
   const setupsLeftIn = (temp: string) => readdirSync(temp).filter((name) => name.startsWith("mirador-install-"));
-  const windowsHasAnAgent = ["claude", "opencode", "pi", "codex"].some((program) => Bun.which(program) !== null);
+  const windowsHasAnAgent = ["claude", "opencode", "pi", "codex", "copilot"].some((program) => Bun.which(program) !== null);
 
   test(
     "runs the release's installer, which closes itself once it has installed and started the app, and leaves nothing behind",
@@ -519,7 +530,7 @@ describe.skipIf(process.platform !== "win32")("install.ps1", () => {
   );
 
   test.skipIf(windowsHasAnAgent)(
-    "without Claude Code, opencode, pi or Codex it says how to install Claude Code",
+    "without Claude Code, opencode, pi, Codex or Copilot it says how to install Claude Code",
     async () => {
       const result = await installOnWindows(windowsMachine({ agent: false }));
       expect(result.output).toContain("Mirador is starting.");

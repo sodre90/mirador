@@ -43,7 +43,7 @@
 
   function Test-Agent {
     $installed = @("$env:USERPROFILE\.local\bin\claude.exe", "$env:USERPROFILE\.opencode\bin\opencode.exe") | Where-Object { Test-Path $_ }
-    (Get-Command claude, opencode, pi, codex -ErrorAction SilentlyContinue) -or $installed
+    (Get-Command claude, opencode, pi, codex, copilot -ErrorAction SilentlyContinue) -or $installed
   }
 
   function Install-Mirador {
@@ -76,7 +76,7 @@
 
     if (-not (Test-Agent)) {
       Write-Host ''
-      Write-Host 'Mirador runs Claude Code, opencode, pi or Codex, and none of them is installed yet. Claude Code installs with:'
+      Write-Host 'Mirador runs Claude Code, opencode, pi, Codex or Copilot, and none of them is installed yet. Claude Code installs with:'
       Write-Host '  irm https://claude.ai/install.ps1 | iex'
     }
   }

@@ -82,8 +82,8 @@ export const settings: Messages["settings"] = {
   },
   canvas: {
     title: "Canvas",
-    hint: "Vom Host für jeden Browser gespeichert. Eine Unterhaltung übernimmt eine Änderung, wenn ihre Sitzung das nächste Mal startet: eine neue sofort, eine offene nach einem Neustart des Hosts. Gilt für Claude Code, pi und Codex; opencode folgt den eigenen Anweisungen des Canvas.",
-    use: "Claude Code, pi und Codex verwenden den Canvas",
+    hint: "Vom Host für jeden Browser gespeichert. Eine Unterhaltung übernimmt eine Änderung, wenn ihre Sitzung das nächste Mal startet: eine neue sofort, eine offene nach einem Neustart des Hosts. Gilt für Claude Code, pi, Codex und Copilot; opencode folgt den eigenen Anweisungen des Canvas.",
+    use: "Claude Code, pi, Codex und Copilot verwenden den Canvas",
   },
   savedPages: {
     title: "Kopierte und gespeicherte Seiten",

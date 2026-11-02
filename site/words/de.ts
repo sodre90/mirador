@@ -98,7 +98,7 @@ export const de: SiteWords = {
     },
     agents: {
       question: "Mit welchen Coding-Agenten funktioniert es?",
-      answer: "Heute mit Claude Code, opencode, pi und Codex (die letzten beiden experimentell), über das Agent Client Protocol (ACP). Weitere Agenten kommen.",
+      answer: "Heute mit Claude Code, opencode, pi, Codex und Copilot (die letzten drei experimentell), über das Agent Client Protocol (ACP). Weitere Agenten kommen.",
     },
     privacy: {
       question: "Verlässt mein Code meinen Rechner?",

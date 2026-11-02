@@ -15,7 +15,7 @@ import type {
 import { hookNoticeIn } from "./hook-message.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { StoredEvent } from "./model.ts";
-import { englishNoticeText, type NoticeAbout } from "./notices.ts";
+import { englishNoticeText, MODE_NAME_META_KEY, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
 import { turnTitle } from "./reverts.ts";
 import { codexMcpToolName } from "./tool-title.ts";
@@ -166,6 +166,11 @@ export interface AgentNoticeBlock extends Origin {
 export const spokenSeverity = ({ severity }: Pick<AgentNoticeBlock, "severity">) => (severity === "error" ? "Error" : severity === "warning" ? "Warning" : null);
 
 export type NoticeBlock = Origin & { kind: "notice"; text: string; about: NoticeAbout };
+
+const modeNameIn = (meta: { [key: string]: unknown } | null | undefined) => {
+  const modeName = meta?.[MODE_NAME_META_KEY];
+  return typeof modeName === "string" ? { modeName } : {};
+};
 
 const noticeBlock = (origin: Origin, about: NoticeAbout): NoticeBlock => ({ kind: "notice", ...origin, text: englishNoticeText(about), about });
 
@@ -514,7 +519,7 @@ class TimelineBuilder {
         this.currentPlan = { kind: "plan", ...origin, entries: update.entries };
         return this.push(this.currentPlan);
       case "current_mode_update":
-        return this.push(noticeBlock(origin, { kind: "mode", modeId: update.currentModeId }));
+        return this.push(noticeBlock(origin, { kind: "mode", modeId: update.currentModeId, ...modeNameIn(update._meta) }));
       case "notice":
         return this.push(agentNoticeBlock(origin, update), into);
       default:

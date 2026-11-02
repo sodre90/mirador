@@ -3,6 +3,7 @@ import { createServer, type ServerResponse, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+import { findCopilot } from "../host/acp/copilot-program.ts";
 import { foldersOnPath, programIn } from "./test-host.ts";
 
 type ChatMessage = { role: string; content?: string | { type: string; text?: string }[] | null };
@@ -215,10 +216,11 @@ export class ScriptedModel {
   }
 }
 
-/** The shell tool each agent offers: Codex's exec_command takes `cmd`, the others' `command`. */
+/** The shell tool each agent offers: Codex's exec_command takes `cmd`, the others' `command`. Copilot on Windows offers powershell instead of bash. */
 function shellCall(tools: string[], command: string): ToolCall {
   if (tools.includes("exec_command")) return { name: "exec_command", arguments: { cmd: command } };
-  return { name: tools.includes("shell") ? "shell" : "bash", arguments: { command, description: "Run the scripted command" } };
+  const name = ["shell", "powershell"].find((tool) => tools.includes(tool)) ?? "bash";
+  return { name, arguments: { command, description: "Run the scripted command" } };
 }
 
 /** Codex offers an MCP server's tools in a namespace, and the model names both in its call. */
@@ -359,4 +361,30 @@ export function scriptedCodexEnvironment(model: ScriptedModel, root: string) {
 export function codexProgram() {
   const candidates = [...(process.env.PATH ?? "").split(delimiter), join(homedir(), ".local", "bin")].map((directory) => join(directory, process.platform === "win32" ? "codex.cmd" : "codex"));
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+/**
+ * The user's own Copilot CLI, which Mirador needs to offer Copilot at all; null where it is not installed. VS Code's
+ * launcher of the same name, which only says the CLI is missing, does not count.
+ */
+export function copilotProgram() {
+  return findCopilot(process.env.PATH);
+}
+
+/**
+ * A profile environment that points Copilot at the scripted model as a bring-your-own-key provider, which needs no GitHub
+ * sign-in, and keeps it away from the user's own Copilot setup: config, state and sessions all live under `root`.
+ */
+export function scriptedCopilotEnvironment(model: ScriptedModel, root: string) {
+  const copilotHome = join(root, "copilot-home");
+  mkdirSync(copilotHome, { recursive: true });
+  return [
+    `COPILOT_HOME=${copilotHome}`,
+    "COPILOT_OFFLINE=true",
+    `COPILOT_PROVIDER_BASE_URL=${model.url}`,
+    "COPILOT_PROVIDER_TYPE=openai",
+    "COPILOT_PROVIDER_WIRE_API=completions",
+    "COPILOT_PROVIDER_API_KEY=unused",
+    "COPILOT_MODEL=scripted",
+  ].join("\n");
 }

@@ -33,6 +33,7 @@ const notices: NoticeAbout[] = [
   { kind: "profile-changed", profileName: "Work" },
   { kind: "profile-changed", profileName: "Radiance", agent: "opencode" },
   { kind: "mode", modeId: "plan" },
+  { kind: "mode", modeId: "https://example.test/session-modes#plan", modeName: "Plan" },
 ];
 
 describe("notices", () => {
