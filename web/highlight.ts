@@ -100,7 +100,6 @@ function grammarFor(path: string) {
 /** The names written after a code fence's backticks that differ from a file extension, e.g. "```shell". */
 const languageByFenceName: Record<string, string> = {
   shell: "bash",
-  console: "bash",
   javascript: "javascript",
   typescript: "typescript",
   python: "python",
@@ -121,13 +120,7 @@ const languageByFenceName: Record<string, string> = {
   "c++": "cpp",
   "c#": "csharp",
   protobuf: "protobuf",
-  java: "java",
-  scala: "scala",
-  groovy: "groovy",
-  swift: "swift",
   csharp: "csharp",
-  cpp: "cpp",
-  sql: "sql",
 };
 
 function grammarForFence(fenceName: string) {

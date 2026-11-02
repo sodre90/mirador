@@ -56,4 +56,8 @@ describe("highlightCode", () => {
     expect(highlightCode("anything", "klingon")).toBeNull();
     expect(highlightCode("anything", "extend")).toBeNull();
   });
+
+  test("a console session is left plain, as its output is not code", () => {
+    expect(highlightCode("$ ls\nREADME.md", "console")).toBeNull();
+  });
 });

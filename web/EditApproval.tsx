@@ -61,7 +61,7 @@ interface RowsProps {
 
 function UnifiedRows({ rows, highlighted, wordChanges }: RowsProps) {
   return (
-    <div className="code-block">
+    <div className="edit-code-block">
       {rows.map((row, index) => (
         <div key={index} className={`code-row ${row.kind}`}>
           <span className="line-number">{row.newLine ?? row.oldLine}</span>
@@ -85,7 +85,7 @@ function SplitRows({ rows, highlighted, wordChanges }: RowsProps) {
     );
   };
   return (
-    <div className="code-block split">
+    <div className="edit-code-block split">
       {sides.map(({ left, right }, index) => (
         <div key={index} className="split-row">
           {side(left, (row) => row.oldLine)}

@@ -18,7 +18,7 @@ const COMMANDS = "./infra/cdp_tls.sh\ntools/pod_devtools.sh 9555";
 const COMMANDS_AS_COPIED = process.platform === "win32" ? COMMANDS.replaceAll("\n", "\r\n") : COMMANDS;
 const PORT_CODE = 'const port = 9555; // the pod\'s\nconnect("devtools", port);';
 const reply = ["Open the link:", "", "```", LINK, "```", "", "Then run `tools/pod_devtools.sh 9333`, or copy both at once:", "", "```bash", COMMANDS, "```"].join("\n");
-const later = ["The port is set here:", "", "```ts", PORT_CODE, "```"].join("\n");
+const later = ["The port is set here:", "", "```ts", PORT_CODE, "```", "", "The README says:", "", "````markdown", "Run:", "```bash", "bun test", "```", "````"].join("\n");
 
 const turn = [
   { type: "user-message", text: "how do I open DevTools on the pod" },
@@ -94,7 +94,7 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
   });
 
   await test.step("a code block whose fence names its language is colored as code, in replies and in the person's messages, and copies as written", async () => {
-    const tsBlock = page.locator(".message.agent").nth(1).locator(".copyable-code");
+    const tsBlock = page.locator(".message.agent").nth(1).locator(".copyable-code").first();
     const keyword = tsBlock.locator(".token.keyword", { hasText: "const" });
     const comment = tsBlock.locator(".token.comment");
     await expect(keyword).toHaveCount(1);
@@ -104,6 +104,8 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
     expect(await colorOf(comment)).not.toBe(await colorOf(keyword));
     await expect(linkBlock.locator(".token"), "a block without a language stays plain").toHaveCount(0);
     await expect(page.locator(".message.user .copyable-code .token.keyword", { hasText: "const" })).toHaveCount(1);
+    const nestedFence = page.locator(".message.agent").nth(1).locator(".token.code-block", { hasText: "bun test" });
+    await expect(nestedFence, "a fence inside a markdown block is colored text, not a box of its own").toHaveCSS("border-top-style", "none");
 
     await tsBlock.hover();
     await tsBlock.locator(".code-copy").click();

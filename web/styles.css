@@ -6012,7 +6012,7 @@ button.picture-option.chosen {
 
 /* The steps and the step's explanation side by side on top, the code below them across the whole width, so its lines wrap less. */
 
-.code-block {
+.edit-code-block {
   font-family: var(--mono);
   font-size: calc(12px * var(--font-scale));
   line-height: 1.45;
