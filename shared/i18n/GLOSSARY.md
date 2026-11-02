@@ -46,6 +46,12 @@ These terms stay the same everywhere:
 | Add / Remove / Delete | Hozzáadás / Eltávolítás / Törlés | Agregar / Quitar / Eliminar | 添加 / 移除 / 删除 | Hinzufügen / Entfernen / Löschen |
 | uncommitted | nem commitolt | sin confirmar | 未提交 | nicht committet |
 | effort (thinking) | erőfeszítés | esfuerzo | 思考强度 | Denkaufwand |
+| go back / rewind (a turn) | visszalépés / visszatekerés | retroceder | 回退 | zurückspulen |
+| unload (a model from memory) | kirakás | liberar (de la memoria) | 卸载 | entladen |
+| delegated (task) | átadott | delegado | 已委派 | delegiert |
+| phone | telefon | teléfono | 手机 | Handy |
+| invite code (also a bare "code" in the join flow) | meghívókód | código de invitación | 邀请码 | Einladungscode |
+| Voice on this Mac (the local engine) | Hang ezen a Macen | Voz en este Mac | 这台 Mac 上的语音 | Sprachfunktionen auf diesem Mac |
 
 ## Hungarian
 

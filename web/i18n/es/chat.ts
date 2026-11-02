@@ -69,7 +69,7 @@ export const chat: Messages["chat"] = {
   busyWith: {
     "switching-profile": "Cambiando de perfil…",
     "clearing-context": "Borrando el contexto…",
-    "going-back": "Volviendo atrás…",
+    "going-back": "Retrocediendo…",
     "loading-history": "Cargando el historial de la sesión…",
     "reading-terminal-turns": "Leyendo los turnos hechos en la terminal…",
   },
