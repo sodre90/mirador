@@ -108,7 +108,7 @@ Mirador is a localhost web app that drives coding agents (Claude Code through `c
 
 - **Names over comments.** Keep comments for a genuine "why" that a name cannot carry.
 - **Tests come with every change.** Every user-visible change gets e2e coverage, and logic gets unit tests.
-- **UI text is translated:** English in `web/i18n/en/`, Hungarian in `web/i18n/hu/`, Spanish in `web/i18n/es/` and Simplified Chinese in `web/i18n/zh/` (typed against English, so a missing key fails `tsc`), read through `t` from `web/i18n/index.ts`. Tooltips are `hints` there. New text goes into every language; `shared/i18n/GLOSSARY.md` holds the terms of each. Text for agents, the voice model or spoken commands stays English.
+- **UI text is translated:** English in `web/i18n/en/`, Hungarian in `web/i18n/hu/`, Spanish in `web/i18n/es/`, Simplified Chinese in `web/i18n/zh/` and German in `web/i18n/de/` (typed against English, so a missing key fails `tsc`), read through `t` from `web/i18n/index.ts`. Tooltips are `hints` there. New text goes into every language; `shared/i18n/GLOSSARY.md` holds the terms of each. Text for agents, the voice model or spoken commands stays English.
 - **UI wording:** plain words and sentence case.
 - **Secrets:** never print the `/auth?token=…` link, tokens or profile environment values. Host logs contain them, so filter `auth?token` out of anything you show.
 - **The owner's own Mirador runs from this checkout.**

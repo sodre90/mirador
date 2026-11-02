@@ -1,12 +1,12 @@
-export const LANGUAGES = ["en", "hu", "es", "zh"] as const;
+export const LANGUAGES = ["en", "hu", "es", "zh", "de"] as const;
 
 export type Language = (typeof LANGUAGES)[number];
 
 /** Each language by its own name, as a language picker lists them. */
-export const languageNames: Record<Language, string> = { en: "English", hu: "Magyar", es: "Español", zh: "简体中文" };
+export const languageNames: Record<Language, string> = { en: "English", hu: "Magyar", es: "Español", zh: "简体中文", de: "Deutsch" };
 
 /** The BCP 47 tag of each language, for the page's lang attribute and for Intl: Chinese is the Simplified script. */
-export const languageTags: Record<Language, string> = { en: "en", hu: "hu", es: "es", zh: "zh-Hans" };
+export const languageTags: Record<Language, string> = { en: "en", hu: "hu", es: "es", zh: "zh-Hans", de: "de" };
 
 export const isLanguage = (value: unknown): value is Language => typeof value === "string" && (LANGUAGES as readonly string[]).includes(value);
 

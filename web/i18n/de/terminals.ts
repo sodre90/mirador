@@ -1,0 +1,33 @@
+import type { Messages } from "../en/index.ts";
+
+export const terminals: Messages["terminals"] = {
+  copyFailed: (key) => `Die Auswahl konnte nicht kopiert werden. Drücke ${key}, um sie zu kopieren.`,
+  showAll: "Alle zeigen",
+  closeTerminal: (number) => `Terminal ${number} schließen`,
+  closeTab: (tab) => `Schließen: ${tab}`,
+  closeArmed: "Schließen?",
+  resize: "Größe der Terminals ändern",
+  terminalNumber: (number) => `Terminal ${number}`,
+  paneLabel: (workspace) => `Terminals in ${workspace}`,
+  tabs: "Terminal-Tabs",
+  newTab: "Neuer Terminal-Tab",
+  splitRight: "Rechts teilen",
+  splitDown: "Unten teilen",
+  hide: "Ausblenden",
+  startShell: "Shell starten",
+  linkClick: { mac: "⌘-Klick", other: "Ctrl+Klick" },
+  find: {
+    placeholder: "Suchen",
+    label: "In diesem Terminal suchen",
+    matchCase: "Groß-/Kleinschreibung beachten",
+    wholeWord: "Ganzes Wort",
+    regex: "Regulären Ausdruck verwenden",
+    older: "Älterer Treffer",
+    newer: "Neuerer Treffer",
+    close: "Suche schließen",
+    invalidPattern: "Ungültiges Muster",
+    noMatches: "Keine Treffer",
+    position: (position, total) => `${position} von ${total}`,
+    matches: (total) => `${total} Treffer`,
+  },
+};

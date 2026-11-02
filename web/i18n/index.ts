@@ -4,8 +4,9 @@ import { en, type Messages } from "./en/index.ts";
 import { es } from "./es/index.ts";
 import { hu } from "./hu/index.ts";
 import { zh } from "./zh/index.ts";
+import { de } from "./de/index.ts";
 
-const messages: Record<Language, Messages> = { en, hu, es, zh };
+const messages: Record<Language, Messages> = { en, hu, es, zh, de };
 
 export const t = messages[language];
 

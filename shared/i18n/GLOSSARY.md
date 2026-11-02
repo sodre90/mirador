@@ -4,47 +4,48 @@ Mirador's Hungarian uses the informal *te* form ("Válaszd ki", "Kattints újra"
 Its Spanish is neutral international Spanish in the *tú* form ("Elige", "Haz clic de nuevo"): no *vosotros*, and no
 words only one region uses (*equipo*, not *ordenador* or *computadora*; *archivo*, not *fichero*; *durazno*, not *melocotón*).
 Its Simplified Chinese (简体中文, code `zh`, tag `zh-Hans`) addresses the user as 你, not 您.
+Its German addresses the user as *du*, not *Sie* ("Wähle ein Profil", "Klicke erneut").
 These terms stay the same everywhere:
 
-| English | Magyar | Español | 简体中文 |
-| --- | --- | --- | --- |
-| agent | ágens | agente | 智能体 |
-| subagent | alágens | subagente | 子智能体 |
-| canvas | vászon | lienzo | 画布 |
-| host | host | host | host |
-| workspace | munkaterület | espacio de trabajo | 工作区 |
-| conversation | beszélgetés | conversación | 对话 |
-| session | munkamenet | sesión | 会话 |
-| profile | profil | perfil | 配置 |
-| turn | kör | turno | 轮次 |
-| tour | bejárás | recorrido | 导览 |
-| review (code) | átnézés | revisión | 审查 |
-| prompt | prompt | prompt | 提示词 |
-| message box | üzenetmező | cuadro de mensaje | 消息框 |
-| terminal | terminál | terminal | 终端 |
-| plugin | bővítmény | complemento | 插件 |
-| palette | (parancs)paletta | paleta | 命令面板 |
-| checklist | ellenőrzőlista | lista de verificación | 清单 |
-| History (canvas) | Előzmények | Historial | 历史 |
-| queue / queued | sor / sorba állított | cola / en cola | 队列 / 已排队 |
-| device | készülék | dispositivo | 设备 |
-| machine | gép | máquina | 机器 |
-| computer | számítógép | equipo | 电脑 |
-| rail | sáv | barra de máquinas | 机器栏 |
-| tool (agent's) | eszköz | herramienta | 工具 |
-| approve / approval | jóváhagy / jóváhagyás | aprobar / aprobación | 批准 |
-| statusline | állapotsor | línea de estado | 状态栏 |
-| fork (a session) | elágaztatás | bifurcar | 分叉 |
-| invite code / link | meghívókód / meghívólink | código / enlace de invitación | 邀请码 / 邀请链接 |
-| keyboard shortcuts | billentyűparancsok | atajos de teclado | 键盘快捷键 |
-| Changes (canvas) | Változások | Cambios | 更改 |
-| Point and ask | Mutass és kérdezz | Señala y pregunta | 指着问 |
-| Dismiss | Elvetés | Descartar | 忽略 |
-| window (of its own) | ablak | ventana | 窗口 |
-| Settings | Beállítások | Configuración | 设置 |
-| Add / Remove / Delete | Hozzáadás / Eltávolítás / Törlés | Agregar / Quitar / Eliminar | 添加 / 移除 / 删除 |
-| uncommitted | nem commitolt | sin confirmar | 未提交 |
-| effort (thinking) | erőfeszítés | esfuerzo | 思考强度 |
+| English | Magyar | Español | 简体中文 | Deutsch |
+| --- | --- | --- | --- | --- |
+| agent | ágens | agente | 智能体 | Agent (den Agenten, die Agenten) |
+| subagent | alágens | subagente | 子智能体 | Subagent |
+| canvas | vászon | lienzo | 画布 | Canvas (der) |
+| host | host | host | host | Host |
+| workspace | munkaterület | espacio de trabajo | 工作区 | Arbeitsbereich |
+| conversation | beszélgetés | conversación | 对话 | Unterhaltung |
+| session | munkamenet | sesión | 会话 | Sitzung |
+| profile | profil | perfil | 配置 | Profil |
+| turn | kör | turno | 轮次 | Runde |
+| tour | bejárás | recorrido | 导览 | Rundgang |
+| review (code) | átnézés | revisión | 审查 | Review |
+| prompt | prompt | prompt | 提示词 | Prompt |
+| message box | üzenetmező | cuadro de mensaje | 消息框 | Nachrichtenfeld |
+| terminal | terminál | terminal | 终端 | Terminal |
+| plugin | bővítmény | complemento | 插件 | Plugin |
+| palette | (parancs)paletta | paleta | 命令面板 | Befehlspalette |
+| checklist | ellenőrzőlista | lista de verificación | 清单 | Checkliste |
+| History (canvas) | Előzmények | Historial | 历史 | Verlauf |
+| queue / queued | sor / sorba állított | cola / en cola | 队列 / 已排队 | Warteschlange / in der Warteschlange |
+| device | készülék | dispositivo | 设备 | Gerät |
+| machine | gép | máquina | 机器 | Rechner |
+| computer | számítógép | equipo | 电脑 | Computer |
+| rail | sáv | barra de máquinas | 机器栏 | Rechnerleiste |
+| tool (agent's) | eszköz | herramienta | 工具 | Tool |
+| approve / approval | jóváhagy / jóváhagyás | aprobar / aprobación | 批准 | genehmigen / Genehmigung |
+| statusline | állapotsor | línea de estado | 状态栏 | Statuszeile |
+| fork (a session) | elágaztatás | bifurcar | 分叉 | forken / Fork |
+| invite code / link | meghívókód / meghívólink | código / enlace de invitación | 邀请码 / 邀请链接 | Einladungscode / Einladungslink |
+| keyboard shortcuts | billentyűparancsok | atajos de teclado | 键盘快捷键 | Tastenkürzel |
+| Changes (canvas) | Változások | Cambios | 更改 | Änderungen |
+| Point and ask | Mutass és kérdezz | Señala y pregunta | 指着问 | Zeigen und fragen |
+| Dismiss | Elvetés | Descartar | 忽略 | Verwerfen |
+| window (of its own) | ablak | ventana | 窗口 | Fenster |
+| Settings | Beállítások | Configuración | 设置 | Einstellungen |
+| Add / Remove / Delete | Hozzáadás / Eltávolítás / Törlés | Agregar / Quitar / Eliminar | 添加 / 移除 / 删除 | Hinzufügen / Entfernen / Löschen |
+| uncommitted | nem commitolt | sin confirmar | 未提交 | nicht committet |
+| effort (thinking) | erőfeszítés | esfuerzo | 思考强度 | Denkaufwand |
 
 ## Hungarian
 
@@ -79,6 +80,22 @@ words or numbers ("3 个文件", "打开 Mirador"). Chinese has no plural: drop 
 in at runtime need no grammar around them, but keep each sentence natural with the value where Chinese puts it.
 Button and menu labels are short verbs or nouns ("发送", "停止", "历史"). Keys keep their English names (Enter, Tab, Esc).
 Mirador, Claude Code, opencode, pi, Codex, git, Tailscale and other product names stay as they are.
+
+## German
+
+Don't put an article, a case ending or a gendered word in front of a value filled in at runtime (a name, a file, a
+version): its gender can't be known in advance. Phrase around it, as in "Führt aus: ${program}". Nouns after a number
+take the plural unless the number is 1, as in English: use the `plural` helper the English file uses.
+Button and menu labels are infinitives or nouns ("Senden", "Stoppen", "Verlauf"), not imperatives; sentences that tell
+the user what to do use *du* imperatives ("Wähle ein Profil"). Sentence case as in English, but nouns keep their
+capital letter. „…“ for quotes. Keys keep their English names (Enter, Tab, Esc), not *Eingabe*.
+Developer words stay English where German developers use them: commit, branch, Prompt, Tool, Plugin, Review, Token.
+
+The German tooltips name these buttons and labels; translate the UI with the same words:
+Stoppen, Stoppen erzwingen, Senden, Bearbeiten, Verlauf, Checkliste, Modell (menu), Modus,
+Wartet auf dich / Fertig / Fehlgeschlagen / Ungelesen, Rechner…, Tauschen, Vereint / Geteilt, Nutzung,
+Adresse speichern, Alle entfernen, Modelle auf diesem Mac, „schließt sich der Runde an“ / „nach der Runde“.
+The palette command "Layout auf Standard zurücksetzen" is `t.settings.layout.resetCommand`: reuse it.
 
 ## Every language
 

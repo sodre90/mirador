@@ -171,6 +171,24 @@ test("简体中文 in Settings shows Mirador in Simplified Chinese, and a Tradit
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
 });
 
+test.describe("with a Swiss German browser", () => {
+  test.use({ locale: "de-CH" });
+
+  test("Mirador opens in German, and Settings names its tabs and themes in German", async ({ page }) => {
+    await page.goto(host.authUrl);
+    await expect(page.locator("html")).toHaveAttribute("lang", "de");
+    const sidebar = page.locator("nav.sidebar");
+    await expect(sidebar.getByRole("heading", { name: "Arbeitsbereiche" })).toBeVisible();
+    await sidebar.getByRole("button", { name: "Einstellungen…" }).click();
+    const einstellungen = page.getByRole("dialog", { name: "Einstellungen" });
+    await expect(einstellungen.getByRole("tab")).toHaveText(["Darstellung", "Unterhaltungen", "Agenten", "Stimme", "Terminal", "Canvas", "Plugins", "Layout", "Geräte", "Benachrichtigungen", "Über"]);
+    await expect(einstellungen.getByRole("radiogroup", { name: "Design" }).getByRole("radio")).toHaveText(["Hell", "Dunkel", "Wie das System"]);
+
+    await Promise.all([page.waitForEvent("load"), einstellungen.getByLabel("Sprache").selectOption("en")]);
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  });
+});
+
 test.describe("with a Traditional Chinese browser", () => {
   test.use({ locale: "zh-TW" });
 

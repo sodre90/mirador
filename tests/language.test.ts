@@ -4,6 +4,7 @@ import { en } from "../web/i18n/en/index.ts";
 import { es } from "../web/i18n/es/index.ts";
 import { hu } from "../web/i18n/hu/index.ts";
 import { zh } from "../web/i18n/zh/index.ts";
+import { de } from "../web/i18n/de/index.ts";
 
 type Entry = string | ((...values: string[]) => string) | { [key: string]: Entry } | Entry[];
 
@@ -18,21 +19,22 @@ function texts(entry: Entry, path: string): [string, string][] {
 }
 
 describe("languages", () => {
-  test.each([en, hu, es, zh])("the page and the desktop app name an untitled conversation alike", (messages) => {
+  test.each([en, hu, es, zh, de])("the page and the desktop app name an untitled conversation alike", (messages) => {
     expect(messages.desktop.untitled).toBe(messages.shell.conversationTitle.untitled);
   });
 
   test("only the listed languages are languages", () => {
     expect(LANGUAGES.every(isLanguage)).toBe(true);
-    expect(isLanguage("de")).toBe(false);
+    expect(isLanguage("fr")).toBe(false);
     expect(isLanguage(null)).toBe(false);
   });
 
   test("the language chosen in Settings wins; without one, the first browser language Mirador has, else English", () => {
     expect(languageFor("en", ["hu-HU"])).toBe("en");
-    expect(languageFor(null, ["de-DE", "hu-HU", "es"])).toBe("hu");
+    expect(languageFor(null, ["fr-FR", "hu-HU", "es"])).toBe("hu");
     expect(languageFor("klingon", ["es-MX"])).toBe("es");
-    expect(languageFor(null, ["de-DE", "fr"])).toBe("en");
+    expect(languageFor(null, ["fr-FR", "it"])).toBe("en");
+    expect(["de", "de-DE", "de-AT", "de-CH"].map((tag) => languageFor(null, [tag]))).toEqual(["de", "de", "de", "de"]);
     expect(languageFor(null, [])).toBe("en");
     expect(["zh", "zh-CN", "zh-SG", "zh-Hans", "zh-Hans-CN"].map((tag) => languageFor(null, [tag]))).toEqual(["zh", "zh", "zh", "zh", "zh"]);
     expect(["zh-TW", "zh-HK", "zh-Hant", "zh-Hant-TW"].map((tag) => languageFor(null, [tag]))).toEqual(["en", "en", "en", "en"]);
@@ -42,6 +44,7 @@ describe("languages", () => {
     ["Hungarian", hu],
     ["Spanish", es],
     ["Chinese", zh],
+    ["German", de],
   ])("%s has every text English has, in the same order, none of them empty, and fills in every value it is given", (_, translated) => {
     const english = new Map(texts(en as unknown as Entry, ""));
     const translatedTexts = texts(translated as unknown as Entry, "");
@@ -58,6 +61,7 @@ describe("languages", () => {
     ["Hungarian", hu],
     ["Spanish", es],
     ["Chinese", zh],
+    ["German", de],
   ])("%s desktop texts keep out what trays misread: quotes and brackets on Linux, & on Windows", (_, messages) => {
     for (const [path, text] of texts(messages.desktop as unknown as Entry, "desktop")) expect(text, path).not.toMatch(/["\\{}[\]&]/);
   });
