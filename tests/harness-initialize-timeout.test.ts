@@ -25,7 +25,7 @@ function harnessRunning(agentSource: string, { initializeTimeoutMs = 10_000, ...
   const exits: string[] = [];
   const harness = new HarnessProcess(
     { id: "opencode", label: "Test", logName: "test", command: [process.execPath, script], environment: {}, prelaunch: "", startsOneAtATime: false, ...spec },
-    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: (_harness, reason) => void exits.push(englishAgentGone(reason)) },
+    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: (_harness, reason) => void exits.push(englishAgentGone(reason)) },
     directory,
     initializeTimeoutMs,
   );

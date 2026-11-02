@@ -51,6 +51,7 @@ import { TerminalService } from "./terminals.ts";
 import { KeepAwakeHold } from "./keep-awake.ts";
 import { keepDataFolderToHostAccount } from "./windows-folder-access.ts";
 import { stopIgnoringCtrlC } from "./windows-processes.ts";
+import { askFormOnCanvas } from "./acp/elicitation.ts";
 
 if (process.platform === "win32") stopIgnoringCtrlC();
 const config = loadConfig();
@@ -95,6 +96,7 @@ const canvasAssetsOrigins = [
   ]),
 ];
 const canvas = new CanvasService(store, hub, conversations, notifications, canvasAssetsOrigins);
+conversations.askFormsWith((conversationId, request, signal) => askFormOnCanvas(canvas, conversationId, request, signal));
 // The checklist plugin's note about the user's ticks came before the page errors when the checklist was Mirador's own.
 conversations.hearCanvasNotesFrom((conversationId) => [...canvasPlugins.notesForAgent(conversationId), ...canvas.notesForAgent(conversationId)]);
 const plugins = new InstalledPlugins(pluginsFolder, loadedPlugins.problems, loadedPlugins.canvases);

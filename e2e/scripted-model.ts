@@ -176,6 +176,7 @@ export class ScriptedModel {
     const [directive, ...rest] = script.split(" ");
     const argument = rest.join(" ");
     if (directive === "RUN") return { call: shellCall(tools, argument) };
+    if (directive === "QUESTIONS") return { call: { name: "request_user_input", arguments: JSON.parse(argument) } };
     if (directive === "DELEGATE") return { call: { name: "subagent", arguments: { agent: "general", description: "Scripted subagent", prompt: argument } } };
     if (directive === "CALL") {
       const [tool, ...json] = rest;

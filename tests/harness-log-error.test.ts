@@ -10,7 +10,7 @@ describe("HarnessProcess.start", () => {
     mkdirSync(join(directory, "broken-log.log"));
     const harness = new HarnessProcess(
       { id: "claude", label: "Noisy agent", logName: "broken-log", command: [process.execPath, "-e", "console.error('noise'); process.exit(3)"], environment: {}, prelaunch: "", startsOneAtATime: false },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: () => {} },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
       directory,
     );
     await expect(harness.start()).rejects.toThrow(/exited with 3/);

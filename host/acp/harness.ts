@@ -73,6 +73,9 @@ const spawnAgent = (program: string, args: string[], environment: Record<string,
  */
 const commandOutputCapability = (harness: HarnessId) => (harness === "codex" ? { terminal_output: true } : {});
 
+/** Codex asks its questions as forms, which Mirador shows as canvas questions. Claude Code reads the capability too, so it alone hears of it. */
+const formQuestionsCapability = (harness: HarnessId): Pick<acp.ClientCapabilities, "elicitation"> => (harness === "codex" ? { elicitation: { form: {} } } : {});
+
 export interface HarnessSpec {
   id: HarnessId;
   /** Names the agent process in messages, e.g. "Claude Code (work)". */
@@ -89,6 +92,7 @@ export interface HarnessSpec {
 export interface HarnessListener {
   onSessionUpdate(notification: acp.SessionNotification): void;
   onPermissionRequest(request: acp.RequestPermissionRequest, signal: AbortSignal): Promise<acp.RequestPermissionResponse>;
+  onElicitationRequest(request: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse>;
   onExit(harness: HarnessProcess, gone: AgentGone): void;
 }
 
@@ -277,6 +281,7 @@ export class HarnessProcess {
       .onRequest(acp.methods.client.session.requestPermission, (ctx) =>
         this.listener.onPermissionRequest(ctx.params, ctx.signal),
       )
+      .onRequest(acp.methods.client.elicitation.create, (ctx) => this.listener.onElicitationRequest(ctx.params, ctx.signal))
       .connect(stream);
     this.connection = connection;
     child.once("exit", (code, signal) => {
@@ -298,6 +303,7 @@ export class HarnessProcess {
           protocolVersion: acp.PROTOCOL_VERSION,
           clientCapabilities: {
             session: { notices: {} },
+            ...formQuestionsCapability(this.spec.id),
             // Claude Code's background tasks come as session updates only to a client that claims the AIR asyncTasks
             // capability; an agent that knows no `_meta` ignores it.
             _meta: { jetbrains: { air: { version: 1, capabilities: ["asyncTasks"] } }, ...commandOutputCapability(this.spec.id) },

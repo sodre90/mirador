@@ -19,7 +19,7 @@ describe("HarnessProcess.start", () => {
         prelaunch: "echo starting; echo 'proxy binary missing' >&2; exit 3",
         startsOneAtATime: false,
       },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } }) as never, onExit: () => {} },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } }) as never, onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
       directory,
     );
     await expect(harness.start()).rejects.toThrow("The pre-launch command of Proxied agent exited with 3: starting\nproxy binary missing");
@@ -42,7 +42,7 @@ describe("HarnessProcess.start", () => {
         prelaunch,
         startsOneAtATime: false,
       },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } }) as never, onExit: () => {} },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } }) as never, onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
       directory,
     );
     const loginShell = process.env.SHELL;

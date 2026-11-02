@@ -26,7 +26,7 @@ function harnessRunning(agentSource: string) {
   writeFileSync(script, agentSource);
   return new HarnessProcess(
     { id: "claude", label: "Test", logName: "test", command: [process.execPath, script], environment: {}, prelaunch: "", startsOneAtATime: false },
-    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: () => {} },
+    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
     directory,
   );
 }

@@ -129,6 +129,9 @@ interface NotesForAgent {
   canvas: CanvasNote[];
 }
 
+/** Asks the user an agent's form, such as Codex's questions, and answers the agent. */
+type AskForm = (conversationId: string, request: acp.CreateElicitationRequest, signal: AbortSignal) => Promise<acp.CreateElicitationResponse>;
+
 const NO_NOTES: NotesForAgent = { commands: [], reverts: [], canvas: [] };
 
 const withNotes = ({ commands, reverts, canvas }: NotesForAgent, text: string) =>
@@ -282,6 +285,7 @@ export class ConversationService {
   /** While the host stops or restarts, messages wait in the queue for the next host, and turns it ends are not the agent's failures. */
   private stopping = false;
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
+  private askForm: AskForm = async () => ({ action: "decline" });
   private hearReply: HearReply = () => {};
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
@@ -1636,6 +1640,7 @@ export class ConversationService {
       {
         onSessionUpdate: (notification) => this.handleSessionUpdate(notification),
         onPermissionRequest: (request, signal) => this.handlePermissionRequest(request, signal),
+        onElicitationRequest: (request, signal) => this.handleElicitationRequest(request, signal),
         onExit: (process) => this.handleHarnessExit(process),
       },
       agentLogsDirectory(this.config.dataDir),
@@ -1862,6 +1867,17 @@ export class ConversationService {
   private notesForAgent(conversationId: string): NotesForAgent {
     const events = this.store.listEventsOfTypes(conversationId, [...USER_COMMAND_EVENT_TYPES, ...REVERT_EVENT_TYPES]);
     return { commands: awaitingDelivery(userCommandsIn(events)), reverts: pendingReverts(events), canvas: this.canvasNotesOf(conversationId) };
+  }
+
+  askFormsWith(askForm: AskForm) {
+    this.askForm = askForm;
+  }
+
+  private async handleElicitationRequest(request: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse> {
+    const { sessionId } = request as { sessionId?: string };
+    const conversationId = sessionId === undefined ? undefined : this.sessions.conversationOf(sessionId);
+    if (!conversationId) return { action: "cancel" };
+    return this.askForm(conversationId, request, signal);
   }
 
   /** The canvas keeps what happened there that the agent has not heard of: the user's ticks, the errors of pages nobody saw shown. */

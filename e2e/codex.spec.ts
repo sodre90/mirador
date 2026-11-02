@@ -96,3 +96,28 @@ test("a message sent with Enter while Codex runs a command joins its turn once t
   await expect(lastAgentMessage(page)).toContainText(`Echo: ${STEERED}`);
   expect(eventsInOrder).toEqual(["RUN sleep 5; echo slept", STEERED, "turn-end"]);
 });
+
+const codexQuestions = {
+  questions: [
+    { id: "color", header: "Color", question: "Which color?", options: [{ label: "Red", description: "Warm" }, { label: "Blue", description: "Cool" }] },
+    { id: "finish", header: "Finish", question: "Which finish?", options: [{ label: "Gloss", description: "Shiny" }, { label: "Satin", description: "Soft" }] },
+  ],
+};
+
+test("in Plan mode Codex's questions show as a canvas question, and Codex hears each answer, the user's own words too", async () => {
+  await page.getByLabel("Collaboration mode").selectOption("plan");
+  await sendMessage(page, `QUESTIONS ${JSON.stringify(codexQuestions)}`);
+  const ask = page.locator(".ask");
+  await ask.getByRole("radio", { name: "Red", exact: true }).check({ timeout: 60_000 });
+  await ask.getByRole("button", { name: "Next" }).click();
+  await expect(ask.getByRole("heading", { name: "Which finish?" })).toBeVisible();
+  await ask.getByRole("textbox", { name: /note/i }).fill("for the kitchen");
+  const ownAnswer = ask.getByRole("textbox", { name: "Your own answer" });
+  await ownAnswer.fill("Matte");
+  await ownAnswer.press("Enter");
+  await ask.getByRole("button", { name: "Submit" }).click();
+  await waitForTurnToEnd(page);
+  const toolResult = lastAgentMessage(page);
+  await expect(toolResult).toContainText('"color":{"answers":["Red"]}');
+  await expect(toolResult).toContainText('"finish":{"answers":["None of the above","user_note: Matte","user_note: for the kitchen"]}');
+});

@@ -37,7 +37,7 @@ describe("HarnessProcess.start", () => {
     const directory = mkdtempSync(join(tmpdir(), "mirador-harness-log-"));
     const harness = new HarnessProcess(
       { id: "claude", label: "Noisy agent", logName: "noisy", command: [process.execPath, "-e", "console.error('one\\ntwo'); process.exit(3)"], environment: {}, prelaunch: "", startsOneAtATime: false },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: () => {} },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
       directory,
     );
     await expect(harness.start()).rejects.toThrow(/exited with 3/);

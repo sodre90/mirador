@@ -47,7 +47,7 @@ function crashingHarness(agent = crashingAgent) {
   writeFileSync(script, agent);
   return new HarnessProcess(
     { id: "opencode", label: "Crashing agent", logName: "crashing", command: [process.execPath, script], environment: {}, prelaunch: "", startsOneAtATime: false },
-    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: () => {} },
+    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
     directory,
   );
 }
@@ -77,7 +77,7 @@ describe("HarnessProcess.start", () => {
         prelaunch: "",
         startsOneAtATime: false,
       },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: () => {} },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
       directory,
     );
     await harness.start();

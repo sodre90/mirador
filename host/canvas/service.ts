@@ -168,6 +168,14 @@ export class CanvasService {
     return saveIntoWorkspace(workspace.path, path, file, { replace });
   }
 
+  /** Takes back a question no one waits for any more, so that a late answer doesn't arrive as a message. */
+  cancelAsk(itemId: string) {
+    const item = this.store.findCanvasItem(itemId);
+    if (item?.status !== "waiting") return;
+    this.answerWaiters.delete(itemId);
+    this.save({ ...item, status: "cancelled" });
+  }
+
   withdrawWaitingAsks(conversationId: string) {
     this.store
       .listCanvasItems(conversationId)

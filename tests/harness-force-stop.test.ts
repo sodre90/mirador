@@ -29,7 +29,7 @@ describe("HarnessProcess.stop", () => {
     let exitedReason: AgentGone | null = null;
     const harness = new HarnessProcess(
       { id: "claude", label: "Stubborn agent", logName: "stubborn", command: [process.execPath, script], environment: {}, prelaunch: "", startsOneAtATime: false },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: (_harness, reason) => void (exitedReason = reason) },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: (_harness, reason) => void (exitedReason = reason) },
       directory,
     );
     await harness.start();

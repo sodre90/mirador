@@ -16,7 +16,7 @@ describe("HarnessProcess.start", () => {
     let exitedReason: string | null = null;
     const harness = new HarnessProcess(
       { id: "claude", label: "Unrunnable agent", logName: "unrunnable", command: [program], environment: {}, prelaunch: "", startsOneAtATime: false },
-      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onExit: (_harness, reason) => void (exitedReason = englishAgentGone(reason)) },
+      { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: (_harness, reason) => void (exitedReason = englishAgentGone(reason)) },
       directory,
     );
     await expect(harness.start()).rejects.toThrow(new RegExp(`The Unrunnable agent agent process could not start: .*${UNRUNNABLE_ERROR}`));
