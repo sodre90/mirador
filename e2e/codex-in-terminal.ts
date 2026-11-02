@@ -34,13 +34,24 @@ await quitAsAUserDoes();
 /** Ctrl+C twice, as Codex asks; killing the codex command would leave the Codex it starts holding the session. */
 async function quitAsAUserDoes() {
   for (const _press of [1, 2]) {
-    child.terminal!.write("\x03");
+    if (!pressCtrlC()) break;
     await Bun.sleep(500);
   }
   const quit = await Promise.race([child.exited.then(() => true), Bun.sleep(QUIT_TIMEOUT_MS).then(() => false)]);
   if (!quit) {
     console.error(plainText(screen).slice(-4000));
     process.exit(1);
+  }
+}
+
+/** False once Codex has quit and taken its terminal with it, as it can after the first press on Windows. */
+function pressCtrlC() {
+  if (child.exitCode !== null) return false;
+  try {
+    child.terminal!.write("\x03");
+    return true;
+  } catch {
+    return false;
   }
 }
 
