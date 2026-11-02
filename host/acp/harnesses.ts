@@ -31,13 +31,10 @@ const piAcpEntry = () => join(dirname(Bun.resolveSync("pi-acp/package.json", imp
 
 const findPi = (path = currentPath()) => Bun.which("pi", { PATH: path });
 
-/**
- * codex-acp runs the Codex its package brings, so Mirador offers Codex only where the user installed it themselves: their
- * sign-in in ~/.codex is what it runs on.
- */
+/** Where Codex's installers put it, for hosts started without a login shell's PATH (e.g. by launchd). */
 const codexInstallDirectories = ["/opt/homebrew/bin", "/usr/local/bin", join(homedir(), ".local", "bin")];
 
-const findCodex = () => Bun.which("codex", { PATH: currentPath() }) ?? Bun.which("codex", { PATH: codexInstallDirectories.join(delimiter) });
+const findCodex = (path = currentPath()) => Bun.which("codex", { PATH: path }) ?? Bun.which("codex", { PATH: codexInstallDirectories.join(delimiter) });
 
 /** Looked up when Codex starts, as pi-acp is. */
 const codexAcpEntry = () => join(dirname(Bun.resolveSync("@agentclientprotocol/codex-acp/package.json", import.meta.dir)), "dist/index.js");
@@ -54,7 +51,7 @@ export function installedHarnesses(claudeProgramSetting: string): HarnessId[] {
     claude: () => findClaudeProgram(claudeProgramSetting),
     opencode: findOpencode,
     pi: () => findPi(),
-    codex: findCodex,
+    codex: () => findCodex(),
   };
   return harnessIds.filter((harness) => programOf[harness]() !== null);
 }
@@ -152,7 +149,7 @@ export function launchEnvironment(harness: HarnessId, profile: Profile | null, c
   const environment = profileEnvironment(profile);
   if (harness === "opencode") return withCanvasToolsPlugin(environment);
   if (harness === "pi") return piAcpEnvironment(environment);
-  if (harness === "codex") return environment;
+  if (harness === "codex") return codexAcpEnvironment(environment);
   if (environment.CLAUDE_CODE_EXECUTABLE) return environment;
   const program = findClaudeProgram(claudeProgramSetting, environment.PATH);
   if (!program) throw new HostProblemError(claudeProgramMissing(claudeProgramSetting));
@@ -169,6 +166,14 @@ function piAcpEnvironment(profileEnvironment: Record<string, string>): Record<st
   const program = findPi(environment.PATH);
   if (!program) throw new HostProblemError({ code: "pi-not-installed" });
   return { ...environment, PI_ACP_PI_COMMAND: program };
+}
+
+/** codex-acp runs the Codex in CODEX_PATH, else the one its package bundles: Mirador runs the user's, as it does Claude Code. */
+function codexAcpEnvironment(environment: Record<string, string>): Record<string, string> {
+  if (environment.CODEX_PATH) return environment;
+  const program = findCodex(environment.PATH);
+  if (!program) throw new HostProblemError({ code: "codex-not-installed" });
+  return { ...environment, CODEX_PATH: program };
 }
 
 export function profileEnvironment(profile: Profile | null): Record<string, string> {

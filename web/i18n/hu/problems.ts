@@ -7,6 +7,7 @@ export const problems: Messages["problems"] = {
     "workspace-gone": "A munkaterület már nem létezik.",
     "conversation-deleted-while-opening": "A beszélgetést törölték, miközben az ágens munkamenete megnyílt.",
     "opencode-not-installed": "Az opencode nincs telepítve: nincs opencode program a PATH-on vagy a szokásos telepítési mappákban.",
+    "codex-not-installed": "A Codex nincs telepítve: nincs codex program a PATH-on és a szokásos telepítési mappákban. Telepítsd így: npm install -g @openai/codex.",
     "pi-not-installed": "A pi nincs telepítve: nincs pi program a PATH-on. Telepítsd így: npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "Az üzenet egyik képe hiányzik, illeszd be újra.",
     "not-an-image-of-conversation": "Ez nem ennek a beszélgetésnek a képe.",

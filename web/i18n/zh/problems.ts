@@ -7,6 +7,7 @@ export const problems: Messages["problems"] = {
     "workspace-gone": "该工作区已不存在。",
     "conversation-deleted-while-opening": "在打开智能体会话时，该对话已被删除。",
     "opencode-not-installed": "未安装 opencode：PATH 和常用安装目录中都没有 opencode 程序。",
+    "codex-not-installed": "未安装 Codex：PATH 和常用安装目录中都没有 codex 程序。请用 npm install -g @openai/codex 安装。",
     "pi-not-installed": "未安装 pi：PATH 中没有 pi 程序。请用 npm install -g @earendil-works/pi-coding-agent 安装。",
     "image-missing": "此消息的一张图片丢失了，请重新粘贴。",
     "not-an-image-of-conversation": "那不是此对话中的图片。",

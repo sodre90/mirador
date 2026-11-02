@@ -20,6 +20,13 @@ function removeBundledClaudeCode() {
   for (const name of readdirSync(scope).filter((entry) => entry.startsWith("claude-agent-sdk-"))) rmSync(join(scope, name), { recursive: true, force: true });
 }
 
+/** Mirador runs the Codex installed on the computer too, so the native Codex codex-acp bundles (some 340 MB) only takes room. */
+function removeBundledCodex() {
+  const scope = join(stage, "node_modules", "@openai");
+  if (!existsSync(scope)) return;
+  for (const name of readdirSync(scope).filter((entry) => entry.startsWith("codex-"))) rmSync(join(scope, name), { recursive: true, force: true });
+}
+
 rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 /** Named relative to the stage, as Git for Windows' GNU tar takes a path with a drive letter for a remote machine's. */
@@ -29,4 +36,5 @@ run(["tar", "-xf", archive], stage);
 rmSync(join(stage, archive));
 run([process.execPath, "install", "--production", "--frozen-lockfile"], stage);
 removeBundledClaudeCode();
+removeBundledCodex();
 run([process.execPath, join(desktop, "scripts", "prune-unused-modules.ts"), stage], desktop);

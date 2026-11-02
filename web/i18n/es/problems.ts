@@ -7,6 +7,7 @@ export const problems: Messages["problems"] = {
     "workspace-gone": "El espacio de trabajo ya no existe.",
     "conversation-deleted-while-opening": "La conversación se eliminó mientras se abría la sesión de su agente.",
     "opencode-not-installed": "opencode no está instalado: no hay un ejecutable opencode en el PATH ni en sus carpetas de instalación habituales.",
+    "codex-not-installed": "Codex no está instalado: no hay un ejecutable codex en el PATH ni en sus carpetas de instalación habituales. Instálalo con npm install -g @openai/codex.",
     "pi-not-installed": "pi no está instalado: no hay un ejecutable pi en el PATH. Instálalo con npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "Falta una imagen de este mensaje; pégala de nuevo.",
     "not-an-image-of-conversation": "Esa no es una imagen de esta conversación.",

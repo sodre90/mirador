@@ -1,6 +1,9 @@
 import { expect, test } from "bun:test";
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
-import { harnessSpec, loginCommand, sessionMeta, sessionSystemPrompt } from "../host/acp/harnesses.ts";
+import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { harnessSpec, launchEnvironment, loginCommand, sessionMeta, sessionSystemPrompt } from "../host/acp/harnesses.ts";
 import { CanvasMcpEndpoints } from "../host/canvas/mcp.ts";
 import type { CanvasService } from "../host/canvas/service.ts";
 import { canvasUseGuidance } from "../host/canvas/guidance.ts";
@@ -11,12 +14,26 @@ import { storeWithConversation } from "./canvas-plugin-host.ts";
 
 const codexProfile = { id: "p-codex-1234", name: "Codex", harness: "codex", environment: "", prelaunch: "" } as Profile;
 
-test("Codex runs as codex-acp on the host's Bun, with the profile's environment and nothing added", () => {
-  const spec = harnessSpec({ ...codexProfile, environment: "CODEX_HOME=/tmp/codex-work" }, "");
+function folderWithCodex() {
+  const folder = mkdtempSync(join(tmpdir(), "mirador-codex-"));
+  const program = join(folder, process.platform === "win32" ? "codex.exe" : "codex");
+  writeFileSync(program, "");
+  chmodSync(program, 0o755);
+  return { folder, program };
+}
+
+test("Codex runs as codex-acp on the host's Bun, with the profile's environment and the user's codex", () => {
+  const { folder, program } = folderWithCodex();
+  const spec = harnessSpec({ ...codexProfile, environment: `CODEX_HOME=/tmp/codex-work\nPATH=${folder}` }, "");
   expect(spec.command).toEqual([process.execPath, expect.stringMatching(/@agentclientprotocol[/\\]codex-acp[/\\]dist[/\\]index\.js$/)]);
   expect(spec.environment.CODEX_HOME).toBe("/tmp/codex-work");
+  expect(spec.environment.CODEX_PATH).toBe(program);
   expect(spec.label).toBe("Codex (Codex)");
   expect(spec.startsOneAtATime).toBe(false);
+});
+
+test("a profile's own CODEX_PATH picks the Codex codex-acp runs", () => {
+  expect(launchEnvironment("codex", { ...codexProfile, environment: "CODEX_PATH=/opt/codex-beta/codex" }, "").CODEX_PATH).toBe("/opt/codex-beta/codex");
 });
 
 test("signing in to Codex runs codex-acp's own login, which signs in the Codex it runs", () => {

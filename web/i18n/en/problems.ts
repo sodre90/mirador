@@ -5,6 +5,7 @@ export const problems = {
     "workspace-gone": "The workspace no longer exists.",
     "conversation-deleted-while-opening": "The conversation was deleted while its agent session opened.",
     "opencode-not-installed": "opencode is not installed: no opencode executable on PATH or in its usual install directories.",
+    "codex-not-installed": "Codex is not installed: no codex executable on PATH or in its usual install directories. Install it with npm install -g @openai/codex.",
     "pi-not-installed": "pi is not installed: no pi executable on PATH. Install it with npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "An image of this message is missing; paste it again.",
     "not-an-image-of-conversation": "That is not an image of this conversation.",
