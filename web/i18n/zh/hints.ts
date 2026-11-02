@@ -279,6 +279,7 @@ export const hints: Messages["hints"] = {
   gitBranch: "工作区目录中已检出的 git 分支。",
   model: "Agent 使用的模型，由上方的模型菜单选定。",
   cost: "到目前为止这个对话的花费，按 Agent 报告的数据。",
+  credits: "这个对话已用的 AI 积分，按 GitHub Copilot 的计算。",
   profileChip: "这个对话的 Agent 运行时所用的配置。",
   quota: (limit: string, percent: string, resetsIn: string) =>
     `你的 Claude 套餐的${limit}用量上限：已用 ${percent}，${resetsIn}后重新开始。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,

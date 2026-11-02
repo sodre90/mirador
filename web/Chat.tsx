@@ -1,7 +1,7 @@
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk";
 import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
 import { modelLabel } from "../shared/claude-models.ts";
-import { flatSelectOptions } from "../shared/config-options.ts";
+import { flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";
 import { hasBegun } from "../shared/conversation-begun.ts";
 import { allInputTokens, formatTokens, type SubagentUsage } from "../shared/subagent-usage.ts";
 import {
@@ -145,7 +145,7 @@ function ConfigControl({ conversationId, option }: { conversationId: string; opt
       <select aria-label={option.name} value={option.currentValue} onChange={(event) => setValue(event.target.value)}>
         {choices.map((choice) => (
           <option key={choice.value} value={choice.value} title={choice.description ?? undefined}>
-            {choice.name}
+            {nameWithMultiplier(choice)}
           </option>
         ))}
       </select>

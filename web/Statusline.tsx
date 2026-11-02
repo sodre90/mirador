@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { chosenModel } from "../shared/config-options.ts";
+import { chosenModel, withMultiplier } from "../shared/config-options.ts";
 import type { ContextUsage, Conversation, PlanQuotas, Profile, QuotaWindow, StatuslineRender } from "../shared/model.ts";
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
 import { connection } from "./connection.ts";
@@ -16,6 +16,7 @@ import {
   contextHint,
   contextLevel,
   formatCost,
+  formatCredits,
   QUOTA_NAMES,
   quotaLabels,
   quotaPercentLabel,
@@ -203,16 +204,21 @@ function BuiltInStatusline({
       )}
       {model && (
         <span className="chip" data-hint={hints.model}>
-          {model.name}
+          {withMultiplier(model.name, model.multiplier)}
         </span>
       )}
-      {usage && <ContextMeter usage={usage} />}
+      {usage && usage.size > 0 && <ContextMeter usage={usage} />}
       {knownWindows(quotas).map(({ name, window }) => (
         <QuotaMeter key={name} name={name} window={window} />
       ))}
       {usage?.cost && (
         <span className="chip" data-hint={hints.cost}>
           {formatCost(usage.cost)}
+        </span>
+      )}
+      {usage?.credits !== undefined && (
+        <span className="chip" data-hint={hints.credits}>
+          {formatCredits(usage.credits)}
         </span>
       )}
       {profile && (

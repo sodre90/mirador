@@ -25,6 +25,8 @@ export const contextLevel = (share: number): ContextLevel => (share >= 0.9 ? "fu
 export const formatCost = ({ amount, currency }: NonNullable<ContextUsage["cost"]>) =>
   formatNumber(amount, { style: "currency", currency, maximumFractionDigits: amount < 1 ? 4 : 2 });
 
+export const formatCredits = (credits: number) => words.credits(formatNumber(credits, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
 export function contextHint(usage: ContextUsage) {
   return [
     words.contextInUse(formatNumber(usage.used), formatNumber(usage.size), usedPercentLabel(usage)),

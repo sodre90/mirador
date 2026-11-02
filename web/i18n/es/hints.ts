@@ -310,6 +310,7 @@ export const hints: Messages["hints"] = {
   gitBranch: "La rama de git activa en el directorio del espacio de trabajo.",
   model: "El modelo que usa el agente, tal como se eligió en el menú Modelo de arriba.",
   cost: "Lo que ha costado la conversación hasta ahora, según lo informa el agente.",
+  credits: "Créditos de IA que ha usado esta conversación, según los cuenta GitHub Copilot.",
   profileChip: "El perfil con el que se ejecuta el agente de esta conversación.",
   quota: (limit, percent, resetsIn) =>
     `Límite de uso ${limit} de tu plan de Claude: ${percent} usado, se reinicia en ${resetsIn}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,

@@ -87,6 +87,7 @@ import type { SystemNotifications } from "./system-notifications.ts";
 import type { TerminalProgram } from "./terminals.ts";
 import { claudeConfigDir } from "./terminal-sessions.ts";
 import { TerminalWork, updatesAfter } from "./terminal-catch-up.ts";
+import { copilotHomeOf, copilotSessionCredits } from "./copilot-credits.ts";
 import { claudeTranscript, lastAnsweringModel, modelChoiceFor, recordsUserMessage, userMessageTakenInAt } from "./claude-transcript.ts";
 import { claudeTranscriptPaths, messageSnippetOf, openOpencodeDatabase, opencodeDatabasePath } from "./session-transcripts.ts";
 import { UserCommandRunner } from "./user-commands.ts";
@@ -285,6 +286,7 @@ export class ConversationService {
   /** A session loaded again replays all of its history; it is held here, so only what the conversation lacks joins it. */
   private readonly replaysBeingRead = new Map<string, acp.SessionNotification[]>();
   private readonly contextUsage: Map<string, ContextUsage>;
+  private readonly creditReads = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly planQuotas = new PlanQuotasByProfile();
   private readonly unseenTurnEnds: Map<string, UnseenTurnEnd>;
   private readonly lastWords = new Map<string, string>();
@@ -577,6 +579,7 @@ export class ConversationService {
     this.statusOverrides.delete(conversationId);
     this.terminalActivity.delete(conversationId);
     this.contextUsage.delete(conversationId);
+    this.stopReadingCredits(conversationId);
     this.unseenTurnEnds.delete(conversationId);
     this.lastWords.delete(conversationId);
     this.asksWaitedOn.delete(conversationId);
@@ -774,6 +777,7 @@ export class ConversationService {
       this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...turnUsageOf(response), ...(model && { model }) });
       runtime.automaticContinues = 0;
       this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
+      this.readCreditsAfterTurn(conversationId);
     } catch (error) {
       this.failOpenToolCalls(conversationId);
       if (runtime.killedOnPurpose) {
@@ -1731,9 +1735,14 @@ export class ConversationService {
       return;
     }
     if (update.sessionUpdate === "usage_update") {
-      const usage: ContextUsage = { used: update.used, size: update.size, cost: update.cost ? { amount: update.cost.amount, currency: update.cost.currency } : null };
-      this.contextUsage.set(conversationId, usage);
-      this.store.setContextUsage(conversationId, usage);
+      const credits = this.contextUsage.get(conversationId)?.credits;
+      const usage: ContextUsage = {
+        used: update.used,
+        size: update.size,
+        cost: update.cost ? { amount: update.cost.amount, currency: update.cost.currency } : null,
+        ...(credits !== undefined && { credits }),
+      };
+      this.setContextUsage(conversationId, usage);
       const model = update._meta?.["_claude/model"];
       if (typeof model === "string") this.runtime(conversationId).reportedModel = model;
       const quotas = reportedQuotas(update._meta);
@@ -1752,6 +1761,54 @@ export class ConversationService {
     this.trackReplyProgress(conversationId, update);
     this.append(conversationId, { type: "acp", update: this.withModeName(conversationId, update) });
     this.followToolCalls(conversationId, update);
+  }
+
+  private setContextUsage(conversationId: string, usage: ContextUsage) {
+    this.contextUsage.set(conversationId, usage);
+    this.store.setContextUsage(conversationId, usage);
+  }
+
+  /** Copilot writes its usage checkpoint a moment after the turn ends, so the file is read again until the credits have grown. A read that lands during a later turn is safe, as credits only grow. */
+  private readCreditsAfterTurn(conversationId: string) {
+    if (this.get(conversationId).harness !== "copilot") return;
+    this.stopReadingCredits(conversationId);
+    const delaysMs = [0, 250, 750, 2000];
+    const readAfter = (attempt: number) => {
+      this.creditReads.set(
+        conversationId,
+        setTimeout(async () => {
+          this.creditReads.delete(conversationId);
+          const applied = await this.refreshCopilotCredits(conversationId);
+          if (!applied && attempt + 1 < delaysMs.length && this.store.hasConversation(conversationId)) readAfter(attempt + 1);
+        }, delaysMs[attempt]).unref(),
+      );
+    };
+    readAfter(0);
+  }
+
+  private stopReadingCredits(conversationId: string) {
+    clearTimeout(this.creditReads.get(conversationId));
+    this.creditReads.delete(conversationId);
+  }
+
+  /** Copilot reports no cost, but writes what its session used to its own events file, so the credits are read from there. Whether they were applied. */
+  private async refreshCopilotCredits(conversationId: string): Promise<boolean> {
+    if (!this.store.hasConversation(conversationId)) return false;
+    const conversation = this.get(conversationId);
+    if (conversation.harness !== "copilot" || !conversation.acpSessionId) return false;
+    let copilotHome: string;
+    try {
+      copilotHome = copilotHomeOf(profileEnvironment(this.profileOf(conversation)));
+    } catch {
+      return false;
+    }
+    const credits = await copilotSessionCredits(copilotHome, conversation.acpSessionId);
+    if (credits === null || !this.store.hasConversation(conversationId)) return false;
+    const usage = this.contextUsage.get(conversationId) ?? { used: 0, size: 0, cost: null };
+    if (usage.credits !== undefined && credits <= usage.credits) return false;
+    this.setContextUsage(conversationId, { ...usage, credits });
+    this.publish(this.get(conversationId));
+    return true;
   }
 
   /** The mode picker's name for the mode, which the notice shows in place of the agent's id for it. */
