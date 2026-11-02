@@ -34,18 +34,24 @@ const turns = new Map<string, number>();
 const models = new Map<string, string>();
 let nextSession = 0;
 
-const recordUsage = (sessionId: string, turn: number) => {
+const appendCheckpoint = (sessionId: string, totalNanoAiu: number, totalPremiumRequests: number) => {
   const directory = join(copilotHome, "session-state", sessionId);
   mkdirSync(directory, { recursive: true });
-  const total = models.get(sessionId) === "free-model" ? 0 : CREDITS_AFTER_TURN[Math.min(turn, CREDITS_AFTER_TURN.length) - 1]!;
-  appendFileSync(join(directory, "events.jsonl"), `${JSON.stringify({ type: "session.usage_checkpoint", data: { totalNanoAiu: total, totalPremiumRequests: turn } })}\n`);
+  appendFileSync(join(directory, "events.jsonl"), `${JSON.stringify({ type: "session.usage_checkpoint", data: { totalNanoAiu, totalPremiumRequests } })}\n`);
 };
+
+const recordUsage = (sessionId: string, turn: number) =>
+  appendCheckpoint(sessionId, models.get(sessionId) === "free-model" ? 0 : CREDITS_AFTER_TURN[Math.min(turn, CREDITS_AFTER_TURN.length) - 1]!, turn);
+
+/** A session whose events file already holds what earlier turns used, as one Mirador began reading credits for only later. */
+const EARLIER_NANO_AIU = Number(process.env.FAKE_COPILOT_EARLIER_NANO_AIU ?? 0);
 
 acp
   .agent()
   .onRequest(acp.methods.agent.initialize, () => ({ protocolVersion: acp.PROTOCOL_VERSION, agentCapabilities: {} }))
   .onRequest(acp.methods.agent.session.new, () => {
     const sessionId = `fake-copilot-${process.pid}-${++nextSession}`;
+    if (EARLIER_NANO_AIU > 0) appendCheckpoint(sessionId, EARLIER_NANO_AIU, 0);
     return { sessionId, configOptions: modelOptions("auto") };
   })
   .onRequest(acp.methods.agent.session.setConfigOption, (ctx) => {

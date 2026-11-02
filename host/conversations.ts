@@ -1768,22 +1768,28 @@ export class ConversationService {
     this.store.setContextUsage(conversationId, usage);
   }
 
-  /** Copilot writes its usage checkpoint a moment after the turn ends, so the file is read again until the credits have grown. A read that lands during a later turn is safe, as credits only grow. */
+  /**
+   * Copilot writes its usage checkpoint a moment after the turn ends, so the file is read again until it shows more than
+   * before the turn. Before a conversation's first reading the file may already hold earlier turns; that reading counts
+   * as before this turn. A read that lands during a later turn is safe, as credits only grow.
+   */
   private readCreditsAfterTurn(conversationId: string) {
     if (this.get(conversationId).harness !== "copilot") return;
     this.stopReadingCredits(conversationId);
     const delaysMs = [0, 250, 750, 2000];
-    const readAfter = (attempt: number) => {
+    const readAfter = (attempt: number, beforeTurn: number | undefined) => {
       this.creditReads.set(
         conversationId,
         setTimeout(async () => {
           this.creditReads.delete(conversationId);
-          const applied = await this.refreshCopilotCredits(conversationId);
-          if (!applied && attempt + 1 < delaysMs.length && this.store.hasConversation(conversationId)) readAfter(attempt + 1);
+          const reading = await this.refreshCopilotCredits(conversationId);
+          const before = beforeTurn ?? reading ?? undefined;
+          const grew = reading !== null && before !== undefined && reading > before;
+          if (!grew && attempt + 1 < delaysMs.length && this.store.hasConversation(conversationId)) readAfter(attempt + 1, before);
         }, delaysMs[attempt]).unref(),
       );
     };
-    readAfter(0);
+    readAfter(0, this.contextUsage.get(conversationId)?.credits);
   }
 
   private stopReadingCredits(conversationId: string) {
@@ -1791,24 +1797,25 @@ export class ConversationService {
     this.creditReads.delete(conversationId);
   }
 
-  /** Copilot reports no cost, but writes what its session used to its own events file, so the credits are read from there. Whether they were applied. */
-  private async refreshCopilotCredits(conversationId: string): Promise<boolean> {
-    if (!this.store.hasConversation(conversationId)) return false;
+  /** Copilot reports no cost, but writes what its session used to its own events file, so the credits are read from there; shown when they are the first or more. The reading, or null without one. */
+  private async refreshCopilotCredits(conversationId: string): Promise<number | null> {
+    if (!this.store.hasConversation(conversationId)) return null;
     const conversation = this.get(conversationId);
-    if (conversation.harness !== "copilot" || !conversation.acpSessionId) return false;
+    if (conversation.harness !== "copilot" || !conversation.acpSessionId) return null;
     let copilotHome: string;
     try {
       copilotHome = copilotHomeOf(profileEnvironment(this.profileOf(conversation)));
     } catch {
-      return false;
+      return null;
     }
     const credits = await copilotSessionCredits(copilotHome, conversation.acpSessionId);
-    if (credits === null || !this.store.hasConversation(conversationId)) return false;
+    if (credits === null || !this.store.hasConversation(conversationId)) return null;
     const usage = this.contextUsage.get(conversationId) ?? { used: 0, size: 0, cost: null };
-    if (usage.credits !== undefined && credits <= usage.credits) return false;
-    this.setContextUsage(conversationId, { ...usage, credits });
-    this.publish(this.get(conversationId));
-    return true;
+    if (usage.credits === undefined || credits > usage.credits) {
+      this.setContextUsage(conversationId, { ...usage, credits });
+      this.publish(this.get(conversationId));
+    }
+    return credits;
   }
 
   /** The mode picker's name for the mode, which the notice shows in place of the agent's id for it. */

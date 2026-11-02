@@ -55,3 +55,15 @@ test("a free model's conversation shows 0.00 credits once Copilot has a checkpoi
   await waitForTurnToEnd(page);
   await expect(statusline(page).locator(".chip", { hasText: "credits" })).toHaveText("0.00 credits");
 });
+
+test("a session whose events file already holds earlier turns' credits shows this turn's total, not the earlier one", async ({ page }) => {
+  await signIn(page, host);
+  const environment = `COPILOT_HOME=${copilotHome()}\nCOPILOT_PATH=${join(host.fakeProgramsDir, "copilot")}\nFAKE_COPILOT_EARLIER_NANO_AIU=1000000000`;
+  const dialog = await createProfile(page, "carried-over Copilot", environment, "", "Copilot");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "carried-over Copilot · Copilot" });
+  await startConversation(page);
+  await sendMessage(page, "first");
+  await waitForTurnToEnd(page);
+  await expect(statusline(page).locator(".chip", { hasText: "credits" })).toHaveText("2.04 credits");
+});
