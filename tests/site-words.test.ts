@@ -12,7 +12,7 @@ function texts(entry: Entry, path: string): [string, string][] {
   return Object.entries(entry).flatMap(([key, value]) => texts(value, path ? `${path}.${key}` : key));
 }
 
-const tagsOf = (text: string) => (text.match(/<[^>]+>/g) ?? []).sort();
+const tagsOf = (text: string) => (text.match(/<[^>]+>/g) ?? []).filter((tag) => tag !== "<br>").sort();
 
 describe("the website's languages", () => {
   const english = new Map(texts(en, ""));
@@ -22,7 +22,7 @@ describe("the website's languages", () => {
     ["Spanish", es],
     ["Chinese", zh],
     ["German", de],
-  ])("%s has every text English has, in the same order, none empty, with the same tags and links", (_, translated) => {
+  ])("%s has every text English has, in the same order, none empty, with the same tags and links, line breaks aside", (_, translated) => {
     const translatedTexts = texts(translated, "");
     expect(translatedTexts.map(([path]) => path)).toEqual([...english.keys()]);
     for (const [path, text] of translatedTexts) {

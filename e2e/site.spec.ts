@@ -255,3 +255,9 @@ test.describe("with a Traditional Chinese browser", () => {
     await expect(page).toHaveURL(siteUrl);
   });
 });
+
+test("the Hungarian headline puts Lásd on a line of its own", async ({ page }) => {
+  await openSite(page, "hu/");
+  const lines = await page.locator("h1").evaluate((heading: HTMLElement) => heading.innerText.split("\n"));
+  expect(lines).toEqual(["Lásd,", "mire gondol az agent."]);
+});
