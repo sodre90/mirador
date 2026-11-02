@@ -57,7 +57,7 @@ import { openAsText, openWithSystemDefault } from "./system-open.ts";
 import { mentionSuggestions } from "./mentions.ts";
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
-import { hasBegun, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
+import { hasBegun, sessionHasRecord, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
 import { isUsageLimitError, usageLimitMessage, usageLimitResetIn } from "../shared/usage-limit.ts";
 import { summarizeWaiting, waitingTones, type WaitingConversation, type WaitingSummary } from "../shared/waiting.ts";
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
@@ -507,6 +507,18 @@ export class ConversationService {
     const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? `Fork: ${title}` : title);
     this.ensureSession(conversation.id, () => this.loadExternalSession(conversation.id, session.sessionId, mode)).catch(() => {});
     return conversation;
+  }
+
+  /** Copies the agent's session as it stands into a new conversation on the same profile; a turn running in it goes on undisturbed. */
+  fork(conversationId: string): Conversation {
+    const { workspaceId, harness, profileId, acpSessionId, title } = this.get(conversationId);
+    if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
+    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title }, "fork");
+  }
+
+  /** The agent has a session to copy once it has worked on a message there. */
+  canFork(conversationId: string): boolean {
+    return this.get(conversationId).acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId));
   }
 
   private insertConversation(workspaceId: string, launch: Launch, title: string): Conversation {
@@ -2352,15 +2364,6 @@ export class ConversationService {
   }
 }
 
-
-/**
- * Claude Code keeps no record of a session until the agent works on a message in it, so a session without a finished
- * turn, agent output or replayed history cannot be resumed. Since a /clear, only what came after it counts.
- */
-export function sessionHasRecord(events: StoredEvent[]) {
-  const sinceCleared = events.slice(events.findLastIndex(({ event }) => event.type === "context-cleared") + 1);
-  return sinceCleared.some(({ event }) => event.type === "turn-end" || (event.type === "acp" && updatesTheAgentRecords.has(event.update.sessionUpdate)));
-}
 
 interface TurnRequest {
   /** The message that started the turn and those that joined it, as one. */

@@ -17,6 +17,7 @@ export const chat: Messages["chat"] = {
     subagentsRunning: (count) => plural(count, "1 subagente en ejecución", `${count} subagentes en ejecución`),
     inTerminal: (activity) => `en una terminal · ${activity}`,
     find: "Buscar",
+    fork: "Fork",
     showCanvas: "Mostrar lienzo",
     hideCanvas: "Ocultar lienzo",
     showTerminal: "Mostrar terminal",

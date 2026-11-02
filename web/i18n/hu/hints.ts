@@ -152,6 +152,7 @@ export const hints: Messages["hints"] = {
     "Az ágens által indított, még dolgozó alágensek, amelyek az üzenetmező fölött is szerepelnek; kattints az első megnyitásához. A háttérben indított alágens addig számít, amíg az őt indító kör véget nem ér, mert addig semmi sem jelzi, hogy befejeződött.",
   searchAll: "Keresés minden munkaterület minden beszélgetésében. Egy találatot megnyitva a beszélgetésében mutatja.",
   find: "Szöveg keresése bárhol ebben a beszélgetésben: a még be nem töltött korábbi bejegyzésekben és az összecsukott kártyákban is, amelyek ott nyílnak ki, ahol találat van.",
+  fork: "Ennek a beszélgetésnek a másolata egy új beszélgetésbe, ugyanazon a profilon; ez a beszélgetés változatlan marad. Az itt futó kör folytatódik, a másolatban az lesz, amit az ágens eddig elmentett belőle. Akkor lehetséges, ha az ágens már dolgozott egy üzeneten itt.",
   findOlder: "Előző találat, feljebb (Enter)",
   findNewer: "Következő találat, lejjebb (Shift+Enter)",
   findMatchCase: "Kis- és nagybetű megkülönböztetése.",

@@ -60,6 +60,7 @@ import { useMessageBox } from "./message-box.ts";
 import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
 import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReading, stopReadingIn } from "./reply-player.ts";
+import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
 import { formatNumber, locale, t } from "./i18n/index.ts";
 import { SearchableSelect } from "./SearchableSelect.tsx";
@@ -268,6 +269,8 @@ function ChatHeader({
   runningSubagents,
   onShowRunningSubagent,
   onFind,
+  onFork,
+  forkable,
   begun,
 }: {
   conversation: Conversation;
@@ -279,6 +282,8 @@ function ChatHeader({
   runningSubagents: number;
   onShowRunningSubagent: () => void;
   onFind: () => void;
+  onFork: () => void;
+  forkable: boolean;
   begun: boolean;
 }) {
   const statusDetail = statusDetailOf(conversation);
@@ -305,6 +310,9 @@ function ChatHeader({
         <span className="harness">{harnessLabels[conversation.harness]}</span>
         <button type="button" className="find-trigger" data-hint={hints.find} data-shortcut={shortcutKeys().find} onClick={onFind}>
           {words.header.find}
+        </button>
+        <button type="button" className="fork-conversation" data-hint={hints.fork} disabled={!forkable} onClick={onFork}>
+          {words.header.fork}
         </button>
         <button className="toggle-canvas" data-hint={hints.canvasToggle} data-shortcut={shortcutKeys().toggleCanvas} onClick={onToggleCanvas}>
           {canvasVisible ? words.header.hideCanvas : words.header.showCanvas}
@@ -2014,6 +2022,7 @@ export function ChatPanel({
   onToggleCanvas,
   terminalVisible,
   onToggleTerminal,
+  onFork,
 }: {
   conversation: Conversation;
   /** The conversations this one's plugin tools started that the user hasn't dismissed. */
@@ -2030,6 +2039,7 @@ export function ChatPanel({
   onToggleCanvas: () => void;
   terminalVisible: boolean;
   onToggleTerminal: () => void;
+  onFork: () => void;
 }) {
   const timeline = useMemo(() => buildTimeline(open.events), [open.events]);
   const readingAs = replyReadingOf(voiceSettings);
@@ -2102,6 +2112,8 @@ export function ChatPanel({
                     runningSubagents={runningSubagents.length}
                     onShowRunningSubagent={showRunningSubagent}
                     onFind={find.open}
+                    onFork={onFork}
+                    forkable={canFork(conversation, open)}
                     begun={begun}
                   />
                   {find.query !== null && <FindBar find={find} />}

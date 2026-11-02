@@ -353,6 +353,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "changes.files-listed":
     case "changes.failed":
     case "slash-commands.listed":
+    case "conversation.fork-checked":
     case "prompt-history.listed":
     case "mentions.suggested":
     case "tool-output.got":

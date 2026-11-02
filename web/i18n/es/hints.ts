@@ -161,6 +161,7 @@ export const hints: Messages["hints"] = {
     "Subagentes que el agente inició y que siguen trabajando, también enumerados sobre el cuadro de mensaje; haz clic para abrir el primero. Uno iniciado en segundo plano cuenta hasta que termina el turno que lo inició, ya que nada avisa de cuándo acabó antes.",
   searchAll: "Busca en todas las conversaciones de todos los espacios de trabajo. Abrir una coincidencia la muestra en su conversación.",
   find: "Busca texto en cualquier parte de esta conversación: en entradas anteriores que aún no se han cargado y en tarjetas contraídas, que se expanden donde se encuentra.",
+  fork: "Copia esta conversación en una nueva con el mismo perfil y deja esta como está. Un turno en curso aquí sigue; la copia tiene lo que el agente ha guardado de él hasta ahora. Disponible cuando el agente ya ha trabajado en un mensaje aquí.",
   findOlder: "Coincidencia anterior, más arriba (Enter)",
   findNewer: "Coincidencia siguiente, más abajo (Shift+Enter)",
   findMatchCase: "Distinguir mayúsculas y minúsculas: las letras mayúsculas y minúsculas cuentan como distintas.",

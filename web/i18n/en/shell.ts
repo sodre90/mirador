@@ -113,6 +113,7 @@ export const shell = {
     splitTerminalDown: "Split the terminal down",
     focusTerminal: "Focus the terminal",
     renameConversation: "Rename conversation…",
+    forkConversation: "Fork conversation",
     openMachine: (machine: string) => `Open machine ${machine}`,
     openPluginWindow: (plugin: string) => `Open the ${plugin} window`,
     searchAll: "Search all workspaces…",

@@ -15,6 +15,7 @@ export const chat: Messages["chat"] = {
     subagentsRunning: (count) => `${count} 个子 Agent 运行中`,
     inTerminal: (activity) => `在终端中 · ${activity}`,
     find: "查找",
+    fork: "Fork",
     showCanvas: "显示画布",
     hideCanvas: "隐藏画布",
     showTerminal: "显示终端",

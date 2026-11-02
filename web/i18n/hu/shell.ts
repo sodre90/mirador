@@ -108,6 +108,7 @@ export const shell: Messages["shell"] = {
     splitTerminalDown: "A terminál felosztása lefelé",
     focusTerminal: "Fókusz a terminálra",
     renameConversation: "Beszélgetés átnevezése…",
+    forkConversation: "Beszélgetés elágaztatása",
     openMachine: (machine) => `Gép megnyitása: ${machine}`,
     openPluginWindow: (plugin) => `Ablak megnyitása: ${plugin}`,
     searchAll: "Keresés minden munkaterületen…",

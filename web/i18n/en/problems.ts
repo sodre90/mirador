@@ -14,6 +14,7 @@ export const problems = {
     "unknown-conversation": "Unknown conversation.",
     "agent-still-working": "The agent is still working on the previous message.",
     "session-already-open": "That session is already open in the app.",
+    "nothing-to-fork-yet": "This conversation has no agent session to fork yet. Send it a message first.",
     "conversation-needs-name": "A conversation needs a name.",
     "stop-turn-before-undo": "The agent is still working. Stop its turn before undoing one.",
     "no-files-kept": "Mirador kept no files for that turn, so there is nothing to undo it to.",

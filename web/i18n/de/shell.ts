@@ -113,6 +113,7 @@ export const shell: Messages["shell"] = {
     splitTerminalDown: "Terminal nach unten teilen",
     focusTerminal: "Terminal fokussieren",
     renameConversation: "Unterhaltung umbenennen…",
+    forkConversation: "Unterhaltung forken",
     openMachine: (machine) => `Rechner öffnen: ${machine}`,
     openPluginWindow: (plugin) => `Fenster öffnen: ${plugin}`,
     searchAll: "Alle Arbeitsbereiche durchsuchen…",

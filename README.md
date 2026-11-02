@@ -263,6 +263,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 - **`/clear`** starts the agent afresh while the transcript stays on screen. It works queued, and across restarts.
 - **Log in again**: when the agent's sign-in expires, *Log in* (or `/login`) opens the agent's own sign-in in a terminal tab, with the conversation's profile.
 - **Usage limits**: when Claude's usage limit is reached, queued messages wait, and Mirador asks the agent to continue about a minute after the limit resets (at most twice in a row). *Continue now* and *Stop waiting* are there too. It survives a host restart.
+- **Fork**: *Fork* in the header, *Fork conversation* in the palette, or a right-click on the conversation in the sidebar copies its agent session into a new conversation on the same profile, *Fork: …*, and leaves the original as it was, also while its agent works. Claude Code's fork holds the turns that had finished; pi's also holds the running turn's message, unanswered. The canvas history stays with the original.
 - **Rename**: click the title in the header, double-click it in the sidebar, or *Rename conversation…* in the palette. A name you choose sticks; otherwise the title is your first message until the agent names the session.
 - **Delete** with a two-click confirm; deleting while the agent works ends the turn quietly.
 - **Nothing is lost**: conversations survive reloads and host restarts, and the agent's session resumes.

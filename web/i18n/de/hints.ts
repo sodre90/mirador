@@ -161,6 +161,7 @@ export const hints: Messages["hints"] = {
     "Subagenten, die der Agent gestartet hat und die noch arbeiten, auch über dem Nachrichtenfeld aufgelistet; klicke, um den ersten zu öffnen. Einer, der im Hintergrund gestartet wurde, zählt, bis die Runde endet, die ihn gestartet hat, weil vorher nichts meldet, wann er fertig war.",
   searchAll: "Durchsucht jede Unterhaltung in jedem Arbeitsbereich. Ein geöffneter Treffer wird in seiner Unterhaltung gezeigt.",
   find: "Sucht Text überall in dieser Unterhaltung: in früheren Einträgen, die noch nicht geladen sind, und in eingeklappten Karten, die sich dort aufklappen, wo er gefunden wird.",
+  fork: "Kopiert diese Unterhaltung in eine neue mit demselben Profil und lässt diese, wie sie ist. Eine Runde, die hier läuft, geht weiter; die Kopie enthält, was der Agent bisher davon gespeichert hat. Möglich, sobald der Agent hier an einer Nachricht gearbeitet hat.",
   findOlder: "Vorheriger Treffer, weiter oben (Enter)",
   findNewer: "Nächster Treffer, weiter unten (Shift+Enter)",
   findMatchCase: "Groß-/Kleinschreibung beachten: Groß- und Kleinbuchstaben gelten als verschieden.",

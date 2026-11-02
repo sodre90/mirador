@@ -144,6 +144,7 @@ export const hints = {
     "Subagents the agent started that are still at work, also listed above the message box; click to open the first one. One started in the background counts until the turn that started it ends, since nothing tells when it finished before that.",
   searchAll: "Search every conversation in every workspace. Opening a match shows it in its conversation.",
   find: "Find text anywhere in this conversation: in earlier entries not loaded yet, and in folded cards, which unfold where it is found.",
+  fork: "Copy this conversation into a new one on the same profile and leave this one as it is. A turn running here goes on; the copy holds what the agent has saved of it so far. Possible once the agent has worked on a message here.",
   findOlder: "Previous match, further up (Enter)",
   findNewer: "Next match, further down (Shift+Enter)",
   findMatchCase: "Match case: capital and small letters count as different.",

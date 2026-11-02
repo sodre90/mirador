@@ -16,6 +16,7 @@ export const problems: Messages["problems"] = {
     "unknown-conversation": "未知对话。",
     "agent-still-working": "Agent 仍在处理上一条消息。",
     "session-already-open": "该会话已在应用中打开。",
+    "nothing-to-fork-yet": "这个对话还没有可以 fork 的 Agent 会话。请先给它发一条消息。",
     "conversation-needs-name": "对话需要一个名称。",
     "stop-turn-before-undo": "Agent 仍在工作。撤销某一轮之前，请先停止它的当前轮次。",
     "no-files-kept": "Mirador 没有保留那一轮的文件，因此无法撤销到那里。",

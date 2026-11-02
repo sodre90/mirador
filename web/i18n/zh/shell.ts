@@ -108,6 +108,7 @@ export const shell: Messages["shell"] = {
     splitTerminalDown: "向下拆分终端",
     focusTerminal: "聚焦终端",
     renameConversation: "重命名对话…",
+    forkConversation: "Fork 对话",
     openMachine: (machine) => `打开机器 ${machine}`,
     openPluginWindow: (plugin) => `打开 ${plugin} 窗口`,
     searchAll: "搜索所有工作区…",
