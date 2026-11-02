@@ -150,22 +150,18 @@ function stopCodexDaemons() {
   if (process.platform !== "win32") spawnSync("pkill", ["-f", join(host.root, "codex-home")]);
 }
 
-/** Seen on Windows CI: there Codex's terminal UI lets its session go as it quits, where on Linux its daemon keeps holding it. */
-const daemonHoldsTerminalSessions = process.platform !== "win32";
-
 test("a Codex session started in a terminal can be continued, and while Codex's daemon still holds it Mirador says how to free it", async () => {
+  test.skip(process.platform === "win32", "On Windows CI, Codex run in a terminal by the test quits early and the session it leaves continues unreliably (vcs-dpps.10)");
   await runCodexInTerminal(TERMINAL_MARKER);
   await page.getByRole("button", { name: "Continue a session…" }).click();
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   const session = dialog.locator(".session-list li", { hasText: TERMINAL_MARKER, has: page.getByRole("button", { name: "Continue" }) });
   await expect(session).toHaveCount(1, { timeout: 30_000 });
   await session.getByRole("button", { name: "Continue" }).click();
-  if (daemonHoldsTerminalSessions) {
-    await expect(page.locator(".status-detail:visible")).toContainText("codex app-server daemon stop", { timeout: 30_000 });
-    stopCodexDaemon();
-  }
+  await expect(page.locator(".status-detail:visible")).toContainText("codex app-server daemon stop", { timeout: 30_000 });
+  stopCodexDaemon();
 
-  /** Not sendMessage: a held session's history replays ahead of the message, so the timeline gains more than the one message. */
+  /** Not sendMessage: the session's history replays ahead of the message, so the timeline gains more than the one message. */
   const composer = page.locator(".composer:visible textarea");
   await composer.fill("In the terminal's session");
   await composer.press("Enter");
