@@ -942,6 +942,12 @@ export function CanvasPanel({
             {words.bar.pointAndAsk}
           </button>
         )}
+        {poppable && (
+          <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
+            ⧉
+          </button>
+        )}
+        {shownPage && <BarMenu className="page-export" label={words.bar.export} menuName={words.bar.exportMenu} hint={hints.canvasPageExport} entries={pageExport.entries} />}
         {shownPage && (
           <button
             type="button"
@@ -954,12 +960,6 @@ export function CanvasPanel({
             <MagnifierIcon />
           </button>
         )}
-        {poppable && (
-          <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
-            ⧉
-          </button>
-        )}
-        {shownPage && <BarMenu className="page-export" label={words.bar.export} menuName={words.bar.exportMenu} hint={hints.canvasPageExport} entries={pageExport.entries} />}
         <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
           ‹
         </button>
