@@ -174,6 +174,7 @@ for (const language of TRANSLATED) {
     await expect(page.locator("html")).toHaveAttribute("lang", languageTags[language]);
     await expect(page).toHaveTitle(words.attributes.title);
     await expect(page.locator(".hero .button.primary")).toHaveText(words.hero.download);
+    expect(await page.locator("h1").evaluate((heading) => getComputedStyle(heading).hyphens), "headings break between words, never inside one").toBe("manual");
     await expect(page.locator("link[rel=alternate]")).toHaveCount(LANGUAGES.length + 1);
     await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://mirador.sodre90.com/${language}/`);
     await expectEveryPictureLoaded(page);

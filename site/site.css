@@ -109,7 +109,7 @@ code { font-family: var(--mono); font-size: 0.86em; }
 
 .translation-note { color: var(--muted); font-size: 15px; }
 
-h1, h2, h3 { overflow-wrap: break-word; hyphens: auto; }
+h1, h2, h3 { overflow-wrap: break-word; }
 
 html:lang(zh) body { font-family: Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif; }
 html:lang(zh) h1, html:lang(zh) h2, html:lang(zh) h3 { letter-spacing: 0; }
