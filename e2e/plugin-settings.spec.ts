@@ -59,6 +59,18 @@ test("Plugins… shows the installed plugins as tiles, and a tile opens the tool
 
   await pluginTile(plugins, "Installed", "Unbuilt").getByRole("button", { name: "Open Unbuilt" }).click();
   await expect(plugins.getByRole("region", { name: "Unbuilt" }).locator(".plugin-problem")).toHaveText("Didn't load: host.ts doesn't exist; build the plugin first?");
+
+  await test.step("in Hungarian, why the plugin didn't load is in Hungarian", async () => {
+    await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+    await page.reload();
+    await page.getByRole("button", { name: "Bővítmények…" }).click();
+    const pluginsInHungarian = page.getByRole("dialog", { name: "Bővítmények" });
+    await pluginsInHungarian.getByRole("list", { name: "Telepítve", exact: true }).getByRole("listitem", { name: "Unbuilt", exact: true }).click();
+    await expect(pluginsInHungarian.getByRole("region", { name: "Unbuilt" }).locator(".plugin-problem")).toHaveText(
+      "Nem töltődött be: nem létezik: host.ts; előbb buildelni kell a bővítményt?",
+    );
+    await page.evaluate(() => localStorage.removeItem("mirador-language"));
+  });
 });
 
 test("Settings → Plugins leads to Plugins…", async ({ page }) => {

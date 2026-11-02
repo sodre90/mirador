@@ -253,6 +253,22 @@ const problems: HostProblem[] = [
   { code: "engine-download-host-busy", host: "huggingface.co", status: 503 },
   { code: "engine-download-broke-off", url: "https://huggingface.co/m/model.safetensors" },
   { code: "engine-download-wrong-size", url: "https://huggingface.co/m/model.safetensors", bytes: 1024 },
+  { code: "plugin-window-needs-newer-api", brought: 4, named: 3 },
+  {
+    code: "canvas-host-module-needs",
+    needs: [
+      { code: "canvas-need-items" },
+      { code: "canvas-need-tools" },
+      { code: "canvas-need-item-shape", item: "card", placements: ["page", "tab"] },
+      { code: "canvas-need-item-opens-with-room", item: "report", rooms: ["fullscreen", "pane"] },
+      { code: "canvas-need-tool-name", tool: "Show-Card" },
+      { code: "canvas-need-tool-shape", tool: "show_card" },
+      { code: "canvas-need-action-function" },
+      { code: "canvas-need-note-function" },
+      { code: "canvas-need-activity-function" },
+      { code: "canvas-need-window-shape" },
+    ],
+  },
 ];
 
 /** What the host wrote before it described its problems by code, which logs, agents and the phone app still get. */
@@ -507,6 +523,11 @@ const englishBeforeCodes = [
   "huggingface.co answered 503.",
   "The download of https://huggingface.co/m/model.safetensors broke off.",
   "https://huggingface.co/m/model.safetensors came in at a size other than 1024 bytes.",
+  "the canvas host module has a window or hears activity, which plugin API 4 brought; plugin.json names API 3",
+  "the canvas host module needs items, by name; tools, by name; items.card with an icon, a placement of page or tab, and count, outcome and listed only as functions; " +
+    "items.report with opensWithRoom only as true or false, or as { setting } naming a setting of plugin.json whose choices are fullscreen and pane; " +
+    "tools named in lower case, digits and underscores, not Show-Card; tools.show_card with a description, an input schema and a run function; " +
+    "action only as a function; note only as a function; activity only as a function; window only as { state, action } with state a function and action, if any, one too",
 ];
 
 describe("problems the host describes", () => {
@@ -559,6 +580,11 @@ describe("problems the host describes", () => {
     expect(problemInHeader("%E0%A4%A")).toBeUndefined();
     expect(problemInHeader(encodeURIComponent("[1, 2]"))).toBeUndefined();
     expect(problemInHeader(null)).toBeUndefined();
+  });
+
+  test("what a plugin's canvas host module needs is said a need at a time in the page's language", () => {
+    const needs: HostProblem = { code: "canvas-host-module-needs", needs: [{ code: "canvas-need-items" }, { code: "canvas-need-tool-name", tool: "Show-Card" }] };
+    expect(problemText(needs, hu.problems)).toBe("a vászon host moduljához ez kell: items, név szerint; kisbetűkből, számjegyekből és aláhúzásjelekből álló nevű tools, nem Show-Card");
   });
 
   test("a problem this page has no words for, from a newer host, is said in the host's English", () => {

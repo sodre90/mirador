@@ -108,6 +108,12 @@ export const problems: Messages["problems"] = {
     "choose-mac-recognition-model": "Válassz egyet ennek a Macnek a beszédfelismerő modelljei közül.",
     "choose-mac-voice-model": "Válassz egyet ennek a Macnek a hangmodelljei közül.",
     "reply-voice-needs-voice": "A válaszok hangjához meg kell adni a szerver egyik hangjának nevét.",
+    "canvas-need-items": "items, név szerint",
+    "canvas-need-tools": "tools, név szerint",
+    "canvas-need-action-function": "action csak függvényként",
+    "canvas-need-note-function": "note csak függvényként",
+    "canvas-need-activity-function": "activity csak függvényként",
+    "canvas-need-window-shape": "window csak { state, action } alakban, ahol a state függvény, és az action is az, ha van",
   },
   couldNotResume: (cause) => `Az ágens előző munkamenetét nem sikerült folytatni (${cause}), ezért új indul.`,
   couldNotSetOption: (option, value, cause) => `Nem sikerült átállítani (${option} → ${value}): ${cause}`,
@@ -259,6 +265,15 @@ export const problems: Messages["problems"] = {
   engineDownloadHostBusy: (host, status) => `A(z) ${host} ${status} kóddal válaszolt.`,
   engineDownloadBrokeOff: (url) => `Megszakadt a letöltés: ${url}.`,
   engineDownloadWrongSize: (url, bytes) => `A(z) ${url} nem ${bytes} bájtos méretben érkezett meg.`,
+  pluginWindowNeedsNewerApi: (brought, named) =>
+    `a vászon host moduljának van ablaka, vagy figyeli a tevékenységet, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
+  canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,
+  canvasNeedItemShape: (item, placements) =>
+    `items.${item} ikonnal (icon), ${placements.join(" vagy ")} elhelyezéssel (placement), a count, outcome és listed pedig csak függvényként`,
+  canvasNeedItemOpensWithRoom: (item, rooms) =>
+    `items.${item}, amelynek opensWithRoom értéke csak true vagy false, vagy egy { setting }, amely a plugin.json egy olyan beállítását nevezi meg, amelynek választásai: ${rooms.join(" és ")}`,
+  canvasNeedToolName: (tool) => `kisbetűkből, számjegyekből és aláhúzásjelekből álló nevű tools, nem ${tool}`,
+  canvasNeedToolShape: (tool) => `tools.${tool} leírással (description), bemeneti sémával (input) és run függvénnyel`,
   agentGone: (agent, gone) => `Az ágens folyamata (${agent}) ${gone}.`,
   gone: {
     "not-running": "nem fut",

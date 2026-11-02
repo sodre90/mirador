@@ -154,6 +154,12 @@ export type HostProblem =
   | { code: "engine-download-host-busy"; host: string; status: number }
   | { code: "engine-download-broke-off"; url: string }
   | { code: "engine-download-wrong-size"; url: string; bytes: number }
+  | { code: "plugin-window-needs-newer-api"; brought: number; named: number }
+  | { code: "canvas-host-module-needs"; needs: HostProblem[] }
+  | { code: "canvas-need-item-shape"; item: string; placements: string[] }
+  | { code: "canvas-need-item-opens-with-room"; item: string; rooms: string[] }
+  | { code: "canvas-need-tool-name"; tool: string }
+  | { code: "canvas-need-tool-shape"; tool: string }
   | { code: "agent-gone"; agent: string; gone: AgentGone }
   | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string };
 

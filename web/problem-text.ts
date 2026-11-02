@@ -299,6 +299,18 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.engineDownloadBrokeOff(problem.url);
     case "engine-download-wrong-size":
       return words.engineDownloadWrongSize(problem.url, problem.bytes);
+    case "plugin-window-needs-newer-api":
+      return words.pluginWindowNeedsNewerApi(problem.brought, problem.named);
+    case "canvas-host-module-needs":
+      return words.canvasHostModuleNeeds(problem.needs.map((need) => problemText(need, words)));
+    case "canvas-need-item-shape":
+      return words.canvasNeedItemShape(problem.item, problem.placements);
+    case "canvas-need-item-opens-with-room":
+      return words.canvasNeedItemOpensWithRoom(problem.item, problem.rooms);
+    case "canvas-need-tool-name":
+      return words.canvasNeedToolName(problem.tool);
+    case "canvas-need-tool-shape":
+      return words.canvasNeedToolShape(problem.tool);
     case "agent-gone":
       return words.agentGone(problem.agent, goneText(problem.gone, words));
     case "prelaunch-failed":

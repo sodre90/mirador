@@ -108,6 +108,12 @@ export const problems: Messages["problems"] = {
     "choose-mac-recognition-model": "Elige uno de los modelos de reconocimiento de voz de este Mac.",
     "choose-mac-voice-model": "Elige uno de los modelos de voz de este Mac.",
     "reply-voice-needs-voice": "La voz de las respuestas necesita el nombre de una de las voces del servidor.",
+    "canvas-need-items": "items, por nombre",
+    "canvas-need-tools": "tools, por nombre",
+    "canvas-need-action-function": "action solo como función",
+    "canvas-need-note-function": "note solo como función",
+    "canvas-need-activity-function": "activity solo como función",
+    "canvas-need-window-shape": "window solo como { state, action }, con state como función y action también, si lo hay",
   },
   couldNotResume: (cause) => `No se pudo reanudar la sesión anterior del agente (${cause}); se empieza una nueva.`,
   couldNotSetOption: (option, value, cause) => `No se pudo cambiar ${option} a ${value}: ${cause}`,
@@ -259,6 +265,15 @@ export const problems: Messages["problems"] = {
   engineDownloadHostBusy: (host, status) => `${host} respondió ${status}.`,
   engineDownloadBrokeOff: (url) => `La descarga de ${url} se interrumpió.`,
   engineDownloadWrongSize: (url, bytes) => `${url} llegó con un tamaño distinto de ${bytes} bytes.`,
+  pluginWindowNeedsNewerApi: (brought, named) =>
+    `el módulo del host del lienzo tiene una ventana o escucha la actividad, que llegó con la API de complementos ${brought}; plugin.json indica la API ${named}`,
+  canvasHostModuleNeeds: (needs) => `el módulo del host del lienzo necesita ${needs.join("; ")}`,
+  canvasNeedItemShape: (item, placements) =>
+    `items.${item} con un icon, un placement de ${placements.join(" o ")}, y count, outcome y listed solo como funciones`,
+  canvasNeedItemOpensWithRoom: (item, rooms) =>
+    `items.${item} con opensWithRoom solo como true o false, o como { setting } que nombre un ajuste de plugin.json cuyas opciones sean ${rooms.join(" y ")}`,
+  canvasNeedToolName: (tool) => `tools con nombres en minúsculas, dígitos y guiones bajos, no ${tool}`,
+  canvasNeedToolShape: (tool) => `tools.${tool} con una description, un esquema input y una función run`,
   agentGone: (agent, gone) => `El proceso del agente ${agent} ${gone}.`,
   gone: {
     "not-running": "no está en marcha",

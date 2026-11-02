@@ -106,6 +106,12 @@ export const problems = {
     "choose-mac-recognition-model": "Choose one of this Mac's speech recognition models.",
     "choose-mac-voice-model": "Choose one of this Mac's voice models.",
     "reply-voice-needs-voice": "The reply voice needs the name of one of the server's voices.",
+    "canvas-need-items": "items, by name",
+    "canvas-need-tools": "tools, by name",
+    "canvas-need-action-function": "action only as a function",
+    "canvas-need-note-function": "note only as a function",
+    "canvas-need-activity-function": "activity only as a function",
+    "canvas-need-window-shape": "window only as { state, action } with state a function and action, if any, one too",
   },
   couldNotResume: (cause: string) => `Could not resume the previous agent session (${cause}); starting a fresh one.`,
   couldNotSetOption: (option: string, value: string, cause: string) => `Could not set ${option} to ${value}: ${cause}`,
@@ -258,6 +264,15 @@ export const problems = {
   engineDownloadHostBusy: (host: string, status: number) => `${host} answered ${status}.`,
   engineDownloadBrokeOff: (url: string) => `The download of ${url} broke off.`,
   engineDownloadWrongSize: (url: string, bytes: number) => `${url} came in at a size other than ${bytes} bytes.`,
+  pluginWindowNeedsNewerApi: (brought: number, named: number) =>
+    `the canvas host module has a window or hears activity, which plugin API ${brought} brought; plugin.json names API ${named}`,
+  canvasHostModuleNeeds: (needs: string[]) => `the canvas host module needs ${needs.join("; ")}`,
+  canvasNeedItemShape: (item: string, placements: string[]) =>
+    `items.${item} with an icon, a placement of ${placements.join(" or ")}, and count, outcome and listed only as functions`,
+  canvasNeedItemOpensWithRoom: (item: string, rooms: string[]) =>
+    `items.${item} with opensWithRoom only as true or false, or as { setting } naming a setting of plugin.json whose choices are ${rooms.join(" and ")}`,
+  canvasNeedToolName: (tool: string) => `tools named in lower case, digits and underscores, not ${tool}`,
+  canvasNeedToolShape: (tool: string) => `tools.${tool} with a description, an input schema and a run function`,
   agentGone: (agent: string, gone: string) => `The ${agent} agent process ${gone}.`,
   gone: {
     "not-running": "is not running",

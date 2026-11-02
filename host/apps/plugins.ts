@@ -216,37 +216,37 @@ const isRoomSetting = (settings: PluginSetting[], id: unknown) => {
 
 function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }: PluginManifest): CanvasHost {
   const host = exportsOf(module);
-  const problems: string[] = [];
-  if (!isObject(host.items)) problems.push("items, by name");
-  if (!isObject(host.tools)) problems.push("tools, by name");
+  const needs: HostProblem[] = [];
+  if (!isObject(host.items)) needs.push({ code: "canvas-need-items" });
+  if (!isObject(host.tools)) needs.push({ code: "canvas-need-tools" });
   const items = isObject(host.items) ? host.items : {};
   const tools = isObject(host.tools) ? host.tools : {};
   for (const [name, item] of Object.entries(items)) {
     const { icon, placement, opensWithRoom, ...functions } = (isObject(item) ? item : {}) as Record<string, unknown>;
     const optionalFunctions = (["count", "outcome", "listed"] as const).map((key) => functions[key]);
     if (typeof icon !== "string" || !pluginItemPlacements.includes(placement as never) || optionalFunctions.some((value) => value !== undefined && !isFunction(value))) {
-      problems.push(`items.${name} with an icon, a placement of ${pluginItemPlacements.join(" or ")}, and count, outcome and listed only as functions`);
+      needs.push({ code: "canvas-need-item-shape", item: name, placements: [...pluginItemPlacements] });
     }
     const namesRoomSetting = isObject(opensWithRoom) && isRoomSetting(settings, opensWithRoom.setting);
     if (opensWithRoom !== undefined && typeof opensWithRoom !== "boolean" && !namesRoomSetting) {
-      problems.push(`items.${name} with opensWithRoom only as true or false, or as { setting } naming a setting of plugin.json whose choices are ${itemRooms.join(" and ")}`);
+      needs.push({ code: "canvas-need-item-opens-with-room", item: name, rooms: [...itemRooms] });
     }
   }
   for (const [name, tool] of Object.entries(tools)) {
     const { description, input, run } = (isObject(tool) ? tool : {}) as Record<string, unknown>;
-    if (!TOOL_NAME.test(name)) problems.push(`tools named in lower case, digits and underscores, not ${name}`);
-    if (typeof description !== "string" || !isObject(input) || !isFunction(run)) problems.push(`tools.${name} with a description, an input schema and a run function`);
+    if (!TOOL_NAME.test(name)) needs.push({ code: "canvas-need-tool-name", tool: name });
+    if (typeof description !== "string" || !isObject(input) || !isFunction(run)) needs.push({ code: "canvas-need-tool-shape", tool: name });
   }
-  if (host.action !== undefined && !isFunction(host.action)) problems.push("action only as a function");
-  if (host.note !== undefined && !isFunction(host.note)) problems.push("note only as a function");
-  if (host.activity !== undefined && !isFunction(host.activity)) problems.push("activity only as a function");
+  if (host.action !== undefined && !isFunction(host.action)) needs.push({ code: "canvas-need-action-function" });
+  if (host.note !== undefined && !isFunction(host.note)) needs.push({ code: "canvas-need-note-function" });
+  if (host.activity !== undefined && !isFunction(host.activity)) needs.push({ code: "canvas-need-activity-function" });
   const window = host.window as Record<string, unknown> | undefined;
   if (window !== undefined && !(isObject(window) && isFunction(window.state) && (window.action === undefined || isFunction(window.action)))) {
-    problems.push("window only as { state, action } with state a function and action, if any, one too");
+    needs.push({ code: "canvas-need-window-shape" });
   }
   if ((host.activity !== undefined || window !== undefined) && api < PLUGIN_WINDOW_API) {
-    throw new Error(`the canvas host module has a window or hears activity, which plugin API ${PLUGIN_WINDOW_API} brought; plugin.json names API ${api}`);
+    throw new HostProblemError({ code: "plugin-window-needs-newer-api", brought: PLUGIN_WINDOW_API, named: api });
   }
-  if (problems.length > 0) throw new Error(`the canvas host module needs ${problems.join("; ")}`);
+  if (needs.length > 0) throw new HostProblemError({ code: "canvas-host-module-needs", needs });
   return host as unknown as CanvasHost;
 }
