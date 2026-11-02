@@ -109,5 +109,9 @@ The palette command "Layout auf Standard zurücksetzen" is `t.settings.layout.re
 
 ## Every language
 
+The website (`site/words/`) is marketing copy, written freely in each language the way its developers talk, not word
+for word. Unlike the app, it keeps developer words English where developers say them in English (canvas, diff, commit,
+build, pull request, plugin, review), so its words can differ from the table above.
+
 Spoken command words stay English, as the voice parser only knows those: “stop”, “repeat that”, “help”, “yes”,
 “the others”, “thanks”. So do option names the agent sends, such as its “allow” option.
