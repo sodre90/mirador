@@ -44,6 +44,7 @@ export type HostProblem =
   | { code: "unknown-colour"; value: string }
   | { code: "not-a-directory"; path: string }
   | { code: "unknown-canvas-use"; value: string }
+  | { code: "unknown-keep-deleted-canvas"; value: string }
   | { code: "unknown-keep-awake"; value: string }
   | { code: "unknown-workspace-colour"; value: string }
   | { code: "not-a-machine-address"; address: string }

@@ -138,6 +138,15 @@ const asCodexSessionHeld = (error: unknown) => (errorMessage(error).includes("th
 
 type AskForm = (conversationId: string, request: acp.CreateElicitationRequest, signal: AbortSignal) => Promise<acp.CreateElicitationResponse>;
 
+/** The session a conversation was loaded from, and whether it continues it or forked it. */
+export interface LoadedSession {
+  harness: HarnessId;
+  sessionId: string;
+  mode: AdoptMode;
+}
+
+export type RestoreCanvas = (conversationId: string, source: LoadedSession, events: StoredEvent[]) => Promise<void>;
+
 const NO_NOTES: NotesForAgent = { commands: [], reverts: [], canvas: [] };
 
 const withNotes = ({ commands, reverts, canvas }: NotesForAgent, text: string) =>
@@ -300,7 +309,7 @@ export class ConversationService {
   /** While the host stops or restarts, messages wait in the queue for the next host, and turns it ends are not the agent's failures. */
   private stopping = false;
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
-  private rebuildCanvas: (conversationId: string, events: StoredEvent[]) => Promise<void> = async () => {};
+  private restoreCanvas: RestoreCanvas = async () => {};
   private askForm: AskForm = async () => ({ action: "decline" });
   private hearReply: HearReply = () => {};
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
@@ -596,12 +605,19 @@ export class ConversationService {
     this.unseenTurnEnds.delete(conversationId);
     this.lastWords.delete(conversationId);
     this.asksWaitedOn.delete(conversationId);
+    this.keepCanvasOf(conversation);
     this.store.deleteConversation(conversationId);
     this.images.deleteConversation(conversationId);
     this.droppedFiles.deleteConversation(conversationId);
     this.hub.broadcast({ type: "conversation.deleted", conversationId });
     this.announceWaiting();
     if (wasRunning) this.announceRunningTurnsCount();
+  }
+
+  /** Continuing the conversation's session later brings its canvas back as it was. */
+  private keepCanvasOf({ id, harness, acpSessionId }: Conversation) {
+    const items = this.store.listCanvasItems(id);
+    if (acpSessionId && items.length > 0) this.store.saveDeletedCanvas(harness, acpSessionId, items, Date.now());
   }
 
   deleteAllInWorkspace(workspaceId: string) {
@@ -1544,7 +1560,9 @@ export class ConversationService {
     this.bindSession(conversationId, loadedId, loaded.configOptions);
     if (conversation.harness === "claude") await this.restoreTranscriptModel(conversationId, loadedId, sessionId);
     await this.applyProfileChoices(conversationId, loadedId);
-    await this.rebuildCanvas(conversationId, this.store.listEvents(conversationId)).catch((error: unknown) => console.error(`rebuilding the canvas of conversation ${conversationId} failed:`, error));
+    await this.restoreCanvas(conversationId, { harness: conversation.harness, sessionId, mode }, this.store.listEvents(conversationId)).catch((error: unknown) =>
+      console.error(`restoring the canvas of conversation ${conversationId} failed:`, error),
+    );
     this.setStatus(conversationId, "idle");
     return loadedId;
   }
@@ -2012,9 +2030,9 @@ export class ConversationService {
     this.canvasNotesOf = canvasNotesOf;
   }
 
-  /** A session Mirador continues gets back on its canvas what the agent put there, as its history tells. */
-  rebuildsCanvasWith(rebuildCanvas: (conversationId: string, events: StoredEvent[]) => Promise<void>) {
-    this.rebuildCanvas = rebuildCanvas;
+  /** A session Mirador continues or forks gets back on its canvas what the agent put there. */
+  restoresCanvasWith(restoreCanvas: RestoreCanvas) {
+    this.restoreCanvas = restoreCanvas;
   }
 
   private async promptContent(conversationId: string, text: string, imageIds: string[]): Promise<acp.ContentBlock[]> {

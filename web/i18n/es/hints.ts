@@ -260,6 +260,8 @@ export const hints: Messages["hints"] = {
     "Evita que el equipo en el que se ejecuta Mirador se suspenda mientras está inactivo.\n\nMientras trabajan los agentes: hasta que termina cada turno en curso, para que los trabajos largos acaben.\n\nSiempre: mientras Mirador se ejecuta, para que tu teléfono y otros dispositivos puedan llegar a él en cualquier momento.\n\nEn macOS y Linux.",
   canvasUse:
     "Si hace falta: el agente decide según las propias instrucciones del lienzo.\n\nA menudo: los prompts de sistema de Claude Code, pi y Codex, y las instrucciones del lienzo para Copilot, también les indican que pongan en el lienzo las explicaciones, comparaciones, planes y el resumen de un trabajo más grande, y que te pregunten allí las opciones.\n\nLas páginas cuestan más tokens que la misma respuesta como texto.",
+  keepDeletedCanvas:
+    "Cuando eliminas una conversación, su lienzo se conserva este tiempo. Si continúas su sesión desde Continuar una sesión…, el lienzo vuelve tal como estaba, también las revisiones y los recorridos. Después, solo vuelve lo que guarda el historial de la propia sesión: páginas, preguntas y checklists.",
   terminalCommand:
     "Claude Code muestra este comando solo en su propia terminal, así que esto lo abre allí: una pestaña de terminal de esta conversación, ejecutada por el Claude Code que usa el perfil de esta conversación. El panel es donde ocurre el comando; la respuesta del agente de arriba es solo su negativa.",
   logIn:

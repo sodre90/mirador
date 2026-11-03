@@ -209,6 +209,18 @@ export type CanvasUse = "as-needed" | "often";
 
 export const canvasUseLabels: Record<CanvasUse, string> = { "as-needed": "As needed", often: "Often" };
 
+/** How long a deleted conversation's canvas is kept, for Continue to bring back exactly if its session is continued. */
+export type KeepDeletedCanvas = "7-days" | "30-days" | "forever";
+
+export const keepDeletedCanvasLabels: Record<KeepDeletedCanvas, string> = { "7-days": "7 days", "30-days": "30 days", forever: "Forever" };
+
+export const isKeepDeletedCanvas = (value: unknown): value is KeepDeletedCanvas => typeof value === "string" && Object.hasOwn(keepDeletedCanvasLabels, value);
+
+export const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** How long it is kept, in milliseconds; null to keep it until its session is continued. */
+export const keptForMs = (keep: KeepDeletedCanvas): number | null => ({ "7-days": 7 * DAY_MS, "30-days": 30 * DAY_MS, forever: null })[keep];
+
 /** The Claude Code the host runs: `configured` is the path set in Settings, empty to find claude on its own. */
 export interface ClaudeProgram {
   configured: string;

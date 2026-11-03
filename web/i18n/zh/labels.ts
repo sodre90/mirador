@@ -25,6 +25,7 @@ export const labels: Messages["labels"] = {
   cursorStyle: { block: "方块", underline: "下划线", bar: "竖线" },
   canvasUse: { "as-needed": "按需", often: "经常" },
   keepAwake: { never: "从不", "while-working": "Agent 工作时", always: "始终" },
+  keepDeletedCanvas: { "7-days": "7 天", "30-days": "30 天", forever: "永久" },
   pageLibraries: {
     cdn: "来自公共 CDN：文件很小，但绘制时需要联网",
     inline: "内嵌在文件里：可离线使用，但 Mermaid 会增加约 3 MB",

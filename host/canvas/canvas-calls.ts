@@ -2,6 +2,8 @@ import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
 import type { AskOption, AskQuestion, StoredEvent } from "../../shared/model.ts";
 import { toolNameOf } from "../../shared/tool-title.ts";
 import { canvasToolName } from "./tool-names.ts";
+import type { LoadedSession } from "../conversations.ts";
+import type { Store } from "../store.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import type { AskRequest, CanvasService, ShowRequest } from "./service.ts";
 
@@ -15,6 +17,19 @@ export interface CanvasCall {
   nextUserMessage: string | null;
   /** Counts the user's messages before the call, so calls of one turn share it. */
   userMessagesBefore: number;
+}
+
+/**
+ * Brings back the canvas of the session a conversation continues or forks: as the conversation that holds the session
+ * has it, or had it when deleted, else as the session's history tells. A continued session's deleted canvas is then
+ * the new conversation's own.
+ */
+export async function restoreCanvas(conversationId: string, { harness, sessionId, mode }: LoadedSession, events: StoredEvent[], store: Store, canvas: CanvasService, plugins: CanvasPlugins) {
+  const holder = store.listConversations().find((conversation) => conversation.id !== conversationId && conversation.harness === harness && conversation.acpSessionId === sessionId);
+  const kept = holder ? store.listCanvasItems(holder.id) : store.deletedCanvas(harness, sessionId);
+  if (!kept) return rebuildCanvas(conversationId, events, canvas, plugins);
+  canvas.restoreItems(conversationId, kept, { sameIds: mode === "continue" && !holder });
+  if (mode === "continue" && !holder) store.forgetDeletedCanvas(harness, sessionId);
 }
 
 /**

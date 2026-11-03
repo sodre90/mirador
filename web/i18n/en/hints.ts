@@ -235,6 +235,8 @@ export const hints = {
     "Stops the computer Mirador runs on from going to sleep while it is idle.\n\nWhile agents work: until every running turn ends, so long jobs finish.\n\nAlways: while Mirador runs, so your phone and other devices can reach it at any time.\n\nOn macOS and Linux.",
   canvasUse:
     "As needed: the agent decides from the canvas's own instructions.\n\nOften: the system prompts of Claude Code, pi and Codex, and Copilot's canvas instructions, also tell them to put explanations, comparisons, plans and the summary of a larger piece of work on the canvas, and to ask you choices there.\n\nPages cost more tokens than the same answer as text.",
+  keepDeletedCanvas:
+    "When you delete a conversation, its canvas is kept this long. Continuing its session from Continue a session… brings the canvas back as it was, reviews and tours too. After that, only what the session's own history holds comes back: pages, questions and checklists.",
   terminalCommand:
     "Claude Code shows this one only in its own terminal, so this opens it there: a terminal tab of this conversation, run by the Claude Code this conversation's profile uses. The panel is where the command happens; the agent's answer above is only its refusal.",
   logIn:

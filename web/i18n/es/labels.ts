@@ -25,6 +25,7 @@ export const labels: Messages["labels"] = {
   cursorStyle: { block: "Bloque", underline: "Subrayado", bar: "Barra" },
   canvasUse: { "as-needed": "Si hace falta", often: "A menudo" },
   keepAwake: { never: "Nunca", "while-working": "Mientras trabajan los agentes", always: "Siempre" },
+  keepDeletedCanvas: { "7-days": "7 días", "30-days": "30 días", forever: "Para siempre" },
   pageLibraries: {
     cdn: "Desde una CDN pública: archivos pequeños, pero necesitan conexión de red para dibujarse",
     inline: "Dentro del archivo: funciona sin conexión, pero Mermaid agrega unos 3 MB",

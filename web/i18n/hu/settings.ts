@@ -84,6 +84,7 @@ export const settings: Messages["settings"] = {
     title: "Vászon",
     hint: "A host őrzi meg minden böngészőnek. Egy beszélgetés akkor veszi át a változást, amikor legközelebb elindul a munkamenete: egy új azonnal, egy megnyitott a host újraindulása után. Claude Code, pi, Codex és Copilot esetén; az opencode a vászon saját utasításait követi.",
     use: "A Claude Code, a pi, a Codex és a Copilot a vásznat használja",
+    keepDeleted: "Törölt beszélgetés vásznának megőrzése",
   },
   savedPages: {
     title: "Másolt és mentett oldalak",

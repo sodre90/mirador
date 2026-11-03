@@ -25,6 +25,7 @@ export const labels: Messages["labels"] = {
   cursorStyle: { block: "Blokk", underline: "Aláhúzás", bar: "Függőleges vonal" },
   canvasUse: { "as-needed": "Szükség szerint", often: "Gyakran" },
   keepAwake: { never: "Soha", "while-working": "Amíg az ágensek dolgoznak", always: "Mindig" },
+  keepDeletedCanvas: { "7-days": "7 nap", "30-days": "30 nap", forever: "Örökre" },
   pageLibraries: {
     cdn: "Nyilvános CDN-ről: kis fájlok, de a rajzoláshoz hálózat kell",
     inline: "A fájlba ágyazva: hálózat nélkül is működik, de a Mermaid kb. 3 MB-tal növeli",

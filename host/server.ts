@@ -5,9 +5,11 @@ import { basename } from "node:path";
 import index from "../web/index.html";
 import {
   isCanvasUse,
+  isKeepDeletedCanvas,
   isKeepAwake,
   isPastel,
   type CanvasUse,
+  type KeepDeletedCanvas,
   type KeepAwake,
   type ClientAddress,
   type FoundAddress,
@@ -939,6 +941,13 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.canvas-use", canvasUse });
   }
 
+  function setKeepDeletedCanvas(keep: KeepDeletedCanvas) {
+    if (!isKeepDeletedCanvas(keep)) throw new HostProblemError({ code: "unknown-keep-deleted-canvas", value: String(keep) });
+    store.setKeepDeletedCanvas(keep);
+    store.forgetExpiredDeletedCanvases();
+    hub.broadcast({ type: "settings.keep-deleted-canvas", keep });
+  }
+
   function setKeepAwake(setting: KeepAwake) {
     if (!isKeepAwake(setting)) throw new HostProblemError({ code: "unknown-keep-awake", value: String(setting) });
     store.setKeepAwake(setting);
@@ -1012,6 +1021,8 @@ export function startServer(services: HostServices) {
         return setCanvasUse(message.canvasUse);
       case "settings.set-keep-awake":
         return setKeepAwake(message.keepAwake);
+      case "settings.set-keep-deleted-canvas":
+        return setKeepDeletedCanvas(message.keep);
       case "settings.set-claude-program":
         return setClaudeProgram(message.path);
       case "newer-version.check":
@@ -1528,6 +1539,7 @@ export function startServer(services: HostServices) {
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),
       keepAwake: store.keepAwake(),
+      keepDeletedCanvas: store.keepDeletedCanvas(),
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),
       editor: editorState(store.editorSetting()),

@@ -13,7 +13,8 @@ import { CanvasPlugins } from "./canvas/plugins.ts";
 import { PluginSettingsStore } from "./plugin-settings.ts";
 import { officialPluginInstaller, PluginCatalog } from "./plugin-catalog.ts";
 import { CanvasService } from "./canvas/service.ts";
-import { rebuildCanvas } from "./canvas/canvas-calls.ts";
+import { restoreCanvas } from "./canvas/canvas-calls.ts";
+import { DAY_MS } from "../shared/model.ts";
 import { agentLogsDirectory, loadConfig } from "./config.ts";
 import { ConversationService } from "./conversations.ts";
 import { DeviceService } from "./devices.ts";
@@ -66,6 +67,8 @@ giveEveryWorkspaceAProfile(store);
 store.rememberPublicAddress(config.publicOrigin ? { origin: config.publicOrigin, canvasOrigin: config.canvasAssetsOrigin } : null);
 const ownAuthorityFingerprint = certificate?.authority ? authorityFingerprint(certificate.authority) : null;
 store.rememberAuthorityFingerprint(ownAuthorityFingerprint);
+store.forgetExpiredDeletedCanvases();
+const forgettingDeletedCanvases = setInterval(() => store.forgetExpiredDeletedCanvases(), DAY_MS);
 const hub = new Hub();
 const images = new ImageStore(join(config.dataDir, "images"));
 const droppedFiles = new DroppedFiles(join(config.dataDir, "dropped-files"));
@@ -102,7 +105,7 @@ const canvasAssetsOrigins = [
 ];
 const canvas = new CanvasService(store, hub, conversations, notifications, canvasAssetsOrigins);
 conversations.askFormsWith((conversationId, request, signal) => askFormOnCanvas(canvas, conversationId, request, signal));
-conversations.rebuildsCanvasWith((conversationId, events) => rebuildCanvas(conversationId, events, canvas, canvasPlugins));
+conversations.restoresCanvasWith((conversationId, source, events) => restoreCanvas(conversationId, source, events, store, canvas, canvasPlugins));
 // The checklist plugin's note about the user's ticks came before the page errors when the checklist was Mirador's own.
 conversations.hearCanvasNotesFrom((conversationId) => [...canvasPlugins.notesForAgent(conversationId), ...canvas.notesForAgent(conversationId)]);
 const plugins = new InstalledPlugins(pluginsFolder, loadedPlugins.problems, loadedPlugins.canvases);
@@ -226,6 +229,7 @@ async function stopServices() {
   relays.stopAll();
   watch.stopAll();
   keepAwake.stop();
+  clearInterval(forgettingDeletedCanvases);
   apps.stop();
   // An agent's exit is handled before its stop resolves, and that handling still reads and writes the store.
   await Promise.all([childrenExited, voiceEngineStopped]);

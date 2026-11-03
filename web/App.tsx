@@ -662,6 +662,7 @@ export function App() {
           promptTemplates={state.promptTemplates}
           canvasUse={state.canvasUse}
           keepAwake={state.keepAwake}
+          keepDeletedCanvas={state.keepDeletedCanvas}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
           editor={state.editor}

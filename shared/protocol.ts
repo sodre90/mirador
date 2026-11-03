@@ -7,6 +7,7 @@ import type {
   CanvasItem,
   CanvasUse,
   KeepAwake,
+  KeepDeletedCanvas,
   ClaudeProgram,
   Conversation,
   ConversationMatches,
@@ -100,6 +101,7 @@ export type ClientMessage =
   | { type: "prompt-template.delete"; templateId: string }
   | { type: "settings.set-canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.set-keep-awake"; keepAwake: KeepAwake }
+  | { type: "settings.set-keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
   | { type: "newer-version.check"; requestId: string }
@@ -360,6 +362,8 @@ export type ServerMessage =
       pluginSettings?: PluginSettings[];
       /** Missing from a host older than the keep awake setting. */
       keepAwake?: KeepAwake;
+      /** Missing from a host older than keeping deleted canvases. */
+      keepDeletedCanvas?: KeepDeletedCanvas;
     }
   /** Every app open in every workspace, whenever one opens or closes, and when an agent opens one again. */
   | { type: "apps.open"; openApps: OpenApp[] }
@@ -374,6 +378,7 @@ export type ServerMessage =
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.keep-awake"; keepAwake: KeepAwake }
+  | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }
   | { type: "settings.editor"; editor: EditorState }

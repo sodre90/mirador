@@ -23,7 +23,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "../shared/model.ts";
-import { isCanvasUse, isKeepAwake, isPastel, type CanvasUse, type KeepAwake, type Pastel } from "../shared/model.ts";
+import { isCanvasUse, isKeepAwake, isKeepDeletedCanvas, isPastel, keptForMs, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
 import { computerName } from "./machine-name.ts";
@@ -72,6 +72,9 @@ const schema = `
   CREATE TABLE IF NOT EXISTS canvas_items (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     created_at INTEGER NOT NULL, item TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS deleted_canvases (
+    harness TEXT NOT NULL, session_id TEXT NOT NULL, deleted_at INTEGER NOT NULL, items TEXT NOT NULL,
+    PRIMARY KEY (harness, session_id));
   CREATE TABLE IF NOT EXISTS profiles (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, environment TEXT NOT NULL, prelaunch TEXT NOT NULL, created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS prompt_templates (
@@ -731,6 +734,15 @@ export class Store {
 
   setCanvasUse(canvasUse: CanvasUse) {
     this.db.query("INSERT INTO settings (key, value) VALUES ('canvas_use', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(canvasUse);
+  }
+
+  keepDeletedCanvas(): KeepDeletedCanvas {
+    const value = this.setting("keep_deleted_canvas");
+    return isKeepDeletedCanvas(value) ? value : "30-days";
+  }
+
+  setKeepDeletedCanvas(keep: KeepDeletedCanvas) {
+    this.setSetting("keep_deleted_canvas", keep);
   }
 
   keepAwake(): KeepAwake {
@@ -1402,6 +1414,28 @@ export class Store {
       .query("SELECT item FROM canvas_items WHERE conversation_id = ? ORDER BY created_at")
       .all(conversationId)
       .map((row: any) => JSON.parse(row.item));
+  }
+
+  /** Keeps a deleted conversation's canvas items by its agent session, for Continue to bring back; a later delete of the same session replaces them. */
+  saveDeletedCanvas(harness: HarnessId, sessionId: string, items: CanvasItem[], deletedAt: number) {
+    this.db
+      .query("INSERT INTO deleted_canvases (harness, session_id, deleted_at, items) VALUES (?, ?, ?, ?) ON CONFLICT(harness, session_id) DO UPDATE SET deleted_at = excluded.deleted_at, items = excluded.items")
+      .run(harness, sessionId, deletedAt, JSON.stringify(items));
+  }
+
+  deletedCanvas(harness: HarnessId, sessionId: string): CanvasItem[] | null {
+    const row = this.db.query("SELECT items FROM deleted_canvases WHERE harness = ? AND session_id = ?").get(harness, sessionId) as { items: string } | null;
+    return row ? JSON.parse(row.items) : null;
+  }
+
+  forgetDeletedCanvas(harness: HarnessId, sessionId: string) {
+    this.db.query("DELETE FROM deleted_canvases WHERE harness = ? AND session_id = ?").run(harness, sessionId);
+  }
+
+  /** Forgets the canvases deleted longer ago than Settings keep them. */
+  forgetExpiredDeletedCanvases(now = Date.now()) {
+    const keptFor = keptForMs(this.keepDeletedCanvas());
+    if (keptFor !== null) this.db.query("DELETE FROM deleted_canvases WHERE deleted_at < ?").run(now - keptFor);
   }
 
   listCanvasItemsWithStatus(status: CanvasItem["status"]): CanvasItem[] {

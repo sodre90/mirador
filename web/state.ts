@@ -1,5 +1,5 @@
 import type { EditorState } from "../shared/editors.ts";
-import type { CanvasItem, CanvasUse, KeepAwake, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
+import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp, type PluginUpdate } from "../shared/apps.ts";
@@ -53,6 +53,7 @@ export interface AppState {
   promptTemplates: PromptTemplate[];
   canvasUse: CanvasUse;
   keepAwake: KeepAwake;
+  keepDeletedCanvas: KeepDeletedCanvas;
   claudeProgram: ClaudeProgram;
   /** The program the host opens scripts in, as text; empty for the system's text editor. */
   scriptProgram: string;
@@ -125,6 +126,7 @@ export const initialState: AppState = {
   promptTemplates: [],
   canvasUse: "often",
   keepAwake: "never",
+  keepDeletedCanvas: "30-days",
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
   editor: UNKNOWN_EDITOR,
@@ -229,6 +231,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         promptTemplates: message.promptTemplates,
         canvasUse: message.canvasUse,
         keepAwake: message.keepAwake ?? "never",
+        keepDeletedCanvas: message.keepDeletedCanvas ?? "30-days",
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
         editor: message.editor ?? UNKNOWN_EDITOR,
@@ -318,6 +321,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, canvasUse: message.canvasUse };
     case "settings.keep-awake":
       return { ...state, keepAwake: message.keepAwake };
+    case "settings.keep-deleted-canvas":
+      return { ...state, keepDeletedCanvas: message.keep };
     case "settings.claude-program":
       return { ...state, claudeProgram: message.claudeProgram };
     case "settings.script-program":

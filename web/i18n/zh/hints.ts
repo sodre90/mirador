@@ -236,6 +236,8 @@ export const hints: Messages["hints"] = {
     "在 Mirador 所在的电脑空闲时，阻止它进入睡眠。\n\nAgent 工作时：直到每个正在运行的轮次结束，让长时间的作业能够完成。\n\n始终：只要 Mirador 在运行，这样你的手机和其他设备随时可以连上它。\n\n适用于 macOS 和 Linux。",
   canvasUse:
     "按需：Agent 根据画布自己的说明来决定。\n\n经常：Claude Code、pi 和 Codex 的系统提示词，以及 Copilot 的画布说明，还会告诉它们，把解释、对比、计划和较大工作的总结放到画布上，并在画布上向你提出选择。\n\n页面比同样内容的文字回答消耗更多 token。",
+  keepDeletedCanvas:
+    "删除对话后，其画布会保留这么久。从“继续会话…”继续它的会话时，画布会原样恢复，包括审查和导览。超过这段时间后，只会恢复会话自身历史中保存的内容：页面、问题和清单。",
   terminalCommand:
     "Claude Code 只在它自己的终端中显示这个，所以这里会在那里打开它：这个对话的一个终端标签页，由这个对话的配置所用的 Claude Code 运行。面板是命令生效的地方；上面 Agent 的回答只是它的拒绝。",
   logIn:

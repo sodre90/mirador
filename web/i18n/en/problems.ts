@@ -148,6 +148,7 @@ export const problems = {
   notADirectory: (path: string) => `${path} is not a directory.`,
   unknownCanvasUse: (value: string) => `Unknown canvas use ${value}`,
   unknownKeepAwake: (value: string) => `Unknown keep awake setting ${value}`,
+  unknownKeepDeletedCanvas: (value: string) => `Unknown setting for keeping deleted canvases: ${value}`,
   unknownWorkspaceColour: (value: string) => `Unknown workspace colour ${value}`,
   notAMachineAddress: (address: string) => `"${address}" is not a machine's address.`,
   machineAlreadyAdded: (origin: string) => `${origin} is already among your machines.`,

@@ -2,7 +2,7 @@ import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
-import { type CanvasUse, type KeepAwake, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
+import { type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
@@ -102,6 +102,7 @@ export function SettingsDialog({
   promptTemplates,
   canvasUse,
   keepAwake,
+  keepDeletedCanvas,
   claudeProgram,
   scriptProgram,
   editor,
@@ -123,6 +124,7 @@ export function SettingsDialog({
   promptTemplates: PromptTemplate[];
   canvasUse: CanvasUse;
   keepAwake: KeepAwake;
+  keepDeletedCanvas: KeepDeletedCanvas;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
   editor: EditorState;
@@ -173,7 +175,7 @@ export function SettingsDialog({
     terminal: () => <TerminalSettings />,
     canvas: () => (
       <>
-        <CanvasSettings canvasUse={canvasUse} />
+        <CanvasSettings canvasUse={canvasUse} keepDeletedCanvas={keepDeletedCanvas} />
         <EditApprovalSettings />
         <SavedPageSettings />
       </>
@@ -771,7 +773,7 @@ function KeepAwakeSettings({ keepAwake }: { keepAwake: KeepAwake }) {
   );
 }
 
-function CanvasSettings({ canvasUse }: { canvasUse: CanvasUse }) {
+function CanvasSettings({ canvasUse, keepDeletedCanvas }: { canvasUse: CanvasUse; keepDeletedCanvas: KeepDeletedCanvas }) {
   return (
     <>
       <h3>{text.canvas.title}</h3>
@@ -781,6 +783,16 @@ function CanvasSettings({ canvasUse }: { canvasUse: CanvasUse }) {
           {text.canvas.use}
           <select value={canvasUse} onChange={(event) => connection.send({ type: "settings.set-canvas-use", canvasUse: event.target.value as CanvasUse })}>
             {Object.entries(t.labels.canvasUse).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label data-hint={hints.keepDeletedCanvas}>
+          {text.canvas.keepDeleted}
+          <select value={keepDeletedCanvas} onChange={(event) => connection.send({ type: "settings.set-keep-deleted-canvas", keep: event.target.value as KeepDeletedCanvas })}>
+            {Object.entries(t.labels.keepDeletedCanvas).map(([value, label]) => (
               <option key={value} value={value}>
                 {label}
               </option>

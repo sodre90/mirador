@@ -107,6 +107,19 @@ export class CanvasService {
     return this.save(answer ? { ...asked, status: "answered", answer } : asked);
   }
 
+  /**
+   * Another conversation's items, as they were, on this one's canvas: under their own ids for the conversation that
+   * continues theirs, under new ones for a fork. A question still waiting there waits for no one here.
+   */
+  restoreItems(conversationId: string, items: CanvasItem[], { sameIds }: { sameIds: boolean }) {
+    const idOf = new Map(items.map(({ id }) => [id, sameIds ? id : crypto.randomUUID()]));
+    items.forEach((item) => {
+      const moved = { ...item, id: idOf.get(item.id)!, conversationId };
+      if (moved.kind === "ask" && moved.shownBefore) moved.shownBefore = moved.shownBefore.map((id) => idOf.get(id) ?? id);
+      this.save(moved.status === "waiting" ? { ...moved, status: "cancelled" } : moved);
+    });
+  }
+
   private lastRestoredAt = 0;
 
   /** Restored items keep the order the agent made them in, however fast they are saved. */

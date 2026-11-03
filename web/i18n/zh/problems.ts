@@ -147,6 +147,7 @@ export const problems: Messages["problems"] = {
   notADirectory: (path) => `${path} 不是文件夹。`,
   unknownCanvasUse: (value) => `未知的画布用法：${value}`,
   unknownKeepAwake: (value) => `未知的保持唤醒设置：${value}`,
+  unknownKeepDeletedCanvas: (value) => `未知的已删除画布保留设置：${value}`,
   unknownWorkspaceColour: (value) => `未知的工作区颜色：${value}`,
   notAMachineAddress: (address) => `“${address}”不是机器的地址。`,
   machineAlreadyAdded: (origin) => `${origin} 已在你的机器中。`,

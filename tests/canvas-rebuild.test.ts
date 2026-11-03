@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 import type { SessionUpdate } from "@agentclientprotocol/sdk";
-import { canvasCallsIn, rebuildCanvas } from "../host/canvas/canvas-calls.ts";
+import { canvasCallsIn, rebuildCanvas, restoreCanvas } from "../host/canvas/canvas-calls.ts";
 import { answerAsToolResult, CanvasService, pastAnswerOf } from "../host/canvas/service.ts";
 import type { ConversationService } from "../host/conversations.ts";
 import type { Hub } from "../host/hub.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
-import type { AskItem, ConversationEvent, StoredEvent } from "../shared/model.ts";
+import type { AskItem, CanvasItem, ConversationEvent, StoredEvent } from "../shared/model.ts";
 import { canvasPluginHost } from "./canvas-plugin-host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
@@ -137,5 +137,83 @@ describe("rebuildCanvas", () => {
     const { store, canvas, plugins } = await setUp();
     await rebuildCanvas("c1", stored(claudeCall("t1", "mcp__canvas__show_card", { title: "Hello", text: "First" }, "Shown.")), canvas, plugins);
     expect(store.listCanvasItems("c1")).toEqual([]);
+  });
+});
+
+describe("restoreCanvas", () => {
+  const page = (id: string, conversationId = "gone"): CanvasItem => ({ id, conversationId, kind: "show", title: id, html: "<p></p>", status: "shown", createdAt: 1 });
+  const question = (id: string, shownBefore: string[], status: CanvasItem["status"]): CanvasItem => ({
+    id,
+    conversationId: "gone",
+    kind: "ask",
+    title: "Which?",
+    question: "Which?",
+    options: [{ label: "One" }, { label: "Two" }],
+    shownBefore,
+    status,
+    createdAt: 2,
+  });
+  const continued = { harness: "claude", sessionId: "s1", mode: "continue" } as const;
+
+  async function setUp() {
+    const { store, plugins } = await canvasPluginHost(FIXTURES);
+    const hub = { publishToConversation: () => {}, isShown: () => false } as unknown as Hub;
+    const canvas = new CanvasService(store, hub, { questionsChanged: () => {} } as unknown as ConversationService, { notify: () => {} } as unknown as SystemNotifications, ["http://127.0.0.1:4601"]);
+    return { store, plugins, canvas };
+  }
+
+  test("a continued session gets its deleted canvas back as it was, a waiting question closed, and the kept canvas is then forgotten", async () => {
+    const { store, plugins, canvas } = await setUp();
+    store.saveDeletedCanvas("claude", "s1", [page("p1"), question("q1", ["p1"], "waiting")], 1);
+    await restoreCanvas("c1", continued, stored(claudeCall("t1", "mcp__canvas__show", { title: "From history", html: "x" }, "Shown.")), store, canvas, plugins);
+    expect(store.listCanvasItems("c1")).toMatchObject([
+      { id: "p1", conversationId: "c1", kind: "show" },
+      { id: "q1", conversationId: "c1", shownBefore: ["p1"], status: "cancelled" },
+    ]);
+    expect(store.deletedCanvas("claude", "s1")).toBeNull();
+  });
+
+  test("a fork gets a copy under new ids, its questions pointing at the copied pages, and the kept canvas stays", async () => {
+    const { store, plugins, canvas } = await setUp();
+    store.saveDeletedCanvas("claude", "s1", [page("p1"), question("q1", ["p1"], "answered")], 1);
+    await restoreCanvas("c1", { ...continued, mode: "fork" }, [], store, canvas, plugins);
+    const [copiedPage, copiedQuestion] = store.listCanvasItems("c1");
+    expect(copiedPage!.id).not.toBe("p1");
+    expect(copiedQuestion).toMatchObject({ status: "answered", shownBefore: [copiedPage!.id] });
+    expect(store.deletedCanvas("claude", "s1")).toHaveLength(2);
+  });
+
+  test("a fork of a conversation still open copies that conversation's canvas", async () => {
+    const { store, plugins, canvas } = await setUp();
+    store.insertConversation({ ...store.findConversation("c1")!, id: "c2", acpSessionId: "s1" });
+    store.saveCanvasItem(page("p1", "c2"));
+    await restoreCanvas("c1", { ...continued, mode: "fork" }, [], store, canvas, plugins);
+    expect(store.listCanvasItems("c1")).toMatchObject([{ kind: "show", title: "p1", conversationId: "c1" }]);
+    expect(store.listCanvasItems("c2")).toMatchObject([{ id: "p1" }]);
+  });
+
+  test("without a kept canvas, the canvas is rebuilt from the session's history", async () => {
+    const { store, plugins, canvas } = await setUp();
+    await restoreCanvas("c1", continued, stored(claudeCall("t1", "mcp__canvas__show", { title: "From history", html: "x" }, "Shown.")), store, canvas, plugins);
+    expect(store.listCanvasItems("c1")).toMatchObject([{ kind: "show", title: "From history" }]);
+  });
+});
+
+describe("deleted canvases", () => {
+  test("are forgotten once older than Settings keep them, and kept forever when Settings say so", async () => {
+    const { store } = await canvasPluginHost(FIXTURES);
+    const day = 24 * 60 * 60 * 1000;
+    store.saveDeletedCanvas("claude", "old", [], 0);
+    store.saveDeletedCanvas("claude", "recent", [], 20 * day);
+    store.setKeepDeletedCanvas("forever");
+    store.forgetExpiredDeletedCanvases(40 * day);
+    expect(store.deletedCanvas("claude", "old")).toEqual([]);
+    store.setKeepDeletedCanvas("30-days");
+    store.forgetExpiredDeletedCanvases(40 * day);
+    expect(store.deletedCanvas("claude", "old")).toBeNull();
+    expect(store.deletedCanvas("claude", "recent")).toEqual([]);
+    store.setKeepDeletedCanvas("7-days");
+    store.forgetExpiredDeletedCanvases(40 * day);
+    expect(store.deletedCanvas("claude", "recent")).toBeNull();
   });
 });

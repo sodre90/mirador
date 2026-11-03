@@ -82,6 +82,7 @@ export const settings = {
     title: "Canvas",
     hint: "Kept by the host for every browser. A conversation picks up a change when its session next starts: a new one at once, an open one after the host restarts. Claude Code, pi, Codex and Copilot; opencode follows the canvas's own instructions.",
     use: "Claude Code, pi, Codex and Copilot use the canvas",
+    keepDeleted: "Keep a deleted conversation's canvas",
   },
   savedPages: {
     title: "Copied and saved pages",

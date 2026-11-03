@@ -84,6 +84,7 @@ export const settings: Messages["settings"] = {
     title: "Canvas",
     hint: "Vom Host für jeden Browser gespeichert. Eine Unterhaltung übernimmt eine Änderung, wenn ihre Sitzung das nächste Mal startet: eine neue sofort, eine offene nach einem Neustart des Hosts. Gilt für Claude Code, pi, Codex und Copilot; opencode folgt den eigenen Anweisungen des Canvas.",
     use: "Claude Code, pi, Codex und Copilot verwenden den Canvas",
+    keepDeleted: "Canvas einer gelöschten Unterhaltung aufbewahren",
   },
   savedPages: {
     title: "Kopierte und gespeicherte Seiten",
