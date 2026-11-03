@@ -195,6 +195,7 @@ function Bridge({ text, facade, onText, onCaret, onKeyDown, onPaste, element }: 
         value(options?: FocusOptions) {
           nativeFocus.call(root, options);
           select(box.current.selection.start, box.current.selection.end);
+          requestAnimationFrame(() => redrawCaret(root));
         },
       },
       enterAddsLine: { configurable: true, value: extras.enterAddsLine },
@@ -301,6 +302,18 @@ const SLACK_FORMATS = "b, strong, i, em, s, del, strike, code, pre, a[href], blo
 function clipboardIsUnformatted(event: globalThis.ClipboardEvent) {
   const html = event.clipboardData?.getData("text/html");
   return !!html && !new DOMParser().parseFromString(html, "text/html").body.querySelector(SLACK_FORMATS);
+}
+
+/**
+ * The desktop app at times draws no caret in the box focused again as its conversation is shown, though the selection is in
+ * it, until the selection is set anew; setting it to what it already is does nothing, so the range goes and comes back.
+ */
+function redrawCaret(box: HTMLElement) {
+  const selection = document.getSelection();
+  if (!selection?.rangeCount || document.activeElement !== box || !box.contains(selection.anchorNode)) return;
+  const range = selection.getRangeAt(0);
+  selection.removeAllRanges();
+  selection.addRange(range);
 }
 
 const carriesFiles = (event: DragEvent) => [...(event.dataTransfer?.types ?? [])].includes("Files");
