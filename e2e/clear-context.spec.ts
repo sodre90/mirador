@@ -76,6 +76,7 @@ test("/clear starts the agent afresh while the conversation stays on screen, als
     await host.stop();
     await host.start();
     await reloadFromRestartedHost(page);
+    await expect(userMessages.filter({ hasText: "queued-after-clear" })).toHaveCount(1);
     await sendMessage(page, "after-restart");
     await waitForTurnToEnd(page);
     await expect.poll(context).toContain("after-restart");

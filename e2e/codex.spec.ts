@@ -158,10 +158,12 @@ test("Codex goes back only to where a turn began, so a message that joined a run
   await waitForTurnToEnd(page);
   await sendMessage(page, "RUN sleep 5; echo slept");
   await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress").first()).toBeVisible({ timeout: 60_000 });
+  model.hold();
   const composer = page.locator(".composer:visible textarea");
   await composer.fill("Steered in");
   await composer.press("Enter");
   await expect(page.locator(".timeline:visible .message.user").last()).toHaveText("Steered in", { timeout: 60_000 });
+  model.answerHeld();
   await waitForTurnToEnd(page);
 
   const steeredTurn = page.locator(".timeline:visible .timeline-entry").filter({ has: page.locator(".message.user").getByText("Steered in", { exact: true }) });
