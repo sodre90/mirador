@@ -1,0 +1,35 @@
+diff --git a/dist/index.js b/dist/index.js
+index 2ce28d2f67d6e977760dd6cb784b8f96e4b6cab3..d1eb6d443a59971f3657f287c08c1cf6c69899ae 100755
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -37491,7 +37491,7 @@ ${params.turnId}`;
+         ));
+       case "account/rateLimits/updated":
+         this.handleRateLimitsUpdated(notification.params);
+-        return null;
++        return this.usageUpdateWithRateLimits();
+       case "account/updated":
+         this.onAccountUpdated?.(notification.params);
+         return null;
+@@ -38076,9 +38076,20 @@ ${event.details}` : event.summary;
+     return {
+       sessionUpdate: "usage_update",
+       used,
+-      size
++      size,
++      ...this.rateLimitsMeta()
+     };
+   }
++  rateLimitsMeta() {
++    const snapshot = this.sessionState.rateLimits?.get("codex")?.snapshot;
++    return snapshot ? { _meta: { "codex/rateLimits": snapshot } } : {};
++  }
++  usageUpdateWithRateLimits() {
++    const used = this.sessionState.lastTokenUsage?.totalTokens;
++    const size = this.sessionState.modelContextWindow;
++    if (used == null || size == null || size <= 0) return null;
++    return { sessionUpdate: "usage_update", used, size, ...this.rateLimitsMeta() };
++  }
+   handleRateLimitsUpdated(params) {
+     if (!this.sessionState.rateLimits) {
+       this.sessionState.rateLimits = /* @__PURE__ */ new Map();

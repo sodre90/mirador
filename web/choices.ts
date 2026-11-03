@@ -1,4 +1,5 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
+import { nameWithMultiplier } from "../shared/config-options.ts";
 
 type SelectOption = Extract<SessionConfigOption, { type: "select" }>;
 
@@ -18,7 +19,9 @@ export interface ChoiceGroup {
 /** opencode lists every provider's models flat, as "Provider/Model"; the provider becomes the group. */
 function groupedByNamePrefix(options: SessionConfigSelectOption[]): ChoiceGroup[] {
   const groups = new Map<string, Choice[]>();
-  options.forEach(({ value, name, description }) => {
+  options.forEach((option) => {
+    const { value, description } = option;
+    const name = nameWithMultiplier(option);
     const separator = name.indexOf("/");
     const group = separator > 0 ? name.slice(0, separator) : "";
     const label = separator > 0 ? name.slice(separator + 1) : name;
@@ -32,7 +35,10 @@ export function choiceGroups(option: SelectOption): ChoiceGroup[] {
   if (first && "group" in first) {
     return option.options.flatMap((entry) =>
       "group" in entry
-        ? [{ name: entry.name, choices: entry.options.map(({ value, name, description }) => ({ value, label: name, name, description: description ?? null })) }]
+        ? [{ name: entry.name, choices: entry.options.map((option) => {
+            const name = nameWithMultiplier(option);
+            return { value: option.value, label: name, name, description: option.description ?? null };
+          }) }]
         : [],
     );
   }

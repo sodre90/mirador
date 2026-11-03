@@ -4,7 +4,7 @@ import { harnessRewinds, type Conversation, type Machine, type Workspace } from 
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { sidebarItems } from "../shared/sidebar-order.ts";
 import { countWaiting } from "../shared/waiting.ts";
-import { canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
+import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
 import { connection, type ConnectionStatus } from "./connection.ts";
@@ -219,6 +219,9 @@ function paletteEntries(
     openHistory && openConversation
       ? [
           { id: "rename", label: words.renameConversation, kind: "action", run: startRenamingOpenConversation },
+          ...(canFork(openConversation, openHistory)
+            ? [{ id: "fork", label: words.forkConversation, detail: shownTitle(openConversation), kind: "action" as const, run: () => forkConversation(openConversation, dispatch) }]
+            : []),
           ...(canMarkUnread(openConversation)
             ? [{ id: "mark-unread", label: t.shell.sidebar.markUnread, detail: shownTitle(openConversation), kind: "action" as const, run: () => markUnread(openConversation.id, dispatch) }]
             : []),
@@ -526,6 +529,7 @@ export function App() {
                     onToggleCanvas={toggleCanvas}
                     terminalVisible={terminalInView}
                     onToggleTerminal={toggleTerminal}
+                    onFork={() => forkConversation(keptConversation, dispatch)}
                   />
                 </AskToRevert.Provider>
               </RedrawnOnlyWhenShown>

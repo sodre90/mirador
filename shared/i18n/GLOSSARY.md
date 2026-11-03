@@ -27,6 +27,7 @@ These terms stay the same everywhere:
 | palette | (parancs)paletta | paleta | 命令面板 | Befehlspalette |
 | checklist | ellenőrzőlista | checklist (la) | 清单 | Checkliste |
 | History (canvas) | Előzmények | Historial | 历史 | Verlauf |
+| AI credits (Copilot's usage unit) | AI-kredit | créditos de IA | AI 积分 | KI-Credits |
 | queue / queued | sor / sorba állított | cola / en cola | 队列 / 已排队 | Warteschlange / in der Warteschlange |
 | device | készülék | dispositivo | 设备 | Gerät |
 | machine | gép | máquina | 机器 | Rechner |

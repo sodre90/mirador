@@ -145,6 +145,7 @@ export const hints: Messages["hints"] = {
     "Agent 启动的、仍在工作的子 Agent，也列在消息框上方；点击可打开第一个。在后台启动的子 Agent 会一直计入，直到启动它的轮次结束，因为在此之前没有任何信号表明它何时完成。",
   searchAll: "搜索每个工作区中的每个对话。打开某个匹配项会在其所在对话中显示它。",
   find: "在这个对话的任何位置查找文本：包括尚未加载的较早条目，以及已折叠的卡片，找到时会展开。",
+  fork: "把这个对话复制成同一配置下的新对话，这个对话保持不变。这里正在进行的轮次会继续；副本包含 Agent 目前已保存的内容。Agent 在这里处理过一条消息后才能使用。",
   findOlder: "上一个匹配项，向上（Enter）",
   findNewer: "下一个匹配项，向下（Shift+Enter）",
   findMatchCase: "区分大小写：大写和小写字母视为不同。",
@@ -279,9 +280,10 @@ export const hints: Messages["hints"] = {
   gitBranch: "工作区目录中已检出的 git 分支。",
   model: "Agent 使用的模型，由上方的模型菜单选定。",
   cost: "到目前为止这个对话的花费，按 Agent 报告的数据。",
+  credits: "这个对话已用的 AI 积分，按 GitHub Copilot 的计算。",
   profileChip: "这个对话的 Agent 运行时所用的配置。",
   quota: (limit: string, percent: string, resetsIn: string) =>
-    `你的 Claude 套餐的${limit}用量上限：已用 ${percent}，${resetsIn}后重新开始。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,
+    `你的套餐的${limit}用量上限：已用 ${percent}，${resetsIn}后重新开始。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,
   statuslineCommand: (command: string) =>
     `你的状态栏，由 ${command} 输出。\n\nhost 像 Claude Code 一样运行它：在 stdin 上提供 Claude Code 的状态栏 JSON（模型、cwd、会话、记录、上下文窗口、花费）以及这个对话所用配置的环境。在这里可切换到内置状态栏。`,
   statuslineBuiltIn: (command: string) =>

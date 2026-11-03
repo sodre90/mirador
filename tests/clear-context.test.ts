@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { queuedBeforeClear, sessionHasRecord } from "../host/conversations.ts";
+import { queuedBeforeClear } from "../host/conversations.ts";
+import { sessionHasRecord } from "../shared/conversation-begun.ts";
 import type { ConversationEvent, QueuedMessage } from "../shared/model.ts";
 
 const stored = (...events: ConversationEvent[]) => events.map((event, seq) => ({ seq, at: seq, event }));

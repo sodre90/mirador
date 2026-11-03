@@ -29,6 +29,24 @@ describe("plan quotas", () => {
     expect(reportedQuotas({ "_claude/rateLimit": { status: "allowed", rateLimitType: "overage" } })).toBeNull();
   });
 
+  test("a usage_update brings Codex's windows, told apart by their length", () => {
+    const meta = {
+      "codex/rateLimits": {
+        limitId: "codex",
+        primary: { usedPercent: 37, windowDurationMins: 300, resetsAt: 1_791_149_400 },
+        secondary: { usedPercent: 88, windowDurationMins: 10_080, resetsAt: 1_791_370_800 },
+        credits: null,
+      },
+    };
+    expect(reportedQuotas(meta)).toEqual({ fiveHour, sevenDay });
+  });
+
+  test("a Codex plan with only a weekly window, or windows of other lengths", () => {
+    expect(reportedQuotas({ "codex/rateLimits": { primary: { usedPercent: 88, windowDurationMins: 10_080, resetsAt: 1_791_370_800 }, secondary: null } })).toEqual({ fiveHour: null, sevenDay });
+    expect(reportedQuotas({ "codex/rateLimits": { primary: { usedPercent: 10, windowDurationMins: 60, resetsAt: 1_791_149_400 } } })).toBeNull();
+    expect(reportedQuotas({ "codex/rateLimits": { primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null } } })).toBeNull();
+  });
+
   test("each profile keeps its own, and a window reported alone leaves the other as it was", () => {
     const quotas = new PlanQuotasByProfile();
     quotas.record(null, { fiveHour, sevenDay });

@@ -142,6 +142,10 @@ export type ClientMessage =
       session: Pick<ExternalSession, "sessionId" | "title">;
       mode: AdoptMode;
     }
+  /** A new conversation with a copy of this one's agent session, which goes on as it was. */
+  | { type: "conversation.fork"; conversationId: string }
+  /** Whether the conversation can be forked yet, for a page that does not hold its history. */
+  | { type: "conversation.check-fork"; requestId: string; conversationId: string }
   | { type: "conversation.delete"; conversationId: string }
   | { type: "conversation.rename"; conversationId: string; title: string }
   | { type: "conversation.set-unread"; conversationId: string; unread: boolean }
@@ -445,6 +449,7 @@ export type ServerMessage =
   | { type: "sessions.searched"; requestId: string; sessions: SessionSearchHit[] }
   | { type: "sessions.failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "slash-commands.listed"; requestId: string; commands: SlashCommand[] }
+  | { type: "conversation.fork-checked"; requestId: string; forkable: boolean }
   | { type: "prompt-history.listed"; requestId: string; prompts: string[]; ownEarlier?: PromptHistoryEntry[] }
   | { type: "mentions.suggested"; requestId: string; suggestions: MentionSuggestion[] }
   | { type: "changes.listed"; requestId: string; list: ChangeList }

@@ -108,6 +108,7 @@ export const shell: Messages["shell"] = {
     splitTerminalDown: "A terminál felosztása lefelé",
     focusTerminal: "Fókusz a terminálra",
     renameConversation: "Beszélgetés átnevezése…",
+    forkConversation: "Beszélgetés elágaztatása",
     openMachine: (machine) => `Gép megnyitása: ${machine}`,
     openPluginWindow: (plugin) => `Ablak megnyitása: ${plugin}`,
     searchAll: "Keresés minden munkaterületen…",
@@ -250,6 +251,7 @@ export const shell: Messages["shell"] = {
     contextExplained:
       "Az ágens minden válasz után jelenti (ACP usage_update). A határ közelében tömöríti a beszélgetést: a régebbi köröket egy összefoglaló váltja fel.",
     costSoFar: (cost) => `Eddigi költség az ágens szerint: ${cost}.`,
+    credits: (amount) => `${amount} kredit`,
     days: (count) => `${count}n`,
     hours: (count) => `${count}ó`,
     minutes: (count) => `${count}p`,

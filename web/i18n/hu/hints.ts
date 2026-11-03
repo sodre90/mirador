@@ -152,6 +152,7 @@ export const hints: Messages["hints"] = {
     "Az ágens által indított, még dolgozó alágensek, amelyek az üzenetmező fölött is szerepelnek; kattints az első megnyitásához. A háttérben indított alágens addig számít, amíg az őt indító kör véget nem ér, mert addig semmi sem jelzi, hogy befejeződött.",
   searchAll: "Keresés minden munkaterület minden beszélgetésében. Egy találatot megnyitva a beszélgetésében mutatja.",
   find: "Szöveg keresése bárhol ebben a beszélgetésben: a még be nem töltött korábbi bejegyzésekben és az összecsukott kártyákban is, amelyek ott nyílnak ki, ahol találat van.",
+  fork: "Ennek a beszélgetésnek a másolata egy új beszélgetésbe, ugyanazon a profilon; ez a beszélgetés változatlan marad. Az itt futó kör folytatódik, a másolatban az lesz, amit az ágens eddig elmentett belőle. Akkor lehetséges, ha az ágens már dolgozott egy üzeneten itt.",
   findOlder: "Előző találat, feljebb (Enter)",
   findNewer: "Következő találat, lejjebb (Shift+Enter)",
   findMatchCase: "Kis- és nagybetű megkülönböztetése.",
@@ -301,9 +302,10 @@ export const hints: Messages["hints"] = {
   gitBranch: "A munkaterület könyvtárában kicheckoutolt git-ág.",
   model: "A modell, amelyet az ágens használ, a fenti Modell menüben kiválasztva.",
   cost: "Amennyibe a beszélgetés eddig került, ahogy az ágens jelenti.",
+  credits: "A beszélgetés által eddig felhasznált AI-kreditek, ahogy a GitHub Copilot számolja.",
   profileChip: "A profil, amellyel ennek a beszélgetésnek az ágense fut.",
   quota: (limit, percent, resetsIn) =>
-    `A Claude-előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
+    `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
   statuslineCommand: (command) =>
     `Az állapotsorod, amelyet ez ír ki: ${command}.\n\nA host úgy futtatja, mint a Claude Code: a Claude Code állapotsor-JSON-jével a stdin-en (modell, cwd, munkamenet, átirat, kontextusablak, költség) és a beszélgetés profiljának környezetével. Itt válthatsz a beépített állapotsorra.`,
   statuslineBuiltIn: (command) => `A beépített állapotsor.\n\nA Claude Code beállításai egy állapotsor-parancsot neveznek meg (${command}); itt válthatsz rá.`,

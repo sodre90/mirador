@@ -161,6 +161,7 @@ export const hints: Messages["hints"] = {
     "Subagentes que el agente inició y que siguen trabajando, también enumerados sobre el cuadro de mensaje; haz clic para abrir el primero. Uno iniciado en segundo plano cuenta hasta que termina el turno que lo inició, ya que nada avisa de cuándo acabó antes.",
   searchAll: "Busca en todas las conversaciones de todos los espacios de trabajo. Abrir una coincidencia la muestra en su conversación.",
   find: "Busca texto en cualquier parte de esta conversación: en entradas anteriores que aún no se han cargado y en tarjetas contraídas, que se expanden donde se encuentra.",
+  fork: "Copia esta conversación en una nueva con el mismo perfil y deja esta como está. Un turno en curso aquí sigue; la copia tiene lo que el agente ha guardado de él hasta ahora. Disponible cuando el agente ya ha trabajado en un mensaje aquí.",
   findOlder: "Coincidencia anterior, más arriba (Enter)",
   findNewer: "Coincidencia siguiente, más abajo (Shift+Enter)",
   findMatchCase: "Distinguir mayúsculas y minúsculas: las letras mayúsculas y minúsculas cuentan como distintas.",
@@ -310,9 +311,10 @@ export const hints: Messages["hints"] = {
   gitBranch: "La rama de git activa en el directorio del espacio de trabajo.",
   model: "El modelo que usa el agente, tal como se eligió en el menú Modelo de arriba.",
   cost: "Lo que ha costado la conversación hasta ahora, según lo informa el agente.",
+  credits: "Créditos de IA que ha usado esta conversación, según los cuenta GitHub Copilot.",
   profileChip: "El perfil con el que se ejecuta el agente de esta conversación.",
   quota: (limit, percent, resetsIn) =>
-    `Límite de uso ${limit} de tu plan de Claude: ${percent} usado, se reinicia en ${resetsIn}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
+    `Límite de uso ${limit} de tu plan: ${percent} usado, se reinicia en ${resetsIn}.\n\nEl agente lo informa después de cada respuesta, para la cuenta del perfil de esta conversación.`,
   statuslineCommand: (command) =>
     `Tu línea de estado, impresa por: ${command}.\n\nEl host la ejecuta como lo hace Claude Code: el JSON de línea de estado de Claude Code por stdin (modelo, cwd, sesión, transcripción, ventana de contexto, costo) y el entorno del perfil de la conversación. Cambia aquí a la línea de estado integrada.`,
   statuslineBuiltIn: (command) =>

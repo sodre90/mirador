@@ -16,6 +16,7 @@ export const problems: Messages["problems"] = {
     "unknown-conversation": "Conversación desconocida.",
     "agent-still-working": "El agente todavía está trabajando en el mensaje anterior.",
     "session-already-open": "Esa sesión ya está abierta en la aplicación.",
+    "nothing-to-fork-yet": "Esta conversación aún no tiene una sesión del agente de la que hacer fork. Envíale un mensaje primero.",
     "conversation-needs-name": "Una conversación necesita un nombre.",
     "stop-turn-before-undo": "El agente todavía está trabajando. Detén su turno antes de deshacer uno.",
     "no-files-kept": "Mirador no guardó archivos de ese turno, así que no hay nada a lo que volver.",

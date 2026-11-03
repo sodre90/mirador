@@ -21,6 +21,7 @@ export const chat = {
     subagentsRunning: (count: number) => plural(count, "1 subagent running", `${count} subagents running`),
     inTerminal: (activity: string) => `in a terminal · ${activity}`,
     find: "Find",
+    fork: "Fork",
     showCanvas: "Show canvas",
     hideCanvas: "Hide canvas",
     showTerminal: "Show terminal",

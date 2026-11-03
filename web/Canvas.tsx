@@ -39,6 +39,15 @@ interface ContentSize {
   width: number | null;
 }
 
+function MagnifierIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="6.75" cy="6.75" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M10.2 10.2l3.8 3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function useElementWidth(element: RefObject<HTMLElement | null>) {
   const [width, setWidth] = useState(0);
 
@@ -933,6 +942,12 @@ export function CanvasPanel({
             {words.bar.pointAndAsk}
           </button>
         )}
+        {poppable && (
+          <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
+            ⧉
+          </button>
+        )}
+        {shownPage && <BarMenu className="page-export" label={words.bar.export} menuName={words.bar.exportMenu} hint={hints.canvasPageExport} entries={pageExport.entries} />}
         {shownPage && (
           <button
             type="button"
@@ -942,15 +957,9 @@ export function CanvasPanel({
             data-shortcut={shortcutKeys().find}
             onClick={pageFind.openFind}
           >
-            ⌕
+            <MagnifierIcon />
           </button>
         )}
-        {poppable && (
-          <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
-            ⧉
-          </button>
-        )}
-        {shownPage && <BarMenu className="page-export" label={words.bar.export} menuName={words.bar.exportMenu} hint={hints.canvasPageExport} entries={pageExport.entries} />}
         <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
           ‹
         </button>

@@ -84,6 +84,8 @@ export class ScriptedModel {
   private readonly responsesRequests: ResponsesRequest[] = [];
   /** While set, every request for a reply gets this error response instead, as from a provider that is down. */
   failure: { status: number; body: object } | null = null;
+  /** Response headers every Responses API reply carries, such as the `x-codex-*` rate limits ChatGPT's backend sends Codex. */
+  responsesHeaders: Record<string, string> = {};
   private server?: Server;
   private heldReplies: (() => void)[] | null = null;
 
@@ -198,7 +200,7 @@ export class ScriptedModel {
     const id = `resp_${this.requests.length}`;
     const item = "text" in reply ? { type: "message", role: "assistant", id: `msg_${this.requests.length}`, content: [{ type: "output_text", text: reply.text }] } : functionCallItem(reply.call, this.requests.length);
     const usage = { input_tokens: SCRIPTED_PROMPT_TOKENS, output_tokens: 500, total_tokens: SCRIPTED_PROMPT_TOKENS + 500 };
-    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.writeHead(200, { ...this.responsesHeaders, "content-type": "text/event-stream" });
     response.end(
       [
         responsesEvent("response.created", { response: { id } }),

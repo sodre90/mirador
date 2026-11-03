@@ -144,6 +144,7 @@ export const hints = {
     "Subagents the agent started that are still at work, also listed above the message box; click to open the first one. One started in the background counts until the turn that started it ends, since nothing tells when it finished before that.",
   searchAll: "Search every conversation in every workspace. Opening a match shows it in its conversation.",
   find: "Find text anywhere in this conversation: in earlier entries not loaded yet, and in folded cards, which unfold where it is found.",
+  fork: "Copy this conversation into a new one on the same profile and leave this one as it is. A turn running here goes on; the copy holds what the agent has saved of it so far. Possible once the agent has worked on a message here.",
   findOlder: "Previous match, further up (Enter)",
   findNewer: "Next match, further down (Shift+Enter)",
   findMatchCase: "Match case: capital and small letters count as different.",
@@ -278,9 +279,10 @@ export const hints = {
   gitBranch: "The git branch checked out in the workspace directory.",
   model: "The model the agent uses, as chosen in the Model menu above.",
   cost: "What the conversation has cost so far, as the agent reports it.",
+  credits: "AI credits this conversation has used, as GitHub Copilot counts them.",
   profileChip: "The profile this conversation's agent runs with.",
   quota: (limit: string, percent: string, resetsIn: string) =>
-    `${limit} usage limit of your Claude plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
+    `${limit} usage limit of your plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
   statuslineCommand: (command: string) =>
     `Your statusline, printed by ${command}.\n\nThe host runs it like Claude Code does: Claude Code's statusline JSON on stdin (model, cwd, session, transcript, context window, cost) and the conversation's profile environment. Switch to the built-in statusline here.`,
   statuslineBuiltIn: (command: string) =>

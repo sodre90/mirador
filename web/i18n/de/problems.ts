@@ -16,6 +16,7 @@ export const problems: Messages["problems"] = {
     "unknown-conversation": "Unbekannte Unterhaltung.",
     "agent-still-working": "Der Agent arbeitet noch an der vorherigen Nachricht.",
     "session-already-open": "Diese Sitzung ist in der App schon geöffnet.",
+    "nothing-to-fork-yet": "Diese Unterhaltung hat noch keine Agentensitzung, die sich forken ließe. Schick ihr zuerst eine Nachricht.",
     "conversation-needs-name": "Eine Unterhaltung braucht einen Namen.",
     "stop-turn-before-undo": "Der Agent arbeitet noch. Stoppe seine Runde, bevor du eine rückgängig machst.",
     "no-files-kept": "Mirador hat für diese Runde keine Dateien aufbewahrt, daher gibt es keinen Stand, zu dem sie sich rückgängig machen lässt.",

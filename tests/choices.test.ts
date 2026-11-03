@@ -39,3 +39,14 @@ describe("choices", () => {
     expect(filterChoiceGroups(groups, "nothing like it")).toEqual([]);
   });
 });
+
+test("a model Copilot prices shows its multiplier beside its name, in a flat and in a grouped list", () => {
+  const option = (options: SelectOption["options"]): SelectOption => ({ id: "model", name: "Model", category: "model", type: "select", currentValue: "a", options });
+  const opus = { value: "opus", name: "Claude Opus 5.5", _meta: { copilotUsage: "15x" } };
+  const auto = { value: "auto", name: "Auto", _meta: null };
+  expect(choiceGroups(option([opus, auto])).flatMap(({ choices }) => choices.map(({ label }) => label))).toEqual(["Claude Opus 5.5 · 15x", "Auto"]);
+  expect(choiceGroups(option([{ group: "g", name: "Copilot", options: [opus, auto] }])).flatMap(({ choices }) => choices.map(({ name }) => name))).toEqual([
+    "Claude Opus 5.5 · 15x",
+    "Auto",
+  ]);
+});

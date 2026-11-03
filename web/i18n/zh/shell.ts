@@ -108,6 +108,7 @@ export const shell: Messages["shell"] = {
     splitTerminalDown: "向下拆分终端",
     focusTerminal: "聚焦终端",
     renameConversation: "重命名对话…",
+    forkConversation: "Fork 对话",
     openMachine: (machine) => `打开机器 ${machine}`,
     openPluginWindow: (plugin) => `打开 ${plugin} 窗口`,
     searchAll: "搜索所有工作区…",
@@ -246,6 +247,7 @@ export const shell: Messages["shell"] = {
     contextExplained:
       "Agent 在每次回复后报告这个数值（ACP usage_update）。接近上限时它会压缩对话：较早的轮次会被摘要取代。",
     costSoFar: (cost) => `目前的花费（按 Agent 的报告）：${cost}。`,
+    credits: (amount) => `${amount} 积分`,
     days: (count) => `${count}天`,
     hours: (count) => `${count}小时`,
     minutes: (count) => `${count}分`,

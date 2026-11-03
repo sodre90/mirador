@@ -304,6 +304,8 @@ export interface ContextUsage {
   used: number;
   size: number;
   cost: { amount: number; currency: string } | null;
+  /** The AI credits GitHub Copilot counts for the conversation; no money, so apart from the cost. */
+  credits?: number;
 }
 
 /** The tokens one turn took, as the agent reported them when it ended. */
@@ -320,7 +322,7 @@ export interface QuotaWindow {
   resetsAt: number;
 }
 
-/** The usage limits of a Claude subscription: the rolling five-hour window and the weekly one. */
+/** The usage limits of a Claude or ChatGPT subscription: the rolling five-hour window and the weekly one. */
 export interface PlanQuotas {
   fiveHour: QuotaWindow | null;
   sevenDay: QuotaWindow | null;

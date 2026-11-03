@@ -15,6 +15,7 @@ export const chat: Messages["chat"] = {
     subagentsRunning: (count) => `${count} alágens fut`,
     inTerminal: (activity) => `terminálban · ${activity}`,
     find: "Keresés",
+    fork: "Elágaztatás",
     showCanvas: "Vászon mutatása",
     hideCanvas: "Vászon elrejtése",
     showTerminal: "Terminál mutatása",

@@ -161,6 +161,7 @@ export const hints: Messages["hints"] = {
     "Subagenten, die der Agent gestartet hat und die noch arbeiten, auch über dem Nachrichtenfeld aufgelistet; klicke, um den ersten zu öffnen. Einer, der im Hintergrund gestartet wurde, zählt, bis die Runde endet, die ihn gestartet hat, weil vorher nichts meldet, wann er fertig war.",
   searchAll: "Durchsucht jede Unterhaltung in jedem Arbeitsbereich. Ein geöffneter Treffer wird in seiner Unterhaltung gezeigt.",
   find: "Sucht Text überall in dieser Unterhaltung: in früheren Einträgen, die noch nicht geladen sind, und in eingeklappten Karten, die sich dort aufklappen, wo er gefunden wird.",
+  fork: "Kopiert diese Unterhaltung in eine neue mit demselben Profil und lässt diese, wie sie ist. Eine Runde, die hier läuft, geht weiter; die Kopie enthält, was der Agent bisher davon gespeichert hat. Möglich, sobald der Agent hier an einer Nachricht gearbeitet hat.",
   findOlder: "Vorheriger Treffer, weiter oben (Enter)",
   findNewer: "Nächster Treffer, weiter unten (Shift+Enter)",
   findMatchCase: "Groß-/Kleinschreibung beachten: Groß- und Kleinbuchstaben gelten als verschieden.",
@@ -313,9 +314,10 @@ export const hints: Messages["hints"] = {
   gitBranch: "Der git-Branch, der im Verzeichnis des Arbeitsbereichs ausgecheckt ist.",
   model: "Das Modell, das der Agent nutzt, wie oben im Menü Modell gewählt.",
   cost: "Was die Unterhaltung bisher gekostet hat, wie der Agent es meldet.",
+  credits: "KI-Credits, die diese Unterhaltung bisher verbraucht hat, wie GitHub Copilot sie zählt.",
   profileChip: "Das Profil, mit dem der Agent dieser Unterhaltung läuft.",
   quota: (limit, percent, resetsIn) =>
-    `${limit}-Nutzungslimit deines Claude-Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
+    `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
   statuslineCommand: (command) =>
     `Deine Statuszeile, ausgegeben von: ${command}.\n\nDer Host führt sie aus wie Claude Code: das Statuszeilen-JSON von Claude Code auf stdin (Modell, cwd, Sitzung, Transkript, Kontextfenster, Kosten) und die Profilumgebung der Unterhaltung. Wechsle hier zur eingebauten Statuszeile.`,
   statuslineBuiltIn: (command) =>

@@ -113,6 +113,7 @@ export const shell: Messages["shell"] = {
     splitTerminalDown: "Terminal nach unten teilen",
     focusTerminal: "Terminal fokussieren",
     renameConversation: "Unterhaltung umbenennen…",
+    forkConversation: "Unterhaltung forken",
     openMachine: (machine) => `Rechner öffnen: ${machine}`,
     openPluginWindow: (plugin) => `Fenster öffnen: ${plugin}`,
     searchAll: "Alle Arbeitsbereiche durchsuchen…",
@@ -261,6 +262,7 @@ export const shell: Messages["shell"] = {
     contextExplained:
       "Der Agent meldet das nach jeder Antwort (ACP usage_update). Nahe am Limit verdichtet er die Unterhaltung: Ältere Runden werden durch eine Zusammenfassung ersetzt.",
     costSoFar: (cost) => `Bisherige Kosten laut Agent: ${cost}.`,
+    credits: (amount) => `${amount} Credits`,
     days: (count) => `${count} d`,
     hours: (count) => `${count} h`,
     minutes: (count) => `${count} min`,

@@ -15,7 +15,7 @@ import { connection } from "./connection.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
 import { DesktopMenu } from "./DesktopMenu.tsx";
 import { useDragToReorder, usePointerDrag } from "./drag-to-reorder.ts";
-import { startConversationIn } from "./actions.ts";
+import { forkConversation, startConversationIn } from "./actions.ts";
 import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
@@ -242,10 +242,26 @@ function WaitingList({ state, dispatch }: { state: AppState; dispatch: Dispatch<
 
 /** Outside the row, so choosing an entry does not also click the row and open the conversation, which would clear its mark. */
 function ConversationMenu({ conversation, at, dispatch, onClose }: { conversation: Conversation; at: { x: number; y: number }; dispatch: Dispatch<AppAction>; onClose: () => void }) {
-  const entry = lastsUntilOpened(conversation.waitingFor)
+  const forkable = useHostSaysForkable(conversation.id);
+  const readEntry = lastsUntilOpened(conversation.waitingFor)
     ? { label: words.markRead, onChoose: () => markRead(conversation.id) }
     : { label: words.markUnread, onChoose: () => markUnread(conversation.id, dispatch), disabled: !canMarkUnread(conversation) };
-  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[entry]} onClose={onClose} />;
+  const forkEntry = { label: t.shell.palette.forkConversation, onChoose: () => forkConversation(conversation, dispatch), disabled: !forkable };
+  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, forkEntry]} onClose={onClose} />;
+}
+
+/** A sidebar row may not have its history in the page, so the host, which has it, says whether it can be forked yet. */
+function useHostSaysForkable(conversationId: string) {
+  const [forkable, setForkable] = useState(false);
+  useEffect(() => {
+    const requestId = crypto.randomUUID();
+    const unsubscribe = connection.onMessage((message) => {
+      if (message.type === "conversation.fork-checked" && message.requestId === requestId) setForkable(message.forkable);
+    });
+    connection.send({ type: "conversation.check-fork", requestId, conversationId });
+    return unsubscribe;
+  }, [conversationId]);
+  return forkable;
 }
 
 const rowClasses = (conversation: Conversation, listed: Conversation[], selectedConversationId: string | null) =>

@@ -16,6 +16,7 @@ export const problems: Messages["problems"] = {
     "unknown-conversation": "Ismeretlen beszélgetés.",
     "agent-still-working": "Az ágens még az előző üzeneten dolgozik.",
     "session-already-open": "Ez a munkamenet már nyitva van az alkalmazásban.",
+    "nothing-to-fork-yet": "Ennek a beszélgetésnek még nincs ágens-munkamenete, amit elágaztatni lehetne. Előbb küldj neki egy üzenetet.",
     "conversation-needs-name": "A beszélgetésnek kell egy név.",
     "stop-turn-before-undo": "Az ágens még dolgozik. Állítsd le a körét, mielőtt visszavonsz egyet.",
     "no-files-kept": "A Mirador nem őrzött meg fájlokat ehhez a körhöz, így nincs mire visszaállítani.",

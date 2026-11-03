@@ -57,7 +57,7 @@ import { openAsText, openWithSystemDefault } from "./system-open.ts";
 import { mentionSuggestions } from "./mentions.ts";
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
-import { hasBegun, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
+import { hasBegun, sessionHasRecord, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
 import { isUsageLimitError, usageLimitMessage, usageLimitResetIn } from "../shared/usage-limit.ts";
 import { summarizeWaiting, waitingTones, type WaitingConversation, type WaitingSummary } from "../shared/waiting.ts";
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
@@ -87,6 +87,7 @@ import type { SystemNotifications } from "./system-notifications.ts";
 import type { TerminalProgram } from "./terminals.ts";
 import { claudeConfigDir } from "./terminal-sessions.ts";
 import { TerminalWork, updatesAfter } from "./terminal-catch-up.ts";
+import { copilotHomeOf, copilotSessionCredits } from "./copilot-credits.ts";
 import { claudeTranscript, lastAnsweringModel, modelChoiceFor, recordsUserMessage, userMessageTakenInAt } from "./claude-transcript.ts";
 import { claudeTranscriptPaths, messageSnippetOf, openOpencodeDatabase, opencodeDatabasePath } from "./session-transcripts.ts";
 import { UserCommandRunner } from "./user-commands.ts";
@@ -285,6 +286,7 @@ export class ConversationService {
   /** A session loaded again replays all of its history; it is held here, so only what the conversation lacks joins it. */
   private readonly replaysBeingRead = new Map<string, acp.SessionNotification[]>();
   private readonly contextUsage: Map<string, ContextUsage>;
+  private readonly creditReads = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly planQuotas = new PlanQuotasByProfile();
   private readonly unseenTurnEnds: Map<string, UnseenTurnEnd>;
   private readonly lastWords = new Map<string, string>();
@@ -507,6 +509,18 @@ export class ConversationService {
     return conversation;
   }
 
+  /** Copies the agent's session as it stands into a new conversation on the same profile; a turn running in it goes on undisturbed. */
+  fork(conversationId: string): Conversation {
+    const { workspaceId, harness, profileId, acpSessionId, title } = this.get(conversationId);
+    if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
+    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title }, "fork");
+  }
+
+  /** The agent has a session to copy once it has worked on a message there. */
+  canFork(conversationId: string): boolean {
+    return this.get(conversationId).acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId));
+  }
+
   private insertConversation(workspaceId: string, launch: Launch, title: string): Conversation {
     this.existingWorkspace(workspaceId);
     const profile = profileToLaunch(this.store, launch);
@@ -577,6 +591,7 @@ export class ConversationService {
     this.statusOverrides.delete(conversationId);
     this.terminalActivity.delete(conversationId);
     this.contextUsage.delete(conversationId);
+    this.stopReadingCredits(conversationId);
     this.unseenTurnEnds.delete(conversationId);
     this.lastWords.delete(conversationId);
     this.asksWaitedOn.delete(conversationId);
@@ -774,6 +789,7 @@ export class ConversationService {
       this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...turnUsageOf(response), ...(model && { model }) });
       runtime.automaticContinues = 0;
       this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
+      this.readCreditsAfterTurn(conversationId);
     } catch (error) {
       this.failOpenToolCalls(conversationId);
       if (runtime.killedOnPurpose) {
@@ -1731,9 +1747,14 @@ export class ConversationService {
       return;
     }
     if (update.sessionUpdate === "usage_update") {
-      const usage: ContextUsage = { used: update.used, size: update.size, cost: update.cost ? { amount: update.cost.amount, currency: update.cost.currency } : null };
-      this.contextUsage.set(conversationId, usage);
-      this.store.setContextUsage(conversationId, usage);
+      const credits = this.contextUsage.get(conversationId)?.credits;
+      const usage: ContextUsage = {
+        used: update.used,
+        size: update.size,
+        cost: update.cost ? { amount: update.cost.amount, currency: update.cost.currency } : null,
+        ...(credits !== undefined && { credits }),
+      };
+      this.setContextUsage(conversationId, usage);
       const model = update._meta?.["_claude/model"];
       if (typeof model === "string") this.runtime(conversationId).reportedModel = model;
       const quotas = reportedQuotas(update._meta);
@@ -1752,6 +1773,61 @@ export class ConversationService {
     this.trackReplyProgress(conversationId, update);
     this.append(conversationId, { type: "acp", update: this.withModeName(conversationId, update) });
     this.followToolCalls(conversationId, update);
+  }
+
+  private setContextUsage(conversationId: string, usage: ContextUsage) {
+    this.contextUsage.set(conversationId, usage);
+    this.store.setContextUsage(conversationId, usage);
+  }
+
+  /**
+   * Copilot writes its usage checkpoint a moment after the turn ends, so the file is read again until it shows more than
+   * before the turn. Before a conversation's first reading the file may already hold earlier turns; that reading counts
+   * as before this turn. A read that lands during a later turn is safe, as credits only grow.
+   */
+  private readCreditsAfterTurn(conversationId: string) {
+    if (this.get(conversationId).harness !== "copilot") return;
+    this.stopReadingCredits(conversationId);
+    const delaysMs = [0, 250, 750, 2000];
+    const readAfter = (attempt: number, beforeTurn: number | undefined) => {
+      this.creditReads.set(
+        conversationId,
+        setTimeout(async () => {
+          this.creditReads.delete(conversationId);
+          const reading = await this.refreshCopilotCredits(conversationId);
+          const before = beforeTurn ?? reading ?? undefined;
+          const grew = reading !== null && before !== undefined && reading > before;
+          if (!grew && attempt + 1 < delaysMs.length && this.store.hasConversation(conversationId)) readAfter(attempt + 1, before);
+        }, delaysMs[attempt]).unref(),
+      );
+    };
+    readAfter(0, this.contextUsage.get(conversationId)?.credits);
+  }
+
+  private stopReadingCredits(conversationId: string) {
+    clearTimeout(this.creditReads.get(conversationId));
+    this.creditReads.delete(conversationId);
+  }
+
+  /** Copilot reports no cost, but writes what its session used to its own events file, so the credits are read from there; shown when they are the first or more. The reading, or null without one. */
+  private async refreshCopilotCredits(conversationId: string): Promise<number | null> {
+    if (!this.store.hasConversation(conversationId)) return null;
+    const conversation = this.get(conversationId);
+    if (conversation.harness !== "copilot" || !conversation.acpSessionId) return null;
+    let copilotHome: string;
+    try {
+      copilotHome = copilotHomeOf(profileEnvironment(this.profileOf(conversation)));
+    } catch {
+      return null;
+    }
+    const credits = await copilotSessionCredits(copilotHome, conversation.acpSessionId);
+    if (credits === null || !this.store.hasConversation(conversationId)) return null;
+    const usage = this.contextUsage.get(conversationId) ?? { used: 0, size: 0, cost: null };
+    if (usage.credits === undefined || credits > usage.credits) {
+      this.setContextUsage(conversationId, { ...usage, credits });
+      this.publish(this.get(conversationId));
+    }
+    return credits;
   }
 
   /** The mode picker's name for the mode, which the notice shows in place of the agent's id for it. */
@@ -2288,15 +2364,6 @@ export class ConversationService {
   }
 }
 
-
-/**
- * Claude Code keeps no record of a session until the agent works on a message in it, so a session without a finished
- * turn, agent output or replayed history cannot be resumed. Since a /clear, only what came after it counts.
- */
-export function sessionHasRecord(events: StoredEvent[]) {
-  const sinceCleared = events.slice(events.findLastIndex(({ event }) => event.type === "context-cleared") + 1);
-  return sinceCleared.some(({ event }) => event.type === "turn-end" || (event.type === "acp" && updatesTheAgentRecords.has(event.update.sessionUpdate)));
-}
 
 interface TurnRequest {
   /** The message that started the turn and those that joined it, as one. */

@@ -113,6 +113,7 @@ export const shell = {
     splitTerminalDown: "Split the terminal down",
     focusTerminal: "Focus the terminal",
     renameConversation: "Rename conversation…",
+    forkConversation: "Fork conversation",
     openMachine: (machine: string) => `Open machine ${machine}`,
     openPluginWindow: (plugin: string) => `Open the ${plugin} window`,
     searchAll: "Search all workspaces…",
@@ -251,6 +252,7 @@ export const shell = {
     contextExplained:
       "The agent reports this after each response (ACP usage_update). Close to the limit it compacts the conversation: older turns are replaced by a summary.",
     costSoFar: (cost: string) => `Cost so far, as the agent reports it: ${cost}.`,
+    credits: (amount: string) => `${amount} credits`,
     days: (count: number) => `${count}d`,
     hours: (count: number) => `${count}h`,
     minutes: (count: number) => `${count}m`,
