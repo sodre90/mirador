@@ -270,6 +270,7 @@ export const chat: Messages["chat"] = {
   slashCommandDescriptions: {
     clear: "让 Agent 重新开始，上下文中不再带有此前的对话；对话仍留在屏幕上",
     login: "让 Agent 重新登录，在终端标签页中进行",
+    mcp: "列出 opencode 已配置的 MCP 服务器及其状态",
     plugin: "安装、启用和停用插件，在终端标签页中进行",
     hooks: "查看和更改 Claude Code 围绕 Agent 运行的命令，在终端标签页中进行",
     permissions: "查看和更改 Agent 无需询问就能做的事，在终端标签页中进行",

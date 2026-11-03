@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { HarnessId, StoredEvent } from "../shared/model.ts";
 import { panelSlashCommands } from "../shared/panel-commands.ts";
-import { clearSlashCommand, latestSlashCommands, matchingCommands, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
+import { clearSlashCommand, latestSlashCommands, matchingCommands, opencodeMcpSlashCommand, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { loginSlashCommand } from "./login-request.ts";
 import { pluginCommands } from "./plugin-commands.tsx";
@@ -40,6 +40,7 @@ const miradorCommands = [clearSlashCommand, loginSlashCommand].map(inPageLanguag
 const miradorCommandsFor = (harness: HarnessId) => [
   ...miradorCommands,
   ...(harness === "claude" ? panelSlashCommands.map(inPageLanguage) : []),
+  ...(harness === "opencode" ? [inPageLanguage(opencodeMcpSlashCommand)] : []),
   ...pluginCommands(),
 ];
 

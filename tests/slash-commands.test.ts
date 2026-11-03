@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredEvent } from "../shared/model.ts";
-import { commandNamedIn, latestSlashCommands, matchingCommands, slashQuery } from "../shared/slash-commands.ts";
+import { commandNamedIn, latestSlashCommands, matchingCommands, shellCommandOfSlashCommand, slashQuery } from "../shared/slash-commands.ts";
 
 const command = (name: string) => ({ name, description: `${name} it`, hint: null });
 
 describe("slash commands", () => {
+  test("/mcp stands for a shell command on opencode alone, and only by itself", () => {
+    expect(shellCommandOfSlashCommand("opencode", " /mcp ")).toBe("opencode mcp list");
+    expect(shellCommandOfSlashCommand("claude", "/mcp")).toBeNull();
+    expect(shellCommandOfSlashCommand("opencode", "/mcp auth github")).toBeNull();
+    expect(shellCommandOfSlashCommand("opencode", "what does /mcp do?")).toBeNull();
+  });
+
   test("are suggested while the message is a / and the start of a name, not once arguments or other text follow", () => {
     expect(slashQuery("/")).toBe("");
     expect(slashQuery("/comp")).toBe("comp");

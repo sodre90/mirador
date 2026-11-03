@@ -277,6 +277,7 @@ export const chat = {
   slashCommandDescriptions: {
     clear: "Start the agent afresh, without the conversation so far in its context; it stays on screen",
     login: "Sign the agent in again, in a terminal tab",
+    mcp: "List the MCP servers opencode has set up, and their status",
     plugin: "Install, enable and disable plugins, in a terminal tab",
     hooks: "See and change the commands Claude Code runs around the agent, in a terminal tab",
     permissions: "See and change what the agent may do without asking, in a terminal tab",

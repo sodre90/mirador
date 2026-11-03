@@ -44,7 +44,13 @@ import * as acp from "@agentclientprotocol/sdk";
  * names a file it writes its pid to. `FAKE_ACP_STEERS=1` offers claude-agent-acp's `_session/steering`: a message
  * steered into a `REPLY STEERED ` turn joins it, any other is refused as needing a prompt of its own.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
+ * Run as `opencode mcp list`, it prints one MCP server and exits, as that command does.
  */
+if (process.argv.slice(2).join(" ") === "mcp list") {
+  console.log("fake-server  connected");
+  process.exit(0);
+}
+
 const promptsFile = process.env.FAKE_ACP_PROMPTS;
 const availableCommands: acp.AvailableCommand[] | null = process.env.FAKE_ACP_COMMANDS ? JSON.parse(process.env.FAKE_ACP_COMMANDS) : null;
 const offersModes = process.env.FAKE_ACP_MODES === "1";

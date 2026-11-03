@@ -273,6 +273,7 @@ export const chat: Messages["chat"] = {
   slashCommandDescriptions: {
     clear: "Reinicia el agente sin la conversación hasta ahora en su contexto; sigue visible en pantalla",
     login: "Vuelve a iniciar la sesión del agente, en una pestaña de terminal",
+    mcp: "Lista los servidores MCP configurados en opencode y su estado",
     plugin: "Instala, activa y desactiva plugins, en una pestaña de terminal",
     hooks: "Muestra y cambia los comandos que Claude Code ejecuta alrededor del agente, en una pestaña de terminal",
     permissions: "Muestra y cambia lo que el agente puede hacer sin preguntar, en una pestaña de terminal",

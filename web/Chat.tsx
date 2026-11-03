@@ -24,6 +24,7 @@ import { profileSettingValue } from "../shared/apps.ts";
 import { choicesOf, toolTitlesOfPlugins, usePluginSettings } from "./plugin-settings.ts";
 import { readableToolTitle as readableToolTitleOf } from "../shared/tool-title.ts";
 import { panelCommandLine, refusedPanelCommand } from "../shared/panel-commands.ts";
+import { shellCommandOfSlashCommand } from "../shared/slash-commands.ts";
 import { adjacentPlaceholder, placeholdersIn, type TextRange } from "../shared/prompt-templates.ts";
 import { commandShownClosed, outputStartsOpen } from "../shared/shell-output.ts";
 import { replyReadingOf } from "../shared/spoken-replies.ts";
@@ -1745,7 +1746,7 @@ function Composer({
     images.clearAfterSending();
   };
   const send = (afterTurn = false, message = text) => {
-    const command = commandIn(message);
+    const command = shellCommandOfSlashCommand(conversation.harness, message) ?? commandIn(message);
     if (!message.trim() || command === "" || attaching || stoppedEdit.goingBack) return;
     if (isLoginCommand(message)) {
       requestLogin(conversation.id);

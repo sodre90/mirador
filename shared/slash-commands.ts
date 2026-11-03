@@ -1,5 +1,5 @@
 import type { AvailableCommand } from "@agentclientprotocol/sdk";
-import type { StoredEvent } from "./model.ts";
+import type { HarnessId, StoredEvent } from "./model.ts";
 
 /** A command the agent takes as a message starting with /name, e.g. /compact; hint describes what may follow it. */
 export interface SlashCommand {
@@ -45,6 +45,20 @@ export const clearSlashCommand: SlashCommand = {
 };
 
 export const isClearCommand = (message: string) => message.trim() === `/${clearSlashCommand.name}`;
+
+/**
+ * Mirador's own /mcp for opencode, whose /mcps is a dialog of its TUI that it does not offer over ACP. It runs as a shell
+ * command, whose card keeps the output: `mcp list` exits at once, which would close a terminal tab.
+ */
+export const opencodeMcpSlashCommand: SlashCommand = {
+  name: "mcp",
+  description: "List the MCP servers opencode has set up, and their status",
+  hint: null,
+};
+
+/** The shell command a message stands for, in a conversation on this agent; null when it stands for none. */
+export const shellCommandOfSlashCommand = (harness: HarnessId, message: string) =>
+  harness === "opencode" && message.trim() === `/${opencodeMcpSlashCommand.name}` ? "opencode mcp list" : null;
 
 export const toSlashCommand = ({ name, description, input }: AvailableCommand): SlashCommand => ({
   name,
