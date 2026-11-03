@@ -53,6 +53,10 @@ const ignoresSigterm = process.env.FAKE_ACP_IGNORES_SIGTERM === "1";
 const offersSteering = process.env.FAKE_ACP_STEERS === "1";
 /** Offers to resume a session, and cannot: as an agent whose record of the session is gone. */
 const resumeFails = process.env.FAKE_ACP_RESUME_FAILS === "1";
+/** A session of its own past, to list and load: `{ sessionId, title, updates }`, its updates replayed on load. */
+const history: { sessionId: string; title: string; updates: acp.SessionUpdate[] } | null = process.env.FAKE_ACP_HISTORY
+  ? JSON.parse(readFileSync(process.env.FAKE_ACP_HISTORY, "utf8"))
+  : null;
 const startsWith = (prompt: acp.ContentBlock[], word: string) => prompt.every((block) => block.type === "text" && block.text.startsWith(word));
 
 const log = (entry: string) => process.env.FAKE_ACP_LOG && appendFileSync(process.env.FAKE_ACP_LOG, `${process.env.FAKE_ACP_NAME ?? "agent"} ${entry}\n`);
@@ -392,7 +396,12 @@ acp
     asyncTasksAdvertised = Array.isArray(air?.capabilities) && (air.capabilities as unknown[]).includes("asyncTasks");
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
-      agentCapabilities: offersModes || resumeFails ? { sessionCapabilities: { ...(offersModes && { close: {} }), ...(resumeFails && { resume: {} }) } } : {},
+      agentCapabilities: {
+        ...((offersModes || resumeFails || history) && {
+          sessionCapabilities: { ...(offersModes && { close: {} }), ...(resumeFails && { resume: {} }), ...(history && { list: {} }) },
+        }),
+        ...(history && { loadSession: true }),
+      },
       ...(offersSteering ? { _meta: { steering: { supported: true } } } : {}),
     };
   })
@@ -401,6 +410,14 @@ acp
     if (availableCommands)
       setTimeout(() => ctx.client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands } }), 50);
     return offersModes ? { sessionId, configOptions: configOptions(sessionId) } : { sessionId };
+  })
+  .onRequest(acp.methods.agent.session.list, (ctx) => ({
+    sessions: history ? [{ sessionId: history.sessionId, cwd: ctx.params.cwd ?? process.cwd(), title: history.title, updatedAt: new Date().toISOString() }] : [],
+  }))
+  .onRequest(acp.methods.agent.session.load, async (ctx) => {
+    if (ctx.params.sessionId !== history?.sessionId) throw acp.RequestError.internalError(undefined, "No such session");
+    for (const update of history.updates) await ctx.client.notify(acp.methods.client.session.update, { sessionId: history.sessionId, update });
+    return {};
   })
   .onRequest(acp.methods.agent.session.resume, () => {
     throw acp.RequestError.internalError(undefined, "No such session");

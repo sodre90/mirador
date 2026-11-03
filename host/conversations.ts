@@ -300,6 +300,7 @@ export class ConversationService {
   /** While the host stops or restarts, messages wait in the queue for the next host, and turns it ends are not the agent's failures. */
   private stopping = false;
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
+  private rebuildCanvas: (conversationId: string, events: StoredEvent[]) => Promise<void> = async () => {};
   private askForm: AskForm = async () => ({ action: "decline" });
   private hearReply: HearReply = () => {};
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
@@ -1543,6 +1544,7 @@ export class ConversationService {
     this.bindSession(conversationId, loadedId, loaded.configOptions);
     if (conversation.harness === "claude") await this.restoreTranscriptModel(conversationId, loadedId, sessionId);
     await this.applyProfileChoices(conversationId, loadedId);
+    await this.rebuildCanvas(conversationId, this.store.listEvents(conversationId)).catch((error: unknown) => console.error(`rebuilding the canvas of conversation ${conversationId} failed:`, error));
     this.setStatus(conversationId, "idle");
     return loadedId;
   }
@@ -2008,6 +2010,11 @@ export class ConversationService {
   /** The canvas keeps what happened there that the agent has not heard of: the user's ticks, the errors of pages nobody saw shown. */
   hearCanvasNotesFrom(canvasNotesOf: (conversationId: string) => CanvasNote[]) {
     this.canvasNotesOf = canvasNotesOf;
+  }
+
+  /** A session Mirador continues gets back on its canvas what the agent put there, as its history tells. */
+  rebuildsCanvasWith(rebuildCanvas: (conversationId: string, events: StoredEvent[]) => Promise<void>) {
+    this.rebuildCanvas = rebuildCanvas;
   }
 
   private async promptContent(conversationId: string, text: string, imageIds: string[]): Promise<acp.ContentBlock[]> {

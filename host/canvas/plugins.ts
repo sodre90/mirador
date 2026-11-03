@@ -48,6 +48,12 @@ const roomOf = (type: PluginItemType | undefined) => {
 /** What the type says of the item, kept with it for the page and the phone, which have no host code. */
 const shownOf = (type: PluginItemType | undefined, data: unknown) => ({ ...countOf(type, data), ...outcomeOf(type, data), ...roomOf(type) });
 
+/**
+ * Review's and tour's tools read the working tree when called, so their calls run again would show today's code, and
+ * delegate's start conversations.
+ */
+const PLUGINS_REBUILT_FROM_THEIR_CALLS = new Set(["checklist"]);
+
 /** A plugin may change its window's state on every tool call; its windows get the state as it settles. */
 const WINDOW_STATE_SETTLES_MS = 100;
 
@@ -73,6 +79,7 @@ export class CanvasPlugins {
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly plugins: CanvasPlugin[],
+    private readonly rebuiltFromTheirCalls: ReadonlySet<string> = PLUGINS_REBUILT_FROM_THEIR_CALLS,
   ) {}
 
   /** Conversations come after the plugins, whose guidance they take. */
@@ -271,6 +278,30 @@ export class CanvasPlugins {
 
   viewCode(pathname: string): Uint8Array<ArrayBuffer> | null {
     return this.plugins.find((plugin) => canvasViewPath(plugin) === pathname)?.view.code ?? null;
+  }
+
+  /**
+   * Runs a plugin tool call from the history of a session Mirador continues again, so its items come back; only for plugins
+   * whose items are made from the call's input alone, with nothing sent to the agent or started.
+   */
+  async replay(conversationId: string, toolName: string, input: Record<string, unknown>) {
+    const plugin = this.plugins.find(({ manifest, host }) => this.rebuiltFromTheirCalls.has(manifest.name) && host.tools[toolName]);
+    if (!plugin) return;
+    const context: CanvasToolContext = {
+      ...this.toolContext(plugin, conversationId, "agent"),
+      prompt: async () => {},
+      startConversation: async () => {
+        throw new Error("Mirador doesn't start conversations while it rebuilds a canvas.");
+      },
+    };
+    const tool = plugin.host.tools[toolName]!;
+    try {
+      const parsed = await fromJsonSchema(tool.input)["~standard"].validate(input);
+      if (parsed.issues) throw new Error(parsed.issues.map(({ message }) => message).join("; "));
+      await tool.run(parsed.value, context);
+    } catch (error) {
+      console.error(`the ${plugin.manifest.name} plugin failed to rebuild its ${toolName} call in conversation ${conversationId}:`, error);
+    }
   }
 
   /** Puts every plugin's tools on a conversation's canvas server; what a tool throws reaches the agent as a tool error. */

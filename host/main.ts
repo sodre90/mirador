@@ -13,6 +13,7 @@ import { CanvasPlugins } from "./canvas/plugins.ts";
 import { PluginSettingsStore } from "./plugin-settings.ts";
 import { officialPluginInstaller, PluginCatalog } from "./plugin-catalog.ts";
 import { CanvasService } from "./canvas/service.ts";
+import { rebuildCanvas } from "./canvas/canvas-calls.ts";
 import { agentLogsDirectory, loadConfig } from "./config.ts";
 import { ConversationService } from "./conversations.ts";
 import { DeviceService } from "./devices.ts";
@@ -101,6 +102,7 @@ const canvasAssetsOrigins = [
 ];
 const canvas = new CanvasService(store, hub, conversations, notifications, canvasAssetsOrigins);
 conversations.askFormsWith((conversationId, request, signal) => askFormOnCanvas(canvas, conversationId, request, signal));
+conversations.rebuildsCanvasWith((conversationId, events) => rebuildCanvas(conversationId, events, canvas, canvasPlugins));
 // The checklist plugin's note about the user's ticks came before the page errors when the checklist was Mirador's own.
 conversations.hearCanvasNotesFrom((conversationId) => [...canvasPlugins.notesForAgent(conversationId), ...canvas.notesForAgent(conversationId)]);
 const plugins = new InstalledPlugins(pluginsFolder, loadedPlugins.problems, loadedPlugins.canvases);

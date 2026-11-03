@@ -53,7 +53,11 @@ export async function canvasPluginHost(
   pluginsFolder: string,
   store = storeWithConversation(),
   hosts: Record<string, CanvasHost> = {},
-  { apps = null, catalog = null }: { apps?: AppDocuments | null; catalog?: PluginCatalog | null } = {},
+  {
+    apps = null,
+    catalog = null,
+    rebuiltFromTheirCalls,
+  }: { apps?: AppDocuments | null; catalog?: PluginCatalog | null; rebuiltFromTheirCalls?: ReadonlySet<string> } = {},
 ) {
   const published: ServerMessage[] = [];
   const toPluginWindows: ServerMessage[] = [];
@@ -67,6 +71,7 @@ export async function canvasPluginHost(
     store,
     hub,
     loaded.canvases.map((plugin) => ({ ...plugin, host: hosts[plugin.manifest.name] ?? plugin.host })),
+    rebuiltFromTheirCalls,
   );
   const prompts: { conversationId: string; text: string; afterTurn: boolean; fromPlugin?: string }[] = [];
   plugins.sendsPromptsWith(async (conversationId, text, options) => void prompts.push({ conversationId, text, ...options }));

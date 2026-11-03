@@ -89,6 +89,32 @@ export class CanvasService {
     return item;
   }
 
+  /** A page from the history of a session Mirador continues, back on its canvas as it was shown. */
+  restorePage(conversationId: string, request: ShowRequest): ShowItem {
+    return this.save({ ...this.restoredBase(conversationId), kind: "show", title: request.title, html: request.html, status: "shown" });
+  }
+
+  /** A question from the history of a session Mirador continues, with the answer the history holds; one it holds none for is closed. */
+  restoreAsk(conversationId: string, request: AskRequest, { shownBefore, toolResult, nextUserMessage }: PastAsk): AskItem {
+    const asked: AskItem = {
+      ...this.restoredBase(conversationId),
+      kind: "ask",
+      ...("questions" in request ? severalQuestionsAsked(request.questions) : singleQuestionAsked(request)),
+      ...(shownBefore.length > 0 && { shownBefore }),
+      status: "cancelled",
+    };
+    const answer = pastAnswerOf(asked, toolResult, nextUserMessage);
+    return this.save(answer ? { ...asked, status: "answered", answer } : asked);
+  }
+
+  private lastRestoredAt = 0;
+
+  /** Restored items keep the order the agent made them in, however fast they are saved. */
+  private restoredBase(conversationId: string) {
+    this.lastRestoredAt = Math.max(Date.now(), this.lastRestoredAt + 1);
+    return { id: crypto.randomUUID(), conversationId, createdAt: this.lastRestoredAt };
+  }
+
   /** Resolves with the user's answer, or rejects when `signal` aborts first; a later answer then arrives as the next message. */
   waitForAnswer(item: CanvasItem, signal: AbortSignal): Promise<Pick<CanvasAnswer, "label" | "note" | "answers">> {
     return new Promise((resolve, reject) => {
@@ -302,6 +328,55 @@ export interface PluginInstaller {
   offer(name: string): Promise<PluginOffer>;
   settle(offerId: string, accepted: boolean): Promise<string>;
 }
+
+/** A question as a session's history has it: the pages shown with it, what the tool returned, and what the user wrote next. */
+export interface PastAsk {
+  shownBefore: string[];
+  toolResult: string;
+  nextUserMessage: string | null;
+}
+
+interface ReadAnswer {
+  entries: AskAnswerEntry[];
+  note?: string;
+}
+
+/** The answer `answerAsToolResult` or `answerAsMessage` wrote for the question, read back; null when neither holds one. */
+export function pastAnswerOf(item: AskItem, toolResult: string, nextUserMessage: string | null): CanvasAnswer | null {
+  const questions = questionsOf(item);
+  const fromToolResult = readAnswer(toolResult, () => /^\s*The user chose: (.*)$/, /^\s*Their note: (.*)$/, /^Their note on all the answers: (.*)$/);
+  const answerLinePrefix = (index: number) =>
+    item.questions ? `${index + 1}. "${questions[index]?.question}": ` : `My answer to your question "${item.question}": `;
+  const fromNextMessage =
+    nextUserMessage === null
+      ? null
+      : readAnswer(nextUserMessage, (index) => new RegExp(`^${escapeRegExp(answerLinePrefix(index))}(.*)$`), /^\s*Note: (.*)$/, /^Note on all the answers: (.*)$/);
+  const read = [
+    { answer: fromToolResult, deliveredAs: "tool-result" as const },
+    { answer: fromNextMessage, deliveredAs: "next-message" as const },
+  ].find(({ answer }) => answer?.entries.length === questions.length);
+  if (!read?.answer) return null;
+  const { entries, note } = read.answer;
+  if (!item.questions) return { label: entries[0]!.label, ...(entries[0]!.note && { note: entries[0]!.note }), deliveredAs: read.deliveredAs };
+  const answers = entries.map((entry, index) => ({ ...entry, question: questions[index]!.question }));
+  return { label: answersSummary(answers), ...(note && { note }), answers, deliveredAs: read.deliveredAs };
+}
+
+function readAnswer(text: string, chosenLine: (index: number) => RegExp, noteLine: RegExp, overallNoteLine: RegExp): ReadAnswer {
+  const read: ReadAnswer = { entries: [] };
+  for (const line of text.split("\n")) {
+    const chosen = chosenLine(read.entries.length).exec(line)?.[1];
+    const overallNote = overallNoteLine.exec(line)?.[1];
+    const note = noteLine.exec(line)?.[1];
+    const latest = read.entries.at(-1);
+    if (chosen !== undefined) read.entries.push({ label: chosen });
+    else if (overallNote !== undefined) read.note = overallNote;
+    else if (note !== undefined && latest) latest.note = note;
+  }
+  return read;
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function answerAsMessage(item: AskItem, { label, note, answers }: GivenAnswer) {
   if (answers) {

@@ -408,7 +408,7 @@ type TurnEnd = Extract<ConversationEvent, { type: "turn-end" }>;
 const errorReason = ({ message, usageLimit, authRequired }: ConversationError) =>
   usageLimit ? "usage limit reached" : authRequired ? "sign-in needed" : failureReason(message);
 
-const toolNameOf = (update: ToolCallUpdate & { name?: unknown }) => {
+export const toolNameOf = (update: ToolCallUpdate & { name?: unknown }) => {
   const claudeName = ((update._meta?.claudeCode ?? {}) as { toolName?: unknown }).toolName;
   if (typeof claudeName === "string") return claudeName;
   const codexMcp = codexMcpToolName(update);
