@@ -4,6 +4,8 @@ import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
 
+test.describe.configure({ mode: "serial" });
+
 test.beforeAll(() => host.start());
 test.afterAll(async () => {
   await host.stop();
