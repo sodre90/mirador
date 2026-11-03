@@ -78,7 +78,7 @@ test("a message sent with Enter while Claude Code runs a tool joins the turn onc
   await waitForTurnToEnd(page);
   await expect(page.locator(".message.agent", { hasText: "Answered: Also, which colour fills" })).toHaveCount(1);
   await expect(lastAgentMessage(page)).toHaveText(`Answered: ${AFTER_TURN}`);
-  const [steeredRequest] = [...api.images].filter(([typed]) => typed.includes("Also, which colour fills"));
+  const [steeredRequest] = [...api.images].filter(([typed]) => typed.startsWith("Also, which colour fills"));
   expect(steeredRequest?.[1], "the image went to the model with the message that joined the turn").toEqual(["image/png"]);
   await expect(userMessages.filter({ hasText: QUEUED }).locator(".message-images img")).toHaveJSProperty("naturalWidth", 64);
   expect(eventsInOrder).toEqual([expect.stringContaining(SLOW_SCRIPT), QUEUED, "turn-end", AFTER_TURN, "turn-end"]);
