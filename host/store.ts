@@ -1352,13 +1352,22 @@ export class Store {
 
   /**
    * The commands the agent last listed in this conversation, or else in another with the same agent and profile,
-   * this workspace's first: an agent lists them only once a session starts, which is after the first message.
+   * this workspace's first: an agent lists them only once a session starts, which is after the first message. A list
+   * sent before the conversation moved to another agent belongs to that agent, so it doesn't count, as in the page's
+   * `latestSlashCommands`.
    */
   latestAvailableCommands({ id, workspaceId, harness, profileId }: Pick<Conversation, "id" | "workspaceId" | "harness" | "profileId">): AvailableCommand[] {
     const row = this.db
       .query(
-        `SELECT e.event FROM events e JOIN conversations c ON c.id = e.conversation_id
+        `WITH last_agent_change AS MATERIALIZED (
+           SELECT conversation_id, MAX(seq) AS seq FROM events
+           WHERE json_extract(event, '$.type') = 'profile-changed' AND json_extract(event, '$.agent') IS NOT NULL
+           GROUP BY conversation_id
+         )
+         SELECT e.event FROM events e JOIN conversations c ON c.id = e.conversation_id
+         LEFT JOIN last_agent_change moved ON moved.conversation_id = e.conversation_id
          WHERE c.harness = ? AND c.profile_id IS ? AND json_extract(e.event, '$.update.sessionUpdate') = 'available_commands_update'
+           AND e.seq > COALESCE(moved.seq, -1)
          ORDER BY c.id = ? DESC, c.workspace_id = ? DESC, e.at DESC, e.seq DESC LIMIT 1`,
       )
       .get(harness, profileId, id, workspaceId) as { event: string } | null;
