@@ -708,6 +708,29 @@ export function buildTimeline(events: StoredEvent[]): TimelineBlock[] {
   return builder.blocks;
 }
 
+/**
+ * The timeline of events that differ from the previous ones only by more text streamed into the last event, as
+ * withStreamedEvent joins a chunk to the reply or thinking before it: the previous timeline with its last block
+ * carrying the added text, every other block the very same, so their rendered entries are kept. Null for any other
+ * change, which needs buildTimeline.
+ */
+export function timelineWithStreamedText(previous: { events: StoredEvent[]; timeline: TimelineBlock[] }, events: StoredEvent[]): TimelineBlock[] | null {
+  const added = textAddedToLastEvent(previous.events, events);
+  const last = previous.timeline.at(-1);
+  if (added === null || !last || last.kind !== added.kind || !last.text.endsWith(added.before)) return null;
+  return [...previous.timeline.slice(0, -1), { ...last, text: last.text + added.text }];
+}
+
+function textAddedToLastEvent(before: StoredEvent[], after: StoredEvent[]): { kind: "agent" | "thought"; before: string; text: string } | null {
+  const [lastBefore, lastAfter] = [before.at(-1), after.at(-1)];
+  if (!lastBefore || !lastAfter || before.length !== after.length || !before.every((stored, index) => index === before.length - 1 || stored === after[index])) return null;
+  const [chunkBefore, chunkAfter] = [coalescibleChunk(lastBefore), coalescibleChunk(lastAfter)];
+  if (!chunkBefore || !chunkAfter || !sameMessage(asFirstChunk(chunkBefore.update), asFirstChunk(chunkAfter.update))) return null;
+  if (claudeCodeMeta(chunkAfter.update).parentToolUseId || opencodeChildMeta(chunkAfter.update) || !chunkAfter.text.startsWith(chunkBefore.text)) return null;
+  const kind = chunkAfter.update.sessionUpdate === "agent_message_chunk" ? "agent" : "thought";
+  return { kind, before: chunkBefore.text, text: chunkAfter.text.slice(chunkBefore.text.length) };
+}
+
 type ChunkUpdate = Extract<SessionUpdate, { sessionUpdate: "agent_message_chunk" | "agent_thought_chunk" }>;
 
 /** Streamed text of the reply or of the thinking, which may go out together with the chunks before it. */

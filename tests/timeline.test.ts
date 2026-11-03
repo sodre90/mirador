@@ -5,7 +5,7 @@ import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";
 import { pageEvent } from "../host/low-data.ts";
 import { canTryAgain } from "../shared/try-again.ts";
-import { approvalsWaiting, authorOf, buildTimeline, latestPlan, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, toolCallsAwaitingPermission, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
+import { approvalsWaiting, authorOf, buildTimeline, latestPlan, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
 
 function stored(events: ConversationEvent[]): StoredEvent[] {
   return events.map((event, index) => ({ seq: index + 1, at: (index + 1) * 1000, event }));
@@ -632,5 +632,44 @@ describe("mode notices", () => {
   test("name the mode as the picker does, or by the agent's id when the host found no name", () => {
     expect(buildTimeline(stored([modeChange({ [MODE_NAME_META_KEY]: "Plan" })]))[0]).toMatchObject({ kind: "notice", text: "Mode: Plan", about: { modeName: "Plan" } });
     expect(buildTimeline(stored([modeChange()]))[0]).toMatchObject({ kind: "notice", text: "Mode: https://example.test/session-modes#plan" });
+  });
+});
+
+describe("timelineWithStreamedText", () => {
+  /** Streams the events in as the page gets them, and at each one says whether the fast path took it, checked against a full build. */
+  function streamIn(events: ConversationEvent[]) {
+    let state = { events: [] as StoredEvent[], timeline: [] as TimelineBlock[] };
+    const fastPathTaken: boolean[] = [];
+    stored(events).forEach((event) => {
+      const next = withStreamedEvent(state.events, event);
+      const streamed = timelineWithStreamedText(state, next);
+      if (streamed) {
+        expect(streamed).toEqual(buildTimeline(next));
+        expect(streamed.slice(0, -1).every((block, index) => block === state.timeline[index])).toBe(true);
+      }
+      fastPathTaken.push(streamed !== null);
+      state = { events: next, timeline: streamed ?? buildTimeline(next) };
+    });
+    return fastPathTaken;
+  }
+
+  const thought = (text: string) => acp({ sessionUpdate: "agent_thought_chunk", content: { type: "text", text } });
+
+  test("chunks added to a reply or a thought keep the blocks before them", () => {
+    expect(streamIn([{ type: "user-message", text: "go" }, thought("Hm"), thought("m."), agentText("Do"), agentText("ne"), agentText(" now.")])).toEqual([
+      false, false, true, false, true, true,
+    ]);
+  });
+
+  test("a chunk after a tool call, or a subagent's chunk, is built in full", () => {
+    const subagentText = (text: string) => agentText(text, byParent("agent-1"));
+    expect(streamIn([{ type: "user-message", text: "go" }, agentText("Look"), bashCall("call-1"), agentText("Found"), launch("agent-1", { description: "dig" }), subagentText("Dig"), subagentText("ging")])).toEqual([
+      false, false, false, false, false, false, false,
+    ]);
+  });
+
+  test("a gateway's repeat of the whole message is not taken as more of it", () => {
+    const withId = (text: string) => acp({ sessionUpdate: "agent_message_chunk", messageId: "m1", content: { type: "text", text } });
+    expect(streamIn([{ type: "user-message", text: "go" }, withId("Hel"), withId("lo"), withId("Hello")])).toEqual([false, false, true, false]);
   });
 });

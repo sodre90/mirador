@@ -91,6 +91,7 @@ import {
   subagentAsking,
   subagentsIn,
   subagentState,
+  timelineWithStreamedText,
   toolCallsAwaitingPermission,
   type AgentNoticeBlock,
   type Author,
@@ -901,6 +902,16 @@ function authorName(author: Author, harness: HarnessId) {
   if (author === "mirador") return <span data-hint={hints.miradorMessage}>{words.author.fromMirador}</span>;
   if (author === "script") return <span data-hint={hints.scriptMessage}>{words.author.fromScript}</span>;
   return author === "user" ? words.author.you : agentNames[harness];
+}
+
+/** The events' timeline; while a reply streams in, only its last block changes, so the other entries are not rendered again. */
+function useTimeline(events: StoredEvent[]) {
+  const previous = useRef<{ events: StoredEvent[]; timeline: TimelineBlock[] }>({ events: [], timeline: [] });
+  return useMemo(() => {
+    const timeline = timelineWithStreamedText(previous.current, events) ?? buildTimeline(events);
+    previous.current = { events, timeline };
+    return timeline;
+  }, [events]);
 }
 
 /** Long conversations have hundreds of entries; one that did not change is not rendered again. */
@@ -2041,7 +2052,7 @@ export function ChatPanel({
   onToggleTerminal: () => void;
   onFork: () => void;
 }) {
-  const timeline = useMemo(() => buildTimeline(open.events), [open.events]);
+  const timeline = useTimeline(open.events);
   const readingAs = replyReadingOf(voiceSettings);
   useEffect(() => readWhenSpokenTurnEnds(conversation.id, open.events, timeline, readingAs), [timeline]);
   useEffect(() => askAloudWhenWaiting(conversation.id, open.canvas), [open.canvas]);
