@@ -6835,6 +6835,18 @@ body.reordering * {
   -webkit-box-orient: vertical;
 }
 
+.button-spinner {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-inline-end: 6px;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: upload-spin 0.8s linear infinite;
+}
+
 .plugin-tile-bottom {
   display: flex;
   align-items: flex-end;

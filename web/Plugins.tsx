@@ -405,7 +405,7 @@ const mainActionOf = (plugin: GalleryPlugin, news: PluginNews | undefined) =>
   !plugin.installed ? { label: words.install, start: "install" as const } : news ? { label: words.update, start: "update" as const } : null;
 
 /** The whole tile opens the plugin's page; its title is the button that does so for the keyboard. */
-function PluginTile({ plugin, news, onOpen }: { plugin: GalleryPlugin; news: PluginNews | undefined; onOpen: (start: Start) => void }) {
+function PluginTile({ plugin, news, updating, onOpen }: { plugin: GalleryPlugin; news: PluginNews | undefined; updating: boolean; onOpen: (start: Start) => void }) {
   const action = mainActionOf(plugin, news);
   return (
     <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
@@ -419,7 +419,15 @@ function PluginTile({ plugin, news, onOpen }: { plugin: GalleryPlugin; news: Plu
       <span className="plugin-tile-bottom">
         <PluginBadges plugin={plugin} news={news} />
         {action && (
-          <button type="button" className="primary" aria-label={`${action.label} ${plugin.title}`} onClick={(event) => (event.stopPropagation(), onOpen(action.start))}>
+          <button
+            type="button"
+            className="primary"
+            aria-label={`${action.label} ${plugin.title}`}
+            aria-busy={updating}
+            disabled={updating}
+            onClick={(event) => (event.stopPropagation(), onOpen(action.start))}
+          >
+            {updating && <span className="button-spinner" aria-hidden="true" />}
             {action.label}
           </button>
         )}
@@ -649,10 +657,12 @@ function newsFor(plugin: PluginInfo, pluginUpdates: FoundUpdate[]): PluginNews |
 }
 
 /** Clones every plugin's update, then asks once for all of them; stops at the first clone or build that fails. A tile's Update starts it right away for just that plugin. */
-function UpdateAll({ updates, startNow = false, onDone }: { updates: FoundUpdate[]; startNow?: boolean; onDone?: () => void }) {
+function UpdateAll({ updates, startNow = false, onDone, onBusy }: { updates: FoundUpdate[]; startNow?: boolean; onDone?: () => void; onBusy?: (busy: boolean) => void }) {
   const [cloning, setCloning] = useState<string | null>(null);
   const [offers, setOffers] = useState<PluginOffer[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const busy = cloning !== null || offers !== null;
+  useEffect(() => onBusy?.(busy), [busy]);
   const offerAll = async () => {
     setProblem(null);
     const offered: PluginOffer[] = [];
@@ -701,11 +711,23 @@ function UpdateAll({ updates, startNow = false, onDone }: { updates: FoundUpdate
   );
 }
 
-function TileList({ label, plugins, newsOf, onOpen }: { label: string; plugins: GalleryPlugin[]; newsOf: (plugin: GalleryPlugin) => PluginNews | undefined; onOpen: (plugin: GalleryPlugin, start: Start) => void }) {
+function TileList({
+  label,
+  plugins,
+  newsOf,
+  updatingFolder = null,
+  onOpen,
+}: {
+  label: string;
+  plugins: GalleryPlugin[];
+  newsOf: (plugin: GalleryPlugin) => PluginNews | undefined;
+  updatingFolder?: string | null;
+  onOpen: (plugin: GalleryPlugin, start: Start) => void;
+}) {
   return (
     <ul className="plugin-tiles" aria-label={label}>
       {plugins.map((plugin) => (
-        <PluginTile key={plugin.key} plugin={plugin} news={newsOf(plugin)} onOpen={(start) => onOpen(plugin, start)} />
+        <PluginTile key={plugin.key} plugin={plugin} news={newsOf(plugin)} updating={updatingFolder !== null && plugin.installed?.folder === updatingFolder} onOpen={(start) => onOpen(plugin, start)} />
       ))}
     </ul>
   );
@@ -726,6 +748,7 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
   const openedPlugin = opened && [...gallery.installed, ...gallery.discover].find(({ key }) => key === opened.key);
   usePicturesFetchedAhead(listed?.official);
   const [updatingFromTile, setUpdatingFromTile] = useState<FoundUpdate | null>(null);
+  const [tileUpdateBusy, setTileUpdateBusy] = useState(false);
   const open = (plugin: GalleryPlugin, start: Start) => {
     const found = start === "update" && newsOf(plugin) ? pluginUpdates.find(({ folder }) => folder === plugin.installed?.folder) : undefined;
     if (found) return setUpdatingFromTile(found);
@@ -760,12 +783,12 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
             <>
               <p className="hint">{words.intro}</p>
               {updatingFromTile ? (
-                <UpdateAll key={updatingFromTile.folder} updates={[updatingFromTile]} startNow onDone={() => setUpdatingFromTile(null)} />
+                <UpdateAll key={updatingFromTile.folder} updates={[updatingFromTile]} startNow onDone={() => setUpdatingFromTile(null)} onBusy={setTileUpdateBusy} />
               ) : (
                 waiting.length > 0 && <UpdateAll updates={waiting} />
               )}
               <h3>{words.installed}</h3>
-              {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
+              {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} updatingFolder={tileUpdateBusy ? (updatingFromTile?.folder ?? null) : null} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
               {gallery.discover.length > 0 && (
                 <>
                   <h3>{words.discover}</h3>

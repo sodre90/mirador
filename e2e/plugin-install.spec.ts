@@ -192,6 +192,7 @@ test("a plugin added from a git repo is built only once the user agrees, works a
 
     await counter.getByRole("button", { name: "← All plugins" }).click();
     await counterTile(plugins).getByRole("button", { name: "Update Counter" }).click();
+    await expect(counterTile(plugins).getByRole("button", { name: "Update Counter" }), "the tile's Update shows it is busy until the update is done").toHaveAttribute("aria-busy", "true");
     await consent(plugins, "Update Counter?").getByRole("button", { name: "Update", exact: true }).click();
     await expect(counterTile(plugins), "a tile's Update updates in the gallery, without opening the plugin").toContainText("used from the next start");
     await expect(plugins.getByRole("region", { name: "Counter" })).toHaveCount(0);
