@@ -346,6 +346,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "files.ask-to-open":
       return { ...state, fileToOpen: { conversationId: message.conversationId, file: message.file } };
     case "fs.completions":
+    case "pong":
     case "profile.saved":
     case "sessions.listed":
     case "sessions.searched":

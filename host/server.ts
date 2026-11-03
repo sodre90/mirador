@@ -1378,6 +1378,8 @@ export function startServer(services: HostServices) {
         return message.unlessBusy ? terminals.closeUnlessBusy(socket, message.terminalId) : terminals.close(message.terminalId);
       case "terminal.close-tab":
         return message.unlessBusy ? terminals.closeTabUnlessBusy(socket, message.tabId) : terminals.closeTab(message.tabId);
+      case "ping":
+        return reply({ type: "pong" });
       case "presence":
         socket.data.presence = { conversationId: message.conversationId, attentive: message.attentive };
         if (message.attentive && message.conversationId) conversations.markSeen(message.conversationId);
@@ -1557,6 +1559,7 @@ export function startServer(services: HostServices) {
       hostCodeChanged: restart.codeChanged,
       desktopAppOutdated: desktopApp.outdated,
       version: MIRADOR_VERSION,
+      answersPings: true,
       newerVersion: newerVersion.current,
       pluginUpdates: pluginUpdates.current ?? [],
       installedApps: apps.installed(),

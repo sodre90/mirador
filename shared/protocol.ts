@@ -268,6 +268,8 @@ export type ClientMessage =
   | { type: "terminal.clear"; terminalId: string }
   /** What this page shows, and whether you are looking at it: the host notifies only about conversations nobody is looking at. */
   | { type: "presence"; conversationId: string | null; attentive: boolean }
+  /** Asks the host to answer with pong, so a device can tell a socket that went quiet from one that died on the way. */
+  | { type: "ping" }
   | { type: "host.restart" }
   | { type: "devices.list" }
   | { type: "plugins.list" }
@@ -345,6 +347,8 @@ export type ServerMessage =
       desktopAppOutdated: boolean;
       /** The version of Mirador this host is. */
       version: string;
+      /** The host answers ping; absent from hosts before pings, which answer it with an error. */
+      answersPings?: true;
       newerVersion: NewerVersion | null;
       /** Plugins from git repos with new commits, as the host found by itself. */
       pluginUpdates?: PluginUpdate[];
@@ -485,6 +489,7 @@ export type ServerMessage =
   /** The host is stopping to start again in place; pages reload once they reconnect. */
   | { type: "host.restarting" }
   | { type: "error"; message: string; problem?: HostProblem }
+  | { type: "pong" }
   /** A file link leads to a file outside the workspace that the agent did not change: the page asks before it opens `file`, the real file. */
   | { type: "files.ask-to-open"; conversationId: string; file: string }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */
