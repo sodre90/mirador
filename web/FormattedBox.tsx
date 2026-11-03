@@ -242,6 +242,7 @@ function Bridge({ text, facade, onText, onCaret, onKeyDown, onPaste, element }: 
           (event) => {
             if ($isCodeNode(topBlockOfSelection())) {
               event?.preventDefault();
+              requestAnimationFrame(() => reapplySelection(editor));
               return editor.dispatchCommand(INSERT_LINE_BREAK_COMMAND, false);
             }
             if (!event?.shiftKey) return false;
@@ -303,6 +304,16 @@ function clipboardIsUnformatted(event: globalThis.ClipboardEvent) {
   const html = event.clipboardData?.getData("text/html");
   return !!html && !new DOMParser().parseFromString(html, "text/html").body.querySelector(SLACK_FORMATS);
 }
+
+/**
+ * WebKit paints a caret put between two line breaks at the end of the line above, until the selection is set again; doing
+ * that before the frame is painted puts it on its own line at once.
+ */
+const reapplySelection = (editor: LexicalEditor) =>
+  editor.update(() => {
+    const selection = $getSelection();
+    if ($isRangeSelection(selection)) selection.dirty = true;
+  });
 
 /**
  * The desktop app at times draws no caret in the box focused again as its conversation is shown, though the selection is in
