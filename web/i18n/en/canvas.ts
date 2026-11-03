@@ -195,4 +195,5 @@ export const canvas = {
   },
   imagePreview: "Image",
   pluginMissing: (plugin: string) => `The ${plugin} plugin isn't installed, so this is what it published, as it is.`,
+  workspaceTabNoView: (plugin: string) => `The ${plugin} plugin has no view to draw its tab with.`,
 };

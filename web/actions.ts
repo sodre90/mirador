@@ -5,10 +5,10 @@ import { connection } from "./connection.ts";
 import type { AppAction } from "./state.ts";
 
 /** Without a profile yet, the main pane offers to set one up instead, as it does with no conversation open. */
-export function startConversationIn(workspace: Workspace, dispatch: Dispatch<AppAction>) {
+export function startConversationIn(workspace: Workspace, dispatch: Dispatch<AppAction>, prompt?: string) {
   if (workspace.defaultLaunch.profileId === null) return dispatch({ type: "select", conversationId: null });
   dispatch({ type: "awaiting-conversation", workspaceId: workspace.id });
-  connection.send({ type: "conversation.create", workspaceId: workspace.id });
+  connection.send({ type: "conversation.create", workspaceId: workspace.id, ...(prompt && { prompt }) });
 }
 
 /** The agent has a session to copy once it has worked on a message there, as the conversation's loaded history shows. */

@@ -122,7 +122,8 @@ export type ClientMessage =
   /** The user's picture as a small square PNG data URL the page drew; null takes it away, leaving the person icon. */
   | { type: "settings.set-avatar"; image: string | null }
   /** Without a launch, the conversation starts on the workspace's default as the host has it when the message arrives. */
-  | { type: "conversation.create"; workspaceId: string; launch?: Launch }
+  /** With a prompt, the new conversation's agent starts on it at once. */
+  | { type: "conversation.create"; workspaceId: string; launch?: Launch; prompt?: string }
   /** Puts the conversation just before another of its workspace in the sidebar, or last. */
   | { type: "conversation.move"; conversationId: string; beforeConversationId: string | null }
   | { type: "sessions.list"; requestId: string; workspaceId: string; launch: Launch }
@@ -231,6 +232,10 @@ export type ClientMessage =
   | { type: "plugin-window.subscribe"; plugin: string }
   /** What the user did in a plugin's own window, for its host code; answered with "plugin-window.acted". */
   | { type: "plugin-window.action"; requestId: string; plugin: string; action: unknown }
+  /** A workspace's tabs of the plugins came into view: each gets its state now, and again whenever its plugin changes it. */
+  | { type: "plugin-tab.subscribe"; workspaceId: string }
+  /** What the user did in a plugin's workspace tab, for its host code; answered with "plugin-tab.acted". */
+  | { type: "plugin-tab.action"; requestId: string; plugin: string; workspaceId: string; action: unknown }
   /** The user takes a plugin's item out of the tab; it stays gone until the plugin publishes a new one. */
   | { type: "canvas.dismiss"; itemId: string }
   /** A page the agent showed, as a file of its own, for the user to copy or download. */
@@ -362,6 +367,8 @@ export type ServerMessage =
       pluginCommands?: SlashCommand[];
       /** The plugins that have a window of their own: their titles by name. Missing from a host older than plugin windows. */
       pluginWindows?: Record<string, string>;
+      /** The plugins that have a workspace tab: their titles by name. Missing from a host older than plugin API 7. */
+      workspaceTabs?: Record<string, string>;
       /** Missing from a host older than plugin settings. */
       pluginSettings?: PluginSettings[];
       /** Missing from a host older than the keep awake setting. */
@@ -512,6 +519,12 @@ export type ServerMessage =
   /** A plugin window's state, or why there is none, such as a plugin with no window. */
   | { type: "plugin-window.state"; plugin: string; state: unknown; problem: string | null }
   | { type: "plugin-window.acted"; requestId: string; reply: unknown; problem: string | null }
+  /**
+   * A plugin's tab in a workspace: whether the workspace gets it, and its state, or why there is none. `seq` grows with
+   * each time the host asks for a state, across restarts too, so a page keeps the newest asked for, whichever answers last.
+   */
+  | { type: "plugin-tab.state"; plugin: string; workspaceId: string; seq: number; shown: boolean; state: unknown; problem: string | null }
+  | { type: "plugin-tab.acted"; requestId: string; reply: unknown; problem: string | null }
   /** What updating the plugin would bring: a newer release and its commits, or the commits on its branch it lacks, newest first. */
   | { type: "plugins.commits-found"; requestId: string; release: string | null; commits: PluginCommit[]; problem: string | null; problemAbout?: HostProblem }
   | { type: "devices.invited"; requestId: string; code: string; expiresAt: number; tunnel: InviteTunnel | null }

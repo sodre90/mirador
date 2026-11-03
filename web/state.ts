@@ -45,6 +45,14 @@ export type SettingsPage = "appearance" | "conversations" | "agents" | "voice" |
 
 export type DevicesListed = Extract<ServerMessage, { type: "devices.listed" }>;
 
+/** A plugin's tab in a workspace, as its host code last said. */
+export interface PluginTabState {
+  seq: number;
+  shown: boolean;
+  state: unknown;
+  problem: string | null;
+}
+
 export interface AppState {
   workspaces: Workspace[];
   workspaceGroups: WorkspaceGroup[];
@@ -104,6 +112,10 @@ export interface AppState {
   canvasViews: Record<string, string>;
   /** The plugins that have a window of their own: their titles by name. */
   pluginWindows: Record<string, string>;
+  /** The plugins that have a workspace tab: their titles by name. */
+  workspaceTabs: Record<string, string>;
+  /** Each workspace's plugin tabs, by workspace id, then plugin name: only those of workspaces the page subscribed to. */
+  pluginTabs: Record<string, Record<string, PluginTabState>>;
   /** The documents of the apps this page shows, by appKey: it gets them only while subscribed. */
   appDocuments: Record<string, AppDocumentState>;
 }
@@ -160,6 +172,8 @@ export const initialState: AppState = {
   openApps: [],
   canvasViews: {},
   pluginWindows: {},
+  workspaceTabs: {},
+  pluginTabs: {},
   appDocuments: {},
   notices: [],
   noticesEverShown: 0,
@@ -255,9 +269,15 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         openApps: message.openApps,
         canvasViews: message.canvasViews,
         pluginWindows: message.pluginWindows ?? {},
+        workspaceTabs: message.workspaceTabs ?? {},
         kept: state.kept.filter(({ conversationId }) => exists(conversationId)),
       };
       return exists(state.selectedConversationId) ? next : select(next, null);
+    }
+    case "plugin-tab.state": {
+      const { workspaceId, plugin, seq, shown, state: tabState, problem } = message;
+      if (seq < (state.pluginTabs[workspaceId]?.[plugin]?.seq ?? -Infinity)) return state;
+      return { ...state, pluginTabs: { ...state.pluginTabs, [workspaceId]: { ...state.pluginTabs[workspaceId], [plugin]: { seq, shown, state: tabState, problem } } } };
     }
     case "apps.open":
       return { ...state, openApps: message.openApps };
@@ -396,6 +416,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "app.file-opened":
     case "plugin-window.state":
     case "plugin-window.acted":
+    case "plugin-tab.acted":
     case "conversation.revert-previewed":
     case "conversation.reverted":
     case "conversation.revert-failed":

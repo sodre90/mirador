@@ -10,6 +10,7 @@ import {
   type PluginActivity,
   type PluginActivityEvent,
   type PluginWindowContext,
+  type WorkspaceTabContext,
   type ConversationReply,
   type PluginItemType,
   type StartedConversation,
@@ -227,6 +228,65 @@ export class CanvasPlugins {
     setTimeout(() => {
       this.windowsSettling.delete(name);
       this.hub.publishToPluginWindows(name, this.windowStateMessage(name));
+    }, WINDOW_STATE_SETTLES_MS);
+  }
+
+  /** The plugins that have a workspace tab, their titles by name. */
+  workspaceTabTitles(): Record<string, string> {
+    return Object.fromEntries(this.plugins.filter(({ host }) => host.workspaceTab).map(({ manifest }) => [manifest.name, manifest.title]));
+  }
+
+  /** Every workspace tab's state in the workspace, one message each, as each settles. */
+  workspaceTabStateMessages(workspaceId: string): Promise<ServerMessage>[] {
+    return this.plugins.filter(({ host }) => host.workspaceTab).map((plugin) => this.workspaceTabStateMessage(plugin, workspaceId));
+  }
+
+  /** Starts at the clock, so states asked for after a restart still come after those asked for before it. */
+  private tabStatesAsked = Date.now();
+
+  private async workspaceTabStateMessage(plugin: CanvasPlugin, workspaceId: string): Promise<ServerMessage> {
+    const about = { type: "plugin-tab.state" as const, plugin: plugin.manifest.name, workspaceId, seq: ++this.tabStatesAsked };
+    try {
+      const tab = plugin.host.workspaceTab!;
+      const context = this.workspaceTabContext(plugin, workspaceId);
+      const shown = tab.shows ? await tab.shows(context) : true;
+      return { ...about, shown, state: shown ? ((await tab.state(context)) ?? null) : null, problem: null };
+    } catch (error) {
+      return { ...about, shown: true, state: null, problem: messageOf(error) };
+    }
+  }
+
+  /** The user's action in a plugin's workspace tab, for its host code; resolves to its reply. */
+  async actInWorkspaceTab(name: string, workspaceId: string, action: unknown): Promise<unknown> {
+    const plugin = this.plugins.find(({ manifest }) => manifest.name === name);
+    const tab = plugin?.host.workspaceTab;
+    if (!plugin || !tab) throw new Error(plugin ? `${plugin.manifest.title} has no workspace tab.` : `No plugin named ${name} is installed.`);
+    if (!tab.action) throw new Error(`${plugin.manifest.title} takes no actions from its tab.`);
+    return (await tab.action(action, this.workspaceTabContext(plugin, workspaceId))) ?? null;
+  }
+
+  private workspaceTabContext(plugin: CanvasPlugin, workspaceId: string): WorkspaceTabContext {
+    const workspace = this.store.findWorkspace(workspaceId);
+    if (!workspace) throw new Error(`No workspace ${workspaceId} is open in Mirador.`);
+    const shared = this.storageOf(plugin);
+    const keyed = (key: string) => `workspace:${workspaceId}:${key}`;
+    return {
+      workspace: { id: workspace.id, name: workspace.name, folder: workspace.path },
+      storage: { get: (key) => shared.get(keyed(key)), set: (key, value) => shared.set(keyed(key), value) },
+      sharedStorage: shared,
+      changed: () => this.workspaceTabChanged(plugin, workspaceId),
+    };
+  }
+
+  private readonly tabsSettling = new Set<string>();
+
+  private workspaceTabChanged(plugin: CanvasPlugin, workspaceId: string) {
+    const key = `${plugin.manifest.name}\n${workspaceId}`;
+    if (this.tabsSettling.has(key)) return;
+    this.tabsSettling.add(key);
+    setTimeout(() => {
+      this.tabsSettling.delete(key);
+      void this.workspaceTabStateMessage(plugin, workspaceId).then((message) => this.hub.publishToPluginTabs(workspaceId, message));
     }, WINDOW_STATE_SETTLES_MS);
   }
 

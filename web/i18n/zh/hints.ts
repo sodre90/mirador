@@ -304,6 +304,7 @@ export const hints: Messages["hints"] = {
   canvasEditsWaiting: "显示 Agent 等你允许或拒绝的编辑。",
   canvasChanges: "这一轮改动的文件，或所有未提交的更改，附带各自的行更改。",
   canvasApp: "在这个工作区中打开的应用，你和 Agent 一起修改它。每个显示它的对话都使用同一份文档。",
+  canvasWorkspaceTab: "插件为这个工作区提供的标签页，在工作区的每个对话中都相同。",
   canvasChecklist:
     "Agent 工作的各个步骤，完成时会被勾选。你也可以勾选其中任何一项：Agent 会随你的下一条消息得知你的勾选。",
   checklistClose: "回到画布原先显示的内容。“清单”按钮可再次打开它。",

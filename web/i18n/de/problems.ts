@@ -121,6 +121,7 @@ export const problems: Messages["problems"] = {
     "canvas-need-note-function": "note nur als Funktion",
     "canvas-need-activity-function": "activity nur als Funktion",
     "canvas-need-window-shape": "window nur als { state, action }, mit state als Funktion und action, falls vorhanden, ebenfalls",
+    "canvas-need-workspace-tab-shape": "workspaceTab nur als { shows, state, action }, mit state als Funktion und shows und action, falls vorhanden, ebenfalls",
   },
   couldNotResume: (cause) => `Die vorherige Sitzung des Agenten ließ sich nicht fortsetzen (${cause}); eine neue wird gestartet.`,
   couldNotSetOption: (option, value, cause) => `${option} ließ sich nicht auf ${value} setzen: ${cause}`,
@@ -285,6 +286,7 @@ export const problems: Messages["problems"] = {
   engineDownloadWrongSize: (url, bytes) => `${url} kam mit einer anderen Größe als ${bytes} Bytes an.`,
   pluginWindowNeedsNewerApi: (brought, named) =>
     `das Canvas-Host-Modul hat ein Fenster oder hört auf Aktivität, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
+  workspaceTabNeedsNewerApi: (brought, named) => `das Canvas-Host-Modul hat einen Tab für Arbeitsbereiche, den Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
   canvasHostModuleNeeds: (needs) => `das Canvas-Host-Modul braucht ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} mit einem icon, einem placement von ${placements.join(" oder ")} und count, outcome und listed nur als Funktionen`,

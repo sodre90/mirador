@@ -24,6 +24,8 @@ export interface SocketData {
   appSubscriptions: Set<string>;
   /** The plugins whose own window the socket's page is. */
   pluginWindowSubscriptions: Set<string>;
+  /** The workspaces whose plugin tabs the socket's page shows. */
+  pluginTabSubscriptions: Set<string>;
   /** The subscribed conversations the socket follows in their low-data form, as a phone does. */
   lowDataSubscriptions: Set<string>;
   /** The socket's client reads long messages deflated, in binary frames. */
@@ -66,6 +68,7 @@ export const socketData = (
   subscriptions: new Set<string>(),
   appSubscriptions: new Set<string>(),
   pluginWindowSubscriptions: new Set<string>(),
+  pluginTabSubscriptions: new Set<string>(),
   lowDataSubscriptions: new Set<string>(),
   terminalConversationId: null,
   presence: { conversationId: null, attentive: false },
@@ -207,6 +210,10 @@ export class Hub {
 
   publishToPluginWindows(plugin: string, message: ServerMessage) {
     this.publishWhere((socket) => socket.data.pluginWindowSubscriptions.has(plugin), message);
+  }
+
+  publishToPluginTabs(workspaceId: string, message: ServerMessage) {
+    this.publishWhere((socket) => socket.data.pluginTabSubscriptions.has(workspaceId), message);
   }
 
   publishToConversation(conversationId: string, message: ServerMessage) {

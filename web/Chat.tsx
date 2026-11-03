@@ -1,5 +1,5 @@
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk";
-import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from "react";
+import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type PointerEvent, type RefObject, type SetStateAction } from "react";
 import { modelLabel } from "../shared/claude-models.ts";
 import { flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";
 import { hasBegun } from "../shared/conversation-begun.ts";
@@ -49,6 +49,7 @@ import { FindBar, MatchesFind, useFind } from "./FindBar.tsx";
 import { useDragToReorder } from "./drag-to-reorder.ts";
 import { useEarlierHistory, type EarlierHistory } from "./earlier-history.ts";
 import { joinDrafts, useDraft } from "./drafts.ts";
+import { onWordsForComposer } from "./tab-handoffs.ts";
 import { useStoppedMessageEdit } from "./edit-stopped.ts";
 import { isLoginCommand, requestLogin } from "./login-request.ts";
 import { requestProgram } from "./program-request.ts";
@@ -1723,6 +1724,7 @@ function Composer({
   const queued = conversation.queuedMessages;
   const command = commandIn(text);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  useWordsFromTabs(conversation.id, setText, textarea);
   const composerHeight = useComposerHeight();
   const images = useComposerImages(conversation.id, text, setText, textarea);
   const droppedFiles = useDroppedFiles(conversation.id, setText, textarea);
@@ -2016,6 +2018,24 @@ function Composer({
       </div>
       <DictationLines dictation={dictation} settings={voiceSettings} engine={voiceEngine} />
     </div>
+  );
+}
+
+/** Words a plugin's workspace tab adds to this conversation's composer, after what the user already wrote, with the caret after them. */
+function useWordsFromTabs(conversationId: string, setText: Dispatch<SetStateAction<string>>, textarea: RefObject<HTMLTextAreaElement | null>) {
+  useEffect(
+    () =>
+      onWordsForComposer((words) => {
+        if (words.conversationId !== conversationId) return false;
+        setText((current) => joinDrafts(current, words.text));
+        requestAnimationFrame(() => {
+          const box = textarea.current;
+          box?.focus();
+          box?.setSelectionRange(box.value.length, box.value.length);
+        });
+        return true;
+      }),
+    [conversationId],
   );
 }
 

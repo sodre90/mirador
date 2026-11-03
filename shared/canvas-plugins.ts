@@ -155,6 +155,37 @@ export interface PluginWindow<State = unknown> {
   action?(action: unknown, context: PluginWindowContext): unknown;
 }
 
+/** The workspace a plugin's workspace tab is open in. */
+export interface PluginWorkspace {
+  id: string;
+  name: string;
+  /** The workspace's folder, absolute, on the computer Mirador runs on. */
+  folder: string;
+}
+
+/** What a plugin's workspace tab reaches: its workspace, what it keeps for that workspace, and a way to say its state changed. */
+export interface WorkspaceTabContext {
+  workspace: PluginWorkspace;
+  /** What the plugin keeps for this workspace alone, across restarts; values are JSON. */
+  storage: CanvasPluginStorage;
+  /** What the plugin keeps across workspaces, as a window's storage. */
+  sharedStorage: CanvasPluginStorage;
+  /** Mirador asks `state` again soon after, and hands it to the tab wherever the workspace is open. */
+  changed(): void;
+}
+
+/**
+ * A tab of the plugin's in the canvas pane of each workspace it shows in, next to the apps, which its canvas view draws
+ * with `mirador.place` set to "tab": the view gets `state` through `mirador.onState`, and `mirador.send` reaches `action`.
+ * Plugin API 7 brought it.
+ */
+export interface WorkspaceTab<State = unknown> {
+  /** Whether the workspace gets the tab, e.g. only one with a git repo; every workspace does without it. */
+  shows?(context: WorkspaceTabContext): boolean | Promise<boolean>;
+  state(context: WorkspaceTabContext): State | Promise<State>;
+  action?(action: unknown, context: WorkspaceTabContext): unknown;
+}
+
 /** A tool the agent calls on the canvas server, next to show, ask and the rest, or the user runs from the slash menu. */
 export interface CanvasTool<Data = unknown> {
   description: string;
@@ -218,4 +249,5 @@ export interface CanvasHost<Data = unknown> {
   activity?(event: PluginActivityEvent, context: PluginActivityContext): void | Promise<void>;
   /** A window of the plugin's own, which the user opens from the palette. */
   window?: PluginWindow;
+  workspaceTab?: WorkspaceTab;
 }

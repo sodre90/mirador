@@ -196,4 +196,5 @@ export const canvas: Messages["canvas"] = {
   },
   imagePreview: "Bild",
   pluginMissing: (plugin) => `Das Plugin ${plugin} ist nicht installiert, daher siehst du hier unverändert, was es veröffentlicht hat.`,
+  workspaceTabNoView: (plugin) => `Das Plugin ${plugin} hat keine Ansicht, mit der es seinen Tab zeichnen kann.`,
 };

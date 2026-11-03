@@ -1049,7 +1049,7 @@ export function startServer(services: HostServices) {
       case "settings.set-avatar":
         return setAvatar(message.image);
       case "conversation.create":
-        conversations.create(message.workspaceId, message.launch);
+        conversations.create(message.workspaceId, message.launch, message.prompt);
         return;
       case "sessions.list":
         conversations
@@ -1285,6 +1285,14 @@ export function startServer(services: HostServices) {
         return void canvasPlugins.actInWindow(message.plugin, message.action).then(
           (answer) => reply({ type: "plugin-window.acted", requestId: message.requestId, reply: answer, problem: null }),
           (error) => reply({ type: "plugin-window.acted", requestId: message.requestId, reply: null, problem: messageOf(error) }),
+        );
+      case "plugin-tab.subscribe":
+        socket.data.pluginTabSubscriptions.add(message.workspaceId);
+        return canvasPlugins.workspaceTabStateMessages(message.workspaceId).forEach((state) => void state.then(reply));
+      case "plugin-tab.action":
+        return void canvasPlugins.actInWorkspaceTab(message.plugin, message.workspaceId, message.action).then(
+          (answer) => reply({ type: "plugin-tab.acted", requestId: message.requestId, reply: answer, problem: null }),
+          (error) => reply({ type: "plugin-tab.acted", requestId: message.requestId, reply: null, problem: messageOf(error) }),
         );
       case "canvas.export":
         canvas
@@ -1568,6 +1576,7 @@ export function startServer(services: HostServices) {
       pluginToolTitles: canvasPlugins.toolTitles(),
       pluginCommands: canvasPlugins.commands(),
       pluginWindows: canvasPlugins.windowTitles(),
+      workspaceTabs: canvasPlugins.workspaceTabTitles(),
       pluginSettings: pluginSettings.all(),
     });
     hub.send(socket, { type: "join-requests.listed", joinRequests: joinRequests.waiting() });

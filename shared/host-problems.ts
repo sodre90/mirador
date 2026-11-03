@@ -159,6 +159,7 @@ export type HostProblem =
   | { code: "engine-download-broke-off"; url: string }
   | { code: "engine-download-wrong-size"; url: string; bytes: number }
   | { code: "plugin-window-needs-newer-api"; brought: number; named: number }
+  | { code: "workspace-tab-needs-newer-api"; brought: number; named: number }
   | { code: "canvas-host-module-needs"; needs: HostProblem[] }
   | { code: "canvas-need-item-shape"; item: string; placements: string[] }
   | { code: "canvas-need-item-opens-with-room"; item: string; rooms: string[] }

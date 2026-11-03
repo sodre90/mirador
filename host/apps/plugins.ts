@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, watch } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_COMMAND_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
+import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_COMMAND_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, WORKSPACE_TAB_API, isPluginManifest, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
 import { itemRooms, pluginItemPlacements, type CanvasHost } from "../../shared/canvas-plugins.ts";
 import { BUILT_IN_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { HostProblemError, type HostProblem } from "../../shared/host-problems.ts";
@@ -248,11 +248,17 @@ function canvasHostFrom(module: Record<string, unknown>, { api, settings = [] }:
   if ((host.activity !== undefined || window !== undefined) && api < PLUGIN_WINDOW_API) {
     throw new HostProblemError({ code: "plugin-window-needs-newer-api", brought: PLUGIN_WINDOW_API, named: api });
   }
+  const workspaceTab = host.workspaceTab as Record<string, unknown> | undefined;
+  if (workspaceTab !== undefined && !isWorkspaceTabShape(workspaceTab)) needs.push({ code: "canvas-need-workspace-tab-shape" });
+  if (workspaceTab !== undefined && api < WORKSPACE_TAB_API) throw new HostProblemError({ code: "workspace-tab-needs-newer-api", brought: WORKSPACE_TAB_API, named: api });
   if (Object.values(tools).some((tool) => isObject(tool) && tool.command !== undefined) && api < PLUGIN_COMMAND_API) {
     throw new HostProblemError({ code: "plugin-command-needs-newer-api", brought: PLUGIN_COMMAND_API, named: api });
   }
   if (needs.length > 0) throw new HostProblemError({ code: "canvas-host-module-needs", needs });
   return host as unknown as CanvasHost;
 }
+
+const isWorkspaceTabShape = (tab: unknown) =>
+  isObject(tab) && isFunction(tab.state) && [tab.shows, tab.action].every((part) => part === undefined || isFunction(part));
 
 const isCommandShape = (command: unknown) => isObject(command) && typeof command.description === "string" && command.description.trim() !== "";

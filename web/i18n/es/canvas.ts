@@ -196,4 +196,5 @@ export const canvas: Messages["canvas"] = {
   },
   imagePreview: "Imagen",
   pluginMissing: (plugin) => `El plugin ${plugin} no está instalado, así que esto es lo que publicó, tal cual.`,
+  workspaceTabNoView: (plugin) => `El plugin ${plugin} no tiene una vista con la que dibujar su pestaña.`,
 };

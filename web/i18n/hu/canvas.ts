@@ -193,4 +193,5 @@ export const canvas: Messages["canvas"] = {
   },
   imagePreview: "Kép",
   pluginMissing: (plugin) => `A bővítmény (${plugin}) nincs telepítve, ezért itt az látszik, amit közzétett, változtatás nélkül.`,
+  workspaceTabNoView: (plugin) => `A bővítménynek (${plugin}) nincs nézete, amellyel a lapját megrajzolhatná.`,
 };

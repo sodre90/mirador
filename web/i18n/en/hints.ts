@@ -303,6 +303,7 @@ export const hints = {
   canvasEditsWaiting: "Show the edit the agent waits for you to allow or reject.",
   canvasChanges: "The files this turn changed, or all uncommitted changes, with their line changes.",
   canvasApp: "The app open in this workspace, which you and the agent change together. Every conversation that shows it works on the same document.",
+  canvasWorkspaceTab: "A plugin's tab for this workspace, the same in each of its conversations.",
   canvasChecklist:
     "The steps of the agent's work, ticked as it finishes them. You can tick any of them too: the agent hears of your ticks with your next message.",
   checklistClose: "Back to what the canvas showed. The Checklist button opens it again.",

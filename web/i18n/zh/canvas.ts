@@ -191,4 +191,5 @@ export const canvas: Messages["canvas"] = {
   },
   imagePreview: "图片",
   pluginMissing: (plugin) => `没有安装 ${plugin} 插件，所以这里按原样显示它发布的内容。`,
+  workspaceTabNoView: (plugin) => `${plugin} 插件没有可以绘制其标签页的视图。`,
 };

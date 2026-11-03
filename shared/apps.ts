@@ -5,9 +5,13 @@ import type { HostProblem } from "./host-problems.ts";
  * tools and items; API 4 tells apply who made the change; API 5 lets a canvas tool message its agent and start a
  * conversation on another profile, and brings profile settings; API 6 brings a canvas plugin's own window, the
  * conversations' activity, canvas tools the user runs from the slash menu, and lets an app's view list the
- * workspace's files, read any of them, and open the app on another one.
+ * workspace's files, read any of them, and open the app on another one; API 7 brings a canvas plugin's workspace tab,
+ * whose view can start a conversation and add to the composer.
  */
-export const APP_PLUGIN_API = 6;
+export const APP_PLUGIN_API = 7;
+
+/** The first plugin API whose canvas host may have a workspace tab. */
+export const WORKSPACE_TAB_API = 7;
 
 /** The first plugin API whose plugin.json may have a canvas part. */
 export const CANVAS_PLUGIN_API = 3;

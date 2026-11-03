@@ -56,6 +56,10 @@ export type CanvasFrameMessage =
   /** What a plugin item's view has its `data-hint` on, pointed at or focused with the keyboard; the panel shows the hint as its own. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-hint"; text: unknown; anchor: unknown }
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-hint-gone" }
+  /** From a plugin's workspace tab: a conversation to start in the workspace on `text`; answered with an "item-reply" or "item-reply-failed". */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "tab-start-conversation"; requestId: string; text: unknown }
+  /** From a plugin's workspace tab: words to add to the conversation's composer; answered as "tab-start-conversation" is. */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "tab-add-to-composer"; requestId: string; text: unknown }
   /** A file the user asked the view to open, a path as the agent wrote it, which opens as a file link in the chat does. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-open-file"; path: unknown }
   /** The view asks for the canvas to fill the workspace, or to sit beside the chat again. */
@@ -349,20 +353,26 @@ export function pluginWindowStateMessage(state: unknown) {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "window-state", state };
 }
 
-/** Where a plugin's canvas view draws: an item on the canvas, or the plugin's own window. */
-export type PluginViewPlace = "canvas" | "window";
+/** Where a plugin's canvas view draws: an item on the canvas, the plugin's own window, or its tab in a workspace. */
+export type PluginViewPlace = "canvas" | "window" | "tab";
 
 /** `window.mirador` in a plugin's canvas view, as its bridge makes it. */
 export interface PluginViewBridge<Data = unknown, State = unknown> {
   place: PluginViewPlace;
   /** On the canvas: the item the view draws. Never called in the plugin's window. */
   onItem(listener: (item: PluginItem<Data>, context: PluginItemContext) => void): () => void;
-  /** In the plugin's window: what its `window.state` returns. Never called on the canvas. */
+  /** In the plugin's window or tab: what its `window.state` or `workspaceTab.state` returns. Never called on the canvas. */
   onState(listener: (state: State) => void): () => void;
-  /** On the canvas, reaches the plugin's `action` with the item; in its window, `window.action`. */
+  /** On the canvas, reaches the plugin's `action` with the item; in its window, `window.action`; in its tab, `workspaceTab.action`. */
   send(action: unknown): Promise<unknown>;
-  /** Rejects in the plugin's window, which belongs to no conversation. */
+  /** To the agent of the conversation whose canvas shows the view; rejects in the plugin's window, which belongs to no conversation. */
   prompt(text: string): Promise<void>;
+  /** In the plugin's tab: starts a conversation in the workspace, on its default profile, working on `text` at once, and shows it. */
+  startConversation(text: string): Promise<void>;
+  /** In the plugin's tab: adds `text` to what the user is writing in the conversation's composer, for them to finish and send. */
+  addToComposer(text: string): Promise<void>;
+  /** Opens an http(s) link in a new tab, or the system's browser in the desktop app. */
+  openLink(url: string): void;
   /** Does nothing in the plugin's window. */
   setFullscreen(on: boolean): void;
   /** Only where files open: Mirador's canvas has it, the phone doesn't. */
@@ -472,6 +482,17 @@ function pluginItemBridge(frameId: string, opensFiles: boolean, place: PluginVie
       if (place === "window") return Promise.reject(new Error("The plugin's own window belongs to no conversation, so it has no agent to send to."));
       return request({ kind: "item-prompt", text }).then(() => undefined);
     },
+    startConversation(text) {
+      if (place !== "tab") return Promise.reject(new Error("Only a plugin's workspace tab starts conversations."));
+      return request({ kind: "tab-start-conversation", text: String(text) }).then(() => undefined);
+    },
+    addToComposer(text) {
+      if (place !== "tab") return Promise.reject(new Error("Only a plugin's workspace tab adds to the composer."));
+      return request({ kind: "tab-add-to-composer", text: String(text) }).then(() => undefined);
+    },
+    openLink(url) {
+      post({ kind: "open-link", href: String(url) });
+    },
     setFullscreen(on) {
       if (place === "canvas") post({ kind: "item-fullscreen", on: Boolean(on) });
     },
@@ -493,6 +514,11 @@ const IN_TAB_PAGE_STYLE = "<style>html{padding:3px}body{margin:0}</style>";
 /** The page of a plugin item's view: the bridge first, then the plugin's canvas view, which the canvas assets serve. */
 export function pluginItemPage(viewUrl: string, frameId: string, { inTab = false, opensFiles = false } = {}) {
   return [`<script>${pluginItemBridge(frameId, opensFiles, "canvas")}</script>`, ...(inTab ? [IN_TAB_PAGE_STYLE] : []), `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+}
+
+/** The page of a plugin's workspace tab: its canvas view, with the bridge for a tab, which has no item and opens no files. */
+export function workspaceTabPage(viewUrl: string, frameId: string) {
+  return [`<script>${pluginItemBridge(frameId, false, "tab")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
 }
 
 /** The page of a plugin's own window: its canvas view, with the bridge for a window, which has no item and opens no files. */

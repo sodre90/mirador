@@ -336,6 +336,7 @@ export const hints: Messages["hints"] = {
   canvasEditsWaiting: "Muestra la edición que el agente espera que permitas o rechaces.",
   canvasChanges: "Los archivos que cambió este turno, o todos los cambios sin commit, con sus cambios de línea.",
   canvasApp: "La aplicación abierta en este espacio de trabajo, que tú y el agente cambian juntos. Todas las conversaciones que la muestran trabajan sobre el mismo documento.",
+  canvasWorkspaceTab: "La pestaña de un plugin para este espacio de trabajo, la misma en cada una de sus conversaciones.",
   canvasChecklist:
     "Los pasos del trabajo del agente, marcados a medida que los termina. Tú también puedes marcar cualquiera: el agente se entera de tus marcas con tu siguiente mensaje.",
   checklistClose: "Vuelve a lo que mostraba el lienzo. El botón Checklist lo abre de nuevo.",

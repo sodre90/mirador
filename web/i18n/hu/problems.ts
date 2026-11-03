@@ -121,6 +121,7 @@ export const problems: Messages["problems"] = {
     "canvas-need-note-function": "note csak függvényként",
     "canvas-need-activity-function": "activity csak függvényként",
     "canvas-need-window-shape": "window csak { state, action } alakban, ahol a state függvény, és az action is az, ha van",
+    "canvas-need-workspace-tab-shape": "workspaceTab csak { shows, state, action } alakban, ahol a state függvény, és a shows meg az action is az, ha van",
   },
   couldNotResume: (cause) => `Az ágens előző munkamenetét nem sikerült folytatni (${cause}), ezért új indul.`,
   couldNotSetOption: (option, value, cause) => `Nem sikerült átállítani (${option} → ${value}): ${cause}`,
@@ -280,6 +281,7 @@ export const problems: Messages["problems"] = {
   engineDownloadWrongSize: (url, bytes) => `Nem ${bytes} bájtos méretben érkezett meg: ${url}.`,
   pluginWindowNeedsNewerApi: (brought, named) =>
     `a vászon host moduljának van ablaka, vagy figyeli a tevékenységet, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
+  workspaceTabNeedsNewerApi: (brought, named) => `a vászon host moduljának van munkaterület-lapja, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} ikonnal (icon), ${placements.join(" vagy ")} elhelyezéssel (placement), a count, outcome és listed pedig csak függvényként`,

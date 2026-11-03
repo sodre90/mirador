@@ -325,6 +325,7 @@ export const hints: Messages["hints"] = {
   canvasEditsWaiting: "Annak a szerkesztésnek a megjelenítése, amelynek engedélyezésére vagy elutasítására az ágens vár.",
   canvasChanges: "A kör által módosított fájlok, vagy az összes nem commitolt változás, a sorváltozásaikkal.",
   canvasApp: "A munkaterületen megnyitott alkalmazás, amelyet te és az ágens együtt módosítotok. Minden beszélgetés, amely mutatja, ugyanazon a dokumentumon dolgozik.",
+  canvasWorkspaceTab: "Egy bővítmény lapja ehhez a munkaterülethez, amely a munkaterület minden beszélgetésében ugyanaz.",
   canvasChecklist:
     "Az ágens munkájának lépései, kipipálva, ahogy végez velük. Te is kipipálhatod bármelyiket: az ágens a következő üzeneteddel értesül a pipáidról.",
   checklistClose: "Vissza ahhoz, amit a vászon mutatott. Az Ellenőrzőlista gomb újra megnyitja.",

@@ -57,9 +57,11 @@ export async function canvasPluginHost(
 ) {
   const published: ServerMessage[] = [];
   const toPluginWindows: ServerMessage[] = [];
+  const toPluginTabs: ServerMessage[] = [];
   const hub = {
     publishToConversation: (_conversationId: string, message: ServerMessage) => void published.push(message),
     publishToPluginWindows: (_plugin: string, message: ServerMessage) => void toPluginWindows.push(message),
+    publishToPluginTabs: (_workspaceId: string, message: ServerMessage) => void toPluginTabs.push(message),
   } as unknown as Hub;
   const loaded = await loadPlugins(pluginsFolder);
   expect(loaded.problems).toEqual([]);
@@ -95,5 +97,5 @@ export async function canvasPluginHost(
     return { text: result.content[0].text as string, isError: result.isError === true };
   };
 
-  return { store, plugins, published, toPluginWindows, prompts, items, mcpRequest, callTool };
+  return { store, plugins, published, toPluginWindows, toPluginTabs, prompts, items, mcpRequest, callTool };
 }

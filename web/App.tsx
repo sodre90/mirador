@@ -47,6 +47,7 @@ import { canMarkUnread, markUnread } from "./unread.ts";
 import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
+import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { idBelowGroup, landingBefore } from "./workspace-groups.ts";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
@@ -338,9 +339,11 @@ export function App() {
   const showSidebarWidth = (share: number) =>
     layoutElement.current?.style.setProperty("--sidebar-width", `${sidebarWidthWithinLimits(share * layoutArea().size)}px`);
   const workspace = currentWorkspace(state);
+  useWorkspaceTabsSubscribed(status, workspace?.id, Object.keys(state.workspaceTabs).length);
+  useConversationsStartedFromTabs(state.workspaces, dispatch);
   const apps = useMemo(
-    () => ({ openApps: state.openApps, installedApps: state.installedApps, appDocuments: state.appDocuments }),
-    [state.openApps, state.installedApps, state.appDocuments],
+    () => ({ openApps: state.openApps, installedApps: state.installedApps, appDocuments: state.appDocuments, workspaceTabs: state.workspaceTabs, pluginTabs: state.pluginTabs }),
+    [state.openApps, state.installedApps, state.appDocuments, state.workspaceTabs, state.pluginTabs],
   );
   const layout = conversationLayouts.layoutOf(state.selectedConversationId);
   const changeLayout = (update: (layout: PaneLayout) => PaneLayout) => conversationLayouts.change(state.selectedConversationId, update);

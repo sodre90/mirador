@@ -27,6 +27,7 @@ import { openWebAddress } from "./outside-links.ts";
 import { opensWithRoom, takeArrivedReview } from "./review-placement.ts";
 import { roomOf } from "./plugin-settings.ts";
 import { FullscreenToggle, PaneGrip, usePaneFullscreen } from "./Workspace.tsx";
+import { WorkspaceTabView, type WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
 const words = t.canvas;
 
@@ -673,11 +674,20 @@ function useFoldLevel(bar: RefObject<HTMLElement | null>) {
   return level;
 }
 
+function ShownWorkspaceTab({ tab, viewPath, ...where }: { tab: WorkspacePluginTab; viewPath: string | undefined; assetsOrigin: string; workspaceId: string; conversationId: string }) {
+  if (tab.problem) return <div className="empty-state plugin-tab-problem">{tab.problem}</div>;
+  if (!viewPath) return <div className="empty-state plugin-tab-problem">{t.canvas.workspaceTabNoView(tab.plugin)}</div>;
+  return <WorkspaceTabView key={`${tab.plugin} ${viewPath}`} tab={tab} viewUrl={`${where.assetsOrigin}${viewPath}`} {...where} />;
+}
+
 /** A tab that covers the canvas until it is closed; an app's is named after the app. */
 type AppTab = `app:${string}`;
-type CoveringTab = "changes" | "checklist" | AppTab | null;
+/** A plugin's tab in the workspace, named after the plugin. */
+type PluginTab = `tab:${string}`;
+type CoveringTab = "changes" | "checklist" | AppTab | PluginTab | null;
 
 const appTab = (app: string): AppTab => `app:${app}`;
+const pluginTab = (plugin: string): PluginTab => `tab:${plugin}`;
 
 /** The apps open in the conversation's workspace, with what the panel needs to show them. */
 export interface WorkspaceApps {
@@ -734,6 +744,8 @@ export function CanvasPanel({
   homeDir,
   changesRefreshPoint,
   apps,
+  workspaceTabs,
+  workspaceId,
   canvasViews,
   onHide,
 }: {
@@ -747,6 +759,9 @@ export function CanvasPanel({
   homeDir: string;
   changesRefreshPoint: number;
   apps: WorkspaceApps;
+  /** The plugins' tabs the conversation's workspace gets. */
+  workspaceTabs: WorkspacePluginTab[];
+  workspaceId: string | undefined;
   /** Where the canvas assets serve each canvas plugin's view, by plugin name. */
   canvasViews: Record<string, string>;
   onHide: () => void;
@@ -769,6 +784,7 @@ export function CanvasPanel({
   const toggleTab = (toggled: Exclude<CoveringTab, null>) => setTab((open) => (open === toggled ? null : toggled));
   const shownApp = apps.open.find(({ app }) => tab === appTab(app));
   const shownAppInstalled = shownApp && apps.installed.find(({ name }) => name === shownApp.app);
+  const shownPluginTab = workspaceTabs.find(({ plugin }) => tab === pluginTab(plugin));
   const editAt = tabItem?.agentEditedAt;
   const seenEdit = useRef<SeenEdit>(left ? left.seenEdit : { tabItemId: tabItem?.id, at: editAt });
   const checklistFlashing = useFlashOnAgentEdit(tabItem?.id, editAt, !checklistOpen);
@@ -849,6 +865,9 @@ export function CanvasPanel({
       : []),
     ...(foldLevel >= FOLDS.checklist && checklistCountText ? [{ label: checklistCountText, checked: checklistOpen, onChoose: () => toggleTab("checklist") }] : []),
     ...(foldLevel >= FOLDS.checklist ? apps.open.map(({ app, title }) => ({ label: title, checked: tab === appTab(app), onChoose: () => toggleTab(appTab(app)) })) : []),
+    ...(foldLevel >= FOLDS.checklist
+      ? workspaceTabs.map(({ plugin, title }) => ({ label: title, checked: tab === pluginTab(plugin), onChoose: () => toggleTab(pluginTab(plugin)) }))
+      : []),
     ...(foldLevel >= FOLDS.checklist && checklistOpen && tabItem ? [{ label: words.bar.dismiss, onChoose: dismissChecklist }] : []),
     ...(foldLevel >= FOLDS.leastUsed
       ? [
@@ -885,6 +904,8 @@ export function CanvasPanel({
             <span className="canvas-title">{shownApp.title}</span>
             <span className="canvas-outcome app-file">{shownApp.file}</span>
           </>
+        ) : shownPluginTab ? (
+          <span className="canvas-title">{shownPluginTab.title}</span>
         ) : checklistOpen ? (
           <>
             <span className="canvas-kind">{tabItem?.icon ?? PLAN_ICON}</span>
@@ -999,6 +1020,18 @@ export function CanvasPanel({
             {title}
           </button>
         ))}
+        {workspaceTabs.map(({ plugin, title }) => (
+          <button
+            key={plugin}
+            type="button"
+            className={`app-toggle workspace-tab-toggle ${tab === pluginTab(plugin) ? "on" : ""}`}
+            aria-pressed={tab === pluginTab(plugin)}
+            data-hint={hints.canvasWorkspaceTab}
+            onClick={() => toggleTab(pluginTab(plugin))}
+          >
+            {title}
+          </button>
+        ))}
         <button
           type="button"
           className={`history-toggle ${historyOpen ? "on" : ""}`}
@@ -1059,6 +1092,7 @@ export function CanvasPanel({
         {shownApp && shownAppInstalled && (
           <AppView key={`${shownApp.app} ${shownAppInstalled.viewPath}`} openApp={shownApp} installed={shownAppInstalled} documentState={apps.documents[appKey(shownApp)]} assetsOrigin={assetsOrigin} conversationId={conversationId} />
         )}
+        {shownPluginTab && workspaceId && <ShownWorkspaceTab tab={shownPluginTab} viewPath={canvasViews[shownPluginTab.plugin]} assetsOrigin={assetsOrigin} workspaceId={workspaceId} conversationId={conversationId} />}
         {!tab && edit.shown && (
           <EditApproval key={edit.shown.permissionId} request={edit.shown} moreWaiting={edit.waiting - 1} note={settledNote} conversationId={conversationId} />
         )}

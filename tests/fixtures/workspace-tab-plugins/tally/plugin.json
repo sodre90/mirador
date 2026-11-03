@@ -1,0 +1,7 @@
+{
+  "name": "tally",
+  "title": "Tally",
+  "version": "1.0.0",
+  "api": 7,
+  "canvas": { "host": "host.ts", "view": "view.js" }
+}

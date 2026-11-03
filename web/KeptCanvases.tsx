@@ -5,13 +5,23 @@ import { CanvasPanel, CanvasShown } from "./Canvas.tsx";
 import { changesRefreshPoint } from "./changes.ts";
 import { editRequestsIn } from "./edit-approval.ts";
 import { useEditsInCanvas } from "./edits-in-canvas.ts";
-import type { OpenConversation } from "./state.ts";
+import type { OpenConversation, PluginTabState } from "./state.ts";
+import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
 interface AppsState {
   openApps: OpenApp[];
   installedApps: InstalledApp[];
   appDocuments: Record<string, AppDocumentState>;
+  workspaceTabs: Record<string, string>;
+  pluginTabs: Record<string, Record<string, PluginTabState>>;
 }
+
+/** The plugins' tabs a workspace gets, once their host code said so. */
+const tabsOfWorkspace = (titles: Record<string, string>, states: Record<string, PluginTabState> | undefined): WorkspacePluginTab[] =>
+  Object.entries(titles).flatMap(([plugin, title]) => {
+    const tab = states?.[plugin];
+    return tab?.shown ? [{ plugin, title, state: tab.state, problem: tab.problem }] : [];
+  });
 
 /** The conversations whose canvas was shown, the one shown now included. */
 function useShownOnce(shownId: string | null) {
@@ -68,7 +78,7 @@ const KeptCanvas = memo(function KeptCanvas({
   open,
   shown,
   workspaceId,
-  apps: { openApps, installedApps, appDocuments },
+  apps: { openApps, installedApps, appDocuments, workspaceTabs, pluginTabs },
   editsInCanvas,
   assetsOrigin,
   homeDir,
@@ -96,6 +106,8 @@ const KeptCanvas = memo(function KeptCanvas({
     },
     [openApps, installedApps, appDocuments, workspaceId, open.conversationId],
   );
+  const workspaceStates = workspaceId ? pluginTabs[workspaceId] : undefined;
+  const tabs = useMemo(() => tabsOfWorkspace(workspaceTabs, workspaceStates), [workspaceTabs, workspaceStates]);
   return (
     <div className="kept-canvas" style={{ display: shown ? "contents" : "none" }}>
       <CanvasShown.Provider value={shown}>
@@ -108,6 +120,8 @@ const KeptCanvas = memo(function KeptCanvas({
           homeDir={homeDir}
           changesRefreshPoint={refreshPoint}
           apps={workspaceApps}
+          workspaceTabs={tabs}
+          workspaceId={workspaceId}
           canvasViews={canvasViews}
           onHide={onHide}
         />
