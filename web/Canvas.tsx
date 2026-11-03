@@ -552,7 +552,7 @@ function useFadingNote() {
 }
 
 /** Clears the canvas when the question on it gets settled, leaving a short note of what happened. */
-function useClearWhenSettled(selected: CanvasItem | undefined, clear: () => void) {
+function useClearWhenSettled(selected: CanvasItem | undefined, clear: (settledId: string) => void) {
   const [note, setNote] = useFadingNote();
   const previous = useRef<{ id: string; status: CanvasItem["status"] } | null>(null);
   useEffect(() => {
@@ -560,7 +560,7 @@ function useClearWhenSettled(selected: CanvasItem | undefined, clear: () => void
     previous.current = selected ? { id: selected.id, status: selected.status } : null;
     if (selected && wasWaiting && isSettledQuestion(selected)) {
       setNote(settledMessage(selected));
-      clear();
+      clear(selected.id);
     }
   }, [selected?.id, selected?.status]);
   return note;
@@ -803,7 +803,7 @@ export function CanvasPanel({
   const somethingElseShown = Boolean(selected || edit.shown);
   const changesShown = changesOpen || (!tab && !somethingElseShown);
   const outcome = selected && outcomeOf(selected);
-  const questionNote = useClearWhenSettled(selected, () => setSelectedId(null));
+  const questionNote = useClearWhenSettled(selected, (settledId) => setSelectedId((current) => (current === settledId ? null : current)));
   const settledNote = edit.note ?? questionNote;
   const older = selected ? newestFirst[selectedIndex + 1] : newest;
   const newer = selected ? newestFirst[selectedIndex - 1] : undefined;

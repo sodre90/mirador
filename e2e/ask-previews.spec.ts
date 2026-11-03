@@ -266,3 +266,32 @@ test("all option previews are shown whole when columns widen, without right-edge
 
   await answerCanvasQuestion(page, "Alpha");
 });
+
+test("a question that arrives together with the answer to the one before it takes the canvas", async ({ page }) => {
+  let heldAnswer: string | null = null;
+  await page.routeWebSocket(/\/ws\?/, (socket) => {
+    const server = socket.connectToServer();
+    socket.onMessage((message) => server.send(message));
+    server.onMessage((message) => {
+      const text = String(message);
+      if (/"type":"canvas\.upserted"/.test(text) && /"status":"answered"/.test(text)) return void (heldAnswer = text);
+      if (heldAnswer && /"type":"canvas\.upserted"/.test(text) && /"status":"waiting"/.test(text)) {
+        socket.send(heldAnswer);
+        heldAnswer = null;
+      }
+      socket.send(message);
+    });
+  });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const options = page.locator(".ask-option:visible");
+
+  askInBackground(conversationId, { question: "Which colour?", options: [{ label: "Green" }, { label: "Blue" }] });
+  await expect(options.first()).toHaveText(/Green/);
+  await answerCanvasQuestion(page, "Green");
+  await expect.poll(() => heldAnswer).not.toBeNull();
+
+  askInBackground(conversationId, { question: "Which size?", options: [{ label: "Huge" }, { label: "Small" }] });
+  await expect(options.first()).toHaveText(/Huge/);
+  await answerCanvasQuestion(page, "Huge");
+});
