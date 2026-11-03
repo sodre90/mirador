@@ -169,6 +169,12 @@ export interface CanvasTool<Data = unknown> {
    * its arguments written as key=value after the name. What run resolves to shows above the composer, and the agent hears nothing of it.
    */
   command?: { description: string };
+  /**
+   * Run again with the same input, it makes the same items: it reads nothing that changes, such as files, and its
+   * prompts and conversations aren't needed. Mirador then runs a continued session's calls of it again, so their items
+   * come back; with prompt doing nothing and startConversation throwing.
+   */
+  rebuiltFromInput?: boolean;
 }
 
 export type ToolCaller = "agent" | "user";

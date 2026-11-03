@@ -48,12 +48,6 @@ const roomOf = (type: PluginItemType | undefined) => {
 /** What the type says of the item, kept with it for the page and the phone, which have no host code. */
 const shownOf = (type: PluginItemType | undefined, data: unknown) => ({ ...countOf(type, data), ...outcomeOf(type, data), ...roomOf(type) });
 
-/**
- * Review's and tour's tools read the working tree when called, so their calls run again would show today's code, and
- * delegate's start conversations.
- */
-const PLUGINS_REBUILT_FROM_THEIR_CALLS = new Set(["checklist"]);
-
 /** A plugin may change its window's state on every tool call; its windows get the state as it settles. */
 const WINDOW_STATE_SETTLES_MS = 100;
 
@@ -79,7 +73,6 @@ export class CanvasPlugins {
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly plugins: CanvasPlugin[],
-    private readonly rebuiltFromTheirCalls: ReadonlySet<string> = PLUGINS_REBUILT_FROM_THEIR_CALLS,
   ) {}
 
   /** Conversations come after the plugins, whose guidance they take. */
@@ -280,12 +273,9 @@ export class CanvasPlugins {
     return this.plugins.find((plugin) => canvasViewPath(plugin) === pathname)?.view.code ?? null;
   }
 
-  /**
-   * Runs a plugin tool call from the history of a session Mirador continues again, so its items come back; only for plugins
-   * whose items are made from the call's input alone, with nothing sent to the agent or started.
-   */
+  /** Runs a plugin tool call from the history of a session Mirador continues again, if its tool is rebuilt from its input, so its items come back. */
   async replay(conversationId: string, toolName: string, input: Record<string, unknown>) {
-    const plugin = this.plugins.find(({ manifest, host }) => this.rebuiltFromTheirCalls.has(manifest.name) && host.tools[toolName]);
+    const plugin = this.plugins.find(({ host }) => host.tools[toolName]?.rebuiltFromInput);
     if (!plugin) return;
     const context: CanvasToolContext = {
       ...this.toolContext(plugin, conversationId, "agent"),

@@ -100,7 +100,7 @@ describe("pastAnswerOf", () => {
 
 describe("rebuildCanvas", () => {
   async function setUp() {
-    const { store, plugins, items, prompts } = await canvasPluginHost(FIXTURES, undefined, {}, { rebuiltFromTheirCalls: new Set(["board"]) });
+    const { store, plugins, items, prompts } = await canvasPluginHost(FIXTURES);
     const hub = { publishToConversation: () => {}, isShown: () => false } as unknown as Hub;
     const conversations = { questionsChanged: () => {} } as unknown as ConversationService;
     const canvas = new CanvasService(store, hub, conversations, { notify: () => {} } as unknown as SystemNotifications, ["http://127.0.0.1:4601"]);
@@ -133,10 +133,9 @@ describe("rebuildCanvas", () => {
     expect(prompts).toEqual([]);
   });
 
-  test("leaves out the calls of plugins not rebuilt from their calls", async () => {
-    const { store, canvas } = await setUp();
-    const { plugins } = await canvasPluginHost(FIXTURES, store);
-    await rebuildCanvas("c1", stored(claudeCall("t1", "mcp__canvas__track_steps", { title: "Steps", steps: ["a"] }, "Tracking 1 steps.")), canvas, plugins);
+  test("leaves out the calls of plugin tools that don't say they are rebuilt from their input", async () => {
+    const { store, canvas, plugins } = await setUp();
+    await rebuildCanvas("c1", stored(claudeCall("t1", "mcp__canvas__show_card", { title: "Hello", text: "First" }, "Shown.")), canvas, plugins);
     expect(store.listCanvasItems("c1")).toEqual([]);
   });
 });

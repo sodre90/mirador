@@ -87,6 +87,7 @@ const host: CanvasHost<BoardData> = {
     track_steps: {
       description: "Track steps in the tab beside the canvas.",
       input: { type: "object", properties: { title: { type: "string" }, steps: { type: "array", items: { type: "string" } } }, required: ["title", "steps"] },
+      rebuiltFromInput: true,
       run(input, { publish }) {
         const { title, steps } = input as { title: string; steps: string[] };
         publish({ type: "steps", title, data: { steps, done: 0 } });
@@ -107,6 +108,7 @@ const host: CanvasHost<BoardData> = {
       description: "Tick off the next step.",
       command: { description: "Tick off the next step" },
       input: { type: "object", properties: {} },
+      rebuiltFromInput: true,
       run(_input, context) {
         const steps = newest(context, "steps");
         if (!steps) throw new Error("There are no steps to tick off.");
