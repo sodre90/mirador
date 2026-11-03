@@ -1,8 +1,8 @@
 import type { PermissionOptionKind, StopReason, ToolCallUpdate } from "@agentclientprotocol/sdk";
 import { askModeLabels, harnessLabels, type ConversationEvent, type HarnessId, type StoredEvent, type TurnUsage } from "../shared/model.ts";
-import { codexMcpToolName } from "../shared/tool-title.ts";
+import { toolNameOf } from "../shared/tool-title.ts";
 import { PLUGIN_INSTALL_TOOL } from "./canvas/guidance.ts";
-import { BUILT_IN_CANVAS_TOOLS } from "./canvas/tool-names.ts";
+import { BUILT_IN_CANVAS_TOOLS, canvasToolName } from "./canvas/tool-names.ts";
 import type { UsageConversation, UsageData, UsageWorkspace } from "./usage-data.ts";
 
 /** What a report covers; every field may be left out. */
@@ -408,15 +408,6 @@ type TurnEnd = Extract<ConversationEvent, { type: "turn-end" }>;
 const errorReason = ({ message, usageLimit, authRequired }: ConversationError) =>
   usageLimit ? "usage limit reached" : authRequired ? "sign-in needed" : failureReason(message);
 
-export const toolNameOf = (update: ToolCallUpdate & { name?: unknown }) => {
-  const claudeName = ((update._meta?.claudeCode ?? {}) as { toolName?: unknown }).toolName;
-  if (typeof claudeName === "string") return claudeName;
-  const codexMcp = codexMcpToolName(update);
-  if (codexMcp) return codexMcp;
-  if (typeof update.name === "string" && update.name) return update.name;
-  return update.title || update.kind || "unknown";
-};
-
 const parentToolUseIdOf = (update: ToolCallUpdate) => ((update._meta?.claudeCode ?? {}) as { parentToolUseId?: unknown }).parentToolUseId;
 
 function noteProgress(record: ToolCallRecord, update: ToolCallUpdate) {
@@ -439,9 +430,6 @@ const contentText = (update: ToolCallUpdate) =>
     .map((block) => (block.type === "content" && block.content.type === "text" ? block.content.text : ""))
     .join("\n")
     .trim();
-
-/** A canvas tool's own name, as each agent prefixes it: `mcp__canvas__ask` in Claude Code, `canvas_ask` in opencode. */
-export const canvasToolName = (tool: string) => /^(?:mcp__canvas__|canvas__|canvas_)(.+)$/.exec(tool)?.[1] ?? null;
 
 /** Where a tool comes from: the agent itself, Mirador's canvas, one of its plugins, or another MCP server. */
 export function sourceOf(tool: string, pluginTools: PluginToolTitles | null): string {

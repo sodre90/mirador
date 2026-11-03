@@ -1,6 +1,7 @@
 import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
 import type { AskOption, AskQuestion, StoredEvent } from "../../shared/model.ts";
-import { canvasToolName, toolNameOf } from "../usage-stats.ts";
+import { toolNameOf } from "../../shared/tool-title.ts";
+import { canvasToolName } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import type { AskRequest, CanvasService, ShowRequest } from "./service.ts";
 
