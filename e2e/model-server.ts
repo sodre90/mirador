@@ -56,3 +56,15 @@ export function ownersModelServer(): Record<string, string> {
   }
   return environment;
 }
+
+/** The HTTP status the model server gives a one-token request, 0 when nothing answers: a restart on the owner's machine shows as 502s for a while. */
+export async function modelServerStatus(): Promise<number> {
+  const { ANTHROPIC_BASE_URL: url = process.env.ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN: key = process.env.ANTHROPIC_AUTH_TOKEN } = ownersModelServer();
+  const response = await fetch(`${url}/v1/messages`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${key}`, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+    body: JSON.stringify({ model: MODEL_SERVER_MODEL, max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
+    signal: AbortSignal.timeout(30_000),
+  }).catch(() => null);
+  return response?.status ?? 0;
+}

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { addWorkspace, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { modelServerStatus } from "./model-server.ts";
 import { TestHost } from "./test-host.ts";
 
 /** The one spec on a real model, the owner's model server; every other spec scripts Claude Code's replies with a fake API. */
@@ -14,7 +15,8 @@ test.afterAll(async () => {
 });
 
 test("a real model streams its reply, asks for permission in the browser and uses a canvas tool", async ({ page }) => {
-  test.setTimeout(480_000);
+  test.setTimeout(660_000);
+  await expect.poll(modelServerStatus, { message: "the model server answers", timeout: 180_000, intervals: [5_000] }).toBe(200);
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   await startConversation(page);
