@@ -109,6 +109,7 @@ export const chat: Messages["chat"] = {
     plan: "计划",
     logIn: "登录",
     tryAgain: "重试",
+    copy: "复制",
     copyReply: "复制回复",
     copyReplyAsMarkdown: "以 Markdown 复制回复",
     copied: "已复制",

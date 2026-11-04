@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import { isFromAnotherSite, siteOf, useExternalImagesBlocked } from "./external-images.ts";
 import { isLocalImagePath, localImageUrl } from "../shared/images.ts";
 import { hints } from "./hints.ts";
+import { t } from "./i18n/index.ts";
 import { looksLikeFilePath } from "../shared/file-paths.ts";
 import { connection } from "./connection.ts";
 import { highlightCode } from "./highlight.ts";
@@ -22,26 +23,27 @@ const FilesOfConversation = createContext<string | null>(null);
 
 function CodeBlock({ node: _node, ...props }: ComponentProps<"pre"> & ExtraProps) {
   const block = useRef<HTMLPreElement>(null);
-  const [label, setLabel] = useState<"Copy" | "Copied" | "Copy failed">("Copy");
+  const [outcome, setOutcome] = useState<"copied" | "failed" | null>(null);
   useEffect(() => {
-    if (label === "Copy") return;
-    const backToCopy = setTimeout(() => setLabel("Copy"), COPY_OUTCOME_SHOWN_MS);
+    if (!outcome) return;
+    const backToCopy = setTimeout(() => setOutcome(null), COPY_OUTCOME_SHOWN_MS);
     return () => clearTimeout(backToCopy);
-  }, [label]);
+  }, [outcome]);
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(codeIn(block.current));
-      setLabel("Copied");
+      setOutcome("copied");
     } catch {
-      setLabel("Copy failed");
+      setOutcome("failed");
     }
   };
+  const label = outcome === "copied" ? t.chat.entry.copied : outcome === "failed" ? t.chat.entry.copyFailed : t.chat.entry.copy;
   return (
     <div className="copyable-code">
       <pre ref={block} {...props}>
         <InsideCodeBlock.Provider value={true}>{props.children}</InsideCodeBlock.Provider>
       </pre>
-      <button type="button" className={`code-copy ${label === "Copy" ? "" : "shown"}`} onClick={copy}>
+      <button type="button" className={`code-copy ${outcome ? "shown" : ""}`} onClick={copy}>
         {label}
       </button>
     </div>

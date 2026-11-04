@@ -115,6 +115,7 @@ export const chat = {
     plan: "Plan",
     logIn: "Log in",
     tryAgain: "Try again",
+    copy: "Copy",
     copyReply: "Copy reply",
     copyReplyAsMarkdown: "Copy reply as Markdown",
     copied: "Copied",

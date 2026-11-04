@@ -84,6 +84,15 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
     await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(COMMANDS_AS_COPIED);
   });
 
+  await test.step("where the browser refuses the copy, the button says so for a moment", async () => {
+    await page.evaluate(() => (navigator.clipboard.writeText = () => Promise.reject(new DOMException("Write permission denied.", "NotAllowedError"))));
+    await linkBlock.hover();
+    await linkCopy.click();
+    await expect(linkCopy).toHaveText("Couldn't copy");
+    await expect(linkCopy).toHaveText("Copy");
+    await page.reload();
+  });
+
   await test.step("the find bar finds the reply's words, not the buttons", async () => {
     await page.keyboard.press("Control+KeyF");
     const bar = page.getByRole("search");
@@ -123,5 +132,12 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
     await expect(buttons).toHaveCount(2);
     for (const button of await buttons.all()) await shown(button);
     await touchContext.close();
+  });
+
+  await test.step("the button speaks the language Mirador is in", async () => {
+    await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
+    await page.reload();
+    await linkBlock.hover();
+    await expect(linkCopy).toHaveText("Másolás");
   });
 });

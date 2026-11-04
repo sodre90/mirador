@@ -111,6 +111,7 @@ export const chat: Messages["chat"] = {
     plan: "Plan",
     logIn: "Iniciar sesión",
     tryAgain: "Reintentar",
+    copy: "Copiar",
     copyReply: "Copiar respuesta",
     copyReplyAsMarkdown: "Copiar respuesta como Markdown",
     copied: "Copiado",
