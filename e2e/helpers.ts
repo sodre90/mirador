@@ -38,6 +38,17 @@ export async function callCanvasTool(host: TestHost, conversationId: string, nam
   return message.result.content[0].text as string;
 }
 
+/**
+ * Waits for a canvas frame and the page around it to paint twice. The sandboxed frame runs in a process of its own, and
+ * the browser sends it a click by what it last painted: a click right after its content first draws can go nowhere.
+ */
+export async function untilFramePainted(page: Page, iframe: Locator) {
+  const twoFramesPainted = () => new Promise((painted) => requestAnimationFrame(() => requestAnimationFrame(painted)));
+  const frame = await (await iframe.elementHandle())?.contentFrame();
+  await frame?.evaluate(twoFramesPainted);
+  await page.evaluate(twoFramesPainted);
+}
+
 export async function signIn(page: Page, host: TestHost) {
   await page.goto(host.authUrl);
   await expect(page.getByText("No conversation selected").or(page.getByRole("heading", { name: "Set up a profile to start" }))).toBeVisible();

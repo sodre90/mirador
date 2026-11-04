@@ -1,7 +1,7 @@
 import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { expect, test, type Locator } from "@playwright/test";
-import { addWorkspace, callCanvasTool, createProfile, openSettings, sendMessage, signIn, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, createProfile, openSettings, sendMessage, signIn, untilFramePainted, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram, writeCompiledBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -133,8 +133,11 @@ test("a plugin's view opens a file through Mirador, as a file link in the chat d
   const conversationId = page.url().match(/#\/c\/(.+)$/)![1]!;
   await callCanvasTool(host, conversationId, "show_card", { title: "Files", text: "Open one" });
 
+  const view = page.locator(".canvas-panel:visible .canvas-frame.plugin iframe");
+  await expect(view.contentFrame().getByRole("button", { name: "Open src/app.ts" })).toBeVisible();
+  await untilFramePainted(page, view);
   const before = openedSoFar();
-  await page.frameLocator(".canvas-panel:visible .canvas-frame.plugin iframe").getByRole("button", { name: "Open src/app.ts" }).click();
+  await view.contentFrame().getByRole("button", { name: "Open src/app.ts" }).click();
   await expect.poll(() => openedSoFar().slice(before.length)).toContain(realpathSync.native(appFile));
 });
 
