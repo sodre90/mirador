@@ -15,8 +15,14 @@ const storedSettings = (page: Page) => page.evaluate(() => JSON.parse(localStora
 const rowsStyle = (page: Page, cssProperty: string) =>
   page.locator(".terminal-pane .xterm-rows").evaluate((rows, cssProperty) => getComputedStyle(rows).getPropertyValue(cssProperty), cssProperty);
 
-/** xterm keeps the drawn spacing as cell width minus glyph width, so deltas of this show the letter spacing option at work. */
-const letterSpacingOf = async (page: Page) => parseFloat(await rowsStyle(page, "letter-spacing"));
+/**
+ * xterm keeps the drawn spacing as cell width minus glyph width, so deltas of this show the letter spacing option at work.
+ * Where the glyphs fill their cells exactly, as with Linux's fonts, it sets none and the rows read "normal".
+ */
+const letterSpacingOf = async (page: Page) => {
+  const spacing = await rowsStyle(page, "letter-spacing");
+  return spacing === "normal" ? 0 : parseFloat(spacing);
+};
 
 /** xterm draws each line as a div of the measured cell height, so a row's line height shows the line height option at work. */
 const lineHeightOf = async (page: Page) =>
