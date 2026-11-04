@@ -30,13 +30,18 @@ const lastTypedText = ({ messages }: MessagesRequest) =>
     .at(-1)!
     .trim();
 
+/** A tool's result as the tool gave it: Claude Code may add its system reminders, such as how many tokens are left, after it. */
+const withoutSystemReminders = (text: string) => text.replace(/\s*<system-reminder>[\s\S]*?<\/system-reminder>/g, "").trim();
+
 /** What the tools called with `CALL` gave back, when the user's newest message carries their results. */
 const resultsOfCalls = ({ messages }: MessagesRequest) => {
   const content = messages.findLast(({ role }) => role === "user")?.content ?? "";
   if (typeof content === "string") return null;
   const results = content.filter(({ type, tool_use_id }) => type === "tool_result" && tool_use_id?.startsWith(CALL_ID));
   if (results.length === 0) return null;
-  return results.map(({ content: result }) => (typeof result === "string" ? result : (result ?? []).map(({ text }) => text ?? "").join(""))).join("\n");
+  return results
+    .map(({ content: result }) => withoutSystemReminders(typeof result === "string" ? result : (result ?? []).map(({ text }) => text ?? "").join("")))
+    .join("\n");
 };
 
 const CALL = "CALL ";
