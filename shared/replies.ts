@@ -10,8 +10,8 @@ function turnsWithText(timeline: TimelineBlock[]): Turn[] {
   const turns: Turn[] = [];
   let current: Turn | null = null;
   for (const block of timeline) {
-    if (block.kind === "user" || block.kind === "command") current = null;
-    else if (block.kind === "agent" && block.text.trim()) {
+    if (block.kind === "user" || block.kind === "command" || (block.kind === "agent" && block.startsTurn)) current = null;
+    if (block.kind === "agent" && block.text.trim()) {
       if (!current) turns.push((current = { lastKey: block.key, texts: [] }));
       current.lastKey = block.key;
       current.texts.push(withoutSurroundingBlankLines(block.text));

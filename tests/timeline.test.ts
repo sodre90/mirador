@@ -26,6 +26,22 @@ describe("buildTimeline", () => {
     ]);
   });
 
+  test("text the agent writes after its turn ended, with no message between, is a message of its own that starts a turn", () => {
+    const timeline = buildTimeline(stored([{ type: "user-message", text: "hi" }, agentText("First."), { type: "turn-end", stopReason: "end_turn" }, agentText("Sec"), agentText("ond.")]));
+    expect(timeline.map(({ key, ...block }) => block)).toEqual([
+      { kind: "user", at: 1000, text: "hi", turnSeq: 1 },
+      { kind: "agent", at: 2000, text: "First." },
+      { kind: "agent", at: 4000, text: "Second.", startsTurn: true },
+    ]);
+  });
+
+  test("a turn a message begins needs no mark of its own", () => {
+    const timeline = buildTimeline(
+      stored([{ type: "user-message", text: "hi" }, agentText("First."), { type: "turn-end", stopReason: "end_turn" }, { type: "user-message", text: "again" }, agentText("Second.")]),
+    );
+    expect(timeline.filter((block) => block.kind === "agent" && block.startsTurn)).toEqual([]);
+  });
+
   test("a message offers to undo its turn's files once they are kept, whether that is said in the message or after it", () => {
     const timeline = buildTimeline(
       stored([

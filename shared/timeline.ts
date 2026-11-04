@@ -175,7 +175,7 @@ const modeNameIn = (meta: { [key: string]: unknown } | null | undefined) => {
 const noticeBlock = (origin: Origin, about: NoticeAbout): NoticeBlock => ({ kind: "notice", ...origin, text: englishNoticeText(about), about });
 
 export type TimelineBlock =
-  | (Origin & { kind: "agent" | "thought" | "info"; text: string } & CarriedImages)
+  | (Origin & { kind: "agent" | "thought" | "info"; text: string; startsTurn?: true } & CarriedImages)
   | NoticeBlock
   | (Origin & { kind: "user"; text: string; imageIds?: string[]; fromScript?: true; fromMirador?: true; fromPlugin?: string; turnSeq?: number; filesKept?: true } & CarriedImages)
   | AgentNoticeBlock
@@ -381,6 +381,10 @@ class TimelineBuilder {
   private readonly commands = new UserCommandLog();
   private readonly errorsAwaitingSignIn: ErrorBlock[] = [];
   private failedTurn: ErrorBlock | null = null;
+  /** Text after it belongs to a later turn, so it doesn't join it. */
+  private lastBlockOfEndedTurn: TimelineBlock | undefined;
+  /** A turn ended and no message has begun the next, so the agent's next message begins one by itself. */
+  private turnStartAwaited = false;
   private readonly streamedMessages = new StreamedMessages();
   /** What each turn began with, for the note a revert leaves. */
   private readonly messageTexts = new Map<number, string>();
@@ -404,6 +408,7 @@ class TimelineBuilder {
         return this.dropUserBlocks(event.seqs);
       case "user-message":
         this.currentPlan = null;
+        this.turnStartAwaited = false;
         this.messageTexts.set(seq, event.text);
         return this.push({
           kind: "user",
@@ -573,6 +578,8 @@ class TimelineBuilder {
   /** Whether the turn ended of its own accord, was stopped, or was cut short by an error: its subagents end with it. */
   private endTurn(stopReason: StopReason) {
     this.currentPlan = null;
+    this.lastBlockOfEndedTurn = this.blocks.at(-1);
+    this.turnStartAwaited = true;
     this.subagentsOfThisTurn.splice(0).forEach((subagent) => (subagent.turnEnded = stopReason));
     this.toolsOfThisTurn.splice(0).filter((block) => block.endedAt === undefined).forEach((block) => (block.leftUnfinished = true));
   }
@@ -597,20 +604,26 @@ class TimelineBuilder {
 
   private appendText(kind: TextBlockKind, origin: Origin, text: string, into: TimelineBlock[]) {
     const last = into.at(-1);
-    if (last && last.kind === kind) {
+    if (last && last.kind === kind && last !== this.lastBlockOfEndedTurn) {
       last.text += text;
       return;
     }
-    this.push({ kind, ...origin, text }, into);
+    this.push({ kind, ...origin, text, ...this.turnStartIfAwaited(kind, into) }, into);
   }
 
   private appendImage(kind: "user" | "agent", origin: Origin, image: ImageContent, into: TimelineBlock[]) {
     const last = into.at(-1);
-    if (last && last.kind === kind) {
+    if (last && last.kind === kind && last !== this.lastBlockOfEndedTurn) {
       last.images = [...(last.images ?? []), image];
       return;
     }
-    this.push({ kind, ...origin, text: "", images: [image] }, into);
+    this.push({ kind, ...origin, text: "", images: [image], ...this.turnStartIfAwaited(kind, into) }, into);
+  }
+
+  private turnStartIfAwaited(kind: TextBlockKind, into: TimelineBlock[]): { startsTurn?: true } {
+    if (kind !== "agent" || into !== this.blocks || !this.turnStartAwaited) return {};
+    this.turnStartAwaited = false;
+    return { startsTurn: true };
   }
 
   private upsertTool(origin: Origin, update: ToolUpdate, into: TimelineBlock[]) {

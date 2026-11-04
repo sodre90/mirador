@@ -15,6 +15,7 @@ test.afterAll(async () => {
 const BEFORE = "Pulling **main** now.";
 const AFTER = "I pulled `main`:\n\n- 128 files changed\n- the new tag v0.11.0";
 const NEXT = "You're welcome.";
+const LATER = "The build you started has finished.";
 
 const agentText = (text: string) => ({ type: "acp", update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } });
 const turns = [
@@ -25,6 +26,8 @@ const turns = [
   { type: "turn-end", stopReason: "end_turn" },
   { type: "user-message", text: "thanks" },
   agentText(NEXT),
+  { type: "turn-end", stopReason: "end_turn" },
+  agentText(LATER),
   { type: "turn-end", stopReason: "end_turn" },
 ];
 
@@ -54,8 +57,8 @@ test("a turn's whole reply copies as formatted text with its Markdown, or as Mar
   await reloadFromRestartedHost(page);
 
   const replies = page.locator(".message.agent");
-  await expect(replies).toHaveCount(3);
-  await expect(page.getByRole("button", { name: "Copy reply", exact: true }), "only a turn's last text offers it").toHaveCount(2);
+  await expect(replies).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Copy reply", exact: true }), "only a turn's last text offers it").toHaveCount(3);
   const [firstTurn, secondTurn] = ["128 files changed", NEXT].map((text) => page.locator(".timeline-entry").filter({ hasText: text }));
   const copyReply = firstTurn.getByRole("button", { name: "Copy reply", exact: true });
   const copyMarkdown = firstTurn.getByRole("button", { name: "Copy reply as Markdown" });
@@ -92,6 +95,14 @@ test("a turn's whole reply copies as formatted text with its Markdown, or as Mar
     await secondTurn.hover();
     await secondTurn.getByRole("button", { name: "Copy reply as Markdown" }).click();
     await expect.poll(() => clipboard(page)).toEqual({ text: NEXT, html: null });
+  });
+
+  await test.step("a turn the agent begins by itself, with no message, is a reply of its own", async () => {
+    const laterTurn = page.locator(".timeline-entry").filter({ hasText: LATER });
+    await expect(page.locator(".message.agent").filter({ hasText: NEXT }), "it doesn't run on from the turn before").not.toContainText(LATER);
+    await laterTurn.hover();
+    await laterTurn.getByRole("button", { name: "Copy reply as Markdown" }).click();
+    await expect.poll(() => clipboard(page)).toEqual({ text: LATER, html: null });
   });
 
   await test.step("where the browser refuses the clipboard write, a copy command copies it instead", async () => {

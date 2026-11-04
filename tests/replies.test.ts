@@ -57,6 +57,16 @@ describe("replies", () => {
     ]);
   });
 
+  test("a turn the agent begins by itself after one ended is a reply of its own, even when it shows a picture first", () => {
+    const picture = acp({ sessionUpdate: "agent_message_chunk", content: { type: "image", data: "AAAA", mimeType: "image/png" } });
+    expect(
+      repliesOf([{ type: "user-message", text: "go" }, agentText("First."), { type: "turn-end", stopReason: "end_turn" }, picture, bashCall("check"), agentText("Second.")]),
+    ).toEqual([
+      ["agent", "First."],
+      ["agent", "Second."],
+    ]);
+  });
+
   test("a part that starts indented, as a code block or a nested list does, keeps its indentation", () => {
     expect(repliesOf([{ type: "user-message", text: "go" }, agentText("Run this:"), bashCall("run"), agentText("\n    npm test\n\n  - nested\n")])).toEqual([
       ["agent", "Run this:\n\n    npm test\n\n  - nested"],
