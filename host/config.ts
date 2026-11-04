@@ -25,6 +25,9 @@ export interface Reachability {
   networkSetByEnvironment: boolean;
 }
 
+/** Antigravity ends every MCP tool call after 3 minutes, so its canvas questions stop waiting a little before. */
+export const ANTIGRAVITY_ASK_WAIT_MS = 170_000;
+
 export const agentLogsDirectory = (dataDir: string) => join(dataDir, "logs");
 
 export interface HostConfig {
@@ -48,6 +51,8 @@ export interface HostConfig {
   testModelOverride: { model?: string; effort?: string };
   /** Test hosts' own Claude Code sessions skip the user's settings and CLAUDE.md, which can steer or refuse test prompts. */
   testSkipsUserSettings: boolean;
+  /** How long a canvas question waits in an Antigravity tool call; e2e shortens it with MIRADOR_ANTIGRAVITY_ASK_WAIT_MS. */
+  antigravityAskWaitMs: number;
   /** Hot reload makes open pages swap modules mid-conversation, so it is opt-in for working on the UI itself. */
   developmentMode: boolean;
   /** Runs the statusline command from the user's Claude Code settings; test hosts turn it off with MIRADOR_STATUSLINE=off. */
@@ -219,6 +224,7 @@ export function loadConfig(env = process.env): HostConfig {
     notifierDir: env.MIRADOR_NOTIFIER_DIR ?? notifierDirIfInstalled(),
     testModelOverride: { model: env.MIRADOR_TEST_MODEL, effort: env.MIRADOR_TEST_EFFORT },
     testSkipsUserSettings: env.MIRADOR_TEST_SKIP_USER_SETTINGS === "1",
+    antigravityAskWaitMs: Number(env.MIRADOR_ANTIGRAVITY_ASK_WAIT_MS) || ANTIGRAVITY_ASK_WAIT_MS,
     developmentMode: env.MIRADOR_DEV === "1",
     runsUserStatusLine: env.MIRADOR_STATUSLINE !== "off",
     checksForNewerVersion: env.MIRADOR_NEWER_VERSION_CHECK !== "off",

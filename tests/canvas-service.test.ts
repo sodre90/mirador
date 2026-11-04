@@ -131,6 +131,33 @@ describe("CanvasService", () => {
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("next-message");
   });
 
+  test("a question waited on for a limited time gives the answer given in time", async () => {
+    const { store, canvas, ask } = setUp();
+    const item = ask();
+    const answer = canvas.waitForAnswerWithin(item, new AbortController().signal, 60_000);
+    canvas.answer(item.id, "Blue");
+    expect(await answer).toEqual({ label: "Blue" });
+    expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("tool-result");
+  });
+
+  test("a question waited on for a limited time stays open past it, and its answer then goes as the next message", async () => {
+    const { store, canvas, nextMessages, ask } = setUp();
+    const item = ask();
+    expect(await canvas.waitForAnswerWithin(item, new AbortController().signal, 10)).toBeNull();
+    expect(asAsk(store.findCanvasItem(item.id))?.status).toBe("waiting");
+    canvas.answer(item.id, "Red");
+    expect(nextMessages).toEqual(['My answer to your question "Color?": Red']);
+    expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("next-message");
+  });
+
+  test("a question waited on for a limited time still fails when the tool call goes first", async () => {
+    const { canvas, ask } = setUp();
+    const gone = new AbortController();
+    const answer = canvas.waitForAnswerWithin(ask(), gone.signal, 60_000);
+    gone.abort(new Error("the agent went away"));
+    await expect(answer).rejects.toThrow("the agent went away");
+  });
+
   test("an install question installs the offered plugin only on Install, discards it otherwise, then tells the agent what came of it", async () => {
     const { canvas, nextMessages } = setUp();
     const settled: [string, boolean][] = [];

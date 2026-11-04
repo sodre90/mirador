@@ -150,6 +150,20 @@ export class CanvasService {
     });
   }
 
+  /**
+   * The answer, or null when `limitMs` passes first: the question stays open, and an answer given later goes to the
+   * agent as the user's next message.
+   */
+  async waitForAnswerWithin(item: CanvasItem, signal: AbortSignal, limitMs: number) {
+    const timeUp = AbortSignal.timeout(limitMs);
+    try {
+      return await this.waitForAnswer(item, AbortSignal.any([signal, timeUp]));
+    } catch (error) {
+      if (timeUp.aborted && !signal.aborted) return null;
+      throw error;
+    }
+  }
+
   answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[]) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });

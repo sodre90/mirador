@@ -7,6 +7,7 @@ import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, type CanvasPl
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { answerAsToolResult, type CanvasService, type RenderOutcome } from "./service.ts";
+import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import type { CanvasUse, HarnessId } from "../../shared/model.ts";
 import type { AppDocuments } from "../apps/documents.ts";
@@ -73,6 +74,9 @@ const SHOWS_ONLY_IN_MIRADOR = { annotations: { readOnlyHint: true, destructiveHi
 
 const reviewFreeFor = (harness: HarnessId | undefined) => (harness === "codex" ? SHOWS_ONLY_IN_MIRADOR : {});
 
+const ANSWER_STILL_TO_COME =
+  "The user hasn't answered yet. The question stays open in their browser, and their answer will arrive as their next message. End your turn now without assuming an answer.";
+
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
 /** opencode 2 names the session that calls a tool, its subagents' included. */
@@ -101,8 +105,10 @@ function buildCanvasServer(
   canvasPlugins: CanvasPlugins | null,
   catalog: PluginCatalog | null,
   store: Store | null,
+  antigravityAskWaitMs: number,
 ) {
   const harness = store?.findConversation(conversationId)?.harness;
+  const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
   const server = new McpServer(
     { name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION },
@@ -198,8 +204,8 @@ function buildCanvasServer(
                 .catch(() => {});
             }, PROGRESS_HEARTBEAT_MS);
       try {
-        const answer = await canvas.waitForAnswer(item, ctx.mcpReq.signal);
-        return { content: [{ type: "text", text: answerAsToolResult(answer) }] };
+        const answer = askWaitLimitMs === null ? await canvas.waitForAnswer(item, ctx.mcpReq.signal) : await canvas.waitForAnswerWithin(item, ctx.mcpReq.signal, askWaitLimitMs);
+        return { content: [{ type: "text", text: answer ? answerAsToolResult(answer) : ANSWER_STILL_TO_COME }] };
       } finally {
         clearInterval(heartbeat);
       }
@@ -256,6 +262,7 @@ export class CanvasMcpEndpoints {
     private readonly canvasPlugins: CanvasPlugins | null = null,
     private readonly catalog: PluginCatalog | null = null,
     private readonly store: Store | null = null,
+    private readonly antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS,
   ) {}
 
   handle(conversationId: string, request: Request) {
@@ -270,7 +277,7 @@ export class CanvasMcpEndpoints {
     let handler = this.handlers.get(conversationId);
     if (!handler) {
       handler = createMcpHandler(() =>
-        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog, this.store),
+        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog, this.store, this.antigravityAskWaitMs),
       );
       this.handlers.set(conversationId, handler);
     }

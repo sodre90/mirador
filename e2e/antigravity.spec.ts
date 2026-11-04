@@ -5,7 +5,9 @@ import { addWorkspace, answerCanvasQuestion, createProfile, lastAgentMessage, se
 import { ScriptedModel, antigravityProgram, scriptedAntigravityEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
-const host = new TestHost();
+/** Short enough to outlast in a test, long enough for the user to answer in time when they do. */
+const ASK_WAIT_MS = 10_000;
+const host = new TestHost({ environment: { MIRADOR_ANTIGRAVITY_ASK_WAIT_MS: String(ASK_WAIT_MS) } });
 const model = new ScriptedModel();
 const PROFILE = "scripted Antigravity";
 const CANVAS_INSTRUCTIONS = "The user finds long terminal text and ASCII diagrams hard to read";
@@ -55,6 +57,15 @@ test("an Antigravity canvas question waits for the user's answer, which comes ba
   await waitForTurnToEnd(page);
   await expect(lastAgentMessage(page)).toContainText("Tool result:", { timeout: 60_000 });
   await expect(lastAgentMessage(page)).toContainText("Red");
+});
+
+test("an Antigravity canvas question left unanswered past Antigravity's tool call limit is answered as the next message", async () => {
+  await sendMessage(page, "ASK Pick a late colour");
+  await expect(lastAgentMessage(page)).toContainText("hasn't answered yet", { timeout: ASK_WAIT_MS + 60_000 });
+  await waitForTurnToEnd(page);
+  await expect(page.locator(".error-line")).toHaveCount(0);
+  await answerCanvasQuestion(page, "Blue");
+  await expect(lastAgentMessage(page)).toContainText('Echo: My answer to your question "Pick a late colour": Blue', { timeout: 60_000 });
 });
 
 test("an Antigravity shell command waits for the user's permission", async () => {
