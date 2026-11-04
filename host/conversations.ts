@@ -834,11 +834,9 @@ export class ConversationService {
         response?.stopReason === "cancelled" && !turn.awaitedUser && (turn.lastReplyMessageId !== null || runtime.openToolCalls.size === 0)
           ? { messageId: turn.lastReplyMessageId }
           : undefined;
-      if (response?.stopReason !== "end_turn") {
-        await this.returnUnansweredSteers(conversationId, runtime, turn.steered, response).catch((error: unknown) =>
-          console.error(`could not tell whether the agent answered the messages that joined the turn of conversation ${conversationId}: ${errorMessage(error)}`),
-        );
-      }
+      await this.returnUnansweredSteers(conversationId, runtime, turn.steered, response).catch((error: unknown) =>
+        console.error(`could not tell whether the agent answered the messages that joined the turn of conversation ${conversationId}: ${errorMessage(error)}`),
+      );
       runtime.running = false;
       this.announceRunningTurnsCount();
       this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(response?.stopReason, runtime.killedOnPurpose === true) });
@@ -2090,14 +2088,16 @@ export class ConversationService {
   }
 
   /**
-   * A turn stopped right after a steer can leave the steered messages unanswered: pi says how many in its answer to the
-   * stopped turn, and for Claude Code its transcript tells which. They go back to the front of the queue, to go out as
-   * the next turn.
+   * A turn stopped right after a steer can leave the steered messages unanswered, and so can one that ends just as a
+   * message joins it: pi says how many in its answer to the turn, and for a stopped Claude Code turn its transcript tells
+   * which. They go back to the front of the queue, to go out as the next turn.
    */
   private async returnUnansweredSteers(conversationId: string, runtime: Runtime, steered: SteeredMessages[], response?: acp.PromptResponse) {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation || steered.length === 0) return;
-    const unanswered = (response && steersLeftUnread(response, steered)) ?? (await this.steersUnansweredInTranscript(conversation, steered));
+    const endedOnItsOwn = response?.stopReason === "end_turn";
+    const unanswered =
+      (response && steersLeftUnread(response, steered)) ?? (endedOnItsOwn ? [] : await this.steersUnansweredInTranscript(conversation, steered));
     if (unanswered.length === 0) return;
     const commandIds = unanswered.flatMap((steer) => steer.commandIds);
     this.append(conversationId, { type: "steered-messages-returned", seqs: unanswered.flatMap(({ seqs }) => seqs), ...(commandIds.length > 0 && { commandIds }) });

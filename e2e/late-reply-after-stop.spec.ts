@@ -100,4 +100,14 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     expect(shown.indexOf("Starting on the plan")).toBeLessThan(shown.indexOf("Steered in"));
     expect(shown.indexOf("Steered in")).toBeLessThan(shown.indexOf("Also Steered in"));
   });
+
+  await test.step("a message that joined a turn as it ended, unread, goes out as the next turn", async () => {
+    await sendMessage(page, "ENDS UNREAD the late one");
+    await waitsForStop("ENDS UNREAD the late one");
+    await page.locator(".composer:visible textarea").fill("SAY Read at last");
+    await page.locator(".composer:visible textarea").press("Enter");
+    await expect(agentBubbles(page).last()).toHaveText("Read at last", { timeout: 30_000 });
+    await waitForTurnToEnd(page);
+    await expect(page.locator(".timeline:visible .message.user", { hasText: "SAY Read at last" })).toHaveCount(1);
+  });
 });

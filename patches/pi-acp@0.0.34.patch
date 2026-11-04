@@ -358,9 +358,9 @@ index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..93307a7df24c84010d949addea48a5a8
 +    return true;
 +  }
 +  /**
-+   * pi keeps a steered message it has not read yet through an abort, and reads it at the start of its next run, after
-+   * that run's own message, so a cancel takes such messages back first. pi reads its queue first in, first out: those
-+   * it never read are the turn's last ones.
++   * pi keeps a steered message it has not read yet through an abort, or one that came after its last look at the queue,
++   * and reads it at the start of its next run, after that run's own message, so a stop or a turn's end takes such
++   * messages back; a failed turn leaves them to that next run. pi reads its queue first in, first out.
 +   */
 +  async takeBackUnreadSteers() {
 +    await Promise.allSettled(this.steersInFlight);
@@ -396,7 +396,7 @@ index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..93307a7df24c84010d949addea48a5a8
      await this.publishContextUsage();
 -    const reason = this.cancelRequested ? "cancelled" : "end_turn";
 -    this.pendingTurn?.resolve(reason);
-+    this.unansweredSteers = await this.steersTakenBack ?? 0;
++    this.unansweredSteers = await (this.steersTakenBack ?? (this.modelFailure ? 0 : this.takeBackUnreadSteers()));
 +    if (this.modelFailure && !this.cancelRequested) {
 +      this.pendingTurn?.reject(new RequestError(-32603, this.modelFailure));
 +    } else {

@@ -28,8 +28,10 @@ import * as acp from "@agentclientprotocol/sdk";
  * ends the turn as done, as Claude Code does when its answer was already complete as the stop came.
  * `REPLY TOOL REPLY ` answers as Claude Code does around a tool: a reply under one id, a tool call, and a reply under
  * the next id. `REPLY STEERED ` begins a reply, waits for a message steered into the turn and
- * answers it under the next id. `TOOL UNTIL ` and a path runs a command until that file exists, then ends the turn
- * at once, before a steer the command's end set off can reach the agent.
+ * answers it under the next id. `ENDS UNREAD ` begins a reply, takes a message steered into the turn and ends it without
+ * reading it, saying so, as pi does when the message came after its last look at its queue. `TOOL UNTIL ` and a path
+ * runs a command until that file exists, then ends the turn at once, before a steer the command's end set off can reach
+ * the agent.
  * `ASYNC TASK` starts a background task the way claude-agent-acp does with its `asyncTasks` capability: a spawn update,
  * a progress beat shortly after, and output lines appended to a file under `FAKE_ACP_TASK_OUTPUT_DIR`; with ` DONE`
  * after it the task completes on its own too, with ` STUCK` a Stop fails on it with an error, and with ` LONG` it
@@ -42,7 +44,7 @@ import * as acp from "@agentclientprotocol/sdk";
  * request waits for a model server to load the model. Starts, changes and closes go to the file in `FAKE_ACP_LOG`,
  * each with the name in `FAKE_ACP_NAME`. FAKE_ACP_IGNORES_SIGTERM=1 makes it survive SIGTERM, and FAKE_ACP_PID_FILE
  * names a file it writes its pid to. `FAKE_ACP_STEERS=1` offers claude-agent-acp's `_session/steering`: a message
- * steered into a `REPLY STEERED ` turn joins it, any other is refused as needing a prompt of its own.
+ * steered into a `REPLY STEERED ` or `ENDS UNREAD ` turn joins it, any other is refused as needing a prompt of its own.
  * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
  */
@@ -350,6 +352,14 @@ async function replyThenSteered(client: acp.AgentContext, sessionId: string, tex
   return { stopReason: "end_turn" as const };
 }
 
+/** A reply the turn begins, then the turn's end, with the message steered into it unread. */
+async function endsWithSteerUnread(client: acp.AgentContext, sessionId: string, text: string) {
+  const steered = new Promise<string>((resolve) => steerWaiters.set(sessionId, resolve));
+  await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Starting on ${text}` } } });
+  await steered;
+  return { stopReason: "end_turn" as const, _meta: { steering: { unanswered: 1 } } };
+}
+
 function steerInto(sessionId: string, prompt: acp.ContentBlock[]) {
   const joinsTurn = steerWaiters.get(sessionId);
   if (!joinsTurn) return { outcome: "promptRequired" };
@@ -469,6 +479,7 @@ acp
     if (startsWith(ctx.params.prompt, "STOPPED QUIET ")) return stoppedQuietly(ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "REPLY TOOL REPLY ")) return replyAroundATool(ctx.client, ctx.params.sessionId, text.slice("REPLY TOOL REPLY ".length));
     if (startsWith(ctx.params.prompt, "TOOL UNTIL ")) return toolUntil(ctx.client, ctx.params.sessionId, text.slice("TOOL UNTIL ".length));
+    if (startsWith(ctx.params.prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
     if (startsWith(ctx.params.prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
     if (startsWith(ctx.params.prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
     if (startsWith(ctx.params.prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
