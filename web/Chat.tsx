@@ -2173,7 +2173,7 @@ export function ChatPanel({
   const [approvalToShow, setApprovalToShow] = useState<string | null>(null);
   useEffect(() => {
     if (!approvalToShow) return;
-    ref.current?.querySelector(`[data-permission-id="${CSS.escape(approvalToShow)}"]`)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    ref.current?.querySelector(`[data-permission-id="${CSS.escape(approvalToShow)}"]`)?.scrollIntoView({ block: "center" });
     setApprovalToShow(null);
   }, [approvalToShow]);
   const showApproval = (approval: PermissionBlock) => {
