@@ -12,12 +12,16 @@ const holds = () => join(host.root, "awake-holds.log");
 const heldAndReleased = () => (existsSync(holds()) ? readFileSync(holds(), "utf8").trim().split("\n") : []);
 const held = expect.stringMatching(/^held /);
 
-/** Stand-ins for caffeinate and systemd-inhibit that write down when they start holding the computer awake and when they are stopped, and end with the host as the real ones do. */
+/**
+ * Stand-ins for caffeinate and systemd-inhibit that write down when they start holding the computer awake and when they
+ * are stopped, and end with the host as the real ones do. They wait on a backgrounded sleep, as sh runs a trap only once
+ * its foreground command ends, which would note the release after a restarted host already held again.
+ */
 function writeFakeAwakeHolders() {
   mkdirSync(host.fakeProgramsDir, { recursive: true });
   for (const name of ["caffeinate", "systemd-inhibit"]) {
     const program = join(host.fakeProgramsDir, name);
-    writeFileSync(program, `#!/bin/sh\ntrap 'echo released >> "${holds()}"; exit 0' TERM\necho "held $*" >> "${holds()}"\nhost=$PPID\nwhile kill -0 $host 2>/dev/null; do sleep 0.2; done\n`);
+    writeFileSync(program, `#!/bin/sh\ntrap 'echo released >> "${holds()}"; exit 0' TERM\necho "held $*" >> "${holds()}"\nhost=$PPID\nwhile kill -0 $host 2>/dev/null; do sleep 0.2 & wait $!; done\n`);
     chmodSync(program, 0o755);
   }
 }
