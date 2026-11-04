@@ -9,6 +9,7 @@ export const problems: Messages["problems"] = {
     "opencode-not-installed": "opencode ist nicht installiert: Es gibt kein opencode-Programm im PATH oder in seinen üblichen Installationsordnern.",
     "codex-not-installed": "Codex ist nicht installiert: Es gibt kein codex-Programm im PATH oder in seinen üblichen Installationsordnern. Installiere es mit npm install -g @openai/codex.",
     "copilot-not-installed": "Copilot ist nicht installiert: Es gibt kein copilot-Programm im PATH oder in seinen üblichen Installationsordnern. Installiere es mit npm install -g @github/copilot.",
+    "antigravity-not-installed": "Antigravity ist nicht installiert: Es gibt kein agy-Programm im PATH oder in seinen üblichen Installationsordnern. Installiere die Antigravity-CLI von antigravity.google.",
     "codex-session-held": "Ein anderes Codex hält diese Sitzung. Beende Codex im Terminal, führe dann codex app-server daemon stop aus (der Daemon, auf dem Codex läuft, hält die Sitzung auch nach dem Beenden von Codex weiter) und sende deine Nachricht hier noch einmal.",
     "pi-not-installed": "pi ist nicht installiert: Es gibt kein pi-Programm im PATH. Installiere es mit npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "Ein Bild dieser Nachricht fehlt; füge es noch einmal ein.",

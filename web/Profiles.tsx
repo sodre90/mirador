@@ -35,6 +35,10 @@ CODEX_CONFIG='{"model":"gpt-5.6-luna"}'`,
   copilot: `COPILOT_HOME=/Users/you/.copilot-work
 # or a token instead of copilot login:
 COPILOT_GITHUB_TOKEN=...`,
+  antigravity: `# an OpenAI-compatible endpoint instead of the Google sign-in:
+AGY_LLM_GATEWAY_URL=http://localhost:8080
+AGY_LLM_GATEWAY_WIRE_PROTOCOL=openai
+AGY_LLM_GATEWAY_API_KEY=...`,
 };
 
 function useSaveProfile(onSaved: (profileId: string) => void) {

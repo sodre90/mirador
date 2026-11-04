@@ -251,7 +251,7 @@ export const hints: Messages["hints"] = {
   keepAwake:
     "Megakadályozza, hogy a gép, amelyen a Mirador fut, tétlenül elaludjon.\n\nAmíg az ágensek dolgoznak: amíg minden futó kör véget nem ér, hogy a hosszú feladatok befejeződjenek.\n\nMindig: amíg a Mirador fut, hogy a telefonod és a többi készüléked bármikor elérje.\n\nmacOS-en és Linuxon.",
   canvasUse:
-    "Szükség szerint: az ágens a vászon saját utasításai alapján dönt.\n\nGyakran: a Claude Code, a pi és a Codex rendszerpromptja, valamint a Copilot vászonutasításai arra is utasítják őket, hogy a magyarázatokat, összehasonlításokat, terveket és egy nagyobb munka összefoglalóját a vászonra tegyék, és a választásokat ott kérdezzék meg tőled.\n\nAz oldalak több tokenbe kerülnek, mint ugyanaz a válasz szövegként.",
+    "Szükség szerint: az ágens a vászon saját utasításai alapján dönt.\n\nGyakran: a Claude Code, a pi, a Codex és az Antigravity rendszerpromptja, valamint a Copilot vászonutasításai arra is utasítják őket, hogy a magyarázatokat, összehasonlításokat, terveket és egy nagyobb munka összefoglalóját a vászonra tegyék, és a választásokat ott kérdezzék meg tőled.\n\nAz oldalak több tokenbe kerülnek, mint ugyanaz a válasz szövegként.",
   keepDeletedCanvas:
     "Ha törölsz egy beszélgetést, a vászna ennyi ideig megmarad. Ha a munkamenetét a Munkamenet folytatása… menüből folytatod, a vászon úgy tér vissza, ahogy volt, az átnézésekkel és bejárásokkal együtt. Ezután csak az jön vissza, amit a munkamenet saját előzménye őriz: oldalak, kérdések és ellenőrzőlisták.",
   terminalCommand:

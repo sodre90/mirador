@@ -3,6 +3,7 @@ import { createServer, type ServerResponse, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+import { findAntigravity } from "../host/acp/antigravity-program.ts";
 import { findCopilot } from "../host/acp/copilot-program.ts";
 import { foldersOnPath, programIn } from "./test-host.ts";
 
@@ -58,6 +59,22 @@ const toolResultOf = (message: ChatMessage) => {
   }
 };
 
+/** The model list an agent such as Antigravity asks an OpenAI-compatible endpoint for. */
+const SCRIPTED_MODEL_LIST = { object: "list", data: [{ id: "scripted", object: "model", owned_by: "e2e" }] };
+
+/** Antigravity sends the user's message inside `<USER_REQUEST>`, followed by metadata such as the local time. */
+const withoutAntigravityWrapping = (text: string) => /<USER_REQUEST>\n?([\s\S]*?)\n?<\/USER_REQUEST>/.exec(text)?.[1] ?? text;
+
+/** Antigravity may follow the user's message with a notice of its own, such as that a restart stopped its background tasks. */
+const isAntigravityNotice = (message: ChatMessage) => message.role === "user" && textOf(message).includes("<SYSTEM_MESSAGE>") && !textOf(message).includes("<USER_REQUEST>");
+
+/** Antigravity refuses a tool call without the `toolSummary` it asks of every call; its shell tool, run_command, tells it apart. */
+function withAntigravityToolSummary(request: ChatRequest, reply: Reply): Reply {
+  const offersRunCommand = (request.tools ?? []).some(({ function: { name } }) => name === "run_command");
+  if (!offersRunCommand || !("call" in reply)) return reply;
+  return { call: { ...reply.call, arguments: { toolSummary: "Scripted call", ...reply.call.arguments } } };
+}
+
 const chunk = (delta: object, finishReason: string | null = null) => ({
   id: "scripted",
   object: "chat.completion.chunk",
@@ -94,6 +111,7 @@ export class ScriptedModel {
       const chunks: Buffer[] = [];
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
+        if (request.method === "GET" && request.url?.endsWith("/models")) return void response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(SCRIPTED_MODEL_LIST));
         const parsed = JSON.parse(Buffer.concat(chunks).toString() || "{}") as ChatRequest | ResponsesRequest;
         const viaResponses = request.url?.endsWith("/responses") ?? false;
         if (viaResponses) this.responsesRequests.push(parsed as ResponsesRequest);
@@ -162,7 +180,7 @@ export class ScriptedModel {
     if ((request.tools ?? []).length > 0 && this.failure) {
       return response.writeHead(this.failure.status, { "content-type": "application/json" }).end(JSON.stringify(this.failure.body));
     }
-    const reply = this.scriptedReply(request);
+    const reply = withAntigravityToolSummary(request, this.scriptedReply(request));
     if (viaResponses) return this.streamResponse(response, reply);
     if ("text" in reply) return this.stream(response, [chunk({ role: "assistant", content: reply.text }), finish("stop")]);
     const toolCall = { index: 0, id: `call_${this.requests.length}`, type: "function", function: { name: reply.call.name, arguments: JSON.stringify(reply.call.arguments) } };
@@ -171,10 +189,10 @@ export class ScriptedModel {
 
   private scriptedReply(request: ChatRequest): Reply {
     const tools = (request.tools ?? []).map(({ function: { name } }) => name);
-    const last = request.messages.at(-1);
+    const last = request.messages.findLast((message) => !isAntigravityNotice(message));
     if (tools.length === 0) return { text: "Scripted title" };
     if (last?.role === "tool") return { text: `Tool result: ${toolResultOf(last)}` };
-    const text = textOf(last).trim();
+    const text = withoutAntigravityWrapping(textOf(last)).trim();
     const canvasTool = (action: string) => tools.find((name) => name.includes("canvas") && name.endsWith(action))!;
     const script = text.split("\n").at(-1)!.trim(); // opencode 2 puts its own lines before a subagent's prompt
     const [directive, ...rest] = script.split(" ");
@@ -218,9 +236,13 @@ export class ScriptedModel {
   }
 }
 
-/** The shell tool each agent offers: Codex's exec_command takes `cmd`, the others' `command`. Copilot on Windows offers powershell instead of bash. */
+/**
+ * The shell tool each agent offers: Codex's exec_command takes `cmd`, Antigravity's run_command `CommandLine`, the
+ * others' `command`. Copilot on Windows offers powershell instead of bash.
+ */
 function shellCall(tools: string[], command: string): ToolCall {
   if (tools.includes("exec_command")) return { name: "exec_command", arguments: { cmd: command } };
+  if (tools.includes("run_command")) return { name: "run_command", arguments: { CommandLine: command, WaitMsBeforeAsync: 5000 } };
   const name = ["shell", "powershell"].find((tool) => tools.includes(tool)) ?? "bash";
   return { name, arguments: { command, description: "Run the scripted command" } };
 }
@@ -389,4 +411,19 @@ export function scriptedCopilotEnvironment(model: ScriptedModel, root: string) {
     "COPILOT_PROVIDER_API_KEY=unused",
     "COPILOT_MODEL=scripted",
   ].join("\n");
+}
+
+/** The user's own Antigravity CLI, `agy`, which Mirador needs to offer Antigravity at all; null where it is not installed. */
+export function antigravityProgram() {
+  return findAntigravity(process.env.PATH);
+}
+
+/**
+ * A profile environment that points Antigravity at the scripted model through its LLM gateway, which needs no Google
+ * sign-in, and keeps it away from the user's own Antigravity setup: its home, and so `~/.gemini`, lives under `root`.
+ */
+export function scriptedAntigravityEnvironment(model: ScriptedModel, root: string) {
+  const home = join(root, "antigravity-home");
+  mkdirSync(home, { recursive: true });
+  return [`HOME=${home}`, `AGY_LLM_GATEWAY_URL=${model.url.replace(/\/v1$/, "")}`, "AGY_LLM_GATEWAY_WIRE_PROTOCOL=openai", "AGY_LLM_GATEWAY_API_KEY=unused"].join("\n");
 }

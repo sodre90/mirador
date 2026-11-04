@@ -8,6 +8,7 @@ import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
+import { findAntigravity } from "./antigravity-program.ts";
 import { findCopilot } from "./copilot-program.ts";
 import { agentEnvironment } from "./environment.ts";
 import type { HarnessSpec } from "./harness.ts";
@@ -62,6 +63,7 @@ export function installedHarnesses(claudeProgramSetting: string): HarnessId[] {
     pi: () => findPi(),
     codex: () => findCodex(),
     copilot: () => findCopilot(currentPath()),
+    antigravity: () => findAntigravity(currentPath()),
   };
   return harnessIds.filter((harness) => programOf[harness]() !== null);
 }
@@ -72,6 +74,7 @@ const commandFor: Record<HarnessId, (environment: Record<string, string>) => str
   pi: () => [process.execPath, piAcpEntry()],
   codex: () => [process.execPath, codexAcpEntry()],
   copilot: copilotCommand,
+  antigravity: (environment) => [environment.AGY_PATH!, "acp"],
 };
 
 const AUTH_REQUIRED_CODE = RequestError.authRequired().code;
@@ -91,6 +94,7 @@ const loginCommandFor: Record<HarnessId, (environment: Record<string, string>, p
   pi: (environment) => [environment.PI_ACP_PI_COMMAND!],
   codex: (environment, pageOnHost) => [environment.CODEX_PATH!, "login", ...(pageOnHost ? [] : ["--device-auth"])],
   copilot: (environment) => [environment.COPILOT_PATH!, "login"],
+  antigravity: (environment) => [environment.AGY_PATH!],
 };
 
 const powershellKeepOpenOnFailure = (command: string[]) =>
@@ -168,6 +172,7 @@ export function launchEnvironment(harness: HarnessId, profile: Profile | null, c
   if (harness === "pi") return piAcpEnvironment(environment);
   if (harness === "codex") return codexAcpEnvironment(environment);
   if (harness === "copilot") return copilotEnvironment(environment);
+  if (harness === "antigravity") return antigravityEnvironment(environment);
   if (environment.CLAUDE_CODE_EXECUTABLE) return environment;
   const program = findClaudeProgram(claudeProgramSetting, environment.PATH);
   if (!program) throw new HostProblemError(claudeProgramMissing(claudeProgramSetting));
@@ -202,6 +207,14 @@ function copilotEnvironment(environment: Record<string, string>): Record<string,
   return { ...environment, COPILOT_PATH: program };
 }
 
+/** Antigravity runs the `agy` in AGY_PATH, else the one on the profile's PATH, as Copilot does COPILOT_PATH. */
+function antigravityEnvironment(environment: Record<string, string>): Record<string, string> {
+  if (environment.AGY_PATH) return environment;
+  const program = findAntigravity(environment.PATH);
+  if (!program) throw new HostProblemError({ code: "antigravity-not-installed" });
+  return { ...environment, AGY_PATH: program };
+}
+
 export function profileEnvironment(profile: Profile | null): Record<string, string> {
   if (!profile) return agentEnvironment(hostEnvironment());
   const environment = parseEnvironment(profile.environment);
@@ -222,6 +235,7 @@ export function sessionMeta(
 ) {
   if (harness === "claude") return claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins });
   if (harness === "pi") return piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
+  if (harness === "antigravity") return antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   return undefined;
 }
 
@@ -239,8 +253,20 @@ export function sessionSystemPrompt(harness: HarnessId, canvasUse: CanvasUse, ca
  * come in the text Mirador's pi-acp patch appends. Its job waits go through the canvas's when_done tool, as opencode's do.
  */
 export function piSessionMeta(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins = NO_CANVAS_PLUGINS) {
+  return { systemPrompt: { append: canvasPromptAppendix(canvasUse, canvasAssetsOrigin, canvasPlugins) } };
+}
+
+/**
+ * Antigravity keeps the instructions of MCP servers from its model, so the canvas server's come in the text it appends
+ * to its system prompt (`_meta.antigravity.systemPrompt.append`), as pi's do. Its job waits go through when_done.
+ */
+export function antigravitySessionMeta(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins = NO_CANVAS_PLUGINS) {
+  return { antigravity: { systemPrompt: { append: canvasPromptAppendix(canvasUse, canvasAssetsOrigin, canvasPlugins) } } };
+}
+
+function canvasPromptAppendix(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins: CanvasPluginGuidance) {
   const canvasServerInstructions = `# Canvas server instructions\n${canvasInstructions(canvasAssetsOrigin, canvasPlugins)}`;
-  return { systemPrompt: { append: [canvasServerInstructions, ...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : [])].join("\n\n") } };
+  return [canvasServerInstructions, ...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : [])].join("\n\n");
 }
 
 /**

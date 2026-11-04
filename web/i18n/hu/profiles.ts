@@ -48,7 +48,7 @@ export const profiles: Messages["profiles"] = {
   restartHint: "Ha módosított környezetet vagy indítás előtti parancsot mentesz, a profil ágense újraindul; a folyamatban lévő kör leáll.",
   onlyProfile: "Ez az egyetlen profilod, és minden beszélgetésnek kell egy, ezért megmarad, amíg nem hozol létre másikat.",
   installAgentTitle: "Telepíts egy ágenst a kezdéshez",
-  installAgentText: "A Mirador Claude Code-ot, opencode-ot, pi-t, Codexet vagy Copilotot futtat, és ezen a gépen egyik sincs meg. Telepíts egyet, majd töltsd újra ezt az oldalt.",
+  installAgentText: "A Mirador Claude Code-ot, opencode-ot, pi-t, Codexet, Copilotot vagy Antigravityt futtat, és ezen a gépen egyik sincs meg. Telepíts egyet, majd töltsd újra ezt az oldalt.",
   firstProfileTitle: "Állíts be egy profilt a kezdéshez",
   firstProfileText:
     "Minden beszélgetés egy profilon fut: egy ágensen és a környezeten, amellyel indul. Ha semmi mást nem adsz meg, az ágenst úgy futtatja, ahogy ezen a gépen be van állítva. Később a Profilokban adhatsz hozzá profilokat más fiókokhoz, átjárókhoz vagy helyi modellekhez.",

@@ -8,5 +8,5 @@ export const APP_TOOLS = ["app_open", "apply", "app_state", "app_run"];
 /** The canvas server's own tools, whose names a plugin's tools can't take. */
 export const BUILT_IN_CANVAS_TOOLS = [...PRE_ALLOWED_CANVAS_TOOLS, ...APP_TOOLS];
 
-/** A canvas tool's own name, as each agent prefixes it: `mcp__canvas__ask` in Claude Code, `canvas_ask` in opencode. */
-export const canvasToolName = (tool: string) => /^(?:mcp__canvas__|canvas__|canvas_)(.+)$/.exec(tool)?.[1] ?? null;
+/** A canvas tool's own name, as each agent prefixes it: `mcp__canvas__ask` in Claude Code, `canvas_ask` in opencode, `mcp_canvas_ask` in Antigravity. */
+export const canvasToolName = (tool: string) => /^(?:mcp__canvas__|mcp_canvas_|canvas__|canvas_)(.+)$/.exec(tool)?.[1] ?? null;

@@ -279,6 +279,9 @@ interface StoppedTurn {
  */
 const SESSION_STATE_UPDATES = new Set<acp.SessionUpdate["sessionUpdate"]>(["available_commands_update", "config_option_update", "session_info_update", "usage_update"]);
 
+/** Antigravity sends the whole history again on session/resume, as on session/load, so its sessions reopen by a load whose replay is left out. */
+const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity";
+
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
   /** One agent process per profile, by its id. */
@@ -1487,7 +1490,7 @@ export class ConversationService {
     const capabilities = await harness.start();
     const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
 
-    const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume);
+    const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume) && !replaysHistoryOnResume(conversation.harness);
     const canLoad = Boolean(capabilities.agentCapabilities?.loadSession);
     if (conversation.acpSessionId && (canResume || canLoad) && this.agentHasRecorded(conversationId)) {
       try {
@@ -1518,7 +1521,7 @@ export class ConversationService {
   }
 
   /**
-   * An agent that can load a session but not resume it replays the whole history on load, which the transcript already
+   * An agent reopening a session by loading it replays the whole history, which the transcript already
    * holds; what it sends is kept in `replay`, for the session's state (commands, mode) to be read from once it is bound.
    */
   private async loadWithoutReplay(harness: HarnessProcess, sessionId: string, sessionRequest: Omit<Parameters<HarnessProcess["loadSession"]>[0], "sessionId">, replay: acp.SessionNotification[]) {

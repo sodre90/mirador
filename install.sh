@@ -154,7 +154,7 @@ is_agent() {
 }
 
 has_agent() {
-  for program in claude opencode pi codex copilot; do
+  for program in claude opencode pi codex copilot agy; do
     path_ifs=$IFS
     IFS=:
     for directory in $PATH "$HOME/.local/bin" /opt/homebrew/bin /usr/local/bin "$HOME/.opencode/bin"; do
@@ -178,7 +178,7 @@ main() {
   esac
   has_agent || {
     say ""
-    say "Mirador runs Claude Code, opencode, pi, Codex or Copilot, and none of them is installed yet. Claude Code installs with:"
+    say "Mirador runs Claude Code, opencode, pi, Codex, Copilot or Antigravity, and none of them is installed yet. Claude Code installs with:"
     say "  curl -fsSL https://claude.ai/install.sh | bash"
   }
 }

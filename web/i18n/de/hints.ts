@@ -262,7 +262,7 @@ export const hints: Messages["hints"] = {
   keepAwake:
     "Verhindert, dass der Computer, auf dem Mirador läuft, im Leerlauf in den Ruhezustand geht.\n\nWährend Agenten arbeiten: bis jede laufende Runde endet, damit lange Jobs fertig werden.\n\nImmer: solange Mirador läuft, damit dein Handy und andere Geräte es jederzeit erreichen.\n\nUnter macOS und Linux.",
   canvasUse:
-    "Bei Bedarf: Der Agent entscheidet anhand der eigenen Anweisungen des Canvas.\n\nOft: Die System-Prompts von Claude Code, pi und Codex sowie die Canvas-Anweisungen für Copilot sagen ihnen außerdem, Erklärungen, Vergleiche, Pläne und die Zusammenfassung einer größeren Arbeit auf den Canvas zu bringen und dich dort nach Entscheidungen zu fragen.\n\nSeiten kosten mehr Token als dieselbe Antwort als Text.",
+    "Bei Bedarf: Der Agent entscheidet anhand der eigenen Anweisungen des Canvas.\n\nOft: Die System-Prompts von Claude Code, pi, Codex und Antigravity sowie die Canvas-Anweisungen für Copilot sagen ihnen außerdem, Erklärungen, Vergleiche, Pläne und die Zusammenfassung einer größeren Arbeit auf den Canvas zu bringen und dich dort nach Entscheidungen zu fragen.\n\nSeiten kosten mehr Token als dieselbe Antwort als Text.",
   keepDeletedCanvas:
     "Wenn du eine Unterhaltung löschst, bleibt ihr Canvas so lange erhalten. Setzt du ihre Sitzung über Sitzung fortsetzen… fort, kommt der Canvas so zurück, wie er war, auch Reviews und Rundgänge. Danach kommt nur zurück, was der eigene Verlauf der Sitzung enthält: Seiten, Fragen und Checklisten.",
   terminalCommand:

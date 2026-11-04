@@ -7,6 +7,7 @@ export const problems = {
     "opencode-not-installed": "opencode is not installed: no opencode executable on PATH or in its usual install directories.",
     "codex-not-installed": "Codex is not installed: no codex executable on PATH or in its usual install directories. Install it with npm install -g @openai/codex.",
     "copilot-not-installed": "Copilot is not installed: no copilot executable on PATH or in its usual install directories. Install it with npm install -g @github/copilot.",
+    "antigravity-not-installed": "Antigravity is not installed: no agy executable on PATH or in its usual install directories. Install the Antigravity CLI from antigravity.google.",
     "codex-session-held": "Another Codex holds this session. Quit Codex in the terminal, then run codex app-server daemon stop (the daemon Codex runs on keeps holding the session after Codex quits) and send your message here again.",
     "pi-not-installed": "pi is not installed: no pi executable on PATH. Install it with npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "An image of this message is missing; paste it again.",

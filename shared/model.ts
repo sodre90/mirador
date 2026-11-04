@@ -11,7 +11,7 @@ import type { HostProblem } from "./host-problems.ts";
 import type { EditDiff } from "./review.ts";
 import type { TerminalLayout } from "./terminal-layout.ts";
 
-export type HarnessId = "claude" | "opencode" | "pi" | "codex" | "copilot";
+export type HarnessId = "claude" | "opencode" | "pi" | "codex" | "copilot" | "antigravity";
 
 export const harnessLabels: Record<HarnessId, string> = {
   claude: "Claude Code",
@@ -19,6 +19,7 @@ export const harnessLabels: Record<HarnessId, string> = {
   pi: "pi",
   codex: "Codex",
   copilot: "Copilot",
+  antigravity: "Antigravity",
 };
 
 export const harnessIds = Object.keys(harnessLabels) as HarnessId[];
@@ -28,7 +29,7 @@ export const harnessIds = Object.keys(harnessLabels) as HarnessId[];
  * earlier turn. Claude Code, pi and Codex answer the fork point Mirador names; opencode takes `session/fork` but ignores
  * the point, so it would copy the whole session rather than leave anything behind.
  */
-export const harnessRewinds: Record<HarnessId, boolean> = { claude: true, opencode: false, pi: true, codex: true, copilot: false };
+export const harnessRewinds: Record<HarnessId, boolean> = { claude: true, opencode: false, pi: true, codex: true, copilot: false, antigravity: false };
 
 export type AskMode = "wait" | "next-message";
 

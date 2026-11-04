@@ -10,7 +10,7 @@ const model = new ScriptedModel();
 const PROFILE = "scripted Copilot";
 const CANVAS_INSTRUCTIONS = "The user finds long terminal text and ASCII diagrams hard to read";
 const CANVAS_USE_GUIDANCE = "Pages are much easier for the user to read than long terminal text";
-const CANVAS_USE_LABEL = "Claude Code, pi, Codex and Copilot use the canvas";
+const CANVAS_USE_LABEL = "Claude Code, pi, Codex, Copilot and Antigravity use the canvas";
 let page: Page;
 
 test.describe.configure({ mode: "serial" });

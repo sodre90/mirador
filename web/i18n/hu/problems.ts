@@ -9,6 +9,7 @@ export const problems: Messages["problems"] = {
     "opencode-not-installed": "Az opencode nincs telepítve: nincs opencode program a PATH-on vagy a szokásos telepítési mappákban.",
     "codex-not-installed": "A Codex nincs telepítve: nincs codex program sem a PATH-on, sem a szokásos telepítési mappákban. Telepítsd így: npm install -g @openai/codex.",
     "copilot-not-installed": "A Copilot nincs telepítve: nincs copilot program sem a PATH-on, sem a szokásos telepítési mappákban. Telepítsd így: npm install -g @github/copilot.",
+    "antigravity-not-installed": "Az Antigravity nincs telepítve: nincs agy program sem a PATH-on, sem a szokásos telepítési mappákban. Telepítsd az Antigravity CLI-t az antigravity.google oldalról.",
     "codex-session-held": "Ezt a munkamenetet egy másik Codex tartja. Lépj ki a Codexből a terminálban, majd futtasd: codex app-server daemon stop (a háttérfolyamat, amelyen a Codex fut, a kilépés után is tartja a munkamenetet), és küldd el újra az üzeneted itt.",
     "pi-not-installed": "A pi nincs telepítve: nincs pi program a PATH-on. Telepítsd így: npm install -g @earendil-works/pi-coding-agent.",
     "image-missing": "Az üzenet egyik képe hiányzik, illeszd be újra.",

@@ -98,7 +98,7 @@ export const hu: SiteWords = {
     },
     agents: {
       question: "Milyen coding agentekkel működik?",
-      answer: "Jelenleg a Claude Code-dal, az opencode-dal, a pi-vel, a Codexszel és a Copilottal (az utóbbi három kísérleti), az Agent Client Protocolon (ACP) keresztül. Továbbiak is jönnek.",
+      answer: "Jelenleg a Claude Code-dal, az opencode-dal, a pi-vel, a Codexszel, a Copilottal és az Antigravityvel (az utóbbi négy kísérleti), az Agent Client Protocolon (ACP) keresztül. Továbbiak is jönnek.",
     },
     privacy: {
       question: "Elhagyja a kódom a gépemet?",
