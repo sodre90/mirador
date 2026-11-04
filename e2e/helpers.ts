@@ -174,7 +174,10 @@ export const literally = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "
 
 export const primaryModifier = async (page: Page) => ((await page.evaluate(() => navigator.userAgent.includes("Mac"))) ? "Meta" : "Control");
 
-/** Sends a message and waits until the host has it, in the timeline or the queue, so a turn it starts already shows as running. */
+/**
+ * Sends a message and waits until the host has it, in the timeline or the queue, so a turn it starts already shows as
+ * running. At least one more: what the message sets off may add one of its own first, as a script's mirador message does.
+ */
 export async function sendMessage(page: Page, text: string) {
   const composer = page.locator(".composer:visible textarea");
   await expect(composer).toBeEditable();
@@ -183,7 +186,7 @@ export async function sendMessage(page: Page, text: string) {
   const takenBefore = await taken.count();
   await composer.fill(text);
   await composer.press("Enter");
-  await expect(taken).toHaveCount(takenBefore + 1);
+  await expect.poll(() => taken.count()).toBeGreaterThan(takenBefore);
 }
 
 /** The user messages and turn ends the page hears about, in the order they come. */
