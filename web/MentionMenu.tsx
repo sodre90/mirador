@@ -1,3 +1,4 @@
+import { flushSync } from "react-dom";
 import { useEffect, useState, type KeyboardEvent, type RefObject } from "react";
 import { mentionAt, withMention, type MentionSuggestion } from "../shared/mentions.ts";
 import { connection } from "./connection.ts";
@@ -63,12 +64,13 @@ export function useMentionMenu({
 
   const take = (suggestion: MentionSuggestion) => {
     const next = withMention(text, caret, suggestion, pathCommands());
-    setText(next.text);
-    setCaret(next.caret);
-    requestAnimationFrame(() => {
-      textarea.current?.focus();
-      textarea.current?.setSelectionRange(next.caret, next.caret);
+    // The caret goes in place now rather than at the next frame, which may come after the user typed on and move their caret back.
+    flushSync(() => {
+      setText(next.text);
+      setCaret(next.caret);
     });
+    textarea.current?.focus();
+    textarea.current?.setSelectionRange(next.caret, next.caret);
   };
 
   /** Handles the key if the menu is open and the key is one of its own; returns whether it did. */

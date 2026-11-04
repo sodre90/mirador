@@ -9,6 +9,22 @@ const COMMANDS = [
   { name: "compact", description: "Compact the context", input: { hint: "what to keep" } },
 ];
 
+/** Keeps the page from drawing a frame, as a busy machine may, until releaseFrames: what waits for one runs late. */
+const holdFrames = (page: Page) =>
+  page.evaluate(() => {
+    const held: FrameRequestCallback[] = [];
+    const draw = window.requestAnimationFrame;
+    Object.assign(window, {
+      releaseHeldFrames: () => {
+        window.requestAnimationFrame = draw;
+        held.forEach((callback) => callback(performance.now()));
+      },
+    });
+    window.requestAnimationFrame = (callback) => held.push(callback);
+  });
+
+const releaseFrames = (page: Page) => page.evaluate(() => (window as unknown as { releaseHeldFrames(): void }).releaseHeldFrames());
+
 /** The formatted message box's tests, run by one spec per browser: the desktop app is WebKit, where a contenteditable differs most. */
 export function formattedBoxTests() {
   const host = new TestHost({ fakePrograms: true });
@@ -158,6 +174,17 @@ export function formattedBoxTests() {
     await expect(box().locator(".box-bold")).toHaveText("this");
     await page.keyboard.type("now");
     await expectSent("look at **this** and @src/server/routes.ts now");
+  });
+
+  test("what is typed straight after a pick, while the page is slow to draw, goes on after the path", async () => {
+    await page.keyboard.type("see @rout");
+    await expect(page.getByRole("listbox", { name: "Paths" }).locator('[aria-selected="true"]')).toHaveText("src/server/routes.ts");
+    await holdFrames(page);
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("no");
+    await releaseFrames(page);
+    await page.keyboard.type("w");
+    await expectSent("see @src/server/routes.ts now");
   });
 
   test("/ suggests the agent's commands: Enter runs one, or writes out one that takes arguments", async () => {
