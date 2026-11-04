@@ -118,6 +118,8 @@ const COMMIT_TIME_TICK_MS = 1000;
 
 /** Long enough after a command for a write not to count as its. */
 const pastTheCommand = () => Bun.sleep(COMMAND_WINDOW_SLACK_MS + 100);
+/** Out of the clock tick within which a file made before the turn began would still count as written in it. */
+const pastTheFileTimeTick = () => Bun.sleep(50);
 
 /** A finished edit as Claude Code reports it: the kind first, then the path and diff, then done. */
 function agentEdits(toolCallId: string, path: string, oldText: string | null, newText: string, kind: ToolKind = "edit") {
@@ -295,6 +297,7 @@ test("a path the agent gives relative to the workspace counts as the project's f
 
 test("a file the agent edits in a folder is listed once, by the path git gives it, as the agent's, in a repository or not", async () => {
   await mkdir(join(projectDir, "src"));
+  await pastTheFileTimeTick();
   await startTurn();
   await Bun.sleep(20);
   await write("src/app.ts", "one\n");
