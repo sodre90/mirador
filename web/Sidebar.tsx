@@ -20,7 +20,10 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { conversationsIn, isUnderCaller } from "./navigation.ts";
+import { conversationsIn, isUnderCaller, putAwayIn } from "./navigation.ts";
+import { isPending } from "../shared/reminders.ts";
+import { openReminderPicker, removeReminder } from "./reminders.ts";
+import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
 import { pastelVariables } from "./pastels.ts";
 import { UpdatesWaiting } from "./Plugins.tsx";
 import { ProfileDot, ProfileEdge } from "./ProfileDot.tsx";
@@ -247,7 +250,12 @@ function ConversationMenu({ conversation, at, dispatch, onClose }: { conversatio
     ? { label: words.markRead, onChoose: () => markRead(conversation.id) }
     : { label: words.markUnread, onChoose: () => markUnread(conversation.id, dispatch), disabled: !canMarkUnread(conversation) };
   const forkEntry = { label: t.shell.palette.forkConversation, onChoose: () => forkConversation(conversation, dispatch), disabled: !forkable };
-  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, forkEntry]} onClose={onClose} />;
+  const pending = isPending(conversation.reminder);
+  const reminderEntries = [
+    { label: pending ? t.reminders.changeReminder : t.reminders.remindMe, onChoose: () => openReminderPicker(conversation.id, dispatch) },
+    ...(conversation.reminder ? [{ label: conversation.reminder.due ? t.reminders.dismiss : t.reminders.remove, onChoose: () => removeReminder(conversation.id) }] : []),
+  ];
+  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, ...reminderEntries, forkEntry]} onClose={onClose} />;
 }
 
 /** A sidebar row may not have its history in the page, so the host, which has it, says whether it can be forked yet. */
@@ -353,6 +361,7 @@ function WorkspaceColorPicker({ workspace, mark, onClose }: { workspace: Workspa
 function WorkspaceSection({
   workspace,
   conversations,
+  putAway,
   profiles,
   homeDir,
   selectedConversationId,
@@ -365,6 +374,7 @@ function WorkspaceSection({
 }: {
   workspace: Workspace;
   conversations: Conversation[];
+  putAway: Conversation[];
   profiles: Profile[];
   homeDir: string;
   selectedConversationId: string | null;
@@ -458,6 +468,7 @@ function WorkspaceSection({
               <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
               <DelegatedToggle callerId={conversation.id} delegated={delegatedTo(conversation)} open={openedDelegations.has(conversation.id)} />
               {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
+              <ReminderChip conversation={conversation} dispatch={dispatch} />
               <ConfirmButton
                 className="icon"
                 label={words.deleteConversation}
@@ -471,6 +482,9 @@ function WorkspaceSection({
             </li>
           ))}
         </ul>
+      )}
+      {!folded && putAway.length > 0 && (
+        <LaterGroup workspace={workspace} putAway={putAway} selectedConversationId={selectedConversationId} dispatch={dispatch} onConversationMenu={onConversationMenu} />
       )}
       {!folded && (
         <div className="workspace-actions">
@@ -730,6 +744,7 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
       onStartDrag={(event) => startWorkspaceDrag(workspace, event)}
       workspace={workspace}
       conversations={conversationsIn(state, workspace.id)}
+      putAway={putAwayIn(state, workspace.id)}
       profiles={state.profiles}
       homeDir={state.homeDir}
       selectedConversationId={state.selectedConversationId}

@@ -142,6 +142,12 @@ export class HarnessProcess {
     await this.agent().request(acp.methods.agent.session.close, { sessionId });
   }
 
+  /** What lets a session be let go of and picked up again later: closing it, and resuming or loading it. */
+  async reopening() {
+    const capabilities = (await this.initialized)?.agentCapabilities;
+    return { close: Boolean(capabilities?.sessionCapabilities?.close), resume: Boolean(capabilities?.sessionCapabilities?.resume), load: Boolean(capabilities?.loadSession) };
+  }
+
   async listSessions(cwd: string) {
     return this.agent().request(acp.methods.agent.session.list, { cwd });
   }

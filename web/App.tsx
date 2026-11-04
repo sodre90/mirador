@@ -44,6 +44,10 @@ import { initialStateFor, reducer, selectedOpen, type AppAction, type AppState, 
 import { useSystemNotifications } from "./system-notifications.ts";
 import { useTabTitle } from "./tab-title.ts";
 import { canMarkUnread, markUnread } from "./unread.ts";
+import { isPending } from "../shared/reminders.ts";
+import { openReminderPicker, reminderTimeText } from "./reminders.ts";
+import { ReminderPicker } from "./ReminderPicker.tsx";
+import { ReminderToast } from "./ReminderViews.tsx";
 import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
@@ -226,6 +230,13 @@ function paletteEntries(
           ...(canMarkUnread(openConversation)
             ? [{ id: "mark-unread", label: t.shell.sidebar.markUnread, detail: shownTitle(openConversation), kind: "action" as const, run: () => markUnread(openConversation.id, dispatch) }]
             : []),
+          {
+            id: "remind",
+            label: isPending(openConversation.reminder) ? t.reminders.changeReminder : t.reminders.remindMe,
+            detail: shownTitle(openConversation),
+            kind: "action" as const,
+            run: () => openReminderPicker(openConversation.id, dispatch),
+          },
           { id: "toggle-canvas", label: canvas.visible ? t.chat.header.hideCanvas : t.chat.header.showCanvas, kind: "action", run: canvas.toggle },
           ...terminalActions,
           ...fullscreenActions,
@@ -241,8 +252,21 @@ function paletteEntries(
   const pluginWindowActions: PaletteEntry[] = canOpenItemWindows()
     ? Object.entries(state.pluginWindows).map(([plugin, title]) => ({ id: `plugin-window-${plugin}`, label: words.openPluginWindow(title), kind: "action", run: () => openPluginWindow(plugin) }))
     : [];
+  const reminderEntries = state.conversations
+    .filter(({ reminder }) => isPending(reminder))
+    .sort((a, b) => a.reminder!.at - b.reminder!.at)
+    .map(
+      (conversation): PaletteEntry => ({
+        id: `reminder-${conversation.id}`,
+        label: t.reminders.paletteEntry(shownTitle(conversation)),
+        detail: `${reminderTimeText(conversation.reminder!.at)} · ${workspaceName(conversation.workspaceId)}`,
+        kind: "conversation",
+        run: () => dispatch({ type: "select", conversationId: conversation.id }),
+      }),
+    );
   return [
     ...conversations,
+    ...reminderEntries,
     ...workspaceActions,
     { id: "toggle-sidebar", label: panes.sidebar.visible ? t.shell.sidebar.hideSidebar : t.shell.sidebar.showSidebar, kind: "action", run: panes.sidebar.toggle },
     ...openConversationActions,
@@ -431,6 +455,8 @@ export function App() {
         const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId);
         return conversation && canMarkUnread(conversation) && markUnread(conversation.id, dispatch);
       }
+      case "remind":
+        return state.selectedConversationId && openReminderPicker(state.selectedConversationId, dispatch);
       case "focus": {
         const { pane } = command;
         if (pane === "terminals") return askTerminals({ type: "focus" });
@@ -503,6 +529,7 @@ export function App() {
     </OpensIn.Provider>
   );
   const overlay = state.overlay;
+  const reminderConversation = overlay?.kind === "reminder" ? state.conversations.find(({ id }) => id === overlay.conversationId) : undefined;
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const conversationPane = (
     <main className="chat-column">
@@ -533,6 +560,8 @@ export function App() {
                     terminalVisible={terminalInView}
                     onToggleTerminal={toggleTerminal}
                     onFork={() => forkConversation(keptConversation, dispatch)}
+                    reminderMorning={state.reminderMorning}
+                    dispatch={dispatch}
                   />
                 </AskToRevert.Provider>
               </RedrawnOnlyWhenShown>
@@ -638,6 +667,17 @@ export function App() {
         />
       )}
       {overlay?.kind === "help" && <ShortcutHelp onClose={closeOverlay} />}
+      {overlay?.kind === "reminder" && reminderConversation && (
+        <ReminderPicker
+          key={overlay.conversationId}
+          conversation={reminderConversation}
+          morning={state.reminderMorning}
+          typed={overlay}
+          dispatch={dispatch}
+          onClose={closeOverlay}
+        />
+      )}
+      {state.reminderUndo && <ReminderToast key={state.reminderUndo.id} undo={state.reminderUndo} dispatch={dispatch} />}
       {overlay?.kind === "revert" && (
         <RevertDialog conversationId={overlay.conversationId} turn={overlay.turn} rewind={overlay.rewind ?? false} onClose={closeOverlay} />
       )}
@@ -665,6 +705,7 @@ export function App() {
           promptTemplates={state.promptTemplates}
           canvasUse={state.canvasUse}
           keepAwake={state.keepAwake}
+          reminderMorning={state.reminderMorning}
           keepDeletedCanvas={state.keepDeletedCanvas}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}

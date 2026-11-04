@@ -43,6 +43,7 @@ import * as acp from "@agentclientprotocol/sdk";
  * each with the name in `FAKE_ACP_NAME`. FAKE_ACP_IGNORES_SIGTERM=1 makes it survive SIGTERM, and FAKE_ACP_PID_FILE
  * names a file it writes its pid to. `FAKE_ACP_STEERS=1` offers claude-agent-acp's `_session/steering`: a message
  * steered into a `REPLY STEERED ` turn joins it, any other is refused as needing a prompt of its own.
+ * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
  */
 const promptsFile = process.env.FAKE_ACP_PROMPTS;
@@ -51,6 +52,8 @@ const offersModes = process.env.FAKE_ACP_MODES === "1";
 const answersAfterMs = Number(process.env.FAKE_ACP_ANSWERS_AFTER_MS ?? 0);
 const ignoresSigterm = process.env.FAKE_ACP_IGNORES_SIGTERM === "1";
 const offersSteering = process.env.FAKE_ACP_STEERS === "1";
+/** Closes and resumes sessions for real, logging both and each new session. */
+const resumes = process.env.FAKE_ACP_RESUMES === "1";
 /** Offers to resume a session, and cannot: as an agent whose record of the session is gone. */
 const resumeFails = process.env.FAKE_ACP_RESUME_FAILS === "1";
 /** A session of its own past, to list and load: `{ sessionId, title, updates }`, its updates replayed on load. */
@@ -397,8 +400,8 @@ acp
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: {
-        ...((offersModes || resumeFails || history) && {
-          sessionCapabilities: { ...(offersModes && { close: {} }), ...(resumeFails && { resume: {} }), ...(history && { list: {} }) },
+        ...((offersModes || resumeFails || resumes || history) && {
+          sessionCapabilities: { ...((offersModes || resumes) && { close: {} }), ...((resumeFails || resumes) && { resume: {} }), ...(history && { list: {} }) },
         }),
         ...(history && { loadSession: true }),
       },
@@ -407,6 +410,7 @@ acp
   })
   .onRequest(acp.methods.agent.session.new, (ctx) => {
     const sessionId = `fake-session-${process.pid}-${++nextSession}`;
+    if (resumes) log(`new ${sessionId}`);
     if (availableCommands)
       setTimeout(() => ctx.client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands } }), 50);
     return offersModes ? { sessionId, configOptions: configOptions(sessionId) } : { sessionId };
@@ -419,8 +423,10 @@ acp
     for (const update of history.updates) await ctx.client.notify(acp.methods.client.session.update, { sessionId: history.sessionId, update });
     return {};
   })
-  .onRequest(acp.methods.agent.session.resume, () => {
-    throw acp.RequestError.internalError(undefined, "No such session");
+  .onRequest(acp.methods.agent.session.resume, (ctx) => {
+    if (!resumes) throw acp.RequestError.internalError(undefined, "No such session");
+    log(`resumed ${ctx.params.sessionId}`);
+    return {};
   })
   .onRequest(acp.methods.agent.session.setConfigOption, (ctx) =>
     answerLate(() => {

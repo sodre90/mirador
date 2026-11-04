@@ -4,6 +4,7 @@ import { panelSlashCommands } from "../shared/panel-commands.ts";
 import { clearSlashCommand, latestSlashCommands, matchingCommands, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { loginSlashCommand } from "./login-request.ts";
+import { laterSlashCommand, remindSlashCommand } from "./reminders.ts";
 import { pluginCommands } from "./plugin-commands.tsx";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { t } from "./i18n/index.ts";
@@ -34,7 +35,7 @@ function useSlashCommands(conversationId: string, events: StoredEvent[], wanted:
 
 const inPageLanguage = (command: SlashCommand) => ({ ...command, description: t.chat.slashCommandDescriptions[command.name] ?? command.description });
 
-const miradorCommands = [clearSlashCommand, loginSlashCommand].map(inPageLanguage);
+const miradorCommands = [clearSlashCommand, loginSlashCommand, laterSlashCommand, remindSlashCommand].map(inPageLanguage);
 
 /** The commands Mirador runs itself, so they stand even where the agent does not list them. */
 const miradorCommandsFor = (harness: HarnessId) => [

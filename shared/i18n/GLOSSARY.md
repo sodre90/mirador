@@ -28,6 +28,9 @@ These terms stay the same everywhere:
 | checklist | ellenőrzőlista | checklist (la) | 清单 | Checkliste |
 | History (canvas) | Előzmények | Historial | 历史 | Verlauf |
 | AI credits (Copilot's usage unit) | AI-kredit | créditos de IA | AI 积分 | KI-Credits |
+| reminder | emlékeztető | recordatorio | 提醒 | Erinnerung |
+| put away (a conversation, until a reminder) | félretesz | apartar | 放一边 | beiseitelegen |
+| Later (the sidebar group of put-away conversations) | Később | Más tarde | 稍后 | Später |
 | queue / queued | sor / sorba állított | cola / en cola | 队列 / 已排队 | Warteschlange / in der Warteschlange |
 | device | készülék | dispositivo | 设备 | Gerät |
 | machine | gép | máquina | 机器 | Rechner |

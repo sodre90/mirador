@@ -22,6 +22,8 @@ export const desktop: Messages["desktop"] = {
     wantsPermission: (tool) => `请求权限：${tool}`,
     aTool: "某个工具",
     finished: "已完成，等你处理",
+    reminder: "你说过现在回到这里",
+    reminderWithNote: (note: string) => `回到这里：${note}`,
     stoppedWithError: (message) => `因错误停止：${message}`,
     joinRequest: (name) => `${name} 请求加入 Mirador`,
     joinRequestBody: (address, tailscaleUser) =>

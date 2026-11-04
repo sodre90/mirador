@@ -1,4 +1,6 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
+import type { Reminder } from "./reminders.ts";
+import type { NotificationKind } from "./system-notifications.ts";
 import type { ToolCallContent } from "@agentclientprotocol/sdk";
 import type {
   AdoptMode,
@@ -101,6 +103,7 @@ export type ClientMessage =
   | { type: "prompt-template.delete"; templateId: string }
   | { type: "settings.set-canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.set-keep-awake"; keepAwake: KeepAwake }
+  | { type: "settings.set-reminder-morning"; minutes: number }
   | { type: "settings.set-keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
@@ -152,6 +155,8 @@ export type ClientMessage =
   | { type: "conversation.delete"; conversationId: string }
   | { type: "conversation.rename"; conversationId: string; title: string }
   | { type: "conversation.set-unread"; conversationId: string; unread: boolean }
+  /** Null takes the reminder away, or dismisses one whose time came. */
+  | { type: "conversation.set-reminder"; conversationId: string; reminder: Reminder | null }
   | { type: "conversation.set-profile"; conversationId: string; profileId: string }
   | { type: "conversation.subscribe"; conversationId: string; lowData?: LowDataSubscription }
   /**
@@ -375,6 +380,10 @@ export type ServerMessage =
       keepAwake?: KeepAwake;
       /** Missing from a host older than keeping deleted canvases. */
       keepDeletedCanvas?: KeepDeletedCanvas;
+      /** Missing from a host older than reminders. */
+      reminderMorning?: number;
+      /** The kinds of notification a phone may register for pushes of. Missing from a host older than reminders, which refuses a registration with a kind it doesn't know. */
+      pushKinds?: NotificationKind[];
     }
   /** Every app open in every workspace, whenever one opens or closes, and when an agent opens one again. */
   | { type: "apps.open"; openApps: OpenApp[] }
@@ -389,6 +398,7 @@ export type ServerMessage =
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.keep-awake"; keepAwake: KeepAwake }
+  | { type: "settings.reminder-morning"; minutes: number }
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }

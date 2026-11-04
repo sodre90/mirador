@@ -277,6 +277,8 @@ export const chat = {
   slashCommandDescriptions: {
     clear: "Start the agent afresh, without the conversation so far in its context; it stays on screen",
     login: "Sign the agent in again, in a terminal tab",
+    later: "Put this conversation away until a time: /later tomorrow 9, then an optional note",
+    remind: "Remind me about this conversation at a time, keeping it in the list: /remind 3h",
     plugin: "Install, enable and disable plugins, in a terminal tab",
     hooks: "See and change the commands Claude Code runs around the agent, in a terminal tab",
     permissions: "See and change what the agent may do without asking, in a terminal tab",

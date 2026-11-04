@@ -275,6 +275,8 @@ export const chat: Messages["chat"] = {
   slashCommandDescriptions: {
     clear: "Startet den Agenten neu, ohne die bisherige Unterhaltung im Kontext; sie bleibt auf dem Bildschirm",
     login: "Meldet den Agenten erneut an, in einem Terminal-Tab",
+    later: "Legt diese Unterhaltung bis zu einer Zeit beiseite: /later tomorrow 9, danach optional eine Notiz",
+    remind: "Erinnert an diese Unterhaltung zu einer Zeit und lässt sie in der Liste: /remind 3h",
     plugin: "Installiert, aktiviert und deaktiviert Plugins, in einem Terminal-Tab",
     hooks: "Zeigt und ändert die Befehle, die Claude Code rund um den Agenten ausführt, in einem Terminal-Tab",
     permissions: "Zeigt und ändert, was der Agent ohne Nachfrage tun darf, in einem Terminal-Tab",

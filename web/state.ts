@@ -1,5 +1,7 @@
 import type { EditorState } from "../shared/editors.ts";
 import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
+import { DEFAULT_MORNING_MINUTES, type ReminderMode } from "../shared/reminders.ts";
+import type { ReminderUndo } from "./reminders.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp, type PluginUpdate } from "../shared/apps.ts";
@@ -27,6 +29,8 @@ const UNKNOWN_EDITOR: EditorState = { setting: { editor: "idea" }, found: [], op
 
 export type Overlay =
   | { kind: "palette" }
+  /** `text` and `mode` come from a /later or /remind whose time the picker could not read. */
+  | { kind: "reminder"; conversationId: string; text?: string; mode?: ReminderMode }
   | { kind: "help" }
   | { kind: "search" }
   | { kind: "profiles" }
@@ -62,6 +66,10 @@ export interface AppState {
   canvasUse: CanvasUse;
   keepAwake: KeepAwake;
   keepDeletedCanvas: KeepDeletedCanvas;
+  /** Minutes after midnight that "morning" means for reminders. */
+  reminderMorning: number;
+  /** The reminder this page set last, until its toast goes. */
+  reminderUndo: (ReminderUndo & { id: number }) | null;
   claudeProgram: ClaudeProgram;
   /** The program the host opens scripts in, as text; empty for the system's text editor. */
   scriptProgram: string;
@@ -128,7 +136,9 @@ export type AppAction =
   | { type: "open-overlay"; overlay: Overlay }
   | { type: "close-overlay" }
   | { type: "dismiss-notice"; id: number }
-  | { type: "dismiss-file-to-open" };
+  | { type: "dismiss-file-to-open" }
+  | { type: "reminder-set"; undo: ReminderUndo }
+  | { type: "dismiss-reminder-undo" };
 
 export const initialState: AppState = {
   workspaces: [],
@@ -139,6 +149,8 @@ export const initialState: AppState = {
   canvasUse: "often",
   keepAwake: "never",
   keepDeletedCanvas: "30-days",
+  reminderMorning: DEFAULT_MORNING_MINUTES,
+  reminderUndo: null,
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
   editor: UNKNOWN_EDITOR,
@@ -246,6 +258,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         canvasUse: message.canvasUse,
         keepAwake: message.keepAwake ?? "never",
         keepDeletedCanvas: message.keepDeletedCanvas ?? "30-days",
+        reminderMorning: message.reminderMorning ?? DEFAULT_MORNING_MINUTES,
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
         editor: message.editor ?? UNKNOWN_EDITOR,
@@ -341,6 +354,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, canvasUse: message.canvasUse };
     case "settings.keep-awake":
       return { ...state, keepAwake: message.keepAwake };
+    case "settings.reminder-morning":
+      return { ...state, reminderMorning: message.minutes };
     case "settings.keep-deleted-canvas":
       return { ...state, keepDeletedCanvas: message.keep };
     case "settings.claude-program":
@@ -464,5 +479,9 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, notices: state.notices.filter(({ id }) => id !== action.id) };
     case "dismiss-file-to-open":
       return { ...state, fileToOpen: null };
+    case "reminder-set":
+      return { ...state, reminderUndo: { ...action.undo, id: (state.reminderUndo?.id ?? 0) + 1 } };
+    case "dismiss-reminder-undo":
+      return { ...state, reminderUndo: null };
   }
 }

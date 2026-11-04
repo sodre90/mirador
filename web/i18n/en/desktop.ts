@@ -25,6 +25,8 @@ export const desktop = {
     wantsPermission: (tool: string) => `Wants permission: ${tool}`,
     aTool: "a tool",
     finished: "Finished, waiting for you",
+    reminder: "You asked to come back to this now",
+    reminderWithNote: (note: string) => `Back to it: ${note}`,
     stoppedWithError: (message: string) => `Stopped with an error: ${message}`,
     joinRequest: (name: string) => `${name} asks to join Mirador`,
     joinRequestBody: (address: string, tailscaleUser: string | null) =>

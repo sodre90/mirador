@@ -198,6 +198,7 @@ sourceWatcher.start();
 if (config.checksForNewerVersion) newerVersion.start();
 if (config.checksForPluginUpdates) pluginUpdates.start();
 conversations.resumeAfterRestart(takeTurnsStoppedForRestart(config.dataDir));
+conversations.startReminders();
 const terminalSessions = new TerminalSessionWatcher(
   () => conversations.claudeConfigDirs(),
   (activityBySession) => conversations.showTerminalActivity(activityBySession),

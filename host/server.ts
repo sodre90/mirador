@@ -1,3 +1,4 @@
+import { isMorningMinutes } from "../shared/reminders.ts";
 import { editorState } from "./editor.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { homedir } from "node:os";
@@ -25,7 +26,7 @@ import { readJobWaitRequest } from "../shared/job-waits.ts";
 import { avatarProblem } from "../shared/avatar.ts";
 import { promptTemplateProblem } from "../shared/prompt-templates.ts";
 import { joinRequestNotification } from "../shared/system-notifications.ts";
-import { pushRelayAddressProblem, type PushNotifications } from "./push-notifications.ts";
+import { NOTIFICATION_KINDS, pushRelayAddressProblem, type PushNotifications } from "./push-notifications.ts";
 import { CANVAS_ASSETS_ORIGIN_HEADER, DESKTOP_APP_CODE_PARAMETER, PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { claudeProgramLookUps, claudeProgramReport } from "./acp/claude-program.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
@@ -948,6 +949,12 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.keep-deleted-canvas", keep });
   }
 
+  function setReminderMorning(minutes: number) {
+    if (!isMorningMinutes(minutes)) throw new HostProblemError({ code: "morning-not-valid" });
+    store.setReminderMorning(minutes);
+    hub.broadcast({ type: "settings.reminder-morning", minutes });
+  }
+
   function setKeepAwake(setting: KeepAwake) {
     if (!isKeepAwake(setting)) throw new HostProblemError({ code: "unknown-keep-awake", value: String(setting) });
     store.setKeepAwake(setting);
@@ -1021,6 +1028,8 @@ export function startServer(services: HostServices) {
         return setCanvasUse(message.canvasUse);
       case "settings.set-keep-awake":
         return setKeepAwake(message.keepAwake);
+      case "settings.set-reminder-morning":
+        return setReminderMorning(message.minutes);
       case "settings.set-keep-deleted-canvas":
         return setKeepDeletedCanvas(message.keep);
       case "settings.set-claude-program":
@@ -1076,6 +1085,8 @@ export function startServer(services: HostServices) {
         });
       case "conversation.rename":
         return conversations.rename(message.conversationId, message.title);
+      case "conversation.set-reminder":
+        return conversations.setReminder(message.conversationId, message.reminder);
       case "conversation.set-unread":
         return message.unread ? conversations.markUnread(message.conversationId) : conversations.markSeen(message.conversationId);
       case "conversation.set-profile":
@@ -1550,6 +1561,8 @@ export function startServer(services: HostServices) {
       canvasUse: store.canvasUse(),
       keepAwake: store.keepAwake(),
       keepDeletedCanvas: store.keepDeletedCanvas(),
+      reminderMorning: store.reminderMorning(),
+      pushKinds: [...NOTIFICATION_KINDS],
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),
       editor: editorState(store.editorSetting()),

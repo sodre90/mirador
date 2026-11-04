@@ -1,3 +1,4 @@
+import { DEFAULT_MORNING_MINUTES, isMorningMinutes, type Reminder } from "../shared/reminders.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { Database } from "bun:sqlite";
 import type { AppStorageItems } from "../shared/apps.ts";
@@ -163,6 +164,7 @@ const addedColumns = [
   { table: "conversations", column: "plugin_settings", definition: "TEXT" },
   { table: "devices", column: "tunnel_key", definition: "TEXT" },
   { table: "devices", column: "tunnel_address", definition: "TEXT" },
+  { table: "conversations", column: "reminder", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -223,6 +225,7 @@ type ConversationRow = {
   delegated_reply: string | null;
   delegation_dismissed: number;
   plugin_settings: string | null;
+  reminder: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -307,6 +310,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   position: row.position,
   ...startedByOf(row),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
+  ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -624,6 +628,11 @@ export class Store {
       );
   }
 
+  /** Its own column, so that saving a conversation read before the reminder changed cannot bring the old one back. */
+  setReminder(conversationId: string, reminder: Reminder | null) {
+    this.db.query("UPDATE conversations SET reminder = ? WHERE id = ?").run(reminder ? JSON.stringify(reminder) : null, conversationId);
+  }
+
   saveQueuedMessages(conversationId: string, messages: QueuedMessage[]) {
     this.db.query("UPDATE conversations SET queued_messages = ? WHERE id = ?").run(JSON.stringify(messages), conversationId);
   }
@@ -748,6 +757,16 @@ export class Store {
   keepAwake(): KeepAwake {
     const value = (this.db.query("SELECT value FROM settings WHERE key = 'keep_awake'").get() as { value: string } | null)?.value;
     return isKeepAwake(value) ? value : "never";
+  }
+
+  /** Minutes after midnight that "morning" means for reminders. */
+  reminderMorning(): number {
+    const minutes = Number(this.setting("reminder_morning") ?? DEFAULT_MORNING_MINUTES);
+    return isMorningMinutes(minutes) ? minutes : DEFAULT_MORNING_MINUTES;
+  }
+
+  setReminderMorning(minutes: number) {
+    this.setSetting("reminder_morning", String(minutes));
   }
 
   setKeepAwake(keepAwake: KeepAwake) {

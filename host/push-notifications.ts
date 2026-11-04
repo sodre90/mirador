@@ -6,9 +6,9 @@ import type { HostProblem } from "../shared/host-problems.ts";
 /** How long a phone with a connection gets to say it showed a notification before the Mac pushes it too. */
 export const SHOWN_WAIT_MS = 5_000;
 const RELAY_TIMEOUT_MS = 20_000;
-const NOTIFICATION_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "job-ended", "join-request"]);
+export const NOTIFICATION_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "job-ended", "join-request", "reminder"]);
 /** The kinds whose conversation waits for you until it's read or answered, which takes their notification away. */
-const WAITING_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error"]);
+const WAITING_KINDS = new Set<NotificationKind>(["question", "permission", "finished", "error", "reminder"]);
 
 export interface PushNotificationsOptions {
   shownWaitMs?: number;
@@ -33,11 +33,19 @@ export function pushRegistrationProblem(registration: PushRegistration): string 
   const { platform, deviceToken, sandbox, kinds } = registration;
   if (platform !== "ios" && platform !== "android") return "Pushes go to iPhones and Android phones only.";
   if (typeof deviceToken !== "string" || !DEVICE_TOKEN_PATTERNS[platform].test(deviceToken)) return "The phone's push token isn't one.";
-  if (typeof sandbox !== "boolean" || !Array.isArray(kinds) || !kinds.every((kind) => NOTIFICATION_KINDS.has(kind))) return "The push registration isn't one.";
+  if (typeof sandbox !== "boolean" || !Array.isArray(kinds) || !kinds.every((kind) => typeof kind === "string")) return "The push registration isn't one.";
   return typeof registration.keyId === "string" && typeof registration.key === "string" && isPushKey(registration) ? null : "The phone's push key isn't one.";
 }
 
-const registrationOf = ({ platform, deviceToken, sandbox, keyId, key, kinds }: PushRegistration): PushRegistration => ({ platform, deviceToken, sandbox, keyId, key, kinds });
+/** A phone newer than this host may ask for kinds it doesn't know yet; it gets the ones it knows. */
+const registrationOf = ({ platform, deviceToken, sandbox, keyId, key, kinds }: PushRegistration): PushRegistration => ({
+  platform,
+  deviceToken,
+  sandbox,
+  keyId,
+  key,
+  kinds: kinds.filter((kind) => NOTIFICATION_KINDS.has(kind)),
+});
 
 /** The phones told that a conversation waits, and whether this machine has seen it waiting since. */
 interface ToldOfWaiting {

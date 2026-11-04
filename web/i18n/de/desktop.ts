@@ -24,6 +24,8 @@ export const desktop: Messages["desktop"] = {
     wantsPermission: (tool) => `Bittet um Erlaubnis: ${tool}`,
     aTool: "ein Tool",
     finished: "Fertig, wartet auf dich",
+    reminder: "Du wolltest jetzt hierher zurückkommen",
+    reminderWithNote: (note: string) => `Zurück dazu: ${note}`,
     stoppedWithError: (message) => `Mit einem Fehler gestoppt: ${message}`,
     joinRequest: (name) => `${name} möchte Mirador beitreten`,
     joinRequestBody: (address, tailscaleUser) =>

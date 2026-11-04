@@ -94,6 +94,13 @@ describe("pushing notifications", () => {
     expect(posted).toHaveLength(0);
   });
 
+  test("a phone newer than the host keeps the kinds the host knows, and gets those", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(["question", "from-the-future" as "question"]));
+    await pushes.notify(notification);
+    expect(posted).toHaveLength(1);
+  });
+
   test("a phone gets no push of a kind it didn't register for", async () => {
     const { pushes, posted } = pushingHost();
     pushes.register("phone", registration(["permission"]));
@@ -233,13 +240,14 @@ describe("push settings", () => {
     expect(pushRelayAddressProblem("push.example.com")).not.toBeNull();
   });
 
-  test("a registration needs a known platform, a token, known kinds and a key of the right size", () => {
+  test("a registration needs a known platform, a token, a list of kinds and a key of the right size", () => {
     expect(pushRegistrationProblem(registration())).toBeNull();
     expect(pushRegistrationProblem({ ...registration(), platform: "windows" as "ios" })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), deviceToken: "" })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), deviceToken: "not-hex-".repeat(10) })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), platform: "android", deviceToken: "fcm-token:" + "x".repeat(40) })).toBeNull();
-    expect(pushRegistrationProblem({ ...registration(), kinds: ["everything" as "question"] })).not.toBeNull();
+    expect(pushRegistrationProblem({ ...registration(), kinds: "question" as unknown as ["question"] })).not.toBeNull();
+    expect(pushRegistrationProblem({ ...registration(), kinds: [3 as unknown as "question"] })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), key: Buffer.alloc(16).toString("base64url") })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), keyId: "not base64url!" })).not.toBeNull();
   });

@@ -15,6 +15,7 @@ export type ShortcutCommand =
   | { type: "find" }
   | { type: "search" }
   | { type: "mark-unread" }
+  | { type: "remind" }
   | { type: "focus"; pane: "chat" | "canvas" | "terminals" }
   | { type: "bigger-font" }
   | { type: "smaller-font" }
@@ -59,6 +60,7 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
   if (primary && !press.altKey && !press.shiftKey && press.code === "KeyF" && typing !== "terminal") return { type: "find" };
   if (primary && !press.altKey && press.shiftKey && press.code === "KeyF" && !terminalFinds) return { type: "search" };
   if (primary && !press.altKey && press.shiftKey && press.code === "KeyU" && !terminalEntersUnicode) return { type: "mark-unread" };
+  if (primary && !press.altKey && press.shiftKey && press.code === "KeyL" && !(!mac && typing === "terminal")) return { type: "remind" };
   if (primary && !press.altKey && press.shiftKey && typing !== "typing") {
     if (press.code === "ArrowLeft") return { type: "focus", pane: "chat" };
     if (press.code === "ArrowRight") return { type: "focus", pane: "canvas" };
@@ -124,6 +126,7 @@ export function shortcutKeys(mac = isMac) {
     search: `${primary}${shift}F`,
     restartHost: `${primary}${shift}R`,
     markUnread: `${primary}${shift}U`,
+    remind: `${primary}${shift}L`,
     templates: `${primary}J`,
     bold: `${primary}B`,
     italic: `${primary}I`,
@@ -164,6 +167,7 @@ export function shortcutHelp(mac = isMac): { keys: string; action: string }[] {
     { keys: keys.toggleTerminal, action: actions.toggleTerminal },
     { keys: keys.search, action: actions.search },
     { keys: keys.markUnread, action: actions.markUnread },
+    { keys: keys.remind, action: t.reminders.shortcut },
     { keys: keys.find, action: actions.find },
     { keys: keys.find, action: actions.findInReview },
     { keys: keys.find, action: actions.findInCanvas },

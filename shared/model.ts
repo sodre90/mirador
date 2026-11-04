@@ -8,6 +8,7 @@ import type {
 } from "@agentclientprotocol/sdk";
 import type { ConversationReply, PluginItemPlacement } from "./canvas-plugins.ts";
 import type { HostProblem } from "./host-problems.ts";
+import type { Reminder } from "./reminders.ts";
 import type { EditDiff } from "./review.ts";
 import type { TerminalLayout } from "./terminal-layout.ts";
 
@@ -505,6 +506,8 @@ export interface Conversation {
   startedBy?: StartedBy;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */
   pluginSettings?: Record<string, Record<string, string>>;
+  /** When the user wants to come back to it, put away or kept in the list until then. */
+  reminder?: Reminder;
   createdAt: number;
   updatedAt: number;
 }

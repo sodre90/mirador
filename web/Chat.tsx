@@ -76,7 +76,10 @@ import { commandLineOf, isShellCommand, shellCommandOf } from "./shell.ts";
 import { useShellOutputStyle } from "./shell-output.ts";
 import { askAloudWhenWaiting } from "./spoken-ask.ts";
 import { Statusline } from "./Statusline.tsx";
-import type { OpenConversation } from "./state.ts";
+import type { AppAction, OpenConversation } from "./state.ts";
+import { isPending, reminderCommandIn, reminderFromCommand } from "../shared/reminders.ts";
+import { openReminderPicker, reminderTimeText, setReminder } from "./reminders.ts";
+import { ReminderBanner } from "./ReminderViews.tsx";
 import { useSubagentUsage } from "./subagent-usage.ts";
 import {
   approvalsWaiting,
@@ -272,6 +275,7 @@ function ChatHeader({
   onShowRunningSubagent,
   onFind,
   onFork,
+  onRemind,
   forkable,
   begun,
 }: {
@@ -285,6 +289,7 @@ function ChatHeader({
   onShowRunningSubagent: () => void;
   onFind: () => void;
   onFork: () => void;
+  onRemind: () => void;
   forkable: boolean;
   begun: boolean;
 }) {
@@ -315,6 +320,16 @@ function ChatHeader({
         </button>
         <button type="button" className="fork-conversation" data-hint={hints.fork} disabled={!forkable} onClick={onFork}>
           {words.header.fork}
+        </button>
+        <button
+          type="button"
+          className={`remind-conversation ${isPending(conversation.reminder) ? "set" : ""}`}
+          aria-label={t.reminders.headerButton}
+          data-hint={t.reminders.headerHint}
+          data-shortcut={shortcutKeys().remind}
+          onClick={onRemind}
+        >
+          ⏰
         </button>
         <button className="toggle-canvas" data-hint={hints.canvasToggle} data-shortcut={shortcutKeys().toggleCanvas} onClick={onToggleCanvas}>
           {canvasVisible ? words.header.hideCanvas : words.header.showCanvas}
@@ -1679,8 +1694,22 @@ function BusySendButtons({ canSteer, enterWhileBusy, onSend }: { canSteer: boole
   return enterWhileBusy === "steer" ? [steer, afterTurn] : [afterTurn, steer];
 }
 
+/** While the message is /later or /remind with a time, when that is; the menu has gone by then. */
+function ReminderCommandPreview({ text, morning }: { text: string; morning: number }) {
+  const command = reminderCommandIn(text);
+  if (!command?.writtenArguments.trim()) return null;
+  const reminder = reminderFromCommand(command, new Date(), morning);
+  return (
+    <div className={`reminder-command-preview ${reminder ? "" : "invalid"}`} role="status">
+      {reminder ? `⏰ ${t.reminders.modes[reminder.mode]} → ${reminderTimeText(reminder.at)}${reminder.note ? ` · “${reminder.note}”` : ""}` : t.reminders.notATimeOpensPicker}
+    </div>
+  );
+}
+
 function Composer({
   conversation,
+  reminderMorning,
+  dispatch,
   delegatedTasks,
   profiles,
   events,
@@ -1692,6 +1721,8 @@ function Composer({
   onManageTemplates,
 }: {
   conversation: Conversation;
+  reminderMorning: number;
+  dispatch: Dispatch<AppAction>;
   delegatedTasks: Conversation[];
   profiles: Profile[];
   events: StoredEvent[];
@@ -1750,6 +1781,14 @@ function Composer({
     if (!message.trim() || command === "" || attaching || stoppedEdit.goingBack) return;
     if (isLoginCommand(message)) {
       requestLogin(conversation.id);
+      setText("");
+      return;
+    }
+    const reminderCommand = reminderCommandIn(message);
+    if (reminderCommand) {
+      const reminder = reminderFromCommand(reminderCommand, new Date(), reminderMorning);
+      if (reminder) setReminder(conversation, reminder, dispatch);
+      else openReminderPicker(conversation.id, dispatch, { text: reminderCommand.writtenArguments, mode: reminderCommand.mode });
       setText("");
       return;
     }
@@ -1909,6 +1948,7 @@ function Composer({
           {images.problem}
         </div>
       )}
+      <ReminderCommandPreview text={text} morning={reminderMorning} />
       {droppedFiles.problem && (
         <div className="composer-problem" role="alert">
           {droppedFiles.problem}
@@ -2055,6 +2095,8 @@ export function ChatPanel({
   terminalVisible,
   onToggleTerminal,
   onFork,
+  reminderMorning,
+  dispatch,
 }: {
   conversation: Conversation;
   /** The conversations this one's plugin tools started that the user hasn't dismissed. */
@@ -2072,6 +2114,8 @@ export function ChatPanel({
   terminalVisible: boolean;
   onToggleTerminal: () => void;
   onFork: () => void;
+  reminderMorning: number;
+  dispatch: Dispatch<AppAction>;
 }) {
   const timeline = useTimeline(open.events);
   const readingAs = replyReadingOf(voiceSettings);
@@ -2145,6 +2189,7 @@ export function ChatPanel({
                     onShowRunningSubagent={showRunningSubagent}
                     onFind={find.open}
                     onFork={onFork}
+                    onRemind={() => openReminderPicker(conversation.id, dispatch)}
                     forkable={canFork(conversation, open)}
                     begun={begun}
                   />
@@ -2177,8 +2222,11 @@ export function ChatPanel({
                       {words.timeline.openInTerminal(words.terminalActivity[conversation.openInTerminal])}
                     </div>
                   )}
+                  <ReminderBanner conversation={conversation} dispatch={dispatch} />
                   <Composer
                     conversation={conversation}
+                    reminderMorning={reminderMorning}
+                    dispatch={dispatch}
                     delegatedTasks={delegatedTasks}
                     profiles={profiles}
                     events={open.events}

@@ -20,6 +20,8 @@ function reasonText(reason: NotificationReason, { desktop: { notifications: word
       return words.stoppedWithError(errorText(reason, problems));
     case "job-ended":
       return reason.message;
+    case "reminder":
+      return reason.note ? words.reminderWithNote(reason.note) : words.reminder;
   }
 }
 

@@ -22,6 +22,8 @@ export const desktop: Messages["desktop"] = {
     wantsPermission: (tool) => `Engedélyt kér: ${tool}`,
     aTool: "egy eszköz",
     finished: "Kész, rád vár",
+    reminder: "Most szeretted volna folytatni ezt",
+    reminderWithNote: (note: string) => `Vissza hozzá: ${note}`,
     stoppedWithError: (message) => `Hibával leállt: ${message}`,
     joinRequest: (name) => `Csatlakozni szeretne a Miradorhoz: ${name}`,
     joinRequestBody: (address, tailscaleUser) =>

@@ -9,7 +9,9 @@ export type NotificationReason =
   | { kind: "finished" }
   | { kind: "error"; message: string; problem?: HostProblem }
   /** A job the agent left running ended, and its message is for you rather than the agent. */
-  | { kind: "job-ended"; message: string };
+  | { kind: "job-ended"; message: string }
+  /** The time came that the user asked to come back to it at. */
+  | { kind: "reminder"; note?: string };
 
 /** What a notification says, for a page or the desktop app to put in its own language; title and body say it in English. */
 export type NotificationAbout =
@@ -47,6 +49,8 @@ function reasonText(reason: NotificationReason) {
       return `Stopped with an error: ${reason.message}`;
     case "job-ended":
       return reason.message;
+    case "reminder":
+      return reason.note ? `Back to it: ${reason.note}` : "You asked to come back to this now";
   }
 }
 

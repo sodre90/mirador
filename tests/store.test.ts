@@ -522,6 +522,30 @@ describe("Store", () => {
     reopened.close();
   });
 
+  test("keeps a conversation's reminder until it is taken away, whatever else is saved meanwhile", () => {
+    const { store, conversation } = seededStore();
+    expect(store.findConversation("c1")?.reminder).toBeUndefined();
+    store.setReminder("c1", { at: 5, mode: "away", note: "the e2e" });
+    expect(store.findConversation("c1")?.reminder).toEqual({ at: 5, mode: "away", note: "the e2e" });
+    store.updateConversation({ ...conversation, title: "renamed" });
+    expect(store.findConversation("c1")?.reminder).toEqual({ at: 5, mode: "away", note: "the e2e" });
+    store.setReminder("c1", { at: 5, mode: "away", due: true });
+    expect(store.findConversation("c1")?.reminder).toEqual({ at: 5, mode: "away", due: true });
+    store.setReminder("c1", null);
+    expect(store.findConversation("c1")?.reminder).toBeUndefined();
+  });
+
+  test("takes morning as 09:00 until Settings move it, also after reopening", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const store = new Store(path);
+    expect(store.reminderMorning()).toBe(9 * 60);
+    store.setReminderMorning(7 * 60 + 30);
+    store.close();
+    const reopened = new Store(path);
+    expect(reopened.reminderMorning()).toBe(7 * 60 + 30);
+    reopened.close();
+  });
+
   test("lets the computer sleep until Settings say to keep it awake, also after reopening", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);

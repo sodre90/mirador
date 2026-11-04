@@ -270,6 +270,8 @@ export const chat: Messages["chat"] = {
   slashCommandDescriptions: {
     clear: "让 Agent 重新开始，上下文中不再带有此前的对话；对话仍留在屏幕上",
     login: "让 Agent 重新登录，在终端标签页中进行",
+    later: "把这个对话放一边直到某个时间：/later tomorrow 9，后面可加备注",
+    remind: "在某个时间提醒我这个对话，并留在列表中：/remind 3h",
     plugin: "安装、启用和停用插件，在终端标签页中进行",
     hooks: "查看和更改 Claude Code 围绕 Agent 运行的命令，在终端标签页中进行",
     permissions: "查看和更改 Agent 无需询问就能做的事，在终端标签页中进行",

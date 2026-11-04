@@ -1,4 +1,5 @@
 import type { Conversation, Workspace } from "../shared/model.ts";
+import { isPutAway } from "../shared/reminders.ts";
 import { inSidebarOrder } from "../shared/sidebar-order.ts";
 
 export interface NavigationState {
@@ -12,10 +13,18 @@ export interface NavigationState {
  * plugin's tool started right under the conversation that started it, until the user dismisses its task.
  */
 export function conversationsIn(state: Pick<NavigationState, "conversations">, workspaceId: string): Conversation[] {
-  const inOrder = state.conversations.filter((conversation) => conversation.workspaceId === workspaceId && !conversation.startedBy?.dismissed).sort(inSidebarOrder);
+  const inOrder = state.conversations
+    .filter((conversation) => conversation.workspaceId === workspaceId && !conversation.startedBy?.dismissed && !isPutAway(conversation.reminder))
+    .sort(inSidebarOrder);
   const callerOf = (conversation: Conversation) => (isUnderCaller(conversation, inOrder) ? conversation.startedBy!.conversationId : null);
   return inOrder.filter((conversation) => !callerOf(conversation)).flatMap((caller) => [caller, ...inOrder.filter((conversation) => callerOf(conversation) === caller.id)]);
 }
+
+/** A workspace's conversations put away until a reminder, the soonest back first: its Later group. */
+export const putAwayIn = (state: Pick<NavigationState, "conversations">, workspaceId: string): Conversation[] =>
+  state.conversations
+    .filter((conversation) => conversation.workspaceId === workspaceId && isPutAway(conversation.reminder))
+    .sort((a, b) => a.reminder!.at - b.reminder!.at);
 
 /** Whether the sidebar lists the conversation under the one that started it, which it does while that one is listed too. */
 export const isUnderCaller = (conversation: Conversation, listed: Conversation[]) =>

@@ -44,6 +44,7 @@ import { panelCommandRun } from "../shared/panel-commands.ts";
 import { historyEntry } from "../shared/prompt-history.ts";
 import { inSidebarOrder, movedBefore } from "../shared/sidebar-order.ts";
 import { isClearCommand, toSlashCommand } from "../shared/slash-commands.ts";
+import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromCommand, type Reminder } from "../shared/reminders.ts";
 import { lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
@@ -108,6 +109,7 @@ const TURN_STOP_TIMEOUT_MS = 10_000;
 const PROMPT_RECORD_WAIT_MS = 3_000;
 /** Letting go of a session is a courtesy to its agent; one that doesn't answer must not hold up what comes next. */
 const SESSION_CLOSE_TIMEOUT_MS = 5_000;
+const REMINDER_CHECK_MS = 30_000;
 const OPTION_ANSWER_TIMEOUT_MS = 10_000;
 /** Like Claude Code: the agent continues a minute after its usage limit resets, at most twice in a row by itself. */
 const USAGE_LIMIT_RESET_MARGIN_MS = 60_000;
@@ -311,6 +313,7 @@ export class ConversationService {
   readonly changes: Changes;
   /** While the host stops or restarts, messages wait in the queue for the next host, and turns it ends are not the agent's failures. */
   private stopping = false;
+  private reminderTimer?: ReturnType<typeof setTimeout>;
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
   private restoreCanvas: RestoreCanvas = async () => {};
   private askForm: AskForm = async () => ({ action: "decline" });
@@ -920,6 +923,9 @@ export class ConversationService {
     imageIds: string[] = [],
     { fromScript = false, fromMirador = false, fromPlugin, afterTurn = false }: { fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean } = {},
   ) {
+    const fromUser = !fromScript && !fromMirador && !fromPlugin;
+    if (fromUser && this.tookReminderCommand(conversationId, text)) return;
+    if (fromUser && this.get(conversationId).reminder) this.setReminder(conversationId, null);
     const runtime = this.runtime(conversationId);
     const sendsAtOnce = !runtime.running && !this.holdsQueue(runtime) && runtime.queuedMessages.length === 0;
     if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, fromScript, fromMirador, fromPlugin, startsTurn: true });
@@ -1125,6 +1131,99 @@ export class ConversationService {
     const message = messageAtEnd(wait, end);
     if (wait.resume) this.send(conversationId, message, [], { fromScript: true }).catch(() => {});
     else this.notifications.notify(conversationId, { kind: "job-ended", message });
+  }
+
+  /** Put away, an idle conversation's agent session is freed at once, a busy one's once it settles; it resumes when the user next writes. */
+  setReminder(conversationId: string, reminder: Reminder | null) {
+    if (reminder !== null && !isReminder(reminder)) throw new HostProblemError({ code: "reminder-not-valid" });
+    this.get(conversationId);
+    this.store.setReminder(conversationId, reminder);
+    this.republish(conversationId);
+    this.scheduleReminders();
+    if (isPutAway(reminder)) void this.freeSessionIfSettled(conversationId, { justPutAway: true });
+  }
+
+  /** /later and /remind typed where the page did not take them, as on a phone: the host's clock reads the time. */
+  private tookReminderCommand(conversationId: string, text: string) {
+    const command = reminderCommandIn(text);
+    if (!command) return false;
+    const reminder = reminderFromCommand(command, new Date(), this.store.reminderMorning());
+    if (!reminder) throw new HostProblemError({ code: "reminder-needs-time" });
+    this.setReminder(conversationId, reminder);
+    return true;
+  }
+
+  /** Starts the reminders' clock; ones whose time passed while the host was down come back at once. */
+  startReminders() {
+    this.scheduleReminders();
+  }
+
+  /**
+   * Wakes at the next reminder's time, or sooner: a timer's wait can stop counting while the computer sleeps, so the
+   * wall clock is looked at again at least this often.
+   */
+  private scheduleReminders() {
+    clearTimeout(this.reminderTimer);
+    if (this.stopping) return;
+    const pending = this.store.listConversations().filter(({ reminder }) => isPending(reminder));
+    if (pending.length === 0) return;
+    const next = Math.min(...pending.map(({ reminder }) => reminder!.at));
+    this.reminderTimer = setTimeout(() => this.reminderClockTicked(), Math.max(0, Math.min(next - Date.now(), REMINDER_CHECK_MS)));
+  }
+
+  private reminderClockTicked() {
+    const now = Date.now();
+    const pending = this.store.listConversations().filter(({ reminder }) => isPending(reminder));
+    pending.filter(({ reminder }) => reminder!.at <= now).forEach(({ id }) => this.reminderDue(id));
+    pending.filter(({ reminder }) => reminder!.at > now && isPutAway(reminder)).forEach(({ id }) => void this.freeSessionIfSettled(id));
+    this.scheduleReminders();
+  }
+
+  /** Its time came: back at the top of its workspace, marked to come back to, and the user told, with their note. */
+  private reminderDue(conversationId: string) {
+    const conversation = this.get(conversationId);
+    const { reminder } = conversation;
+    if (!reminder || reminder.due) return;
+    this.store.setReminder(conversationId, { ...reminder, due: true });
+    this.republish(conversationId);
+    const first = this.store
+      .listConversations()
+      .filter(({ workspaceId }) => workspaceId === conversation.workspaceId)
+      .sort(inSidebarOrder)[0];
+    if (first && first.id !== conversationId) this.move(conversationId, first.id);
+    this.markUnread(conversationId);
+    this.notifications.notify(conversationId, { kind: "reminder", ...(reminder.note && { note: reminder.note }) });
+  }
+
+  /**
+   * Put away, the conversation lets go of its agent session, but only where the agent frees it on close and can pick it
+   * up again with its context, and only once nothing still needs it. Opened again from its Later group, it keeps its
+   * session while the user looks at it; the page that just put it away still shows it for a moment, which doesn't count.
+   */
+  private async freeSessionIfSettled(conversationId: string, { justPutAway = false } = {}) {
+    const runtime = this.runtimes.get(conversationId);
+    const harness = runtime?.harness;
+    if (!runtime?.sessionId || !harness) return;
+    const sessionId = await runtime.sessionId.catch(() => null);
+    if (!sessionId || !(await this.reopensWithContext(conversationId, harness))) return;
+    if (runtime.harness !== harness || !isPutAway(this.store.findConversation(conversationId)?.reminder)) return;
+    const settled = sessionIsSettled({
+      running: runtime.running,
+      holdingQueue: runtime.holdingQueue,
+      queuedMessages: runtime.queuedMessages.length,
+      pendingPermissions: runtime.pendingPermissions.size,
+      waitingAsk: this.asksWaitedOn.has(conversationId),
+      usageLimitWait: runtime.usageLimit !== undefined,
+      jobWaitsThatResume: this.jobWaits.in(conversationId).filter(({ resume }) => resume).length,
+      asyncTasks: this.asyncTasks.in(conversationId).length,
+      watched: !justPutAway && this.hub.isWatched(conversationId),
+    });
+    if (settled) await this.releaseSession(conversationId, runtime, sessionId);
+  }
+
+  private async reopensWithContext(conversationId: string, harness: HarnessProcess) {
+    const { close, resume, load } = await harness.reopening();
+    return close && ((resume && !replaysHistoryOnResume(this.get(conversationId).harness)) || load);
   }
 
   /** A focused window shows the conversation, or the owner marked it read: either way its Done, Failed or Unread mark goes. */
@@ -1402,6 +1501,7 @@ export class ConversationService {
 
   shutdown() {
     this.stopping = true;
+    clearTimeout(this.reminderTimer);
     this.jobWaits.stopAll();
     return Promise.all([this.commands.shutdown(), ...[...this.harnessesByProfile.values()].map((harness) => harness.stop())]);
   }
@@ -2524,6 +2624,31 @@ export function whatKeepsQueuedMessagesOut({ hasSession, ownToolCall, queueHold,
   if (!agentSteers) return "its agent cannot take messages into a running turn";
   return null;
 }
+
+/** What could still need a conversation's agent session, which putting it away must not cut off. */
+export interface SessionUse {
+  running: boolean;
+  holdingQueue: boolean;
+  queuedMessages: number;
+  pendingPermissions: number;
+  waitingAsk: boolean;
+  usageLimitWait: boolean;
+  jobWaitsThatResume: number;
+  asyncTasks: number;
+  /** A focused page shows it: the user reads it, maybe about to write. */
+  watched: boolean;
+}
+
+export const sessionIsSettled = (use: SessionUse) =>
+  !use.running &&
+  !use.holdingQueue &&
+  use.queuedMessages === 0 &&
+  use.pendingPermissions === 0 &&
+  !use.waitingAsk &&
+  !use.usageLimitWait &&
+  use.jobWaitsThatResume === 0 &&
+  use.asyncTasks === 0 &&
+  !use.watched;
 
 /** Messages queued after a /clear wait for it, rather than join the turn in the session it ends. */
 export const queuedBeforeClear = (queue: QueuedMessage[]) => {

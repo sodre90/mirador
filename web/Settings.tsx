@@ -102,6 +102,7 @@ export function SettingsDialog({
   promptTemplates,
   canvasUse,
   keepAwake,
+  reminderMorning,
   keepDeletedCanvas,
   claudeProgram,
   scriptProgram,
@@ -124,6 +125,7 @@ export function SettingsDialog({
   promptTemplates: PromptTemplate[];
   canvasUse: CanvasUse;
   keepAwake: KeepAwake;
+  reminderMorning: number;
   keepDeletedCanvas: KeepDeletedCanvas;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
@@ -163,6 +165,7 @@ export function SettingsDialog({
         <FileLinkSettings scriptProgram={scriptProgram} />
         <EditorSettings editor={editor} />
         {isMac && <TypingSettings />}
+        <ReminderSettings morning={reminderMorning} />
       </>
     ),
     agents: () => (
@@ -748,6 +751,27 @@ function AgentSettings({ claudeProgram }: { claudeProgram: ClaudeProgram }) {
       <p className="hint claude-program-found" role="status">
         {foundClaudeProgram(claudeProgram)}
       </p>
+    </>
+  );
+}
+
+const timeOfDay = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+function ReminderSettings({ morning }: { morning: number }) {
+  const setMorning = (value: string) => {
+    const [hours, minutes] = value.split(":").map(Number);
+    if (hours !== undefined && minutes !== undefined) connection.send({ type: "settings.set-reminder-morning", minutes: hours * 60 + minutes });
+  };
+  return (
+    <>
+      <h3>{t.reminders.settingsTitle}</h3>
+      <p className="hint">{t.reminders.morningHint}</p>
+      <div className="sending-settings">
+        <label>
+          {t.reminders.morning}
+          <input type="time" className="reminder-morning" value={timeOfDay(morning)} onChange={(event) => event.target.value && setMorning(event.target.value)} />
+        </label>
+      </div>
     </>
   );
 }
