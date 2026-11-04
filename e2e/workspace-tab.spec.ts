@@ -1,7 +1,7 @@
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, signIn, untilFramePainted } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -49,6 +49,7 @@ test("a plugin's workspace tab shows its state, takes the user's actions, and ha
   });
 
   await test.step("the user's action reaches the plugin, whose reply and new state come back", async () => {
+    await untilFramePainted(page, page.locator(".canvas-panel:visible .canvas-frame.workspace-tab iframe"));
     await tabView(page).getByRole("button", { name: "Count" }).click();
     await expect(tabView(page).locator("#reply")).toHaveText("Counted to 1");
     await expect(tabView(page).locator("#count")).toHaveText("Counted 1 here, 1 everywhere");
