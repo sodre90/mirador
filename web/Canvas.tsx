@@ -28,6 +28,8 @@ import { opensWithRoom, takeArrivedReview } from "./review-placement.ts";
 import { roomOf } from "./plugin-settings.ts";
 import { FullscreenToggle, PaneGrip, usePaneFullscreen } from "./Workspace.tsx";
 import { WorkspaceTabView, type WorkspacePluginTab } from "./WorkspaceTabView.tsx";
+import { stepPressedOn, useOwnMouseSteps } from "./mouse-steps.ts";
+import { isStep } from "./visit-trail.ts";
 
 const words = t.canvas;
 
@@ -185,6 +187,7 @@ export function CanvasFrame({
         if (askedWidth) onContentWidthRef.current?.(askedWidth);
       }
       if (message.kind === "wheel") scrollPanelBy(frame.current, message);
+      if (message.kind === "mouse-step" && frame.current && isStep(message.step)) stepPressedOn(frame.current, message.step);
       if (message.kind === "open-link" && openable(message.href)) openFromPage(message.href);
       onMessageRef.current?.(message);
     };
@@ -893,8 +896,14 @@ export function CanvasPanel({
     event.preventDefault();
   };
 
+  const panel = useRef<HTMLElement>(null);
+  useOwnMouseSteps(panel, (step) => {
+    const page = step === "back" ? older : newer;
+    if (page) pick(page.id);
+  });
+
   return (
-    <aside className="canvas-panel" onKeyDown={closeOnEscape}>
+    <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape}>
       <div className="canvas-header" data-pane-bar ref={bar} data-fold={foldLevel}>
         <PaneGrip pane="canvas" />
         {changesOpen ? (

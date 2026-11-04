@@ -13,6 +13,8 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "size"; height: number; overflowWidth: number | null }
   /** A wheel turn the page has no use for, for the panel behind it to take instead. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "wheel"; deltaX: number; deltaY: number; deltaMode: number }
+  /** The mouse's back or forward button, pressed on the page, for the panel to step through what it shows. */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "mouse-step"; step: "back" | "forward" }
   /** A link to another site the user followed on the page, which the sandbox keeps from opening there. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "open-link"; href: unknown }
   | {
@@ -1260,6 +1262,17 @@ ${HIDDEN_ERROR_SCRIPT}
     }
     scrollWhereTheEngineDoesNot(node, event);
   }, { passive: false });
+  // The browser's own step would move the window Mirador is in, or leave it.
+  const mouseSteps = { 3: "back", 4: "forward" };
+  addEventListener("mousedown", (event) => {
+    if (mouseSteps[event.button]) event.preventDefault();
+  }, true);
+  addEventListener("mouseup", (event) => {
+    const step = mouseSteps[event.button];
+    if (!step) return;
+    event.preventDefault();
+    if (event.isTrusted) post({ kind: "mouse-step", step });
+  }, true);
   const forwardKey = (event) => {
     const target = event.target;
     const typing = Boolean(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)));

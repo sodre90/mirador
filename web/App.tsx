@@ -1,4 +1,6 @@
 import { OpensIn } from "./opens-in.ts";
+import { useMouseSteps } from "./mouse-steps.ts";
+import { EMPTY_TRAIL, stepped, visited } from "./visit-trail.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { harnessRewinds, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
@@ -502,6 +504,15 @@ export function App() {
     window.addEventListener("hashchange", selectFromHash);
     return () => window.removeEventListener("hashchange", selectFromHash);
   }, []);
+
+  const trail = useRef(EMPTY_TRAIL);
+  trail.current = visited(trail.current, state.selectedConversationId);
+  useMouseSteps((step) => {
+    const next = stepped(trail.current, step, (conversationId) => state.conversations.some(({ id }) => id === conversationId));
+    if (next === trail.current || next.current === null) return;
+    trail.current = next;
+    dispatch({ type: "select", conversationId: next.current });
+  });
 
   useEffect(() => {
     const hash = machines.shownId ? `#/m/${machines.shownId}` : state.selectedConversationId ? `#/c/${state.selectedConversationId}` : "";
