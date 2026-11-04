@@ -41,7 +41,7 @@ function copyThroughCommand(formats: Formats) {
 async function copy(formats: Formats) {
   if (!navigator.clipboard || typeof ClipboardItem === "undefined") return copyThroughCommand(formats);
   const blobs = Object.fromEntries(Object.entries(formats).map(([type, data]) => [type, new Blob([data], { type })]));
-  await navigator.clipboard.write([new ClipboardItem(blobs)]);
+  await navigator.clipboard.write([new ClipboardItem(blobs)]).catch(() => copyThroughCommand(formats));
 }
 
 function CopyIcon() {

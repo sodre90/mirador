@@ -94,6 +94,19 @@ test("a turn's whole reply copies as formatted text with its Markdown, or as Mar
     await expect.poll(() => clipboard(page)).toEqual({ text: NEXT, html: null });
   });
 
+  await test.step("where the browser refuses the clipboard write, a copy command copies it instead", async () => {
+    await page.evaluate(() => {
+      navigator.clipboard.write = () => Promise.reject(new DOMException("Write permission denied.", "NotAllowedError"));
+      const copied: string[] = [];
+      Object.assign(window, { copied });
+      window.addEventListener("copy", (event) => copied.push(event.clipboardData!.getData("text/plain")));
+    });
+    await firstTurn.hover();
+    await copyMarkdown.click();
+    await expect(firstTurn.getByRole("button", { name: "Copied" })).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { copied: string[] }).copied)).toEqual([`${BEFORE}\n\n${AFTER}`]);
+  });
+
   await test.step("without the clipboard API, as over plain http, a copy command copies both formats, and a refused one says so", async () => {
     await page.addInitScript(() => {
       Object.defineProperty(navigator, "clipboard", { value: undefined });
