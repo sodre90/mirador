@@ -9,7 +9,8 @@ import { connection } from "./connection.ts";
 import { highlightCode } from "./highlight.ts";
 import { blocksOfMessage, linesOfInlines, type Block, type Inline, type LineInline, type Mark } from "../shared/slack-markdown.ts";
 
-const COPY_OUTCOME_SHOWN_MS = 1_500;
+/** How long a Copy button says it copied, or couldn't. */
+export const COPY_OUTCOME_SHOWN_MS = 1_500;
 
 /** The block's text as written: markdown ends a code block's last line with a line break the author did not write. */
 const codeIn = (block: HTMLPreElement | null) => (block?.textContent ?? "").replace(/\n$/, "");

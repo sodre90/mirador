@@ -112,6 +112,10 @@ export const chat: Messages["chat"] = {
     plan: "Plan",
     logIn: "Anmelden",
     tryAgain: "Erneut versuchen",
+    copyReply: "Antwort kopieren",
+    copyReplyAsMarkdown: "Antwort als Markdown kopieren",
+    copied: "Kopiert",
+    copyFailed: "Kopieren fehlgeschlagen",
   },
   timeline: {
     loading: "Wird geladen…",

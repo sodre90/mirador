@@ -60,6 +60,8 @@ import { FormattedBox, type FormattedBoxExtras } from "./FormattedBox.tsx";
 import { useMessageBox } from "./message-box.ts";
 import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
+import { CopyReply, TimelineNow } from "./CopyReply.tsx";
+import { replyEnds } from "../shared/replies.ts";
 import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReading, stopReadingIn } from "./reply-player.ts";
 import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
@@ -936,11 +938,14 @@ const TimestampedEntry = memo(function TimestampedEntry({
   startsGroup,
   harness,
   conversationId,
+  endsReply,
 }: {
   block: TimelineBlock;
   startsGroup: boolean;
   harness: HarnessId;
   conversationId: string;
+  /** Whether it is the turn's last text, under which the whole reply can be copied. */
+  endsReply: boolean;
 }) {
   const author = authorOf(block);
   return (
@@ -953,13 +958,13 @@ const TimestampedEntry = memo(function TimestampedEntry({
             <Timestamp at={block.at} />
           </div>
         )}
-        <TimelineEntry block={block} conversationId={conversationId} harness={harness} canRewind={harnessRewinds[harness]} />
+        <TimelineEntry block={block} conversationId={conversationId} harness={harness} canRewind={harnessRewinds[harness]} endsReply={endsReply} />
       </div>
     </div>
   );
 });
 
-function TimelineEntry({ block, conversationId, harness, canRewind }: { block: TimelineBlock; conversationId: string; harness: HarnessId; canRewind: boolean }) {
+function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }: { block: TimelineBlock; conversationId: string; harness: HarnessId; canRewind: boolean; endsReply?: boolean }) {
   const askToRevert = useContext(AskToRevert);
   switch (block.kind) {
     case "user":
@@ -989,7 +994,10 @@ function TimelineEntry({ block, conversationId, harness, canRewind }: { block: T
               </div>
             )}
           </div>
-          <ReadAloud conversationId={conversationId} replyKey={block.key} reply={block.text} />
+          <div className="reply-actions">
+            {endsReply && <CopyReply replyKey={block.key} />}
+            <ReadAloud conversationId={conversationId} replyKey={block.key} reply={block.text} />
+          </div>
         </>
       );
     }
@@ -2125,6 +2133,11 @@ export function ChatPanel({
   const begun = useMemo(() => !open.loaded || hasBegun(open.events), [open.loaded, open.events]);
   const pendingCommands = useMemo(() => awaitingDelivery(timeline.flatMap((block) => (block.kind === "command" ? [block.command] : []))), [timeline]);
   const awaitingPermission = useMemo(() => toolCallsAwaitingPermission(timeline), [timeline]);
+  const endsOfReplies = useMemo(() => replyEnds(timeline), [timeline]);
+  const timelineNow = useRef(timeline);
+  useLayoutEffect(() => {
+    timelineNow.current = timeline;
+  }, [timeline]);
   const { ref, onScroll, holdPlace, isPinned, rememberPlace } = useScrollAnchor();
   const earlier = useEarlierHistory(open);
   const { firstLoaded, loadFrom, loadEarlier } = useLoadedEntries(timeline, open.loaded, { holdPlace, isPinned }, earlier);
@@ -2178,66 +2191,69 @@ export function ChatPanel({
             <ConversationBusy.Provider value={busy}>
               <UserPicture.Provider value={userPicture}>
                 <ReadsRepliesAloud.Provider value={readingAs}>
-                  <ChatHeader
-                    conversation={conversation}
-                    profiles={profiles}
-                    canvasVisible={canvasVisible}
-                    onToggleCanvas={onToggleCanvas}
-                    terminalVisible={terminalVisible}
-                    onToggleTerminal={onToggleTerminal}
-                    runningSubagents={runningSubagents.length}
-                    onShowRunningSubagent={showRunningSubagent}
-                    onFind={find.open}
-                    onFork={onFork}
-                    onRemind={() => openReminderPicker(conversation.id, dispatch)}
-                    forkable={canFork(conversation, open)}
-                    begun={begun}
-                  />
-                  {find.query !== null && <FindBar find={find} />}
-                  <MatchesFind.Provider value={find.matches}>
-                    <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
-                      {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
-                      {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
-                      {(firstLoaded > 0 || earlier.available) && (
-                        <button type="button" className="notice-line load-earlier" onClick={loadEarlier}>
-                          {earlierEntriesLabel(firstLoaded, earlier)}
-                        </button>
-                      )}
-                      {timeline.slice(firstLoaded).map((block, offset) => (
-                        <TimestampedEntry
-                          key={block.key}
-                          block={block}
-                          startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
-                          harness={conversation.harness}
-                          conversationId={conversation.id}
-                        />
-                      ))}
-                      {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
-                    </div>
-                  </MatchesFind.Provider>
-                  {approvalsOutOfView.length > 0 && <ApprovalsWaiting approvals={approvalsOutOfView} timeline={timeline} onShow={showApproval} />}
-                  {runningSubagents.length > 0 && <RunningSubagents conversationId={conversation.id} subagents={runningSubagents} onShow={showSubagent} />}
-                  {conversation.openInTerminal && (
-                    <div className="terminal-warning" role="status">
-                      {words.timeline.openInTerminal(words.terminalActivity[conversation.openInTerminal])}
-                    </div>
-                  )}
-                  <ReminderBanner conversation={conversation} dispatch={dispatch} />
-                  <Composer
-                    conversation={conversation}
-                    reminderMorning={reminderMorning}
-                    dispatch={dispatch}
-                    delegatedTasks={delegatedTasks}
-                    profiles={profiles}
-                    events={open.events}
-                    holdsEarliest={!open.hasEarlier}
-                    pendingCommands={pendingCommands}
-                    promptTemplates={promptTemplates}
-                    voiceSettings={voiceSettings}
-                    voiceEngine={voiceEngine}
-                    onManageTemplates={onManageTemplates}
-                  />
-                  <Statusline conversation={conversation} profiles={profiles} />
+                  <TimelineNow.Provider value={timelineNow}>
+                    <ChatHeader
+                      conversation={conversation}
+                      profiles={profiles}
+                      canvasVisible={canvasVisible}
+                      onToggleCanvas={onToggleCanvas}
+                      terminalVisible={terminalVisible}
+                      onToggleTerminal={onToggleTerminal}
+                      runningSubagents={runningSubagents.length}
+                      onShowRunningSubagent={showRunningSubagent}
+                      onFind={find.open}
+                      onFork={onFork}
+                      onRemind={() => openReminderPicker(conversation.id, dispatch)}
+                      forkable={canFork(conversation, open)}
+                      begun={begun}
+                    />
+                    {find.query !== null && <FindBar find={find} />}
+                    <MatchesFind.Provider value={find.matches}>
+                      <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
+                        {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
+                        {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
+                        {(firstLoaded > 0 || earlier.available) && (
+                          <button type="button" className="notice-line load-earlier" onClick={loadEarlier}>
+                            {earlierEntriesLabel(firstLoaded, earlier)}
+                          </button>
+                        )}
+                        {timeline.slice(firstLoaded).map((block, offset) => (
+                          <TimestampedEntry
+                            key={block.key}
+                            block={block}
+                            startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
+                            harness={conversation.harness}
+                            conversationId={conversation.id}
+                            endsReply={endsOfReplies.has(block.key)}
+                          />
+                        ))}
+                        {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
+                      </div>
+                    </MatchesFind.Provider>
+                    {approvalsOutOfView.length > 0 && <ApprovalsWaiting approvals={approvalsOutOfView} timeline={timeline} onShow={showApproval} />}
+                    {runningSubagents.length > 0 && <RunningSubagents conversationId={conversation.id} subagents={runningSubagents} onShow={showSubagent} />}
+                    {conversation.openInTerminal && (
+                      <div className="terminal-warning" role="status">
+                        {words.timeline.openInTerminal(words.terminalActivity[conversation.openInTerminal])}
+                      </div>
+                    )}
+                    <ReminderBanner conversation={conversation} dispatch={dispatch} />
+                    <Composer
+                      conversation={conversation}
+                      reminderMorning={reminderMorning}
+                      dispatch={dispatch}
+                      delegatedTasks={delegatedTasks}
+                      profiles={profiles}
+                      events={open.events}
+                      holdsEarliest={!open.hasEarlier}
+                      pendingCommands={pendingCommands}
+                      promptTemplates={promptTemplates}
+                      voiceSettings={voiceSettings}
+                      voiceEngine={voiceEngine}
+                      onManageTemplates={onManageTemplates}
+                    />
+                    <Statusline conversation={conversation} profiles={profiles} />
+                  </TimelineNow.Provider>
                 </ReadsRepliesAloud.Provider>
               </UserPicture.Provider>
             </ConversationBusy.Provider>

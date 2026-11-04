@@ -109,6 +109,10 @@ export const chat: Messages["chat"] = {
     plan: "计划",
     logIn: "登录",
     tryAgain: "重试",
+    copyReply: "复制回复",
+    copyReplyAsMarkdown: "以 Markdown 复制回复",
+    copied: "已复制",
+    copyFailed: "无法复制",
   },
   timeline: {
     loading: "加载中…",

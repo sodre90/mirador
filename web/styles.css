@@ -1866,6 +1866,80 @@ input.picker-search {
   visibility: visible;
 }
 
+.reply-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+}
+
+/* Floats on the reply's bottom edge, so the row it sits in takes no room until read aloud needs one. */
+.copy-reply {
+  position: absolute;
+  right: 12px;
+  bottom: 0;
+  z-index: 1;
+  translate: 0 50%;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--text) 12%, transparent);
+  /* Not visibility: a hidden button can't take focus, and Tab must reach it. */
+  opacity: 0;
+  pointer-events: none;
+}
+
+.copy-reply button {
+  display: inline-flex;
+  padding: 2px 6px;
+  color: var(--muted);
+  border: none;
+}
+
+.copy-reply svg {
+  width: calc(14px * var(--font-scale));
+  height: calc(14px * var(--font-scale));
+}
+
+.timeline-entry:hover .copy-reply,
+.copy-reply:focus-within,
+.copy-reply:has(.copied, [role="alert"]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.copy-reply button.copied {
+  color: var(--accent);
+}
+
+@media (hover: none) {
+  .copy-reply {
+    position: static;
+    translate: none;
+    opacity: 1;
+    pointer-events: auto;
+    background: none;
+    border: none;
+    box-shadow: none;
+  }
+
+  .copy-reply-problem {
+    position: static;
+  }
+}
+
+.copy-reply-problem {
+  position: absolute;
+  right: calc(100% + 8px);
+  white-space: nowrap;
+  color: var(--danger);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .read-aloud {
   display: flex;
   align-items: center;

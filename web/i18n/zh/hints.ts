@@ -31,6 +31,8 @@ export const hints: Messages["hints"] = {
   replyVoiceName: "服务器的某个声音，就像 alloy 是 OpenAI 的声音之一。",
   readAloud: "朗读这条回复的简短摘要。",
   stopReadingAloud: "停止朗读这条回复。",
+  copyReply: "以带格式的文本复制本轮次的回复，不含其中运行的工具。",
+  copyReplyAsMarkdown: "以 Markdown 复制本轮次的回复，不含其中运行的工具。",
   keepTalking:
     "对你听写的内容的回复朗读完后，麦克风会再次打开，你接着说的话会立即发送。说“stop”或“thanks”，或按 Esc 即可结束。其间 Agent 提出的问题会朗读给你，你可以用语音回答；说“help”可以听到能说什么。",
   sendRightAway: "你说的话一变成文字就立即发送，而不是先留在消息框里让你检查。",

@@ -109,6 +109,10 @@ export const chat: Messages["chat"] = {
     plan: "Terv",
     logIn: "Bejelentkezés",
     tryAgain: "Újra",
+    copyReply: "Válasz másolása",
+    copyReplyAsMarkdown: "Válasz másolása Markdownként",
+    copied: "Másolva",
+    copyFailed: "Nem sikerült másolni",
   },
   timeline: {
     loading: "Betöltés…",
