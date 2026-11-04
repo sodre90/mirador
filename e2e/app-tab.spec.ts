@@ -2,7 +2,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, createProfile, reloadFromRestartedHost, sendMessage, signIn } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, createProfile, reloadFromRestartedHost, sendMessage, signIn, untilFramePainted } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -117,7 +117,8 @@ test.afterEach(async ({}, testInfo) => {
 
 const appToggle = (page: Page) => page.locator(".canvas-header:visible .app-toggle");
 const canvasTitle = (page: Page) => page.locator(".canvas-header:visible .canvas-title");
-const view = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-frame.app iframe");
+const viewFrame = (page: Page) => page.locator(".canvas-panel:visible .canvas-frame.app iframe");
+const view = (page: Page) => viewFrame(page).contentFrame();
 const counterFile = () => join(host.projectDir, "counter.json");
 
 async function showApp(page: Page) {
@@ -233,7 +234,9 @@ test("the agent opens an app that its changes, your clicks and outside edits all
   await test.step("what the view keeps in localStorage stays in the workspace, through a reload and a restart of the host", async () => {
     await expect(view(page).locator("#same-storage")).toHaveText("localStorage is the app's storage");
     await expect(view(page).locator("#remembered")).toHaveText("nothing remembered");
+    await untilFramePainted(page, viewFrame(page));
     await view(page).getByRole("button", { name: "Remember the count" }).click();
+    await expect.poll(() => view(page).locator("body").evaluate(() => localStorage.getItem("remembered"))).toBe("the count was 40");
     await expect(async () => {
       await page.reload();
       await showApp(page);
