@@ -111,10 +111,10 @@ test("a conversation can be put away or kept with a reminder, and comes back at 
   });
 
   await test.step("its agent session was let go of while it waited, and the next message picks the same session up again", async () => {
-    const closed = agentLogLines().find((line) => line.includes(" closed "))?.split(" ").at(-1);
-    expect(closed, agentLogLines().join("\n")).toBeTruthy();
+    const firstSession = agentLogLines().find((line) => line.startsWith("agent new "))?.split(" ").at(-1);
+    expect(agentLogLines(), agentLogLines().join("\n")).toContain(`agent closed ${firstSession}`);
     await sendMessage(page, "picking it up");
-    await expect.poll(agentLogLines).toContain(`agent resumed ${closed}`);
+    await expect.poll(agentLogLines).toContain(`agent resumed ${firstSession}`);
     await expect(page.locator(".timeline:visible .message.user")).toHaveCount(2);
   });
 
