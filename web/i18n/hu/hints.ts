@@ -32,6 +32,8 @@ export const hints: Messages["hints"] = {
   replyVoiceName: "A szerver egyik hangja, ahogy az alloy az OpenAI egyik hangja.",
   readAloud: "Felolvassa ennek a válasznak egy rövid összefoglalóját.",
   stopReadingAloud: "Leállítja ennek a válasznak a felolvasását.",
+  copyReply: "Formázott szövegként másolja ennek a körnek a válaszát, a futtatott eszközök nélkül.",
+  copyReplyAsMarkdown: "Markdownként másolja ennek a körnek a válaszát, a futtatott eszközök nélkül.",
   keepTalking:
     "Miután a diktált üzenetedre adott választ felolvasta, a mikrofon újra megnyílik, és amit ezután mondasz, azonnal elküldi. A „stop” vagy „thanks” szó, illetve az Esc befejezi. Ha az ágens közben kérdez, azt felolvassa, hogy hanggal válaszolhass; mondd, hogy „help”, és meghallod, mit mondhatsz.",
   sendRightAway: "Azonnal elküldi, amit mondtál, amint szöveggé vált, ahelyett hogy az üzenetmezőben hagyná, hogy előbb ellenőrizhesd.",

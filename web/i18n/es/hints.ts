@@ -33,6 +33,8 @@ export const hints: Messages["hints"] = {
   replyVoiceName: "Una de las voces del servidor, como alloy es una de las de OpenAI.",
   readAloud: "Lee en voz alta un breve resumen de esta respuesta.",
   stopReadingAloud: "Deja de leer en voz alta esta respuesta.",
+  copyReply: "Copia la respuesta de este turno como texto con formato, sin las herramientas que usó.",
+  copyReplyAsMarkdown: "Copia la respuesta de este turno como Markdown, sin las herramientas que usó.",
   keepTalking:
     "Cuando la respuesta a lo que dictaste se ha leído en voz alta, el micrófono se abre de nuevo y lo que digas a continuación se envía de inmediato. Decir “stop” o “thanks”, o pulsar Esc, lo termina. Una pregunta que el agente haga mientras tanto se lee en voz alta para que respondas con la voz; di “help” para oír lo que puedes decir.",
   sendRightAway: "Envía lo que dijiste en cuanto es texto, en lugar de dejarlo en el cuadro de mensaje para que lo compruebes antes.",

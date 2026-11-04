@@ -115,6 +115,10 @@ export const chat = {
     plan: "Plan",
     logIn: "Log in",
     tryAgain: "Try again",
+    copyReply: "Copy reply",
+    copyReplyAsMarkdown: "Copy reply as Markdown",
+    copied: "Copied",
+    copyFailed: "Couldn't copy",
   },
   timeline: {
     loading: "Loading…",
