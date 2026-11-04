@@ -50,7 +50,8 @@ describe("HarnessProcess.start", () => {
     try {
       await expect(harness.start()).rejects.toThrow("The pre-launch command of Fish user's agent exited with 3: from the login shell");
     } finally {
-      process.env.SHELL = loginShell;
+      if (loginShell === undefined) delete process.env.SHELL;
+      else process.env.SHELL = loginShell;
     }
     expect(readFileSync(join(directory, "given"), "utf8")).toBe(prelaunch);
   }, 15_000);
