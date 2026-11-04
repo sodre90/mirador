@@ -18,7 +18,7 @@ import type { StoredEvent } from "./model.ts";
 import { englishNoticeText, MODE_NAME_META_KEY, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
 import { turnTitle } from "./reverts.ts";
-import { codexMcpToolName } from "./tool-title.ts";
+import { mcpToolNameOf } from "./tool-title.ts";
 import { leavesFailedTurnBehind, offersTryAgain } from "./try-again.ts";
 import { UserCommandLog, type UserCommand } from "./user-commands.ts";
 
@@ -326,12 +326,12 @@ function opencodeChildMeta(update: { _meta?: { [key: string]: unknown } | null }
 }
 
 /** opencode puts the title of the child session that made a call before the call's own title. */
-/** codex-acp calls an MCP tool's call a command; it shows as the MCP call it is. */
-const kindOf = (update: ToolUpdate) => (codexMcpToolName(update) ? "other" : update.kind);
+/** codex-acp calls an MCP tool's call a command; it shows as the MCP call it is, titled as Claude Code's are. */
+const kindOf = (update: ToolUpdate) => (mcpToolNameOf(update) ? "other" : update.kind);
 
 function ownTitle(update: ToolUpdate) {
-  const codexMcp = codexMcpToolName(update);
-  if (codexMcp) return codexMcp;
+  const mcpTool = mcpToolNameOf(update);
+  if (mcpTool) return mcpTool;
   const childTitle = opencodeChildMeta(update)?.title;
   return childTitle && update.title?.startsWith(`${childTitle}: `) ? update.title.slice(childTitle.length + 2) : update.title;
 }

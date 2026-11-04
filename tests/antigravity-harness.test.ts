@@ -8,6 +8,9 @@ import { canvasInstructions, canvasUseGuidance } from "../host/canvas/guidance.t
 import { canvasToolName } from "../host/canvas/tool-names.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { harnessRewinds, type Profile } from "../shared/model.ts";
+import { antigravityMcpToolName, readableToolTitle } from "../shared/tool-title.ts";
+import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import { buildTimeline } from "../shared/timeline.ts";
 import { harnessSteers } from "../web/busy-sending.ts";
 import { fakeProgram } from "./fake-program.ts";
 
@@ -95,4 +98,22 @@ test("Antigravity's name for a canvas tool, mcp_canvas_<tool>, reads as the canv
   expect(canvasToolName("mcp_canvas_show")).toBe("show");
   expect(canvasToolName("mcp_canvas_update_checklist")).toBe("update_checklist");
   expect(canvasToolName("mcp_other_show")).toBeNull();
+});
+
+test("Antigravity's MCP calls, titled Run mcp_<server>_<tool>, go by Claude Code's name for them", () => {
+  expect(antigravityMcpToolName({ name: "mcp_canvas_update_checklist", title: "Run mcp_canvas_update_checklist" })).toBe("mcp__canvas__update_checklist");
+  expect(antigravityMcpToolName({ name: "mcp_github_list_issues", title: "Run mcp_github_list_issues" })).toBe("mcp__github__list_issues");
+  expect(antigravityMcpToolName({ name: "run_command", title: "echo hi" })).toBeNull();
+  expect(antigravityMcpToolName({ name: "mcp_canvas_show", title: "Something else" })).toBeNull();
+});
+
+test("an Antigravity canvas call reads as canvas · show in the timeline", () => {
+  const call = { toolCallId: "call_1", name: "mcp_canvas_show", title: "Run mcp_canvas_show", kind: "other" };
+  const updates = [
+    { sessionUpdate: "tool_call", ...call, status: "in_progress" },
+    { sessionUpdate: "tool_call_update", ...call, status: "completed" },
+  ] as SessionUpdate[];
+  const [block] = buildTimeline(updates.map((update, seq) => ({ seq, at: seq, event: { type: "acp", update } })));
+  expect(block?.kind).toBe("tool");
+  expect(readableToolTitle((block as { title: string }).title, {})).toBe("canvas · show");
 });

@@ -10,6 +10,21 @@ export function codexMcpToolName(update: { _meta?: { [key: string]: unknown } | 
   return typeof server === "string" && typeof tool === "string" ? `mcp__${server}__${tool}` : null;
 }
 
+/**
+ * Antigravity names an MCP tool `mcp_<server>_<tool>` and titles its call "Run mcp_<server>_<tool>"; it goes by Claude
+ * Code's name, `mcp__<server>__<tool>`. The server's name ends at the first underscore, as the canvas server's does.
+ */
+export function antigravityMcpToolName(update: { name?: unknown; title?: string | null }) {
+  const { name, title } = update;
+  if (typeof name !== "string" || title !== `Run ${name}`) return null;
+  const [, server, tool] = /^mcp_([^_]+)_(.+)$/.exec(name) ?? [];
+  return server && tool ? `mcp__${server}__${tool}` : null;
+}
+
+/** An MCP tool's call by Claude Code's name for it, from the agents that name or title such calls otherwise. */
+export const mcpToolNameOf = (update: { _meta?: { [key: string]: unknown } | null; rawInput?: unknown; name?: unknown; title?: string | null }) =>
+  codexMcpToolName(update) ?? antigravityMcpToolName(update);
+
 /** An MCP tool's call as "server · tool", or for a plugin's tool on the canvas server, "plugin's title · tool". */
 export function readableToolTitle(title: string, pluginToolTitles: Record<string, string>) {
   const mcpTool = title.match(/^mcp__(.+?)__(.+)$/);

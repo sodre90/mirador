@@ -46,6 +46,7 @@ test("an Antigravity conversation replies and shows a canvas page without asking
   await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1")).toHaveText("Scripted page", { timeout: 60_000 });
   await waitForTurnToEnd(page);
   await expect(page.locator(".permission")).toHaveCount(0);
+  await expect(page.locator(".timeline:visible .tool-title", { hasText: "canvas · show" })).toHaveCount(1);
 });
 
 test("an Antigravity canvas question waits for the user's answer, which comes back as the tool's result", async () => {
