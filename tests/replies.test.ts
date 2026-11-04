@@ -57,6 +57,12 @@ describe("replies", () => {
     ]);
   });
 
+  test("a part that starts indented, as a code block or a nested list does, keeps its indentation", () => {
+    expect(repliesOf([{ type: "user-message", text: "go" }, agentText("Run this:"), bashCall("run"), agentText("\n    npm test\n\n  - nested\n")])).toEqual([
+      ["agent", "Run this:\n\n    npm test\n\n  - nested"],
+    ]);
+  });
+
   test("what a subagent writes stays under its tool call, out of the reply", () => {
     expect(repliesOf([{ type: "user-message", text: "explore" }, launchSubagent("a1"), subagentText("a1", "Looking around."), agentText("The cache lives in the store.")])).toEqual([
       ["agent", "The cache lives in the store."],

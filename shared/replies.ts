@@ -2,6 +2,9 @@ import type { TimelineBlock } from "./timeline.ts";
 
 type Turn = { lastKey: string; texts: string[] };
 
+/** Leading spaces are Markdown, as in an indented code block or a nested list, so only blank lines go from the start. */
+const withoutSurroundingBlankLines = (text: string) => text.replace(/^\s*\n/, "").trimEnd();
+
 /** Each turn the agent wrote in: its text blocks, without the tools, approvals and thoughts between them. */
 function turnsWithText(timeline: TimelineBlock[]): Turn[] {
   const turns: Turn[] = [];
@@ -11,7 +14,7 @@ function turnsWithText(timeline: TimelineBlock[]): Turn[] {
     else if (block.kind === "agent" && block.text.trim()) {
       if (!current) turns.push((current = { lastKey: block.key, texts: [] }));
       current.lastKey = block.key;
-      current.texts.push(block.text.trim());
+      current.texts.push(withoutSurroundingBlankLines(block.text));
     }
   }
   return turns;
