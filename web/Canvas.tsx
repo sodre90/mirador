@@ -35,6 +35,8 @@ const words = t.canvas;
 
 /** Content as wide as the viewport would otherwise widen the frame that measures it without end. */
 const MAX_CONTENT_WIDTH = 2400;
+/** Past this, a page's unwrapped lines are prose that reads fine wrapped, rather than a layout that needs the room. */
+const MAX_UNWRAPPED_WIDTH_ASKED = 720;
 
 interface ContentSize {
   height: number;
@@ -150,11 +152,13 @@ export function CanvasFrame({
   const roomWidth = useElementWidth(box);
   const [errors, setErrors] = useState<string[]>([]);
   const [contentSize, setContentSize] = useState<ContentSize>();
+  const [unwrappedWidth, setUnwrappedWidth] = useState(0);
   // The theme is not a dependency: changing it would reload the page, so it reaches a shown page by message instead.
   const imagesFromOtherSites = policy?.imagesFromOtherSites ?? false;
+  const measuresNaturalWidth = onContentWidth !== undefined;
   const document = useMemo(
-    () => buildCanvasDocument(html, frameId, assetsOrigin, shownTheme(), { padded, policy: { imagesFromOtherSites }, markable }),
-    [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable],
+    () => buildCanvasDocument(html, frameId, assetsOrigin, shownTheme(), { padded, policy: { imagesFromOtherSites }, markable, measuresNaturalWidth }),
+    [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, measuresNaturalWidth],
   );
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
@@ -175,6 +179,7 @@ export function CanvasFrame({
   useEffect(() => {
     setErrors([]);
     setContentSize(undefined);
+    setUnwrappedWidth(0);
     const listener = (event: MessageEvent) => {
       if (event.source !== frame.current?.contentWindow || !isCanvasFrameMessage(event.data)) return;
       const message = event.data;
@@ -184,7 +189,7 @@ export function CanvasFrame({
       if (message.kind === "size") {
         const askedWidth = message.overflowWidth && Math.min(message.overflowWidth, MAX_CONTENT_WIDTH);
         setContentSize((current) => ({ height: message.height, width: askedWidth || current?.width || null }));
-        if (askedWidth) onContentWidthRef.current?.(askedWidth);
+        if (message.naturalWidth) setUnwrappedWidth(Math.min(message.naturalWidth, MAX_UNWRAPPED_WIDTH_ASKED));
       }
       if (message.kind === "wheel") scrollPanelBy(frame.current, message);
       if (message.kind === "mouse-step" && frame.current && isStep(message.step)) stepPressedOn(frame.current, message.step);
@@ -199,8 +204,9 @@ export function CanvasFrame({
   }, [document]);
 
   useEffect(() => {
-    if (contentSize?.width) onContentWidthRef.current?.(contentSize.width);
-  }, [contentSize?.width]);
+    const wantedWidth = Math.max(contentSize?.width ?? 0, unwrappedWidth);
+    if (wantedWidth) onContentWidthRef.current?.(wantedWidth);
+  }, [contentSize?.width, unwrappedWidth]);
 
   useEffect(() => onShownThemeChange(() => postThemeTo(frame)), []);
 

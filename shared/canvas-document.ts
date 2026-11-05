@@ -9,8 +9,11 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; kind: "shell-ready" }
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "error"; message: string }
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "rendered"; errors: string[] }
-  /** `overflowWidth` is how wide the content wants to be, when that is wider than the frame. */
-  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "size"; height: number; overflowWidth: number | null }
+  /**
+   * `overflowWidth` is how wide the content wants to be, when that is wider than the frame. `naturalWidth` is how wide it
+   * would be with no line wrapped, at any frame width, from a page built to measure it.
+   */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "size"; height: number; overflowWidth: number | null; naturalWidth: number | null }
   /** A wheel turn the page has no use for, for the panel behind it to take instead. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "wheel"; deltaX: number; deltaY: number; deltaMode: number }
   /** The mouse's back or forward button, pressed on the page, for the panel to step through what it shows. */
@@ -1054,7 +1057,7 @@ ${pageDrawing(assetsOrigin)}
 })();`;
 }
 
-function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string) {
+function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, measuresNaturalWidth: boolean) {
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
@@ -1196,7 +1199,15 @@ ${HIDDEN_ERROR_SCRIPT}
     const root = document.documentElement;
     const bodyLeft = document.body ? document.body.getBoundingClientRect().left + scrollX : 0;
     const overflowWidth = root.scrollWidth > root.clientWidth ? Math.ceil(root.scrollWidth + bodyLeft) : null;
-    post({ kind: "size", height: Math.ceil(root.getBoundingClientRect().height), overflowWidth });
+    const height = Math.ceil(root.getBoundingClientRect().height);
+    post({ kind: "size", height, overflowWidth, naturalWidth: ${measuresNaturalWidth} ? naturalWidthOf(root) : null });
+  };
+  const naturalWidthOf = (root) => {
+    const inlineWidth = root.style.width;
+    root.style.width = "max-content";
+    const width = Math.ceil(root.getBoundingClientRect().width);
+    root.style.width = inlineWidth;
+    return width;
   };
   new ResizeObserver(reportSize).observe(document.documentElement);
   addEventListener("load", reportSize);
@@ -1319,7 +1330,12 @@ export function buildCanvasDocument(
   itemId: string,
   assetsOrigin: string,
   theme: CanvasTheme,
-  { padded = false, policy = {}, markable = false }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean } = {},
+  {
+    padded = false,
+    policy = {},
+    markable = false,
+    measuresNaturalWidth = false,
+  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean } = {},
 ) {
   const withoutDoctype = html.replace(/^\s*<!doctype[^>]*>/i, "");
   return [
@@ -1328,7 +1344,7 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, assetsOrigin)}</script>`,
+    `<script>${frameReporter(itemId, theme, assetsOrigin, measuresNaturalWidth)}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),

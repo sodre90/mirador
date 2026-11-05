@@ -64,6 +64,33 @@ test("previews show whole: option columns widen to fit them, and what is wider t
   expect(blue!.y).toBe(green!.y);
 });
 
+test("a preview that would squeeze its layout to fit beside the others takes its own row instead, at its natural width", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const options = page.locator(".ask-option");
+  const toolbar = (name: string) =>
+    `<div class="toolbar" style="display:inline-flex;gap:24px;padding:8px;background:#eef">${["Navigation", "Search the whole site", "Account settings", name].map((item) => `<b>${item}</b>`).join("")}</div>`;
+
+  askInBackground(conversationId, {
+    question: "Which toolbar?",
+    options: [
+      { label: "Light", html: toolbar("Light") },
+      { label: "Dark", html: toolbar("Dark") },
+    ],
+  });
+  await expect(options).toHaveCount(2);
+  const [light, dark, row] = await Promise.all([options.nth(0).boundingBox(), options.nth(1).boundingBox(), page.locator(".ask-options").boundingBox()]);
+  const toolbarWidth = await preview(options.nth(0)).contentFrame().locator(".toolbar").evaluate((toolbar) => toolbar.scrollWidth);
+  expect(2 * toolbarWidth, "two toolbars don't fit side by side").toBeGreaterThan(row!.width);
+  expect(dark!.y, "so they stack").toBeGreaterThan(light!.y);
+  for (const option of await options.all()) {
+    const heights = await preview(option).contentFrame().locator(".toolbar b").evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height));
+    expect(new Set(heights).size, "no item of the toolbar wraps").toBe(1);
+  }
+  await answerCanvasQuestion(page, "Light");
+});
+
 test("the agent can make the answer boxes wider, up to the canvas's width", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 900 });
   await signIn(page, host);
