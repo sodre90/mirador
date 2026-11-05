@@ -341,6 +341,17 @@ body.resizing iframe {
   text-align: center;
 }
 
+.page-broke {
+  max-width: 520px;
+  margin: 15vh auto 0;
+  padding: 24px;
+  text-align: center;
+}
+
+.page-broke p {
+  color: var(--muted);
+}
+
 .first-profile {
   max-width: 640px;
   overflow-y: auto;

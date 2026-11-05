@@ -2,6 +2,7 @@ import type { Messages } from "../en/index.ts";
 
 export const shell: Messages["shell"] = {
   close: "Bezárás",
+  pageBroke: { title: "Hiba történt ezen az oldalon", detail: "A hiba a host naplójában van.", reload: "Újratöltés" },
   sidebar: {
     hideSidebar: "Oldalsáv elrejtése",
     showSidebar: "Oldalsáv megjelenítése",

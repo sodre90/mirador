@@ -133,6 +133,7 @@ const appFailure = (error: unknown) => ({ message: messageOf(error), ...problemO
 /** What OpenAI's speech API takes at most: over 13 minutes of 16 kHz mono WAV. */
 const MAX_SPOKEN_CLIP_BYTES = 25 * 1024 * 1024;
 const MAX_REPLY_BYTES = 1024 * 1024;
+const PAGE_ERROR_LOG_LIMIT = 8 * 1024;
 const MAX_SPOKEN_SENTENCE_BYTES = 4 * 1024;
 
 async function textWithin(request: Request, maxBytes: number) {
@@ -1399,6 +1400,8 @@ export function startServer(services: HostServices) {
         return message.unlessBusy ? terminals.closeTabUnlessBusy(socket, message.tabId) : terminals.closeTab(message.tabId);
       case "ping":
         return reply({ type: "pong" });
+      case "page.error":
+        return console.log(`page error: ${message.message.slice(0, PAGE_ERROR_LOG_LIMIT)}\n${message.stack.slice(0, PAGE_ERROR_LOG_LIMIT)}`);
       case "presence":
         socket.data.presence = { conversationId: message.conversationId, attentive: message.attentive };
         if (message.attentive && message.conversationId) conversations.markSeen(message.conversationId);

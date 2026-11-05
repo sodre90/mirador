@@ -5,6 +5,8 @@ import { askDesktopAppForNonce, giveLanguageToDesktopApp } from "./desktop-bridg
 import { closeWhatHasFocusOnCommandW } from "./desktop-close.ts";
 import { applyExternalImages, externalImages } from "./external-images.ts";
 import { openOutsideLinksInTheBrowser } from "./outside-links.ts";
+import { PageErrorBoundary } from "./PageErrorBoundary.tsx";
+import { reportUncaughtPageErrors } from "./page-errors.ts";
 import { ItemWindow } from "./ItemWindow.tsx";
 import { PluginWindow } from "./PluginWindow.tsx";
 import { applyFontScale, currentFontScale } from "./font-scale.ts";
@@ -16,6 +18,7 @@ import { applyTimestampsShown, storedTimestampsShown } from "./timestamps.ts";
 import { applyWaitingStyle, storedWaitingStyle } from "./waiting.ts";
 import { applyWorkspaceColorStyle } from "./workspace-colors.ts";
 
+reportUncaughtPageErrors();
 applyExternalImages(externalImages.get());
 applyFontScale(currentFontScale());
 applyLanguage();
@@ -38,4 +41,8 @@ function Page() {
   return pluginWithWindow ? <PluginWindow plugin={pluginWithWindow} /> : <App />;
 }
 
-createRoot(document.getElementById("root")!).render(<Page />);
+createRoot(document.getElementById("root")!).render(
+  <PageErrorBoundary>
+    <Page />
+  </PageErrorBoundary>,
+);

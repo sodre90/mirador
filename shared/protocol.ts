@@ -280,6 +280,8 @@ export type ClientMessage =
   | { type: "presence"; conversationId: string | null; attentive: boolean }
   /** Asks the host to answer with pong, so a device can tell a socket that went quiet from one that died on the way. */
   | { type: "ping" }
+  /** An error the page threw, so that one which blanks the page leaves its stack in the host log. */
+  | { type: "page.error"; message: string; stack: string }
   | { type: "host.restart" }
   | { type: "devices.list" }
   | { type: "plugins.list" }
