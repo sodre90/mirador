@@ -76,7 +76,7 @@ import { movedCaretToLineEdge } from "./line-edge-keys.ts";
 import { findsTemplate, keyLabels, shortcutKeys } from "./shortcuts.ts";
 import { commandLineOf, isShellCommand, shellCommandOf } from "./shell.ts";
 import { useShellOutputStyle } from "./shell-output.ts";
-import { askAloudWhenWaiting } from "./spoken-ask.ts";
+import { endSpokenConversation, followSpokenConversation, spokenConversationIn } from "./spoken-conversation.ts";
 import { Statusline } from "./Statusline.tsx";
 import type { AppAction, OpenConversation } from "./state.ts";
 import { isPending, reminderCommandIn, reminderFromCommand } from "../shared/reminders.ts";
@@ -1779,8 +1779,11 @@ function Composer({
   const sendPrompt = (message: string, imageIds: string[], afterTurn: boolean) => {
     if (!connection.send({ type: "conversation.prompt", conversationId: conversation.id, text: message, imageIds, afterTurn })) return;
     stopReading();
-    if (dictation.takeDictated() && speaksReplies(voiceSettings)) awaitSpokenReply(conversation.id, events, { ticks: voiceSettings.keepTalking });
-    else forgetSpokenReply(conversation.id);
+    forgetSpokenReply(conversation.id);
+    const dictated = dictation.takeDictated() && speaksReplies(voiceSettings);
+    if (dictated && voiceSettings.keepTalking) spokenConversationIn(conversation.id).sentFromTheMessageBox(events);
+    else if (dictated) awaitSpokenReply(conversation.id, events);
+    else endSpokenConversation(conversation.id);
     setText("");
     images.clearAfterSending();
   };
@@ -2128,11 +2131,20 @@ export function ChatPanel({
   const timeline = useTimeline(open.events);
   const readingAs = replyReadingOf(voiceSettings);
   useEffect(() => readWhenSpokenTurnEnds(conversation.id, open.events, timeline, readingAs), [timeline]);
-  useEffect(() => askAloudWhenWaiting(conversation.id, open.canvas), [open.canvas]);
-  useEffect(() => () => stopReadingIn(conversation.id), [conversation.id]);
+  useEffect(
+    () => () => {
+      stopReadingIn(conversation.id);
+      endSpokenConversation(conversation.id);
+    },
+    [conversation.id],
+  );
   const begun = useMemo(() => !open.loaded || hasBegun(open.events), [open.loaded, open.events]);
   const pendingCommands = useMemo(() => awaitingDelivery(timeline.flatMap((block) => (block.kind === "command" ? [block.command] : []))), [timeline]);
   const awaitingPermission = useMemo(() => toolCallsAwaitingPermission(timeline), [timeline]);
+  useEffect(
+    () => followSpokenConversation(conversation.id, { events: open.events, timeline, canvas: open.canvas, awaitingApproval: awaitingPermission.size > 0 }, readingAs),
+    [timeline, open.canvas, awaitingPermission],
+  );
   const endsOfReplies = useMemo(() => replyEnds(timeline), [timeline]);
   const timelineNow = useRef(timeline);
   useLayoutEffect(() => {

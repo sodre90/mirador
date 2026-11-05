@@ -7,7 +7,6 @@ export const dictation: Messages["dictation"] = {
   recognitionOff: "听写需要语音识别。可以在设置 → 语音中打开。",
   nothingHeard: "没有听到任何声音，听写已停止。",
   noWords: "语音识别没有听到任何词。",
-  nothingToRepeat: "这里还没有朗读过任何回复，所以没有可重复的内容。",
   didNotReachMirador: (problem) => `你说的话没有传到 Mirador：${problem}`,
   recognitionFailed: (status) => `语音识别失败（${status}）。`,
   replyDidNotReachMirador: (problem) => `回复没有传到 Mirador，无法朗读：${problem}`,

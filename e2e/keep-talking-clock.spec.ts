@@ -12,13 +12,19 @@ test.use(fakeMicrophone);
 
 const host = new TestHost({ fakePrograms: true });
 const firstDone = () => join(host.root, "first-done");
-/** Each dictated message holds the agent's turn until its file exists; the one in between is only dictated into the box. */
+/**
+ * Each message holds the agent's turn until its file exists; the one in between is only dictated into the box, and
+ * the last is heard once the first turn has ended without a reply.
+ */
 const said = () => [`WRITE [{"waitFor": ${JSON.stringify(firstDone())}}]`, "Said while the clock waits.", `WRITE [{"waitFor": ${JSON.stringify(join(host.root, "never"))}}]`];
 
 let heard = 0;
+/** What was read aloud, sentence by sentence. */
+const spoken: string[] = [];
 
 const voiceServer = createServer((request, response) => {
-  request.resume();
+  const body: Buffer[] = [];
+  request.on("data", (chunk: Buffer) => body.push(chunk));
   request.on("end", () => {
     if (request.url!.endsWith("/audio/transcriptions")) {
       response.setHeader("content-type", "application/json");
@@ -28,6 +34,7 @@ const voiceServer = createServer((request, response) => {
       response.setHeader("content-type", "application/json");
       return response.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "The agent answered." }, finish_reason: "stop" }] }));
     }
+    if (request.url!.endsWith("/audio/speech")) spoken.push(JSON.parse(Buffer.concat(body).toString()).input);
     response.setHeader("content-type", "audio/wav");
     response.end(toneWav(1));
   });
@@ -118,15 +125,15 @@ test("with Keep talking, a clock ticks while the agent works on what was dictate
     await expect.poll(ticks, { timeout: 20_000 }).toBe(ticksWhenListening + 2);
   });
 
-  await test.step("it stops once the turn ends", async () => {
+  await test.step("it stops once the turn ends, which says it had no reply and listens for the next message", async () => {
     const ticksBeforeTheEnd = await ticks();
     writeFileSync(firstDone(), "");
-    await page.waitForTimeout(17_000);
+    await expect.poll(() => spoken, { timeout: 30_000 }).toContain("The agent stopped without a reply.");
+    await expect(page.locator(".timeline:visible .message.user")).toHaveCount(2, { timeout: 30_000 });
     expect(await ticks()).toBe(ticksBeforeTheEnd);
   });
 
   await test.step("losing the host while the agent works plays two low tones, and the clock stops", async () => {
-    await dictate(said()[2]!);
     await page.waitForTimeout(1_000);
     await host.stop();
     await expect.poll(sounds, { timeout: 15_000 }).toContain("connection lost");

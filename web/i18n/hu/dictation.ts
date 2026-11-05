@@ -7,7 +7,6 @@ export const dictation: Messages["dictation"] = {
   recognitionOff: "A diktáláshoz beszédfelismerés kell. A Beállítások → Hang részben kapcsolhatod be.",
   nothingHeard: "Semmi sem hallatszott, ezért a diktálás leállt.",
   noWords: "A beszédfelismerés nem hallott szavakat.",
-  nothingToRepeat: "Itt még nem hangzott el felolvasott válasz, így nincs mit megismételni.",
   didNotReachMirador: (problem) => `Amit mondtál, nem jutott el a Miradorhoz: ${problem}`,
   recognitionFailed: (status) => `A beszédfelismerés nem sikerült (${status}).`,
   replyDidNotReachMirador: (problem) => `A válasz nem jutott el a Miradorhoz, hogy felolvassa: ${problem}`,

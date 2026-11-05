@@ -3,23 +3,22 @@ import { flushSync } from "react-dom";
 import { isCanvasFrameMessage } from "../shared/canvas-document.ts";
 import { speaksReplies, type Dictation as Dictated, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
-import { dictationStatus, madeUpFromSilence, onlyThinking, pressed, released, spacedAtCaret, voiceCommand, type DictationPhase, type ListeningFor, type Press } from "./dictation.ts";
+import { dictationStatus, pressed, released, spacedAtCaret, type DictationPhase, type ListeningFor, type Press } from "./dictation.ts";
 import { joinDrafts } from "./drafts.ts";
 import { hints } from "./hints.ts";
 import { refusalText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { insertAtCaret } from "./insert-at-caret.ts";
-import { KEEP_TALKING_WAIT_MS, pauseWatch, type PauseWatch, type SpeechSpan } from "./pause-watch.ts";
+import { pauseWatch, type PauseWatch, type SpeechSpan } from "./pause-watch.ts";
 import { startRecording, type Recording } from "./recorder.ts";
-import { allowReplyAudio, chime, helpWithConversation, onSpokenReplyHeard, quietClock, repeatLastReply, stopReading } from "./reply-player.ts";
+import { allowReplyAudio, chime, quietClock, stopReading } from "./reply-player.ts";
 import { dictates, shortcutKeys } from "./shortcuts.ts";
-import { answeringIn, heardAnswer, helpWithQuestion, repeatQuestion, stopAnswering } from "./spoken-ask.ts";
+import { lendMicrophone, spokenConversationIn } from "./spoken-conversation.ts";
 
 const words = t.dictation;
 const RECOGNITION_OFF = words.recognitionOff;
 const NOTHING_HEARD = words.nothingHeard;
 const NO_WORDS = words.noWords;
-const NOTHING_TO_REPEAT = words.nothingToRepeat;
 
 const releasingKeys = ["Meta", "Control", "Shift"];
 const aDialogIsOpen = () => document.querySelector(".modal-backdrop") !== null;
@@ -77,28 +76,19 @@ export function useDictation({
   const dictatedIntoDraft = useRef(false);
   /** Listening again after a reply was read aloud sends what is heard, so that the conversation goes on hands-free. */
   const sendsWhatIsHeard = useRef(false);
-  /** The two minutes Keep talking waits for words run from the reply, however many rounds hear only noise meanwhile. */
+  /** Until when Keep talking waits for the first words, however many rounds hear only noise meanwhile. */
   const keepTalkingUntil = useRef(0);
   const available = settings.recognition.kind !== "off";
 
   const put = (dictated: Dictated) => {
-    if (!/[\p{L}\p{N}]/u.test(dictated.text)) return setProblem(NO_WORDS);
     if (sendsWhatIsHeard.current) {
-      const command = voiceCommand(dictated.text);
-      if (answeringIn(conversationId)) {
-        if (command === "stop") return stopAnswering(conversationId);
-        if (command === "repeat") return repeatQuestion(conversationId);
-        if (command === "help") return helpWithQuestion(conversationId);
-        setSentOriginal(dictated.original);
-        return heardAnswer(conversationId, dictated.text);
-      }
-      if (command === "stop") return;
-      if (command === "repeat") return repeatLastReply(conversationId) || setProblem(NOTHING_TO_REPEAT);
-      if (command === "help") return helpWithConversation(conversationId);
+      setSentOriginal(dictated.original);
+      return spokenConversationIn(conversationId).heard(dictated.text);
     }
+    if (!/[\p{L}\p{N}]/u.test(dictated.text)) return setProblem(NO_WORDS);
     insertDictated(textarea.current, setText, dictated.text);
     dictatedIntoDraft.current = true;
-    if (settings.sendRightAway || sendsWhatIsHeard.current) {
+    if (settings.sendRightAway) {
       setSentOriginal(dictated.original);
       return latestSendNow.current();
     }
@@ -111,33 +101,30 @@ export function useDictation({
     listening.current = null;
     press.current = { kind: "up" };
     const nextDictationBegan = () => listening.current !== null;
+    const keepsTalking = sendsWhatIsHeard.current;
     try {
       const recording = await ending.recording;
       if (!ending.heardSpeech()) {
         recording.cancel();
         if (nextDictationBegan()) return;
         setPhase("idle");
-        return setProblem(NOTHING_HEARD);
+        setProblem(NOTHING_HEARD);
+        if (keepsTalking) spokenConversationIn(conversationId).heardNothing();
+        return;
       }
       setPhase("transcribing");
-      const keepsTalking = sendsWhatIsHeard.current;
       /** Keep talking waits long for the first word, and the silence and noise before it are what recognition makes words up from. */
       const clip = await recording.finish(keepsTalking ? ending.speechSpan() : null);
       if (settings.keepTalking && speaksReplies(settings)) void chime("heard");
       const dictated = await transcribed(conversationId, clip);
-      if (keepsTalking && (madeUpFromSilence(dictated.text) || onlyThinking(dictated.text))) return listenOnAfterNoise();
       put(dictated);
     } catch (error) {
       if (nextDictationBegan()) return;
       setProblem(problemOf(error));
+      if (keepsTalking) spokenConversationIn(conversationId).listeningFailed(problemOf(error));
     }
-    setPhase("idle");
-  };
-
-  /** What was heard was no message, so the conversation goes on as if nothing had been, with the settings as they are now. */
-  const listenOnAfterNoise = () => {
-    setPhase("idle");
-    latest.current.listenOn();
+    /** What was heard may have been noise, and listening for what is said next has begun meanwhile. */
+    if (!nextDictationBegan()) setPhase("idle");
   };
 
   const onLevel = (watch: PauseWatch, level: number) => {
@@ -148,7 +135,7 @@ export function useDictation({
   /** The microphone would hear a reply being read aloud. */
   const begin = ({ listeningAgain = false } = {}) => {
     sendsWhatIsHeard.current = listeningAgain;
-    setListeningFor(listeningAgain ? (answeringIn(conversationId) ? "answer" : "conversation") : "message");
+    setListeningFor(listeningAgain ? (spokenConversationIn(conversationId).answeringAQuestion ? "answer" : "conversation") : "message");
     stopReading();
     if (speaksReplies(settings)) allowReplyAudio();
     setProblem(null);
@@ -160,6 +147,7 @@ export function useDictation({
       const now = performance.now();
       watch = listeningAgain ? pauseWatch(now, keepTalkingUntil.current - now) : pauseWatch(now);
       setPhase("listening");
+      if (listeningAgain) spokenConversationIn(conversationId).microphoneOpened();
     };
     const started: Listening = {
       recording: startRecording((level) => watch && onLevel(watch, level), recordingStarted),
@@ -202,28 +190,45 @@ export function useDictation({
     if (next.action === "finish") void finish();
   };
 
-  /** Takes up the conversation only when nothing else is going on in it. */
-  const listenAgain = (heardIn: string) => {
-    if (heardIn !== conversationId || listening.current || phase !== "idle") return false;
-    keepTalkingUntil.current = performance.now() + KEEP_TALKING_WAIT_MS;
-    return listenOn();
-  };
-
-  /** Only while Keep talking is on, its two minutes aren't up and the page is in view; the chime ends before the microphone could hear it. */
-  const listenOn = () => {
-    if (!settings.keepTalking || !available || performance.now() >= keepTalkingUntil.current) return false;
+  /** Only while Keep talking is on and the page is in view; the conversation chimes before the microphone could hear it. */
+  const listenAgain = (until: number) => {
+    if (!settings.keepTalking || !available || listening.current) return false;
     if (document.hidden || aDialogIsOpen()) return false;
+    keepTalkingUntil.current = until;
     press.current = { kind: "tapped" };
-    void chime("listening").then(() => {
-      if (!listening.current && press.current.kind === "tapped") begin({ listeningAgain: true });
-    });
+    begin({ listeningAgain: true });
     return true;
   };
 
-  const latest = useRef({ onPress, onRelease, cancel, listenAgain, listenOn });
-  latest.current = { onPress, onRelease, cancel, listenAgain, listenOn };
+  /** Only a listening of the spoken conversation: dictating a message of one's own goes on. */
+  const stopListeningAgain = () => {
+    if (sendsWhatIsHeard.current) cancel();
+  };
 
-  useEffect(() => onSpokenReplyHeard((heardIn) => latest.current.listenAgain(heardIn)), []);
+  const sendSaid = (message: string) => {
+    insertDictated(textarea.current, setText, message);
+    dictatedIntoDraft.current = true;
+    latestSendNow.current();
+  };
+
+  /** Esc ends a spoken conversation that listens, rather than only that listening. */
+  const escape = () => {
+    if (sendsWhatIsHeard.current) spokenConversationIn(conversationId).end();
+    else cancel();
+  };
+
+  const latest = useRef({ onPress, onRelease, cancel, escape, listenAgain, stopListeningAgain, sendSaid });
+  latest.current = { onPress, onRelease, cancel, escape, listenAgain, stopListeningAgain, sendSaid };
+
+  useEffect(
+    () =>
+      lendMicrophone(conversationId, {
+        listen: (until) => latest.current.listenAgain(until),
+        stop: () => latest.current.stopListeningAgain(),
+        send: (message) => latest.current.sendSaid(message),
+      }),
+    [conversationId],
+  );
 
   const microphoneOpen = phase === "starting" || phase === "listening";
   useEffect(() => (microphoneOpen ? quietClock() : undefined), [microphoneOpen]);
@@ -241,7 +246,7 @@ export function useDictation({
       if (event.key === "Escape" && listening.current) {
         event.preventDefault();
         event.stopPropagation();
-        return latest.current.cancel();
+        return latest.current.escape();
       }
       if (!dictates(event)) return;
       event.preventDefault();

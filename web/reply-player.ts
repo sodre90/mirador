@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import type { StoredEvent } from "../shared/model.ts";
+import type { Chime } from "../shared/spoken-conversation.ts";
 import { lastReply, spokenTurn } from "../shared/spoken-replies.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
 import { connection, type ConnectionStatus } from "./connection.ts";
@@ -28,8 +29,6 @@ interface Snapshot {
 interface AwaitedReply {
   conversationId: string;
   afterSeq: number;
-  /** Keeping a spoken conversation going: a clock ticks while the agent works, so that silence isn't a mystery. */
-  ticks: boolean;
 }
 
 const RESUME_WAIT_MS = 500;
@@ -42,8 +41,6 @@ let snapshot: Snapshot = { reading: null, problem: null };
 let stopCurrent: (() => void) | null = null;
 let awaited: AwaitedReply | null = null;
 const listeners = new Set<() => void>();
-/** Each says whether it takes up the conversation; only the first that does listens again. */
-const listenersAgain = new Set<(conversationId: string) => boolean>();
 
 /** A reply's summary and its sentences' sound, kept so that hearing it again starts at once, in the same words. */
 interface KeptSummary {
@@ -141,18 +138,8 @@ function inAdvance<T>(making: Promise<T>) {
   return making;
 }
 
-interface ReadReply {
-  key: string;
-  reply: string;
-  readingAs: string;
-}
-
-/** By conversation, so that "repeat that" reads the same reply again, in the same words. */
-const lastRead = new Map<string, ReadReply>();
-
 /** Sums the reply up and speaks it, starting as soon as the first sentence is ready; reading another reply stops this one. Tells whether it was heard to the end. */
 export async function readReply(conversationId: string, key: string, reply: string, readingAs: string) {
-  lastRead.set(conversationId, { key, reply, readingAs });
   const id = JSON.stringify([conversationId, key, reply, readingAs]);
   return speak(conversationId, key, async (signal) => keptSummary(id) ?? keep(id, { sentences: await sayable(conversationId, reply, signal), sounds: [] }));
 }
@@ -208,39 +195,47 @@ export function stopReadingOf(conversationId: string, key: string) {
   if (snapshot.reading?.conversationId === conversationId && snapshot.reading.key === key) stopReading();
 }
 
+/** Stops what is being read for this conversation, while a reply of another reads on. */
+export function stopReadingAloudIn(conversationId: string) {
+  if (snapshot.reading?.conversationId === conversationId) stopReading();
+}
+
+/** What went wrong reading this aloud, when it did. */
+export function readingProblemOf(conversationId: string, key: string) {
+  const problem = snapshot.problem;
+  return problem?.conversationId === conversationId && problem.key === key ? problem.problem : null;
+}
+
 /** As when the user switches away from the conversation: a reply of another conversation reads on. */
 export function stopReadingIn(conversationId: string) {
-  if (snapshot.reading?.conversationId === conversationId) stopReading();
+  stopReadingAloudIn(conversationId);
   forgetSpokenReply(conversationId);
 }
 
 const TICKS_EVERY_MS = 15_000;
 let ticking: ReturnType<typeof setInterval> | null = null;
 
-function awaitReply(next: AwaitedReply | null) {
-  awaited = next;
+/** In a spoken conversation, a clock tells while the agent works that it is still at it, so that silence isn't a mystery. */
+export function tickTheClock(on: boolean) {
   if (ticking) clearInterval(ticking);
-  ticking = next?.ticks ? setInterval(() => connection.status === "open" && clockTicks(), TICKS_EVERY_MS) : null;
+  ticking = on ? setInterval(() => connection.status === "open" && clockTicks(), TICKS_EVERY_MS) : null;
 }
 
-/** The turn the message starts gets its last reply read aloud when it ends; with ticks, a clock tells meanwhile that the agent is still at it. */
-export function awaitSpokenReply(conversationId: string, events: StoredEvent[], { ticks = false } = {}) {
-  awaitReply({ conversationId, afterSeq: events.at(-1)?.seq ?? 0, ticks });
+/** The turn the message starts gets its last reply read aloud when it ends. */
+export function awaitSpokenReply(conversationId: string, events: StoredEvent[]) {
+  awaited = { conversationId, afterSeq: events.at(-1)?.seq ?? 0 };
 }
-
-/** Keep talking keeps a dictated message's turn going here, so what the agent asks meanwhile is asked aloud. */
-export const keepsTalkingIn = (conversationId: string) => awaited?.conversationId === conversationId && awaited.ticks;
 
 /** As when a message the user typed starts the conversation's next turn; another pane's dictated message still gets its reply read. */
 export function forgetSpokenReply(conversationId: string) {
-  if (awaited?.conversationId === conversationId) awaitReply(null);
+  if (awaited?.conversationId === conversationId) awaited = null;
 }
 
 let lastStatus: ConnectionStatus = connection.status;
 
 /** Losing the host while the clock ticks would otherwise sound just like the agent working on. */
 connection.onStatus((status) => {
-  if (lastStatus === "open" && status !== "open" && awaited?.ticks) connectionLostTones();
+  if (lastStatus === "open" && status !== "open" && ticking) connectionLostTones();
   lastStatus = status;
 });
 
@@ -249,31 +244,14 @@ export function readWhenSpokenTurnEnds(conversationId: string, events: StoredEve
   if (awaited?.conversationId !== conversationId) return;
   const outcome = spokenTurn(events, awaited.afterSeq);
   if (outcome === "going-on") return;
-  awaitReply(null);
+  awaited = null;
   const reply = outcome === "ended" ? lastReply(timeline) : null;
-  if (reply && readingAs) void readReply(conversationId, reply.key, reply.text, readingAs).then((heard) => heard && listenAgainIn(conversationId));
-}
-
-const CONVERSATION_HELP = ["Say stop to end the conversation, or repeat that to hear my last reply again.", "Anything else goes to the agent as your next message."];
-
-/** "Help" in a spoken conversation says what can be said, then listens again. */
-export function helpWithConversation(conversationId: string) {
-  void sayAloud(conversationId, "help", CONVERSATION_HELP).then((heard) => heard && listenAgainIn(conversationId));
-}
-
-/** Reads the conversation's last reply read aloud again, and keeps the spoken conversation going once it is heard; false when none was read. */
-export function repeatLastReply(conversationId: string) {
-  const last = lastRead.get(conversationId);
-  if (!last) return false;
-  void readReply(conversationId, last.key, last.reply, last.readingAs).then((heard) => heard && listenAgainIn(conversationId));
-  return true;
+  if (reply && readingAs) void readReply(conversationId, reply.key, reply.text, readingAs);
 }
 
 const CHIME_SECONDS = 0.18;
 const CHIME_VOLUME = 0.45;
 
-/** For keeping a spoken conversation going with the eyes elsewhere: rising as the microphone opens, falling once it has heard. */
-export type Chime = "listening" | "heard";
 
 const soundPlays = () => context?.state === "running";
 
@@ -292,10 +270,12 @@ function tone(from: number, to: number, at: number, seconds: number, loudness: n
   sound.stop(at + seconds);
 }
 
+const chimeGlides: Record<Chime, [number, number]> = { listening: [660, 990], heard: [880, 520], trouble: [300, 200] };
+
 /** Resolves once it has played, at once when the page can't play sound; by the clock, as a context suspended meanwhile would never end the tone. */
 export function chime(kind: Chime) {
   if (!soundPlays()) return Promise.resolve();
-  const [from, to] = kind === "listening" ? [660, 990] : [880, 520];
+  const [from, to] = chimeGlides[kind];
   tone(from, to, context!.currentTime, CHIME_SECONDS, CHIME_VOLUME);
   return new Promise<void>((resolve) => setTimeout(resolve, CHIME_SECONDS * 1000));
 }
@@ -373,17 +353,4 @@ function connectionLostTones() {
   const at = context!.currentTime;
   tone(330, 250, at, 0.3, CHIME_VOLUME);
   tone(250, 180, at + 0.35, 0.4, CHIME_VOLUME);
-}
-
-/** The first composer of the conversation that can listen again does; another pane of it stays quiet. */
-export function listenAgainIn(conversationId: string) {
-  for (const listener of listenersAgain) if (listener(conversationId)) return;
-}
-
-/** For keeping a spoken conversation going: called once a dictated message's reply has been read aloud to the end. */
-export function onSpokenReplyHeard(listener: (conversationId: string) => boolean) {
-  listenersAgain.add(listener);
-  return () => {
-    listenersAgain.delete(listener);
-  };
 }

@@ -5,7 +5,6 @@ export const dictation = {
   recognitionOff: "Dictating needs speech recognition. Settings → Voice can turn it on.",
   nothingHeard: "Nothing was heard, so dictation stopped.",
   noWords: "Speech recognition heard no words.",
-  nothingToRepeat: "No reply has been read aloud here yet, so there is nothing to repeat.",
   didNotReachMirador: (problem: string) => `What you said didn't reach Mirador: ${problem}`,
   recognitionFailed: (status: string) => `Speech recognition failed (${status}).`,
   replyDidNotReachMirador: (problem: string) => `The reply didn't reach Mirador to be read aloud: ${problem}`,

@@ -7,7 +7,6 @@ export const dictation: Messages["dictation"] = {
   recognitionOff: "Para dictar hace falta el reconocimiento de voz. Puedes activarlo en Configuración → Voz.",
   nothingHeard: "No se oyó nada, así que el dictado se detuvo.",
   noWords: "El reconocimiento de voz no oyó ninguna palabra.",
-  nothingToRepeat: "Aún no se ha leído en voz alta ninguna respuesta aquí, así que no hay nada que repetir.",
   didNotReachMirador: (problem) => `Lo que dijiste no llegó a Mirador: ${problem}`,
   recognitionFailed: (status) => `El reconocimiento de voz falló (${status}).`,
   replyDidNotReachMirador: (problem) => `La respuesta no llegó a Mirador para leerla en voz alta: ${problem}`,

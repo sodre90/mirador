@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
 import { lastReply, spokenTurn } from "../shared/spoken-replies.ts";
-import { listenAgainIn, onSpokenReplyHeard } from "../web/reply-player.ts";
+import { lendMicrophone, spokenConversationIn } from "../web/spoken-conversation.ts";
 
 const stored = (...events: ConversationEvent[]): StoredEvent[] => events.map((event, index) => ({ seq: index + 1, at: index, event }));
 const asked: ConversationEvent = { type: "user-message", text: "Run the e2e tests." };
@@ -31,16 +31,20 @@ describe("reading the reply to a dictated message", () => {
 });
 
 describe("keeping a spoken conversation going", () => {
-  test("only the first composer that takes up the conversation listens again, and one gone hears nothing", () => {
+  test("only the first composer that can listen again does, and one gone hears nothing", async () => {
     const heard: string[] = [];
-    const busy = onSpokenReplyHeard((conversationId) => (heard.push(`busy ${conversationId}`), false));
-    const free = onSpokenReplyHeard((conversationId) => (heard.push(`free ${conversationId}`), true));
-    const later = onSpokenReplyHeard((conversationId) => (heard.push(`later ${conversationId}`), true));
-    listenAgainIn("c1");
-    expect(heard).toEqual(["busy c1", "free c1"]);
+    const microphone = (name: string, free: boolean) => ({ listen: () => (heard.push(name), free), stop: () => {}, send: () => {} });
+    const busy = lendMicrophone("c1", microphone("busy", false));
+    const free = lendMicrophone("c1", microphone("free", true));
+    const later = lendMicrophone("c1", microphone("later", true));
+    spokenConversationIn("c1").tap();
+    await Bun.sleep(0);
+    expect(heard).toEqual(["busy", "free"]);
     free();
-    listenAgainIn("c2");
-    expect(heard.slice(2)).toEqual(["busy c2", "later c2"]);
+    spokenConversationIn("c1").end();
+    spokenConversationIn("c1").tap();
+    await Bun.sleep(0);
+    expect(heard.slice(2)).toEqual(["busy", "later"]);
     busy();
     later();
   });

@@ -7,7 +7,6 @@ export const dictation: Messages["dictation"] = {
   recognitionOff: "Zum Diktieren braucht es die Spracherkennung. Du kannst sie unter Einstellungen → Stimme einschalten.",
   nothingHeard: "Es war nichts zu hören, deshalb wurde das Diktat beendet.",
   noWords: "Die Spracherkennung hat keine Wörter gehört.",
-  nothingToRepeat: "Hier wurde noch keine Antwort vorgelesen, also gibt es nichts zu wiederholen.",
   didNotReachMirador: (problem) => `Was du gesagt hast, ist nicht bei Mirador angekommen: ${problem}`,
   recognitionFailed: (status) => `Die Spracherkennung ist fehlgeschlagen (${status}).`,
   replyDidNotReachMirador: (problem) => `Die Antwort ist zum Vorlesen nicht bei Mirador angekommen: ${problem}`,

@@ -1,7 +1,8 @@
+import { KEEP_LISTENING_MS } from "../shared/spoken-conversation.ts";
 export const PAUSE_ENDS_MS = 2_500;
 export const NOTHING_HEARD_MS = 8_000;
 /** Keeping a spoken conversation going leaves time to think before speaking; "stop" or Esc ends it sooner. */
-export const KEEP_TALKING_WAIT_MS = 120_000;
+export const KEEP_TALKING_WAIT_MS = KEEP_LISTENING_MS;
 /** The quietest level counted as speech, as an RMS of samples from -1 to 1, whatever the room's noise. */
 const LEAST_SPEECH_LEVEL = 0.015;
 const SPEECH_OVER_NOISE = 3;

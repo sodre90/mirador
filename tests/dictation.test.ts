@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { EngineServerState } from "../shared/voice-engine.ts";
-import { dictationStatus, HOLD_MS, madeUpFromSilence, type MicrophonePlace, microphoneProblem, NO_MICROPHONE_API, onlyThinking, type Press, pressed, released, spacedAtCaret, voiceCommand } from "../web/dictation.ts";
+import { dictationStatus, HOLD_MS, type MicrophonePlace, microphoneProblem, NO_MICROPHONE_API, type Press, pressed, released, spacedAtCaret } from "../web/dictation.ts";
+import { madeUpFromSilence, onlyThinking, voiceCommand } from "../shared/spoken-commands.ts";
 import { KEEP_TALKING_WAIT_MS, NOTHING_HEARD_MS, PAUSE_ENDS_MS, pauseWatch } from "../web/pause-watch.ts";
 import { wavOf } from "../web/wav.ts";
 
