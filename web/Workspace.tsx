@@ -23,7 +23,7 @@ const MIN_PANE_HEIGHT = 120;
 const MIN_CONVERSATION_HEIGHT = 300;
 const minimumHeightOf = (pane: PaneId) => (pane === "conversation" ? MIN_CONVERSATION_HEIGHT : MIN_PANE_HEIGHT);
 const paneOrder: PaneId[] = ["conversation", "canvas", "terminals"];
-const NOT_A_BAR_BACKGROUND = "button, a, input, select, textarea, label, [role=tab], [role=separator], .renamable, [contenteditable]";
+const NOT_A_BAR_BACKGROUND = "button, a, input, select, textarea, label, [role=tab], [role=separator], [role=dialog], .renamable, [contenteditable]";
 
 interface PaneControls {
   fullscreen: PaneId | null;

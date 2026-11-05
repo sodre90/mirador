@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addWorkspace, openProfiles, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, openProfiles, signIn, startConversation, workspaceCard, conversationSettings } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost({ withoutProfiles: true });
@@ -34,7 +34,7 @@ test("with no profile yet, Mirador offers the first one filled in; workspaces st
     await setUp.getByRole("button", { name: "Create profile" }).click();
     await expect(card.locator(".agent-chip-label")).toHaveText("Claude Code");
     await startConversation(page);
-    await expect(page.getByLabel("Profile", { exact: true }).filter({ visible: true }).locator("option:checked")).toHaveText("Claude Code");
+    await expect((await conversationSettings(page)).getByLabel("Profile", { exact: true }).locator("option:checked")).toHaveText("Claude Code");
   });
 
   await test.step("the only profile cannot be deleted; with another, deleting it moves the workspace to that one", async () => {

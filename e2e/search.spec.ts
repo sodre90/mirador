@@ -21,7 +21,7 @@ async function startConversationIn(page: Page, directory: string) {
   const previousUrl = page.url();
   await workspaceCard(page, directory).getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
-  await expect(page.locator(".chat-header:visible").getByLabel("Model", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".chat-header:visible .settings-model")).toBeVisible({ timeout: 60_000 });
   return page.url().match(/#\/c\/(.+)$/)![1]!;
 }
 

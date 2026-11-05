@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, createProfile, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings, turnOnYolo } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -17,8 +17,8 @@ const SLOW_SCRIPT = "wait-then-print.sh";
 /** Claude Code retitles a session as later prompts come, so the conversation the tests share is opened by its id. */
 let sharedConversationId = "";
 
-const profilePicker = (page: Page) => page.getByLabel("Profile", { exact: true });
-const chosenProfile = (page: Page) => profilePicker(page).locator("option:checked");
+const profilePicker = async (page: Page) => (await conversationSettings(page)).getByLabel("Profile", { exact: true });
+const chosenProfile = async (page: Page) => (await profilePicker(page)).locator("option:checked");
 
 async function requestContaining(text: string) {
   const find = () => gateway.messageRequests().find(({ body }) => body.includes(text));
@@ -66,8 +66,8 @@ test("a profile's environment and pre-launch command reach Claude Code, and its 
 
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "fake gateway · Claude Code" });
   sharedConversationId = await startConversation(page);
-  await expect(chosenProfile(page)).toHaveText("fake gateway");
-  await expect(page.getByLabel("Model", { exact: true })).toHaveValue("e2e-gateway-model");
+  await expect(await chosenProfile(page)).toHaveText("fake gateway");
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("e2e-gateway-model");
   expect(readFileSync(prelaunchMarker, "utf8").trim()).toBe(gateway.url);
 
   await sendMessage(page, "hello");
@@ -118,11 +118,11 @@ test("a conversation moves to another profile of its agent and continues the sam
   const saved = await createProfile(page, "second gateway", `${gatewayEnvironment(gateway, "e2e-second-token")}\nANTHROPIC_MODEL=e2e-second-model`);
   await saved.getByRole("button", { name: "Close" }).click();
   await page.goto(`${host.origin}/#/c/${sharedConversationId}`);
-  await expect(chosenProfile(page)).toHaveText("fake gateway");
+  await expect(await chosenProfile(page)).toHaveText("fake gateway");
 
-  await profilePicker(page).selectOption({ label: "second gateway" });
+  await (await profilePicker(page)).selectOption({ label: "second gateway" });
   await expect(page.locator(".timeline")).toContainText("Now using the profile “second gateway”");
-  await expect(page.getByLabel("Model", { exact: true })).toHaveValue("e2e-second-model", { timeout: 60_000 });
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("e2e-second-model", { timeout: 60_000 });
   await sendMessage(page, "after the switch");
   const afterSwitch = await requestContaining("after the switch");
   expect(afterSwitch.authorization).toBe("Bearer e2e-second-token");
@@ -136,8 +136,8 @@ test("a new conversation moved to another profile before its first message start
   await signIn(page, host);
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "fake gateway · Claude Code" });
   await startConversation(page);
-  await profilePicker(page).selectOption({ label: "second gateway" });
-  await expect(page.getByLabel("Model", { exact: true })).toHaveValue("e2e-second-model", { timeout: 60_000 });
+  await (await profilePicker(page)).selectOption({ label: "second gateway" });
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("e2e-second-model", { timeout: 60_000 });
 
   await sendMessage(page, "first message, on the second gateway");
   const first = await requestContaining("first message, on the second gateway");
@@ -156,10 +156,10 @@ test("a conversation whose profile was deleted continues after picking another o
   await expect(dialog.locator(".profile-list li", { hasText: "second gateway" })).toHaveCount(0);
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.goto(`${host.origin}/#/c/${sharedConversationId}`);
-  await expect(chosenProfile(page)).toHaveText("Deleted profile");
+  await expect(await chosenProfile(page)).toHaveText("Deleted profile");
 
-  await profilePicker(page).selectOption({ label: "fake gateway" });
-  await expect(page.getByLabel("Model", { exact: true })).toHaveValue("e2e-gateway-model", { timeout: 60_000 });
+  await (await profilePicker(page)).selectOption({ label: "fake gateway" });
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("e2e-gateway-model", { timeout: 60_000 });
   await sendMessage(page, "back on the first gateway");
   const afterSwitch = await requestContaining("back on the first gateway");
   expect(afterSwitch.authorization).toBe("Bearer e2e-rotated-token");
@@ -173,9 +173,7 @@ test("switching profile while the agent works stops the turn, moves the session 
   await saved.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "scripted claude · Claude Code" });
   await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
   await sendMessage(page, `RUN sh ${SLOW_SCRIPT}`);
   await expect(page.locator(".timeline").locator(".tool-pending, .tool-in_progress").first()).toBeVisible();
   const composer = page.locator(".composer textarea");
@@ -183,8 +181,8 @@ test("switching profile while the agent works stops the turn, moves the session 
   await composer.press("Enter");
   await expect(page.locator(".queue .queued-text")).toHaveText(["queued before the switch"]);
 
-  await expect(profilePicker(page)).toBeEnabled();
-  await profilePicker(page).selectOption({ label: "fake gateway" });
+  await expect(await profilePicker(page)).toBeEnabled();
+  await (await profilePicker(page)).selectOption({ label: "fake gateway" });
   await expect(page.locator(".timeline")).toContainText("Turn ended: cancelled");
   await expect(page.locator(".timeline")).toContainText("Now using the profile “fake gateway”");
   const continued = await requestContaining("Continue where you left off.");

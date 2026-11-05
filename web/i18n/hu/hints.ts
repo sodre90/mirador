@@ -41,6 +41,9 @@ export const hints: Messages["hints"] = {
   dictateOff: "A diktáláshoz beszédfelismerés kell. A Beállítások → Hang részben kapcsolhatod be.",
   yolo:
     "Mindent jóváhagy kérdezés nélkül.\n\nAmikor az ágens engedélyt kér egy eszköz futtatására, a host azonnal az ágens saját „allow” lehetőségével válaszol, ahelyett hogy kártyát mutatna neked. Bekapcsoláskor a már várakozó kérést is jóváhagyja. Azok a kérések, amelyekben nincs engedélyező lehetőség, továbbra is megkérdeznek.\n\nEz független az ágens Módjától: azok az eszközök, amelyeket a Mód már enged, sosem kérdeznek. Beszélgetésenként mentődik.",
+  conversationSettings:
+    "A beszélgetés profilja, ágense, modellje és többi beállítása.\n\nA profil csak a kezdőértékeiket adja meg: ha itt változtatod őket, a profil nem változik.",
+  yoloOn: "A YOLO be van kapcsolva: az ágens eszközhívásait kérdezés nélkül jóváhagyja. A beszélgetés beállításaiban kapcsolhatod ki.",
   profile:
     "A profil (környezeti változók és indítás előtti parancs), amellyel az ágens fut.\n\nMinden profil saját ágensfolyamatot futtat. Váltáskor ez a munkamenet bezárul a jelenlegi folyamaton, és az újon folytatódik, így az ágens megtartja az egész beszélgetést. A modell visszaáll az új profil alapértelmezettjére.\n\nHa váltasz, miközben az ágens dolgozik, leáll a köre, a munkamenet átkerül, és az ágens ott folytatja, ahol abbahagyta; a sorba állított üzeneteid ezután mennek ki.\n\nMás ágens profiljai csak az első üzenet előtt választhatók: az az ágens új munkamenetet kezd. Ha a beszélgetés már elkezdődött, indíts új beszélgetést a használatukhoz.",
   questions:

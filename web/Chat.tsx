@@ -1,13 +1,11 @@
-import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ToolCallContent } from "@agentclientprotocol/sdk";
 import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type PointerEvent, type RefObject, type SetStateAction } from "react";
 import { modelLabel } from "../shared/claude-models.ts";
-import { flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";
 import { hasBegun } from "../shared/conversation-begun.ts";
 import { allInputTokens, formatTokens, type SubagentUsage } from "../shared/subagent-usage.ts";
 import {
   harnessLabels,
   harnessRewinds,
-  type AskMode,
   type AsyncTask,
   type AsyncTaskState,
   type Conversation,
@@ -20,8 +18,7 @@ import {
   type StoredEvent,
   type UsageLimitWait,
 } from "../shared/model.ts";
-import { profileSettingValue } from "../shared/apps.ts";
-import { choicesOf, toolTitlesOfPlugins, usePluginSettings } from "./plugin-settings.ts";
+import { toolTitlesOfPlugins } from "./plugin-settings.ts";
 import { readableToolTitle as readableToolTitleOf } from "../shared/tool-title.ts";
 import { panelCommandLine, refusedPanelCommand } from "../shared/panel-commands.ts";
 import { adjacentPlaceholder, placeholdersIn, type TextRange } from "../shared/prompt-templates.ts";
@@ -33,7 +30,6 @@ import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { parseAnsi, plainTextOf } from "./ansi.ts";
 import { harnessSteers, useEnterWhileBusy, type EnterWhileBusy } from "./busy-sending.ts";
 import { connection } from "./connection.ts";
-import { choiceGroups } from "./choices.ts";
 import { MessageImages, PastedImages, useComposerImages } from "./ComposerImages.tsx";
 import { useDroppedFiles } from "./dropped-files.ts";
 import { DictateButton, DictationLines, useDictation } from "./Dictation.tsx";
@@ -66,7 +62,6 @@ import { awaitSpokenReply, forgetSpokenReply, readWhenSpokenTurnEnds, stopReadin
 import { canFork } from "./actions.ts";
 import { hints, statusHints } from "./hints.ts";
 import { formatNumber, locale, t } from "./i18n/index.ts";
-import { SearchableSelect } from "./SearchableSelect.tsx";
 import { useMentionMenu } from "./MentionMenu.tsx";
 import { usePromptHistory } from "./PromptHistory.ts";
 import { TemplateFinder, TemplatePicker } from "./PromptTemplates.tsx";
@@ -107,163 +102,42 @@ import {
   type TimelineBlock,
   type ToolBlock,
 } from "../shared/timeline.ts";
-import { ProfileDot } from "./ProfileDot.tsx";
 import { noticeText } from "./notice-text.ts";
 import { errorText } from "./problem-text.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import { formatClockTime, formatDuration, formatFullTime } from "./timestamps.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
-
-/** Past this many choices a plain select is hard to scan: opencode lists every model of every provider. */
-const SEARCHABLE_FROM_CHOICES = 20;
+import { ConversationSettingsPopover, ConversationSettingsToggle, useConversationSettings } from "./ConversationSettings.tsx";
 
 const words = t.chat;
 
 /** A command Claude Code opens a panel for only in its own terminal gets one there, on the conversation's profile. */
 const requestPanelCommand = (conversationId: string, line: string) => requestProgram({ type: "terminal.open-panel-command", conversationId, line });
 
-const configOptionHint = (option: SessionConfigOption) => [option.description, hints.configOption].filter(Boolean).join("\n\n");
-
-function ConfigControl({ conversationId, option }: { conversationId: string; option: SessionConfigOption }) {
-  const setValue = (value: string | boolean) => connection.send({ type: "conversation.set-config", conversationId, configId: option.id, value });
-  if (option.type === "boolean") {
-    return (
-      <label className="config" data-hint={configOptionHint(option)}>
-        <input type="checkbox" aria-label={option.name} checked={option.currentValue} onChange={(event) => setValue(event.target.checked)} />
-        {option.name}
-      </label>
-    );
-  }
-  const choices = flatSelectOptions(option);
-  if (choices.length > SEARCHABLE_FROM_CHOICES) {
-    return (
-      <SearchableSelect
-        label={option.name}
-        hint={configOptionHint(option)}
-        value={option.currentValue}
-        groups={choiceGroups(option)}
-        onChange={setValue}
-      />
-    );
-  }
-  return (
-    <label className="config" data-hint={configOptionHint(option)}>
-      <span>{option.name}</span>
-      <select aria-label={option.name} value={option.currentValue} onChange={(event) => setValue(event.target.value)}>
-        {choices.map((choice) => (
-          <option key={choice.value} value={choice.value} title={choice.description ?? undefined}>
-            {nameWithMultiplier(choice)}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 const isBusy = (conversation: Conversation) => conversation.status === "running" || conversation.status === "starting";
 
 /** How long a graceful stop is given before the button offers to kill the wedged agent process. */
 const STOP_FORCE_GRACE_MS = 3000;
 
-/**
- * Profiles of the conversation's own agent, then the other agents', which can be picked only until the conversation has
- * begun: another agent cannot continue its session. One that has no profile to run on asks for one.
- */
-function ProfilePicker({ conversation, profiles, begun }: { conversation: Conversation; profiles: Profile[]; begun: boolean }) {
-  const choices = profiles.filter(({ harness }) => harness === conversation.harness);
-  const otherAgents = profiles.filter(({ harness }) => harness !== conversation.harness);
-  const hasItsProfile = choices.some(({ id }) => id === conversation.profileId);
+function HeaderIcon({ shape }: { shape: "find" | "fork" | "clock" }) {
+  const paths = {
+    find: <path d="M7 2.5a4.5 4.5 0 1 1 0 9a4.5 4.5 0 0 1 0-9ZM10.3 10.3L13.5 13.5" />,
+    fork: (
+      <>
+        <circle cx="5" cy="3.5" r="1.5" />
+        <circle cx="11" cy="3.5" r="1.5" />
+        <circle cx="5" cy="12.5" r="1.5" />
+        <path d="M5 5v6M11 5v1.5a2.5 2.5 0 0 1-2.5 2.5H7a2 2 0 0 0-2 2" />
+      </>
+    ),
+    clock: <path d="M8 2.25a5.75 5.75 0 1 1 0 11.5a5.75 5.75 0 0 1 0-11.5ZM8 5v3.25l2.25 1.5" />,
+  };
   return (
-    <label className="config" data-hint={hints.profile}>
-      <span>{words.header.profile}</span>
-      <ProfileDot profile={profiles.find(({ id }) => id === conversation.profileId)} />
-      <select
-        aria-label={words.header.profile}
-        value={hasItsProfile ? conversation.profileId! : ""}
-        onChange={(event) => connection.send({ type: "conversation.set-profile", conversationId: conversation.id, profileId: event.target.value })}
-      >
-        {!hasItsProfile && (
-          <option value="" disabled>
-            {conversation.profileId === null ? words.header.pickProfile : words.header.deletedProfile}
-          </option>
-        )}
-        {choices.map(({ id, name }) => (
-          <option key={id} value={id}>
-            {name}
-          </option>
-        ))}
-        {otherAgents.length > 0 && (
-          <optgroup label={begun ? words.header.otherAgentsBegun : words.header.otherAgents}>
-            {otherAgents.map(({ id, name, harness }) => (
-              <option key={id} value={id} disabled={begun}>
-                {name} · {harnessLabels[harness]}
-              </option>
-            ))}
-          </optgroup>
-        )}
-      </select>
-    </label>
+    <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      {paths[shape]}
+    </svg>
   );
-}
-
-function YoloSwitch({ conversation }: { conversation: Conversation }) {
-  return (
-    <label
-      className={`config yolo ${conversation.bypassPermissions ? "on" : ""}`}
-      data-hint={hints.yolo}
-    >
-      <input
-        type="checkbox"
-        aria-label="YOLO"
-        checked={conversation.bypassPermissions}
-        onChange={(event) =>
-          connection.send({ type: "conversation.set-bypass-permissions", conversationId: conversation.id, bypassPermissions: event.target.checked })
-        }
-      />
-      YOLO
-    </label>
-  );
-}
-
-const FOLLOWS_PROFILE = "\u0000profile";
-
-/** Each plugin's profile settings, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none. */
-function PluginSettingMenus({ conversation, profiles }: { conversation: Conversation; profiles: Profile[] }) {
-  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings }) => (profileSettings ?? []).map((setting) => ({ plugin, setting })));
-  if (conversation.startedBy) return null;
-  const profile = profiles.find(({ id }) => id === conversation.profileId);
-  return withProfileSettings.map(({ plugin, setting }) => {
-    const choices = choicesOf(setting, profiles, conversation.profileId);
-    const profilesValue = profileSettingValue(profile?.pluginSettings, plugin, setting);
-    const profilesLabel = choices.find(({ value }) => value === profilesValue)?.label ?? words.header.none;
-    const chosen = conversation.pluginSettings?.[plugin]?.[setting.id] ?? FOLLOWS_PROFILE;
-    return (
-      <label key={`${plugin}/${setting.id}`} className="config" data-hint={[setting.hint, hints.conversationPluginSetting].filter(Boolean).join("\n\n")}>
-        <span>{setting.label}</span>
-        <select
-          aria-label={setting.label}
-          value={chosen}
-          onChange={(event) =>
-            connection.send({
-              type: "conversation.set-plugin-setting",
-              conversationId: conversation.id,
-              plugin,
-              setting: setting.id,
-              value: event.target.value === FOLLOWS_PROFILE ? null : event.target.value,
-            })
-          }
-        >
-          <option value={FOLLOWS_PROFILE}>{words.header.profilesChoice(profilesLabel)}</option>
-          {choices.map((choice) => (
-            <option key={choice.value} value={choice.value}>
-              {choice.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    );
-  });
 }
 
 function ChatHeader({
@@ -288,70 +162,57 @@ function ChatHeader({
   begun: boolean;
 }) {
   const statusDetail = statusDetailOf(conversation);
+  const settings = useConversationSettings();
   return (
     <header className="chat-header" data-pane-bar>
       <div className="title-row">
-        <PaneGrip pane="conversation" />
-        <h2>
-          <ConversationTitle conversation={conversation} startEditingOn="click" className="conversation-name" />
-        </h2>
-        <span className={`badge status-${conversation.status}`} data-hint={statusHints[conversation.status]}>
-          {words.status[conversation.status]}
-        </span>
-        {runningSubagents > 0 && (
-          <button type="button" className="subagents-running" data-hint={hints.subagentsRunning} onClick={onShowRunningSubagent}>
-            ◐ {words.header.subagentsRunning(runningSubagents)}
-          </button>
-        )}
-        {conversation.openInTerminal && (
-          <span className={`badge terminal-${conversation.openInTerminal}`} data-hint={hints.inTerminal}>
-            {words.header.inTerminal(words.terminalActivity[conversation.openInTerminal])}
+        <div className="title-line">
+          <PaneGrip pane="conversation" />
+          <h2>
+            <ConversationTitle conversation={conversation} startEditingOn="click" className="conversation-name" />
+          </h2>
+          <span className={`badge status-${conversation.status}`} data-hint={statusHints[conversation.status]}>
+            {words.status[conversation.status]}
           </span>
-        )}
-        <span className="harness">{harnessLabels[conversation.harness]}</span>
-        <button type="button" className="find-trigger" data-hint={hints.find} data-shortcut={shortcutKeys().find} onClick={onFind}>
-          {words.header.find}
-        </button>
-        <button type="button" className="fork-conversation" data-hint={hints.fork} disabled={!forkable} onClick={onFork}>
-          {words.header.fork}
-        </button>
-        <button
-          type="button"
-          className={`remind-conversation ${isPending(conversation.reminder) ? "set" : ""}`}
-          aria-label={t.reminders.headerButton}
-          data-hint={t.reminders.headerHint}
-          data-shortcut={shortcutKeys().remind}
-          onClick={onRemind}
-        >
-          ⏰
-        </button>
-        <FullscreenToggle pane="conversation" />
+          {runningSubagents > 0 && (
+            <button type="button" className="subagents-running" data-hint={hints.subagentsRunning} onClick={onShowRunningSubagent}>
+              ◐ {words.header.subagentsRunning(runningSubagents)}
+            </button>
+          )}
+          {conversation.openInTerminal && (
+            <span className={`badge terminal-${conversation.openInTerminal}`} data-hint={hints.inTerminal}>
+              {words.header.inTerminal(words.terminalActivity[conversation.openInTerminal])}
+            </span>
+          )}
+          <span className="header-actions">
+            <ConversationSettingsToggle conversation={conversation} profiles={profiles} settings={settings} />
+            {conversation.bypassPermissions && (
+              <span className="yolo-on" data-hint={hints.yoloOn}>
+                YOLO
+              </span>
+            )}
+            <button type="button" className="icon header-icon find-trigger" aria-label={words.header.find} data-hint={hints.find} data-shortcut={shortcutKeys().find} onClick={onFind}>
+              <HeaderIcon shape="find" />
+            </button>
+            <button type="button" className="icon header-icon fork-conversation" aria-label={words.header.fork} data-hint={hints.fork} disabled={!forkable} onClick={onFork}>
+              <HeaderIcon shape="fork" />
+            </button>
+            <button
+              type="button"
+              className={`icon header-icon remind-conversation ${isPending(conversation.reminder) ? "set" : ""}`}
+              aria-label={t.reminders.headerButton}
+              data-hint={t.reminders.headerHint}
+              data-shortcut={shortcutKeys().remind}
+              onClick={onRemind}
+            >
+              <HeaderIcon shape="clock" />
+            </button>
+            <FullscreenToggle pane="conversation" />
+          </span>
+        </div>
       </div>
       {statusDetail && <div className="status-detail">{statusDetail}</div>}
-      <div className="controls">
-        <ProfilePicker conversation={conversation} profiles={profiles} begun={begun} />
-        {conversation.configOptions.map((option) => (
-          <ConfigControl key={option.id} conversationId={conversation.id} option={option} />
-        ))}
-        <YoloSwitch conversation={conversation} />
-        <PluginSettingMenus conversation={conversation} profiles={profiles} />
-        <label className="config" data-hint={hints.questions}>
-          <span>{words.header.questions}</span>
-          <select
-            aria-label={words.header.questions}
-            value={conversation.askMode}
-            onChange={(event) =>
-              connection.send({ type: "conversation.set-ask-mode", conversationId: conversation.id, askMode: event.target.value as AskMode })
-            }
-          >
-            {(Object.keys(words.askMode) as AskMode[]).map((mode) => (
-              <option key={mode} value={mode}>
-                {words.askMode[mode]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      <ConversationSettingsPopover conversation={conversation} profiles={profiles} begun={begun} settings={settings} />
     </header>
   );
 }

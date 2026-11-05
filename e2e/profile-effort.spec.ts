@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, openProfiles, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, openProfiles, signIn, conversationSettings } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -52,12 +52,12 @@ test("a profile sets the effort of the conversations that start with it or move 
     await expect(profiles.getByLabel("Profile effort").locator("option")).toHaveText(["Agent's default"]);
     await profiles.getByRole("button", { name: "Close" }).click();
   }
-  const effort = page.getByLabel("Effort", { exact: true }).filter({ visible: true });
-  const profilePicker = page.getByLabel("Profile", { exact: true }).filter({ visible: true });
+  const effort = async () => (await conversationSettings(page)).getByLabel("Effort", { exact: true });
+  const profilePicker = async () => (await conversationSettings(page)).getByLabel("Profile", { exact: true });
   const timeline = page.locator(".timeline:visible");
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "plain · opencode" });
   const plain = await startConversationWithoutModel(page);
-  await expect(effort).toHaveValue("low");
+  await expect(await effort()).toHaveValue("low");
 
   await test.step("the profile offers the effort levels the agent listed, and keeps one", async () => {
     const editor = await openProfiles(page);
@@ -72,24 +72,24 @@ test("a profile sets the effort of the conversations that start with it or move 
   await test.step("a conversation that starts with the profile takes it", async () => {
     await page.getByLabel("Agent", { exact: true }).selectOption({ label: "thorough · opencode" });
     await startConversationWithoutModel(page);
-    await expect(effort).toHaveValue("high");
+    await expect(await effort()).toHaveValue("high");
     expect(optionChanges()).toEqual(["thorough set effort to high"]);
   });
 
   await test.step("a conversation moved to the profile takes it too", async () => {
     await page.locator(`li[data-reorder-id="${plain}"]`).click();
-    await expect(effort).toHaveValue("low");
-    await profilePicker.selectOption({ label: "thorough" });
+    await expect(await effort()).toHaveValue("low");
+    await (await profilePicker()).selectOption({ label: "thorough" });
     await expect(timeline).toContainText("Now using the profile “thorough”");
-    await expect(effort).toHaveValue("high");
+    await expect(await effort()).toHaveValue("high");
   });
 
   await test.step("a level the agent does not offer leaves the conversation's own, without an error", async () => {
     await saveProfileWithEffort(page, "maxed", "FAKE_ACP_MODES=1\nFAKE_ACP_NAME=maxed", "max");
-    await profilePicker.selectOption({ label: "maxed" });
+    await (await profilePicker()).selectOption({ label: "maxed" });
     await expect(timeline).toContainText("Now using the profile “maxed”");
     await expect.poll(optionChanges).toContain("maxed set effort to high");
-    await expect(effort).toHaveValue("high");
+    await expect(await effort()).toHaveValue("high");
     expect(optionChanges()).not.toContain("maxed set effort to max");
     await expect(timeline.locator(".error-line")).toHaveCount(0);
   });

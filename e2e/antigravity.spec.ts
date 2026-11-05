@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { chmodSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { addWorkspace, answerCanvasQuestion, createProfile, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, createProfile, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { ScriptedModel, antigravityProgram, scriptedAntigravityEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -35,7 +35,7 @@ test("an Antigravity conversation replies and shows a canvas page without asking
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Antigravity` });
   await startConversation(page);
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("Antigravity");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "Antigravity");
 
   await sendMessage(page, "hello Antigravity");
   await waitForTurnToEnd(page);

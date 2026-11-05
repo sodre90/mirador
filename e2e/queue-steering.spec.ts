@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, eventsInOrderOn, lastAgentMessage, openSettings, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, eventsInOrderOn, lastAgentMessage, openSettings, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -33,9 +33,7 @@ test("a message sent with Enter while Claude Code runs a tool joins the turn onc
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
   await sendMessage(page, `RUN sh ${SLOW_SCRIPT}`);
   await expect(page.locator(".timeline").locator(".tool-pending, .tool-in_progress").filter({ has: page.locator(".shell-command", { hasText: SLOW_SCRIPT }) })).toBeVisible();
 

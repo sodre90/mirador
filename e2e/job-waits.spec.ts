@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, allowNotifications, createProfile, notificationsShown, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, allowNotifications, createProfile, notificationsShown, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -50,9 +50,7 @@ test("the agent has the host wait for a job it left running, then resume the age
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · opencode` });
   const conversationId = await startConversation(page);
   const sidebarDot = page.locator(`li[data-reorder-id="${conversationId}"] .dot`).first();
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
   await expect.poll(sessionId).not.toBeNull();
 
   const waits = page.getByRole("region", { name: "Jobs waited for" });

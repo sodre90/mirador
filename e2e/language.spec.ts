@@ -81,7 +81,10 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   await expect(sidebar.locator(".conversation-title").first()).toHaveText("Új beszélgetés");
   const windowBar = page.locator(".window-bar");
   await expect(windowBar.getByRole("button", { name: "Vászon elrejtése" }).or(windowBar.getByRole("button", { name: "Vászon mutatása" }))).toBeVisible();
-  await expect(header.getByLabel("Kérdések").locator("option")).toHaveText(["Az ágens vár a válaszomra", "A válaszom a következő üzenetként megy el"]);
+  await header.locator(".conversation-settings-toggle").click();
+  const settings = page.getByRole("dialog", { name: "A beszélgetés beállításai" });
+  await expect(settings.getByLabel("Kérdések").locator("option")).toHaveText(["Az ágens vár a válaszomra", "A válaszom a következő üzenetként megy el"]);
+  await page.keyboard.press("Escape");
 
   const showCanvas = windowBar.getByRole("button", { name: "Vászon mutatása" });
   if (await showCanvas.isVisible()) await showCanvas.click();

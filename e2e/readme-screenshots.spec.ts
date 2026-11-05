@@ -3,7 +3,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspaceFromSidebar, callCanvasTool, reloadFromRestartedHost, signIn, workspaceCard, walkthroughView } from "./helpers.ts";
+import { addWorkspaceFromSidebar, conversationSettings, callCanvasTool, reloadFromRestartedHost, signIn, workspaceCard, walkthroughView } from "./helpers.ts";
 import type { Demo, DemoConversation } from "./seed-demo.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -195,8 +195,9 @@ async function newConversationIn(page: Page, directory: string) {
   const previousUrl = page.url();
   await workspaceCard(page, directory).getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
-  await expect(page.locator(".chat-header:visible").getByLabel("Model", { exact: true })).toBeVisible({ timeout: 60_000 });
-  await expect(page.locator(".chat-header:visible").getByLabel("Effort", { exact: true })).toHaveValue("default");
+  await expect(page.locator(".chat-header:visible .settings-model")).toBeVisible({ timeout: 60_000 });
+  await expect((await conversationSettings(page)).getByLabel("Effort", { exact: true })).toHaveValue("default");
+  await page.keyboard.press("Escape");
   return page.url().match(/#\/c\/(.+)$/)![1]!;
 }
 

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, answerCanvasQuestion, callCanvasTool, openCanvasHistory, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, callCanvasTool, openCanvasHistory, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -94,7 +94,7 @@ test("the sidebar marks the conversations waiting for you, in the look chosen in
     askInBackground(first, "Which layout now?");
     await expect(firstPill).toHaveText("Needs you");
     await secondRow.click();
-    await page.getByLabel("Questions").filter({ visible: true }).selectOption("next-message");
+    await (await conversationSettings(page)).getByLabel("Questions").selectOption("next-message");
     askInBackground(second, "Which name?");
     const secondPill = secondRow.locator(".waiting-pill");
     await expect(secondPill).toHaveText("Needs you");

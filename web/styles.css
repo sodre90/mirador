@@ -1490,24 +1490,132 @@ button.icon.workspace-fold {
 }
 
 .title-row {
+  container-type: inline-size;
+}
+
+/* One line, so the bar keeps its height as the pane narrows; only a very narrow pane moves the buttons below the title. */
+.title-line {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
   gap: 6px 8px;
 }
 
-.title-row h2 {
+.title-line > * {
+  flex-shrink: 0;
+}
+
+.title-line h2 {
   font-size: calc(14.5px * var(--font-scale));
   font-weight: 600;
   margin: 0;
-  flex: 1;
-  min-width: min(10em, 60%);
+  flex: 1 1 0;
+  min-width: 4em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.harness {
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+@container (max-width: 300px) {
+  .title-line {
+    flex-wrap: wrap;
+  }
+
+  .title-line h2 {
+    flex-basis: 8em;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+}
+
+button.conversation-settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 280px;
+  height: 26px;
+  margin-right: 4px;
+  padding: 0 6px 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: none;
+  color: var(--text);
+  font-size: calc(12px * var(--font-scale));
+  white-space: nowrap;
+}
+
+button.conversation-settings-toggle.on {
+  border-color: var(--accent);
+}
+
+.settings-summary {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.settings-agent,
+.settings-caret {
+  color: var(--muted);
+}
+
+.yolo-on {
+  margin-right: 4px;
+  font-size: calc(11px * var(--font-scale));
+  padding: 1px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+  font-weight: 600;
+}
+
+button.icon.header-icon {
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 5px;
+}
+
+button.icon.header-icon svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+}
+
+.conversation-settings {
+  position: fixed;
+  z-index: 40;
+  width: min(420px, calc(100vw - 24px));
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+.conversation-settings h3 {
+  margin: 0;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+}
+
+.conversation-settings-note {
+  margin: 4px 0 10px;
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
 }
@@ -1556,23 +1664,16 @@ button.subagents-running {
   color: var(--warn);
 }
 
-button.find-trigger {
-  font-size: calc(12px * var(--font-scale));
-  padding: 3px 10px;
-  color: var(--muted);
-}
-
 .status-detail {
   color: var(--danger);
   font-size: calc(12px * var(--font-scale));
   margin-top: 4px;
 }
 
-.controls {
+.conversation-settings .controls {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
 }
 
 .config {

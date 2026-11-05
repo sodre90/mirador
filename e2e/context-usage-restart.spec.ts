@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -36,5 +36,5 @@ test("an opencode conversation's context meter survives a host restart, which is
   await host.restart();
   await reloadFromRestartedHost(page);
   await expect(meter).toHaveText(USAGE, { timeout: 60_000 });
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("opencode");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "opencode");
 });

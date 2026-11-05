@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator } from "@playwright/test";
-import { addWorkspace, openProfiles, openSettings, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, openProfiles, openSettings, signIn, startConversation, workspaceCard, conversationSettings } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -50,13 +50,13 @@ test("a profile's colour marks it wherever it is named, and a workspace added on
   await test.step("a conversation shows its profile's colour in the header, the statusline and on its row's edge, in the waiting list too", async () => {
     const conversationId = await startConversation(page);
     const row = card.locator(`li[data-reorder-id="${conversationId}"]`);
-    const header = page.locator("label.config", { has: page.getByLabel("Profile", { exact: true }) });
+    const header = page.locator(".chat-header:visible .conversation-settings-toggle");
     const statuslineProfile = page.locator(".statusline-chips .chip", { hasText: "Claude Code" });
     await expect(header.locator(".profile-dot")).toHaveAttribute("data-color", "rose");
     await expect(statuslineProfile.locator(".profile-dot")).toHaveAttribute("data-color", "rose");
     await expect(row.locator(".profile-edge")).toHaveAttribute("data-color", "rose");
 
-    await page.getByLabel("Profile", { exact: true }).selectOption({ label: "Work" });
+    await (await conversationSettings(page)).getByLabel("Profile", { exact: true }).selectOption({ label: "Work" });
     await expect(row.locator(".profile-edge")).toHaveAttribute("data-color", "mint");
     await expect(header.locator(".profile-dot")).toHaveAttribute("data-color", "mint");
 

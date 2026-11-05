@@ -43,6 +43,9 @@ export const hints: Messages["hints"] = {
   dictateOff: "Para dictar hace falta el reconocimiento de voz. Puedes activarlo en Configuración → Voz.",
   yolo:
     "Aprueba todo sin preguntar.\n\nCuando el agente pide permiso para ejecutar una herramienta, el host responde de inmediato con la opción “allow” del propio agente en lugar de mostrarte una tarjeta. Al activarlo también se aprueba una solicitud que ya estaba esperando. Las solicitudes que no ofrecen una opción de permitir siguen preguntándote.\n\nEsto es independiente del Modo del agente: las herramientas que el Modo ya permite nunca preguntan. Se guarda por conversación.",
+  conversationSettings:
+    "Perfil, agente, modelo y el resto de la configuración de esta conversación.\n\nEl perfil solo les da sus valores iniciales: cambiarlos aquí no modifica el perfil.",
+  yoloOn: "YOLO está activado: las llamadas a herramientas del agente se aprueban sin preguntar. Desactívalo en la configuración de esta conversación.",
   profile:
     "El perfil (variables de entorno y comando previo al inicio) con el que se ejecuta el agente.\n\nCada perfil ejecuta su propio proceso de agente. Cambiar cierra esta sesión en el proceso actual y la reanuda en el nuevo, así que el agente conserva toda la conversación. El modelo vuelve al predeterminado del nuevo perfil.\n\nSi cambias mientras el agente trabaja, se detiene su turno, se mueve la sesión y se le pide al agente que continúe donde se quedó; los mensajes que pusiste en cola salen después.\n\nLos perfiles de otro agente solo se pueden elegir antes del primer mensaje: ese agente inicia una sesión nueva. Una vez empezada la conversación, inicia una conversación nueva para usarlos.",
   questions:

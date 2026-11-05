@@ -23,6 +23,8 @@ export const chat: Messages["chat"] = {
     showTerminal: "Mostrar terminal",
     hideTerminal: "Ocultar terminal",
     questions: "Preguntas",
+    settingsTitle: "Configuración de esta conversación",
+    settingsNote: "El perfil solo les da sus valores iniciales: lo que cambies aquí vale solo para esta conversación.",
   },
   tool: {
     input: "entrada",

@@ -7,7 +7,7 @@ import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, createProfile, sendMessage, signIn, workspaceCard } from "./helpers.ts";
+import { addWorkspace, createProfile, sendMessage, signIn, workspaceCard, conversationSettings } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -106,7 +106,7 @@ test("a terminal session continues and forks on the model that answered in it, n
   writeFileSync(join(configDir, "settings.json"), JSON.stringify({ model: "opus" }));
   const environment = `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${configDir}`;
   const sessionId = await runClaudeInTerminal(host.projectDirInTerminal, "Say hi", environment);
-  const model = page.getByLabel("Model", { exact: true }).filter({ visible: true });
+  const model = async () => (await conversationSettings(page)).getByLabel("Model", { exact: true });
 
   await signIn(page, host);
   const profiles = await createProfile(page, "answering api", [environment, sameClaudeCode].join("\n"));
@@ -114,11 +114,11 @@ test("a terminal session continues and forks on the model that answered in it, n
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "answering api · Claude Code" });
   await sessionRow(await openSessionsDialog(page), sessionId).getByRole("button", { name: "Fork" }).click();
   await expect(page.locator(".timeline")).toContainText("Answered: Say hi", { timeout: 30_000 });
-  await expect(model.locator("option:checked")).toHaveText(/^Haiku/);
+  await expect((await model()).locator("option:checked")).toHaveText(/^Haiku/);
 
   await sessionRow(await openSessionsDialog(page), sessionId).getByRole("button", { name: "Continue" }).click();
   await expect(page.locator(".chat-header h2").filter({ visible: true })).toHaveText("Say hi");
   await expect(page.locator(".timeline").filter({ visible: true })).toContainText("Answered: Say hi", { timeout: 30_000 });
-  await expect(model.locator("option:checked")).toHaveText(/^Haiku/);
+  await expect((await model()).locator("option:checked")).toHaveText(/^Haiku/);
   api.stop();
 });

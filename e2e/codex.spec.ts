@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
-import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { ScriptedModel, codexProgram, scriptedCodexEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -41,7 +41,7 @@ test("a Codex conversation replies, runs commands and uses the canvas tools", as
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Codex` });
   await startConversation(page);
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("Codex");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "Codex");
 
   await sendMessage(page, "Hello Codex");
   await waitForTurnToEnd(page);
@@ -85,7 +85,7 @@ test("a command Codex runs messages its own conversation with mirador message, a
 test("a message sent with Enter while Codex runs a command joins its turn once the command finishes", async () => {
   const eventsInOrder = eventsInOrderOn(page);
   await page.reload();
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("Codex");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "Codex");
   await sendMessage(page, "RUN sleep 5; echo slept");
   await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress").first()).toBeVisible({ timeout: 60_000 });
   model.hold();

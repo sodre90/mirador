@@ -27,6 +27,8 @@ export const chat = {
     showTerminal: "Show terminal",
     hideTerminal: "Hide terminal",
     questions: "Questions",
+    settingsTitle: "This conversation's settings",
+    settingsNote: "The profile only gives them their first values: changes here are for this conversation alone.",
   },
   tool: {
     input: "input",

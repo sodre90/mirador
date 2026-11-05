@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, sendMessage, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, sendMessage, signIn, startConversation, turnOnYolo } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -21,9 +21,7 @@ test("a host killed in the middle of a turn comes back with that turn ended, not
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
   await sendMessage(page, "RUN echo waiting; sleep 60");
   await expect(page.locator(".timeline").locator(".tool-pending, .tool-in_progress").first()).toBeVisible();
 

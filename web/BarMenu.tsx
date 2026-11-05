@@ -8,11 +8,18 @@ export function placedBelow(element: HTMLElement): CSSProperties {
   return { top: bottom + POPOVER_GAP, right: window.innerWidth - right };
 }
 
-/** Closes what is open on Escape, or on a press anywhere outside the element. */
-export function useClosing(open: boolean, inside: RefObject<HTMLElement | null>, close: () => void) {
+/** Like placedBelow, lined up with the button's left edge in the window's left half, where a wide popover has room. */
+export function placedBelowOnItsSide(element: HTMLElement): CSSProperties {
+  const { bottom, left } = element.getBoundingClientRect();
+  return left < window.innerWidth / 2 ? { top: bottom + POPOVER_GAP, left } : placedBelow(element);
+}
+
+/** Closes what is open on Escape, or on a press anywhere outside the elements. */
+export function useClosing(open: boolean, inside: RefObject<HTMLElement | null> | RefObject<HTMLElement | null>[], close: () => void) {
   useEffect(() => {
     if (!open) return;
-    const closeWhenOutside = (event: PointerEvent) => inside.current?.contains(event.target as Node) || close();
+    const insides = Array.isArray(inside) ? inside : [inside];
+    const closeWhenOutside = (event: PointerEvent) => insides.some(({ current }) => current?.contains(event.target as Node)) || close();
     const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && close();
     document.addEventListener("pointerdown", closeWhenOutside);
     document.addEventListener("keydown", closeOnEscape);

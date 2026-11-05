@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { ToolReport, UsageReport } from "../host/usage-stats.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -92,7 +92,7 @@ test("an agent reads which tools each profile used, how each fared, where they c
 
   const profiles = await createProfile(page, "Second", "");
   await profiles.getByRole("button", { name: "Close" }).click();
-  await page.getByLabel("Profile", { exact: true }).filter({ visible: true }).selectOption({ label: "Second" });
+  await (await conversationSettings(page)).getByLabel("Profile", { exact: true }).selectOption({ label: "Second" });
   await expect(page.locator(".timeline:visible")).toContainText("Now using the profile “Second”");
   await sendMessage(page, "Hello from the second profile");
   await waitForTurnToEnd(page);

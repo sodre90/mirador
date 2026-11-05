@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { addWorkspace, createProfile, primaryModifier, sendMessage, signIn, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, primaryModifier, sendMessage, signIn, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -135,7 +135,7 @@ test("a background task the agent started shows with its output and Stop above t
   await test.step("moving the conversation to another profile closes its session, and the tasks running in it go with it", async () => {
     const profiles = await createProfile(page, "async elsewhere", "", "", "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
-    await page.getByLabel("Profile", { exact: true }).selectOption({ label: "async elsewhere" });
+    await (await conversationSettings(page)).getByLabel("Profile", { exact: true }).selectOption({ label: "async elsewhere" });
     await expect(page.locator(".timeline:visible")).toContainText("Now using the profile “async elsewhere”");
     await expect(tasks).toHaveCount(0);
   });

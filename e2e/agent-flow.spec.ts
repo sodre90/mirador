@@ -11,6 +11,7 @@ import {
   signIn,
   startConversation,
   waitForTurnToEnd,
+  conversationSettings,
 } from "./helpers.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
 import { TestHost } from "./test-host.ts";
@@ -47,7 +48,7 @@ test("starts a Claude Code conversation with the test model", async () => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   await startConversation(page);
-  await expect(page.getByLabel("Model", { exact: true }).filter({ visible: true })).toHaveValue("haiku");
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("haiku");
   await page.locator(".chat-header h2").getByText("New conversation").click();
   await page.getByLabel("Conversation name").fill(CHOSEN_NAME);
   await page.getByLabel("Conversation name").press("Enter");
@@ -100,17 +101,17 @@ test("keeps the history across a page refresh", async () => {
 test("resumes the agent session and canvas tools after a host restart", async () => {
   await host.restart();
   await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
-  await page.getByLabel("Mode", { exact: true }).selectOption("acceptEdits");
+  await (await conversationSettings(page)).getByLabel("Mode", { exact: true }).selectOption("acceptEdits");
   await sendMessage(page, 'CALL mcp__canvas__show {"title": "After restart", "html": "<p>The color was Blue</p>"}');
   await waitForTurnToEnd(page);
   expect(api.history.at(-1)!.join("\n"), "the resumed session still holds the answer").toContain("Blue");
   await expect(page.locator(".canvas-panel:visible .canvas-frame.show iframe").contentFrame().getByText("The color was Blue")).toBeVisible();
-  await expect(page.getByLabel("Model", { exact: true }).filter({ visible: true })).toHaveValue("haiku");
-  await expect(page.getByLabel("Mode", { exact: true })).toHaveValue("acceptEdits");
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("haiku");
+  await expect((await conversationSettings(page)).getByLabel("Mode", { exact: true })).toHaveValue("acceptEdits");
 });
 
 test("delivers an answer as the next message when the conversation is set to", async () => {
-  await page.getByLabel("Questions").selectOption("next-message");
+  await (await conversationSettings(page)).getByLabel("Questions").selectOption("next-message");
   await sendMessage(page, 'CALL mcp__canvas__ask {"question": "Pick a size", "options": [{"label": "Small"}, {"label": "Large"}]}');
   await expect(page.locator(".ask").getByRole("radio", { name: "Large" })).toBeVisible();
   await waitForTurnToEnd(page);
@@ -124,7 +125,7 @@ test("delivers an answer as the next message when the conversation is set to", a
 
 test("a conversation that never got a message starts a fresh session after a host restart, without a failed resume", async () => {
   await startConversation(page);
-  await expect(page.getByLabel("Model", { exact: true }).filter({ visible: true })).toHaveValue("haiku");
+  await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("haiku");
   await host.restart();
   await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
   await sendMessage(page, "Reply with only the word ready.");

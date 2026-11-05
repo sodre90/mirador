@@ -39,6 +39,9 @@ export const hints = {
   dictateOff: "Dictating needs speech recognition. Settings → Voice can turn it on.",
   yolo:
     "Approve everything without asking.\n\nWhen the agent asks for permission to run a tool, the host answers with the agent's own \"allow\" option at once instead of showing you a card. Switching it on also approves a request that is already waiting. Requests that offer no allow option still ask you.\n\nThis is separate from the agent's Mode: tools that the Mode already allows never ask at all. Saved per conversation.",
+  conversationSettings:
+    "Profile, agent, model and the rest of this conversation's settings.\n\nThe profile only gives them their first values: changing them here leaves the profile as it is.",
+  yoloOn: "YOLO is on: the agent's tool calls are approved without asking. Turn it off in this conversation's settings.",
   profile:
     "The profile (environment variables and pre-launch command) the agent runs with.\n\nEach profile runs its own agent process. Switching closes this session on the current process and resumes it on the new one, so the agent keeps the whole conversation. The model goes back to the new profile's default.\n\nSwitching while the agent works stops its turn, moves the session, and asks the agent to continue where it left off; messages you queued go out after that.\n\nProfiles of another agent can be picked only before the first message: that agent starts a fresh session. Once the conversation has begun, start a new conversation to use them.",
   questions:

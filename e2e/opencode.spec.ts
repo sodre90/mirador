@@ -14,6 +14,7 @@ import {
   signIn,
   startConversation,
   waitForTurnToEnd,
+  conversationSettings,
 } from "./helpers.ts";
 import { SPARE_MODELS, ScriptedModel, opencodeProgram, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost, spawnProgram } from "./test-host.ts";
@@ -61,8 +62,8 @@ test("an opencode conversation asks for permission in the browser and uses the c
   await dialog.getByRole("button", { name: "Close" }).click();
   await chooseScriptedOpencode(page);
   await startConversation(page);
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("opencode");
-  await expect(page.getByLabel("Profile", { exact: true }).locator("option:checked")).toHaveText(PROFILE);
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "opencode");
+  await expect((await conversationSettings(page)).getByLabel("Profile", { exact: true }).locator("option:checked")).toHaveText(PROFILE);
   const modelPicker = page.getByRole("button", { name: "Model", exact: true });
   await expect(modelPicker).toHaveText("e2e/Scripted");
   await modelPicker.click();
@@ -158,7 +159,7 @@ test("an opencode conversation moves to another opencode profile and keeps its c
   const saved = await createProfile(page, "scripted opencode 2", scriptedOpencodeEnvironment(model, host.root), "", "opencode");
   await saved.getByRole("button", { name: "Close" }).click();
   await page.locator(".workspace li", { hasText: "RUN echo e2e-bash-output" }).click();
-  await page.getByLabel("Profile", { exact: true }).selectOption({ label: "scripted opencode 2" });
+  await (await conversationSettings(page)).getByLabel("Profile", { exact: true }).selectOption({ label: "scripted opencode 2" });
   await expect(page.locator(".timeline:visible")).toContainText("Now using the profile “scripted opencode 2”");
 
   await sendMessage(page, "after the switch");
@@ -172,20 +173,20 @@ test("with YOLO on, tools run without asking, and switching it on approves the r
   await signIn(page, host);
   await chooseScriptedOpencode(page);
   await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await expect(yolo).not.toBeChecked();
-  await yolo.hover();
+  const yolo = async () => (await conversationSettings(page)).getByLabel("YOLO", { exact: true });
+  await expect(await yolo()).not.toBeChecked();
+  await (await yolo()).hover();
   const hint = page.getByRole("tooltip");
   await expect(hint).toContainText('the host answers with the agent\'s own "allow" option');
-  await page.getByLabel("Questions").hover();
+  await (await conversationSettings(page)).getByLabel("Questions").hover();
   await expect(hint).toContainText("What happens when the agent asks you something");
   await page.locator(".chat-header:visible h2").hover();
   await expect(hint).toBeHidden();
 
   await sendMessage(page, "RUN echo approved-by-yolo");
   await expect(page.locator(".permission.pending")).toBeVisible({ timeout: 60_000 });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await (await yolo()).click();
+  await expect(await yolo()).toBeChecked();
   await expect(lastAgentMessage(page)).toContainText("Tool result: approved-by-yolo", { timeout: 60_000 });
   await waitForTurnToEnd(page);
 
@@ -193,7 +194,7 @@ test("with YOLO on, tools run without asking, and switching it on approves the r
   await expect(lastAgentMessage(page)).toContainText("Tool result: no-questions-asked", { timeout: 60_000 });
   await expect(page.locator(".permission")).toHaveCount(1);
   await page.reload();
-  await expect(page.getByLabel("YOLO", { exact: true })).toBeChecked();
+  await expect((await conversationSettings(page)).getByLabel("YOLO", { exact: true })).toBeChecked();
 });
 
 test("messages sent while the agent works wait in a queue that can be edited and reordered, and go out when the turn ends", async ({ page }) => {

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { isHostCommandLine } from "../desktop/src/core/host-command.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -62,9 +62,7 @@ test("Cmd+R serves the UI as it is now; Cmd+Shift+R restarts the host in place, 
   });
 
   await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
   await sendMessage(page, "RUN echo waiting; sleep 60");
   await expect(page.locator(".timeline").locator(".tool-pending, .tool-in_progress").first()).toBeVisible();
   const composer = page.locator(".composer textarea");
@@ -100,9 +98,7 @@ const QUEUED_MESSAGE = "queued before the outside restart";
 test("a host stopped from outside, like the tray's Restart, keeps the queued messages and sends them once it is back", async ({ page }) => {
   await signIn(page, host);
   await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
   await sendMessage(page, "RUN echo waiting; sleep 60");
   await expect(page.locator(".timeline").locator(".tool-pending, .tool-in_progress").first()).toBeVisible();
   const composer = page.locator(".composer textarea");

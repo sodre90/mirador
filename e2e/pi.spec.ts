@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
-import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, pasteImage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, pasteImage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { ScriptedModel, forgetPiAcpSessionsUnder, piProgram, scriptedPiEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -93,7 +93,7 @@ test("a pi conversation replies, runs commands and uses the canvas tools", async
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · pi` });
   firstConversationId = await startConversation(page);
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("pi");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "pi");
 
   await sendMessage(page, "Hello pi");
   await waitForTurnToEnd(page);
@@ -144,7 +144,7 @@ test("a pi command's output past what pi keeps of it shows each line once, as pi
 
 test("a second pi conversation on the same profile leaves the first one working", async () => {
   await startConversation(page);
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("pi");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "pi");
   await sendMessage(page, "SHOW Second page");
   await expect(canvasHeading()).toHaveText("Second page", { timeout: 60_000 });
   await waitForTurnToEnd(page);
@@ -229,7 +229,7 @@ test("after a host restart, a pi conversation goes on in its own session with th
 test("a message sent with Enter while pi runs a command joins its turn once the command finishes", async () => {
   const eventsInOrder = eventsInOrderOn(page);
   await page.reload();
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("pi");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "pi");
   await sendMessage(page, "RUN sleep 5; echo slept");
   await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress").first()).toBeVisible({ timeout: 60_000 });
   model.hold();
@@ -273,10 +273,10 @@ test("↑ after stopping a pi turn edits its message, and Enter replaces the tur
 test("a pi conversation moves to another pi profile, even one with its own PI_CODING_AGENT_DIR, and goes on in the same session and model", async () => {
   const dialog = await createProfile(page, OTHER_PROFILE, scriptedPiEnvironment(model, join(host.root, "other"), "other"), "", "pi");
   await dialog.getByRole("button", { name: "Close" }).click();
-  const profilePicker = page.getByLabel("Profile", { exact: true }).filter({ visible: true });
-  await expect(profilePicker.locator("option:checked")).toHaveText(PROFILE);
+  const profilePicker = async () => (await conversationSettings(page)).getByLabel("Profile", { exact: true });
+  await expect((await profilePicker()).locator("option:checked")).toHaveText(PROFILE);
 
-  await profilePicker.selectOption({ label: OTHER_PROFILE });
+  await (await profilePicker()).selectOption({ label: OTHER_PROFILE });
   await expect(page.locator(".timeline:visible")).toContainText(`Now using the profile “${OTHER_PROFILE}”`);
   await sendMessage(page, "After the switch");
   await waitForTurnToEnd(page);
@@ -366,7 +366,7 @@ test("a message that joined a pi turn goes out again after Stop if pi had not re
 test("rewinding a pi conversation to a turn keeps a message pi read in the turn before it, though Stop came before pi answered it", async () => {
   // The Stop of the test before leaves its force-stop timer running, which would swallow this test's Escape.
   await page.reload();
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("pi");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "pi");
   const command = "RUN sleep 3; echo slept";
   await sendMessage(page, command);
   await expect(page.locator(".timeline:visible").locator(".tool-pending, .tool-in_progress", { hasText: "sleep 3; echo slept" })).toBeVisible({ timeout: 60_000 });

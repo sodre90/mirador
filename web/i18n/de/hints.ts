@@ -43,6 +43,9 @@ export const hints: Messages["hints"] = {
   dictateOff: "Zum Diktieren braucht es die Spracherkennung. Du kannst sie unter Einstellungen → Stimme einschalten.",
   yolo:
     "Alles ohne Nachfrage genehmigen.\n\nWenn der Agent um Erlaubnis bittet, ein Tool auszuführen, antwortet der Host sofort mit der eigenen „allow“-Option des Agenten, statt dir eine Karte zu zeigen. Das Einschalten genehmigt auch eine Anfrage, die schon wartet. Anfragen ohne „allow“-Option fragen dich weiterhin.\n\nDas ist unabhängig vom Modus des Agenten: Tools, die der Modus schon erlaubt, fragen gar nicht erst. Wird pro Unterhaltung gespeichert.",
+  conversationSettings:
+    "Profil, Agent, Modell und die übrigen Einstellungen dieser Unterhaltung.\n\nDas Profil gibt nur ihre Anfangswerte vor: Wenn du sie hier änderst, bleibt das Profil, wie es ist.",
+  yoloOn: "YOLO ist an: Tool-Aufrufe des Agenten werden ohne Nachfrage genehmigt. Schalte es in den Einstellungen dieser Unterhaltung aus.",
   profile:
     "Das Profil (Umgebungsvariablen und Befehl vor dem Start), mit dem der Agent läuft.\n\nJedes Profil führt seinen eigenen Agent-Prozess aus. Ein Wechsel schließt diese Sitzung auf dem aktuellen Prozess und setzt sie auf dem neuen fort, sodass der Agent die ganze Unterhaltung behält. Das Modell geht auf den Standard des neuen Profils zurück.\n\nEin Wechsel, während der Agent arbeitet, stoppt seine Runde, verschiebt die Sitzung und bittet den Agenten, dort weiterzumachen, wo er aufgehört hat; Nachrichten in der Warteschlange gehen danach raus.\n\nProfile eines anderen Agenten lassen sich nur vor der ersten Nachricht wählen: Dieser Agent startet eine neue Sitzung. Hat die Unterhaltung schon begonnen, starte eine neue Unterhaltung, um sie zu nutzen.",
   questions:

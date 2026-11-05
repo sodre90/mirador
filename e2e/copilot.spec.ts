@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { chmodSync, cpSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { addWorkspace, createProfile, lastAgentMessage, openSettings, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, lastAgentMessage, openSettings, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
 import { ScriptedModel, copilotProgram, scriptedCopilotEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -35,7 +35,7 @@ test("a Copilot conversation replies and shows a canvas page without asking perm
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Copilot` });
   await startConversation(page, { withModels: false });
-  await expect(page.locator(".chat-header:visible .harness")).toHaveText("Copilot");
+  await expect(page.locator(".chat-header:visible .conversation-settings-toggle")).toHaveAttribute("data-agent", "Copilot");
 
   await sendMessage(page, "hello Copilot");
   await waitForTurnToEnd(page);

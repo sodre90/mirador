@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import type { Conversation } from "../shared/model.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, bashPath, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, bashPath, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
 import { spawnProgram, TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -57,9 +57,7 @@ test("a script the agent starts, or anything with the agent's session, messages 
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const conversationId = await startConversation(page);
-  const yolo = page.getByLabel("YOLO", { exact: true });
-  await yolo.click();
-  await expect(yolo).toBeChecked();
+  await turnOnYolo(page);
 
   await test.step("a command the agent runs reaches its own conversation, and the agent reads the message", async () => {
     await sendMessage(page, `RUN ${bashPath(mirador)} message "The build finished with 3 warnings."`);

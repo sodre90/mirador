@@ -21,6 +21,8 @@ export const chat: Messages["chat"] = {
     showTerminal: "Terminál mutatása",
     hideTerminal: "Terminál elrejtése",
     questions: "Kérdések",
+    settingsTitle: "A beszélgetés beállításai",
+    settingsNote: "A profil csak a kezdőértékeiket adja meg: amit itt változtatsz, csak erre a beszélgetésre vonatkozik.",
   },
   tool: {
     input: "bemenet",
