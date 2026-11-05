@@ -27,6 +27,7 @@ async function expectStaysPutWhenClicked(page: Page, toggleClass: string) {
 }
 
 test("with no conversation open, the sidebar toggle still works and the canvas and terminal toggles wait, disabled", async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 900 });
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   await expect(page.getByText("No conversation selected")).toBeVisible();
@@ -43,7 +44,22 @@ test("with no conversation open, the sidebar toggle still works and the canvas a
   for (const toggle of await paneToggles.all()) await expect(toggle).toBeEnabled();
 });
 
-for (const width of [1100, 1440]) {
+test("in a window up to 1700px wide the canvas and terminal toggles show only their icons, leaving the conversation's title the room", async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await signIn(page, host);
+  const [newConversation, addProject] = [page.getByRole("button", { name: "+ New conversation" }), page.getByRole("button", { name: "+ Add a project directory" })];
+  await expect(newConversation.or(addProject)).toBeVisible();
+  if (await addProject.isVisible()) await addWorkspace(page, host.projectDir);
+  await startConversation(page);
+  const paneToggles = toggles(page).locator(".toggle-canvas, .toggle-terminal");
+  await expect(paneToggles).toHaveCount(2);
+  for (const toggle of await paneToggles.all()) await expect(toggle).toHaveText("", { useInnerText: true });
+  await expect(toggles(page).getByRole("button", { name: "Show terminal" })).toBeVisible();
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await expect(paneToggles).toHaveText(["Canvas", "Terminal"], { useInnerText: true });
+});
+
+for (const width of [1100, 1440, 1800]) {
   test(`at ${width}px wide, the canvas and terminal toggles at the start of the conversation's bar stay under the pointer as they hide and show their panes`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await signIn(page, host);

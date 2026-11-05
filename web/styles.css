@@ -194,6 +194,13 @@ kbd {
   gap: 2px;
 }
 
+/* By the window's width, not the bar's: the bar widens as the canvas hides, and names coming back would move the toggles. */
+@media (max-width: 1700px) {
+  button.icon.layout-toggle > span {
+    display: none;
+  }
+}
+
 .empty-state-bar {
   padding: 10px 16px;
 }
