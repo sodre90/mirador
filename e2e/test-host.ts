@@ -310,7 +310,9 @@ export class TestHost {
     this.logFile = log;
     const capture = (chunk: Buffer) => {
       this.output += chunk;
-      log.write(chunk);
+      // Output can still come after "exit", which ended the log: waiting for "close" instead would wait on any process
+      // still holding the host's pipes, keeping the log open where Windows then can't remove it.
+      if (log.writable) log.write(chunk);
     };
     child.stdout!.on("data", capture);
     child.stderr!.on("data", capture);
