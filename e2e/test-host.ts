@@ -2,6 +2,7 @@ import { execFileSync, spawn, spawnSync, type ChildProcess, type SpawnOptions, t
 import { accessSync, chmodSync, constants, cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
+import { test } from "@playwright/test";
 import { muteMarkerName, MUTED_LIST_FILE, mutedListAt } from "../host/notifier.ts";
 import { HOST_RELAUNCH, HOST_RESTART_EXIT_CODE } from "../shared/host-relaunch.ts";
 import { freePorts } from "./free-ports.ts";
@@ -145,6 +146,15 @@ const timesRunningIn = (log: string) => log.split("Mirador is running").length -
 
 /** A process a signal ended has no exit code; on Windows every kill is one, as it ends the process outright. */
 const hasEnded = (child: ChildProcess) => child.exitCode !== null || child.signalCode !== null;
+
+/** The spec file running, without its folder and .spec.ts; outside a test or hook there is none. */
+function specName() {
+  try {
+    return basename(test.info().file).replace(/\.spec\.ts$/, "");
+  } catch {
+    return "outside-a-test";
+  }
+}
 
 /** Runs the real host (and through it a real Claude Code on a cheap model) in throwaway directories. */
 export class TestHost {
@@ -397,6 +407,7 @@ export class TestHost {
   }
 
   async cleanUp() {
+    this.keepLogs();
     this.unmuteOwnSessions();
     if (process.env.MIRADOR_E2E_KEEP) return;
     rmSync(this.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
@@ -404,6 +415,22 @@ export class TestHost {
     await new Promise((resolve) => setTimeout(resolve, TRANSCRIPT_WRITERS_GRACE_MS));
     rmSync(this.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     this.removeClaudeTranscripts();
+  }
+
+  /**
+   * Copies the host's log, its fake agents' and the agents' own logs where MIRADOR_E2E_HOST_LOGS says, named after the
+   * spec: scripts/e2e.sh points it into the copy it runs from, which it keeps only when a test failed.
+   */
+  private keepLogs() {
+    const keptLogs = process.env.MIRADOR_E2E_HOST_LOGS;
+    if (!keptLogs || !existsSync(this.root)) return;
+    const folder = join(keptLogs, `${specName()}-${basename(this.root)}`);
+    mkdirSync(folder, { recursive: true });
+    readdirSync(this.root)
+      .filter((name) => name.endsWith(".log"))
+      .forEach((name) => cpSync(join(this.root, name), join(folder, name)));
+    const agentLogs = join(this.dataDir, "logs");
+    if (existsSync(agentLogs)) cpSync(agentLogs, join(folder, "agent-logs"), { recursive: true });
   }
 
   /** Claude Code processes outlive the host briefly and write a last "interrupted" entry while they stop, in `~/.claude` for a host on the owner's login. */

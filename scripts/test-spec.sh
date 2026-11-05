@@ -4,7 +4,7 @@
 # ports, test-results and results dir. Unlike scripts/linux-test.sh this skips the type check and the unit suite.
 # Usage: scripts/test-spec.sh e2e/<spec>.spec.ts [more specs...]
 # Specs that wait for a real Claude reply get it from your model server, as scripts/linux-common.sh says.
-# Failure artifacts are copied to a fresh dir under $TMPDIR, printed at the start.
+# Failure artifacts, the test hosts' logs among them, are copied to a fresh dir under $TMPDIR, printed at the start.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -20,9 +20,11 @@ run_in_container \
   "mirador-linux-test-$arch" bash -c '
     mkdir /tmp/mirador && tar -X /src/scripts/linux-copy.exclude -C /src -cf - . | tar -xf - -C /tmp/mirador
     cd /tmp/mirador
+    export MIRADOR_E2E_HOST_LOGS=/tmp/mirador/host-logs
     bun install --frozen-lockfile >/dev/null
     status=0
     bunx playwright test --reporter=line "$@" || status=$?
     cp -r test-results/. /results/ 2>/dev/null || true
+    if (( status != 0 )); then cp -r host-logs /results/ 2>/dev/null || true; fi
     exit $status
   ' test-spec "$@"

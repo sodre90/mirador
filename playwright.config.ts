@@ -7,7 +7,8 @@ export default defineConfig({
   expect: { timeout: process.platform === "win32" ? 60_000 : 20_000 },
   workers: 4,
   fullyParallel: false,
-  reporter: [["list"]],
+  // With no file named, Playwright's JSON report would go to stdout among the list's lines.
+  reporter: process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ? [["list"], ["json"]] : [["list"]],
   use: {
     ...devices["Desktop Chrome"],
     channel: process.platform === "darwin" ? "chrome" : undefined,

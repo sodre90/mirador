@@ -3,7 +3,8 @@
 # can keep being edited while a run is in flight, and runs started at the same time, by you or by agents, share
 # nothing but the machine. The copy holds the files git tracks or would add; node_modules is the checkout's own.
 # Usage: scripts/e2e.sh [Playwright arguments, e.g. e2e/review.spec.ts --workers=2]
-# The copy goes once every test passed; otherwise its test-results keep the failures' traces and screenshots.
+# The copy goes once every test passed; otherwise its test-results keep the failures' traces and screenshots, and
+# host-logs each test host's logs. PLAYWRIGHT_JSON_OUTPUT_FILE names where the results go, in the copy by default.
 set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/.." && pwd)
@@ -18,7 +19,15 @@ existingOwnFiles() { while IFS= read -r -d '' file; do if [[ $file != */ && -e $
 ln -s "$repo/node_modules" "$copy/node_modules"
 
 cd "$copy"
+export MIRADOR_E2E_HOST_LOGS="$copy/host-logs"
+export PLAYWRIGHT_JSON_OUTPUT_FILE="${PLAYWRIGHT_JSON_OUTPUT_FILE:-$copy/results.json}"
 status=0
 bunx playwright test "$@" || status=$?
-if (( status == 0 )); then rm -rf "$copy"; else echo "failure artifacts: $copy/test-results"; fi
+if (( status == 0 )); then
+  rm -rf "$copy"
+else
+  echo "failure artifacts: $copy/test-results"
+  echo "test hosts' logs: $MIRADOR_E2E_HOST_LOGS"
+  echo "results: $PLAYWRIGHT_JSON_OUTPUT_FILE"
+fi
 exit $status
