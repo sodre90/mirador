@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { authorityFingerprint, ownServingCertificate } from "../host/certificates.ts";
 import { DeviceService } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
-import { forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, relayedHeaders } from "../host/machine-relays.ts";
+import { forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, relayedHeaders } from "../host/machine-relays.ts";
 import type { RelayedSocket } from "../host/machine-relays.ts";
 import { Store } from "../host/store.ts";
 
@@ -35,6 +35,82 @@ describe("forwardedHeaders", () => {
   });
 });
 
+const freePorts = (count: number) =>
+  Array.from({ length: count }, () => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })).map((server) => {
+    const { port } = server;
+    server.stop(true);
+    return port!;
+  });
+
+describe("forwardedCanvasHeaders", () => {
+  test("leave this host's sign-in behind, which the browser sends to every port of 127.0.0.1, and name the relay the page loads from", () => {
+    const incoming = new Headers({ host: "127.0.0.1:4621", cookie: "mirador_token=this-hosts-own", origin: "null", range: "bytes=0-99" });
+    expect(Object.fromEntries(forwardedCanvasHeaders(incoming, "http://127.0.0.1:4621"))).toEqual({
+      range: "bytes=0-99",
+      "mirador-canvas-assets-origin": "http://127.0.0.1:4621",
+    });
+  });
+});
+
+describe("a machine's canvas assets", () => {
+  const servers: { stop: (closeActiveConnections?: boolean) => void }[] = [];
+  let relays: MachineRelays | null = null;
+  afterEach(() => {
+    relays?.stopAll();
+    servers.splice(0).forEach((server) => server.stop(true));
+  });
+
+  /** A machine whose web server says where its canvas server is, when it is new enough to; each says what it was asked. */
+  function machineThatSays(says: "its canvas origin" | "nothing about it") {
+    const canvas = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) =>
+        Response.json({ path: new URL(request.url).pathname, cookie: request.headers.get("cookie"), relay: request.headers.get("mirador-canvas-assets-origin") }),
+    });
+    const web = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) =>
+        new URL(request.url).pathname === "/mirador-here"
+          ? Response.json(says === "its canvas origin" ? { mirador: true, canvasOrigin: canvas.url.origin } : { mirador: true })
+          : Response.json({ canvasAssetsOrigin: request.headers.get("mirador-canvas-assets-origin") }),
+    });
+    servers.push(canvas, web);
+    return web.url.origin;
+  }
+
+  function relaysFor(origin: string) {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "home", name: "Home server", origin, createdAt: 1 });
+    relays = new MachineRelays(store, freePorts(3), "http://127.0.0.1:4601", () => true, () => {}, () => {});
+    relays.startAll();
+    return `http://127.0.0.1:${store.findMachine("home")!.relayPort}`;
+  }
+
+  const canvasAssetsOriginTold = async (pageRelay: string) => ((await (await fetch(`${pageRelay}/`)).json()) as { canvasAssetsOrigin: string }).canvasAssetsOrigin;
+
+  test("come through a relay of their own on this computer, which the machine's shell is told it loads from", async () => {
+    const pageRelay = relaysFor(machineThatSays("its canvas origin"));
+    const canvasRelay = await canvasAssetsOriginTold(pageRelay);
+    expect(canvasRelay).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect([pageRelay, "http://127.0.0.1:4601"]).not.toContain(canvasRelay);
+    const answer = await fetch(`${canvasRelay}/apps/media/6af5ae1363fad878/view.js`, { headers: { cookie: "mirador_token=this-hosts-own" } });
+    expect(await answer.json()).toEqual({ path: "/apps/media/6af5ae1363fad878/view.js", cookie: null, relay: canvasRelay });
+  });
+
+  test("answer only at the relay's own address", async () => {
+    const pageRelay = relaysFor(machineThatSays("its canvas origin"));
+    const canvasRelay = new URL(await canvasAssetsOriginTold(pageRelay));
+    const response = await fetch(`http://localhost:${canvasRelay.port}/d3.min.js`);
+    expect([response.status, await response.text()]).toEqual([403, "forbidden host"]);
+  });
+
+  test("come from this computer's own canvas server for a machine too old to say where its are", async () => {
+    expect(await canvasAssetsOriginTold(relaysFor(machineThatSays("nothing about it")))).toBe("http://127.0.0.1:4601");
+  });
+});
+
 describe("relayedHeaders", () => {
   test("keeps the machine's cookies off this host's address, and its redirects on the relay", () => {
     const upstream = new Headers({ "set-cookie": "mirador_token=machine; Path=/", "content-encoding": "gzip", location: `${machine}/#/c/1`, "content-type": "text/html" });
@@ -46,12 +122,6 @@ describe("relayedHeaders", () => {
 });
 
 describe("relay ports", () => {
-  const freePorts = (count: number) =>
-    Array.from({ length: count }, () => Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })).map((server) => {
-      const { port } = server;
-      server.stop(true);
-      return port!;
-    });
 
   test("keep a machine on its port from before, and move it into the range the desktop app lets its window load", () => {
     const [kept, inRange, outside] = freePorts(3) as [number, number, number];

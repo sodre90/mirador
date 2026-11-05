@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import { HERE_PATH } from "../addresses.ts";
 import { APP_MEDIA_PATH } from "../../shared/apps.ts";
+import { canvasAssetsOriginOnLoopback } from "../../shared/protocol.ts";
 import { CANVAS_SHELL_PAGE, CANVAS_SHELL_PATH, canvasShellPolicy, CAPTURE_LIBRARY_PATH, shellPolicyAskedFor } from "../../shared/canvas-document.ts";
 
 const packageDir = (name: string) => dirname(Bun.resolveSync(`${name}/package.json`, import.meta.dir));
@@ -63,7 +64,8 @@ export function serveCanvasAssets(port: number, { certificate = null, knownOrigi
       const { pathname } = url;
       if (pathname === HERE_PATH) return Response.json({ mirador: true }, { headers: corsHeaders });
       if (pathname === CANVAS_SHELL_PATH) {
-        const policy = canvasShellPolicy([...new Set([url.origin, ...knownOrigins])], shellPolicyAskedFor(url));
+        const viewingComputersRelay = canvasAssetsOriginOnLoopback(request.headers);
+        const policy = canvasShellPolicy([...new Set([url.origin, ...knownOrigins, ...(viewingComputersRelay ? [viewingComputersRelay] : [])])], shellPolicyAskedFor(url));
         return new Response(CANVAS_SHELL_PAGE, { headers: { ...shellHeaders, "Content-Security-Policy": policy } });
       }
       const viewCode = pathname.startsWith("/apps/") ? appViewCode(pathname) : null;

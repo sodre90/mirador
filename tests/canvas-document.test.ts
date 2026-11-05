@@ -211,6 +211,18 @@ describe("serveCanvasAssets", () => {
     }
   });
 
+  test("names the relay of a computer showing this machine in its rail, but only one on that computer's loopback", async () => {
+    const server = serveCanvasAssets(0);
+    try {
+      const policyAskedThrough = async (relay: string) =>
+        (await fetch(`http://127.0.0.1:${server.port}${CANVAS_SHELL_PATH}`, { headers: { "mirador-canvas-assets-origin": relay } })).headers.get("content-security-policy");
+      expect(await policyAskedThrough("http://127.0.0.1:4621")).toContain(`'self' http://127.0.0.1:${server.port} http://127.0.0.1:4621;`);
+      expect(await policyAskedThrough("https://elsewhere.example")).not.toContain("elsewhere.example");
+    } finally {
+      server.stop(true);
+    }
+  });
+
   test("streams the file an open app's view was granted, in the ranges asked for, to the sandboxed page, never from a cache", async () => {
     const clip = join(mkdtempSync(join(tmpdir(), "media-")), "clip.webm");
     writeFileSync(clip, "0123456789");

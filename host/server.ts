@@ -27,7 +27,7 @@ import { avatarProblem } from "../shared/avatar.ts";
 import { promptTemplateProblem } from "../shared/prompt-templates.ts";
 import { joinRequestNotification } from "../shared/system-notifications.ts";
 import { NOTIFICATION_KINDS, pushRelayAddressProblem, type PushNotifications } from "./push-notifications.ts";
-import { CANVAS_ASSETS_ORIGIN_HEADER, DESKTOP_APP_CODE_PARAMETER, PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
+import { canvasAssetsOriginOnLoopback, DESKTOP_APP_CODE_PARAMETER, PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { claudeProgramLookUps, claudeProgramReport } from "./acp/claude-program.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
 import type { CanvasMcpEndpoints } from "./canvas/mcp.ts";
@@ -229,8 +229,8 @@ export function startServer(services: HostServices) {
 
   /** Each page loads canvas libraries from the address it reached the host at, so it never needs to trust another. */
   function canvasAssetsOriginFor(request: Request) {
-    const viewingComputersCopy = request.headers.get(CANVAS_ASSETS_ORIGIN_HEADER);
-    if (viewingComputersCopy && /^http:\/\/127\.0\.0\.1:\d+$/.test(viewingComputersCopy)) return viewingComputersCopy;
+    const viewingComputersRelay = canvasAssetsOriginOnLoopback(request.headers);
+    if (viewingComputersRelay) return viewingComputersRelay;
     const host = request.headers.get("host") ?? "";
     if (tunnelEnds.has(request)) return canvasProxyBeside(host) ?? config.canvasAssetsOrigin;
     if (localHosts.includes(host)) return localCanvasAssetsOrigin;
@@ -245,8 +245,8 @@ export function startServer(services: HostServices) {
     return canvasPort && canvasPort <= 65535 ? `http://127.0.0.1:${canvasPort}` : null;
   }
 
-  /** Public, so Settings can tell whether an address reaches this Mirador before it believes it. */
-  const here = () => Response.json({ mirador: true });
+  /** Public, so Settings can tell whether an address reaches this Mirador before it believes it; its canvas origin lets a computer showing this machine in its rail relay its canvas assets. */
+  const here = (request: Request) => Response.json({ mirador: true, canvasOrigin: canvasAssetsOriginFor(request) });
 
   /** Public, so devices can trust Mirador's own certificate authority before they join. */
   const serveAuthority = () =>

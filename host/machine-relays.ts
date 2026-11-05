@@ -1,6 +1,7 @@
 import { askToJoin as askToJoinThere } from "../shared/join-requests.ts";
 import type { Machine } from "../shared/model.ts";
 import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE } from "../shared/protocol.ts";
+import { HERE_PATH } from "./addresses.ts";
 import { authorityFingerprint } from "./certificates.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { offeredAuthority, trusting } from "./machine-trust.ts";
@@ -9,6 +10,7 @@ import type { Store } from "./store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 
 const UPSTREAM_OPEN_TIMEOUT_MS = 10_000;
+const CANVAS_ORIGIN_ASK_TIMEOUT_MS = 4000;
 /** About the hop to the relay, or this host's own sign-in, rather than what the page asks the machine for. */
 const UNFORWARDED_REQUEST_HEADERS = new Set(["host", "cookie", "origin", "referer", "connection", "upgrade", "keep-alive", "transfer-encoding", "content-length"]);
 /**
@@ -52,6 +54,22 @@ export function forwardedHeaders(incoming: Headers, machineOrigin: string, token
   return headers;
 }
 
+/** What a canvas page asks the machine's canvas server for, without this host's sign-in, which browsers send to every port of 127.0.0.1. */
+export function forwardedCanvasHeaders(incoming: Headers, relayOrigin: string) {
+  const headers = new Headers([...incoming].filter(([name]) => !UNFORWARDED_REQUEST_HEADERS.has(name)));
+  headers.set(CANVAS_ASSETS_ORIGIN_HEADER, relayOrigin);
+  return headers;
+}
+
+/** The machine's canvas origin, as it answers at its address; null from a machine too old to say. */
+async function canvasOriginOf(machine: Machine, authority: string | null) {
+  const response = await fetch(`${machine.origin}${HERE_PATH}`, { signal: AbortSignal.timeout(CANVAS_ORIGIN_ASK_TIMEOUT_MS), ...trusting(authority) }).catch(() => null);
+  const { canvasOrigin } = ((await response?.json().catch(() => null)) ?? {}) as { canvasOrigin?: unknown };
+  if (typeof canvasOrigin !== "string" || !URL.canParse(canvasOrigin)) return null;
+  const url = new URL(canvasOrigin);
+  return url.protocol === "https:" || url.protocol === "http:" ? url.origin : null;
+}
+
 export function relayedHeaders(upstream: Headers, machineOrigin: string, relayOrigin: string) {
   const headers = new Headers([...upstream].filter(([name]) => !UNRELAYED_RESPONSE_HEADERS.has(name)));
   const location = headers.get("location");
@@ -85,6 +103,8 @@ function openUpstream(url: string, headers: Headers, authority: string | null) {
  */
 export class MachineRelays {
   private readonly servers = new Map<string, Bun.Server<RelayedSocket>>();
+  private readonly canvasServers = new Map<string, Bun.Server<undefined>>();
+  private readonly machineCanvasOrigins = new Map<string, Promise<string | null>>();
 
   constructor(
     private readonly store: Store,
@@ -95,12 +115,20 @@ export class MachineRelays {
     private readonly signedOut: (machineId: string) => void,
   ) {}
 
+  /** Each machine's page relay first, so no canvas relay takes a port a machine had before. */
   startAll() {
-    this.store.listMachines().forEach((machine) => this.start(machine));
+    const machines = this.store.listMachines();
+    machines.forEach((machine) => this.startPageRelay(machine));
+    machines.forEach((machine) => this.startCanvasRelay(machine.id));
+  }
+
+  start(machine: Machine) {
+    this.startPageRelay(machine);
+    this.startCanvasRelay(machine.id);
   }
 
   /** On the machine's port from before when it is free, so its pages keep what they stored for their origin. */
-  start(machine: Machine) {
+  private startPageRelay(machine: Machine) {
     const portBefore = machine.relayPort !== null && this.ports.includes(machine.relayPort) ? machine.relayPort : null;
     const server = (portBefore && this.listen(machine.id, portBefore)) || this.listenOnFreePort(machine.id);
     if (!server) return console.error(`no free port to show the machine ${machine.name} on`);
@@ -108,13 +136,23 @@ export class MachineRelays {
     if (server.port !== machine.relayPort) this.store.setMachineRelayPort(machine.id, server.port!);
   }
 
+  /** Canvas pages keep nothing for their origin, so this relay takes any free port. */
+  private startCanvasRelay(machineId: string) {
+    const server = this.freePortsInRange().reduce<Bun.Server<undefined> | null>((found, port) => found ?? this.listenForCanvas(machineId, port), null);
+    if (!server) return console.error(`no free port to relay the canvas assets of the machine ${this.store.findMachine(machineId)?.name} on`);
+    this.canvasServers.set(machineId, server);
+  }
+
   stop(machineId: string) {
     this.servers.get(machineId)?.stop(true);
     this.servers.delete(machineId);
+    this.canvasServers.get(machineId)?.stop(true);
+    this.canvasServers.delete(machineId);
+    this.machineCanvasOrigins.delete(machineId);
   }
 
   stopAll() {
-    [...this.servers.keys()].forEach((machineId) => this.stop(machineId));
+    [...new Set([...this.servers.keys(), ...this.canvasServers.keys()])].forEach((machineId) => this.stop(machineId));
   }
 
   /**
@@ -181,13 +219,63 @@ export class MachineRelays {
     return offered.authority;
   }
 
-  private listenOnFreePort(machineId: string) {
+  private freePortsInRange() {
     const taken = new Set(this.store.listMachines().map(({ relayPort }) => relayPort));
-    for (const port of this.ports.filter((port) => !taken.has(port))) {
+    return this.ports.filter((port) => !taken.has(port));
+  }
+
+  private listenOnFreePort(machineId: string) {
+    for (const port of this.freePortsInRange()) {
       const server = this.listen(machineId, port);
       if (server) return server;
     }
     return null;
+  }
+
+  private listenForCanvas(machineId: string, port: number) {
+    try {
+      return Bun.serve({ hostname: "127.0.0.1", port, fetch: (request) => this.relayCanvas(machineId, port, request) });
+    } catch {
+      return null;
+    }
+  }
+
+  /** Where the machine's pages in the frame load canvas assets from: its relay here, or this host's own for a machine too old to say where its are. */
+  private async canvasAssetsOriginFor(machine: Machine) {
+    const canvasServer = this.canvasServers.get(machine.id);
+    if (!canvasServer || !(await this.machineCanvasOrigin(machine))) return this.canvasAssetsOrigin;
+    return `http://127.0.0.1:${canvasServer.port}`;
+  }
+
+  /** Asked again each time a page's socket opens, so an updated or moved machine is followed. */
+  private machineCanvasOrigin(machine: Machine, askAgain = false) {
+    const known = this.machineCanvasOrigins.get(machine.id);
+    if (known && !askAgain) return known;
+    const asked = canvasOriginOf(machine, this.store.machineAuthority(machine.id));
+    this.machineCanvasOrigins.set(machine.id, asked);
+    return asked;
+  }
+
+  /** No sign-in, as the machine's canvas server asks none: it serves only libraries, views under a hash of their code, and media under tokens. */
+  private async relayCanvas(machineId: string, port: number, request: Request) {
+    const machine = this.store.findMachine(machineId);
+    if (!machine) return new Response("unknown machine", { status: 404 });
+    const relayOrigin = `http://127.0.0.1:${port}`;
+    if (request.headers.get("host") !== new URL(relayOrigin).host) return new Response("forbidden host", { status: 403 });
+    const canvasOrigin = await this.machineCanvasOrigin(machine);
+    if (!canvasOrigin) return new Response(`${machine.name} did not say where its canvas assets are.`, { status: 502 });
+    const url = new URL(request.url);
+    const response = await fetch(`${canvasOrigin}${url.pathname}${url.search}`, {
+      method: request.method,
+      headers: forwardedCanvasHeaders(request.headers, relayOrigin),
+      redirect: "manual",
+      ...trusting(this.store.machineAuthority(machineId)),
+    }).catch(() => null);
+    if (!response) {
+      this.machineCanvasOrigins.delete(machineId);
+      return new Response(`${machine.name} did not answer.`, { status: 502 });
+    }
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: relayedHeaders(response.headers, canvasOrigin, relayOrigin) });
   }
 
   private listen(machineId: string, port: number) {
@@ -225,8 +313,10 @@ export class MachineRelays {
     const url = new URL(request.url);
     if (url.pathname === "/join" && request.method === "POST") return this.joinFromPage(machine, request);
     if (url.pathname.startsWith("/join-requests")) return new Response("This computer asks to join its machines itself, from its own window.", { status: 403 });
-    const headers = forwardedHeaders(request.headers, machine.origin, this.store.machineDeviceToken(machineId), this.canvasAssetsOrigin);
-    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") return this.relaySocket(machine, url, headers, request, server);
+    const opensSocket = request.headers.get("upgrade")?.toLowerCase() === "websocket";
+    if (opensSocket) await this.machineCanvasOrigin(machine, true);
+    const headers = forwardedHeaders(request.headers, machine.origin, this.store.machineDeviceToken(machineId), await this.canvasAssetsOriginFor(machine));
+    if (opensSocket) return this.relaySocket(machine, url, headers, request, server);
 
     const response = await fetch(`${machine.origin}${url.pathname}${url.search}`, {
       method: request.method,

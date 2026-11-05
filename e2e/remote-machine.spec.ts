@@ -1,6 +1,6 @@
 import { connect, createServer, type Server } from "node:net";
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync } from "node:fs";
+import { cpSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import {
   addWorkspace,
@@ -46,8 +46,14 @@ function forward(fromPort: number, toPort: number) {
 
 let forwarders: Server[] = [];
 
+/** An app on the server alone, so this computer's canvas server has no copy of its view to stand in for the server's. */
+function installCounterAppOnTheServer() {
+  cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "apps", "counter"), join(host.dataDir, "plugins", "counter"), { recursive: true });
+}
+
 test.beforeAll(async () => {
   publicPort = await freePorts(2);
+  installCounterAppOnTheServer();
   await Promise.all([host.start(), laptop.start()]);
   forwarders = await Promise.all([forward(publicPort, host.port), forward(publicPort + 1, host.port + 1)]);
 });
@@ -158,14 +164,25 @@ test("the laptop joins the server with an invite link and shows its own Mirador 
     serverConversation = conversationInFrame(page)!;
   });
 
-  await test.step("its canvas pages load their libraries from this computer, whose browser need not trust the server's certificate", async () => {
+  await test.step("its canvas pages load the server's libraries through a relay on this computer, whose browser need not trust the server's certificate", async () => {
     const html = `<div id="out"></div><script src="${publicCanvasOrigin()}/d3.min.js"></script><script>document.getElementById("out").textContent = "d3 " + d3.version;</script>`;
     void callCanvasTool(host, serverConversation, "show", { title: "Chart", html }).catch(() => {});
     const canvasPage = frame.locator(".canvas-panel:visible .canvas-frame.show iframe");
     await expect(canvasPage.contentFrame().locator("#out")).toHaveText(/^d3 7/);
-    const laptopAssets = `http://127.0.0.1:${laptop.port + 1}`;
-    expect(await canvasPage.getAttribute("src")).toBe(`${laptopAssets}${CANVAS_SHELL_PATH}`);
-    await expect(canvasPage.contentFrame().locator("script[src$='/d3.min.js']")).toHaveAttribute("src", `${laptopAssets}/d3.min.js`);
+    const canvasRelay = new URL((await canvasPage.getAttribute("src"))!).origin;
+    expect(canvasRelay).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/);
+    expect([`http://127.0.0.1:${laptop.port + 1}`, publicCanvasOrigin()]).not.toContain(canvasRelay);
+    expect(await canvasPage.getAttribute("src")).toBe(`${canvasRelay}${CANVAS_SHELL_PATH}`);
+    await expect(canvasPage.contentFrame().locator("script[src$='/d3.min.js']")).toHaveAttribute("src", `${canvasRelay}/d3.min.js`);
+  });
+
+  await test.step("an app only the server has shows there, and streams the server's media", async () => {
+    cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "red-clip.webm"), join(serverOnly, "clip.webm"));
+    expect(await callCanvasTool(host, serverConversation, "app_open", { app: "counter", file: "counter.json" })).toContain("Counter is open on counter.json");
+    const view = frame.locator(".canvas-panel:visible .canvas-frame.app iframe").contentFrame();
+    await expect(view.locator("#count")).toHaveText("0");
+    await view.locator("#show-clip").click();
+    await expect(view.locator("#clip-state")).toHaveText("showing 64×48");
   });
 
   await test.step("the page shows the server again after a reload, and this computer's own view at a click", async () => {

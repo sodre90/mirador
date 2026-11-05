@@ -62,10 +62,15 @@ export interface TerminalSplit {
 /** The cookie a signed-in page carries; the desktop app sends it too when it listens for system notifications. */
 export const TOKEN_COOKIE = "mirador_token";
 /**
- * Sent by the relay that shows a machine in the rail: the machine's pages there load canvas libraries from this
- * computer's own copy, as this computer's browser may not trust the machine's certificate.
+ * Sent by the relay that shows a machine in the rail: the machine's pages there load canvas libraries, app views and
+ * media through a relay on this computer's loopback, as this computer's browser may not trust the machine's certificate.
  */
 export const CANVAS_ASSETS_ORIGIN_HEADER = "mirador-canvas-assets-origin";
+
+export function canvasAssetsOriginOnLoopback(headers: Headers) {
+  const origin = headers.get(CANVAS_ASSETS_ORIGIN_HEADER);
+  return origin && /^http:\/\/127\.0\.0\.1:\d+$/.test(origin) ? origin : null;
+}
 /**
  * Mirador's own pages edit profiles, so they open /ws with this query parameter to get what each profile launches its
  * agent with: the environment and prelaunch command, which often hold API keys. Other clients, such as the phone app,
