@@ -492,6 +492,21 @@ describe("SourceWatcher", () => {
     expect(await staleAfterEditing("shared/model.ts", ["host", "ui"])).toEqual(["host", "ui"]);
   });
 
+  test("the listener is told which file was edited, by its path in the source folder", async () => {
+    const sourceDir = mkdtempSync(join(tmpdir(), "mirador-source-"));
+    ["web/chat", "shared", "host"].forEach((directory) => mkdirSync(join(sourceDir, directory), { recursive: true }));
+    await Bun.sleep(200);
+    const edited: string[] = [];
+    const watcher = new SourceWatcher(sourceDir, { uiEdited: (path) => edited.push(path), hostEdited: () => {} });
+    watcher.start();
+    try {
+      const bubble = join("web", "chat", "Bubble.tsx");
+      expect(await toldOnceExpected(edited, [bubble], () => writeFileSync(join(sourceDir, bubble), "export {};\n"))).toEqual([bubble]);
+    } finally {
+      watcher.stop();
+    }
+  });
+
   test("a change Linux tells of without a name is an edit", () => {
     const sourceDir = mkdtempSync(join(tmpdir(), "mirador-source-"));
     mkdirSync(join(sourceDir, "acp"));

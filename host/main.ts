@@ -185,7 +185,8 @@ const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
 const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
 const sourceWatcher = new SourceWatcher(sourceDir, {
-  uiEdited: () => {
+  uiEdited: (edited) => {
+    console.log(`${edited} changed, so the page is built again`);
     server.rebuildUi();
     newerVersion.recount();
   },

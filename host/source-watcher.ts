@@ -24,7 +24,8 @@ export class SourceWatcher {
 
   constructor(
     private readonly sourceDir: string,
-    private readonly on: Record<EditListener, () => void>,
+    /** Each listener is given what was edited, relative to the source folder: a file, or a folder replaced or named by no event. */
+    private readonly on: Record<EditListener, (edited: string) => void>,
   ) {}
 
   start() {
@@ -47,7 +48,7 @@ export class SourceWatcher {
     const ino = inodeOf(path);
     if (ino === undefined) return;
     const watcher = watch(path, { recursive: true }, (_event, name) => {
-      if (isEdit(path, name)) this.edited(directory);
+      if (isEdit(path, name)) this.edited(directory, name ? join(directory, name) : directory);
     });
     this.folderWatches.set(directory, { watcher, ino });
   }
@@ -55,10 +56,10 @@ export class SourceWatcher {
   private folderMayBeReplaced(directory: string) {
     if (inodeOf(join(this.sourceDir, directory)) === this.folderWatches.get(directory)?.ino) return;
     this.watchFolder(directory);
-    this.edited(directory);
+    this.edited(directory, directory);
   }
 
-  private edited(directory: string) {
-    listenersByDirectory[directory]?.forEach((listener) => this.on[listener]());
+  private edited(directory: string, edited: string) {
+    listenersByDirectory[directory]?.forEach((listener) => this.on[listener](edited));
   }
 }
