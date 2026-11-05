@@ -152,7 +152,7 @@ test("the laptop joins the server with an invite link and shows its own Mirador 
     await expect(page).toHaveURL(/#\/m\/[\w-]+$/);
     const card = workspaceCard(frame, serverOnly);
     await card.getByRole("button", { name: "+ New conversation" }).click();
-    await expect(frame.locator(".chat-header:visible .settings-model")).toBeVisible({ timeout: 60_000 });
+    await expect(frame.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: 60_000 });
     await expect(page.getByText("No conversation selected")).toBeHidden();
     await expect.poll(() => conversationInFrame(page)).toBeTruthy();
     serverConversation = conversationInFrame(page)!;

@@ -98,3 +98,33 @@ test.describe("under a banner", () => {
     await expectStaysPutWhenClicked(page, ".toggle-canvas");
   });
 });
+
+test("however narrow the conversation's pane gets, every button of its bar stays inside it on one line, the settings turning into an icon where their names don't fit", async ({ page }) => {
+  await page.setViewportSize({ width: 1800, height: 900 });
+  await signIn(page, host);
+  const [newConversation, addProject] = [page.getByRole("button", { name: "+ New conversation" }), page.getByRole("button", { name: "+ Add a project directory" })];
+  await expect(newConversation.or(addProject)).toBeVisible();
+  if (await addProject.isVisible()) await addWorkspace(page, host.projectDir);
+  const conversationId = await startConversation(page);
+  await callCanvasTool(host, conversationId, "show", { title: "Open", html: "<p>canvas</p>" });
+  await expect(toggles(page).getByRole("button", { name: "Hide canvas" })).toBeVisible();
+  const header = page.locator(".chat-header:visible");
+  const heightAtFullWidth = (await header.boundingBox())!.height;
+  for (const conversationWidth of [700, 560, 480, 440, 400, 377, 320]) {
+    await page.locator(".workspace-area:visible").evaluate((area, width) => (area.style.gridTemplateColumns = `${width}px 7px minmax(0, 1fr)`), conversationWidth);
+    await expect.poll(async () => Math.round((await header.boundingBox())!.width)).toBe(conversationWidth);
+    const bar = (await header.boundingBox())!;
+    for (const button of await header.locator(".title-line button:visible").all()) {
+      const box = (await button.boundingBox())!;
+      expect(box.x + box.width, `${await button.getAttribute("class")} at ${conversationWidth}px`).toBeLessThanOrEqual(bar.x + bar.width);
+    }
+    const settings = header.locator(".conversation-settings-toggle");
+    if (conversationWidth > 440) expect((await settings.boundingBox())!.width, `settings at ${conversationWidth}px`).toBeGreaterThanOrEqual(70);
+    else {
+      await expect(settings.locator(".settings-icon"), `at ${conversationWidth}px the settings show as an icon`).toBeVisible();
+      await expect(settings.locator(".settings-summary")).toBeHidden();
+      await expect(settings).toHaveAttribute("data-hint", /^Claude Code · /);
+    }
+    if (conversationWidth >= 377) expect((await header.boundingBox())!.height, `one line at ${conversationWidth}px`).toBe(heightAtFullWidth);
+  }
+});

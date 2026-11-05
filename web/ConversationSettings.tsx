@@ -192,11 +192,24 @@ export function useConversationSettings() {
 
 type SettingsState = ReturnType<typeof useConversationSettings>;
 
+/** Stands in for the profile and model where the bar has no room for them. */
+function SettingsIcon() {
+  return (
+    <svg className="settings-icon" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+      <path d="M2.5 4.5h11M2.5 8h11M2.5 11.5h11" />
+      <circle cx="5.5" cy="4.5" r="1.4" fill="var(--panel)" />
+      <circle cx="10.5" cy="8" r="1.4" fill="var(--panel)" />
+      <circle cx="6.5" cy="11.5" r="1.4" fill="var(--panel)" />
+    </svg>
+  );
+}
+
 /** The conversation's profile, its agent where the name doesn't say it, and its model: what opens its settings. */
 export function ConversationSettingsToggle({ conversation, profiles, settings }: { conversation: Conversation; profiles: Profile[]; settings: SettingsState }) {
   const profile = profiles.find(({ id }) => id === conversation.profileId);
   const agent = agentBesideProfile(profile?.name ?? null, conversation.harness);
   const model = chosenModel(conversation.configOptions);
+  const summary = [profileNameOf(conversation, profile), agent, model?.name].filter(Boolean).join(" · ");
   return (
     <button
       ref={settings.toggle}
@@ -205,10 +218,11 @@ export function ConversationSettingsToggle({ conversation, profiles, settings }:
       aria-haspopup="dialog"
       aria-expanded={settings.placement !== null}
       data-agent={harnessLabels[conversation.harness]}
-      data-hint={hints.conversationSettings}
+      data-hint={`${summary}\n\n${hints.conversationSettings}`}
       onClick={settings.flip}
     >
       <ProfileDot profile={profile} />
+      <SettingsIcon />
       <span className="settings-summary">
         <span className="settings-profile">{profileNameOf(conversation, profile)}</span>
         {agent && (

@@ -179,7 +179,7 @@ export async function startConversation(page: Page, { withModels = true } = {}) 
   await page.getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
   await expect(page.locator(".chat-header:visible h2")).toHaveText("New conversation");
-  if (withModels) await expect(page.locator(".chat-header:visible .settings-model")).toBeVisible({ timeout: 60_000 });
+  if (withModels) await expect(page.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: 60_000 });
   return page.url().match(/#\/c\/(.+)$/)![1]!;
 }
 

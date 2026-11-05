@@ -195,7 +195,7 @@ async function newConversationIn(page: Page, directory: string) {
   const previousUrl = page.url();
   await workspaceCard(page, directory).getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
-  await expect(page.locator(".chat-header:visible .settings-model")).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: 60_000 });
   await expect((await conversationSettings(page)).getByLabel("Effort", { exact: true })).toHaveValue("default");
   await page.keyboard.press("Escape");
   return page.url().match(/#\/c\/(.+)$/)![1]!;

@@ -194,8 +194,17 @@ kbd {
   gap: 2px;
 }
 
-/* By the window's width, not the bar's: the bar widens as the canvas hides, and names coming back would move the toggles. */
+/*
+ * Mostly by the window's width, not the bar's: the bar widens as the canvas hides, and names coming back would move the
+ * toggles. Only a bar too narrow for them drops them by its own width.
+ */
 @media (max-width: 1700px) {
+  button.icon.layout-toggle > span {
+    display: none;
+  }
+}
+
+@container (max-width: 560px) {
   button.icon.layout-toggle > span {
     display: none;
   }
@@ -1528,17 +1537,22 @@ button.icon.workspace-fold {
   white-space: nowrap;
 }
 
-/* The title is what tells conversations apart, so the settings give up their room first. */
+/* Its buttons are the bar's own items: a group would keep the settings' whole text as its least width. */
 .header-actions {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  min-width: 0;
-  flex-shrink: 4;
+  display: contents;
 }
 
-.header-actions > :not(.conversation-settings-toggle) {
+.header-actions > * {
   flex-shrink: 0;
+}
+
+.header-actions > * + * {
+  margin-left: -6px;
+}
+
+/* The title is what tells conversations apart, so the settings give up their room first. */
+.header-actions > button.conversation-settings-toggle {
+  flex-shrink: 4;
 }
 
 @container (max-width: 300px) {
@@ -1550,7 +1564,7 @@ button.icon.workspace-fold {
     flex-basis: 8em;
   }
 
-  .header-actions {
+  .header-actions > :first-child {
     margin-left: auto;
   }
 }
@@ -1559,7 +1573,7 @@ button.conversation-settings-toggle {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  min-width: 0;
+  min-width: 6em;
   max-width: 280px;
   height: 26px;
   margin-right: 4px;
@@ -1574,6 +1588,33 @@ button.conversation-settings-toggle {
 
 button.conversation-settings-toggle.on {
   border-color: var(--accent);
+}
+
+.settings-icon {
+  display: none;
+  flex: none;
+  width: 14px;
+  height: 14px;
+}
+
+/* Too narrow a bar for the profile and model: they show in the toggle's hint and its popover instead. */
+@container (max-width: 440px) {
+  .settings-icon {
+    display: block;
+  }
+
+  .settings-summary {
+    display: none;
+  }
+
+  .header-actions > button.conversation-settings-toggle {
+    min-width: 0;
+    flex-shrink: 0;
+  }
+
+  .title-line h2 {
+    min-width: 3em;
+  }
 }
 
 .settings-summary {
