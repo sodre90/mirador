@@ -194,6 +194,8 @@ function Bridge({ text, facade, onText, onCaret, onKeyDown, onPaste, element }: 
         configurable: true,
         value(options?: FocusOptions) {
           nativeFocus.call(root, options);
+          // Lexical focuses the box again when applying a selection outside it, so a box that can't take focus, as one hidden, would recurse forever.
+          if (document.activeElement !== root) return;
           select(box.current.selection.start, box.current.selection.end);
           requestAnimationFrame(() => redrawCaret(root));
         },

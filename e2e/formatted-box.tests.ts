@@ -434,4 +434,20 @@ export function formattedBoxTests() {
     await page.keyboard.type("item");
     await expectSent("- item", "ControlOrMeta+Enter");
   });
+
+  test("the box focused while hidden, as a full-screen canvas hides the chat, keeps the page and its draft", async () => {
+    await page.keyboard.type("draft");
+    const composer = (await page.locator(".composer:visible").elementHandle())!;
+    await composer.evaluate((element) => {
+      (document.activeElement as HTMLElement | null)?.blur();
+      element.style.display = "none";
+      (element.querySelector(".formatted-box") as HTMLElement).focus();
+    });
+    await composer.evaluate((element) => (element.style.display = ""));
+    await expect(page.getByRole("heading", { name: "Something went wrong on this page" })).toHaveCount(0);
+    expect(await boxValue()).toBe("draft");
+    await box().click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace");
+  });
 }
