@@ -54,6 +54,7 @@ test("a conversation can be put away or kept with a reminder, and comes back at 
   const toast = page.locator(".reminder-toast");
   const banner = page.locator(".reminder-banner:visible");
   const modifier = await primaryModifier(page);
+  let agentLogLinesBeforePuttingFirstAway = 0;
 
   await test.step("⌘⇧L then Enter puts the open conversation away until tomorrow morning, and the toast takes it back", async () => {
     await page.keyboard.press(`${modifier}+Shift+KeyL`);
@@ -93,6 +94,7 @@ test("a conversation can be put away or kept with a reminder, and comes back at 
     await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle");
     await typeInComposer(page, "/later 0.1m pick up the e2e");
     await expect(page.locator(".reminder-command-preview:visible")).toContainText("Put away →");
+    agentLogLinesBeforePuttingFirstAway = agentLogLines().length;
     await page.locator(".composer:visible textarea").press("Enter");
     await expect(row(first)).toHaveCount(0);
     await laterGroup.getByRole("button", { name: /Later \(1\)/ }).click();
@@ -111,10 +113,14 @@ test("a conversation can be put away or kept with a reminder, and comes back at 
   });
 
   await test.step("its agent session was let go of while it waited, and the next message picks the same session up again", async () => {
-    const firstSession = agentLogLines().find((line) => line.startsWith("agent new "))?.split(" ").at(-1);
-    expect(agentLogLines(), agentLogLines().join("\n")).toContain(`agent closed ${firstSession}`);
+    const closedOnceAway = agentLogLines()
+      .slice(agentLogLinesBeforePuttingFirstAway)
+      .find((line) => line.startsWith("agent closed "))
+      ?.split(" ")
+      .at(-1);
+    expect(closedOnceAway, agentLogLines().join("\n")).toBeTruthy();
     await sendMessage(page, "picking it up");
-    await expect.poll(agentLogLines).toContain(`agent resumed ${firstSession}`);
+    await expect.poll(agentLogLines).toContain(`agent resumed ${closedOnceAway}`);
     await expect(page.locator(".timeline:visible .message.user")).toHaveCount(2);
   });
 
