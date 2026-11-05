@@ -88,6 +88,10 @@ test("a preview that would squeeze its layout to fit beside the others takes its
     const heights = await preview(option).contentFrame().locator(".toolbar b").evaluateAll((items) => items.map((item) => item.getBoundingClientRect().height));
     expect(new Set(heights).size, "no item of the toolbar wraps").toBe(1);
   }
+  await page.setViewportSize({ width: 1500, height: 1000 });
+  await expect(options.nth(1), "the previews measure themselves again as the canvas narrows").toBeVisible();
+  await page.waitForTimeout(500);
+  await expect(page.locator(".ask-option .frame-errors"), "measuring a preview is no error of its page").toHaveCount(0);
   await answerCanvasQuestion(page, "Light");
 });
 

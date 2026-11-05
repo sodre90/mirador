@@ -1209,7 +1209,8 @@ ${HIDDEN_ERROR_SCRIPT}
     root.style.width = inlineWidth;
     return width;
   };
-  new ResizeObserver(reportSize).observe(document.documentElement);
+  // Measuring the natural width resizes the page for a moment, which inside the observer's own callback is a resize loop.
+  new ResizeObserver(() => (${measuresNaturalWidth} ? requestAnimationFrame(reportSize) : reportSize())).observe(document.documentElement);
   addEventListener("load", reportSize);
   const hasRoom = (node, axis, delta) => {
     const position = axis === "scrollTop" ? node.scrollTop : node.scrollLeft;
