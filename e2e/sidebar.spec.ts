@@ -71,7 +71,7 @@ test("a workspace folds to its heading, by its chevron or its name, stays folded
   await expect(workspaceCard(page, otherDir).locator("li")).toHaveCount(1);
 
   await page
-    .locator(".window-bar")
+    .locator(".sidebar")
     .getByRole("button", { name: /^Conversations and actions/ })
     .click();
   await page.getByPlaceholder(/Go to a conversation/).fill(`New conversation in ${name}`);
@@ -86,7 +86,7 @@ test("a workspace folds to its heading, by its chevron or its name, stays folded
     await card.getByRole("button", { name: `Fold ${name}` }).click();
     await expect(card.locator("li")).toHaveCount(0);
     await page
-      .locator(".window-bar")
+      .locator(".sidebar")
       .getByRole("button", { name: /^Conversations and actions/ })
       .click();
     await page.getByPlaceholder(/Go to a conversation/).fill("Folded away");

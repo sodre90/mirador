@@ -79,7 +79,7 @@ function ReadyUpdateBanner({ readyUpdate }: { readyUpdate: ReadyUpdate }) {
   if (dismissed === readyUpdate.version) return null;
   return (
     <div className="banner newer-version">
-      <span>{words.ready(readyUpdate.version)}</span>
+      <span title={words.ready(readyUpdate.version)}>{words.ready(readyUpdate.version)}</span>
       <RestartToUpdate />
       <button type="button" data-hint={hints.dismissNewerVersion} onClick={() => dismiss(readyUpdate.version)}>
         {words.dismiss}
@@ -93,7 +93,7 @@ function NewerVersionSign({ newerVersion, desktopUpdate }: { newerVersion: Newer
   if (dismissed === newerVersionKey(newerVersion)) return null;
   return (
     <div className="banner newer-version">
-      <span>{newerVersionSentence(newerVersion, desktopUpdate)}</span>
+      <span title={newerVersionSentence(newerVersion, desktopUpdate)}>{newerVersionSentence(newerVersion, desktopUpdate)}</span>
       <NextStep newerVersion={newerVersion} desktopUpdate={desktopUpdate} />
       <button type="button" data-hint={hints.dismissNewerVersion} onClick={() => dismiss(newerVersionKey(newerVersion))}>
         {words.dismiss}

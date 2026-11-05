@@ -29,7 +29,7 @@ test("splitting, closing and hiding terminals while other tabs are open throws n
   const splits = page.locator(".terminal-pane .terminal-splits.shown .terminal-split");
 
   for (let round = 0; round < ROUNDS; round++) {
-    await page.locator(".window-bar").getByRole("button", { name: "Show terminal" }).click();
+    await page.locator(".layout-toggles:visible").getByRole("button", { name: "Show terminal" }).click();
     await expect(splits).toHaveCount(1);
     await page.getByRole("button", { name: "Split right" }).click();
     await expect(splits).toHaveCount(2);
@@ -39,7 +39,7 @@ test("splitting, closing and hiding terminals while other tabs are open throws n
     await page.getByRole("button", { name: "New terminal tab" }).click();
     await expect(page.getByRole("tab")).toHaveCount(round + 2);
     await page.getByRole("tab").first().click();
-    await page.locator(".window-bar").getByRole("button", { name: "Hide terminal" }).click();
+    await page.locator(".layout-toggles:visible").getByRole("button", { name: "Hide terminal" }).click();
     await expect(page.locator(".terminal-pane")).toHaveCount(0);
   }
   expect(pageErrors).toEqual([]);

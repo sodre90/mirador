@@ -41,7 +41,7 @@ import { findsInCanvasPage, shortcutKeys, typingStateOf, type ShortcutCommand } 
 import { setFontScale, stepFontScale } from "./font-scale.ts";
 import { resetTerminalFontSize, stepTerminalFontSize } from "./terminal-settings.ts";
 import { Sidebar } from "./Sidebar.tsx";
-import { WindowBar } from "./WindowBar.tsx";
+import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
 import { Splitter } from "./Splitter.tsx";
 import { initialStateFor, reducer, selectedOpen, type AppAction, type AppState, type OpenConversation } from "./state.ts";
 import { useSystemNotifications } from "./system-notifications.ts";
@@ -82,7 +82,7 @@ export function HostBanner({ status, state }: { status: ConnectionStatus; state:
   if (!state.hostCodeChanged) return null;
   return (
     <div className="banner host-code-changed">
-      <span>{t.shell.app.hostCodeChanged}</span>
+      <span title={t.shell.app.hostCodeChanged}>{t.shell.app.hostCodeChanged}</span>
       <button type="button" data-hint={hints.restartHost} onClick={restartHost}>
         {t.shell.app.restartHost} <kbd>{shortcutKeys().restartHost}</kbd>
       </button>
@@ -543,50 +543,62 @@ export function App() {
   const overlay = state.overlay;
   const reminderConversation = overlay?.kind === "reminder" ? state.conversations.find(({ id }) => id === overlay.conversationId) : undefined;
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
+  const layoutToggles = {
+    sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
+    canvas: { visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) },
+    terminal: { visible: terminalInView, toggle: toggleTerminal, disabled: !(conversation && workspace) },
+  };
   const conversationPane = (
     <main className="chat-column">
-      <HostBanner status={status} state={state} />
-      <DesktopAppBanner state={state} />
-      <NewerVersionBanner newerVersion={state.newerVersion} />
-      {inFixedOrder(state.kept).map((kept) => {
-        const keptConversation = state.conversations.find(({ id }) => id === kept.conversationId);
-        return (
-          keptConversation && (
-            <Activity key={kept.conversationId} mode={kept === open ? "visible" : "hidden"}>
-              <RedrawnOnlyWhenShown shown={kept === open}>
-                <AskToRevert.Provider
-                  value={({ turn, rewind }) => dispatch({ type: "open-overlay", overlay: { kind: "revert", conversationId: kept.conversationId, turn, rewind } })}
-                >
-                  <ChatPanel
-                    conversation={keptConversation}
-                    delegatedTasks={state.conversations.filter(({ startedBy }) => startedBy?.conversationId === keptConversation.id && !startedBy.dismissed)}
-                    profiles={state.profiles}
-                    promptTemplates={state.promptTemplates}
-                    voiceSettings={state.voiceSettings}
-                    voiceEngine={state.voiceEngine}
-                    userPicture={state.avatar}
-                    onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
-                    open={kept}
-                    canvasVisible={canvasInView}
-                    onFork={() => forkConversation(keptConversation, dispatch)}
-                    reminderMorning={state.reminderMorning}
-                    dispatch={dispatch}
-                  />
-                </AskToRevert.Provider>
-              </RedrawnOnlyWhenShown>
-            </Activity>
-          )
-        );
-      })}
-      {!(conversation && open) &&
-        (state.profiles.length === 0 ? (
-          <FirstProfile installedAgents={state.installedAgents} conversations={state.conversations} />
-        ) : (
-          <div className="empty-state">
-            <h2>{t.shell.app.noConversation}</h2>
-            <p>{t.shell.app.noConversationHint}</p>
-          </div>
-        ))}
+      <LayoutToggleState.Provider value={layoutToggles}>
+        <HostBanner status={status} state={state} />
+        <DesktopAppBanner state={state} />
+        <NewerVersionBanner newerVersion={state.newerVersion} />
+        {inFixedOrder(state.kept).map((kept) => {
+          const keptConversation = state.conversations.find(({ id }) => id === kept.conversationId);
+          return (
+            keptConversation && (
+              <Activity key={kept.conversationId} mode={kept === open ? "visible" : "hidden"}>
+                <RedrawnOnlyWhenShown shown={kept === open}>
+                  <AskToRevert.Provider
+                    value={({ turn, rewind }) => dispatch({ type: "open-overlay", overlay: { kind: "revert", conversationId: kept.conversationId, turn, rewind } })}
+                  >
+                    <ChatPanel
+                      conversation={keptConversation}
+                      delegatedTasks={state.conversations.filter(({ startedBy }) => startedBy?.conversationId === keptConversation.id && !startedBy.dismissed)}
+                      profiles={state.profiles}
+                      promptTemplates={state.promptTemplates}
+                      voiceSettings={state.voiceSettings}
+                      voiceEngine={state.voiceEngine}
+                      userPicture={state.avatar}
+                      onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
+                      open={kept}
+                      canvasVisible={canvasInView}
+                      onFork={() => forkConversation(keptConversation, dispatch)}
+                      reminderMorning={state.reminderMorning}
+                      dispatch={dispatch}
+                    />
+                  </AskToRevert.Provider>
+                </RedrawnOnlyWhenShown>
+              </Activity>
+            )
+          );
+        })}
+        {!(conversation && open) &&
+          (state.profiles.length === 0 ? (
+            <FirstProfile installedAgents={state.installedAgents} conversations={state.conversations} />
+          ) : (
+            <>
+              <div className="empty-state-bar" data-pane-bar>
+                <LayoutToggles />
+              </div>
+              <div className="empty-state">
+                <h2>{t.shell.app.noConversation}</h2>
+                <p>{t.shell.app.noConversationHint}</p>
+              </div>
+            </>
+          ))}
+      </LayoutToggleState.Provider>
     </main>
   );
   const layoutWidth = layoutElement.current?.getBoundingClientRect().width ?? window.innerWidth;
@@ -606,12 +618,6 @@ export function App() {
         className={`layout ${shownMachine ? "covered" : ""} ${sidebarHidden ? "sidebar-hidden" : ""}`}
         style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
       >
-        <WindowBar
-          sidebar={{ visible: !sidebarHidden, toggle: toggleSidebar }}
-          canvas={{ visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) }}
-          terminal={{ visible: terminalInView, toggle: toggleTerminal, disabled: !(conversation && workspace) }}
-          onPalette={() => dispatch({ type: "open-overlay", overlay: { kind: "palette" } })}
-        />
         {!sidebarHidden && (
           <>
             <Sidebar state={state} dispatch={dispatch} />

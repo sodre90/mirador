@@ -180,9 +180,7 @@ kbd {
   --splitter-width: 7px;
   position: relative;
   display: grid;
-  --window-bar-height: 28px;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  grid-template-rows: var(--window-bar-height) minmax(0, 1fr);
   height: 100vh;
 }
 
@@ -190,32 +188,17 @@ kbd {
   grid-template-columns: minmax(0, 1fr);
 }
 
-.window-bar {
-  grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
-}
-
-.window-bar .palette-bar {
-  flex: 0 1 440px;
-  min-width: 0;
-  margin: 0 auto;
-  padding: 1px 10px;
-  font-size: calc(11.5px * var(--font-scale));
-}
-
-.window-bar-panes {
+.layout-toggles {
   display: flex;
   flex: none;
   gap: 2px;
 }
 
-button.icon.window-toggle {
+.empty-state-bar {
+  padding: 10px 16px;
+}
+
+button.icon.layout-toggle {
   flex: none;
   min-width: 28px;
   height: 22px;
@@ -228,13 +211,13 @@ button.icon.window-toggle {
   font-size: calc(12px * var(--font-scale));
 }
 
-button.icon.window-toggle[aria-pressed="true"],
-button.icon.window-toggle[aria-pressed="true"]:hover:not(:disabled) {
+button.icon.layout-toggle[aria-pressed="true"],
+button.icon.layout-toggle[aria-pressed="true"]:hover:not(:disabled) {
   color: var(--text);
   background: var(--panel-2);
 }
 
-button.icon.window-toggle svg,
+button.icon.layout-toggle svg,
 button.icon.page-find-toggle svg {
   display: block;
   width: 1em;
@@ -333,7 +316,7 @@ button.icon.pane-fullscreen.on {
 
 .layout > .splitter {
   position: absolute;
-  top: var(--window-bar-height);
+  top: 0;
   bottom: 0;
   left: calc(var(--sidebar-width) - var(--splitter-width) / 2);
   width: var(--splitter-width);
@@ -392,19 +375,35 @@ body.resizing iframe {
   text-align: left;
 }
 
+/* One line at any width: a banner that wrapped in a narrow column would move the bar below it as the column widens. */
 .banner {
   background: var(--warn);
   color: #000;
   padding: 4px 12px;
   font-size: calc(12px * var(--font-scale));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .banner.host-code-changed,
 .banner.newer-version {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: 10px;
+}
+
+.banner.host-code-changed > *,
+.banner.newer-version > * {
+  flex: none;
+}
+
+.banner.host-code-changed > span:first-child,
+.banner.newer-version > span:first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* The banner is the same orange with black text in both themes, so its button is too. */
@@ -676,6 +675,7 @@ body.resizing iframe {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  margin: 12px 10px 0;
   padding: 6px 10px;
   border: 1px solid var(--rail-line);
   border-radius: 6px;

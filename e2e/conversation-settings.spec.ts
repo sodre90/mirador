@@ -81,13 +81,13 @@ for (const width of [1100, 1440]) {
     await signInWithWorkspace(page);
     const conversationId = await startConversation(page);
     await callCanvasTool(host, conversationId, "show", { title: "Open", html: "<p>canvas</p>" });
-    const canvasToggle = page.locator(".window-bar").getByRole("button", { name: "Hide canvas" });
+    const canvasToggle = page.locator(".layout-toggles:visible").getByRole("button", { name: "Hide canvas" });
     await expect(canvasToggle).toBeVisible();
     const header = page.locator(".chat-header:visible");
     const heightWithCanvas = (await header.boundingBox())!.height;
 
     await canvasToggle.click();
-    await expect(page.locator(".window-bar").getByRole("button", { name: "Show canvas" })).toBeVisible();
+    await expect(page.locator(".layout-toggles:visible").getByRole("button", { name: "Show canvas" })).toBeVisible();
     expect((await header.boundingBox())!.height).toBe(heightWithCanvas);
   });
 }

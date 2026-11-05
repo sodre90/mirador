@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { shortcutKeys } from "./shortcuts.ts";
@@ -43,7 +43,7 @@ function ToggleButton({
   return (
     <button
       type="button"
-      className={`icon window-toggle ${className}`}
+      className={`icon layout-toggle ${className}`}
       aria-label={pane.visible ? hideLabel : showLabel}
       aria-pressed={pane.visible}
       disabled={pane.disabled}
@@ -57,11 +57,25 @@ function ToggleButton({
   );
 }
 
-/** Across the whole window, so its buttons stay under the pointer whatever they show or hide. */
-export function WindowBar({ sidebar, canvas, terminal, onPalette }: { sidebar: PaneToggle; canvas: PaneToggle; terminal: PaneToggle; onPalette: () => void }) {
+interface LayoutToggleState {
+  sidebar: PaneToggle;
+  canvas: PaneToggle;
+  terminal: PaneToggle;
+}
+
+export const LayoutToggleState = createContext<LayoutToggleState | null>(null);
+
+/**
+ * At the start of the conversation's bar: in the default layout, showing or hiding the canvas or terminal leaves that edge
+ * where it is, so these stay under the pointer. Hiding the sidebar, or a pane moved before the conversation, moves them.
+ */
+export function LayoutToggles() {
+  const state = useContext(LayoutToggleState);
+  if (!state) return null;
+  const { sidebar, canvas, terminal } = state;
   const keys = shortcutKeys();
   return (
-    <header className="window-bar">
+    <span className="layout-toggles">
       <ToggleButton
         className="toggle-sidebar"
         pane={sidebar}
@@ -71,32 +85,26 @@ export function WindowBar({ sidebar, canvas, terminal, onPalette }: { sidebar: P
         hint={sidebar.visible ? hints.hideSidebar : hints.showSidebar}
         shortcut={keys.toggleSidebar}
       />
-      <button type="button" className="palette-bar" onClick={onPalette}>
-        <span>{t.shell.sidebar.paletteBar}</span>
-        <kbd>{keys.palette}</kbd>
-      </button>
-      <span className="window-bar-panes">
-        <ToggleButton
-          className="toggle-canvas"
-          pane={canvas}
-          icon={<PanelIcon panel="right" />}
-          name={t.chat.header.canvasToggle}
-          hideLabel={t.chat.header.hideCanvas}
-          showLabel={t.chat.header.showCanvas}
-          hint={hints.canvasToggle}
-          shortcut={keys.toggleCanvas}
-        />
-        <ToggleButton
-          className="toggle-terminal"
-          pane={terminal}
-          icon={<PanelIcon panel="bottom" />}
-          name={t.chat.header.terminalToggle}
-          hideLabel={t.chat.header.hideTerminal}
-          showLabel={t.chat.header.showTerminal}
-          hint={hints.terminalToggle}
-          shortcut={keys.toggleTerminal}
-        />
-      </span>
-    </header>
+      <ToggleButton
+        className="toggle-canvas"
+        pane={canvas}
+        icon={<PanelIcon panel="right" />}
+        name={t.chat.header.canvasToggle}
+        hideLabel={t.chat.header.hideCanvas}
+        showLabel={t.chat.header.showCanvas}
+        hint={hints.canvasToggle}
+        shortcut={keys.toggleCanvas}
+      />
+      <ToggleButton
+        className="toggle-terminal"
+        pane={terminal}
+        icon={<PanelIcon panel="bottom" />}
+        name={t.chat.header.terminalToggle}
+        hideLabel={t.chat.header.hideTerminal}
+        showLabel={t.chat.header.showTerminal}
+        hint={hints.terminalToggle}
+        shortcut={keys.toggleTerminal}
+      />
+    </span>
   );
 }

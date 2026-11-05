@@ -56,7 +56,7 @@ async function startConversationIn(page: Page, directory: string) {
 }
 
 async function runFromPalette(page: Page, label: string) {
-  await page.locator(".window-bar").getByRole("button", { name: /^Conversations and actions/ }).click();
+  await page.locator(".sidebar").getByRole("button", { name: /^Conversations and actions/ }).click();
   await page.getByPlaceholder(/Go to a conversation/).fill(label);
   await page.keyboard.press("Enter");
 }

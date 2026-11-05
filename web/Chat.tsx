@@ -108,6 +108,7 @@ import { statusDetailOf } from "./status-detail.ts";
 import { formatClockTime, formatDuration, formatFullTime } from "./timestamps.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
+import { LayoutToggles } from "./LayoutToggles.tsx";
 import { ConversationSettingsPopover, ConversationSettingsToggle, useConversationSettings } from "./ConversationSettings.tsx";
 
 const words = t.chat;
@@ -167,6 +168,7 @@ function ChatHeader({
     <header className="chat-header" data-pane-bar>
       <div className="title-row">
         <div className="title-line">
+          <LayoutToggles />
           <PaneGrip pane="conversation" />
           <h2>
             <ConversationTitle conversation={conversation} startEditingOn="click" className="conversation-name" />

@@ -15,7 +15,7 @@ test.afterAll(async () => {
 
 const screens = (page: Page) => page.locator(".terminal-pane .terminal-splits.shown .xterm-rows");
 const screenOf = (page: Page, index: number) => screens(page).nth(index);
-const terminalToggle = (page: Page, name: "Show terminal" | "Hide terminal") => page.locator(".window-bar").getByRole("button", { name });
+const terminalToggle = (page: Page, name: "Show terminal" | "Hide terminal") => page.locator(".layout-toggles:visible").getByRole("button", { name });
 
 /** Shown again, the pane mounts its terminals afresh, and they replay their history. */
 async function hideTerminalPane(page: Page) {

@@ -760,6 +760,10 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
   };
   return (
     <nav className="sidebar">
+      <button className="palette-bar" onClick={() => openOverlay({ kind: "palette" })}>
+        <span>{words.paletteBar}</span>
+        <kbd>{shortcutKeys().palette}</kbd>
+      </button>
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">
