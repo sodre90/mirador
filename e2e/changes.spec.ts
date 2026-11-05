@@ -66,6 +66,12 @@ async function startConversation(page: Page) {
 
 let conversationId: string;
 
+/**
+ * Git keeps a commit's time in whole seconds, so the host counts a commit in any command window starting within its
+ * second, and a window opens a second before its command: a test's commit stays out of the next conversation's after two.
+ */
+const pastTheCommitsWindows = () => new Promise((passed) => setTimeout(passed, 2_000));
+
 test("the empty canvas lists the files this turn changed as the agent works, its own edits apart from the project's other changes and files outside the project apart, under home as ~/", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
@@ -601,6 +607,7 @@ test("This turn lists the files commits since the turn began changed in a sectio
     await expect(fileRow(page, "by-hand.txt").locator(".from-commit")).toHaveCount(0);
     await expect(changes(page).locator(".changes-diff")).toContainText("committed by the agent");
   });
+  await pastTheCommitsWindows();
 });
 
 test("This session leaves out the git-ignored files its commands wrote while Git-ignored files is off, and remembers the choice", async ({ page }) => {
