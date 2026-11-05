@@ -16,12 +16,13 @@
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { CASK_ASSETS } from "../desktop/scripts/homebrew-cask.ts";
 import { LOGIN_KEYCHAIN, NOTARY_CREDENTIALS, NOTARY_PROFILE } from "../desktop/scripts/sign-macos-app.ts";
 import { buildMachineBun, definedBunVersion, requireDefinedBun } from "../desktop/scripts/ship-build-bun.ts";
 import type { Platform } from "../desktop/scripts/update-files.ts";
 import { isNewerVersion, RELEASES_REPOSITORY } from "../shared/newer-version.ts";
+import { errorsOutsideTests, failedTests, keepBeadsFor, type Beads, type E2eReport } from "./e2e-failure-beads.ts";
 
 const CHECKOUT = join(import.meta.dir, "..");
 const VERSION_FILE = join("shared", "version.ts");
@@ -340,7 +341,41 @@ function gate(release: Release) {
   requireDefinedBun(buildMachineBun(), definedBunVersion(release.worktree));
   run(["bunx", "tsc", "--noEmit", "-p", "."], release.worktree);
   run(["bun", "run", "test"], release.worktree);
-  run(["scripts/e2e.sh"], release.worktree);
+  // Not in release.dist, whose every file the draft takes for an asset.
+  const results = join(mkdtempSync(join(tmpdir(), "mirador-gate-")), "e2e-results.json");
+  try {
+    run(["scripts/e2e.sh"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: results });
+  } catch (failed) {
+    try {
+      keepBeadsForFailedTests(results, release);
+    } catch (error) {
+      console.error(`Keeping beads for the failed tests failed: ${error instanceof Error ? error.message : error}`);
+    }
+    throw failed;
+  }
+}
+
+/** Beads through bd in the checkout, which holds the project's beads. */
+const beadsOfTheCheckout: Beads = {
+  find: (externalRef) => (JSON.parse(read(["bd", "list", "--all", "--external-ref", externalRef, "--limit", "1", "--json"])) as { id: string; status: string }[])[0],
+  create: ({ title, description, externalRef }) =>
+    read(["bd", "create", "--type", "bug", "--priority", "2", "--title", title, "--description", description, "--external-ref", externalRef, "--silent"]),
+  comment: (id, text) => void read(["bd", "comments", "add", id, text]),
+  reopen: (id, reason) => void read(["bd", "reopen", id, "--reason", reason]),
+};
+
+function keepBeadsForFailedTests(results: string, release: Release) {
+  if (!existsSync(results)) return console.error(`No results at ${results}, so no beads for the failed tests`);
+  const report = JSON.parse(readFileSync(results, "utf8")) as E2eReport;
+  const run = { commit: read(["git", "rev-parse", "--short", "HEAD"], release.worktree), date: new Date().toISOString().slice(0, 10), keptCopy: dirname(report.config.rootDir) };
+  const failed = failedTests(report);
+  if (failed.length === 0) {
+    console.error(`No test failed on its own, so no bead was filed. The run's own errors:\n${errorsOutsideTests(report)}`);
+    return;
+  }
+  keepBeadsFor(failed, beadsOfTheCheckout, run).forEach((outcome) =>
+    console.error(`${outcome.was} ${"id" in outcome ? outcome.id : outcome.problem}: ${outcome.test.file}:${outcome.test.line} ${outcome.test.title}`),
+  );
 }
 
 function requireLinuxHost() {
