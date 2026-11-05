@@ -40,7 +40,8 @@ import { SettingsDialog } from "./Settings.tsx";
 import { findsInCanvasPage, shortcutKeys, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
 import { setFontScale, stepFontScale } from "./font-scale.ts";
 import { resetTerminalFontSize, stepTerminalFontSize } from "./terminal-settings.ts";
-import { ShowSidebarButton, Sidebar } from "./Sidebar.tsx";
+import { Sidebar } from "./Sidebar.tsx";
+import { WindowBar } from "./WindowBar.tsx";
 import { Splitter } from "./Splitter.tsx";
 import { initialStateFor, reducer, selectedOpen, type AppAction, type AppState, type OpenConversation } from "./state.ts";
 import { useSystemNotifications } from "./system-notifications.ts";
@@ -567,9 +568,6 @@ export function App() {
                     onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
                     open={kept}
                     canvasVisible={canvasInView}
-                    onToggleCanvas={toggleCanvas}
-                    terminalVisible={terminalInView}
-                    onToggleTerminal={toggleTerminal}
                     onFork={() => forkConversation(keptConversation, dispatch)}
                     reminderMorning={state.reminderMorning}
                     dispatch={dispatch}
@@ -608,11 +606,15 @@ export function App() {
         className={`layout ${shownMachine ? "covered" : ""} ${sidebarHidden ? "sidebar-hidden" : ""}`}
         style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
       >
-        {sidebarHidden ? (
-          <ShowSidebarButton onShow={toggleSidebar} />
-        ) : (
+        <WindowBar
+          sidebar={{ visible: !sidebarHidden, toggle: toggleSidebar }}
+          canvas={{ visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) }}
+          terminal={{ visible: terminalInView, toggle: toggleTerminal, disabled: !(conversation && workspace) }}
+          onPalette={() => dispatch({ type: "open-overlay", overlay: { kind: "palette" } })}
+        />
+        {!sidebarHidden && (
           <>
-            <Sidebar state={state} dispatch={dispatch} onHide={toggleSidebar} />
+            <Sidebar state={state} dispatch={dispatch} />
             <Splitter
               label={t.shell.panes.resizeSidebar}
               share={sidebarWidth / layoutWidth}

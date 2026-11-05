@@ -58,7 +58,7 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   await expect(sidebar.getByRole("button", { name: "+ Új beszélgetés" })).toBeVisible();
   await expect(sidebar.locator(".footer-buttons > button")).toHaveText([/^Beállítások…/, /^Bővítmények…/, "Profilok…", "Gépek…", "Keresés…", /^Billentyűk/]);
 
-  await sidebar.getByRole("button", { name: /^Beszélgetések és műveletek…/ }).click();
+  await page.locator(".window-bar").getByRole("button", { name: /^Beszélgetések és műveletek…/ }).click();
   const palette = page.getByRole("dialog", { name: "Paletta" });
   await expect(palette.getByRole("textbox", { name: "Beszélgetések és műveletek keresése" })).toBeVisible();
   const entries = palette.getByRole("option");
@@ -79,16 +79,17 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   const header = page.locator(".chat-header:visible");
   await expect(header.locator("h2")).toHaveText("Új beszélgetés");
   await expect(sidebar.locator(".conversation-title").first()).toHaveText("Új beszélgetés");
-  await expect(header.getByRole("button", { name: "Vászon elrejtése" }).or(header.getByRole("button", { name: "Vászon mutatása" }))).toBeVisible();
+  const windowBar = page.locator(".window-bar");
+  await expect(windowBar.getByRole("button", { name: "Vászon elrejtése" }).or(windowBar.getByRole("button", { name: "Vászon mutatása" }))).toBeVisible();
   await expect(header.getByLabel("Kérdések").locator("option")).toHaveText(["Az ágens vár a válaszomra", "A válaszom a következő üzenetként megy el"]);
 
-  const showCanvas = header.getByRole("button", { name: "Vászon mutatása" });
+  const showCanvas = windowBar.getByRole("button", { name: "Vászon mutatása" });
   if (await showCanvas.isVisible()) await showCanvas.click();
   const canvas = page.locator(".canvas-panel:visible");
   await expect(canvas.locator(".canvas-title")).toHaveText("Vászon");
   await expect(canvas.getByRole("button", { name: "Elrejtés" })).toBeVisible();
 
-  const showTerminal = header.getByRole("button", { name: "Terminál mutatása" });
+  const showTerminal = windowBar.getByRole("button", { name: "Terminál mutatása" });
   if (await showTerminal.isVisible()) await showTerminal.click();
   const terminals = page.locator(".terminal-pane:visible");
   await expect(terminals.getByRole("button", { name: "Új terminállap" })).toBeVisible();

@@ -115,10 +115,10 @@ test("conversations, workspaces, the canvas and the dialogs are all reachable fr
   await expect.poll(() => focusedTag(page)).toBe("TEXTAREA");
 });
 
-test("the search bar at the top of the sidebar shows the palette's shortcut and opens the palette", async ({ page }) => {
+test("the search bar at the top of the window shows the palette's shortcut and opens the palette", async ({ page }) => {
   await signIn(page, host);
   const primary = await primaryModifier(page);
-  const bar = page.locator(".sidebar .palette-bar");
+  const bar = page.locator(".window-bar .palette-bar");
   await expect(bar).toContainText("Conversations and actions…");
   await expect(bar.locator("kbd")).toHaveText(primary === "Meta" ? "⌘K" : "Ctrl+K");
   await bar.click();

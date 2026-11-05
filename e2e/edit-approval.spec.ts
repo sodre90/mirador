@@ -152,7 +152,7 @@ test("with edits kept out of the canvas in Settings, or the canvas hidden, the c
   await expect(lastAgentMessage(page)).toHaveText("Edit src/app.ts: allow");
 
   await showInCanvas(true);
-  await page.locator(".chat-header:visible").getByRole("button", { name: "Hide canvas" }).click();
+  await page.locator(".window-bar").getByRole("button", { name: "Hide canvas" }).click();
   await askToEdit(page, edit("Edit src/app.ts", "line 8\n", "line eight\n"));
   await expect(pendingCard(page).locator(".diff")).toContainText("line eight");
   await expect(pendingCard(page).locator(".diff-removed .word-changed")).toHaveText("8");
@@ -162,7 +162,7 @@ test("with edits kept out of the canvas in Settings, or the canvas hidden, the c
     text: getComputedStyle(line.querySelector(".code-text")!).fontSize,
   }));
   expect(fontSizes.text).toBe(fontSizes.line);
-  await page.locator(".chat-header:visible").getByRole("button", { name: "Show canvas" }).click();
+  await page.locator(".window-bar").getByRole("button", { name: "Show canvas" }).click();
   await expect(editView(page).locator(".code-row.added")).toContainText("line eight");
   await expect(pendingCard(page)).toContainText("Shown in the canvas");
   await expect(pendingCard(page).locator(".diff")).toHaveCount(0);

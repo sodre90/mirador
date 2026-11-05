@@ -100,5 +100,5 @@ test("a narrow conversation pane keeps its title readable and moves the header's
   await dragSplitterBy(page, -5000);
   expect(await widthOf(page, ".chat-header")).toBeLessThan(400);
   expect(await widthOf(page, ".chat-header h2")).toBeGreaterThanOrEqual(120);
-  await expect(page.locator(".chat-header .toggle-terminal")).toBeInViewport({ ratio: 1 });
+  await expect(page.locator(".chat-header:visible .pane-fullscreen")).toBeInViewport({ ratio: 1 });
 });

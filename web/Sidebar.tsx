@@ -684,25 +684,7 @@ function ConnectedDevices({ listed, onOpen }: { listed: DevicesListed | null; on
   );
 }
 
-function SidebarIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <rect x="1.75" y="2.75" width="12.5" height="10.5" rx="2" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M6 3v10" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
-}
-
-/** Stays over the top-left pane's bar while the sidebar is hidden, to bring it back. */
-export function ShowSidebarButton({ onShow }: { onShow: () => void }) {
-  return (
-    <button className="icon show-sidebar" aria-label={words.showSidebar} data-hint={hints.showSidebar} data-shortcut={shortcutKeys().toggleSidebar} onClick={onShow}>
-      <SidebarIcon />
-    </button>
-  );
-}
-
-export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch: Dispatch<AppAction>; onHide: () => void }) {
+export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
   const adding = state.overlay?.kind === "add-workspace";
   const setAdding = (open: boolean) => dispatch(open ? { type: "open-overlay", overlay: { kind: "add-workspace" } } : { type: "close-overlay" });
   const openOverlay = (overlay: Overlay) => dispatch({ type: "open-overlay", overlay });
@@ -778,10 +760,6 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
   };
   return (
     <nav className="sidebar">
-      <button className="palette-bar" onClick={() => openOverlay({ kind: "palette" })}>
-        <span>{words.paletteBar}</span>
-        <kbd>{shortcutKeys().palette}</kbd>
-      </button>
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">
@@ -790,9 +768,6 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
           </button>
           <button className="icon" aria-label={words.addWorkspace} data-hint={hints.addWorkspace} data-shortcut={shortcutKeys().newWorkspace} onClick={() => setAdding(true)}>
             +
-          </button>
-          <button className="icon hide-sidebar" aria-label={words.hideSidebar} data-hint={hints.hideSidebar} data-shortcut={shortcutKeys().toggleSidebar} onClick={onHide}>
-            <SidebarIcon />
           </button>
         </span>
       </header>

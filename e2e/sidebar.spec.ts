@@ -71,7 +71,7 @@ test("a workspace folds to its heading, by its chevron or its name, stays folded
   await expect(workspaceCard(page, otherDir).locator("li")).toHaveCount(1);
 
   await page
-    .locator(".sidebar")
+    .locator(".window-bar")
     .getByRole("button", { name: /^Conversations and actions/ })
     .click();
   await page.getByPlaceholder(/Go to a conversation/).fill(`New conversation in ${name}`);
@@ -86,7 +86,7 @@ test("a workspace folds to its heading, by its chevron or its name, stays folded
     await card.getByRole("button", { name: `Fold ${name}` }).click();
     await expect(card.locator("li")).toHaveCount(0);
     await page
-      .locator(".sidebar")
+      .locator(".window-bar")
       .getByRole("button", { name: /^Conversations and actions/ })
       .click();
     await page.getByPlaceholder(/Go to a conversation/).fill("Folded away");
@@ -254,6 +254,6 @@ test("the Workspaces heading and its buttons stay at the top of the sidebar whil
   await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
   expect(await heading.boundingBox()).toEqual(placeBefore);
 
-  await heading.getByRole("button", { name: "Hide the sidebar" }).click();
-  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await heading.getByRole("button", { name: "Add workspace" }).click();
+  await expect(page.locator(".add-workspace input")).toBeVisible();
 });

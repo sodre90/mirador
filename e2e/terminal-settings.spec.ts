@@ -32,7 +32,7 @@ const terminalBackgroundOf = async (page: Page) =>
   page.locator(".terminal-pane .terminal-view").first().evaluate((view) => getComputedStyle(view).backgroundColor);
 
 const showTerminal = async (page: Page) => {
-  const toggle = page.locator(".chat-header:visible").getByRole("button", { name: "Show terminal" });
+  const toggle = page.locator(".window-bar").getByRole("button", { name: "Show terminal" });
   if (await toggle.count()) await toggle.click();
   await expect(page.locator(".terminal-pane .xterm-rows")).toBeVisible();
 };

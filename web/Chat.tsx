@@ -269,10 +269,6 @@ function PluginSettingMenus({ conversation, profiles }: { conversation: Conversa
 function ChatHeader({
   conversation,
   profiles,
-  canvasVisible,
-  onToggleCanvas,
-  terminalVisible,
-  onToggleTerminal,
   runningSubagents,
   onShowRunningSubagent,
   onFind,
@@ -283,10 +279,6 @@ function ChatHeader({
 }: {
   conversation: Conversation;
   profiles: Profile[];
-  canvasVisible: boolean;
-  onToggleCanvas: () => void;
-  terminalVisible: boolean;
-  onToggleTerminal: () => void;
   runningSubagents: number;
   onShowRunningSubagent: () => void;
   onFind: () => void;
@@ -332,12 +324,6 @@ function ChatHeader({
           onClick={onRemind}
         >
           ⏰
-        </button>
-        <button className="toggle-canvas" data-hint={hints.canvasToggle} data-shortcut={shortcutKeys().toggleCanvas} onClick={onToggleCanvas}>
-          {canvasVisible ? words.header.hideCanvas : words.header.showCanvas}
-        </button>
-        <button className="toggle-terminal" data-hint={hints.terminalToggle} data-shortcut={shortcutKeys().toggleTerminal} onClick={onToggleTerminal}>
-          {terminalVisible ? words.header.hideTerminal : words.header.showTerminal}
         </button>
         <FullscreenToggle pane="conversation" />
       </div>
@@ -2102,9 +2088,6 @@ export function ChatPanel({
   onManageTemplates,
   open,
   canvasVisible,
-  onToggleCanvas,
-  terminalVisible,
-  onToggleTerminal,
   onFork,
   reminderMorning,
   dispatch,
@@ -2121,9 +2104,6 @@ export function ChatPanel({
   onManageTemplates: () => void;
   open: OpenConversation;
   canvasVisible: boolean;
-  onToggleCanvas: () => void;
-  terminalVisible: boolean;
-  onToggleTerminal: () => void;
   onFork: () => void;
   reminderMorning: number;
   dispatch: Dispatch<AppAction>;
@@ -2207,10 +2187,6 @@ export function ChatPanel({
                     <ChatHeader
                       conversation={conversation}
                       profiles={profiles}
-                      canvasVisible={canvasVisible}
-                      onToggleCanvas={onToggleCanvas}
-                      terminalVisible={terminalVisible}
-                      onToggleTerminal={onToggleTerminal}
                       runningSubagents={runningSubagents.length}
                       onShowRunningSubagent={showRunningSubagent}
                       onFind={find.open}

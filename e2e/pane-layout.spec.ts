@@ -100,13 +100,13 @@ test("panes resize, swap by their grips without reloading, go fullscreen, hide, 
   await page.getByRole("button", { name: "Exit fullscreen" }).click();
   expect(await placeOf(page, "terminals")).toBe("left");
 
-  const header = page.locator(".chat-header:visible");
+  const windowBar = page.locator(".window-bar");
   await page.getByRole("button", { name: "Fullscreen conversation" }).click();
-  await expect(header.getByRole("button", { name: "Show canvas" })).toBeVisible();
-  await header.getByRole("button", { name: "Show terminal" }).click();
+  await expect(windowBar.getByRole("button", { name: "Show canvas" })).toBeVisible();
+  await windowBar.getByRole("button", { name: "Show terminal" }).click();
   expect(await placesOf(page)).toEqual({ conversation: "right bottom", canvas: "right top", terminals: "left" });
-  await expect(header.getByRole("button", { name: "Hide canvas" })).toBeVisible();
-  await expect(header.getByRole("button", { name: "Hide terminal" })).toBeVisible();
+  await expect(windowBar.getByRole("button", { name: "Hide canvas" })).toBeVisible();
+  await expect(windowBar.getByRole("button", { name: "Hide terminal" })).toBeVisible();
   await page.getByRole("button", { name: "Fullscreen conversation" }).click();
   await runFromPalette(page, "Show canvas");
   await expect.poll(() => placesOf(page)).toEqual({ conversation: "right bottom", canvas: "right top", terminals: "left" });
@@ -164,18 +164,18 @@ test("a canvas the user hid comes back when the agent shows something new on it"
   await expect(newConversation.or(addProject)).toBeVisible();
   if (await addProject.isVisible()) await addWorkspace(page, host.projectDir);
   const conversationId = await startConversation(page);
-  const header = page.locator(".chat-header:visible");
+  const windowBar = page.locator(".window-bar");
   await callCanvasTool(host, conversationId, "show", { title: "Before hiding", html: "<h1>before</h1>" });
   await expect(page.locator(".canvas-title:visible")).toHaveText("Before hiding");
-  await header.getByRole("button", { name: "Hide canvas" }).click();
+  await windowBar.getByRole("button", { name: "Hide canvas" }).click();
   await expect(pane(page, "canvas")).toHaveCount(0);
   await page.reload();
-  await expect(header.getByRole("button", { name: "Show canvas" })).toBeVisible();
+  await expect(windowBar.getByRole("button", { name: "Show canvas" })).toBeVisible();
   await expect(pane(page, "canvas")).toHaveCount(0);
 
   await callCanvasTool(host, conversationId, "show", { title: "After hiding", html: "<h1>after</h1>" });
   await expect(page.locator(".canvas-title:visible")).toHaveText("After hiding");
-  await expect(header.getByRole("button", { name: "Hide canvas" })).toBeVisible();
+  await expect(windowBar.getByRole("button", { name: "Hide canvas" })).toBeVisible();
 });
 
 test("the sidebar resizes between its limits, keeps its width after a reload, and a double-click restores it", async ({ page }) => {
@@ -243,13 +243,13 @@ test("the sidebar hides completely by its button, the palette or the shortcut, s
   const primary = await primaryModifier(page);
   const sidebar = page.locator(".sidebar");
   const showButton = page.getByRole("button", { name: "Show the sidebar" });
-  const title = page.locator(".chat-header h2:visible");
+  const toggle = page.locator(".window-bar .toggle-sidebar");
+  const togglePlace = await toggle.boundingBox();
   const expectHidden = async () => {
     await expect(sidebar).toHaveCount(0);
     await expect(showButton).toBeVisible();
     expect((await workspaceBox(page)).x).toBe(0);
-    const button = (await showButton.boundingBox())!;
-    expect((await title.boundingBox())!.x).toBeGreaterThanOrEqual(button.x + button.width);
+    expect(await toggle.boundingBox()).toEqual(togglePlace);
   };
   const expectShown = async () => {
     await expect(sidebar).toBeVisible();
