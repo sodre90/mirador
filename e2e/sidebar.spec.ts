@@ -239,3 +239,21 @@ test("Enter takes the highlighted folder while its name is being typed, and adds
   await pickProfileIfAsked(page, join(parent, "alpha-two"));
   await expect(workspaceCard(page, join(parent, "alpha-two"))).toBeVisible();
 });
+
+test("the Workspaces heading and its buttons stay at the top of the sidebar while its list scrolls", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 420 });
+  const folders = ["scrolled-a", "scrolled-b", "scrolled-c", "scrolled-d"].map((name) => join(host.root, name));
+  folders.forEach((folder) => mkdirSync(folder, { recursive: true }));
+  await signIn(page, host);
+  for (const folder of folders) await addWorkspaceFromSidebar(page, folder);
+  const heading = page.locator(".sidebar-header");
+  const placeBefore = await heading.boundingBox();
+
+  const list = page.locator(".sidebar-scroll");
+  await list.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
+  expect(await heading.boundingBox()).toEqual(placeBefore);
+
+  await heading.getByRole("button", { name: "Hide the sidebar" }).click();
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+});

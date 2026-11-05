@@ -782,23 +782,23 @@ export function Sidebar({ state, dispatch, onHide }: { state: AppState; dispatch
         <span>{words.paletteBar}</span>
         <kbd>{shortcutKeys().palette}</kbd>
       </button>
+      <header className="sidebar-header">
+        <h1>{words.workspaces}</h1>
+        <span className="sidebar-header-buttons">
+          <button className="icon" aria-label={words.newGroup} data-hint={hints.addWorkspaceGroup} onClick={() => openOverlay({ kind: "add-workspace-group" })}>
+            ⊞
+          </button>
+          <button className="icon" aria-label={words.addWorkspace} data-hint={hints.addWorkspace} data-shortcut={shortcutKeys().newWorkspace} onClick={() => setAdding(true)}>
+            +
+          </button>
+          <button className="icon hide-sidebar" aria-label={words.hideSidebar} data-hint={hints.hideSidebar} data-shortcut={shortcutKeys().toggleSidebar} onClick={onHide}>
+            <SidebarIcon />
+          </button>
+        </span>
+      </header>
       <div className="sidebar-scroll" ref={sidebar}>
         <WaitingEdge side="above" hidden={outOfView.above} onClick={() => scrollToWaiting("above")} />
         <WaitingList state={state} dispatch={dispatch} />
-        <header>
-          <h1>{words.workspaces}</h1>
-          <span className="sidebar-header-buttons">
-            <button className="icon" aria-label={words.newGroup} data-hint={hints.addWorkspaceGroup} onClick={() => openOverlay({ kind: "add-workspace-group" })}>
-              ⊞
-            </button>
-            <button className="icon" aria-label={words.addWorkspace} data-hint={hints.addWorkspace} data-shortcut={shortcutKeys().newWorkspace} onClick={() => setAdding(true)}>
-              +
-            </button>
-            <button className="icon hide-sidebar" aria-label={words.hideSidebar} data-hint={hints.hideSidebar} data-shortcut={shortcutKeys().toggleSidebar} onClick={onHide}>
-              <SidebarIcon />
-            </button>
-          </span>
-        </header>
         {adding && <AddWorkspace profiles={state.profiles} onDone={() => setAdding(false)} />}
         {state.workspaces.length === 0 && !adding && (
           <button className="link" onClick={() => setAdding(true)}>

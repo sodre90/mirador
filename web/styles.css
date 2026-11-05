@@ -682,12 +682,12 @@ body.resizing iframe {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 14px 10px 8px;
+  padding: 4px 10px 8px;
   display: flex;
   flex-direction: column;
 }
 
-.sidebar-scroll > header,
+.sidebar-header,
 .workspace > header {
   display: flex;
   align-items: center;
@@ -695,8 +695,9 @@ body.resizing iframe {
   gap: 8px;
 }
 
-.sidebar-scroll > header {
-  padding: 0 4px 0 8px;
+.sidebar-header {
+  flex: none;
+  padding: 12px 14px 4px 18px;
 }
 
 .sidebar h1 {
@@ -706,7 +707,7 @@ body.resizing iframe {
   margin: 0;
 }
 
-.sidebar-scroll > header h1 {
+.sidebar-header h1 {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
