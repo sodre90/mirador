@@ -17,9 +17,9 @@ const splits = (page: Page) => page.locator(".terminal-pane .terminal-splits.sho
 const terminalHasFocus = (page: Page) => page.evaluate(() => Boolean(document.activeElement?.closest(".terminal-pane .terminal-splits.shown .xterm")));
 const focusMessageBox = (page: Page) => page.locator(".composer textarea:visible").click();
 
-/** From the sidebar's button: a macOS terminal keeps ⌘K to clear itself, and a fullscreen pane covers the message box. */
+/** From the window bar's button: a macOS terminal keeps ⌘K to clear itself, and a fullscreen pane covers the message box. */
 async function runFromPalette(page: Page, label: string) {
-  await page.locator(".sidebar").getByRole("button", { name: /^Conversations and actions/ }).click();
+  await page.locator(".window-bar").getByRole("button", { name: /^Conversations and actions/ }).click();
   await page.getByPlaceholder(/Go to a conversation/).fill(label);
   await page.keyboard.press("Enter");
 }
