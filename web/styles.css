@@ -1521,19 +1521,24 @@ button.icon.workspace-fold {
   font-size: calc(14.5px * var(--font-scale));
   font-weight: 600;
   margin: 0;
-  flex: 1 1 0;
+  flex: 1 1 auto;
   min-width: 4em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* The title is what tells conversations apart, so the settings give up their room first. */
 .header-actions {
   display: flex;
   align-items: center;
   gap: 2px;
   min-width: 0;
-  flex-shrink: 1;
+  flex-shrink: 4;
+}
+
+.header-actions > :not(.conversation-settings-toggle) {
+  flex-shrink: 0;
 }
 
 @container (max-width: 300px) {
