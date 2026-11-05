@@ -29,7 +29,7 @@ test("the canvas and terminal toggles wait, disabled, in the window bar until a 
   await addWorkspace(page, host.projectDir);
   await expect(windowBar(page).getByRole("button", { name: "Show the sidebar" }).or(windowBar(page).getByRole("button", { name: "Hide the sidebar" }))).toBeEnabled();
   const paneToggles = windowBar(page).locator(".window-bar-panes button");
-  await expect(paneToggles).toHaveCount(2);
+  await expect(paneToggles, "each pane's toggle names it, the same whether it hides or shows").toHaveText(["Canvas", "Terminal"]);
   for (const toggle of await paneToggles.all()) await expect(toggle).toBeDisabled();
   await startConversation(page);
   for (const toggle of await paneToggles.all()) await expect(toggle).toBeEnabled();

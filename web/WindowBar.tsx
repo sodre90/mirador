@@ -24,6 +24,7 @@ function ToggleButton({
   className,
   pane,
   icon,
+  name,
   hideLabel,
   showLabel,
   hint,
@@ -32,6 +33,8 @@ function ToggleButton({
   className: string;
   pane: PaneToggle;
   icon: ReactNode;
+  /** Shown beside the icon; Hide and Show stay out of it, so the button keeps its width. */
+  name?: string;
   hideLabel: string;
   showLabel: string;
   hint: string;
@@ -49,6 +52,7 @@ function ToggleButton({
       onClick={pane.toggle}
     >
       {icon}
+      {name && <span>{name}</span>}
     </button>
   );
 }
@@ -76,6 +80,7 @@ export function WindowBar({ sidebar, canvas, terminal, onPalette }: { sidebar: P
           className="toggle-canvas"
           pane={canvas}
           icon={<PanelIcon panel="right" />}
+          name={t.chat.header.canvasToggle}
           hideLabel={t.chat.header.hideCanvas}
           showLabel={t.chat.header.showCanvas}
           hint={hints.canvasToggle}
@@ -85,6 +90,7 @@ export function WindowBar({ sidebar, canvas, terminal, onPalette }: { sidebar: P
           className="toggle-terminal"
           pane={terminal}
           icon={<PanelIcon panel="bottom" />}
+          name={t.chat.header.terminalToggle}
           hideLabel={t.chat.header.hideTerminal}
           showLabel={t.chat.header.showTerminal}
           hint={hints.terminalToggle}

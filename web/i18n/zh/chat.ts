@@ -20,6 +20,8 @@ export const chat: Messages["chat"] = {
     hideCanvas: "隐藏画布",
     showTerminal: "显示终端",
     hideTerminal: "隐藏终端",
+    canvasToggle: "画布",
+    terminalToggle: "终端",
     questions: "问题",
     settingsTitle: "此对话的设置",
     settingsNote: "配置只提供它们的初始值：在这里的更改只对此对话有效。",

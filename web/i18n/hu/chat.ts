@@ -20,6 +20,8 @@ export const chat: Messages["chat"] = {
     hideCanvas: "Vászon elrejtése",
     showTerminal: "Terminál mutatása",
     hideTerminal: "Terminál elrejtése",
+    canvasToggle: "Vászon",
+    terminalToggle: "Terminál",
     questions: "Kérdések",
     settingsTitle: "A beszélgetés beállításai",
     settingsNote: "A profil csak a kezdőértékeiket adja meg: amit itt változtatsz, csak erre a beszélgetésre vonatkozik.",

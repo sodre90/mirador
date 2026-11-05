@@ -180,7 +180,7 @@ kbd {
   --splitter-width: 7px;
   position: relative;
   display: grid;
-  --window-bar-height: 36px;
+  --window-bar-height: 28px;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
   grid-template-rows: var(--window-bar-height) minmax(0, 1fr);
   height: 100vh;
@@ -205,7 +205,8 @@ kbd {
   flex: 0 1 440px;
   min-width: 0;
   margin: 0 auto;
-  padding: 3px 10px;
+  padding: 1px 10px;
+  font-size: calc(11.5px * var(--font-scale));
 }
 
 .window-bar-panes {
@@ -216,16 +217,21 @@ kbd {
 
 button.icon.window-toggle {
   flex: none;
-  width: 30px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  padding: 0;
+  min-width: 28px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 6px;
   border-radius: 5px;
+  font-size: calc(12px * var(--font-scale));
 }
 
-button.icon.window-toggle[aria-pressed="true"] {
+button.icon.window-toggle[aria-pressed="true"],
+button.icon.window-toggle[aria-pressed="true"]:hover:not(:disabled) {
   color: var(--text);
+  background: var(--panel-2);
 }
 
 button.icon.window-toggle svg,

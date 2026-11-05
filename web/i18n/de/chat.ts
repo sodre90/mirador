@@ -22,6 +22,8 @@ export const chat: Messages["chat"] = {
     hideCanvas: "Canvas ausblenden",
     showTerminal: "Terminal zeigen",
     hideTerminal: "Terminal ausblenden",
+    canvasToggle: "Canvas",
+    terminalToggle: "Terminal",
     questions: "Fragen",
     settingsTitle: "Einstellungen dieser Unterhaltung",
     settingsNote: "Das Profil gibt nur ihre Anfangswerte vor: Was du hier änderst, gilt nur für diese Unterhaltung.",
