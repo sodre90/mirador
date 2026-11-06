@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { runInNewContext } from "node:vm";
 import { resolveAsset, serveCanvasAssets } from "../host/canvas/assets.ts";
 import { APP_STORAGE_CHARACTERS, type AppStorageItems } from "../shared/apps.ts";
 import {
@@ -79,6 +80,38 @@ describe("buildCanvasDocument", () => {
     expect(document).toContain("::highlight(mirador-find){background:#fde68a;color:#000}");
     expect(document).toContain("::highlight(mirador-find-current){background:#f97316;color:#000}");
   });
+
+  for (const markable of [false, true]) {
+    test(`find keys are ${markable ? "captured for a shown page" : "left to the frame's own handlers"}`, () => {
+      const document = buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light", { markable });
+      const script = [...document.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]!).find((code) => code.includes("const forwardKey"));
+      expect(script).toBeDefined();
+      for (const modifier of ["ctrlKey", "metaKey"]) {
+        let prevented = false;
+        const event = {
+          isTrusted: true, key: "f", code: "KeyF", target: null,
+          ctrlKey: modifier === "ctrlKey", metaKey: modifier === "metaKey", altKey: false, shiftKey: false,
+          preventDefault() { prevented = true; },
+        };
+        const keydown: ((press: typeof event) => void)[] = [];
+        const messages: unknown[] = [];
+        class Observer { observe() {} }
+        runInNewContext(script!, {
+          document: { createElement: () => ({}), head: { append() {} }, scripts: [], documentElement: {} },
+          console: { error() {} },
+          MutationObserver: Observer, ResizeObserver: Observer,
+          parent: { postMessage: (message: unknown) => messages.push(message) },
+          addEventListener: (type: string, listener: (press: typeof event) => void, capture?: boolean) => {
+            if (type === "keydown" && capture) keydown.push(listener);
+          },
+        });
+        expect(keydown).toHaveLength(1);
+        keydown[0]!(event);
+        expect(prevented).toBe(markable);
+        expect(messages).toEqual([expect.objectContaining({ kind: "key", code: "KeyF", [modifier]: true })]);
+      }
+    });
+  }
 });
 
 interface PageScript {
