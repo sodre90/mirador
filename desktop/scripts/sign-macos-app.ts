@@ -6,7 +6,7 @@
  * When Apple takes longer than the wait, `sign-macos-app.ts --staple <Mirador.app>` finishes once it accepted the app.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { closeSync, mkdtempSync, openSync, readdirSync, readSync, rmSync } from "node:fs";
+import { closeSync, existsSync, mkdtempSync, openSync, readdirSync, readSync, rmSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, sep } from "node:path";
 
@@ -79,8 +79,31 @@ function checkBunRuns(app: string) {
   if (output.trim() !== "49999995000000") throw new Error(`The signed Bun printed ${JSON.stringify(output)} instead of the loop's sum.`);
 }
 
-const notarytool = (args: string[]) =>
-  execFileSync("xcrun", ["notarytool", ...args, ...NOTARY_CREDENTIALS], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+const versionOf = (program: string) => spawnSync(program, ["--version"], { encoding: "utf8" }).stdout?.match(/^\d+(\.\d+)*/)?.[0];
+
+/**
+ * The newest notarytool of the Xcodes in `applications`, whichever Xcode xcode-select picks: Xcode 16.4's notarytool
+ * 1.0.0 overflowed its stack right after uploading, twice on 2026-11-06 (vcs-4ohn), and xcrun would run that one.
+ */
+export function newestNotarytool(applications = "/Applications"): string[] {
+  const installed = existsSync(applications)
+    ? readdirSync(applications)
+        .filter((name) => /^Xcode.*\.app$/.test(name))
+        .map((name) => join(applications, name, "Contents", "Developer", "usr", "bin", "notarytool"))
+        .filter((program) => existsSync(program))
+        .flatMap((program) => {
+          const version = versionOf(program);
+          return version ? [{ program, version }] : [];
+        })
+    : [];
+  const newest = installed.toSorted((a, b) => Bun.semver.order(b.version, a.version))[0];
+  return newest ? [newest.program] : ["xcrun", "notarytool"];
+}
+
+const notarytool = (args: string[]) => {
+  const [program, ...before] = newestNotarytool();
+  return execFileSync(program!, [...before, ...args, ...NOTARY_CREDENTIALS], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] });
+};
 
 function submit(app: string) {
   const folder = mkdtempSync(join(tmpdir(), "mirador-notarize-"));
@@ -95,7 +118,8 @@ function submit(app: string) {
 
 /** Ends when Apple decided, or when the wait ran out; the submission's status says which. */
 function waitForApple(id: string) {
-  spawnSync("xcrun", ["notarytool", "wait", id, ...NOTARY_CREDENTIALS, "--timeout", NOTARY_TIMEOUT], { stdio: "inherit" });
+  const [program, ...before] = newestNotarytool();
+  spawnSync(program!, [...before, "wait", id, ...NOTARY_CREDENTIALS, "--timeout", NOTARY_TIMEOUT], { stdio: "inherit" });
 }
 
 function notarize(app: string) {
@@ -104,11 +128,12 @@ function notarize(app: string) {
   const { status } = JSON.parse(notarytool(["info", id, "--output-format", "json"])) as { status: string };
   if (status === "In Progress") {
     throw new Error(
-      `Apple is still checking submission ${id}. Once \`xcrun notarytool info ${id} ${NOTARY_CREDENTIALS.join(" ")}\` says Accepted, run make macos-staple.`,
+      `Apple is still checking submission ${id}. Once \`${newestNotarytool().join(" ")} info ${id} ${NOTARY_CREDENTIALS.join(" ")}\` says Accepted, run make macos-staple.`,
     );
   }
   if (status !== "Accepted") {
-    run("xcrun", ["notarytool", "log", id, ...NOTARY_CREDENTIALS]);
+    const [program, ...before] = newestNotarytool();
+    run(program!, [...before, "log", id, ...NOTARY_CREDENTIALS]);
     throw new Error(`Apple's notary service answered ${status} for submission ${id}.`);
   }
 }

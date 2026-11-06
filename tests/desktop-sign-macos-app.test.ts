@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
-import { machOFiles } from "../desktop/scripts/sign-macos-app.ts";
+import { machOFiles, newestNotarytool } from "../desktop/scripts/sign-macos-app.ts";
 
 const app = mkdtempSync(join(tmpdir(), "mirador-sign-"));
 afterAll(() => rmSync(app, { recursive: true, force: true }));
@@ -57,4 +57,23 @@ test.skipIf(process.platform === "win32")("every program and library in the app 
     ["Contents/MacOS/libNativeWrapper.dylib", "library"],
     ["Contents/Resources/uninstall", "executable"],
   ]);
+});
+
+const xcodeWithNotarytool = (applications: string, xcode: string, version: string) => {
+  const program = join(applications, xcode, "Contents", "Developer", "usr", "bin", "notarytool");
+  mkdirSync(dirname(program), { recursive: true });
+  writeFileSync(program, `#!/bin/sh\necho "${version}"\n`, { mode: 0o755 });
+  return program;
+};
+
+test.skipIf(process.platform === "win32")("notarizing uses the newest notarytool of the installed Xcodes, not the one xcode-select picks", () => {
+  const applications = join(app, "Applications");
+  xcodeWithNotarytool(applications, "Xcode-16.4.0.app", "1.0.0 (38)");
+  const newest = xcodeWithNotarytool(applications, "Xcode.app", "1.1.4 (43)");
+  xcodeWithNotarytool(applications, "Xcode-15.app", "0.9.2 (20)");
+  expect(newestNotarytool(applications)).toEqual([newest]);
+});
+
+test("without an Xcode's notarytool, notarizing goes through xcrun", () => {
+  expect(newestNotarytool(join(app, "no-applications"))).toEqual(["xcrun", "notarytool"]);
 });

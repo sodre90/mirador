@@ -367,11 +367,11 @@ test("a notary profile missing from the login keychain stops the release with ho
   const scratch = mkdtempSync(join(tmpdir(), "release-notary-"));
   const recorded = join(scratch, "arguments.txt");
   const refusingXcrun = fakeProgram(scratch, "xcrun", `require("node:fs").writeFileSync(${JSON.stringify(recorded)}, process.argv.slice(2).join(" ")); process.exit(1);`);
-  expect(() => requireReadableNotaryProfile(refusingXcrun)).toThrow(`xcrun notarytool store-credentials mirador-notary --keychain ${LOGIN_KEYCHAIN}`);
+  expect(() => requireReadableNotaryProfile([refusingXcrun, "notarytool"])).toThrow(`xcrun notarytool store-credentials mirador-notary --keychain ${LOGIN_KEYCHAIN}`);
   expect(readFileSync(recorded, "utf8")).toBe(`notarytool history --keychain-profile mirador-notary --keychain ${LOGIN_KEYCHAIN}`);
 });
 
 test("a notary profile that can be read lets the release go on", () => {
   const workingXcrun = fakeProgram(mkdtempSync(join(tmpdir(), "release-notary-")), "xcrun", "process.exit(0);");
-  expect(() => requireReadableNotaryProfile(workingXcrun)).not.toThrow();
+  expect(() => requireReadableNotaryProfile([workingXcrun, "notarytool"])).not.toThrow();
 });
