@@ -38,7 +38,8 @@ import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
 import { AppProblem, messageOf } from "./apps/plugins.ts";
-import { appKey, type PluginUpdate } from "../shared/apps.ts";
+import { appKey, isPluginUpdateMode, type PluginUpdate, type PluginUpdateMode } from "../shared/apps.ts";
+import type { ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import type { PluginSettingsStore } from "./plugin-settings.ts";
 import { pluginsListed as listedPlugins, type PluginCatalog } from "./plugin-catalog.ts";
 import { FileAlreadyThere } from "./canvas/save-to-project.ts";
@@ -110,6 +111,7 @@ export interface HostServices {
   desktopApp: DesktopAppCheck;
   newerVersion: NewerVersionWatcher;
   pluginUpdates: Lookout<PluginUpdate[]>;
+  readyPluginUpdates: ReadyPluginUpdates;
   devices: DeviceService;
   joinRequests: JoinRequestService;
   signInCodes: SignInCodes;
@@ -195,6 +197,7 @@ export function startServer(services: HostServices) {
     desktopApp,
     newerVersion,
     pluginUpdates,
+    readyPluginUpdates,
     devices,
     joinRequests,
     signInCodes,
@@ -971,6 +974,24 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.keep-awake", keepAwake: setting });
   }
 
+  const markedPluginUpdates = () => readyPluginUpdates.marked(pluginUpdates.current ?? []);
+
+  /** The updates found so far go in by themselves from now on, or, back to asking, none does. */
+  function setPluginUpdateMode(mode: PluginUpdateMode) {
+    if (!isPluginUpdateMode(mode)) throw new HostProblemError({ code: "unknown-plugin-update-mode", value: String(mode) });
+    store.setPluginUpdateMode(mode);
+    if (mode === "ask") readyPluginUpdates.discardAll();
+    hub.broadcast({ type: "settings.plugin-update-mode", mode });
+    hub.announcePluginUpdates(markedPluginUpdates());
+    if (mode !== "ask") void readyPluginUpdates.prepare(pluginUpdates.current ?? []);
+  }
+
+  async function setUpdatesByItself(folder: string, updatesByItself: boolean) {
+    await readyPluginUpdates.setUpdatesByItself(folder, updatesByItself);
+    hub.broadcast(await pluginsListed());
+    if (updatesByItself) void readyPluginUpdates.prepare(pluginUpdates.current ?? []);
+  }
+
   function deletePromptTemplate(templateId: string) {
     store.deletePromptTemplate(templateId);
     hub.broadcast({ type: "prompt-template.deleted", templateId });
@@ -1452,7 +1473,14 @@ export function startServer(services: HostServices) {
         return void changePlugins(socket, message.requestId, async () => {
           const name = await plugins.remove(message.folder);
           if (name) store.forgetOpenApps(name);
+          readyPluginUpdates.forget(message.folder);
         });
+      case "settings.set-plugin-update-mode":
+        return setPluginUpdateMode(message.mode);
+      case "plugins.set-updates-by-itself":
+        return void setUpdatesByItself(message.folder, message.updatesByItself).catch((error) => hub.send(socket, { type: "error", ...appFailure(error) }));
+      case "plugins.undo-update":
+        return void changePlugins(socket, message.requestId, () => readyPluginUpdates.undo(message.folder));
       case "plugins.find-commits":
         return void plugins.news(message.folder).then(
           (news) => {
@@ -1599,7 +1627,9 @@ export function startServer(services: HostServices) {
       version: MIRADOR_VERSION,
       answersPings: true,
       newerVersion: newerVersion.current,
-      pluginUpdates: pluginUpdates.current ?? [],
+      pluginUpdates: markedPluginUpdates(),
+      pluginUpdateMode: store.pluginUpdateMode(),
+      pluginsUpdatedAtStart: readyPluginUpdates.appliedAtStart,
       installedApps: apps.installed(),
       openApps: apps.openApps(),
       canvasViews: canvasPlugins.viewPaths(),

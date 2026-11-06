@@ -83,6 +83,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.unknownKeepAwake(problem.value);
     case "unknown-conversation-order":
       return words.unknownConversationOrder(problem.value);
+    case "unknown-plugin-update-mode":
+      return words.unknownPluginUpdateMode(problem.value);
     case "unknown-keep-deleted-canvas":
       return words.unknownKeepDeletedCanvas(problem.value);
     case "unknown-workspace-colour":

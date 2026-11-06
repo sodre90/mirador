@@ -100,7 +100,13 @@ export const hints: Messages["hints"] = {
   checkPluginUpdates:
     "Sucht nach einem neueren Release des Plugins oder, bei einem Plugin, das einem Branch folgt, nach neuen Commits des Branches. Nichts ändert sich, bis du aktualisierst.",
   pluginUpdatesWaiting:
-    "Plugins aus git-Repos mit einem neueren Release oder neuen Commits. Mirador sucht beim Start und alle 6 Stunden und installiert nichts von selbst: Aktualisiere sie unter Einstellungen › Plugins.",
+    "Plugins aus Git-Repos mit einem neueren Release oder neuen Commits. Mirador prüft beim Start und alle 6 Stunden. Von selbst installiert es nur, wenn Plugin-Updates so eingestellt ist; sonst aktualisierst du sie unter Einstellungen › Plugins.",
+  pluginUpdateMode:
+    "Frag mich: Jedes Update wartet auf deine Zustimmung. Mit Mirador-Updates: Plugins, die sich selbst aktualisieren, bekommen neue Releases, sobald Mirador selbst aktualisiert wird. Bei jedem Neustart: Sie bekommen sie bei jedem Start von Mirador. Mirador lädt und baut Updates schon vorher. Ein Update, das den Build-Befehl oder die Host-Module ändert oder nicht aus dem offiziellen Repo stammt, wartet weiterhin auf deine Zustimmung.",
+  pluginUpdatesByItself:
+    "Installiert neue Releases dieses Plugins ohne Nachfrage, zu dem Zeitpunkt, den Plugin-Updates festlegt. Bei offiziellen Plugins standardmäßig an.",
+  undoPluginUpdate:
+    "Holt ab dem nächsten Neustart die Version zurück, die dieses Update ersetzt hat. Dieses Release wird danach nicht mehr von selbst installiert, du kannst es aber weiterhin von Hand installieren.",
   updateAllPlugins: "Klont das neuere Release oder die neuen Commits jedes Plugins, zeigt, was von jedem ausgeführt wird, und fragt dann einmal für alle.",
   updatePlugin:
     "Klont das neueste Release oder den Branch, wie er jetzt ist, und zeigt, was davon ausgeführt wird. Sobald du zustimmst, baut es ihn und ersetzt erst dann das Plugin, sodass ein fehlgeschlagenes Update es lässt, wie es war.",

@@ -71,7 +71,7 @@ describe("InstalledPlugins", () => {
     const listed = await new InstalledPlugins(plugins, loaded.problems).list();
 
     expect(listed).toEqual([
-      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null },
+      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false },
       {
         folder: "cloned",
         name: "counter",
@@ -83,8 +83,9 @@ describe("InstalledPlugins", () => {
         kinds: ["app"],
         tools: [],
         icon: null,
+        updatesByItself: false,
       },
-      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null },
+      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false },
     ]);
   });
 
@@ -168,6 +169,7 @@ describe("adding, updating and removing plugins", () => {
         kinds: ["app"],
         tools: [],
         icon: null,
+        updatesByItself: false,
       },
     ]);
     expect(leftInStaging(plugins)).toEqual([]);
@@ -307,7 +309,7 @@ describe("adding, updating and removing plugins", () => {
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     const installedAt = git(join(plugins, "counter"), "rev-parse", "--short", "HEAD");
     const found = await installed.updatesFound(null);
-    expect(found).toEqual([{ folder: "counter", title: "Counter", from: installedAt, release: null, commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by two" }] }]);
+    expect(found).toEqual([{ folder: "counter", title: "Counter", from: installedAt, release: null, commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by two" }], ready: false, heldBack: null }]);
 
     rmSync(repo, { recursive: true, force: true });
     expect(await installed.updatesFound(found)).toEqual(found);
@@ -340,7 +342,7 @@ describe("adding, updating and removing plugins", () => {
     release(repo, "1.11.0");
     const news = { release: "1.11.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.11.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }] };
     expect(await installed.news("counter")).toEqual(news);
-    expect(await installed.updatesFound(null)).toEqual([{ folder: "counter", title: "Counter", from: listed!.source.kind === "git" ? listed!.source.commit : "", ...news }]);
+    expect(await installed.updatesFound(null)).toEqual([{ folder: "counter", title: "Counter", from: listed!.source.kind === "git" ? listed!.source.commit : "", ...news, ready: false, heldBack: null }]);
 
     await installed.update("counter");
     expect((await installed.list())[0]).toMatchObject({ version: "1.11.0", source: { release: "1.11.0" }, waitsForRestart: true });

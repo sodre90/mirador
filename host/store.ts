@@ -2,7 +2,7 @@ import { DEFAULT_MORNING_MINUTES, isMorningMinutes, type Reminder } from "../sha
 import { CUSTOM_ORDER, isConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { Database } from "bun:sqlite";
-import type { AppStorageItems } from "../shared/apps.ts";
+import { isPluginUpdateMode, type AppStorageItems, type PluginUpdateMode } from "../shared/apps.ts";
 import type { AvailableCommand, ToolCallUpdate } from "@agentclientprotocol/sdk";
 import type {
   AskMode,
@@ -525,6 +525,60 @@ export class Store {
 
   rememberDefaultPluginInstalled(name: string) {
     this.setSetting("default_plugins_installed", JSON.stringify([...new Set([...this.defaultPluginsInstalled(), name])]));
+  }
+
+  pluginUpdateMode(): PluginUpdateMode {
+    const value = this.setting("plugin_update_mode");
+    return isPluginUpdateMode(value) ? value : "ask";
+  }
+
+  setPluginUpdateMode(mode: PluginUpdateMode) {
+    this.setSetting("plugin_update_mode", mode);
+  }
+
+  /** What the user chose for each plugin folder; a plugin they chose nothing for follows whether it is official. */
+  pluginUpdatesByItself(): Record<string, boolean> {
+    return this.jsonRecordSetting("plugin_updates_by_itself", (value): value is boolean => typeof value === "boolean");
+  }
+
+  setPluginUpdatesByItself(folder: string, updatesByItself: boolean) {
+    this.setSetting("plugin_updates_by_itself", JSON.stringify({ ...this.pluginUpdatesByItself(), [folder]: updatesByItself }));
+  }
+
+  /** The release of each plugin folder whose update the user undid, or that didn't load, so it doesn't go in by itself again. */
+  pluginUpdatesUndone(): Record<string, string> {
+    return this.jsonRecordSetting("plugin_updates_undone", (value): value is string => typeof value === "string");
+  }
+
+  rememberPluginUpdateUndone(folder: string, release: string) {
+    this.setSetting("plugin_updates_undone", JSON.stringify({ ...this.pluginUpdatesUndone(), [folder]: release }));
+  }
+
+  /** A removed plugin's choices go with it, so another plugin added later in its folder starts afresh. */
+  forgetPluginUpdateChoices(folder: string) {
+    const { [folder]: _chosen, ...byItself } = this.pluginUpdatesByItself();
+    const { [folder]: _undone, ...undone } = this.pluginUpdatesUndone();
+    this.setSetting("plugin_updates_by_itself", JSON.stringify(byItself));
+    this.setSetting("plugin_updates_undone", JSON.stringify(undone));
+  }
+
+  /** The Mirador version, or a checkout's commit, the host last started as; null before it ever recorded one. */
+  miradorStartedAs(): string | null {
+    return this.setting("mirador_started_as");
+  }
+
+  rememberMiradorStartedAs(identity: string) {
+    this.setSetting("mirador_started_as", identity);
+  }
+
+  private jsonRecordSetting<T>(key: string, isValue: (value: unknown) => value is T): Record<string, T> {
+    try {
+      const parsed: unknown = JSON.parse(this.setting(key) ?? "{}");
+      if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+      return Object.fromEntries(Object.entries(parsed).filter((entry): entry is [string, T] => isValue(entry[1])));
+    } catch {
+      return {};
+    }
   }
 
   saveAppConversation(workspaceId: string, app: string, conversationId: string) {

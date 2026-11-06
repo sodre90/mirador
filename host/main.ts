@@ -8,6 +8,7 @@ import { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import { AppDocuments } from "./apps/documents.ts";
 import { defaultPluginsIn, installDefaultPlugins } from "./apps/default-plugins.ts";
 import { InstalledPlugins } from "./apps/installed-plugins.ts";
+import { applyReadyUpdatesAtStart, ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import { loadPlugins, watchViews } from "./apps/plugins.ts";
 import { CanvasPlugins } from "./canvas/plugins.ts";
 import { PluginSettingsStore } from "./plugin-settings.ts";
@@ -79,7 +80,9 @@ const notifierMute = new NotifierMute(config.notifierDir, join(config.dataDir, M
 notifierMute.unmuteSessionsOfEarlierRuns();
 const sourceDir = dirname(import.meta.dir);
 const pluginsFolder = join(config.dataDir, "plugins");
-if (config.defaultPluginsFile) await installDefaultPlugins(await defaultPluginsIn(config.defaultPluginsFile), new InstalledPlugins(pluginsFolder, []), store);
+const defaultPlugins = config.defaultPluginsFile ? await defaultPluginsIn(config.defaultPluginsFile) : [];
+if (defaultPlugins.length > 0) await installDefaultPlugins(defaultPlugins, new InstalledPlugins(pluginsFolder, []), store);
+const pluginsUpdatedAtStart = await applyReadyUpdatesAtStart(pluginsFolder, store, sourceDir);
 const loadedPlugins = await loadPlugins(pluginsFolder);
 for (const { folder, message } of loadedPlugins.problems) console.warn(`The plugin in ${folder} didn't load: ${message}`);
 const canvasPlugins = new CanvasPlugins(store, hub, loadedPlugins.canvases);
@@ -110,6 +113,15 @@ conversations.restoresCanvasWith((conversationId, source, events) => restoreCanv
 // The checklist plugin's note about the user's ticks came before the page errors when the checklist was Mirador's own.
 conversations.hearCanvasNotesFrom((conversationId) => [...canvasPlugins.notesForAgent(conversationId), ...canvas.notesForAgent(conversationId)]);
 const plugins = new InstalledPlugins(pluginsFolder, loadedPlugins.problems, loadedPlugins.canvases);
+const readyPluginUpdates = new ReadyPluginUpdates(
+  pluginsFolder,
+  plugins,
+  store,
+  () => [...catalog.all, ...defaultPlugins].map(({ name, repo }) => ({ name, repo })),
+  () => hub.announcePluginUpdates(readyPluginUpdates.marked(pluginUpdates.current ?? [])),
+);
+plugins.decidesUpdatesByItselfWith(readyPluginUpdates.updatesByItself);
+await readyPluginUpdates.started(pluginsUpdatedAtStart, loadedPlugins.problems);
 canvas.installsPluginsWith(officialPluginInstaller(catalog, plugins, (listed) => hub.broadcast(listed)));
 const apps = new AppDocuments(store, loadedPlugins.apps, {
   openAppsChanged: (openApps) => hub.broadcast({ type: "apps.open", openApps }),
@@ -133,7 +145,15 @@ const desktopApp = new DesktopAppCheck(
   (outdated) => hub.broadcast({ type: "desktop-app.outdated", outdated }),
 );
 const newerVersion = new NewerVersionWatcher(newerVersionLookup(sourceDir, config.latestReleaseUrl), (found) => hub.announceNewerVersion(found));
-const pluginUpdates = new Lookout((_, last: PluginUpdate[] | null) => plugins.updatesFound(last), (found) => hub.announcePluginUpdates(found ?? []));
+// Prepared after every look, not only when what was found changed, so a clone that failed is tried again.
+const pluginUpdates = new Lookout(
+  async (_, last: PluginUpdate[] | null) => {
+    const found = await plugins.updatesFound(last);
+    void readyPluginUpdates.prepare(found);
+    return found;
+  },
+  (found) => hub.announcePluginUpdates(readyPluginUpdates.marked(found ?? [])),
+);
 const devices = new DeviceService(store);
 const joinRequests = new JoinRequestService(store, devices, ownAuthorityFingerprint);
 const signInCodes = new SignInCodes(store);
@@ -184,7 +204,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

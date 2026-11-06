@@ -100,7 +100,13 @@ export const hints: Messages["hints"] = {
   checkPluginUpdates:
     "Busca una versión más nueva del plugin o, si sigue una rama, los commits nuevos de la rama. Nada cambia hasta que actualices.",
   pluginUpdatesWaiting:
-    "Plugins de repositorios git con una versión más nueva o con commits nuevos. Mirador busca al iniciarse y cada 6 horas, y no instala nada por sí solo: actualízalos en Configuración › Plugins.",
+    "Plugins de repositorios git con una versión más reciente o commits nuevos. Mirador revisa al iniciarse y cada 6 horas. Solo instala algo por sí solo si Actualizaciones de plugins lo indica; si no, actualízalos en Configuración › Plugins.",
+  pluginUpdateMode:
+    "Preguntarme: cada actualización espera tu aprobación. Con las actualizaciones de Mirador: los plugins que se actualizan solos reciben sus versiones nuevas cuando se actualiza Mirador. En cada reinicio: las reciben cada vez que Mirador se inicia. Mirador descarga las actualizaciones y hace su build por adelantado. Si una actualización cambia el comando de build o los módulos del host, o no viene del repositorio oficial, sigue esperando tu aprobación.",
+  pluginUpdatesByItself:
+    "Instala las versiones nuevas de este plugin sin preguntar, en el momento que indique Actualizaciones de plugins. Activado de forma predeterminada en los plugins oficiales.",
+  undoPluginUpdate:
+    "Restaura la versión que esta actualización reemplazó a partir del próximo reinicio. Después, esta versión ya no se instala sola, pero puedes seguir actualizando a ella manualmente.",
   updateAllPlugins: "Clona la versión más nueva o los commits nuevos de cada plugin y muestra qué parte de cada uno se ejecuta, y luego pregunta una sola vez por todos.",
   updatePlugin:
     "Clona la versión más reciente, o la rama tal como está ahora, y muestra qué parte se ejecuta. Cuando aceptas, hace el build y solo entonces reemplaza el plugin, así que una actualización fallida lo deja como estaba.",
