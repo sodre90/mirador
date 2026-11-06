@@ -2,6 +2,7 @@
 /** Stages the committed Mirador the host runs, with its production dependencies, in release/mirador for a release build. */
 import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
+import { buildSidecar } from "./build-sidecar.ts";
 
 const desktop = join(import.meta.dir, "..");
 const checkout = join(desktop, "..");
@@ -38,3 +39,5 @@ run([process.execPath, "install", "--production", "--frozen-lockfile"], stage);
 removeBundledClaudeCode();
 removeBundledCodex();
 run([process.execPath, join(desktop, "scripts", "prune-unused-modules.ts"), stage], desktop);
+/** The sidecar reaches the host over Unix sockets, so Windows gets one with its own transport (vcs-ov9h.25). */
+if (process.platform !== "win32") buildSidecar(stage);

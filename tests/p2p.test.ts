@@ -61,13 +61,30 @@ function host(more: Partial<PeerToPeerSettings> = {}) {
 }
 
 test("peer to peer is off unless the environment names the sidecar and the broker together", () => {
-  expect(peerToPeerSettings({})).toBeNull();
+  expect(peerToPeerSettings({}, { binary: join(folder, "absent"), broker: null })).toBeNull();
   expect(() => peerToPeerSettings({ MIRADOR_P2P_BINARY: "/bin/mirador-p2p" })).toThrow(/together/);
   expect(() => peerToPeerSettings({ MIRADOR_P2P_BINARY: "/bin/mirador-p2p", MIRADOR_P2P_BROKER: "203.0.113.7:47800", MIRADOR_P2P_BROKER_KEY: "nope" })).toThrow(/not a key/);
   expect(peerToPeerSettings({ MIRADOR_P2P_BINARY: "/bin/mirador-p2p", MIRADOR_P2P_BROKER: "203.0.113.7:47800", MIRADOR_P2P_BROKER_KEY: brokerKey })).toEqual({
     binary: "/bin/mirador-p2p",
     broker: { address: "203.0.113.7:47800", key: brokerKey },
   });
+});
+
+test("a release connects peer to peer through the sidecar it carries, once it has a built-in broker", () => {
+  const carried = fakeSidecar();
+  const broker = { address: "p2p.example.com:47800", key: brokerKey };
+  expect(peerToPeerSettings({}, { binary: carried, broker })).toEqual({ binary: carried, broker });
+  expect(peerToPeerSettings({}, { binary: carried, broker: null }), "no broker yet").toBeNull();
+  expect(peerToPeerSettings({}, { binary: join(folder, "absent"), broker }), "a checkout carries no sidecar").toBeNull();
+});
+
+test("the environment's sidecar and broker win over the built-in ones", () => {
+  const builtIn = { binary: fakeSidecar(), broker: { address: "p2p.example.com:47800", key: brokerKey } };
+  expect(peerToPeerSettings({ MIRADOR_P2P_BINARY: "/bin/mirador-p2p", MIRADOR_P2P_BROKER: "203.0.113.7:47800", MIRADOR_P2P_BROKER_KEY: brokerKey }, builtIn)).toEqual({
+    binary: "/bin/mirador-p2p",
+    broker: { address: "203.0.113.7:47800", key: brokerKey },
+  });
+  expect(() => peerToPeerSettings({ MIRADOR_P2P_BROKER: "203.0.113.7:47800" }, builtIn)).toThrow(/together/);
 });
 
 test("the environment may hand devices another broker address and announce more places to reach the sidecar at", () => {

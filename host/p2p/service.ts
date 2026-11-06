@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
+import { sidecarInMirador } from "../../shared/p2p-sidecar.ts";
 import type { DeviceTunnel, InviteTunnel, TunnelPlaces } from "../../shared/tunnel.ts";
 import { inviteKey } from "../devices.ts";
 import type { Store } from "../store.ts";
@@ -31,10 +32,32 @@ export interface PeerToPeerSettings {
   canvasAssetsPort?: number;
 }
 
-/** On only when the environment names the sidecar and the broker; anything else is a mistake worth saying. */
-export function peerToPeerSettings(environment: Record<string, string | undefined>): PeerToPeerSettings | null {
+type Broker = PeerToPeerSettings["broker"];
+
+/** The broker a release uses when the environment names none. Null until p2p.sodre90.com is ready for everyone's Miradors. */
+export const BUILT_IN_BROKER: Broker | null = null;
+/** Where a release carries the sidecar, beside host/: desktop/scripts/stage-mirador.ts puts it there. */
+export const BUNDLED_SIDECAR = join(import.meta.dir, "..", "..", sidecarInMirador());
+
+export interface BuiltInPeerToPeer {
+  binary: string;
+  broker: Broker | null;
+}
+
+function builtInSettings({ binary, broker }: BuiltInPeerToPeer): PeerToPeerSettings | null {
+  return broker && existsSync(binary) ? { binary, broker } : null;
+}
+
+/**
+ * The environment's sidecar and broker win, and naming only some of them is a mistake worth saying. Without them, a
+ * release connects peer to peer through the sidecar it carries and the built-in broker.
+ */
+export function peerToPeerSettings(
+  environment: Record<string, string | undefined>,
+  builtIn: BuiltInPeerToPeer = { binary: BUNDLED_SIDECAR, broker: BUILT_IN_BROKER },
+): PeerToPeerSettings | null {
   const { MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: address, MIRADOR_P2P_BROKER_KEY: key } = environment;
-  if (!binary && !address && !key) return null;
+  if (!binary && !address && !key) return builtInSettings(builtIn);
   if (!binary || !address || !key) throw new Error("Peer to peer needs MIRADOR_P2P_BINARY, MIRADOR_P2P_BROKER and MIRADOR_P2P_BROKER_KEY together.");
   if (!isTunnelKey(key)) throw new Error("MIRADOR_P2P_BROKER_KEY is not a key: it is 32 bytes in base64.");
   const deviceBroker = environment.MIRADOR_P2P_DEVICE_BROKER || undefined;
