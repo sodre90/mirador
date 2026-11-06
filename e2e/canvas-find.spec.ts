@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, createProfile, primaryModifier, sendMessage, signIn } from "./helpers.ts";
@@ -9,6 +9,24 @@ const profileName = "canvas-find";
 const promptsFile = () => join(host.root, "prompts");
 
 test.beforeAll(async () => {
+  const appDir = join(host.dataDir, "plugins", "counter");
+  cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "apps", "counter"), appDir, { recursive: true });
+  appendFileSync(join(appDir, "view.js"), `
+    const find = document.createElement("input");
+    find.id = "app-find";
+    find.hidden = true;
+    document.body.append(find);
+    addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.code === "KeyF") {
+        document.body.dataset.findPrevented = String(event.defaultPrevented);
+        if (event.defaultPrevented) return;
+        event.preventDefault();
+        find.hidden = false;
+        find.focus();
+      }
+      if (event.key === "Escape") find.hidden = true;
+    });
+  `);
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsFile() });
   writeFileSync(promptsFile(), "");
   await host.start();
@@ -126,5 +144,22 @@ test("the user finds text on the page the agent showed, from the canvas bar's bu
     await expect(findBar(page)).toHaveCount(0);
     await conversationFindBar(page).locator("input").press("Escape");
     await expect(conversationFindBar(page)).toHaveCount(0);
+  });
+
+  await test.step("an app's own find handler receives Ctrl+F and ⌘F without the frame cancelling them first", async () => {
+    await callCanvasTool(host, conversationId, "app_open", { app: "counter", file: "counter.json" });
+    const app = page.locator(".canvas-panel:visible .canvas-frame.app iframe").contentFrame();
+    await expect(app.locator("#count")).toHaveText("0");
+    for (const modifier of ["Control", "Meta"]) {
+      await app.locator("#count").click();
+      await page.keyboard.press(`${modifier}+f`);
+      await expect(app.locator("body")).toHaveAttribute("data-find-prevented", "false");
+      await expect(app.locator("#app-find")).toBeVisible();
+      await expect(app.locator("#app-find")).toBeFocused();
+      await expect(findBar(page)).toHaveCount(0);
+      await expect(conversationFindBar(page)).toHaveCount(0);
+      await page.keyboard.press("Escape");
+      await expect(app.locator("#app-find")).toBeHidden();
+    }
   });
 });

@@ -1057,7 +1057,7 @@ ${pageDrawing(assetsOrigin)}
 })();`;
 }
 
-function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, measuresNaturalWidth: boolean) {
+function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean) {
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
@@ -1296,7 +1296,7 @@ ${HIDDEN_ERROR_SCRIPT}
   addEventListener("keydown", (event) => {
     if (!event.isTrusted || !withModifier(event)) return;
     // The panel finds on the page instead, so the browser's own find must not open.
-    if (findKeys(event)) event.preventDefault();
+    if (${findsOnPage} && findKeys(event)) event.preventDefault();
     forwardKey(event);
   }, true);
   // Listened to after the page's own handlers, so an Esc that closes something on the page stays with the page.
@@ -1345,7 +1345,7 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, assetsOrigin, measuresNaturalWidth)}</script>`,
+    `<script>${frameReporter(itemId, theme, assetsOrigin, measuresNaturalWidth, markable)}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),
