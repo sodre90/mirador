@@ -1,6 +1,6 @@
 # The Mirador trailer
 
-A trailer of about 2 minutes at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
+A trailer of about 75 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
 running the real Claude Code and opencode against a scripted stand-in for the model. Nothing in it is mocked up by hand, and no
 account, conversation or setting of yours is used.
 
@@ -28,15 +28,18 @@ camera logic, and that the storyboard speaks every line.
 
 ## Changing it
 
-- **A scene's cut, camera or caption**: `src/storyboard.ts`. Shots, camera moves and captions are keyed to the moments the
-  capture marked, such as `["sent", 0.2]`, so they stay right when the footage is filmed again. A scene's `seconds` sets
-  its length, and `fadeInFrames: 0` cuts straight to it instead of crossfading; the score puts a hit on such a cut. A
-  line of narration's `musicDipsTo` makes the music dip less under it. A clip scene can have several `captions`. The
-  montage's scenes (edit, terminals, groups, overview) last whole beats of the score (`BEAT`), so each starts on the beat. The score's last chord
-  rings out over the `backdrop` scene before the end card.
-- **The cold open**: `COLD_OPEN` in `src/storyboard.ts` is six cuts of two beats each, one moment of a clip apiece. A
-  scene's `slam` brings it in with a flash, a punch of zoom and its words, giant (`src/components/Slam.tsx`), and the
-  score hits on every cut.
+- **A scene's cut, camera or slam**: `src/storyboard.ts`. Shots and camera moves are keyed to the moments the capture
+  marked, such as `["sent", 0.2]`, so they stay right when the footage is filmed again. A scene's `seconds` sets its
+  length. A scene with a `slam` cuts straight in with a flash, a punch of zoom and its words, giant
+  (`src/components/Slam.tsx`), which clear after 1.3 s; the score hits on every slam. A line of narration's
+  `musicDipsTo` makes the music dip less under it. The score's last chord rings out over the `backdrop` scene before
+  the end card.
+- **Keeping the cuts on the beat**: every slammed scene lasts whole beats of the score (`beats(n)`, at `TEMPO`), long
+  enough for its narration, and each of the score's sections (from show, review, edit, plugins and voice) adds up to
+  whole bars, so no section bends its tempo. `tests/timeline.test.ts` checks the scenes; when you change a scene's
+  length, keep its section's beats a multiple of four.
+- **The cold open**: `COLD_OPEN` in `src/storyboard.ts` is six slammed cuts of two beats each, one moment of a clip
+  apiece.
 - **The opening**: the `hook` scene slams STOP READING, then START SEEING (`HEADLINES` in `src/Trailer.tsx`) over a
   drawing of the checkout diagram the agent draws in the show clip (`capture/checkout-flow.ts`), and the show scene
   picks up once the app has drawn it, so it is never drawn twice. The score builds under the picture into a hit on the

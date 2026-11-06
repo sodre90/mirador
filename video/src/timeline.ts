@@ -119,9 +119,14 @@ export function clipNamed(clips: Record<string, ClipInfo>, name: string) {
   return clip;
 }
 
-/** Scenes one after another, each overlapping the one before by its fade in, `crossfadeFrames` unless it says otherwise. */
+/** A scene comes in over the one before by its own fade in, or cuts straight in when it slams, or crossfades by `crossfadeFrames`. */
+function fadeInFramesOf(scene: Scene, crossfadeFrames: number) {
+  return scene.fadeInFrames ?? (scene.kind === "clip" && scene.slam ? 0 : crossfadeFrames);
+}
+
+/** Scenes one after another, each overlapping the one before by its fade in. */
 export function placeScenes(scenes: Scene[], clips: Record<string, ClipInfo>, narration: Record<string, NarrationLine>, fps: number, crossfadeFrames: number): PlacedScene[] {
-  const fadeInOf = (scene: Scene | undefined, index: number) => (!scene || index === 0 ? 0 : (scene.fadeInFrames ?? crossfadeFrames));
+  const fadeInOf = (scene: Scene | undefined, index: number) => (!scene || index === 0 ? 0 : fadeInFramesOf(scene, crossfadeFrames));
   let from = 0;
   return scenes.map((scene, index) => {
     const overlapWithNext = fadeInOf(scenes[index + 1], index + 1);

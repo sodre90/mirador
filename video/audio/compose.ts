@@ -2,11 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CROSSFADE_FRAMES, FRAME } from "../src/brand.ts";
 import { spokenSpans } from "../src/mix.ts";
-import { STORYBOARD } from "../src/storyboard.ts";
+import { STORYBOARD, TEMPO } from "../src/storyboard.ts";
 import type { ClipInfo, NarrationLine } from "../src/timeline.ts";
 import { placeScenes } from "../src/timeline.ts";
 import {
-  boom, Buses, carve, clap, crash, fadeOut, grid, hat, kick, lead, limit, Mix, phrase, pluck, range, riser, roll, sawPluck, snare, subBass, subsonic, supersaw, swell, synthBass, tonalRiser, writeWav, type Grid,
+  boom, Buses, carve, clap, crash, fadeOut, grid, hat, kick, lead, limit, Mix, phrase, pluck, range, riser, roll, sawPluck, shape, snare, subBass, subsonic, supersaw, swell, synthBass, tonalRiser, writeWav, type Grid,
 } from "./synth.ts";
 
 /**
@@ -18,13 +18,14 @@ import {
  * bring a lighter half-time breakdown, which builds into the voice scene, where the music steps up to E minor and leaves
  * room for the conversation. Its last chord rings over the backdrop and resolves to E major on the end card's hit.
  * Each stretch's tempo bends a little so the scene changes land on beats; it is timed by the storyboard, so the hits land
- * on the scene changes however long the scenes run. While the narrator speaks, the band where words are heard is turned
+ * on the scene changes however long the scenes run. Every scene that slams in lands on a hit. While the narrator speaks, the band where words are heard is turned
  * down, on top of the ducking in src/mix.ts.
  * Run with bun after encode and narrate: bun audio/compose.ts
  */
 const video = join(import.meta.dirname, "..");
 const output = join(video, "public", "music", "score.wav");
-const TEMPO = 144;
+/** A slam's boom is cut short, and fades out over its last 30 ms so it doesn't click. */
+const SLAM_BOOM_SECONDS = 0.8;
 /** The score was chosen at this level, a little under its own peak, where it is as loud as the score before it. */
 const LEVEL = 10 ** (-1.07 / 20);
 
@@ -46,17 +47,11 @@ function timeline() {
     coldOpen: startOf("coldShow"),
     picture: startOf("hook"),
     show: startOf("show"),
-    ask: startOf("ask"),
     review: startOf("review"),
     plugins: startOf("plugins"),
-    media: startOf("media"),
-    delegate: startOf("delegate"),
-    jobs: startOf("jobs"),
     voice: startOf("voice"),
     montage: startOf("edit"),
-    terminals: startOf("terminals"),
-    groups: startOf("groups"),
-    overview: startOf("overview"),
+    slams: placed.filter(({ scene }) => scene.kind === "clip" && scene.slam).map(({ from }) => from / FRAME.fps),
     lastChord: startOf("backdrop"),
     ending: startOf("end"),
     spoken: spokenSpans(placed, lines, FRAME.fps).map(({ from, to }) => ({ from: from / FRAME.fps, to: to / FRAME.fps })),
@@ -102,6 +97,7 @@ class Score {
     this.montage();
     this.breakdown();
     this.closer();
+    this.slams();
     this.ending();
     const mix = new Mix(at.seconds);
     mix.addStereo(0, this.main.bounce({ depth: 0.65, release: 0.24, delaySeconds: (0.75 * 60) / TEMPO, feedback: 0.35 }), 1);
@@ -174,11 +170,15 @@ class Score {
     });
   }
 
-  /** A cymbal on the beat nearest a dissolve, swelling into it. */
-  private accent(g: Grid, time: number) {
-    const onBeat = g.nearestBeat(time);
-    this.main.add(onBeat - 2 * g.beat, swell(2 * g.beat), 0.18);
-    this.main.add(onBeat, crash(), 0.3, { verb: 0.2 });
+  /** The hit under each feature's slam: a big kick, a crash and a short boom, after the cold open's own hits. */
+  private slams() {
+    const { at, main, drums } = this;
+    const slamBoom = shape(boom(SLAM_BOOM_SECONDS), (t) => Math.min(1, (SLAM_BOOM_SECONDS - t) / 0.03));
+    at.slams.filter((time) => time > at.show).forEach((time) => {
+      main.add(time, drums.bigKick, 0.65);
+      main.add(time, crash(), 0.32, { verb: 0.25 });
+      main.add(time, slamBoom, 0.5);
+    });
   }
 
   private halfTime(g: Grid, bar: number, busy: boolean) {
@@ -205,6 +205,7 @@ class Score {
   }
 
   private playHook(g: Grid, bar: number, fromHookBar: number, toHookBar: number, transpose = 0, octave = false) {
+    if (bar + toHookBar - fromHookBar > g.bars) throw new Error(`The hook's bars ${fromHookBar}–${toHookBar} from bar ${bar} run past a section of ${g.bars} bars`);
     const notes = phrase(g, bar * 4, hookBars(fromHookBar, toHookBar), transpose);
     this.main.add(g.at(bar * 4), lead(notes), 0.2, { delay: 0.35, verb: 0.25 });
     if (octave) this.main.add(g.at(bar * 4), lead(notes.map((note) => ({ ...note, note: note.note + 12 })), { square: 0.1, cutoff: 1800 }), 0.09, { delay: 0.35, verb: 0.25, pan: 0.2 });
@@ -220,10 +221,10 @@ class Score {
       const building = bar >= buildFrom;
       if (bar % 2 === 0) {
         const bars = Math.min(2, g.bars - bar);
-        const opening = bar >= 8;
+        const opening = bar >= Math.floor(g.bars / 4);
         this.harmony(g, bar, chord, { bars, cutoff: building ? (t) => 1800 * 4.5 ** (t / (bars * g.bar)) : opening ? 1800 : 950, gain: building ? 0.28 : opening ? 0.24 : 0.2, rolling: opening, arp: opening, arpGain: building ? 0.08 : 0.055 });
       }
-      if (!building) return this.halfTime(g, bar, bar >= 8);
+      if (!building) return this.halfTime(g, bar, bar >= Math.floor(g.bars / 4));
       const beats = bar === g.bars - 1 ? [0, 1, 2] : [0, 2];
       beats.forEach((offset) => main.add(g.at(bar * 4 + offset), drums.kick, 0.55));
       main.pumpAt(...range(0, 4).map((offset) => g.at(bar * 4 + offset)));
@@ -231,7 +232,6 @@ class Score {
     roll(main, g, buildFrom * 4, g.beats, { from: 0.06, to: 0.34 });
     main.add(g.at(buildFrom * 4), tonalRiser([62, 69, 74], 2 * g.bar), 0.26, { verb: 0.2 });
     main.add(g.at(buildFrom * 4), riser(2 * g.bar), 0.25);
-    this.accent(g, at.ask);
     return g;
   }
 
@@ -239,13 +239,11 @@ class Score {
   private drop() {
     const { at, main } = this;
     const g = grid(at.review, at.montage, TEMPO, true);
-    main.add(at.review, crash(), 0.5, { verb: 0.3 });
     range(0, g.bars).forEach((bar) => {
       this.harmony(g, bar, PROGRESSION[bar % 4]!, { cutoff: 5000, gain: 0.32, arp: true });
       this.fourOnTheFloor(g, bar);
     });
-    this.playHook(g, 0, 0, 2);
-    this.playHook(g, 9, 0, 3);
+    this.playHook(g, 0, 0, Math.min(4, g.bars));
     main.add(at.montage - 2 * g.beat, swell(2 * g.beat), 0.2);
   }
 
@@ -254,7 +252,6 @@ class Score {
     const { at, main, drums } = this;
     const g = grid(at.plugins, at.voice, TEMPO, true);
     const buildFrom = g.bars - 2;
-    main.add(at.plugins, crash(), 0.4, { verb: 0.35 });
     range(0, g.bars).forEach((bar) => {
       const chord = PROGRESSION[Math.floor(bar / 2) % 4]!;
       const building = bar >= buildFrom;
@@ -270,22 +267,20 @@ class Score {
     roll(main, g, buildFrom * 4, g.beats, { from: 0.06, to: 0.32 });
     main.add(g.at(buildFrom * 4), tonalRiser([62, 69, 74], 2 * g.bar), 0.24, { verb: 0.2 });
     main.add(g.at(buildFrom * 4), riser(2 * g.bar), 0.24);
-    [at.media, at.delegate, at.jobs].forEach((time) => this.accent(g, time));
   }
 
   /** From the montage to the plugins, still four on the floor, with the whole hook doubled an octave up. */
   private montage() {
     const { at, main, drums } = this;
     const g = grid(at.montage, at.plugins, TEMPO, true);
-    main.add(at.montage, crash(), 0.5, { verb: 0.3 });
+    const lastBar = g.bars - 1;
     range(0, g.bars).forEach((bar) => {
-      this.harmony(g, bar, PROGRESSION[bar % 4]!, { cutoff: bar === 7 ? (t) => 1500 * 4 ** (t / g.bar) : 6500, gain: 0.33, arp: true, arpGain: 0.07 });
+      this.harmony(g, bar, PROGRESSION[bar % 4]!, { cutoff: bar === lastBar ? (t) => 1500 * 4 ** (t / g.bar) : 6500, gain: 0.33, arp: true, arpGain: 0.07 });
       this.fourOnTheFloor(g, bar);
-      if (bar >= 4) range(0, 4).forEach((offset) => main.add(g.at(bar * 4 + offset + 0.5), drums.snare, 0.05, { verb: 0.1 }));
+      if (bar >= g.bars / 2) range(0, 4).forEach((offset) => main.add(g.at(bar * 4 + offset + 0.5), drums.snare, 0.05, { verb: 0.1 }));
     });
-    roll(main, g, 7 * 4, 8 * 4, { from: 0.04, to: 0.2 });
-    this.playHook(g, 8, 0, 4, 0, true);
-    [at.terminals, at.groups, at.overview].forEach((time) => this.accent(g, time));
+    roll(main, g, lastBar * 4, g.beats, { from: 0.04, to: 0.2 });
+    this.playHook(g, 0, 0, Math.min(4, g.bars), 0, true);
     main.add(at.plugins - 2 * g.beat, swell(2 * g.beat), 0.2);
   }
 
@@ -294,7 +289,6 @@ class Score {
     const { at, main } = this;
     const g = grid(at.voice, at.lastChord, TEMPO, true);
     const lifted = PROGRESSION.map((chord) => up(chord, 2));
-    main.add(at.voice, crash(), 0.45, { verb: 0.35 });
     range(0, g.bars).forEach((bar) => {
       const last = bar === g.bars - 1;
       this.harmony(g, bar, lifted[bar % 4]!, { cutoff: 2200, gain: 0.26, arp: true, arpGain: 0.05, ringsOn: last ? at.ending - at.lastChord + 0.9 : 0 });

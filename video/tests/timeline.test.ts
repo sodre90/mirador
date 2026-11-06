@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { STORYBOARD, TEMPO } from "../src/storyboard.ts";
 import { type ClipInfo, type ClipScene, type Scene, clipSeconds, linesOf, placeScenes, sceneSeconds, sceneSecondsOf, shotsOf, shotTrim } from "../src/timeline.ts";
 
 const clip: ClipInfo = { name: "demo", seconds: 20, moments: { sent: 4, shown: 10 }, rects: {} };
@@ -113,12 +116,41 @@ test("a shot's trim covers its last frame however its times round", () => {
   }
 });
 
-describe("the cold open", () => {
-  test("lasts whole bars of the score, so its hits stay on the cuts", async () => {
-    const { STORYBOARD } = await import("../src/storyboard.ts");
-    const cuts = STORYBOARD.filter((scene) => scene.kind === "clip" && scene.slam);
-    const beats = (cuts.reduce((seconds, cut) => seconds + (cut.kind === "clip" ? cut.seconds! : 0), 0) * 144) / 60;
-    expect(cuts.length).toBeGreaterThan(0);
-    expect(Math.abs(beats / 4 - Math.round(beats / 4))).toBeLessThan(1e-6);
+const video = join(import.meta.dirname, "..");
+const filmed = existsSync(join(video, "public", "clips"));
+
+describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
+  const clipNames = [...new Set(STORYBOARD.flatMap((scene) => (scene.kind === "clip" ? [scene.clip] : [])))];
+  const clips = filmed ? Object.fromEntries(clipNames.map((name) => [name, JSON.parse(readFileSync(join(video, "public", "clips", `${name}.json`), "utf8")) as ClipInfo])) : {};
+  const { lines } = JSON.parse(readFileSync(join(video, "public", "narration", "manifest.json"), "utf8"));
+  const wholeBeats = (seconds: number) => (seconds * TEMPO) / 60;
+  const isWhole = (count: number) => Math.abs(count - Math.round(count)) < 1e-6;
+
+  test("opens with cuts that last whole bars of the score, so its hits stay on the cuts", () => {
+    const coldOpen = STORYBOARD.slice(0, STORYBOARD.findIndex(({ id }) => id === "hook"));
+    expect(coldOpen.length).toBeGreaterThan(0);
+    expect(isWhole(wholeBeats(coldOpen.reduce((seconds, scene) => seconds + sceneSeconds(scene, clips, lines), 0)) / 4)).toBe(true);
+  });
+
+  test("gives every slammed scene whole beats, with room for its narration", () => {
+    const slammed = STORYBOARD.filter((scene): scene is ClipScene => scene.kind === "clip" && Boolean(scene.slam));
+    for (const scene of slammed) {
+      expect({ id: scene.id, seconds: sceneSeconds(scene, clips, lines) }).toEqual({ id: scene.id, seconds: scene.seconds! });
+      expect({ id: scene.id, whole: isWhole(wholeBeats(scene.seconds!)) }).toEqual({ id: scene.id, whole: true });
+    }
+  });
+
+  test("gives each of the score's sections whole bars, so none bends its tempo", () => {
+    const sectionStarts = ["show", "review", "edit", "plugins", "voice", "backdrop"];
+    const placed = placeScenes(STORYBOARD, clips, lines, 60, 18);
+    const startOf = (id: string) => placed.find(({ scene }) => scene.id === id)!.from / 60;
+    for (const [from, to] of sectionStarts.slice(0, -1).map((id, index) => [id, sectionStarts[index + 1]!])) {
+      expect({ from, bars: isWhole(wholeBeats(startOf(to!) - startOf(from!)) / 4) }).toEqual({ from, bars: true });
+    }
+  });
+
+  test("cuts straight into a slammed scene", () => {
+    const placed = placeScenes(STORYBOARD, clips, lines, 60, 18);
+    for (const { scene, fadeInFrames } of placed.filter(({ scene }) => scene.kind === "clip" && scene.slam)) expect({ id: scene.id, fadeInFrames }).toEqual({ id: scene.id, fadeInFrames: 0 });
   });
 });

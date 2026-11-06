@@ -9,6 +9,9 @@ import { Flash, punchScale, Slam } from "../components/Slam.tsx";
 import type { ClipInfo, ClipScene } from "../timeline.ts";
 import { shotsOf, shotTrim } from "../timeline.ts";
 
+/** How long a scene's slam stays before it clears, for the footage under it. */
+const SLAM_SECONDS = 1.3;
+
 /** A filmed scene: the clip's shots in the app window, the camera moving between its views, and the scene's captions. */
 export function ClipSceneView({ scene, clip, frames }: { scene: ClipScene; clip: ClipInfo; frames: number }) {
   const frame = useCurrentFrame();
@@ -17,6 +20,7 @@ export function ClipSceneView({ scene, clip, frames }: { scene: ClipScene; clip:
   const shots = shotsOf(scene, clip);
   const footageEnds = Math.round(shots.at(-1)!.sceneTo * fps);
   const last = shots.at(-1)!;
+  const slamFrames = Math.round(SLAM_SECONDS * fps);
   const camera = cameraTransform(viewAt(scene, clip, frame / fps), WINDOW.app, FRAME);
   return (
     <AbsoluteFill>
@@ -48,7 +52,7 @@ export function ClipSceneView({ scene, clip, frames }: { scene: ClipScene; clip:
           </AppWindow>
         </AbsoluteFill>
       </AbsoluteFill>
-      {scene.slam && <Slam words={scene.slam} from={2} />}
+      {scene.slam && <Slam words={scene.slam} from={2} to={frames > slamFrames ? slamFrames : undefined} />}
       {scene.slam && <Flash />}
       {(scene.captions ?? []).map((caption) => (
         <CaptionCard key={caption.title} kicker={caption.kicker} title={caption.title} side={caption.side} from={Math.round((caption.at ?? 0.5) * fps)} to={caption.seconds ? Math.round(((caption.at ?? 0.5) + caption.seconds) * fps) : frames - 12} />

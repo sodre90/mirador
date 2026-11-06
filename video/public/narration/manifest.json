@@ -9,93 +9,65 @@
       "speed": 1
     },
     "show": {
-      "text": "Flows, architecture, mockups and charts, drawn on the canvas next to your chat.",
+      "text": "Flows, mockups and charts, drawn right beside your chat.",
       "file": "show.wav",
-      "seconds": 4.714666666666667,
+      "seconds": 3.1573333333333333,
       "voice": "am_fenrir",
       "speed": 1
     },
     "ask": {
-      "text": "When a decision is yours, it asks with pictures. Click an option, and it carries on.",
+      "text": "When it's your call, it asks with pictures.",
       "file": "ask.wav",
-      "seconds": 4.736,
+      "seconds": 2.0906666666666665,
       "voice": "am_fenrir",
       "speed": 1
     },
     "review": {
-      "text": "Reviews become a guided tour of the change, in the order the code runs, with findings pinned to the lines they're about.",
+      "text": "Reviews become a guided tour of the change, with findings pinned to the lines.",
       "file": "review.wav",
-      "seconds": 7.061333333333334,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "reviewAsk": {
-      "text": "Question a finding, and the agent answers and rewrites it in place.",
-      "file": "reviewAsk.wav",
-      "seconds": 3.7973333333333334,
+      "seconds": 4.522666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },
     "overview": {
-      "text": "Every project at once. See who's working, and who needs you.",
+      "text": "Every project at once. See who needs you.",
       "file": "overview.wav",
-      "seconds": 3.2426666666666666,
+      "seconds": 2.304,
       "voice": "am_fenrir",
       "speed": 1
     },
     "edit": {
-      "text": "Approve every edit with its diff.",
+      "text": "Approve every edit with its diff, and see every change.",
       "file": "edit.wav",
-      "seconds": 1.6213333333333333,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "changes": {
-      "text": "Every change since your last commit, even outside the project.",
-      "file": "changes.wav",
-      "seconds": 3.584,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "terminals": {
-      "text": "Your terminals sit right beside the conversation.",
-      "file": "terminals.wav",
-      "seconds": 2.5813333333333333,
+      "seconds": 3.029333333333333,
       "voice": "am_fenrir",
       "speed": 1
     },
     "plugins": {
-      "text": "Mirador grows with plugins. Your agent knows the official ones, and installs one when you say so.",
+      "text": "Your agent installs official plugins when you say so.",
       "file": "plugins.wav",
-      "seconds": 6.144,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "media": {
-      "text": "Like Media. Mark what's wrong on the frame, and the agent cuts the video and renders it.",
-      "file": "media.wav",
-      "seconds": 4.8213333333333335,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "agents": {
-      "text": "Mirador isn't another agent. It runs the ones you already have, and lets them work together.",
-      "file": "agents.wav",
-      "seconds": 5.546666666666667,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "delegate": {
-      "text": "Here, Claude Code hands a long read to a local model.",
-      "file": "delegate.wav",
       "seconds": 3.050666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },
+    "media": {
+      "text": "Mark what's wrong on the frame, and the agent cuts the video.",
+      "file": "media.wav",
+      "seconds": 3.1573333333333333,
+      "voice": "am_fenrir",
+      "speed": 1
+    },
+    "delegate": {
+      "text": "It runs the agents you already have. Here, Claude Code hands a long read to a local model.",
+      "file": "delegate.wav",
+      "seconds": 5.8453333333333335,
+      "voice": "am_fenrir",
+      "speed": 1
+    },
     "jobs": {
-      "text": "Leave the long jobs running, like the tests on your build server. Mirador keeps watch, and wakes your agent when they're done.",
+      "text": "Long jobs? Mirador keeps watch, and wakes your agent when they're done.",
       "file": "jobs.wav",
-      "seconds": 7.402666666666667,
+      "seconds": 3.7546666666666666,
       "voice": "am_fenrir",
       "speed": 1
     },
