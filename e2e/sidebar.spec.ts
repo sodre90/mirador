@@ -1,7 +1,7 @@
 import { mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, addWorkspaceFromSidebar, createProfile, dragOnto, pickProfileIfAsked, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -128,6 +128,13 @@ test("a folded workspace's tooltip offers to unfold it, it moves by its heading 
   await expect.poll(foldedIds).not.toContain(workspaceId);
 });
 
+/** With one profile Enter adds the workspace at once, which shows only once the host is back; with more it asks which first. */
+async function pickProfileIfAskedWhileOffline(page: Page, input: Locator, directory: string) {
+  const profiles = page.getByRole("listbox", { name: "Profile of the new workspace" });
+  await expect.poll(async () => (await profiles.isVisible()) || !(await input.isVisible())).toBe(true);
+  if (await profiles.isVisible()) await pickProfileIfAsked(page, directory);
+}
+
 test("a workspace added while the page reconnects to the host is added once it has", async ({ page }) => {
   await signIn(page, host);
   await host.stop();
@@ -138,7 +145,7 @@ test("a workspace added while the page reconnects to the host is added once it h
   const input = page.getByLabel("Workspace directory");
   await input.fill(directory);
   await input.press("Enter");
-  await pickProfileIfAsked(page, directory);
+  await pickProfileIfAskedWhileOffline(page, input, directory);
   await host.start();
   await expect(workspaceCard(page, directory)).toBeVisible({ timeout: 30_000 });
 });
