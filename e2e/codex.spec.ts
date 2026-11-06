@@ -112,6 +112,7 @@ const codexQuestions = {
 
 test("in Plan mode Codex's questions show as a canvas question, and Codex hears each answer, the user's own words too", async () => {
   await (await conversationSettings(page)).getByLabel("Collaboration mode").selectOption("plan");
+  await page.keyboard.press("Escape");
   await sendMessage(page, `QUESTIONS ${JSON.stringify(codexQuestions)}`);
   const ask = page.locator(".ask");
   await ask.getByRole("radio", { name: "Red", exact: true }).check({ timeout: 60_000 });
