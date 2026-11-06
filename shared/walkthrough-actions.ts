@@ -1,4 +1,4 @@
-import type { FindingDecision } from "./review.ts";
+import type { FindingDecision, PostAs } from "./review.ts";
 
 export type WalkthroughTab = "overview" | "flow" | "files" | "findings" | "conversations";
 
@@ -29,7 +29,8 @@ export type WalkthroughAction =
   | { kind: "update-finding"; findingId: string; decision?: FindingDecision; body?: string }
   | { kind: "update-answer"; answerId: string; decision?: FindingDecision; body?: string; resolve?: boolean }
   | { kind: "check-github-cli" }
-  | { kind: "post" }
+  | { kind: "choose-post"; as?: PostAs; body?: string }
+  | { kind: "post"; as?: PostAs; body?: string }
   | { kind: "review-again" };
 
 /** What the view draws with from its first paint: the pane shares the user last left, and where they were in this item. */

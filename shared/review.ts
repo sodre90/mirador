@@ -128,6 +128,10 @@ export interface EditDiff {
 /** What keeps gh from posting to a pull request's host: it is not installed, or has no account it can use there. */
 export type GitHubCliProblem = "missing" | "logged-out";
 
+/** How posting leaves the user's review on the pull request: pending, for them to submit on GitHub, or submitted as one of GitHub's review events. */
+export type PostAs = "draft" | "comment" | "approve" | "request-changes";
+export type SubmittedAs = Exclude<PostAs, "draft">;
+
 export interface PullRequestRef {
   url: string;
   host: string;
@@ -173,6 +177,14 @@ export interface Review extends Walkthrough {
   pendingReviewOfOtherCommit?: PendingReviewOfOtherCommit;
   /** Why the last post failed as a whole, e.g. gh couldn't reach GitHub, until the user posts again. */
   postFailure?: string;
+  /** How the user chose to post; missing until they choose, when the verdict suggests how: read it with postAsOf. */
+  postAs?: PostAs;
+  /** The user's wording of a submitted review's summary; missing until they change the verdict's reason: read it with postBodyOf. */
+  postBody?: string;
+  /** What the review on pendingReviewUrl was submitted as; missing while it is pending. */
+  submittedAs?: SubmittedAs;
+  /** Why the last post left the review pending instead of submitting it. */
+  submitFailure?: string;
   /** The agent's latest change to parts of the review in place: finding and answer ids, "summary", "verdict" or "flow". */
   agentEdit?: { at: number; parts: string[] };
   /** The highest finding number handed out so far, so a removed finding's id never names another one; missing until the agent changes the review. */
@@ -198,6 +210,25 @@ export const answersOf = (review: Review) => review.answers ?? [];
 
 /** The verdict's first words, before its reason: "Request changes" of "Request changes: the fallback skips auth.". */
 export const verdictInBrief = (verdict: string) => verdict.split(/:|\s[—–]\s/)[0]!.trim() || verdict;
+
+/** The verdict's reason, after its first words: "the fallback skips auth." of "Request changes: the fallback skips auth.". */
+export function verdictReason(verdict: string) {
+  const separator = /:|\s[—–]\s/.exec(verdict);
+  return separator ? verdict.slice(separator.index + separator[0].length).trim() : "";
+}
+
+function postAsTheVerdictSuggests(verdict: string): PostAs {
+  const brief = verdictInBrief(verdict).toLowerCase();
+  if (brief.startsWith("request changes")) return "request-changes";
+  return brief.startsWith("approve") ? "approve" : "draft";
+}
+
+export const postAsOf = (review: Pick<Review, "postAs" | "verdict">) => review.postAs ?? postAsTheVerdictSuggests(review.verdict);
+
+export const postBodyOf = (review: Pick<Review, "postBody" | "verdict">) => review.postBody ?? verdictReason(review.verdict);
+
+/** GitHub takes an approval without a summary, but not a comment or a request for changes. */
+export const postAsNeedsBody = (postAs: PostAs) => postAs === "comment" || postAs === "request-changes";
 
 const shortCommit = (commit: string) => commit.slice(0, 10);
 
