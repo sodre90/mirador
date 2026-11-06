@@ -149,7 +149,7 @@ test("workspaces and groups share one order: workspaces gather in groups that fo
     await page.mouse.up();
     await expect.poll(() => topLevel(page)).toEqual(["[Own]", "[Customers]", "gamma", "alpha"]);
     await page.reload();
-    expect(await topLevel(page)).toEqual(["[Own]", "[Customers]", "gamma", "alpha"]);
+    await expect.poll(() => topLevel(page)).toEqual(["[Own]", "[Customers]", "gamma", "alpha"]);
   });
 
   await test.step("deleting a group keeps its workspaces where it was", async () => {
