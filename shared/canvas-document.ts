@@ -1057,6 +1057,9 @@ ${pageDrawing(assetsOrigin)}
 })();`;
 }
 
+/** On a shown page the panel finds instead, so the browser's own find must not open; other frames keep the key for their own find. */
+const CANCEL_BROWSER_FIND = "if (findKeys(event)) event.preventDefault();";
+
 function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean) {
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
@@ -1295,8 +1298,7 @@ ${HIDDEN_ERROR_SCRIPT}
   const findKeys = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.code === "KeyF";
   addEventListener("keydown", (event) => {
     if (!event.isTrusted || !withModifier(event)) return;
-    // The panel finds on the page instead, so the browser's own find must not open.
-    if (${findsOnPage} && findKeys(event)) event.preventDefault();
+    ${findsOnPage ? CANCEL_BROWSER_FIND : ""}
     forwardKey(event);
   }, true);
   // Listened to after the page's own handlers, so an Esc that closes something on the page stays with the page.
