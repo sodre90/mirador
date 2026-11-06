@@ -1612,8 +1612,9 @@ button.conversation-settings-toggle.on {
     flex-shrink: 0;
   }
 
+  /* Windows' wider glyphs leave a bar of 377px less room for the title than macOS does. */
   .title-line h2 {
-    min-width: 3em;
+    min-width: 2em;
   }
 }
 
