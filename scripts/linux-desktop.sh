@@ -8,8 +8,6 @@
 # with no path from the container baked in; the checks then also see the host run the copy inside the app, and go on to
 # build the release after it and check the installed app finds it, downloads the patch rather than the whole archive,
 # and leaves the version it runs until the user restarts it.
-# A release also builds the peer-to-peer sidecar, from the git bundle MIRADOR_P2P_BUNDLE names (make linux makes it), as
-# the container has no GitHub key for the private mirador-p2p.
 # The installer, screenshots and logs are saved to $results.
 set -euo pipefail
 
@@ -23,18 +21,11 @@ rm -rf "$results" && mkdir -p "$results"
 build_image linux-test
 build_image linux-desktop
 
-sidecar_source=()
-if [ "$release" = 1 ]; then
-  [ -f "${MIRADOR_P2P_BUNDLE:-}" ] || { echo "A release needs MIRADOR_P2P_BUNDLE, a git bundle of mirador-p2p (make linux makes it)" >&2; exit 2; }
-  sidecar_source=(--volume "$(realpath "$MIRADOR_P2P_BUNDLE"):/p2p.bundle:ro" --env MIRADOR_P2P_SOURCE=/p2p.bundle
-    --volume "mirador-linux-cargo-cache-$arch:/home/ubuntu/.cargo/registry")
-fi
-
-run_in_container --volume "$results:/results" --env "RELEASE=$release" "${sidecar_source[@]}" "mirador-linux-desktop-$arch" bash -c '
+run_in_container --volume "$results:/results" --env "RELEASE=$release" "mirador-linux-desktop-$arch" bash -c '
     set -uo pipefail
     if [ "$RELEASE" = 1 ]; then
       git -c safe.directory="*" clone --quiet /src /tmp/mirador || { echo "clone failed: run it from the main checkout or a clone"; exit 1; }
-      echo "== release of $(git -C /tmp/mirador describe --tags --always)"
+      echo "== release of $(git -C /tmp/mirador describe --tags --match "v*" --always)"
     else
       mkdir /tmp/mirador && tar -X /src/scripts/linux-copy.exclude -C /src -cf - . | tar -xf - -C /tmp/mirador
     fi
@@ -81,8 +72,6 @@ run_in_container --volume "$results:/results" --env "RELEASE=$release" "${sideca
     if [ "$RELEASE" = 1 ]; then
       host_folder=$(readlink "/proc/$(pgrep -f " host/main.ts$" | head -1)/cwd")
       check "it runs the Mirador inside the app ($host_folder)" test "${host_folder#"$HOME"/.local/share/com.sodre90.mirador/}" != "$host_folder"
-      sidecar_runs() { "$host_folder/p2p/mirador-p2p" --help > /dev/null; }
-      check "it carries the peer-to-peer sidecar, which runs here" sidecar_runs
     fi
     check "the window opens" until_true window_shown
     sleep 10

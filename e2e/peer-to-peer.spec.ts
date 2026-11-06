@@ -260,3 +260,24 @@ test("with an address of its own as well, an invite joins peer to peer unless th
     await addressed.cleanUp();
   }
 });
+
+test("when the broker doesn't answer, an invite offers no tunnel, and Settings says why", async ({ page }) => {
+  const nobodyAnswers = await freePort();
+  const unanswered = new TestHost({ environment: () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${nobodyAnswers}`, MIRADOR_P2P_BROKER_KEY: brokerKey }) });
+  await unanswered.start();
+  try {
+    await signIn(page, unanswered);
+    const settings = await openSettings(page, "Devices");
+    await settings.getByRole("button", { name: "Invite a device" }).click();
+    const invite = settings.getByLabel("Invite");
+    await expect(invite.getByRole("alert"), "with no tunnel and no address, the invite reaches no one").toContainText("No other device can reach this Mirador");
+    await expect(invite.getByRole("radiogroup", { name: "How the device joins" })).toHaveCount(0);
+    await expect(settings.locator(".peer-to-peer-problem"), "once the broker has been silent a while").toHaveText(
+      "Peer to peer can't reach its server, so invites don't offer it. A firewall or this network may be blocking UDP.",
+      { timeout: 25_000 },
+    );
+  } finally {
+    await unanswered.stop();
+    await unanswered.cleanUp();
+  }
+});

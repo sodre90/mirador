@@ -42,7 +42,8 @@ import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
 import { startServer } from "./server.ts";
-import { PeerToPeer, peerToPeerSettings } from "./p2p/service.ts";
+import { BUILT_IN_BROKER, PeerToPeer, peerToPeerSettings } from "./p2p/service.ts";
+import { downloadedSidecar } from "./p2p/sidecar-download.ts";
 import { SourceWatcher } from "./source-watcher.ts";
 import { StatuslineService } from "./statusline.ts";
 import { SystemNotifications } from "./system-notifications.ts";
@@ -136,7 +137,7 @@ const pluginUpdates = new Lookout((_, last: PluginUpdate[] | null) => plugins.up
 const devices = new DeviceService(store);
 const joinRequests = new JoinRequestService(store, devices, ownAuthorityFingerprint);
 const signInCodes = new SignInCodes(store);
-const p2pSettings = peerToPeerSettings(process.env);
+const p2pSettings = peerToPeerSettings(process.env, { sidecar: downloadedSidecar(config.dataDir), broker: BUILT_IN_BROKER });
 const p2p = p2pSettings && new PeerToPeer({ ...p2pSettings, canvasAssetsPort: config.canvasAssetsPort }, join(config.dataDir, "p2p"), store);
 const search = new ConversationSearch(store);
 const signedIn = signedInWith(config.browserToken, devices);

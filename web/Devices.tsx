@@ -5,7 +5,7 @@ import { inviteLink, joinCodeIn } from "../shared/machines.ts";
 import { relativeTimeOf } from "../shared/relative-time.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
 import type { DeviceConnection, ListedDevice, PublicAddress, ReachabilitySettings } from "../shared/model.ts";
-import type { ServerMessage } from "../shared/protocol.ts";
+import type { PeerToPeerStatus, ServerMessage } from "../shared/protocol.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { setConnectedDevicesInSidebar, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
@@ -546,6 +546,12 @@ function InviteRouteHint({ throughTunnel, address }: { throughTunnel: boolean; a
   );
 }
 
+/** Says why invites don't offer peer to peer, when it is on but can't work; nothing while it works or isn't needed yet. */
+function PeerToPeerProblem({ status }: { status: PeerToPeerStatus | null }) {
+  const problem = status === "broker-unreachable" ? words.invite.peerToPeerUnreachable : status === "sidecar-unavailable" ? words.invite.peerToPeerUnavailable : null;
+  return problem && <p className="warning peer-to-peer-problem">{problem}</p>;
+}
+
 function RestartHostButton() {
   return (
     <button type="button" data-hint={hints.restartHost} onClick={() => connection.send({ type: "host.restart" })}>
@@ -649,6 +655,7 @@ export function DeviceSettings({ listed }: { listed: DevicesListed | null }) {
         <button type="button" onClick={createInvite} data-hint={hints.inviteDevice}>
           {words.invite.button}
         </button>
+        <PeerToPeerProblem status={listed?.peerToPeer ?? null} />
         {invite && (
           <div className="invite" aria-label={words.invite.label}>
             <span>

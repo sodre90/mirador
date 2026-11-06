@@ -99,6 +99,10 @@ export const devices: Messages["devices"] = {
       "Solo funciona en esta máquina, así que una invitación no tiene adónde apuntar. Deja que lleguen los dispositivos de esta red o elige otra forma abajo.",
     restartToReach: "Guardado. Reinicia el host y vuelve a invitar para tener un enlace y un código QR.",
     useThisNetwork: "Usar esta red",
+    peerToPeerUnreachable:
+      "La conexión de igual a igual no llega a su servidor, así que las invitaciones no la ofrecen. Puede que un cortafuegos o esta red bloqueen UDP.",
+    peerToPeerUnavailable:
+      "No se pudo descargar la conexión de igual a igual, así que las invitaciones no la ofrecen. La próxima invitación lo intenta de nuevo.",
     withoutLink:
       "Sin enlace ni código QR: nada le ha dicho a Mirador cómo llegan a él otros dispositivos. Una de las opciones de abajo le da una dirección; el host la usa desde su próximo inicio.",
     button: "Invitar un dispositivo",

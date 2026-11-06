@@ -98,6 +98,10 @@ export const devices: Messages["devices"] = {
       "Es läuft nur auf diesem Rechner, daher kann eine Einladung nirgendwohin zeigen. Lass Geräte in diesem Netzwerk es erreichen oder wähle unten einen anderen Weg.",
     restartToReach: "Gespeichert. Starte den Host neu und lade dann erneut ein, um einen Link und einen QR-Code zu bekommen.",
     useThisNetwork: "Dieses Netzwerk verwenden",
+    peerToPeerUnreachable:
+      "Peer-to-Peer erreicht seinen Server nicht, daher bieten Einladungen es nicht an. Eine Firewall oder dieses Netzwerk blockiert vielleicht UDP.",
+    peerToPeerUnavailable:
+      "Peer-to-Peer konnte nicht heruntergeladen werden, daher bieten Einladungen es nicht an. Die nächste Einladung versucht es erneut.",
     withoutLink:
       "Kein Link und kein QR-Code: Mirador weiß noch nicht, wie andere Geräte es erreichen. Eine der Optionen unten gibt ihm eine Adresse – der Host verwendet sie ab seinem nächsten Start.",
     button: "Gerät einladen",

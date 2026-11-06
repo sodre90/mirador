@@ -422,6 +422,7 @@ export function startServer(services: HostServices) {
     devices: listedDevices(),
     thisDeviceId: socket.data.deviceId,
     reachability: reachabilitySettings(),
+    peerToPeer: p2p?.peerToPeerStatus() ?? null,
   });
   const sendDevicesToEveryPage = () => hub.sendEach(devicesListed);
   const pluginsListed = () => listedPlugins(plugins, catalog);
@@ -1451,8 +1452,9 @@ export function startServer(services: HostServices) {
         );
       case "devices.invite": {
         const invite = devices.invite();
-        const tunnel = p2p?.invite(invite.code, invite.expiresAt) ?? null;
-        return hub.send(socket, { type: "devices.invited", requestId: message.requestId, ...invite, tunnel });
+        return void (p2p?.invite(invite.code, invite.expiresAt) ?? Promise.resolve(null)).then((tunnel) =>
+          hub.send(socket, { type: "devices.invited", requestId: message.requestId, ...invite, tunnel }),
+        );
       }
       case "address.find":
       case "address.serve":
@@ -1722,7 +1724,7 @@ export function startServer(services: HostServices) {
     };
   }
 
-  p2p?.start(serveTunnel);
+  p2p?.start(serveTunnel, sendDevicesToEveryPage);
   /** The page bundle is built once per set of routes, so setting the same routes again rebuilds it from the current source. */
   const rebuildUi = () => {
     server.reload(options);

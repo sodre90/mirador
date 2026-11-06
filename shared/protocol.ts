@@ -517,7 +517,8 @@ export type ServerMessage =
   /** A file link leads to a file outside the workspace that the agent did not change: the page asks before it opens `file`, the real file. */
   | { type: "files.ask-to-open"; conversationId: string; file: string }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */
-  | { type: "devices.listed"; devices: ListedDevice[]; thisDeviceId: string | null; reachability: ReachabilitySettings }
+  /** peerToPeer is null when this host doesn't connect peer to peer. */
+  | { type: "devices.listed"; devices: ListedDevice[]; thisDeviceId: string | null; reachability: ReachabilitySettings; peerToPeer: PeerToPeerStatus | null }
   /** `folder` is where plugins are installed; `restartNeeded` once a plugin was added, updated or removed since Mirador started. */
   /** `official` is the catalog of official plugins; missing from a host older than it. */
   | { type: "plugins.listed"; folder: string; plugins: PluginInfo[]; official?: CatalogPlugin[]; restartNeeded: boolean }
@@ -558,3 +559,9 @@ export type ServerMessage =
   | { type: "settings.saved"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   /** The conversation with the newest hit first. */
   | { type: "search.results"; requestId: string; conversations: ConversationMatches[] };
+
+/**
+ * Where peer to peer stands: not needed yet, starting, found through the broker, or unable to be, because the broker
+ * doesn't answer (a firewall, or no network) or the sidecar couldn't be downloaded.
+ */
+export type PeerToPeerStatus = "waiting" | "connecting" | "ready" | "broker-unreachable" | "sidecar-unavailable";

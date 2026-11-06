@@ -96,6 +96,10 @@ export const devices: Messages["devices"] = {
       "Csak ezen a gépen fut, így egy meghívó sehova sem mutathat. Engedd, hogy az ezen a hálózaton lévő eszközök elérjék, vagy válassz lent más módot.",
     restartToReach: "Mentve. Indítsd újra a hostot, majd hívj meg újra, hogy legyen link és QR-kód.",
     useThisNetwork: "Ez a hálózat",
+    peerToPeerUnreachable:
+      "Az egyenrangú kapcsolat nem éri el a szerverét, ezért a meghívók nem ajánlják fel. Lehet, hogy egy tűzfal vagy ez a hálózat blokkolja az UDP-t.",
+    peerToPeerUnavailable:
+      "Az egyenrangú kapcsolatot nem sikerült letölteni, ezért a meghívók nem ajánlják fel. A következő meghívó újra megpróbálja.",
     withoutLink:
       "Nincs link és QR-kód: semmi sem adta meg a Miradornak, hogyan érik el más készülékek. Az alábbi lehetőségek egyike ad neki címet — a host a következő indulásától használja.",
     button: "Készülék meghívása",
