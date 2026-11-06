@@ -94,7 +94,13 @@ export const hints: Messages["hints"] = {
   checkPluginUpdates:
     "A bővítmény újabb kiadását keresi, illetve egy ágat követő bővítménynél az ág új commitjait. Semmi sem változik, amíg nem frissítesz.",
   pluginUpdatesWaiting:
-    "Git-repókból származó bővítmények, amelyekhez újabb kiadás vagy új commitok vannak. A Mirador induláskor és 6 óránként néz körül, és magától semmit sem telepít: a Beállítások › Bővítmények részben frissítheted őket.",
+    "Git-repókból telepített bővítmények, amelyekhez újabb kiadás vagy új commit érhető el. A Mirador induláskor és 6 óránként ellenőrzi őket. Magától csak akkor telepít, ha a Bővítményfrissítések beállítás ezt kéri; egyébként a Beállítások › Bővítmények részben frissítheted őket.",
+  pluginUpdateMode:
+    "Kérdezzen meg: minden frissítéshez a jóváhagyásod kell. A Mirador frissítésével: az automatikusan frissülő bővítmények új kiadásai a Mirador következő frissítésekor települnek. Minden újraindításkor: a Mirador minden indulásakor települnek. A Mirador előre letölti és buildeli a frissítéseket. Ha egy frissítés megváltoztatja a build parancsot vagy a host modulokat, vagy nem a hivatalos repóból származik, továbbra is a jóváhagyásodra vár.",
+  pluginUpdatesByItself:
+    "A bővítmény új kiadásai kérdés nélkül települnek, a Bővítményfrissítések beállításnak megfelelően. A hivatalos bővítményeknél alapból be van kapcsolva.",
+  undoPluginUpdate:
+    "A következő újraindításkor visszaállítja a frissítés előtti verziót. Ez a kiadás ezután nem települ magától, de kézzel továbbra is frissíthetsz rá.",
   updateAllPlugins: "Klónozza minden bővítmény újabb kiadását vagy új commitjait, megmutatja, mi fut mindegyikből, majd egyszer kér beleegyezést mindegyikhez.",
   updatePlugin:
     "Klónozza a legújabb kiadást, vagy az ágat a mostani állapotában, és megmutatja, mi fut belőle. Ha beleegyezel, buildeli, és csak ezután cseréli le a bővítményt, így egy sikertelen frissítés a régi állapotban hagyja.",

@@ -12,6 +12,7 @@ import {
   type PluginSource,
   type PluginTool,
   type PluginUpdate as FoundUpdate,
+  type PluginUpdateMode,
 } from "../shared/apps.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
@@ -167,7 +168,15 @@ export function UpdatesWaiting({ count }: { count: number }) {
 
 const isNothingNew = ({ release, commits }: PluginNews) => release === null && commits.length === 0;
 
-function PluginUpdate({ plugin, found, startUpdating }: { plugin: PluginInfo; found: PluginNews | undefined; startUpdating: boolean }) {
+/** When a found update goes in by itself, or why it waits for the user; nothing while the user is asked for each. */
+function whenItGoesIn(found: FoundUpdate | undefined, mode: PluginUpdateMode): string | null {
+  if (mode === "ask" || !found) return null;
+  if (found.heldBack) return words.heldBack[found.heldBack];
+  if (!found.ready) return null;
+  return mode === "with-mirador" ? words.goesInWithMirador : words.goesInAtRestart;
+}
+
+function PluginUpdate({ plugin, found, goesIn, startUpdating }: { plugin: PluginInfo; found: PluginNews | undefined; goesIn: string | null; startUpdating: boolean }) {
   const [checked, setUpdating] = useState<Updating>({ step: "idle" });
   const updating: Updating = checked.step === "idle" && found ? { step: "found", news: found } : checked;
   const check = async () => {
@@ -209,6 +218,7 @@ function PluginUpdate({ plugin, found, startUpdating }: { plugin: PluginInfo; fo
               {plugin.version ?? "?"} → {updating.news.release}
             </span>
           )}
+          {goesIn && <span className="plugin-goes-in">{goesIn}</span>}
           <ul className="plugin-commits" aria-label={words.newCommits(plugin.title ?? plugin.folder)}>
             {updating.news.commits.map(({ commit, subject }) => (
               <li key={commit}>
@@ -378,7 +388,7 @@ function PictureViewer({ screenshots, shown, onShow, onClose }: { screenshots: P
   );
 }
 
-function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: PluginNews | undefined }) {
+function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: FoundUpdate | undefined }) {
   const { installed, official } = plugin;
   return (
     <span className="plugin-badges">
@@ -392,7 +402,7 @@ function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: PluginNew
           {words.official}
         </span>
       )}
-      {news && <span className="plugin-badge plugin-has-update">{words.updateAvailable}</span>}
+      {news && (news.ready ? <span className="plugin-badge plugin-update-ready">{words.updateReady}</span> : <span className="plugin-badge plugin-has-update">{words.updateAvailable}</span>)}
       {installed?.problem && <span className="plugin-badge plugin-failed">{words.didntLoadBadge}</span>}
       {installed?.waitsForRestart && <span className="plugin-badge plugin-waits">{words.waitsForRestart}</span>}
     </span>
@@ -405,7 +415,7 @@ const mainActionOf = (plugin: GalleryPlugin, news: PluginNews | undefined) =>
   !plugin.installed ? { label: words.install, start: "install" as const } : news ? { label: words.update, start: "update" as const } : null;
 
 /** The whole tile opens the plugin's page; its title is the button that does so for the keyboard. */
-function PluginTile({ plugin, news, updating, onOpen }: { plugin: GalleryPlugin; news: PluginNews | undefined; updating: boolean; onOpen: (start: Start) => void }) {
+function PluginTile({ plugin, news, updating, onOpen }: { plugin: GalleryPlugin; news: FoundUpdate | undefined; updating: boolean; onOpen: (start: Start) => void }) {
   const action = mainActionOf(plugin, news);
   return (
     <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
@@ -492,11 +502,24 @@ function InstallConsent({ installing }: { installing: Installing }) {
   );
 }
 
-function InstalledDetail({ plugin, title, news, startUpdating }: { plugin: PluginInfo; title: string; news: PluginNews | undefined; startUpdating: boolean }) {
+function InstalledDetail({
+  plugin,
+  title,
+  news,
+  updateMode,
+  startUpdating,
+}: {
+  plugin: PluginInfo;
+  title: string;
+  news: FoundUpdate | undefined;
+  updateMode: PluginUpdateMode;
+  startUpdating: boolean;
+}) {
   const settings = usePluginSettings().find(({ plugin: name }) => name === plugin.name);
   const [problem, setProblem] = useState<string | null>(null);
   const linked = plugin.source.kind === "linked";
   const remove = async () => setProblem(await changePlugins((requestId) => ({ type: "plugins.remove", requestId, folder: plugin.folder })));
+  const setUpdatesByItself = (updatesByItself: boolean) => connection.send({ type: "plugins.set-updates-by-itself", folder: plugin.folder, updatesByItself });
   return (
     <>
       {plugin.problem && <p className="plugin-problem">{words.didntLoad(describedText(plugin.problem, plugin.problemAbout))}</p>}
@@ -507,9 +530,15 @@ function InstalledDetail({ plugin, title, news, startUpdating }: { plugin: Plugi
           <SettingsOf settings={settings} />
         </>
       )}
+      {plugin.source.kind === "git" && updateMode !== "ask" && (
+        <label className="plugin-updates-by-itself" data-hint={hints.pluginUpdatesByItself}>
+          <input type="checkbox" checked={plugin.updatesByItself} onChange={(event) => setUpdatesByItself(event.target.checked)} />
+          {words.updatesByItself}
+        </label>
+      )}
       {plugin.source.kind === "git" && (
         <span className="plugin-actions">
-          <PluginUpdate key={plugin.source.commit} plugin={plugin} found={news} startUpdating={startUpdating} />
+          <PluginUpdate key={plugin.source.commit} plugin={plugin} found={news} goesIn={whenItGoesIn(news, updateMode)} startUpdating={startUpdating} />
         </span>
       )}
       <details className="plugin-upkeep">
@@ -543,7 +572,7 @@ function InstalledDetail({ plugin, title, news, startUpdating }: { plugin: Plugi
   );
 }
 
-function PluginDetail({ plugin, news, start, onBack }: { plugin: GalleryPlugin; news: PluginNews | undefined; start: Start; onBack: () => void }) {
+function PluginDetail({ plugin, news, updateMode, start, onBack }: { plugin: GalleryPlugin; news: FoundUpdate | undefined; updateMode: PluginUpdateMode; start: Start; onBack: () => void }) {
   const installing = useInstallOfficial(plugin.installed ? null : plugin.official, start === "install");
   return (
     <section className="plugin-detail" aria-label={plugin.title}>
@@ -561,7 +590,7 @@ function PluginDetail({ plugin, news, start, onBack }: { plugin: GalleryPlugin; 
       {plugin.official && <p className="plugin-description">{plugin.official.description}</p>}
       {!plugin.installed && <InstallConsent installing={installing} />}
       {plugin.official?.screenshots && <Screenshots title={plugin.title} screenshots={plugin.official.screenshots} />}
-      {plugin.installed && <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} startUpdating={start === "update"} />}
+      {plugin.installed && <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} updateMode={updateMode} startUpdating={start === "update"} />}
     </section>
   );
 }
@@ -651,7 +680,7 @@ function usePluginsListed() {
 }
 
 /** The news Mirador found for the plugin: none once it was updated past the commit it was found from. */
-function newsFor(plugin: PluginInfo, pluginUpdates: FoundUpdate[]): PluginNews | undefined {
+function newsFor(plugin: PluginInfo, pluginUpdates: FoundUpdate[]): FoundUpdate | undefined {
   const found = pluginUpdates.find(({ folder }) => folder === plugin.folder);
   return found && plugin.source.kind === "git" && plugin.source.commit === found.from ? found : undefined;
 }
@@ -720,7 +749,7 @@ function TileList({
 }: {
   label: string;
   plugins: GalleryPlugin[];
-  newsOf: (plugin: GalleryPlugin) => PluginNews | undefined;
+  newsOf: (plugin: GalleryPlugin) => FoundUpdate | undefined;
   updatingFolder?: string | null;
   onOpen: (plugin: GalleryPlugin, start: Start) => void;
 }) {
@@ -734,7 +763,25 @@ function TileList({
 }
 
 /** Plugins, as a gallery of what each does; a tile opens what it gives the agent, its settings and its upkeep. */
-export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: FoundUpdate[]; onClose: () => void }) {
+const PLUGIN_UPDATE_MODES: PluginUpdateMode[] = ["ask", "with-mirador", "any-restart"];
+
+function UpdateModeChoice({ mode }: { mode: PluginUpdateMode }) {
+  return (
+    <label className="plugin-update-mode" data-hint={hints.pluginUpdateMode}>
+      {words.updateMode}
+      <select value={mode} onChange={(event) => connection.send({ type: "settings.set-plugin-update-mode", mode: event.target.value as PluginUpdateMode })}>
+        {PLUGIN_UPDATE_MODES.map((choice) => (
+          <option key={choice} value={choice}>
+            {words.updateModes[choice]}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+
+export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pluginUpdates: FoundUpdate[]; pluginUpdateMode: PluginUpdateMode; onClose: () => void }) {
   const listed = usePluginsListed();
   const [opened, setOpened] = useState<{ key: string; start: Start } | null>(null);
   useEffect(() => {
@@ -778,10 +825,11 @@ export function PluginsDialog({ pluginUpdates, onClose }: { pluginUpdates: Found
             </p>
           )}
           {openedPlugin ? (
-            <PluginDetail key={openedPlugin.key} plugin={openedPlugin} news={newsOf(openedPlugin)} start={opened.start} onBack={() => setOpened(null)} />
+            <PluginDetail key={openedPlugin.key} plugin={openedPlugin} news={newsOf(openedPlugin)} updateMode={pluginUpdateMode} start={opened.start} onBack={() => setOpened(null)} />
           ) : (
             <>
               <p className="hint">{words.intro}</p>
+              <UpdateModeChoice mode={pluginUpdateMode} />
               {updatingFromTile ? (
                 <UpdateAll key={updatingFromTile.folder} updates={[updatingFromTile]} startNow onDone={() => setUpdatingFromTile(null)} onBusy={setTileUpdateBusy} />
               ) : (
