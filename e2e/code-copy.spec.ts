@@ -94,6 +94,7 @@ test("each code block in a reply has a Copy button, shown on hover or always on 
   });
 
   await test.step("the find bar finds the reply's words, not the buttons", async () => {
+    await expect(message).toBeVisible();
     await page.keyboard.press("Control+KeyF");
     const bar = page.getByRole("search");
     await bar.getByLabel("Find in this conversation").fill("copy");
