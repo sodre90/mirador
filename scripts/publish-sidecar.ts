@@ -3,13 +3,14 @@
  * Builds the peer-to-peer sidecar from a commit of the private mirador-p2p, publishes it as a prerelease of the public
  * repository for hosts to download the first time they need it, and pins that release and its SHA-256s in
  * host/p2p/sidecar-download.ts. The macOS one is built and signed with the Developer ID here; the Linux ones are built
- * on LINUX_HOST in Ubuntu 22.04 and must run on Ubuntu 22.04 and Debian 12 before anything is published.
+ * on LINUX_HOST in Ubuntu 22.04 and must run on Ubuntu 22.04 and Debian 12 before anything is published. The Windows one is
+ * cross-built here with cargo-xwin, which needs Homebrew's llvm and lld (for clang-cl, as ring compiles C).
  * Usage: LINUX_HOST=user@host bun scripts/publish-sidecar.ts [commit]  (P2P_SOURCE: the mirador-p2p clone, ~/prj/mirador-p2p)
  */
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 
 const SIGNING_IDENTITY = "Developer ID Application";
@@ -21,9 +22,11 @@ const LINUX_BUILDS = [
 /** Distributions the Linux desktop app runs on, oldest C library first; the sidecar has to start on each. */
 const LINUX_CHECKS = ["docker.io/library/ubuntu:22.04", "docker.io/library/debian:12"];
 const RUST_VERSION = "1.99.1";
+const WINDOWS_TARGET = "x86_64-pc-windows-msvc";
+const WINDOWS_TOOLS = ["/opt/homebrew/opt/llvm/bin", "/opt/homebrew/opt/lld/bin"];
 
-function run(command: string[], cwd?: string, input?: Uint8Array) {
-  const result = Bun.spawnSync(command, { cwd, stdin: input ?? "inherit", stdout: "pipe", stderr: "inherit" });
+function run(command: string[], cwd?: string, input?: Uint8Array, env?: Record<string, string>) {
+  const result = Bun.spawnSync(command, { cwd, env: env && { ...process.env, ...env }, stdin: input ?? "inherit", stdout: "pipe", stderr: "inherit" });
   if (result.exitCode !== 0) throw new Error(`${command.join(" ")} failed with exit code ${result.exitCode}`);
   return result.stdout;
 }
@@ -36,7 +39,7 @@ const commit = text(["git", "rev-parse", "--verify", `${process.argv[2] ?? "orig
 const tag = `p2p-sidecar-${commit.slice(0, 7)}`;
 const archive = run(["git", "archive", "--format=tar", commit], source);
 const out = mkdtempSync(join(tmpdir(), "mirador-sidecar-"));
-const asset = (platformAndCpu: string) => join(out, `mirador-p2p-${platformAndCpu}`);
+const asset = (platformAndCpu: string) => join(out, `mirador-p2p-${platformAndCpu}${platformAndCpu.startsWith("win32") ? ".exe" : ""}`);
 console.error(`Building ${tag} from ${commit} in ${out}`);
 
 function buildForMacos() {
@@ -48,6 +51,15 @@ function buildForMacos() {
   run(["codesign", "--force", "--options", "runtime", "--timestamp", "--sign", SIGNING_IDENTITY, asset("darwin-arm64")]);
   run(["codesign", "--verify", "--strict", asset("darwin-arm64")]);
   run([asset("darwin-arm64"), "--help"]);
+  rmSync(tree, { recursive: true, force: true });
+}
+
+function buildForWindows() {
+  const tree = join(out, "windows-source");
+  run(["mkdir", "-p", tree]);
+  run(["tar", "-xf", "-"], tree, archive);
+  run(["cargo", "xwin", "build", "-q", "--release", "--locked", "-p", "mirador-p2p", "--target", WINDOWS_TARGET], tree, undefined, { PATH: [...WINDOWS_TOOLS, process.env.PATH].join(":") });
+  run(["cp", join(tree, "target", WINDOWS_TARGET, "release", "mirador-p2p.exe"), asset("win32-x64")]);
   rmSync(tree, { recursive: true, force: true });
 }
 
@@ -95,12 +107,13 @@ function pin(sha256s: Record<string, string>) {
 
 try {
   buildForMacos();
+  buildForWindows();
   LINUX_BUILDS.forEach((build) => {
     buildForLinux(build);
     checkRunsOnLinux(build);
   });
-  const sha256s = Object.fromEntries(["darwin-arm64", ...LINUX_BUILDS.map(({ platformAndCpu }) => platformAndCpu)].map((platformAndCpu) => [platformAndCpu, sha256Of(asset(platformAndCpu))]));
-  const sums = Object.entries(sha256s).map(([platformAndCpu, sha256]) => `${sha256}  mirador-p2p-${platformAndCpu}`);
+  const sha256s = Object.fromEntries(["darwin-arm64", "win32-x64", ...LINUX_BUILDS.map(({ platformAndCpu }) => platformAndCpu)].map((platformAndCpu) => [platformAndCpu, sha256Of(asset(platformAndCpu))]));
+  const sums = Object.entries(sha256s).map(([platformAndCpu, sha256]) => `${sha256}  ${basename(asset(platformAndCpu))}`);
   writeFileSync(join(out, "SHA256SUMS"), `${sums.join("\n")}\n`);
   const notes = `The peer-to-peer sidecar Mirador downloads the first time it needs one, built from mirador-p2p ${commit}. Not a Mirador release.`;
   // A prerelease, never the latest, so nothing that looks for Mirador's newest release or its update files finds it.
