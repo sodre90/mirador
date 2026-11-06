@@ -107,8 +107,8 @@ function Risk({ title, detail, slow, at, seconds }: { title: string; detail: str
 }
 
 /**
- * Out of the black, the picture of what the wall of text said: the checkout diagram the agent draws later in the
- * trailer, drawn here part by part, with the places an order gets stuck flaring red.
+ * The trailer's opening picture: the checkout diagram the agent draws in the show clip, drawn here part by part from the
+ * first frame, with the places an order gets stuck flaring red.
  */
 export function CheckoutPicture({ secondsIn }: { secondsIn: number }) {
   const { fps } = useVideoConfig();

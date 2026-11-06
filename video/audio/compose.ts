@@ -3,17 +3,16 @@ import { join } from "node:path";
 import { CROSSFADE_FRAMES, FRAME } from "../src/brand.ts";
 import { spokenSpans } from "../src/mix.ts";
 import { STORYBOARD } from "../src/storyboard.ts";
-import type { ClipInfo, NarrationLine, WallScene } from "../src/timeline.ts";
-import { placeScenes, statementBeats } from "../src/timeline.ts";
+import type { ClipInfo, NarrationLine } from "../src/timeline.ts";
+import { placeScenes } from "../src/timeline.ts";
 import {
-  boom, Buses, carve, clap, crash, fadeOut, grid, hat, kick, lead, limit, Mix, peakOf, phrase, pluck, range, riser, roll, sawPluck, silence, snare, subBass, subsonic, supersaw, swell, synthBass, tonalRiser, writeWav, type Grid,
+  boom, Buses, carve, clap, crash, fadeOut, grid, hat, kick, lead, limit, Mix, phrase, pluck, range, riser, roll, sawPluck, snare, subBass, subsonic, supersaw, swell, synthBass, tonalRiser, writeWav, type Grid,
 } from "./synth.ts";
 
 /**
  * The trailer's score, synthesised (synth.ts) so there is no track to licence or credit: driving electronic music in D
- * minor near 144 BPM. A pumping drone and a quickening arpeggio under the wall of text build into a snare roll and stop
- * dead for the voice: in the silence, each part of the statement lands on a clap, and from its stressed part on a hit.
- * Pumping chords and a climbing arpeggio swell under the picture into a hit on the logo. Then a half-time groove with a
+ * minor near 144 BPM. Pumping chords and a climbing arpeggio swell under the opening picture into a hit on the cut to
+ * the app. Then a half-time groove with a
  * rolling bass runs under the first features and builds into a four-on-the-floor drop on the review, where a synth hook
  * plays in the gaps between lines, and goes on into the montage with the whole hook doubled an octave up. The plugins
  * bring a lighter half-time breakdown, which builds into the voice scene, where the music steps up to E minor and leaves
@@ -37,30 +36,29 @@ function timeline() {
   const placed = placeScenes(STORYBOARD, clips, lines, FRAME.fps, CROSSFADE_FRAMES);
   const last = placed.at(-1)!;
   const starts = Object.fromEntries(placed.map(({ scene, from }) => [scene.id, from / FRAME.fps]));
-  const wall = STORYBOARD.find((scene): scene is WallScene => scene.kind === "text-wall");
-  if (!wall?.goesBlackAt || wall.pictureAt === undefined || !wall.statement) throw new Error("The score expects the wall to go black, land its statement, then show its picture");
+  const startOf = (id: string) => {
+    const start = starts[id];
+    if (start === undefined) throw new Error(`The score expects a scene "${id}" in the storyboard`);
+    return start;
+  };
   return {
     seconds: (last.from + last.frames) / FRAME.fps,
-    goesBlack: starts[wall.id]! + wall.goesBlackAt,
-    picture: starts[wall.id]! + wall.pictureAt,
-    landings: statementBeats(wall.statement).map((at) => starts[wall.id]! + at),
-    stressed: Math.max(0, wall.statement.parts.findIndex(({ stressed }) => stressed)),
-    logo: starts.logo!,
-    show: starts.show!,
-    point: starts.point!,
-    overview: starts.overview!,
-    ask: starts.ask!,
-    review: starts.review!,
-    plugins: starts.plugins!,
-    media: starts.media!,
-    delegate: starts.delegate!,
-    jobs: starts.jobs!,
-    voice: starts.voice!,
-    montage: starts.edit!,
-    terminals: starts.terminals!,
-    groups: starts.groups!,
-    lastChord: starts.backdrop!,
-    ending: starts.end!,
+    coldOpen: startOf("coldShow"),
+    picture: startOf("hook"),
+    show: startOf("show"),
+    ask: startOf("ask"),
+    review: startOf("review"),
+    plugins: startOf("plugins"),
+    media: startOf("media"),
+    delegate: startOf("delegate"),
+    jobs: startOf("jobs"),
+    voice: startOf("voice"),
+    montage: startOf("edit"),
+    terminals: startOf("terminals"),
+    groups: startOf("groups"),
+    overview: startOf("overview"),
+    lastChord: startOf("backdrop"),
+    ending: startOf("end"),
     spoken: spokenSpans(placed, lines, FRAME.fps).map(({ from, to }) => ({ from: from / FRAME.fps, to: to / FRAME.fps })),
   };
 }
@@ -85,79 +83,61 @@ const hookBars = (fromBar: number, toBar: number) => HOOK.filter(([step]) => ste
 
 const drumKit = () => ({ kick: kick(), bigKick: kick({ punch: 190, decay: 5, seconds: 0.7 }), clap: clap(), snare: snare(), closedHat: hat(80), softHat: hat(120), openHat: hat(14) });
 
-/** The score, stretch by stretch. The wall plays on its own buses, so its echoes and reverb stop dead with it. */
+/** The score, stretch by stretch. */
 class Score {
   private readonly drums = drumKit();
-  private readonly intro: Buses;
   private readonly main: Buses;
 
   constructor(private readonly at: Moments) {
-    this.intro = new Buses(at.seconds);
     this.main = new Buses(at.seconds);
   }
 
   render() {
     const { at } = this;
-    this.wall();
+    this.coldOpen();
     this.picture();
     const firstFeatureBeat = this.features();
-    this.logo(firstFeatureBeat);
+    this.hit(firstFeatureBeat);
     this.drop();
     this.montage();
     this.breakdown();
     this.closer();
     this.ending();
     const mix = new Mix(at.seconds);
-    const wall = this.intro.bounce({ depth: 0.5, release: 0.25, delaySeconds: (0.75 * 60) / TEMPO });
-    silence(wall, at.goesBlack, at.seconds);
-    mix.addStereo(0, wall, 1);
     mix.addStereo(0, this.main.bounce({ depth: 0.65, release: 0.24, delaySeconds: (0.75 * 60) / TEMPO, feedback: 0.35 }), 1);
     subsonic(mix);
-    const hits = subsonic(this.statement());
-    const ceiling = limit(mix, 12);
+    limit(mix, 12);
     carve(mix, at.spoken);
-    silence(mix, at.goesBlack, at.picture);
-    mix.addStereo(0, hits, ceiling / peakOf(hits));
     fadeOut(mix, 1.8);
     return mix;
   }
 
-  private wall() {
-    const { at, intro, drums } = this;
-    const g = grid(0, at.goesBlack, TEMPO);
-    const rise = (t: number) => Math.min(1, t / at.goesBlack);
-    intro.add(0, supersaw([38, 50, 57], at.goesBlack + 0.3, { cutoff: (t) => 180 * 14 ** rise(t), attack: 1.5, release: 0.1, detune: 18 }), 0.45, { pump: true, verb: 0.2 });
-    range(0, g.beats * 4).forEach((step) => {
-      const time = g.at(step / 4);
-      const progress = rise(time);
-      intro.add(time, sawPluck([62, 65, 69, 74][step % 4]! + (step % 8 >= 4 ? 12 : 0), 0.3, { open: 500 + 3500 * progress ** 2 }), 0.05 + 0.12 * progress, { pan: step % 2 ? 0.35 : -0.35, delay: 0.25 });
+  /** The cold open: a hit on every cut, the beat driving between them, and a riser into the hook's slam. */
+  private coldOpen() {
+    const { at, main, drums } = this;
+    const g = grid(at.coldOpen, at.picture, TEMPO, true);
+    const chords = [DM, BB, F, C, DM, up(C, 2)];
+    range(0, g.beats / 2).forEach((cut) => {
+      const hit = g.at(cut * 2);
+      main.add(hit, drums.bigKick, 0.8);
+      main.add(hit, crash(), cut === 0 ? 0.45 : 0.22, { verb: 0.25 });
+      main.add(hit, supersaw(chords[cut % chords.length]!.chord, 1.6 * g.beat, { cutoff: (t) => 900 + 6000 * Math.exp(-t * 4), attack: 0.003, release: 0.12 }), 0.42, { pump: true, verb: 0.3 });
+      main.add(hit, subBass(chords[cut % chords.length]!.bass, 2 * g.beat - 0.02), 0.35, { pump: true });
+      main.add(g.at(cut * 2 + 1), drums.kick, 0.55);
+      main.add(g.at(cut * 2 + 1), drums.clap, 0.3, { verb: 0.2 });
     });
-    range(6, g.beats).forEach((beat) => {
-      intro.add(g.at(beat), drums.kick, 0.25 + 0.35 * (beat / g.beats));
-      intro.pumpAt(g.at(beat));
-    });
-    roll(intro, g, 12, g.beats, { from: 0.05, to: 0.3 });
-    intro.add(at.goesBlack - 2.4, riser(2.4), 0.45);
-    intro.add(g.at(g.beats - 4), tonalRiser([50, 57], 4 * g.beat), 0.25);
-  }
-
-  private statement() {
-    const { at, drums } = this;
-    const hits = new Buses(at.seconds);
-    at.landings.forEach((time, index) => {
-      hits.add(time, drums.clap, 0.25, { verb: 0.5 });
-      if (index < at.stressed) return;
-      const hardest = index === at.stressed;
-      hits.add(time, drums.bigKick, hardest ? 0.9 : 0.55);
-      hits.add(time, boom().subarray(0, Math.round(1.4 * 48_000)), hardest ? 0.85 : 0.55);
-      if (hardest) hits.add(time, supersaw(DM.chord, 0.7, { cutoff: (t) => 600 + 6000 * Math.exp(-t * 5), release: 0.5 }), 0.4, { verb: 0.6 });
-    });
-    return hits.bounce();
+    range(0, g.beats * 2).forEach((step) => main.add(g.at(step / 2), step % 2 ? drums.openHat : drums.closedHat, step % 2 ? 0.04 : 0.05, { pan: step % 2 ? 0.25 : -0.25 }));
+    main.pumpAt(...range(0, g.beats).map(g.at));
+    roll(main, g, g.beats - 2, g.beats, { from: 0.1, to: 0.35 });
+    main.add(g.at(g.beats - 4), riser(4 * g.beat), 0.3);
+    main.add(at.picture, drums.bigKick, 0.9);
+    main.add(at.picture, boom(), 1);
+    main.add(at.picture, crash(), 0.4, { verb: 0.3 });
   }
 
   private picture() {
     const { at, main, drums } = this;
-    const g = grid(at.logo - (8 * 60) / TEMPO, at.logo, TEMPO);
+    const g = grid(at.show - (8 * 60) / TEMPO, at.show, TEMPO);
     main.add(at.picture, supersaw(BB.chord, g.at(4) - at.picture + 0.1, { cutoff: (t) => 400 * 5 ** (t / 2), attack: 1, release: 0.1 }), 0.38, { pump: true, verb: 0.35 });
     main.add(g.at(4), supersaw(C.chord, 4 * g.beat + 0.05, { cutoff: (t) => 2000 * 3 ** (t / (4 * g.beat)), attack: 0.02, release: 0.04 }), 0.4, { pump: true, verb: 0.35 });
     main.pumpAt(...range(0, 8).map(g.at));
@@ -169,18 +149,16 @@ class Score {
     range(4, 8).forEach((beat) => main.add(g.at(beat), drums.kick, 0.5));
     roll(main, g, 6, 8, { from: 0.08, to: 0.3 });
     main.add(g.at(4), tonalRiser([62, 69], 4 * g.beat), 0.25, { verb: 0.2 });
-    main.add(at.picture, riser(at.logo - at.picture), 0.3);
+    main.add(at.picture, riser(at.show - at.picture), 0.3);
   }
 
-  private logo(firstBeat: Grid) {
+  /** The hit on the cut from the opening picture to the app, with a snare pickup into it. */
+  private hit(firstBeat: Grid) {
     const { at, main, drums } = this;
-    main.add(at.logo, drums.bigKick, 0.9);
-    main.add(at.logo, boom(), 1);
-    main.add(at.logo, crash(), 0.4, { verb: 0.3 });
-    main.add(at.logo, supersaw([38, ...DM.chord, 74], 2.6, { cutoff: (t) => 700 + 7000 * Math.exp(-t * 2.2), attack: 0.004, release: 1.8 }), 0.5, { verb: 0.5 });
-    main.add(at.logo + 0.6, supersaw(DM.chord, at.show - at.logo - 0.6, { cutoff: 900, attack: 1.2, release: 0.3, voices: 5 }), 0.28, { verb: 0.3 });
-    main.add(at.logo, subBass(38, at.show - at.logo, 0.01, 1), 0.3);
-    main.add(at.show - 4 * firstBeat.beat, swell(4 * firstBeat.beat), 0.25);
+    main.add(at.show, drums.bigKick, 0.9);
+    main.add(at.show, boom(), 1);
+    main.add(at.show, crash(), 0.4, { verb: 0.3 });
+    main.add(at.show, supersaw([38, ...DM.chord, 74], 2.6, { cutoff: (t) => 700 + 7000 * Math.exp(-t * 2.2), attack: 0.004, release: 1.8 }), 0.5, { verb: 0.5 });
     range(0, 4).forEach((sixteenth) => main.add(firstBeat.at(-1 + sixteenth / 4), drums.snare, 0.08 + 0.05 * sixteenth, { verb: 0.15 }));
   }
 
@@ -253,7 +231,7 @@ class Score {
     roll(main, g, buildFrom * 4, g.beats, { from: 0.06, to: 0.34 });
     main.add(g.at(buildFrom * 4), tonalRiser([62, 69, 74], 2 * g.bar), 0.26, { verb: 0.2 });
     main.add(g.at(buildFrom * 4), riser(2 * g.bar), 0.25);
-    [at.point, at.overview, at.ask].forEach((time) => this.accent(g, time));
+    this.accent(g, at.ask);
     return g;
   }
 
@@ -307,7 +285,7 @@ class Score {
     });
     roll(main, g, 7 * 4, 8 * 4, { from: 0.04, to: 0.2 });
     this.playHook(g, 8, 0, 4, 0, true);
-    [at.terminals, at.groups].forEach((time) => this.accent(g, time));
+    [at.terminals, at.groups, at.overview].forEach((time) => this.accent(g, time));
     main.add(at.plugins - 2 * g.beat, swell(2 * g.beat), 0.2);
   }
 
@@ -340,7 +318,7 @@ function compose() {
   const at = timeline();
   writeWav(output, new Score(at).render(), LEVEL);
   console.log(
-    `${output}: ${at.seconds.toFixed(1)} s; black at ${at.goesBlack.toFixed(2)} s, picture at ${at.picture.toFixed(2)} s, logo at ${at.logo.toFixed(2)} s, groove from ${at.show.toFixed(2)} s, drop at ${at.review.toFixed(2)} s, montage from ${at.montage.toFixed(2)} s, breakdown at ${at.plugins.toFixed(2)} s, voice at ${at.voice.toFixed(2)} s, last chord at ${at.lastChord.toFixed(2)} s, end card at ${at.ending.toFixed(2)} s`,
+    `${output}: ${at.seconds.toFixed(1)} s; picture at ${at.picture.toFixed(2)} s, hit and groove from ${at.show.toFixed(2)} s, drop at ${at.review.toFixed(2)} s, montage from ${at.montage.toFixed(2)} s, breakdown at ${at.plugins.toFixed(2)} s, voice at ${at.voice.toFixed(2)} s, last chord at ${at.lastChord.toFixed(2)} s, end card at ${at.ending.toFixed(2)} s`,
   );
 }
 

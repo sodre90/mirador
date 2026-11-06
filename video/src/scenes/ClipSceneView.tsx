@@ -5,6 +5,7 @@ import { cameraTransform, viewAt } from "../camera.ts";
 import { AppWindow, ClipVideo } from "../components/AppWindow.tsx";
 import { Backdrop } from "../components/Backdrop.tsx";
 import { CaptionCard } from "../components/CaptionCard.tsx";
+import { Flash, punchScale, Slam } from "../components/Slam.tsx";
 import type { ClipInfo, ClipScene } from "../timeline.ts";
 import { shotsOf, shotTrim } from "../timeline.ts";
 
@@ -20,31 +21,35 @@ export function ClipSceneView({ scene, clip, frames }: { scene: ClipScene; clip:
   return (
     <AbsoluteFill>
       <Backdrop />
-      <AbsoluteFill style={camera}>
-        <AppWindow>
-          {shots.map((shot, index) => {
-            const from = Math.round(shot.sceneFrom * fps);
-            const fadeInFrames = index > 0 ? (scene.shots[index]!.fadeInFrames ?? 0) : 0;
-            return (
-              <Sequence key={from} from={from} durationInFrames={Math.round(shot.sceneTo * fps) - from} layout="none">
-                <ClipVideo src={src} {...shotTrim(shot, clip, fps)} playbackRate={shot.speed} />
-                {fadeInFrames > 0 && (
-                  <Sequence durationInFrames={fadeInFrames} layout="none">
-                    <FadingOut frames={fadeInFrames}>
-                      <ClipFrame src={src} at={shots[index - 1]!.clipTo} />
-                    </FadingOut>
-                  </Sequence>
-                )}
+      <AbsoluteFill style={scene.slam ? { transform: `scale(${punchScale(frame)})` } : undefined}>
+        <AbsoluteFill style={camera}>
+          <AppWindow>
+            {shots.map((shot, index) => {
+              const from = Math.round(shot.sceneFrom * fps);
+              const fadeInFrames = index > 0 ? (scene.shots[index]!.fadeInFrames ?? 0) : 0;
+              return (
+                <Sequence key={from} from={from} durationInFrames={Math.round(shot.sceneTo * fps) - from} layout="none">
+                  <ClipVideo src={src} {...shotTrim(shot, clip, fps)} playbackRate={shot.speed} />
+                  {fadeInFrames > 0 && (
+                    <Sequence durationInFrames={fadeInFrames} layout="none">
+                      <FadingOut frames={fadeInFrames}>
+                        <ClipFrame src={src} at={shots[index - 1]!.clipTo} />
+                      </FadingOut>
+                    </Sequence>
+                  )}
+                </Sequence>
+              );
+            })}
+            {frames > footageEnds && (
+              <Sequence from={footageEnds} layout="none">
+                <ClipFrame src={src} at={last.clipTo} />
               </Sequence>
-            );
-          })}
-          {frames > footageEnds && (
-            <Sequence from={footageEnds} layout="none">
-              <ClipFrame src={src} at={last.clipTo} />
-            </Sequence>
-          )}
-        </AppWindow>
+            )}
+          </AppWindow>
+        </AbsoluteFill>
       </AbsoluteFill>
+      {scene.slam && <Slam words={scene.slam} from={2} />}
+      {scene.slam && <Flash />}
       {(scene.captions ?? []).map((caption) => (
         <CaptionCard key={caption.title} kicker={caption.kicker} title={caption.title} side={caption.side} from={Math.round((caption.at ?? 0.5) * fps)} to={caption.seconds ? Math.round(((caption.at ?? 0.5) + caption.seconds) * fps) : frames - 12} />
       ))}

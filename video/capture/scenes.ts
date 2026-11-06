@@ -314,7 +314,7 @@ export function scripts({ projects, assetsOrigin }: { projects: { shopApi: strin
       prompt: LOCAL_MODEL_REPLIED,
       steps: [
         { thinkMs: 900, say: "Checking Qwen's list before we rely on it.", call: { tool: "Bash", input: { command: `grep -rn "${DEAD_FLAGS.join("\\|")}" src`, description: "Check that nothing reads them" } } },
-        { thinkMs: 700, say: `${DEAD_FLAGS_ANSWER}, as only \`src/flags.ts\` names them: ${new Intl.ListFormat("en").format(DEAD_FLAGS.map((flag) => `\`${flag}\``))}. Want me to delete them?` },
+        { thinkMs: 700, say: `${DEAD_FLAGS_ANSWER}, as only \`src/flags.ts\` names them: ${new Intl.ListFormat("en").format(DEAD_FLAGS.map((flag) => `\`${flag}\``))}. Say the word and I'll delete them.` },
       ],
     },
     {

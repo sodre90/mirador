@@ -92,7 +92,7 @@ async function narrate() {
 async function speakSamples() {
   const directory = join(video, "out", "voice-samples");
   mkdirSync(directory, { recursive: true });
-  const text = `${textOf("canvas")} ${textOf("show")}`;
+  const text = `${textOf("hook")}`;
   const seconds = await speak(SAMPLE_VOICES.map((voice) => ({ text, voice, speed: SPEED, out: join(directory, `${voice}.wav`) })));
   seconds.forEach((length, out) => console.log(`${out}: ${length.toFixed(1)} s`));
 }

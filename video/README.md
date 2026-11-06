@@ -1,6 +1,6 @@
 # The Mirador trailer
 
-A trailer of 2 minutes 33 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
+A trailer of about 2 minutes at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
 running the real Claude Code and opencode against a scripted stand-in for the model. Nothing in it is mocked up by hand, and no
 account, conversation or setting of yours is used.
 
@@ -32,13 +32,16 @@ camera logic, and that the storyboard speaks every line.
   capture marked, such as `["sent", 0.2]`, so they stay right when the footage is filmed again. A scene's `seconds` sets
   its length, and `fadeInFrames: 0` cuts straight to it instead of crossfading; the score puts a hit on such a cut. A
   line of narration's `musicDipsTo` makes the music dip less under it. A clip scene can have several `captions`. The
-  montage's scenes (edit, terminals, groups) last whole beats of the score (`BEAT`), so each starts on the beat. The score's last chord
+  montage's scenes (edit, terminals, groups, overview) last whole beats of the score (`BEAT`), so each starts on the beat. The score's last chord
   rings out over the `backdrop` scene before the end card.
-- **The opening**: the wall scene's `goesBlackAt` is when the wall cuts to black and silence. In the black its
-  `statement` lands its `parts` as the narrator says them: `STATEMENT_AT` is when the `statement` line starts, and each
-  part's `after` is how far into the spoken line its words begin, so measure them again when the line is spoken again.
-  At `pictureAt` the statement clears and the checkout diagram the agent draws in the show clip
-  (`capture/checkout-flow.ts`) draws itself. The score follows all three.
+- **The cold open**: `COLD_OPEN` in `src/storyboard.ts` is six cuts of two beats each, one moment of a clip apiece. A
+  scene's `slam` brings it in with a flash, a punch of zoom and its words, giant (`src/components/Slam.tsx`), and the
+  score hits on every cut.
+- **The opening**: the `hook` scene slams STOP READING, then START SEEING (`HEADLINES` in `src/Trailer.tsx`) over a
+  drawing of the checkout diagram the agent draws in the show clip (`capture/checkout-flow.ts`), and the show scene
+  picks up once the app has drawn it, so it is never drawn twice. The score builds under the picture into a hit on the
+  cut to show. The cold open and the hook replace the old 14-second text-wall opening, during which YouTube's retention
+  showed a third of viewers leaving.
 - **What the agents say and draw**: `capture/scenes.ts`, then film again.
 - **The plugins**: `capture/plugins.ts` clones the plugins that come with Mirador, at the tags `plugins/defaults.json`
   names, and Media at `MEDIA`'s tag, once into `~/.cache/mirador-video/plugins`. Mirador installs Media on camera from

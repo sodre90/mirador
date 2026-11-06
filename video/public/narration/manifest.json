@@ -1,38 +1,17 @@
 {
   "voice": "am_fenrir",
   "lines": {
-    "wall": {
-      "text": "Coding agents are fast. In minutes, they read your code, change ten files, and explain it all...",
-      "file": "wall.wav",
-      "seconds": 5.653333333333333,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "wallOfText": {
-      "text": "in a wall of text.",
-      "file": "wallOfText.wav",
-      "seconds": 1.0666666666666667,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "statement": {
-      "text": "But humans see faster than they read.",
-      "file": "statement.wav",
-      "seconds": 1.792,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "canvas": {
-      "text": "Mirador gives your agent a canvas.",
-      "file": "canvas.wav",
-      "seconds": 1.984,
+    "hook": {
+      "text": "Coding agents explain everything in a wall of text. Mirador gives them a canvas, so they can show you.",
+      "file": "hook.wav",
+      "seconds": 6.4,
       "voice": "am_fenrir",
       "speed": 1
     },
     "show": {
-      "text": "So instead of describing, it shows you. Flows, architecture, mockups and charts, drawn right beside the conversation.",
+      "text": "Flows, architecture, mockups and charts, drawn on the canvas next to your chat.",
       "file": "show.wav",
-      "seconds": 7.402666666666667,
+      "seconds": 4.714666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },
@@ -57,17 +36,10 @@
       "voice": "am_fenrir",
       "speed": 1
     },
-    "reviewPost": {
-      "text": "Keep the ones you agree with, and post them to the pull request.",
-      "file": "reviewPost.wav",
-      "seconds": 3.2213333333333334,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
     "overview": {
-      "text": "Run your agents across all your projects. See who's working, who's done, and who needs you.",
+      "text": "Every project at once. See who's working, and who needs you.",
       "file": "overview.wav",
-      "seconds": 5.269333333333333,
+      "seconds": 3.2426666666666666,
       "voice": "am_fenrir",
       "speed": 1
     },
@@ -89,13 +61,6 @@
       "text": "Your terminals sit right beside the conversation.",
       "file": "terminals.wav",
       "seconds": 2.5813333333333333,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "point": {
-      "text": "Point at anything it drew, and ask about it, or have it changed.",
-      "file": "point.wav",
-      "seconds": 3.328,
       "voice": "am_fenrir",
       "speed": 1
     },
@@ -121,9 +86,9 @@
       "speed": 1
     },
     "delegate": {
-      "text": "Here, Claude Code hands a long read to a local model on opencode, then checks what comes back.",
+      "text": "Here, Claude Code hands a long read to a local model.",
       "file": "delegate.wav",
-      "seconds": 6.08,
+      "seconds": 3.050666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },

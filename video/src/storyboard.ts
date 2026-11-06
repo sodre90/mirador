@@ -1,4 +1,4 @@
-import type { Scene } from "./timeline.ts";
+import type { CameraKey, ClipScene, Scene } from "./timeline.ts";
 
 /** The score's beat, at 96 beats a minute: the scene changes after the review fall on it. */
 export const BEAT = 60 / 96;
@@ -10,27 +10,35 @@ const TOP_OF_CANVAS = { x: 836, y: 0, width: 700, height: 394 };
 
 /** The review's flow: the steps along the top, and the code of the step under them. */
 const FLOW = { x: 256, y: 80, width: 1280, height: 720 };
-/** The top of the canvas, where the point-and-ask button and the diagram are. */
-const TOP_OF_DIAGRAM = { x: 836, y: 0, width: 700, height: 540 };
-/** The bottom of the diagram, its risks, and the box to ask about what was pointed at. */
-const RISKS_AND_QUESTION = { x: 836, y: 300, width: 700, height: 564 };
 /** The plugin's install question and its answers, at the top of the canvas. */
-const INSTALL_QUESTION = { x: 836, y: 0, width: 700, height: 520 };
+const INSTALL_QUESTION = { x: 836, y: 0, width: 700, height: 560 };
 /** Media's frame, its timeline and the note under it. */
 const MEDIA_EDITOR = { x: 836, y: 80, width: 700, height: 640 };
+/** The sidebar's three projects, with who's working and who needs you. */
+const PROJECTS_IN_SIDEBAR = { x: 0, y: 100, width: 256, height: 520 };
 /** The workspace with the delegated conversation under its caller, and the task working above the composer. */
 const DELEGATED_TASK = { x: 0, y: 290, width: 830, height: 467 };
 
-/**
- * A page the agent shows shows its diagram's source for a few frames before Mermaid draws it: a shot ends just before a
- * drawing starts, and the next starts once it's drawn, fading in over the frame before so the page doesn't jump.
- */
-const BEFORE_DRAWING = -0.2;
+/** A page the agent shows shows its diagram's source for a few frames before Mermaid draws it: the show scene starts once it's drawn. */
 const ONCE_DRAWN = -0.05;
-const OVER_THE_FRAME_BEFORE = 15;
 
-/** When the narrator starts the statement, in seconds of the wall scene; its parts land as they're said. */
-const STATEMENT_AT = 8;
+/** A cut of the cold open lasts two beats of the score's 144 a minute, so the hits on the cuts keep its time. */
+const COLD_CUT = (2 * 60) / 144;
+
+/** A cut of the cold open: a moment of a clip, framed close, slammed in with its words on a hit. */
+function coldCut(id: string, clip: string, from: [string, number], look: CameraKey["look"], zoom: number | undefined, slam: string): ClipScene {
+  return { kind: "clip", id, clip, shots: [{ from, to: [from[0], from[1] + COLD_CUT + 0.1] }], camera: [{ at: from, look, zoom }], seconds: COLD_CUT, slam, fadeInFrames: 0 };
+}
+
+/** The opening seconds, where viewers left the last cut: the best moments, a beat-synced burst of them. */
+const COLD_OPEN: Scene[] = [
+  coldCut("coldShow", "show", ["canvasShown", 1], "canvas", 1.3, "It draws."),
+  coldCut("coldAsk", "ask", ["questionShown", 0.6], "options", 1.25, "It asks."),
+  coldCut("coldReview", "review", ["flowStep", 0.6], FLOW, 1.2, "It reviews."),
+  coldCut("coldMedia", "media", ["boxed", -0.4], MEDIA_EDITOR, 1.4, "It edits video."),
+  coldCut("coldOverview", "overview", ["needsYou", 0], PROJECTS_IN_SIDEBAR, 1.55, "Every project."),
+  coldCut("coldVoice", "voice", ["listening", 1], "composer", 1.6, "It talks."),
+];
 
 /**
  * The trailer, scene by scene. A clip scene plays stretches of a filmed clip (capture/trailer.spec.ts films them) and
@@ -38,79 +46,19 @@ const STATEMENT_AT = 8;
  * narration (narration/lines.ts). To show a new feature: film it as a clip, add its line, add a scene here.
  */
 export const STORYBOARD: Scene[] = [
-  {
-    kind: "text-wall",
-    id: "wall",
-    seconds: 13.8,
-    narration: [
-      { line: "wall", at: 0.3 },
-      { line: "wallOfText", at: 6.4 },
-      { line: "statement", at: STATEMENT_AT, musicDipsTo: 0.75 },
-    ],
-    goesBlackAt: 7.6,
-    statement: {
-      at: STATEMENT_AT,
-      parts: [
-        { words: "But", after: 0.02 },
-        { words: "humans", after: 0.16, stressed: true },
-        { words: "see faster", after: 0.7 },
-        { words: "than they read.", after: 1.18 },
-      ],
-    },
-    pictureAt: 10.2,
-  },
-  { kind: "logo", id: "logo", seconds: 3.8, narration: [{ line: "canvas", at: 0.8 }], fadeInFrames: 0 },
+  ...COLD_OPEN,
+  { kind: "picture", id: "hook", seconds: 5, narration: [{ line: "hook", at: 0.3 }], fadeInFrames: 0 },
   {
     kind: "clip",
     id: "show",
     clip: "show",
-    shots: [
-      { from: ["typing", -0.5], to: "sent", speed: 2 },
-      { from: "sent", to: ["canvasShown", BEFORE_DRAWING], speed: 1.25 },
-      { from: ["canvasShown", ONCE_DRAWN], to: ["turnEnded", 1.5], speed: 1.25, fadeInFrames: OVER_THE_FRAME_BEFORE },
-    ],
+    shots: [{ from: ["canvasShown", ONCE_DRAWN], to: ["turnEnded", 1.5], speed: 1.25 }],
     camera: [
-      { at: ["typing", -0.5], look: "composer", zoom: 1.6 },
-      { at: ["sent", 0.2], look: "timeline", zoom: 1.4 },
-      { at: ["canvasShown", -0.3], look: "canvas", zoom: 1.3 },
-      { at: ["turnEnded", -0.2], look: "app" },
+      { at: ["canvasShown", ONCE_DRAWN], look: "canvas", zoom: 1.3 },
+      { at: ["canvasShown", 1.4], look: "app" },
     ],
-    captions: [{ kicker: "Show", title: "Your agent draws what it means.", at: 6.8, seconds: 3.6 }],
-    narration: [{ line: "show", at: 1.2 }],
-  },
-  {
-    kind: "clip",
-    id: "point",
-    clip: "point",
-    shots: [
-      { from: 1, to: ["picked", 0.3], speed: 1.6 },
-      { from: ["picked", 0.3], to: "typed", speed: 1.8 },
-      { from: "typed", to: ["asked", 0.3], speed: 1.3 },
-      { from: ["asked", 0.3], to: ["redrawn", BEFORE_DRAWING], speed: 1.5 },
-      { from: ["redrawn", ONCE_DRAWN], to: ["redrawn", 1.5], fadeInFrames: OVER_THE_FRAME_BEFORE },
-    ],
-    camera: [
-      { at: 1, look: TOP_OF_DIAGRAM, zoom: 1.6 },
-      { at: ["picked", -0.6], look: RISKS_AND_QUESTION, zoom: 1.6 },
-      { at: ["asked", 0.4], look: "canvas", zoom: 1.3 },
-    ],
-    captions: [{ kicker: "Point and ask", title: "Ask about what it drew.", at: 0.4, seconds: 3.4 }],
-    narration: [{ line: "point", at: 0.4 }],
-  },
-  {
-    kind: "clip",
-    id: "overview",
-    clip: "overview",
-    shots: [
-      { from: 3.5, to: ["needsYou", -0.3], speed: 1.3 },
-      { from: ["needsYou", -0.3], to: ["runbookDone", 1.6] },
-    ],
-    camera: [
-      { at: 3.5, look: "app" },
-      { at: 4.2, look: { x: 0, y: 330, width: 256, height: 420 }, zoom: 1.55 },
-    ],
-    captions: [{ kicker: "Every project", title: "See who needs you.", at: 3.6, seconds: 3.4, side: "right" }],
-    narration: [{ line: "overview", at: 0.3 }],
+    captions: [{ kicker: "Show", title: "Your agent draws what it means.", at: 0.6, seconds: 3.6 }],
+    narration: [{ line: "show", at: 0.3 }],
   },
   {
     kind: "clip",
@@ -122,8 +70,7 @@ export const STORYBOARD: Scene[] = [
       { from: ["submitted", 0.3], to: ["turnEnded", 1.4] },
     ],
     camera: [
-      { at: ["opened", -0.9], look: { x: 0, y: 330, width: 256, height: 420 }, zoom: 1.55 },
-      { at: ["opened", 0.1], look: "app" },
+      { at: ["opened", -0.9], look: "app" },
       { at: ["submitted", 0.4], look: "timeline", zoom: 1.35 },
     ],
     captions: [{ kicker: "Ask", title: "Decisions come with pictures.", at: 1.8, seconds: 3.6 }],
@@ -143,9 +90,6 @@ export const STORYBOARD: Scene[] = [
       { from: "questionTyped", to: ["asked", 0.5], speed: 1.6 },
       { from: ["asked", 0.5], to: "chatShown", speed: 1.3 },
       { from: "chatShown", to: ["answered", 1.6] },
-      { from: ["answered", 1.6], to: ["dropped", -0.9], speed: 2.4 },
-      { from: ["dropped", -0.9], to: ["postClicked", -0.3], speed: 3 },
-      { from: ["postClicked", -0.3], to: ["posted", 0.9], speed: 1.2 },
     ],
     camera: [
       { at: ["typing", -0.4], look: "composer", zoom: 1.6 },
@@ -155,13 +99,11 @@ export const STORYBOARD: Scene[] = [
       { at: ["askOpened", 0.1], look: "askDialog", zoom: 1.22 },
       { at: ["chatShown", 0.1], look: "app" },
       { at: "answered", look: { x: 852, y: 99, width: 668, height: 130 }, zoom: 2.2 },
-      { at: ["answered", 1.8], look: { x: 836, y: 393, width: 700, height: 394 }, zoom: 2.19 },
     ],
     captions: [{ kicker: "Review", title: "A guided tour of the change.", at: 4.2, seconds: 3.4 }],
     narration: [
       { line: "review", at: 3.4 },
       { line: "reviewAsk", at: 10.6 },
-      { line: "reviewPost", at: 14.8 },
     ],
   },
   {
@@ -219,6 +161,22 @@ export const STORYBOARD: Scene[] = [
   },
   {
     kind: "clip",
+    id: "overview",
+    clip: "overview",
+    shots: [
+      { from: 3.5, to: ["needsYou", -0.3], speed: 1.3 },
+      { from: ["needsYou", -0.3], to: ["runbookDone", 1.6] },
+    ],
+    camera: [
+      { at: 3.5, look: "app" },
+      { at: 4.2, look: PROJECTS_IN_SIDEBAR, zoom: 1.55 },
+    ],
+    captions: [{ kicker: "Every project", title: "See who needs you.", at: 3.6, seconds: 3.4, side: "right" }],
+    narration: [{ line: "overview", at: 0.3, musicDipsTo: 0.6 }],
+    seconds: 8 * BEAT,
+  },
+  {
+    kind: "clip",
     id: "plugins",
     clip: "plugins",
     shots: [
@@ -262,11 +220,11 @@ export const STORYBOARD: Scene[] = [
     id: "delegate",
     clip: "delegate",
     shots: [
-      { from: ["typing", -0.3], to: "sent", speed: 2 },
-      { from: "sent", to: ["delegated", 0.4], speed: 1.6 },
+      { from: ["typing", -0.3], to: "sent", speed: 3 },
+      { from: "sent", to: ["delegated", 0.4], speed: 2.2 },
       { from: ["delegated", 0.4], to: ["unfolded", 0.6], speed: 1.2 },
-      { from: ["unfolded", 0.6], to: ["replied", -0.3], speed: 2 },
-      { from: ["replied", -0.3], to: ["checked", 1.6], speed: 1.5 },
+      { from: ["unfolded", 0.6], to: ["replied", -0.3], speed: 3 },
+      { from: ["replied", -0.3], to: ["checked", 1.6], speed: 2 },
     ],
     camera: [
       { at: ["typing", -0.3], look: "composer", zoom: 1.6 },
@@ -277,7 +235,7 @@ export const STORYBOARD: Scene[] = [
     captions: [{ kicker: "Your agents, together", title: "Claude Code hands the reading to opencode.", at: 0.3, seconds: 3.4, side: "right" }],
     narration: [
       { line: "agents", at: 0.4 },
-      { line: "delegate", at: 6.2 },
+      { line: "delegate", at: 6.1 },
     ],
   },
   {
@@ -286,11 +244,11 @@ export const STORYBOARD: Scene[] = [
     clip: "jobs",
     shots: [
       { from: ["typing", -0.3], to: "sent", speed: 2.6 },
-      { from: "sent", to: ["waiting", 0.3], speed: 2 },
-      { from: ["waiting", 0.3], to: ["following", 0.5], speed: 1.5 },
-      { from: ["following", 0.5], to: ["passed", 0.6], speed: 4 },
+      { from: "sent", to: ["waiting", 0.3], speed: 3 },
+      { from: ["waiting", 0.3], to: ["following", 0.5], speed: 2 },
+      { from: ["following", 0.5], to: ["passed", 0.6], speed: 5 },
       { from: ["passed", 0.6], to: ["woken", -0.2], speed: 6 },
-      { from: ["woken", -0.2], to: ["reported", 1.4], speed: 1.5 },
+      { from: ["woken", -0.2], to: ["reported", 1.4], speed: 2 },
     ],
     camera: [
       { at: ["typing", -0.3], look: "composer", zoom: 1.6 },

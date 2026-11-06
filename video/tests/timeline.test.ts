@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { type ClipInfo, type ClipScene, type Scene, clipSeconds, linesOf, placeScenes, sceneSeconds, sceneSecondsOf, shotsOf, shotTrim, statementBeats } from "../src/timeline.ts";
+import { type ClipInfo, type ClipScene, type Scene, clipSeconds, linesOf, placeScenes, sceneSeconds, sceneSecondsOf, shotsOf, shotTrim } from "../src/timeline.ts";
 
 const clip: ClipInfo = { name: "demo", seconds: 20, moments: { sent: 4, shown: 10 }, rects: {} };
 
@@ -104,11 +104,6 @@ test("a scene that cuts straight in doesn't overlap the one before it", () => {
   ]);
 });
 
-test("a statement's parts land as far into its line as the narrator says them", () => {
-  const beats = statementBeats({ at: 8, parts: [{ words: "But", after: 0.02 }, { words: "humans", after: 0.16, stressed: true }, { words: "see faster", after: 0.7 }] });
-  expect(beats.map((at) => Math.round(at * 100) / 100)).toEqual([8.02, 8.16, 8.7]);
-});
-
 test("a shot's trim covers its last frame however its times round", () => {
   const scene: ClipScene = { kind: "clip", id: "s", clip: "demo", shots: [{ from: 0, to: 1.008 }, { from: 5, to: 9.991 }], camera: [] };
   for (const shot of shotsOf(scene, clip)) {
@@ -116,4 +111,14 @@ test("a shot's trim covers its last frame however its times round", () => {
     const { trimBefore, trimAfter } = shotTrim(shot, clip, 60);
     expect(Math.ceil((frames - 1) * shot.speed)).toBeLessThan(trimAfter - trimBefore);
   }
+});
+
+describe("the cold open", () => {
+  test("lasts whole bars of the score, so its hits stay on the cuts", async () => {
+    const { STORYBOARD } = await import("../src/storyboard.ts");
+    const cuts = STORYBOARD.filter((scene) => scene.kind === "clip" && scene.slam);
+    const beats = (cuts.reduce((seconds, cut) => seconds + (cut.kind === "clip" ? cut.seconds! : 0), 0) * 144) / 60;
+    expect(cuts.length).toBeGreaterThan(0);
+    expect(Math.abs(beats / 4 - Math.round(beats / 4))).toBeLessThan(1e-6);
+  });
 });

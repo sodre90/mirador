@@ -195,7 +195,7 @@ async function newConversationIn(page: Page, directory: string) {
   const previousUrl = page.url();
   await workspaceCard(page, directory).getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
-  await expect(page.locator(".chat-header:visible").getByLabel("Model", { exact: true })).toBeVisible({ timeout: 60_000 });
+  await expect(page.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: 60_000 });
   return page.url().match(/#\/c\/(.+)$/)![1]!;
 }
 
@@ -266,12 +266,6 @@ const canvasPane = (page: Page) => page.locator('[data-pane="canvas"]');
 async function scrollSmoothlyToTop(scroller: Locator) {
   await scroller.evaluate((element) => element.scrollTo({ top: 0, behavior: "smooth" }));
   await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0);
-}
-
-/** Scrolls a target to the middle of its scroller as a person's wheel would, instead of the jump Playwright makes. */
-async function scrollSmoothlyTo(page: Page, target: Locator) {
-  await target.evaluate((element) => element.scrollIntoView({ behavior: "smooth", block: "center" }));
-  await page.waitForTimeout(800);
 }
 
 const update = (update: Record<string, unknown>) => ({ type: "acp", update });
@@ -499,22 +493,6 @@ test("the trailer's clips", async ({ page }) => {
       await recorder.markRect("rewrittenBlocker", view.locator(".finding").first());
       await waitForTurnToEnd(page);
       recorder.mark("answered");
-      await page.waitForTimeout(1600);
-      const nit = view.locator(".finding.severity-nit");
-      await scrollSmoothlyTo(page, nit);
-      await recorder.markRect("nit", nit);
-      await cursor.click(nit.getByRole("button", { name: "Kept", exact: true }));
-      recorder.mark("dropped");
-      await expect(nit).toHaveClass(/dropped/);
-      await page.waitForTimeout(500);
-      const postPanel = view.locator(".post-panel");
-      await scrollSmoothlyTo(page, postPanel);
-      await recorder.markRect("postPanel", postPanel);
-      await cursor.click(postPanel.getByRole("button", { name: "Post 2 findings to the pull request" }));
-      recorder.mark("postClicked");
-      await expect(postPanel.locator(".posted-note")).toContainText("2 findings are on your pending review");
-      recorder.mark("posted");
-      await recorder.markRect("postedPanel", postPanel);
       await page.waitForTimeout(2200);
     });
   });

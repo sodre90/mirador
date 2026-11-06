@@ -30,25 +30,17 @@ export type Spoken = { line: string; at: number; from?: ClipTime; musicDipsTo?: 
 /** A line of narration with its start in seconds of its scene. */
 export type PlacedLine = { line: string; at: number; musicDipsTo?: number };
 
-/**
- * Words shown large, landing part by part as the narrator says them: its line starts at `at`, and each part lands
- * `after` seconds into it, as the narrator reaches it. A `stressed` part stands out.
- */
-export type Statement = { at: number; parts: { words: string; after: number; stressed?: boolean }[] };
-
-/** When each part of a statement lands, in seconds of its scene. */
-export const statementBeats = ({ parts, at }: Statement) => parts.map(({ after }) => at + after);
-
 /** How a scene comes in: over the one before it for `fadeInFrames` frames (0 cuts straight to it), the trailer's crossfade by default. */
 type Transition = { fadeInFrames?: number };
 
-/** A clip scene lasts as long as its shots, or `seconds` when given: shorter cuts the footage, longer holds its last frame. */
-export type ClipScene = Transition & { kind: "clip"; id: string; clip: string; shots: Shot[]; camera: CameraKey[]; captions?: Caption[]; narration?: Spoken[]; seconds?: number };
-/** The logo, the end card, or the backdrop alone, for a breath before the end card. */
-export type CardScene = Transition & { kind: "logo" | "end" | "backdrop"; id: string; seconds: number; narration?: Spoken[] };
-/** The wall of text goes black at `goesBlackAt` for the statement to land in, and from `pictureAt` a picture draws itself. */
-export type WallScene = Transition & { kind: "text-wall"; id: string; seconds: number; narration?: Spoken[]; goesBlackAt?: number; pictureAt?: number; statement?: Statement };
-export type Scene = ClipScene | CardScene | WallScene;
+/**
+ * A clip scene lasts as long as its shots, or `seconds` when given: shorter cuts the footage, longer holds its last frame.
+ * A scene that slams comes in on a hit: a flash, a punch of zoom and its words, giant, over the footage.
+ */
+export type ClipScene = Transition & { kind: "clip"; id: string; clip: string; shots: Shot[]; camera: CameraKey[]; captions?: Caption[]; narration?: Spoken[]; seconds?: number; slam?: string };
+/** The checkout picture drawing itself, the logo, the end card, or the backdrop alone, for a breath before the end card. */
+export type CardScene = Transition & { kind: "picture" | "logo" | "end" | "backdrop"; id: string; seconds: number; narration?: Spoken[] };
+export type Scene = ClipScene | CardScene;
 
 export type NarrationLine = { text: string; file: string; seconds: number };
 
