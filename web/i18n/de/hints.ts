@@ -75,6 +75,8 @@ export const hints: Messages["hints"] = {
     "Für einen Proxy wie Nginx Proxy Manager auf einem anderen Rechner deines Netzwerks, der die Ports dieses Rechners nicht erreichen kann. Beim Speichern der Adresse stellt Mirador dann auch HTTPS im Netzwerk bereit, und der Proxy leitet an diese Ports weiter.",
   networkReachability:
     "Mirador stellt auf diesem Port selbst HTTPS bereit, mit einer Zertifizierungsstelle, die es erzeugt, sodass Geräte im selben Netzwerk weder Proxy noch Adresse brauchen. Jeder Browser warnt einmal wegen des Zertifikats (oder vertraut ihm dauerhaft, sobald er mirador-ca.pem installiert).",
+  useThisNetwork:
+    "Lässt Geräte im selben Netzwerk dieses Mirador über HTTPS erreichen, wie die Auswahl unten. Der Host verwendet es ab seinem nächsten Start.",
   inviteDevice:
     "Erzeugt einen Einmalcode, mit dem ein anderer Browser oder eine App diesem Mirador innerhalb von 15 Minuten beitritt. Ein beigetretenes Gerät kann hier alles, auch Befehle in Terminals ausführen.",
   inviteRoute:

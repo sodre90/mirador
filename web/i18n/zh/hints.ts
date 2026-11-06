@@ -70,6 +70,8 @@ export const hints: Messages["hints"] = {
     "适用于你网络中另一台机器上的代理，例如 Nginx Proxy Manager，它无法访问这台机器自己的端口。保存地址后，Mirador 也会在网络上提供 HTTPS，由代理转发到这些端口。",
   networkReachability:
     "Mirador 在这个端口上自己提供 HTTPS，使用它生成的证书颁发机构，所以同一网络上的设备不需要代理，也不需要地址。每个浏览器会对证书警告一次（安装 mirador-ca.pem 后则永久信任）。",
+  useThisNetwork:
+    "让同一网络上的设备通过 HTTPS 访问这个 Mirador，与下方的选项相同。host 从下次启动起使用它。",
   inviteDevice:
     "生成一次性邀请码，另一个浏览器或应用可在 15 分钟内用它加入这个 Mirador。加入的设备可以在这里做任何事，包括在终端里运行命令。",
   inviteRoute:

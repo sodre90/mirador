@@ -69,6 +69,8 @@ export const hints = {
     "For a proxy such as Nginx Proxy Manager on another machine of your network, which can't reach this machine's own ports. Saving the address then also has Mirador serve HTTPS on the network, and the proxy forwards to those ports.",
   networkReachability:
     "Mirador serves HTTPS itself on this port, with a certificate authority it makes, so devices on the same network need no proxy and no address. Each browser warns once about the certificate (or trusts it for good once it installs mirador-ca.pem).",
+  useThisNetwork:
+    "Lets devices on the same network reach this Mirador over HTTPS, as the choice below does. The host uses it from its next start.",
   inviteDevice:
     "Makes a one-time code another browser or app joins this Mirador with, within 15 minutes. A joined device can do everything here, including run commands in terminals.",
   inviteRoute:

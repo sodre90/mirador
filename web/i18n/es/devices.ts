@@ -94,6 +94,11 @@ export const devices: Messages["devices"] = {
       "La aplicación se conecta directamente a este Mac desde la mayoría de las redes, con datos móviles u otra Wi-Fi, sin VPN. Un servidor tuyo solo los presenta; lo que se envían está cifrado de extremo a extremo.",
     atAddress: (host) =>
       `Un navegador o la aplicación se une en ${host}, así que el dispositivo tiene que llegar a esa dirección, por ejemplo estando en la misma tailnet.`,
+    unreachableTitle: "Ningún otro dispositivo puede llegar a este Mirador",
+    unreachable:
+      "Solo funciona en esta máquina, así que una invitación no tiene adónde apuntar. Deja que lleguen los dispositivos de esta red o elige otra forma abajo.",
+    restartToReach: "Guardado. Reinicia el host y vuelve a invitar para tener un enlace y un código QR.",
+    useThisNetwork: "Usar esta red",
     withoutLink:
       "Sin enlace ni código QR: nada le ha dicho a Mirador cómo llegan a él otros dispositivos. Una de las opciones de abajo le da una dirección; el host la usa desde su próximo inicio.",
     button: "Invitar un dispositivo",

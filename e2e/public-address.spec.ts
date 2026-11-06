@@ -228,11 +228,11 @@ test("an address saved in Settings goes to config.json, and invite links use it 
     await expect(shownInvite.locator(".invite-code")).toBeVisible();
     await expect(shownInvite.locator(".invite-link")).toHaveCount(0);
     await expect(inviteQrCode(shownInvite)).toHaveCount(0);
-    await expect(shownInvite.locator(".invite-without-link"), "the invite says why it has no link to show").toBeVisible();
+    await expect(shownInvite.getByRole("alert"), "the invite warns that it needs the restart").toContainText("Restart the host, then invite again");
   });
 
   await test.step("after the restart, invites come with a link to the saved address", async () => {
-    await settings.getByRole("button", { name: "Restart host" }).click();
+    await settings.getByLabel("Invite").getByRole("button", { name: "Restart host" }).click();
     await expect(settings, "the page reloads once the restarted host answers").toBeHidden({ timeout: 30_000 });
     await expect(page.getByText("No conversation selected")).toBeVisible();
     settings = await openSettings(page, "Devices");

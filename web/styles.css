@@ -7212,6 +7212,17 @@ body.reordering * {
   gap: 4px;
 }
 
+.invite-without-link {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  max-width: 60ch;
+}
+
+.invite-without-link p {
+  margin: 0;
+}
+
 .invite-routes {
   display: flex;
   flex-wrap: wrap;

@@ -18,15 +18,16 @@ const host = new TestHost({
 const networkOrigin = () => networkOriginAt(host.port);
 const networkCanvasOrigin = () => networkCanvasOriginAt(host.port);
 const hostSwitchedInSettings = new TestHost();
+const hostOnlyOnThisMachine = new TestHost();
 /** Another computer's Mirador, which shows the host as one of its machines. */
 const laptop = new TestHost();
 
 test.beforeAll(async () => {
-  await Promise.all([host.start(), hostSwitchedInSettings.start(), laptop.start()]);
+  await Promise.all([host.start(), hostSwitchedInSettings.start(), hostOnlyOnThisMachine.start(), laptop.start()]);
 });
 test.afterAll(async () => {
-  await Promise.all([host.stop(), hostSwitchedInSettings.stop(), laptop.stop()]);
-  await Promise.all([host.cleanUp(), hostSwitchedInSettings.cleanUp(), laptop.cleanUp()]);
+  await Promise.all([host.stop(), hostSwitchedInSettings.stop(), hostOnlyOnThisMachine.stop(), laptop.stop()]);
+  await Promise.all([host.cleanUp(), hostSwitchedInSettings.cleanUp(), hostOnlyOnThisMachine.cleanUp(), laptop.cleanUp()]);
 });
 
 const authorityOf = (testHost: TestHost) => readFileSync(join(testHost.dataDir, "tls", "authority.pem"), "utf8");
@@ -117,6 +118,39 @@ test("turning the network on in Settings takes effect when the host restarts", a
   await settings.getByRole("radio", { name: "Only on this machine" }).check();
   await settings.getByRole("button", { name: "Use this" }).click();
   await expect(settings.getByText("Saved. The host uses it from its next start.")).toBeVisible();
+});
+
+test("an invite from a Mirador nothing else reaches warns so, and one click puts it on the network", async ({ page }) => {
+  await signIn(page, hostOnlyOnThisMachine);
+  let settings = await openSettings(page, "Devices");
+  const invite = async () => {
+    await settings.getByRole("button", { name: "Invite a device" }).click();
+    return settings.getByLabel("Invite");
+  };
+
+  const warned = await invite();
+  const warning = warned.getByRole("alert");
+  await test.step("the invite says no other device can reach it, and has no link", async () => {
+    await expect(warning).toContainText("No other device can reach this Mirador");
+    await expect(warned.locator(".invite-link")).toHaveCount(0);
+  });
+
+  await test.step("Use this network saves the network route and asks for a restart", async () => {
+    await warning.getByRole("button", { name: "Use this network" }).click();
+    await expect(warning).toContainText("Restart the host, then invite again");
+    expect(JSON.parse(readFileSync(join(hostOnlyOnThisMachine.dataDir, "config.json"), "utf8"))).toEqual({ network: true });
+    await expect(settings.getByRole("radio", { name: "Over the network, with no address" })).toBeChecked();
+  });
+
+  await test.step("after the restart, the invite has a link at the network address", async () => {
+    await warning.getByRole("button", { name: "Restart host" }).click();
+    await expect(settings, "the page reloads once the restarted host answers").toBeHidden({ timeout: 30_000 });
+    settings = await openSettings(page, "Devices");
+    const linked = await invite();
+    await expect(linked.locator(".invite-link")).toHaveText(new RegExp(`^https://.+:${hostOnlyOnThisMachine.port + 2}/#/join/`));
+    await expect(linked.locator(".invite-code")).toBeVisible();
+    await expect(linked.getByRole("alert")).toHaveCount(0);
+  });
 });
 
 test("another Mirador joins over HTTPS only with the certificate authority the invite link names, then shows the host through it", async ({ page, browser }) => {

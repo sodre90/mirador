@@ -71,6 +71,8 @@ export const hints: Messages["hints"] = {
     "Egy másik gépen futó proxyhoz a hálózatodon, például Nginx Proxy Managerhez, amely nem éri el ennek a gépnek a saját portjait. A cím mentésekor a Mirador ilyenkor HTTPS-t is kiszolgál a hálózaton, és a proxy ezekre a portokra továbbít.",
   networkReachability:
     "A Mirador maga szolgál ki HTTPS-t ezen a porton, egy általa készített tanúsítványkiadóval, így az ugyanazon a hálózaton lévő készülékeknek nem kell sem proxy, sem cím. Minden böngésző egyszer figyelmeztet a tanúsítványra (vagy végleg megbízik benne, ha telepíti a mirador-ca.pem-et).",
+  useThisNetwork:
+    "Az ugyanazon a hálózaton lévő eszközök HTTPS-en érik el ezt a Miradort, ahogy a lenti választás is. A host a következő indulásától használja.",
   inviteDevice:
     "Egyszer használható kódot készít, amellyel egy másik böngésző vagy alkalmazás 15 percen belül csatlakozhat ehhez a Miradorhoz. Egy csatlakozott készülék itt mindent megtehet, terminálokban parancsokat is futtathat.",
   inviteRoute:

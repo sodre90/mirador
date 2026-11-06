@@ -89,6 +89,11 @@ export const devices = {
     throughTunnel:
       "The app connects straight to this Mac from most networks, over mobile data or another Wi-Fi, with no VPN. A server of yours only introduces the two; what they send is encrypted end to end.",
     atAddress: (host: string) => `A browser or the app joins at ${host}, so the device has to reach that address, for example by being on the same tailnet.`,
+    unreachableTitle: "No other device can reach this Mirador",
+    unreachable:
+      "It runs only on this machine, so an invite has nowhere to point. Let devices on this network reach it, or choose another way below.",
+    restartToReach: "Saved. Restart the host, then invite again for a link and a QR code.",
+    useThisNetwork: "Use this network",
     withoutLink:
       "No link and no QR code: nothing has told Mirador how other devices reach it. One of the choices below gives it an address — the host uses it from its next start.",
     button: "Invite a device",

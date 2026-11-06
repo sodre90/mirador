@@ -91,6 +91,11 @@ export const devices: Messages["devices"] = {
       "Az alkalmazás a legtöbb hálózatról közvetlenül kapcsolódik ehhez a Machez, mobilneten vagy egy másik Wi-Fi-n át, VPN nélkül. Egy saját szervered csak összehozza a kettőt; amit küldenek, az végig titkosított.",
     atAddress: (host) =>
       `Böngésző vagy az alkalmazás ezen a címen csatlakozik: ${host}. A készüléknek tehát el kell érnie ezt a címet, például úgy, hogy ugyanazon a tailneten van.`,
+    unreachableTitle: "Más eszköz nem éri el ezt a Miradort",
+    unreachable:
+      "Csak ezen a gépen fut, így egy meghívó sehova sem mutathat. Engedd, hogy az ezen a hálózaton lévő eszközök elérjék, vagy válassz lent más módot.",
+    restartToReach: "Mentve. Indítsd újra a hostot, majd hívj meg újra, hogy legyen link és QR-kód.",
+    useThisNetwork: "Ez a hálózat",
     withoutLink:
       "Nincs link és QR-kód: semmi sem adta meg a Miradornak, hogyan érik el más készülékek. Az alábbi lehetőségek egyike ad neki címet — a host a következő indulásától használja.",
     button: "Készülék meghívása",

@@ -476,9 +476,7 @@ function ReachabilitySettingsSection({ settings }: { settings: ReachabilitySetti
       {settings.restartNeeded && (
         <p className="restart-needed">
           {words.reach.saved}
-          <button type="button" data-hint={hints.restartHost} onClick={() => connection.send({ type: "host.restart" })}>
-            {words.reach.restartHost}
-          </button>
+          <RestartHostButton />
         </p>
       )}
     </section>
@@ -548,11 +546,42 @@ function InviteRouteHint({ throughTunnel, address }: { throughTunnel: boolean; a
   );
 }
 
-function InviteWithoutLink() {
+function RestartHostButton() {
   return (
-    <span className="hint invite-without-link">
-      {words.invite.withoutLink}
-    </span>
+    <button type="button" data-hint={hints.restartHost} onClick={() => connection.send({ type: "host.restart" })}>
+      {words.reach.restartHost}
+    </button>
+  );
+}
+
+/** An invite with no link can't reach another device, so it says so plainly and offers the shortest way to fix it. */
+function InviteWithoutLink({ settings }: { settings: ReachabilitySettings }) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const reachesNowhere = routeOf(settings) === "none" && !settings.publicAddressSetByEnvironment && !settings.networkSetByEnvironment;
+  const useThisNetwork = () => {
+    setProblem(null);
+    void saveRoute("network", null).then(setProblem);
+  };
+  return (
+    <div className="warning invite-without-link" role="alert">
+      <strong>{words.invite.unreachableTitle}</strong>
+      {settings.restartNeeded ? (
+        <>
+          <p>{words.invite.restartToReach}</p>
+          <RestartHostButton />
+        </>
+      ) : (
+        <>
+          <p>{reachesNowhere ? words.invite.unreachable : words.invite.withoutLink}</p>
+          {reachesNowhere && (
+            <button type="button" data-hint={hints.useThisNetwork} onClick={useThisNetwork}>
+              {words.invite.useThisNetwork}
+            </button>
+          )}
+        </>
+      )}
+      {problem && <p className="setting-problem">{problem}</p>}
+    </div>
   );
 }
 
@@ -631,7 +660,7 @@ export function DeviceSettings({ listed }: { listed: DevicesListed | null }) {
             {link ? (
               <InviteLink link={link} appOnly={joinsThroughTunnel(invite, inviteRoute, publicOrigin)} />
             ) : (
-              <InviteWithoutLink />
+              listed && <InviteWithoutLink settings={listed.reachability} />
             )}
           </div>
         )}

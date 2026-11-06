@@ -87,6 +87,11 @@ export const devices: Messages["devices"] = {
     throughTunnel:
       "应用在大多数网络下都能直连这台 Mac，不论是移动数据还是其他 Wi-Fi，无需 VPN。你的服务器只负责引荐双方，它们之间传输的内容是端到端加密的。",
     atAddress: (host) => `浏览器或应用通过 ${host} 加入，所以设备必须能访问这个地址，例如在同一个 tailnet 里。`,
+    unreachableTitle: "其他设备无法访问这个 Mirador",
+    unreachable:
+      "它只在这台机器上运行，所以邀请无处可指。让这个网络上的设备访问它，或在下方选择其他方式。",
+    restartToReach: "已保存。重启 host，然后再次邀请，即可获得链接和二维码。",
+    useThisNetwork: "使用这个网络",
     withoutLink: "没有链接，也没有二维码：还没有任何设置告诉 Mirador 其他设备如何访问它。下面的选项之一会给它一个地址，host 从下次启动起使用。",
     button: "邀请设备",
     label: "邀请",
