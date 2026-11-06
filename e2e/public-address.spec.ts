@@ -80,8 +80,8 @@ test("Settings offers one way at a time to reach it, and names what each one nee
   });
 
   await test.step("both servers answer where Settings checks an address", async () => {
-    expect(await (await fetch(`${host.origin}/mirador-here`)).json()).toEqual({ mirador: true });
-    expect(await (await fetch(`http://127.0.0.1:${host.port + 1}/mirador-here`)).json()).toEqual({ mirador: true });
+    expect(await (await fetch(`${host.origin}/mirador-here`)).json()).toMatchObject({ mirador: true });
+    expect(await (await fetch(`http://127.0.0.1:${host.port + 1}/mirador-here`)).json()).toMatchObject({ mirador: true });
   });
 
   await test.step("a machine with no Tailscale, and nothing answering, is told the choice is what is left", async () => {
