@@ -114,6 +114,8 @@ describe("heldBackBecause", () => {
     expect(heldBackBecause({ ...decided, release: null })).toBe("not-a-release");
     expect(heldBackBecause({ ...decided, undone: "1.0.1" })).toBe("undone");
     expect(heldBackBecause({ ...decided, undone: "1.0.0" })).toBeNull();
+    expect(heldBackBecause({ ...decided, undone: "1.0.1", didntLoad: "1.0.1" }), "one taken back because it didn't load").toBe("didnt-load");
+    expect(heldBackBecause({ ...decided, undone: "1.0.1", didntLoad: "1.0.0" }), "an earlier release that didn't load").toBe("undone");
   });
 
   test("a plugin whose installed plugin.json can't be read waits, as it can't be told official or not", () => {
@@ -169,13 +171,13 @@ describe("a plugin swap cut short", () => {
     cpSync(COUNTER, plugin, { recursive: true });
     cpSync(COUNTER, replacement, { recursive: true });
     writeFileSync(join(replacement, "plugin.json"), JSON.stringify({ ...counterManifest, version: "0.9.0" }));
-    await expect(swapPlugin(pluginsFolder, { folder: "counter", movedOutTo: parked, movingIn: replacement, whenCutShort: "finish", undoneRelease: "1.0.0" }, renameOnlyOnce())).rejects.toThrow();
+    await expect(swapPlugin(pluginsFolder, { folder: "counter", movedOutTo: parked, movingIn: replacement, whenCutShort: "finish", undoneRelease: "1.0.0", undoneBecause: "didnt-load" }, renameOnlyOnce())).rejects.toThrow();
     expect(existsSync(plugin), "the swap stopped halfway").toBe(false);
 
-    const undone: [string, string][] = [];
-    await settleCutShortSwaps(pluginsFolder, (folder, release) => undone.push([folder, release]));
+    const undone: [string, string, string][] = [];
+    await settleCutShortSwaps(pluginsFolder, (folder, release, because) => undone.push([folder, release, because]));
     expect(versionIn(plugin)).toBe("0.9.0");
-    expect(undone).toEqual([["counter", "1.0.0"]]);
+    expect(undone, "with why it was taken back").toEqual([["counter", "1.0.0", "didnt-load"]]);
   });
 
   test("refuses a folder name that leads out of the plugins folder", async () => {
@@ -259,13 +261,18 @@ describe("ready plugin updates", () => {
     expect(afterRestart.marked(found), "what held it back is remembered across starts").toMatchObject([{ heldBack: "build-changed" }]);
   });
 
-  test("a release whose build fails waits for the user", async () => {
+  test("a release whose build fails waits for the user, and its build is tried again at the next look", async () => {
     const { repo, pluginsFolder, plugins, ready } = await installedCounter("build-fails");
-    release(repo, "1.0.1", {}, { "build.ts": "process.exit(1);\n" });
+    const online = join(root, "build-fails", "online");
+    release(repo, "1.0.1", {}, { "build.ts": `if (!(await Bun.file(${JSON.stringify(online)}).exists())) process.exit(1);\nawait Bun.write("view.js", Bun.file("src/view.js"));\n` });
     const found = await plugins.updatesFound(null);
     await ready.prepare(found);
     expect(ready.marked(found)).toMatchObject([{ ready: false, heldBack: "build-failed" }]);
     expect(existsSync(join(readyFolderOf(pluginsFolder), "counter", "plugin"))).toBe(false);
+
+    writeFileSync(online, "");
+    await ready.prepare(found);
+    expect(ready.marked(found), "a build that failed for a passing reason, offline for one, goes in once it builds").toMatchObject([{ ready: true, heldBack: null }]);
   });
 
   test("a plugin that follows a branch waits for the user; a third-party plugin not turned on, and every plugin while asking, aren't prepared", async () => {
@@ -362,11 +369,12 @@ describe("ready plugin updates", () => {
     expect(versionIn(join(pluginsFolder, "counter"))).toBe("1.0.0");
     expect(afterRestart.restartNeeded).toBe(true);
     expect(store.pluginUpdatesUndone()).toEqual({ counter: "1.0.1" });
+    expect(store.pluginUpdatesThatDidntLoad()).toEqual({ counter: "1.0.1" });
 
     const { plugins: nextPlugins, ready: nextReady } = await restarted(pluginsFolder, store);
     const found = await nextPlugins.updatesFound(null);
     await nextReady.prepare(found);
-    expect(nextReady.marked(found)).toMatchObject([{ release: "1.0.1", ready: false, heldBack: "undone" }]);
+    expect(nextReady.marked(found), "the user is told it didn't load, not that they undid it").toMatchObject([{ release: "1.0.1", ready: false, heldBack: "didnt-load" }]);
   });
 
   test("undo puts back the plugin an update replaced at this start, once, and remembers the release", async () => {
@@ -420,12 +428,13 @@ describe("ready plugin updates", () => {
 
   test("removing a plugin forgets its choices, so another one added in its folder starts afresh", async () => {
     const { store, plugins, ready } = await installedCounter("forgets");
-    store.rememberPluginUpdateUndone("counter", "1.0.1");
+    store.rememberPluginUpdateUndone("counter", "1.0.1", "didnt-load");
     expect(store.pluginUpdatesByItself()).toEqual({ counter: true });
     await plugins.remove("counter");
     ready.forget("counter");
     expect(store.pluginUpdatesByItself()).toEqual({});
     expect(store.pluginUpdatesUndone()).toEqual({});
+    expect(store.pluginUpdatesThatDidntLoad()).toEqual({});
   });
 
   test("a renamed release waits for the user, and a clone that failed is tried again at the next look", async () => {

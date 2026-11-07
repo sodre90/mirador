@@ -84,6 +84,7 @@ export const plugins: Messages["plugins"] = {
     "remote-changed": "Jóváhagyásra vár: nem a hivatalos repóból származik.",
     "build-failed": "Jóváhagyásra vár: nem sikerült a build.",
     undone: "Jóváhagyásra vár: ezt a kiadást korábban visszavontad.",
+    "didnt-load": "Jóváhagyásra vár: ez a kiadás korábban nem töltődött be.",
     renamed: "Jóváhagyásra vár: a plugin.json más nevet ad meg.",
     "unreadable-manifest": "Jóváhagyásra vár: a telepített bővítmény plugin.json fájlja nem olvasható.",
   },

@@ -2,7 +2,7 @@ import { DEFAULT_MORNING_MINUTES, isMorningMinutes, type Reminder } from "../sha
 import { CUSTOM_ORDER, isConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { Database } from "bun:sqlite";
-import { isPluginUpdateMode, type AppStorageItems, type PluginUpdateMode } from "../shared/apps.ts";
+import { isPluginUpdateMode, type AppStorageItems, type PluginUpdateMode, type TakenBackBecause } from "../shared/apps.ts";
 import type { AvailableCommand, ToolCallUpdate } from "@agentclientprotocol/sdk";
 import type {
   AskMode,
@@ -550,16 +550,25 @@ export class Store {
     return this.jsonRecordSetting("plugin_updates_undone", (value): value is string => typeof value === "string");
   }
 
-  rememberPluginUpdateUndone(folder: string, release: string) {
+  rememberPluginUpdateUndone(folder: string, release: string, because: TakenBackBecause = "undone") {
     this.setSetting("plugin_updates_undone", JSON.stringify({ ...this.pluginUpdatesUndone(), [folder]: release }));
+    const { [folder]: _earlier, ...didntLoad } = this.pluginUpdatesThatDidntLoad();
+    this.setSetting("plugin_updates_didnt_load", JSON.stringify(because === "didnt-load" ? { ...didntLoad, [folder]: release } : didntLoad));
+  }
+
+  /** Of the releases in pluginUpdatesUndone, those taken back because they didn't load rather than by the user. */
+  pluginUpdatesThatDidntLoad(): Record<string, string> {
+    return this.jsonRecordSetting("plugin_updates_didnt_load", (value): value is string => typeof value === "string");
   }
 
   /** A removed plugin's choices go with it, so another plugin added later in its folder starts afresh. */
   forgetPluginUpdateChoices(folder: string) {
     const { [folder]: _chosen, ...byItself } = this.pluginUpdatesByItself();
     const { [folder]: _undone, ...undone } = this.pluginUpdatesUndone();
+    const { [folder]: _didntLoad, ...didntLoad } = this.pluginUpdatesThatDidntLoad();
     this.setSetting("plugin_updates_by_itself", JSON.stringify(byItself));
     this.setSetting("plugin_updates_undone", JSON.stringify(undone));
+    this.setSetting("plugin_updates_didnt_load", JSON.stringify(didntLoad));
   }
 
   /** The Mirador version, or a checkout's commit, the host last started as; null before it ever recorded one. */

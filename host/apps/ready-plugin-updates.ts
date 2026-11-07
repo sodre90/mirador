@@ -58,6 +58,7 @@ const hostModulesOf = (manifest: PluginManifest) => JSON.stringify([manifest.app
 export function heldBackBecause({
   release,
   undone,
+  didntLoad,
   name,
   remote,
   official,
@@ -67,6 +68,8 @@ export function heldBackBecause({
   release: string | null;
   /** The release of the plugin the user undid, or that didn't load. */
   undone: string | undefined;
+  /** The release of the plugin that didn't load, when that is why it was taken back. */
+  didntLoad?: string;
   /** The installed plugin's name, null when its plugin.json can't be read. */
   name: string | null;
   remote: string | null;
@@ -76,7 +79,7 @@ export function heldBackBecause({
 }): PluginUpdateHeldBack | null {
   if (release === null) return "not-a-release";
   if (name === null) return "unreadable-manifest";
-  if (undone === release) return "undone";
+  if (undone === release) return didntLoad === release ? "didnt-load" : "undone";
   if (officialness({ name, remote }, official) === "name-only") return "remote-changed";
   if (!update) return null;
   if (!installed) return "unreadable-manifest";
@@ -172,7 +175,7 @@ export async function applyReadyUpdates(pluginsFolder: string, rename = renameWh
 export async function applyReadyUpdatesAtStart(pluginsFolder: string, store: Store, sourceDir: string, rename = renameWhenFree): Promise<AppliedPluginUpdate[]> {
   let applied: AppliedPluginUpdate[] = [];
   try {
-    await settleCutShortSwaps(pluginsFolder, (folder, release) => store.rememberPluginUpdateUndone(folder, release));
+    await settleCutShortSwaps(pluginsFolder, (folder, release, because) => store.rememberPluginUpdateUndone(folder, release, because));
     removeOrLog(parkedFolderOf(pluginsFolder));
     const now = await miradorIdentity(sourceDir);
     const mode = store.pluginUpdateMode();
@@ -235,8 +238,8 @@ export class ReadyPluginUpdates {
         const problem = problems.find(({ folder }) => basename(folder) === update.folder);
         if (!problem) return update;
         try {
-          await this.plugins.putBack(update.folder, join(this.previousFolder, update.folder), update.to);
-          this.store.rememberPluginUpdateUndone(update.folder, update.to);
+          await this.plugins.putBack(update.folder, join(this.previousFolder, update.folder), update.to, "didnt-load");
+          this.store.rememberPluginUpdateUndone(update.folder, update.to, "didnt-load");
           console.warn(`the ${update.folder} plugin at ${update.to} didn't load, so the one it replaced is back from the next start: ${problem.message}`);
           return { ...update, restoredBecause: problem.message };
         } catch (error) {
@@ -276,8 +279,8 @@ export class ReadyPluginUpdates {
       }
       if (plugin.source.commit !== update.from) continue;
       const known = this.statuses.get(update.folder);
-      if (known && known.release === update.release) continue;
-      const decided = { release: update.release, undone: this.store.pluginUpdatesUndone()[update.folder], name: plugin.name, remote: remoteOf(plugin), official: this.official() };
+      if (known && known.release === update.release && known.heldBack !== "build-failed") continue;
+      const decided = { release: update.release, undone: this.store.pluginUpdatesUndone()[update.folder], didntLoad: this.store.pluginUpdatesThatDidntLoad()[update.folder], name: plugin.name, remote: remoteOf(plugin), official: this.official() };
       const heldBack = heldBackBecause(decided);
       if (heldBack || decided.release === null) {
         this.setStatus(update.folder, { release: update.release, heldBack });

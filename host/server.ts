@@ -1480,7 +1480,10 @@ export function startServer(services: HostServices) {
       case "plugins.set-updates-by-itself":
         return void setUpdatesByItself(message.folder, message.updatesByItself).catch((error) => hub.send(socket, { type: "error", ...appFailure(error) }));
       case "plugins.undo-update":
-        return void changePlugins(socket, message.requestId, () => readyPluginUpdates.undo(message.folder));
+        return void changePlugins(socket, message.requestId, async () => {
+          await readyPluginUpdates.undo(message.folder);
+          hub.broadcast({ type: "plugins.updated-at-start", updates: readyPluginUpdates.appliedAtStart });
+        });
       case "plugins.find-commits":
         return void plugins.news(message.folder).then(
           (news) => {

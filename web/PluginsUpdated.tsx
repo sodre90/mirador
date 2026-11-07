@@ -29,7 +29,6 @@ async function undoUpdate(folder: string): Promise<string | null> {
 }
 
 function AppliedUpdate({ update }: { update: AppliedPluginUpdate }) {
-  const [undone, setUndone] = useState(update.undone === true);
   const [undoing, setUndoing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const undo = async () => {
@@ -37,10 +36,9 @@ function AppliedUpdate({ update }: { update: AppliedPluginUpdate }) {
     const failed = await undoUpdate(update.folder);
     setUndoing(false);
     setProblem(failed);
-    if (!failed) setUndone(true);
   };
   if (update.restoredBecause) return <li>{words.restoredAtStart(update.title, update.to, update.restoredBecause)}</li>;
-  if (undone) {
+  if (update.undone) {
     return (
       <li>
         {words.undoneAtStart(update.title, update.from)}{" "}

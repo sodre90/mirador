@@ -421,6 +421,8 @@ export type ServerMessage =
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.keep-awake"; keepAwake: KeepAwake }
   | { type: "settings.plugin-update-mode"; mode: PluginUpdateMode }
+  /** What the host put in as it started, again after one of them was undone. */
+  | { type: "plugins.updated-at-start"; updates: AppliedPluginUpdate[] }
   | { type: "settings.reminder-morning"; minutes: number }
   | { type: "settings.conversation-order"; order: ConversationOrder }
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }

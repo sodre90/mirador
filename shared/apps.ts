@@ -361,7 +361,9 @@ export interface PluginUpdate extends PluginNews {
 export type PluginUpdateMode = "ask" | "with-mirador" | "any-restart";
 export const isPluginUpdateMode = (value: unknown): value is PluginUpdateMode => value === "ask" || value === "with-mirador" || value === "any-restart";
 /** Why a found update waits for the user instead of going in by itself. */
-export type PluginUpdateHeldBack = "not-a-release" | "build-changed" | "host-code-changed" | "remote-changed" | "build-failed" | "undone" | "renamed" | "unreadable-manifest";
+export type PluginUpdateHeldBack = "not-a-release" | "build-changed" | "host-code-changed" | "remote-changed" | "build-failed" | "undone" | "didnt-load" | "renamed" | "unreadable-manifest";
+/** Why an update that went in was taken back out: the user undid it, or it didn't load. */
+export type TakenBackBecause = "undone" | "didnt-load";
 /** An update the host put in, or took back out, as it started. */
 export interface AppliedPluginUpdate {
   folder: string;

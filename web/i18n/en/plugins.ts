@@ -82,6 +82,7 @@ export const plugins = {
     "remote-changed": "Needs your approval: it comes from a repo other than the official one.",
     "build-failed": "Needs your approval: its build failed.",
     undone: "Needs your approval: you undid this release.",
+    "didnt-load": "Needs your approval: this release didn't load before.",
     renamed: "Needs your approval: its plugin.json gives it a different name.",
     "unreadable-manifest": "Needs your approval: the installed plugin's plugin.json can't be read.",
   },

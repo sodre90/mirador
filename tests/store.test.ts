@@ -628,12 +628,16 @@ describe("Store", () => {
     store.setPluginUpdatesByItself("review", false);
     store.setPluginUpdatesByItself("counter", true);
     store.rememberPluginUpdateUndone("review", "1.0.12");
+    store.rememberPluginUpdateUndone("counter", "2.0.0", "didnt-load");
     store.rememberMiradorStartedAs("0.9.0");
     store.close();
     const reopened = new Store(path);
     expect(reopened.pluginUpdateMode()).toBe("with-mirador");
     expect(reopened.pluginUpdatesByItself()).toEqual({ review: false, counter: true });
-    expect(reopened.pluginUpdatesUndone()).toEqual({ review: "1.0.12" });
+    expect(reopened.pluginUpdatesUndone()).toEqual({ review: "1.0.12", counter: "2.0.0" });
+    expect(reopened.pluginUpdatesThatDidntLoad()).toEqual({ counter: "2.0.0" });
+    reopened.rememberPluginUpdateUndone("counter", "2.0.0");
+    expect(reopened.pluginUpdatesThatDidntLoad(), "undone by the user since").toEqual({});
     expect(reopened.miradorStartedAs()).toBe("0.9.0");
     reopened.close();
   });

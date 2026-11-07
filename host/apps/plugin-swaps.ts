@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { renameWhenFree } from "../rename-when-free.ts";
+import type { TakenBackBecause } from "../../shared/apps.ts";
 import { messageOf } from "./plugins.ts";
 
 /**
@@ -16,6 +17,7 @@ export interface PluginSwap {
   whenCutShort: "finish" | "roll-back";
   /** A release to remember as undone once the swap is finished, for a swap that puts back the plugin an update replaced. */
   undoneRelease?: string;
+  undoneBecause?: TakenBackBecause;
 }
 
 /** A plugin folder's name, which may only name a folder right inside the plugins folder. */
@@ -67,7 +69,7 @@ const isSwap = (value: unknown): value is PluginSwap => {
  * began; one whose folder is gone is finished or rolled back, as it says. Each is settled on its own, and one that
  * can't be is only logged.
  */
-export async function settleCutShortSwaps(pluginsFolder: string, rememberUndone: (folder: string, release: string) => void) {
+export async function settleCutShortSwaps(pluginsFolder: string, rememberUndone: (folder: string, release: string, because: TakenBackBecause) => void) {
   const swaps = swapsFolderOf(pluginsFolder);
   let journals: string[] = [];
   try {
@@ -84,7 +86,7 @@ export async function settleCutShortSwaps(pluginsFolder: string, rememberUndone:
       if (!existsSync(plugin)) {
         const finishing = swap.whenCutShort === "finish" ? existsSync(swap.movingIn) : !existsSync(swap.movedOutTo);
         await renameWhenFree(finishing ? swap.movingIn : swap.movedOutTo, plugin);
-        if (finishing && swap.undoneRelease) rememberUndone(swap.folder, swap.undoneRelease);
+        if (finishing && swap.undoneRelease) rememberUndone(swap.folder, swap.undoneRelease, swap.undoneBecause === "didnt-load" ? "didnt-load" : "undone");
         console.warn(`swapping the ${swap.folder} plugin was cut short, so it was ${finishing ? "finished" : "rolled back"}`);
       }
       removeOrLog(journal);

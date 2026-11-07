@@ -84,6 +84,7 @@ export const plugins: Messages["plugins"] = {
     "remote-changed": "等你确认：它不是来自官方仓库。",
     "build-failed": "等你确认：构建失败。",
     undone: "等你确认：你撤销过这个发布版本。",
+    "didnt-load": "等你确认：这个发布版本之前加载失败。",
     renamed: "等你确认：plugin.json 中的名称变了。",
     "unreadable-manifest": "等你确认：无法读取已安装插件的 plugin.json。",
   },

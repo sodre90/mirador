@@ -36,6 +36,7 @@ function release(name: string, version: string, manifest: Record<string, unknown
 /**
  * Four plugins installed at their release 1.0.0 as Mirador installs one, each with a 1.0.1 since: Counter and Gauge are
  * official, through the catalog, and Gauge's 1.0.1 doesn't load; Tally and Meter aren't, and Meter's 1.0.1 brings a build command.
+ * Dial, official too, follows its main branch, so it never updates by itself.
  */
 test.beforeAll(async () => {
   const plugins = join(host.dataDir, "plugins");
@@ -45,12 +46,14 @@ test.beforeAll(async () => {
     releasedRepo(name, title);
     git(plugins, "-c", "advice.detachedHead=false", "clone", "--quiet", "--branch=v1.0.0", repoOf(name), name);
   }
+  releasedRepo("dial", "Dial");
+  git(plugins, "clone", "--quiet", "--branch=main", repoOf("dial"), "dial");
   release("counter", "1.0.1");
   release("tally", "1.0.1");
   release("meter", "1.0.1", { build: "echo built > built.txt" });
   release("gauge", "1.0.1", {}, { "host.ts": 'throw new Error("the gauge broke");\n' });
-  const official = (name: "counter" | "gauge") => ({ name, title: titles[name], description: `The ${name}.`, recommendWhen: `the user wants a ${name}`, repo: repoOf(name) });
-  writeFileSync(catalogFile(), JSON.stringify({ plugins: [official("counter"), official("gauge")] }));
+  const official = (name: string, title: string) => ({ name, title, description: `The ${name}.`, recommendWhen: `the user wants a ${name}`, repo: repoOf(name) });
+  writeFileSync(catalogFile(), JSON.stringify({ plugins: [official("counter", "Counter"), official("gauge", "Gauge"), official("dial", "Dial")] }));
   await host.start();
 });
 test.afterAll(async () => {
@@ -100,6 +103,22 @@ test("plugins ask before each update until the user lets them update by themselv
     await page.keyboard.press("Escape");
   });
 
+  await test.step("with Mirador updates, a ready update waits for a newer Mirador, so restarting the same one installs nothing", async () => {
+    let plugins = await openPlugins(page);
+    await plugins.getByLabel("Plugin updates").selectOption({ label: "With Mirador updates" });
+    let counter = await openPluginDetail(plugins, "Counter");
+    await expect(counter.getByText("Installs with the next Mirador update."), "the host has cloned and built it").toBeVisible({ timeout: 60_000 });
+    await page.keyboard.press("Escape");
+
+    await restartAndReload(page);
+    await expect(updatedNotice(page)).toHaveCount(0);
+    plugins = await openPlugins(page);
+    counter = await detailsOf(plugins, "Counter");
+    await expect(counter.locator(".plugin-upkeep dl")).toContainText("Version1.0.0");
+    await expect(counter.getByText("Installs with the next Mirador update."), "it stays ready").toBeVisible();
+    await page.keyboard.press("Escape");
+  });
+
   await test.step("at any restart, official plugins update by themselves, others once the user turns them on, and each says when it goes in or why it waits", async () => {
     const plugins = await openPlugins(page);
     await plugins.getByLabel("Plugin updates").selectOption({ label: "At any restart" });
@@ -123,6 +142,10 @@ test("plugins ask before each update until the user lets them update by themselv
     const gauge = await openPluginDetail(plugins, "Gauge");
     await expect(gauge.getByText("Installs at the next restart.")).toBeVisible({ timeout: 60_000 });
     await backToAll(gauge);
+
+    const dial = await openPluginDetail(plugins, "Dial");
+    await expect(dial.getByLabel("Update by itself"), "a plugin that follows a branch never updates by itself").toHaveCount(0);
+    await backToAll(dial);
 
     const tally = await openPluginDetail(plugins, "Tally");
     await expect(tally.getByLabel("Update by itself")).not.toBeChecked();
@@ -155,10 +178,19 @@ test("plugins ask before each update until the user lets them update by themselv
     await page.keyboard.press("Escape");
   });
 
-  await test.step("Undo puts the version it replaced back from the next restart, and those releases then wait for the user", async () => {
+  await test.step("Undo puts the version it replaced back from the next restart, every open page says so, and those releases then wait for the user", async () => {
+    const otherPage = await page.context().newPage();
+    await otherPage.goto(host.origin);
+    const otherNotice = updatedNotice(otherPage);
+    await expect(otherNotice.getByRole("button", { name: "Undo the update of Counter" })).toBeVisible();
+
     const notice = updatedNotice(page);
     await notice.getByRole("button", { name: "Undo the update of Counter" }).click();
     await expect(notice.getByRole("listitem").filter({ hasText: "Counter" })).toHaveText("Counter goes back to 1.0.0 at the next restart. Restart host");
+    await expect(otherNotice.getByRole("listitem").filter({ hasText: "Counter" })).toHaveText("Counter goes back to 1.0.0 at the next restart. Restart host");
+    await otherNotice.getByRole("button", { name: "Dismiss" }).click();
+    await expect(otherNotice).toHaveCount(0);
+    await otherPage.close();
 
     await restartAndReload(page);
     await expect(updatedNotice(page)).toHaveCount(0);
@@ -171,6 +203,6 @@ test("plugins ask before each update until the user lets them update by themselv
     const gauge = await detailsOf(plugins, "Gauge");
     await expect(gauge.locator(".plugin-upkeep dl")).toContainText("Version1.0.0");
     await expect(gauge.locator(".plugin-problem"), "the version put back loads").toHaveCount(0);
-    await expect(gauge.getByText("Needs your approval: you undid this release.")).toBeVisible({ timeout: 30_000 });
+    await expect(gauge.getByText("Needs your approval: this release didn't load before.")).toBeVisible({ timeout: 30_000 });
   });
 });

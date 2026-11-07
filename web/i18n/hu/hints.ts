@@ -96,7 +96,7 @@ export const hints: Messages["hints"] = {
   pluginUpdatesWaiting:
     "Git-repókból telepített bővítmények, amelyekhez újabb kiadás vagy új commit érhető el. A Mirador induláskor és 6 óránként ellenőrzi őket. Magától csak akkor telepít, ha a Bővítményfrissítések beállítás ezt kéri; egyébként a Beállítások › Bővítmények részben frissítheted őket.",
   pluginUpdateMode:
-    "Kérdezzen meg: minden frissítéshez a jóváhagyásod kell. A Mirador frissítésével: az automatikusan frissülő bővítmények új kiadásai a Mirador következő frissítésekor települnek. Minden újraindításkor: a Mirador minden indulásakor települnek. A Mirador előre letölti és buildeli a frissítéseket. Ha egy frissítés megváltoztatja a build parancsot vagy a host modulokat, vagy nem a hivatalos repóból származik, továbbra is a jóváhagyásodra vár.",
+    "Kérdezzen meg: minden frissítéshez a jóváhagyásod kell. A Mirador frissítésével: az automatikusan frissülő bővítmények új kiadásai a Mirador következő frissítésekor települnek, git checkoutból futó Miradornál egy új commitnál. Minden újraindításkor: a Mirador minden indulásakor települnek. A Mirador amint talál egy új kiadást, letölti, és rögtön le is futtatja a buildjét. Egy frissítés továbbra is a jóváhagyásodra vár, ha a plugin.json-ja más build parancsot vagy más host modul fájlokat nevez meg, vagy nem a hivatalos repóból származik; e fájlok tartalmát nem hasonlítja össze.",
   pluginUpdatesByItself:
     "A bővítmény új kiadásai kérdés nélkül települnek, a Bővítményfrissítések beállításnak megfelelően. A hivatalos bővítményeknél alapból be van kapcsolva.",
   undoPluginUpdate:

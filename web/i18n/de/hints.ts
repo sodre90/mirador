@@ -102,7 +102,7 @@ export const hints: Messages["hints"] = {
   pluginUpdatesWaiting:
     "Plugins aus Git-Repos mit einem neueren Release oder neuen Commits. Mirador prüft beim Start und alle 6 Stunden. Von selbst installiert es nur, wenn Plugin-Updates so eingestellt ist; sonst aktualisierst du sie unter Einstellungen › Plugins.",
   pluginUpdateMode:
-    "Frag mich: Jedes Update wartet auf deine Zustimmung. Mit Mirador-Updates: Plugins, die sich selbst aktualisieren, bekommen neue Releases, sobald Mirador selbst aktualisiert wird. Bei jedem Neustart: Sie bekommen sie bei jedem Start von Mirador. Mirador lädt und baut Updates schon vorher. Ein Update, das den Build-Befehl oder die Host-Module ändert oder nicht aus dem offiziellen Repo stammt, wartet weiterhin auf deine Zustimmung.",
+    "Frag mich: Jedes Update wartet auf deine Zustimmung. Mit Mirador-Updates: Plugins, die sich selbst aktualisieren, bekommen neue Releases, sobald Mirador selbst aktualisiert wird, bei einem Mirador aus einem Git-Checkout bei einem neuen Commit. Bei jedem Neustart: Sie bekommen sie bei jedem Start von Mirador. Mirador lädt ein neues Release herunter, sobald es eines findet, und führt dann gleich seinen Build aus. Ein Update wartet weiterhin auf deine Zustimmung, wenn seine plugin.json einen anderen Build-Befehl oder andere Host-Modul-Dateien nennt oder es nicht aus dem offiziellen Repo stammt; der Inhalt dieser Dateien wird nicht verglichen.",
   pluginUpdatesByItself:
     "Installiert neue Releases dieses Plugins ohne Nachfrage, zu dem Zeitpunkt, den Plugin-Updates festlegt. Bei offiziellen Plugins standardmäßig an.",
   undoPluginUpdate:

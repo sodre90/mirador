@@ -370,6 +370,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, keepAwake: message.keepAwake };
     case "settings.plugin-update-mode":
       return { ...state, pluginUpdateMode: message.mode };
+    case "plugins.updated-at-start":
+      return { ...state, pluginsUpdatedAtStart: message.updates };
     case "settings.reminder-morning":
       return { ...state, reminderMorning: message.minutes };
     case "settings.conversation-order":

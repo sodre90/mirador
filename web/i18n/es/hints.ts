@@ -102,7 +102,7 @@ export const hints: Messages["hints"] = {
   pluginUpdatesWaiting:
     "Plugins de repositorios git con una versión más reciente o commits nuevos. Mirador revisa al iniciarse y cada 6 horas. Solo instala algo por sí solo si Actualizaciones de plugins lo indica; si no, actualízalos en Configuración › Plugins.",
   pluginUpdateMode:
-    "Preguntarme: cada actualización espera tu aprobación. Con las actualizaciones de Mirador: los plugins que se actualizan solos reciben sus versiones nuevas cuando se actualiza Mirador. En cada reinicio: las reciben cada vez que Mirador se inicia. Mirador descarga las actualizaciones y hace su build por adelantado. Si una actualización cambia el comando de build o los módulos del host, o no viene del repositorio oficial, sigue esperando tu aprobación.",
+    "Preguntarme: cada actualización espera tu aprobación. Con las actualizaciones de Mirador: los plugins que se actualizan solos reciben sus versiones nuevas cuando se actualiza Mirador o, si Mirador se ejecuta desde un checkout de git, con un commit nuevo. En cada reinicio: las reciben cada vez que Mirador se inicia. Mirador descarga una versión nueva en cuanto la encuentra y ejecuta su build en ese momento. Una actualización sigue esperando tu aprobación si su plugin.json nombra otro comando de build u otros archivos de módulos del host, o si no viene del repositorio oficial; no se compara lo que contienen esos archivos.",
   pluginUpdatesByItself:
     "Instala las versiones nuevas de este plugin sin preguntar, en el momento que indique Actualizaciones de plugins. Activado de forma predeterminada en los plugins oficiales.",
   undoPluginUpdate:

@@ -86,6 +86,7 @@ export const plugins: Messages["plugins"] = {
     "remote-changed": "Espera tu aprobación: no viene del repositorio oficial.",
     "build-failed": "Espera tu aprobación: falló su build.",
     undone: "Espera tu aprobación: deshiciste esta versión.",
+    "didnt-load": "Espera tu aprobación: esta versión ya no se pudo cargar antes.",
     renamed: "Espera tu aprobación: su plugin.json le da otro nombre.",
     "unreadable-manifest": "Espera tu aprobación: no se puede leer el plugin.json del plugin instalado.",
   },

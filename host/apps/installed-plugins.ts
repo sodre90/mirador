@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
-import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, type PluginKind, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate } from "../../shared/apps.ts";
+import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, type PluginKind, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
 import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
@@ -404,11 +404,11 @@ export class InstalledPlugins {
    * Puts `replacement` in the plugin's place for the next start, remembering `undoneRelease` should the swap be cut
    * short; the plugin as it is now waits in the parked folder, since the running host may hold its code.
    */
-  putBack(folderName: string, replacement: string, undoneRelease: string): Promise<void> {
+  putBack(folderName: string, replacement: string, undoneRelease: string, undoneBecause: TakenBackBecause = "undone"): Promise<void> {
     return this.oneAtATime(async () => {
       this.installedFolder(folderName);
       const movedOutTo = join(parkedFolderOf(this.folder), `${folderName}-${crypto.randomUUID()}`);
-      await swapPlugin(this.folder, { folder: folderName, movedOutTo, movingIn: replacement, whenCutShort: "finish", undoneRelease });
+      await swapPlugin(this.folder, { folder: folderName, movedOutTo, movingIn: replacement, whenCutShort: "finish", undoneRelease, undoneBecause });
       this.changed.add(folderName);
     });
   }

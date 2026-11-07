@@ -87,6 +87,7 @@ export const plugins: Messages["plugins"] = {
     "remote-changed": "Wartet auf deine Zustimmung: Es stammt nicht aus dem offiziellen Repo.",
     "build-failed": "Wartet auf deine Zustimmung: Der Build ist fehlgeschlagen.",
     undone: "Wartet auf deine Zustimmung: Du hast dieses Release rückgängig gemacht.",
+    "didnt-load": "Wartet auf deine Zustimmung: Dieses Release ließ sich schon einmal nicht laden.",
     renamed: "Wartet auf deine Zustimmung: Die plugin.json gibt ihm einen anderen Namen.",
     "unreadable-manifest": "Wartet auf deine Zustimmung: Die plugin.json des installierten Plugins ist nicht lesbar.",
   },

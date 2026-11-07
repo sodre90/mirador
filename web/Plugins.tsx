@@ -530,7 +530,7 @@ function InstalledDetail({
           <SettingsOf settings={settings} />
         </>
       )}
-      {plugin.source.kind === "git" && updateMode !== "ask" && (
+      {plugin.source.kind === "git" && plugin.source.release !== null && updateMode !== "ask" && (
         <label className="plugin-updates-by-itself" data-hint={hints.pluginUpdatesByItself}>
           <input type="checkbox" checked={plugin.updatesByItself} onChange={(event) => setUpdatesByItself(event.target.checked)} />
           {words.updatesByItself}
@@ -762,7 +762,6 @@ function TileList({
   );
 }
 
-/** Plugins, as a gallery of what each does; a tile opens what it gives the agent, its settings and its upkeep. */
 const PLUGIN_UPDATE_MODES: PluginUpdateMode[] = ["ask", "with-mirador", "any-restart"];
 
 function UpdateModeChoice({ mode }: { mode: PluginUpdateMode }) {
@@ -780,7 +779,7 @@ function UpdateModeChoice({ mode }: { mode: PluginUpdateMode }) {
   );
 }
 
-
+/** Plugins, as a gallery of what each does; a tile opens what it gives the agent, its settings and its upkeep. */
 export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pluginUpdates: FoundUpdate[]; pluginUpdateMode: PluginUpdateMode; onClose: () => void }) {
   const listed = usePluginsListed();
   const [opened, setOpened] = useState<{ key: string; start: Start } | null>(null);
