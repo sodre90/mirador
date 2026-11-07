@@ -4,7 +4,7 @@ import { DEFAULT_MORNING_MINUTES, type ReminderMode } from "../shared/reminders.
 import type { ReminderUndo } from "./reminders.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
-import { appKey, type AppDocumentState, type InstalledApp, type OpenApp, type PluginUpdate } from "../shared/apps.ts";
+import { appKey, type AppDocumentState, type AppliedPluginUpdate, type InstalledApp, type OpenApp, type PluginUpdate, type PluginUpdateMode } from "../shared/apps.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Turn } from "../shared/reverts.ts";
 import { CUSTOM_ORDER, type ConversationOrder } from "../shared/conversation-order.ts";
@@ -118,6 +118,8 @@ export interface AppState {
   desktopAppOutdated: boolean;
   newerVersion: NewerVersion | null;
   pluginUpdates: PluginUpdate[];
+  pluginUpdateMode: PluginUpdateMode;
+  pluginsUpdatedAtStart: AppliedPluginUpdate[];
   installedApps: InstalledApp[];
   openApps: OpenApp[];
   /** Where the canvas assets serve each plugin's canvas view, by plugin name. */
@@ -187,6 +189,8 @@ export const initialState: AppState = {
   desktopAppOutdated: false,
   newerVersion: null,
   pluginUpdates: [],
+  pluginUpdateMode: "ask",
+  pluginsUpdatedAtStart: [],
   installedApps: [],
   openApps: [],
   canvasViews: {},
@@ -286,6 +290,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         desktopAppOutdated: message.desktopAppOutdated,
         newerVersion: message.newerVersion,
         pluginUpdates: message.pluginUpdates ?? [],
+        pluginUpdateMode: message.pluginUpdateMode ?? "ask",
+        pluginsUpdatedAtStart: message.pluginsUpdatedAtStart ?? [],
         installedApps: message.installedApps,
         openApps: message.openApps,
         canvasViews: message.canvasViews,
@@ -362,6 +368,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, canvasUse: message.canvasUse };
     case "settings.keep-awake":
       return { ...state, keepAwake: message.keepAwake };
+    case "settings.plugin-update-mode":
+      return { ...state, pluginUpdateMode: message.mode };
     case "settings.reminder-morning":
       return { ...state, reminderMorning: message.minutes };
     case "settings.conversation-order":

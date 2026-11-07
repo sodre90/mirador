@@ -75,6 +75,8 @@ export const problems: Messages["problems"] = {
     "push-relay-is-origin": "A push-továbbító címe csak az originje, például https://push.example.com.",
     "push-relay-needs-token": "A push-továbbítónak kell ennek a Macnek a tokenje.",
     "join-number-wrong": "Nem ezt a számot mutatja a készülék, ezért a Mirador elutasította a kérését. Újra kérheti.",
+    "plugin-update-not-undoable":
+      "Ezt a frissítést már nem lehet visszavonni: a bővítmény a Mirador indulása óta megváltozott, vagy a frissítést már visszavontad.",
     "plugin-clone-gone": "A Miradornál már nincs meg ennek a bővítménynek a klónja, például egy újraindítás miatt; add hozzá újra, hogy lásd, mit hoz.",
     "plugin-needs-repo-address": "Add meg a bővítmény tárolójának git URL-jét vagy útvonalát.",
     "plugin-json-missing": "nincs plugin.json a mappája legfelső szintjén",
@@ -156,6 +158,7 @@ export const problems: Messages["problems"] = {
   unknownCanvasUse: (value) => `Ismeretlen vászonhasználat: ${value}`,
   unknownKeepAwake: (value) => `Ismeretlen ébren tartási beállítás: ${value}`,
   unknownConversationOrder: (value) => `Ismeretlen beszélgetéssorrend: ${value}`,
+  unknownPluginUpdateMode: (value) => `Ismeretlen bővítményfrissítési beállítás: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Ismeretlen beállítás a törölt vásznak megőrzéséhez: ${value}`,
   unknownWorkspaceColour: (value) => `Ismeretlen munkaterület-szín: ${value}`,
   notAMachineAddress: (address) => `Ez nem egy gép címe: „${address}”.`,

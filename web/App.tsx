@@ -20,6 +20,7 @@ import { MachineFrames, MachineRail, showsMachinesHere, useShownMachine } from "
 import { MachinesDialog, openMachine } from "./Machines.tsx";
 import { PluginsDialog } from "./Plugins.tsx";
 import { NewerVersionBanner } from "./NewerVersion.tsx";
+import { PluginsUpdatedBanner } from "./PluginsUpdated.tsx";
 import { HintLayer } from "./Hint.tsx";
 import { SearchDialog } from "./Search.tsx";
 import { hints } from "./hints.ts";
@@ -554,6 +555,7 @@ export function App() {
         <HostBanner status={status} state={state} />
         <DesktopAppBanner state={state} />
         <NewerVersionBanner newerVersion={state.newerVersion} />
+        <PluginsUpdatedBanner hostRunId={state.hostRunId} updates={state.pluginsUpdatedAtStart} />
         {inFixedOrder(state.kept).map((kept) => {
           const keptConversation = state.conversations.find(({ id }) => id === kept.conversationId);
           return (
@@ -716,7 +718,7 @@ export function App() {
           onClose={closeOverlay}
         />
       )}
-      {overlay?.kind === "plugins" && <PluginsDialog pluginUpdates={state.pluginUpdates} onClose={closeOverlay} />}
+      {overlay?.kind === "plugins" && <PluginsDialog pluginUpdates={state.pluginUpdates} pluginUpdateMode={state.pluginUpdateMode} onClose={closeOverlay} />}
       {overlay?.kind === "settings" && (
         <SettingsDialog
           page={overlay.page}

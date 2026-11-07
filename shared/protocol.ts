@@ -41,7 +41,7 @@ import type { ConversationOrder } from "./conversation-order.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
-import type { AppDocumentState, AppStorageItems, CatalogPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginOffer, PluginSettings, PluginUpdate } from "./apps.ts";
+import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode } from "./apps.ts";
 import type { LowDataSubscription } from "./low-data.ts";
 import type { MentionSuggestion } from "./mentions.ts";
 import type { NewerVersion } from "./newer-version.ts";
@@ -303,6 +303,12 @@ export type ClientMessage =
   | { type: "plugins.discard"; offerId: string }
   | { type: "plugins.find-commits"; requestId: string; folder: string }
   | { type: "plugins.remove"; requestId: string; folder: string }
+  /** When the updates the host finds go in without asking; "ask" leaves every one to the user. */
+  | { type: "settings.set-plugin-update-mode"; mode: PluginUpdateMode }
+  /** Whether the plugin's releases may go in without asking. */
+  | { type: "plugins.set-updates-by-itself"; folder: string; updatesByItself: boolean }
+  /** Puts back the plugin an update replaced as the host started; answered with "plugins.changed". */
+  | { type: "plugins.undo-update"; requestId: string; folder: string }
   | { type: "devices.invite"; requestId: string }
   /** Looks for the addresses other devices reach this host at; address.serve first puts its ports on the tailnet, when Tailscale is installed. */
   | { type: "address.find"; requestId: string }
@@ -388,6 +394,10 @@ export type ServerMessage =
       pluginSettings?: PluginSettings[];
       /** Missing from a host older than the keep awake setting. */
       keepAwake?: KeepAwake;
+      /** Missing from a host older than plugins that update by themselves. */
+      pluginUpdateMode?: PluginUpdateMode;
+      /** The updates the host put in as it started, and those it took back out; the same for each page until the next start. */
+      pluginsUpdatedAtStart?: AppliedPluginUpdate[];
       /** Missing from a host older than keeping deleted canvases. */
       keepDeletedCanvas?: KeepDeletedCanvas;
       /** Missing from a host older than reminders. */
@@ -410,6 +420,7 @@ export type ServerMessage =
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.keep-awake"; keepAwake: KeepAwake }
+  | { type: "settings.plugin-update-mode"; mode: PluginUpdateMode }
   | { type: "settings.reminder-morning"; minutes: number }
   | { type: "settings.conversation-order"; order: ConversationOrder }
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }
@@ -532,7 +543,7 @@ export type ServerMessage =
   | { type: "plugins.views"; installedApps: InstalledApp[]; canvasViews: Record<string, string> }
   /** Every plugin's settings, whenever the user chooses one. */
   | { type: "plugins.settings"; pluginSettings: PluginSettings[] }
-  /** The answer to plugins.install and plugins.remove. */
+  /** The answer to plugins.install, plugins.remove and plugins.undo-update. */
   | { type: "plugins.changed"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   | { type: "plugins.offered"; requestId: string; offer: PluginOffer | null; problem: string | null; problemAbout?: HostProblem }
   /** The plugin's reply to an item's action, or why there is none. */

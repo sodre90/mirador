@@ -217,6 +217,8 @@ export interface PluginInfo {
   tools?: PluginTool[];
   /** The SVG its plugin.json names as its icon, when that is a small SVG file inside its folder. */
   icon?: string | null;
+  /** Whether a release the host finds for it may go in without asking, once the plugin update mode isn't "ask". */
+  updatesByItself: boolean;
 }
 
 export type PluginKind = "app" | "canvas";
@@ -349,6 +351,26 @@ export interface PluginUpdate extends PluginNews {
   title: string;
   /** The plugin's commit when it was found: once it is updated past it, this is no longer news. */
   from: string;
+  /** Cloned and built, waiting in the ready folder to go in at a start the plugin update mode says. */
+  ready: boolean;
+  /** Why it waits for the user instead; null when it is ready, being prepared, or the mode is "ask". */
+  heldBack: PluginUpdateHeldBack | null;
+}
+
+/** When plugin updates the host found go in without asking. */
+export type PluginUpdateMode = "ask" | "with-mirador" | "any-restart";
+export const isPluginUpdateMode = (value: unknown): value is PluginUpdateMode => value === "ask" || value === "with-mirador" || value === "any-restart";
+/** Why a found update waits for the user instead of going in by itself. */
+export type PluginUpdateHeldBack = "not-a-release" | "build-changed" | "host-code-changed" | "remote-changed" | "build-failed" | "undone" | "renamed" | "unreadable-manifest";
+/** An update the host put in, or took back out, as it started. */
+export interface AppliedPluginUpdate {
+  folder: string;
+  title: string;
+  from: string | null;
+  to: string;
+  restoredBecause: string | null;
+  /** The user undid it since: the plugin it replaced is back from the next start. */
+  undone?: boolean;
 }
 
 /** What an app's view keeps in a workspace, as its localStorage: text by key. */
