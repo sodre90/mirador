@@ -81,6 +81,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.unknownCanvasUse(problem.value);
     case "unknown-keep-awake":
       return words.unknownKeepAwake(problem.value);
+    case "unknown-conversation-order":
+      return words.unknownConversationOrder(problem.value);
     case "unknown-keep-deleted-canvas":
       return words.unknownKeepDeletedCanvas(problem.value);
     case "unknown-workspace-colour":

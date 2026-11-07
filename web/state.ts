@@ -7,6 +7,8 @@ import type { NewerVersion } from "../shared/newer-version.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp, type PluginUpdate } from "../shared/apps.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Turn } from "../shared/reverts.ts";
+import { CUSTOM_ORDER, type ConversationOrder } from "../shared/conversation-order.ts";
+import { turnTimesOf, type HeldTurnTimes } from "./navigation.ts";
 import { inSidebarOrder } from "../shared/sidebar-order.ts";
 import { withStreamedEvent } from "../shared/timeline.ts";
 import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
@@ -68,6 +70,8 @@ export interface AppState {
   keepDeletedCanvas: KeepDeletedCanvas;
   /** Minutes after midnight that "morning" means for reminders. */
   reminderMorning: number;
+  conversationOrder: ConversationOrder;
+  heldTurnTimes: HeldTurnTimes | null;
   /** The reminder this page set last, until its toast goes. */
   reminderUndo: (ReminderUndo & { id: number }) | null;
   claudeProgram: ClaudeProgram;
@@ -131,6 +135,7 @@ export interface AppState {
 export type AppAction =
   | { type: "server"; message: ServerMessage }
   | { type: "select"; conversationId: string | null }
+  | { type: "hold-turn-times"; held: boolean }
   | { type: "leave-conversation"; conversationId: string }
   | { type: "awaiting-conversation"; workspaceId: string }
   | { type: "open-overlay"; overlay: Overlay }
@@ -150,6 +155,8 @@ export const initialState: AppState = {
   keepAwake: "never",
   keepDeletedCanvas: "30-days",
   reminderMorning: DEFAULT_MORNING_MINUTES,
+  conversationOrder: CUSTOM_ORDER,
+  heldTurnTimes: null,
   reminderUndo: null,
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
   scriptProgram: "",
@@ -259,6 +266,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         keepAwake: message.keepAwake ?? "never",
         keepDeletedCanvas: message.keepDeletedCanvas ?? "30-days",
         reminderMorning: message.reminderMorning ?? DEFAULT_MORNING_MINUTES,
+        conversationOrder: message.conversationOrder ?? CUSTOM_ORDER,
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
         editor: message.editor ?? UNKNOWN_EDITOR,
@@ -356,6 +364,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, keepAwake: message.keepAwake };
     case "settings.reminder-morning":
       return { ...state, reminderMorning: message.minutes };
+    case "settings.conversation-order":
+      return { ...state, conversationOrder: message.order };
     case "settings.keep-deleted-canvas":
       return { ...state, keepDeletedCanvas: message.keep };
     case "settings.claude-program":
@@ -465,6 +475,8 @@ export function reducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case "server":
       return applyServerMessage(state, action.message);
+    case "hold-turn-times":
+      return { ...state, heldTurnTimes: action.held ? turnTimesOf(state.conversations) : null };
     case "select":
       return { ...(action.conversationId === state.selectedConversationId ? state : select(state, action.conversationId)), conversationsPicked: state.conversationsPicked + 1 };
     case "leave-conversation":

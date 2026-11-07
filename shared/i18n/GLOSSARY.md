@@ -15,6 +15,7 @@ These terms stay the same everywhere:
 | host | host | host | host | Host |
 | workspace | munkaterület | espacio de trabajo | 工作区 | Arbeitsbereich |
 | conversation | beszélgetés | conversación | 对话 | Unterhaltung |
+| favourite (conversation) | kedvenc | favorita | 收藏 | Favorit |
 | session | munkamenet | sesión | 会话 | Sitzung |
 | profile | profil | perfil | 配置 | Profil |
 | turn | kör | turno | 轮次 | Runde |

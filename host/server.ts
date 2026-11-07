@@ -1,3 +1,4 @@
+import { isConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
 import { isMorningMinutes } from "../shared/reminders.ts";
 import { editorState } from "./editor.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
@@ -957,6 +958,12 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.reminder-morning", minutes });
   }
 
+  function setConversationOrder(order: ConversationOrder) {
+    if (!isConversationOrder(order)) throw new HostProblemError({ code: "unknown-conversation-order", value: JSON.stringify(order) });
+    store.setChosenConversationOrder(order);
+    hub.broadcast({ type: "settings.conversation-order", order });
+  }
+
   function setKeepAwake(setting: KeepAwake) {
     if (!isKeepAwake(setting)) throw new HostProblemError({ code: "unknown-keep-awake", value: String(setting) });
     store.setKeepAwake(setting);
@@ -1032,6 +1039,8 @@ export function startServer(services: HostServices) {
         return setKeepAwake(message.keepAwake);
       case "settings.set-reminder-morning":
         return setReminderMorning(message.minutes);
+      case "settings.set-conversation-order":
+        return setConversationOrder(message.order);
       case "settings.set-keep-deleted-canvas":
         return setKeepDeletedCanvas(message.keep);
       case "settings.set-claude-program":
@@ -1087,6 +1096,8 @@ export function startServer(services: HostServices) {
         });
       case "conversation.rename":
         return conversations.rename(message.conversationId, message.title);
+      case "conversation.set-favourite":
+        return conversations.setFavourite(message.conversationId, message.favourite);
       case "conversation.set-reminder":
         return conversations.setReminder(message.conversationId, message.reminder);
       case "conversation.set-unread":
@@ -1567,6 +1578,7 @@ export function startServer(services: HostServices) {
       keepAwake: store.keepAwake(),
       keepDeletedCanvas: store.keepDeletedCanvas(),
       reminderMorning: store.reminderMorning(),
+      conversationOrder: store.chosenConversationOrder(),
       pushKinds: [...NOTIFICATION_KINDS],
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),

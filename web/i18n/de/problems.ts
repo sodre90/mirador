@@ -156,6 +156,7 @@ export const problems: Messages["problems"] = {
   notADirectory: (path) => `Kein Ordner: ${path}`,
   unknownCanvasUse: (value) => `Unbekannte Canvas-Nutzung: ${value}`,
   unknownKeepAwake: (value) => `Unbekannte Wachhalte-Einstellung: ${value}`,
+  unknownConversationOrder: (value) => `Unbekannte Reihenfolge der Unterhaltungen: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Unbekannte Einstellung zum Aufbewahren gelöschter Canvas: ${value}`,
   unknownWorkspaceColour: (value) => `Unbekannte Arbeitsbereichsfarbe: ${value}`,
   notAMachineAddress: (address) => `„${address}“ ist keine Adresse eines Rechners.`,

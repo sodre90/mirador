@@ -201,6 +201,9 @@ export const hints: Messages["hints"] = {
   theme: "Hell, dunkel, oder der Systemeinstellung folgen.",
   waitingStyle:
     "Wie die Seitenleiste eine Unterhaltung markiert, deren Agent auf dich wartet: auf eine Genehmigung oder eine Antwort (Wartet auf dich), oder weil ihre Runde endete, während du woanders hingesehen hast (Fertig, oder Fehlgeschlagen nach einem Fehler).\n\nBadge und Anzahl: ein Badge in der Zeile und eine Zahl an ihrem Arbeitsbereich. Nur Punkt: ein farbiger Punkt und ein fetter Titel. Badges und eine Liste oben: listet zusätzlich jede wartende Unterhaltung über den Arbeitsbereichen auf.",
+  conversationOrder: "Wähle, wie die Unterhaltungen jedes Arbeitsbereichs geordnet sind und in welche Richtung. Favoriten bleiben oben.",
+  addFavourite: "Zu Favoriten hinzufügen: Sie bleibt oben in ihrem Arbeitsbereich, egal in welcher Reihenfolge.",
+  removeFavourite: "Aus Favoriten entfernen: Sie kehrt an ihren Platz in der Reihenfolge zurück.",
   waitingCount: "Unterhaltungen in diesem Arbeitsbereich, die auf dich warten.",
   workspaceColor: "Gib diesem Arbeitsbereich eine Farbe, um ihn in der Seitenleiste zu unterscheiden. Jedes Fenster zeigt sie.",
   workspaceColorStyle:

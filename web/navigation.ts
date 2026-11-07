@@ -1,21 +1,35 @@
 import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
-import { inSidebarOrder } from "../shared/sidebar-order.ts";
+import { CUSTOM_ORDER, inConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
 
 export interface NavigationState {
   workspaces: Workspace[];
   conversations: Conversation[];
   selectedConversationId: string | null;
+  conversationOrder?: ConversationOrder;
+  /** While the pointer is over the list: the times it sorts by, as they were when the pointer got there, so no row moves just as it is clicked. */
+  heldTurnTimes?: HeldTurnTimes | null;
 }
 
+export type HeldTurnTimes = Map<string, Pick<Conversation, "lastMessageAt" | "lastReplyAt">>;
+
+export const turnTimesOf = (conversations: Conversation[]): HeldTurnTimes =>
+  new Map(conversations.map(({ id, lastMessageAt, lastReplyAt }) => [id, { lastMessageAt, lastReplyAt }]));
+
 /**
- * A workspace's conversations in the order the sidebar lists them: where the user put them, a new one first, and one a
- * plugin's tool started right under the conversation that started it, until the user dismisses its task.
+ * A workspace's conversations in the order the sidebar lists them: favourites first, then the order the user chose (by
+ * default where they put them, a new one first), with one a plugin's tool started right under the conversation that
+ * started it, until the user dismisses its task.
  */
-export function conversationsIn(state: Pick<NavigationState, "conversations">, workspaceId: string): Conversation[] {
+export function conversationsIn(state: Pick<NavigationState, "conversations" | "conversationOrder" | "heldTurnTimes">, workspaceId: string): Conversation[] {
+  const order = inConversationOrder(state.conversationOrder ?? CUSTOM_ORDER);
+  const asHeld = (conversation: Conversation) => {
+    const held = state.heldTurnTimes?.get(conversation.id);
+    return held ? { ...conversation, ...held } : conversation;
+  };
   const inOrder = state.conversations
     .filter((conversation) => conversation.workspaceId === workspaceId && !conversation.startedBy?.dismissed && !isPutAway(conversation.reminder))
-    .sort(inSidebarOrder);
+    .sort((a, b) => order(asHeld(a), asHeld(b)));
   const callerOf = (conversation: Conversation) => (isUnderCaller(conversation, inOrder) ? conversation.startedBy!.conversationId : null);
   return inOrder.filter((conversation) => !callerOf(conversation)).flatMap((caller) => [caller, ...inOrder.filter((conversation) => callerOf(conversation) === caller.id)]);
 }

@@ -192,6 +192,9 @@ export const hints: Messages["hints"] = {
   theme: "Világos, sötét, vagy a rendszerbeállítást követi.",
   waitingStyle:
     "Hogyan jelöli az oldalsáv azt a beszélgetést, amelynek az ágense rád vár: jóváhagyásra vagy válaszra (Rád vár), vagy mert a köre véget ért, amíg máshol jártál (Kész, illetve hiba után Sikertelen).\n\nCímke és szám: egy címke a soron és egy szám a munkaterületén. Csak pötty: egy színes pötty és félkövér cím. Címkék és lista felül: emellett minden várakozó beszélgetést felsorol a munkaterületek fölött.",
+  conversationOrder: "Válaszd ki, milyen sorrendben és melyik irányban álljanak a munkaterületek beszélgetései. A kedvencek felül maradnak.",
+  addFavourite: "Hozzáadás a kedvencekhez: a munkaterülete tetején marad, bármilyen a sorrend.",
+  removeFavourite: "Eltávolítás a kedvencek közül: visszakerül a helyére a sorrendben.",
   waitingCount: "A munkaterület rád váró beszélgetései.",
   workspaceColor: "Adj színt ennek a munkaterületnek, hogy megkülönböztesd az oldalsávban. Minden ablak mutatja.",
   workspaceColorStyle:
