@@ -37,6 +37,7 @@ import type {
   Pastel,
 } from "./model.ts";
 import type { ChangeList, ChangeScope, FileChanges, ProjectFiles } from "./changes.ts";
+import type { ConversationOrder } from "./conversation-order.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
@@ -109,6 +110,7 @@ export type ClientMessage =
   | { type: "settings.set-canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.set-keep-awake"; keepAwake: KeepAwake }
   | { type: "settings.set-reminder-morning"; minutes: number }
+  | { type: "settings.set-conversation-order"; order: ConversationOrder }
   | { type: "settings.set-keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
@@ -159,6 +161,7 @@ export type ClientMessage =
   | { type: "conversation.check-fork"; requestId: string; conversationId: string }
   | { type: "conversation.delete"; conversationId: string }
   | { type: "conversation.rename"; conversationId: string; title: string }
+  | { type: "conversation.set-favourite"; conversationId: string; favourite: boolean }
   | { type: "conversation.set-unread"; conversationId: string; unread: boolean }
   /** Null takes the reminder away, or dismisses one whose time came. */
   | { type: "conversation.set-reminder"; conversationId: string; reminder: Reminder | null }
@@ -389,6 +392,8 @@ export type ServerMessage =
       keepDeletedCanvas?: KeepDeletedCanvas;
       /** Missing from a host older than reminders. */
       reminderMorning?: number;
+      /** Missing from a host older than ordering conversations. */
+      conversationOrder?: ConversationOrder;
       /** The kinds of notification a phone may register for pushes of. Missing from a host older than reminders, which refuses a registration with a kind it doesn't know. */
       pushKinds?: NotificationKind[];
     }
@@ -406,6 +411,7 @@ export type ServerMessage =
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }
   | { type: "settings.keep-awake"; keepAwake: KeepAwake }
   | { type: "settings.reminder-morning"; minutes: number }
+  | { type: "settings.conversation-order"; order: ConversationOrder }
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }

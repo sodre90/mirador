@@ -183,6 +183,9 @@ export const hints: Messages["hints"] = {
   theme: "浅色、深色，或跟随系统设置。",
   waitingStyle:
     "侧边栏如何标记 Agent 在等你的对话：等待批准或回答（需要你），或者因为你在看别处而轮次已结束（完成，出错后为失败）。\n\n标签和计数：行上显示标签，其工作区上显示计数。仅圆点：彩色圆点和粗体标题。标签，顶部再加列表：还会在工作区上方列出每个等待中的对话。",
+  conversationOrder: "选择每个工作区中对话的排序方式和方向。收藏的对话始终在最上面。",
+  addFavourite: "加入收藏：无论什么顺序，它都留在工作区的最上面。",
+  removeFavourite: "取消收藏：它回到顺序中原来的位置。",
   waitingCount: "这个工作区中等你处理的对话。",
   workspaceColor: "给这个工作区设置一个颜色，以便在侧边栏中区分。每个窗口都会显示它。",
   workspaceColorStyle:

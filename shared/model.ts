@@ -502,6 +502,12 @@ export interface Conversation {
   configOptions: SessionConfigOption[];
   /** Its place among its workspace's conversations in the sidebar. */
   position: number;
+  /** Listed above the rest of its workspace, whatever the order. */
+  favourite?: boolean;
+  /** When the user last wrote in it; messages from scripts, plugins and Mirador itself don't count. */
+  lastMessageAt?: number;
+  /** When the agent last finished a turn in it. */
+  lastReplyAt?: number;
   /** Only on a conversation a plugin's tool started, such as a delegated task. */
   startedBy?: StartedBy;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */

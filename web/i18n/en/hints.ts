@@ -182,6 +182,9 @@ export const hints = {
   theme: "Light, dark, or follow the system setting.",
   waitingStyle:
     "How the sidebar marks a conversation whose agent waits for you: for an approval or an answer (Needs you), or because its turn ended while you looked elsewhere (Done, or Failed after an error).\n\nPill and count: a pill on the row and a count on its workspace. Dot only: a coloured dot and a bold title. Pills and a list on top: also lists every waiting conversation above the workspaces.",
+  conversationOrder: "Choose how each workspace's conversations are ordered, and which way. Favourites stay on top.",
+  addFavourite: "Add to favourites: it stays at the top of its workspace, whatever the order.",
+  removeFavourite: "Remove from favourites: it goes back to its place in the order.",
   waitingCount: "Conversations in this workspace waiting for you.",
   workspaceColor: "Give this workspace a colour, to tell it apart in the sidebar. Every window shows it.",
   workspaceColorStyle:

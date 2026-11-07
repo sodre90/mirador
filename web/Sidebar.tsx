@@ -7,6 +7,7 @@ import {
   type Workspace,
   type Pastel,
 } from "../shared/model.ts";
+import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu } from "./ContextMenu.tsx";
@@ -14,6 +15,7 @@ import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected
 import { connection } from "./connection.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
 import { DesktopMenu } from "./DesktopMenu.tsx";
+import { FavouriteStar, favouriteLabel, setFavourite } from "./FavouriteStar.tsx";
 import { useDragToReorder, usePointerDrag } from "./drag-to-reorder.ts";
 import { forkConversation, startConversationIn } from "./actions.ts";
 import { hints, statusHints, waitingHints } from "./hints.ts";
@@ -37,6 +39,7 @@ import { canMarkUnread, markRead, markUnread } from "./unread.ts";
 import { lastsUntilOpened, waitingByUrgency, waitingLabels, waitingShowsOnDot, waitingTones } from "./waiting.ts";
 import { scrollToNearestWaiting, useWaitingOutOfView, waitingInFoldedGroup, type HiddenWaiting } from "./waiting-edges.ts";
 import { parentFolder } from "./workspace-folder.ts";
+import { CONVERSATION_ORDERS, landingBeforeInCustomOrder, usualDirection, type ConversationOrder, type OrderDirection } from "../shared/conversation-order.ts";
 import { markInitials, workspaceMarkColor } from "../shared/marks.ts";
 import { sidebarItems, type SidebarItem } from "../shared/sidebar-order.ts";
 import { forgetFoldsOfDeleted, landingBefore, movesWorkspace, setDelegationsOpen, setGroupFolded, setWorkspaceFolded, useFoldedGroups, useFoldedWorkspaces, useOpenedDelegations, workspaceDropAt, type SidebarRow, type WorkspaceDrop } from "./workspace-groups.ts";
@@ -255,7 +258,8 @@ function ConversationMenu({ conversation, at, dispatch, onClose }: { conversatio
     { label: pending ? t.reminders.changeReminder : t.reminders.remindMe, onChoose: () => openReminderPicker(conversation.id, dispatch) },
     ...(conversation.reminder ? [{ label: conversation.reminder.due ? t.reminders.dismiss : t.reminders.remove, onChoose: () => removeReminder(conversation.id) }] : []),
   ];
-  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, ...reminderEntries, forkEntry]} onClose={onClose} />;
+  const favouriteEntry = { label: favouriteLabel(conversation), onChoose: () => setFavourite(conversation.id, !conversation.favourite) };
+  return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, favouriteEntry, ...reminderEntries, forkEntry]} onClose={onClose} />;
 }
 
 /** A sidebar row may not have its history in the page, so the host, which has it, says whether it can be forked yet. */
@@ -358,9 +362,27 @@ function WorkspaceColorPicker({ workspace, mark, onClose }: { workspace: Workspa
   );
 }
 
+/** The ↕ at the top of the sidebar: what each workspace's conversations are ordered by, and which way. */
+function ConversationOrderMenu({ order }: { order: ConversationOrder }) {
+  const choose = (next: ConversationOrder) => connection.send({ type: "settings.set-conversation-order", order: next });
+  const directionEntry = (direction: OrderDirection, label: string, separatorBefore = false): BarMenuEntry => ({
+    label,
+    checked: order.direction === direction,
+    separatorBefore,
+    onChoose: () => choose({ ...order, direction }),
+  });
+  const [ascending, descending] = order.by === "title" ? [words.aToZ, words.zToA] : [words.oldestFirst, words.newestFirst];
+  const entries: BarMenuEntry[] = [
+    ...CONVERSATION_ORDERS.map((by) => ({ label: words.orderBy[by], checked: order.by === by, onChoose: () => choose({ by, direction: usualDirection(by) }) })),
+    ...(order.by === "custom" ? [] : [directionEntry("ascending", ascending, true), directionEntry("descending", descending)]),
+  ];
+  return <BarMenu className="conversation-order" label="↕" buttonName={words.conversationOrder} menuName={words.conversationOrder} hint={hints.conversationOrder} entries={entries} />;
+}
+
 function WorkspaceSection({
   workspace,
   conversations,
+  draggable,
   putAway,
   profiles,
   homeDir,
@@ -374,6 +396,8 @@ function WorkspaceSection({
 }: {
   workspace: Workspace;
   conversations: Conversation[];
+  /** Only the custom order has places to drag a conversation to. */
+  draggable: boolean;
   putAway: Conversation[];
   profiles: Profile[];
   homeDir: string;
@@ -397,8 +421,9 @@ function WorkspaceSection({
   const delegatedTo = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && conversation.startedBy!.conversationId === caller.id);
   const shown = conversations.filter((conversation) => !isUnderCaller(conversation, conversations) || openedDelegations.has(conversation.startedBy!.conversationId));
   const conversationList = useRef<HTMLUListElement>(null);
-  const conversationDrag = useDragToReorder((conversationId, beforeConversationId) =>
-    connection.send({ type: "conversation.move", conversationId, beforeConversationId }),
+  const conversationDrag = useDragToReorder(
+    (conversationId, beforeConversationId) => connection.send({ type: "conversation.move", conversationId, beforeConversationId }),
+    (conversationId, beforeConversationId) => landingBeforeInCustomOrder(shown, conversationId, beforeConversationId),
   );
 
   return (
@@ -459,7 +484,7 @@ function WorkspaceSection({
               data-reorder-id={conversation.id}
               data-waiting-tone={conversation.waitingFor ? waitingTones[conversation.waitingFor] : undefined}
               className={[...rowClasses(conversation, conversations, selectedConversationId), ...conversationDrag.classesOf(conversation.id, index === shown.length - 1)].join(" ")}
-              onPointerDown={(event) => conversationDrag.startDrag(conversation.id, conversationList.current, event)}
+              onPointerDown={draggable ? (event) => conversationDrag.startDrag(conversation.id, conversationList.current, event) : undefined}
               onClick={() => dispatch({ type: "select", conversationId: conversation.id })}
               onContextMenu={(event) => onConversationMenu(conversation, event)}
             >
@@ -469,6 +494,7 @@ function WorkspaceSection({
               <DelegatedToggle callerId={conversation.id} delegated={delegatedTo(conversation)} open={openedDelegations.has(conversation.id)} />
               {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
               <ReminderChip conversation={conversation} dispatch={dispatch} />
+              <FavouriteStar conversation={conversation} />
               <ConfirmButton
                 className="icon"
                 label={words.deleteConversation}
@@ -707,6 +733,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
   const workspaceDrag = usePointerDrag<WorkspaceDrop>((workspaceId, { groupId, beforeId }) =>
     connection.send({ type: "workspace.move", workspaceId, groupId, ...landingBefore(state.workspaceGroups, beforeId) }),
   );
+  useEffect(() => () => dispatch({ type: "hold-turn-times", held: false }), [dispatch]);
   const landing = workspaceDrag.drag?.changes ? workspaceDrag.drag.target : null;
   const landsLastIn = (groupId: string | null) => landing !== null && landing.beforeId === null && landing.groupId === groupId;
   const startWorkspaceDrag = (workspace: Workspace, event: PointerEvent<HTMLElement>) =>
@@ -726,6 +753,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
       onStartDrag={(event) => startWorkspaceDrag(workspace, event)}
       workspace={workspace}
       conversations={conversationsIn(state, workspace.id)}
+      draggable={state.conversationOrder.by === "custom"}
       putAway={putAwayIn(state, workspace.id)}
       profiles={state.profiles}
       homeDir={state.homeDir}
@@ -767,6 +795,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">
+          <ConversationOrderMenu order={state.conversationOrder} />
           <button className="icon" aria-label={words.newGroup} data-hint={hints.addWorkspaceGroup} onClick={() => openOverlay({ kind: "add-workspace-group" })}>
             ⊞
           </button>
@@ -775,7 +804,12 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
           </button>
         </span>
       </header>
-      <div className="sidebar-scroll" ref={sidebar}>
+      <div
+        className="sidebar-scroll"
+        ref={sidebar}
+        onPointerEnter={() => dispatch({ type: "hold-turn-times", held: true })}
+        onPointerLeave={() => dispatch({ type: "hold-turn-times", held: false })}
+      >
         <WaitingEdge side="above" hidden={outOfView.above} onClick={() => scrollToWaiting("above")} />
         <WaitingList state={state} dispatch={dispatch} />
         {adding && <AddWorkspace profiles={state.profiles} onDone={() => setAdding(false)} />}

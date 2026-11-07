@@ -155,6 +155,7 @@ export const problems: Messages["problems"] = {
   notADirectory: (path) => `Ez nem mappa: ${path}`,
   unknownCanvasUse: (value) => `Ismeretlen vászonhasználat: ${value}`,
   unknownKeepAwake: (value) => `Ismeretlen ébren tartási beállítás: ${value}`,
+  unknownConversationOrder: (value) => `Ismeretlen beszélgetéssorrend: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Ismeretlen beállítás a törölt vásznak megőrzéséhez: ${value}`,
   unknownWorkspaceColour: (value) => `Ismeretlen munkaterület-szín: ${value}`,
   notAMachineAddress: (address) => `Ez nem egy gép címe: „${address}”.`,

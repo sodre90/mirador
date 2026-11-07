@@ -35,6 +35,7 @@ import { useDroppedFiles } from "./dropped-files.ts";
 import { DictateButton, DictationLines, useDictation } from "./Dictation.tsx";
 import { setComposerHeight, useComposerHeight } from "./composer-height.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
+import { FavouriteStar } from "./FavouriteStar.tsx";
 import { lineDiff } from "./diff.ts";
 import { CodeText } from "./CodeText.tsx";
 import { rowWordChanges } from "./word-diff.ts";
@@ -173,6 +174,7 @@ function ChatHeader({
           <h2>
             <ConversationTitle conversation={conversation} startEditingOn="click" className="conversation-name" />
           </h2>
+          <FavouriteStar conversation={conversation} />
           <span className={`badge status-${conversation.status}`} data-hint={statusHints[conversation.status]}>
             {words.status[conversation.status]}
           </span>

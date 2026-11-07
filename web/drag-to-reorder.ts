@@ -89,13 +89,14 @@ export function usePointerDrag<Target>(onDrop: (id: string, target: Target) => v
 }
 
 /** Reorders a list's items, the children marked data-reorder-id, by dragging one to another place: the gap nearest the pointer's height is where it lands. */
-export function useDragToReorder(onMove: (id: string, beforeId: string | null) => void) {
+export function useDragToReorder(onMove: (id: string, beforeId: string | null) => void, landingBefore?: (id: string, beforeId: string | null) => string | null) {
   const { drag, startDrag } = usePointerDrag<string | null>(onMove);
 
   const startReorder = (id: string, list: HTMLElement | null, event: ReactPointerEvent<HTMLElement>) => {
     if (!list) return;
     startDrag(id, event, (y) => {
-      const beforeId = idBelow(list, y);
+      const below = idBelow(list, y);
+      const beforeId = landingBefore ? landingBefore(id, below) : below;
       return { target: beforeId, changes: changesOrder(list, id, beforeId) };
     });
   };

@@ -75,6 +75,66 @@ describe("Store", () => {
     expect(store.findConversation("c2")?.position).toBe(1);
   });
 
+  test("keeps when the user last wrote and when the agent last finished, not counting messages from anything else", () => {
+    const { store } = seededStore();
+    const times = () => {
+      const { lastMessageAt, lastReplyAt } = store.findConversation("c1")!;
+      return { lastMessageAt, lastReplyAt };
+    };
+    expect(times()).toEqual({ lastMessageAt: undefined, lastReplyAt: undefined });
+    for (const from of [{ fromScript: true }, { fromMirador: true }, { fromPlugin: true }] as object[]) {
+      store.appendEvent("c1", { type: "user-message", text: "not the user", ...from } as ConversationEvent);
+    }
+    expect(times()).toEqual({ lastMessageAt: undefined, lastReplyAt: undefined });
+    const written = store.appendEvent("c1", { type: "user-message", text: "hi" });
+    expect(times()).toEqual({ lastMessageAt: written.at, lastReplyAt: undefined });
+    const ended = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    expect(times()).toEqual({ lastMessageAt: written.at, lastReplyAt: ended.at });
+  });
+
+  test("a turn the host was killed in ends without counting as a reply", () => {
+    const { store } = seededStore();
+    const replied = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    store.appendEvent("c1", { type: "user-message", text: "go on" });
+    const ended = store.endTurnCutShortByRestart("c1");
+    expect(store.listEvents("c1").at(-1)).toMatchObject({ seq: ended.seq, event: { type: "turn-end", stopReason: "cancelled" } });
+    expect(store.findConversation("c1")!.lastReplyAt).toBe(replied.at);
+  });
+
+  test("a database from before these times gets them from its events", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-order-")), "state.sqlite");
+    const { conversation } = seededStore();
+    const store = new Store(path);
+    store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    store.insertConversation(conversation);
+    const written = store.appendEvent("c1", { type: "user-message", text: "hi" });
+    store.appendEvent("c1", { type: "user-message", text: "from a script", fromScript: true } as ConversationEvent);
+    const ended = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    const older = new Database(path);
+    older.run("ALTER TABLE conversations DROP COLUMN last_message_at");
+    older.run("ALTER TABLE conversations DROP COLUMN last_reply_at");
+    older.close();
+
+    expect(new Store(path).findConversation("c1")).toMatchObject({ lastMessageAt: written.at, lastReplyAt: ended.at });
+  });
+
+  test("a favourite survives saving a conversation read before it became one, and goes when removed", () => {
+    const { store } = seededStore();
+    const readBefore = store.findConversation("c1")!;
+    store.setFavourite("c1", true);
+    store.updateConversation(readBefore);
+    expect(store.findConversation("c1")!.favourite).toBe(true);
+    store.setFavourite("c1", false);
+    expect(store.findConversation("c1")!.favourite).toBeUndefined();
+  });
+
+  test("remembers the chosen conversation order, and starts from the custom one", () => {
+    const { store } = seededStore();
+    expect(store.chosenConversationOrder()).toEqual({ by: "custom", direction: "ascending" });
+    store.setChosenConversationOrder({ by: "reply", direction: "ascending" });
+    expect(store.chosenConversationOrder()).toEqual({ by: "reply", direction: "ascending" });
+  });
+
   test("numbers events per conversation from 1 in append order", () => {
     const { store } = seededStore();
     store.appendEvent("c1", { type: "user-message", text: "a" });

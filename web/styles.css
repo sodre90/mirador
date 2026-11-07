@@ -973,6 +973,23 @@ body.resizing iframe {
   display: none;
 }
 
+/* Takes no room in a row until it can be used, so titles keep their width; a favourite always shows its. */
+.workspace li:not(:hover, .selected) .favourite-star {
+  display: none;
+}
+
+button.icon.favourite-star {
+  flex: none;
+}
+
+button.icon.favourite-star.on,
+.workspace li:not(:hover, .selected) .favourite-star.on,
+.workspace li.waiting:not(:hover, .selected) .favourite-star.on {
+  display: inline-block;
+  visibility: visible;
+  color: var(--accent);
+}
+
 .workspace-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1078,6 +1095,17 @@ body.resizing iframe {
   display: flex;
   flex: none;
   align-items: center;
+}
+
+.sidebar-header .conversation-order .bar-menu-toggle:not(.on) {
+  border-color: transparent;
+  background: none;
+}
+
+.sidebar-header .conversation-order .bar-menu-toggle {
+  height: 24px;
+  padding: 0 6px;
+  font-size: calc(16px * var(--font-scale));
 }
 
 /* Groups of workspaces: a folding heading each, among the workspaces in none, with their own a little indented */

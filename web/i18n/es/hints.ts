@@ -201,6 +201,9 @@ export const hints: Messages["hints"] = {
   theme: "Claro, oscuro, o igual que el ajuste del sistema.",
   waitingStyle:
     "Cómo marca la barra lateral una conversación cuyo agente te espera: por una aprobación o una respuesta (Esperándote), o porque su turno terminó mientras mirabas otra cosa (Listo, o Falló tras un error).\n\nEtiqueta y número: una etiqueta en la fila y un número en su espacio de trabajo. Solo punto: un punto de color y un título en negrita. Etiquetas y lista arriba: además enumera todas las conversaciones en espera sobre los espacios de trabajo.",
+  conversationOrder: "Elige cómo se ordenan las conversaciones de cada espacio de trabajo y en qué sentido. Las favoritas se quedan arriba.",
+  addFavourite: "Añadir a favoritas: se queda arriba en su espacio de trabajo, sea cual sea el orden.",
+  removeFavourite: "Quitar de favoritas: vuelve a su lugar en el orden.",
   waitingCount: "Conversaciones de este espacio de trabajo que te esperan.",
   workspaceColor: "Dale un color a este espacio de trabajo para distinguirlo en la barra lateral. Todas las ventanas lo muestran.",
   workspaceColorStyle:

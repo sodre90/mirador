@@ -42,6 +42,7 @@ import { causeOf, englishProblem, HostProblemError, problemOf, type AgentGone, t
 import { messageAtEnd, type JobWaitRequest } from "../shared/job-waits.ts";
 import { panelCommandRun } from "../shared/panel-commands.ts";
 import { historyEntry } from "../shared/prompt-history.ts";
+import { customOrderAfterDrag } from "../shared/conversation-order.ts";
 import { inSidebarOrder, movedBefore } from "../shared/sidebar-order.ts";
 import { isClearCommand, toSlashCommand } from "../shared/slash-commands.ts";
 import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromCommand, type Reminder } from "../shared/reminders.ts";
@@ -579,7 +580,7 @@ export class ConversationService {
       .listConversations()
       .filter((conversation) => conversation.workspaceId === workspaceId)
       .sort(inSidebarOrder);
-    this.store.setConversationOrder(movedBefore(siblings.map(({ id }) => id), conversationId, beforeConversationId));
+    this.store.setConversationOrder(customOrderAfterDrag(siblings, conversationId, beforeConversationId));
     const positionBefore = new Map(siblings.map(({ id, position }) => [id, position]));
     this.store
       .listConversations()
@@ -1129,6 +1130,12 @@ export class ConversationService {
     const message = messageAtEnd(wait, end);
     if (wait.resume) this.send(conversationId, message, [], { fromScript: true }).catch(() => {});
     else this.notifications.notify(conversationId, { kind: "job-ended", message });
+  }
+
+  setFavourite(conversationId: string, favourite: boolean) {
+    this.get(conversationId);
+    this.store.setFavourite(conversationId, favourite);
+    this.republish(conversationId);
   }
 
   /** Put away, an idle conversation's agent session is freed at once, a busy one's once it settles; it resumes when the user next writes. */
@@ -2218,7 +2225,7 @@ export class ConversationService {
   private endTurnsOrphanedByRestart() {
     const turnsInFlight = this.store.takeTurnsInFlight();
     turnsInFlight.forEach((id) => {
-      if (openTurnTheAgentWorkedOn(this.store.listEvents(id))) this.store.appendEvent(id, { type: "turn-end", stopReason: "cancelled" });
+      if (openTurnTheAgentWorkedOn(this.store.listEvents(id))) this.store.endTurnCutShortByRestart(id);
     });
     return turnsInFlight;
   }
@@ -2376,6 +2383,7 @@ export class ConversationService {
     if (!this.store.hasConversation(conversationId)) return;
     const stored = this.store.appendEvent(conversationId, event);
     this.hub.publishEvent(conversationId, stored);
+    if (event.type === "user-message" || event.type === "turn-end") this.republish(conversationId);
     const activity = activityOf(event);
     if (activity) this.hearActivity(conversationId, activity);
     return stored.seq;

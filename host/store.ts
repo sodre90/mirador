@@ -1,4 +1,5 @@
 import { DEFAULT_MORNING_MINUTES, isMorningMinutes, type Reminder } from "../shared/reminders.ts";
+import { CUSTOM_ORDER, isConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { Database } from "bun:sqlite";
 import type { AppStorageItems } from "../shared/apps.ts";
@@ -165,6 +166,9 @@ const addedColumns = [
   { table: "devices", column: "tunnel_key", definition: "TEXT" },
   { table: "devices", column: "tunnel_address", definition: "TEXT" },
   { table: "conversations", column: "reminder", definition: "TEXT" },
+  { table: "conversations", column: "favourite", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "conversations", column: "last_message_at", definition: "INTEGER" },
+  { table: "conversations", column: "last_reply_at", definition: "INTEGER" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -226,6 +230,9 @@ type ConversationRow = {
   delegation_dismissed: number;
   plugin_settings: string | null;
   reminder: string | null;
+  favourite: number;
+  last_message_at: number | null;
+  last_reply_at: number | null;
   created_at: number;
   updated_at: number;
 };
@@ -311,6 +318,9 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...startedByOf(row),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
+  ...(row.favourite === 1 && { favourite: true }),
+  ...(row.last_message_at !== null && { lastMessageAt: row.last_message_at }),
+  ...(row.last_reply_at !== null && { lastReplyAt: row.last_reply_at }),
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -334,7 +344,9 @@ export class Store {
     const keptTrackOfOfferedTemplates = this.hasTable("offered_prompt_templates");
     const keptTrackOfAppConversations = this.hasTable("app_conversations");
     this.db.run(schema);
+    const hasTurnTimes = this.hasColumn("conversations", "last_message_at");
     this.addMissingColumns();
+    if (!hasTurnTimes) this.fillTurnTimesFromEvents();
     this.shareSidebarOrder();
     this.handSavedChecklistsToThePlugin();
     this.handSavedWalkthroughsToThePlugin();
@@ -633,6 +645,11 @@ export class Store {
     this.db.query("UPDATE conversations SET reminder = ? WHERE id = ?").run(reminder ? JSON.stringify(reminder) : null, conversationId);
   }
 
+  /** Its own column, for the same reason as the reminder's. */
+  setFavourite(conversationId: string, favourite: boolean) {
+    this.db.query("UPDATE conversations SET favourite = ? WHERE id = ?").run(favourite ? 1 : 0, conversationId);
+  }
+
   saveQueuedMessages(conversationId: string, messages: QueuedMessage[]) {
     this.db.query("UPDATE conversations SET queued_messages = ? WHERE id = ?").run(JSON.stringify(messages), conversationId);
   }
@@ -767,6 +784,15 @@ export class Store {
 
   setReminderMorning(minutes: number) {
     this.setSetting("reminder_morning", String(minutes));
+  }
+
+  chosenConversationOrder(): ConversationOrder {
+    const saved = JSON.parse(this.setting("conversation_order") ?? "null");
+    return isConversationOrder(saved) ? saved : CUSTOM_ORDER;
+  }
+
+  setChosenConversationOrder(order: ConversationOrder) {
+    this.setSetting("conversation_order", JSON.stringify(order));
   }
 
   setKeepAwake(keepAwake: KeepAwake) {
@@ -1131,12 +1157,27 @@ export class Store {
     return (this.db.query("SELECT tunnel_key AS key, tunnel_address AS address FROM devices WHERE id = ?").get(id) as { key: string | null; address: string | null } | null) ?? undefined;
   }
 
-  appendEvent(conversationId: string, event: ConversationEvent): StoredEvent {
+  private insertEvent(conversationId: string, event: ConversationEvent): StoredEvent {
     const seq = this.allocateSeq(conversationId);
     const stored = { seq, at: Date.now(), event };
     this.db
       .query("INSERT INTO events (conversation_id, seq, at, event) VALUES (?, ?, ?, ?)")
       .run(conversationId, seq, stored.at, JSON.stringify(event));
+    return stored;
+  }
+
+  /** Nobody answered when the host came back up, so the time of the last reply stays: a restart doesn't lift the conversation in the sidebar's orders. */
+  endTurnCutShortByRestart(conversationId: string): StoredEvent {
+    return this.insertEvent(conversationId, { type: "turn-end", stopReason: "cancelled" });
+  }
+
+  appendEvent(conversationId: string, event: ConversationEvent): StoredEvent {
+    const stored = this.insertEvent(conversationId, event);
+    if (event.type === "user-message" && !event.fromScript && !event.fromMirador && !event.fromPlugin) {
+      this.db.query("UPDATE conversations SET last_message_at = ? WHERE id = ?").run(stored.at, conversationId);
+    } else if (event.type === "turn-end") {
+      this.db.query("UPDATE conversations SET last_reply_at = ? WHERE id = ?").run(stored.at, conversationId);
+    }
     return stored;
   }
 
@@ -1507,11 +1548,31 @@ export class Store {
     });
   }
 
+  private hasColumn(table: string, column: string) {
+    const columns = this.db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    return columns.some(({ name }) => name === column);
+  }
+
   private addMissingColumns() {
     addedColumns.forEach(({ table, column, definition }) => {
-      const columns = this.db.query(`PRAGMA table_info(${table})`).all() as { name: string }[];
-      if (!columns.some(({ name }) => name === column)) this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+      if (!this.hasColumn(table, column)) this.db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
     });
+  }
+
+  /** Conversations from before these times were kept: what appendEvent would have written. Goes through events_by_type, so only the messages and turn ends are read. */
+  private fillTurnTimesFromEvents() {
+    const fill = (column: string, events: string) =>
+      this.db.run(
+        `UPDATE conversations SET ${column} = latest.at
+         FROM (SELECT conversation_id, MAX(at) AS at FROM events WHERE ${events} GROUP BY conversation_id) AS latest
+         WHERE conversations.id = latest.conversation_id`,
+      );
+    fill(
+      "last_message_at",
+      `json_extract(event, '$.type') = 'user-message' AND json_extract(event, '$.fromScript') IS NULL
+       AND json_extract(event, '$.fromMirador') IS NULL AND json_extract(event, '$.fromPlugin') IS NULL`,
+    );
+    fill("last_reply_at", "json_extract(event, '$.type') = 'turn-end'");
   }
 
   private allocateSeq(conversationId: string) {

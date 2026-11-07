@@ -155,6 +155,7 @@ export const problems: Messages["problems"] = {
   notADirectory: (path) => `No es una carpeta: ${path}`,
   unknownCanvasUse: (value) => `Uso del lienzo desconocido: ${value}`,
   unknownKeepAwake: (value) => `Ajuste de mantener activo desconocido: ${value}`,
+  unknownConversationOrder: (value) => `Orden de conversaciones desconocido: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Ajuste desconocido para conservar lienzos eliminados: ${value}`,
   unknownWorkspaceColour: (value) => `Color de espacio de trabajo desconocido: ${value}`,
   notAMachineAddress: (address) => `“${address}” no es la dirección de una máquina.`,
