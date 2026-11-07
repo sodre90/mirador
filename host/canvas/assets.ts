@@ -3,7 +3,15 @@ import { dirname, join, resolve, sep } from "node:path";
 import { HERE_PATH } from "../addresses.ts";
 import { APP_MEDIA_PATH } from "../../shared/apps.ts";
 import { canvasAssetsOriginOnLoopback } from "../../shared/protocol.ts";
+import { canvas as en } from "../../web/i18n/en/canvas.ts";
+import { canvas as hu } from "../../web/i18n/hu/canvas.ts";
+import { canvas as es } from "../../web/i18n/es/canvas.ts";
+import { canvas as zh } from "../../web/i18n/zh/canvas.ts";
+import { canvas as de } from "../../web/i18n/de/canvas.ts";
+import { DIAGRAM_STEPS_PATH, diagramStepsScript } from "../../shared/diagram-steps.ts";
 import { CANVAS_SHELL_PAGE, CANVAS_SHELL_PATH, canvasShellPolicy, CAPTURE_LIBRARY_PATH, shellPolicyAskedFor } from "../../shared/canvas-document.ts";
+
+const diagramStepsWords = { en: en.diagramSteps, hu: hu.diagramSteps, es: es.diagramSteps, zh: zh.diagramSteps, de: de.diagramSteps };
 
 const packageDir = (name: string) => dirname(Bun.resolveSync(`${name}/package.json`, import.meta.dir));
 
@@ -21,6 +29,12 @@ const singleFiles: Record<string, string> = {
   "/mermaid.min.js": join(packageDir("mermaid"), "dist", "mermaid.min.js"),
   [CAPTURE_LIBRARY_PATH]: join(packageDir("modern-screenshot"), "dist", "index.mjs"),
 };
+
+/** Assets Mirador writes itself, rather than serving a file of a package. */
+const generatedScripts: Record<string, string> = { [DIAGRAM_STEPS_PATH]: diagramStepsScript(diagramStepsWords) };
+
+/** A served script's text, for putting it into a saved page. */
+export const assetText = (pathname: string) => generatedScripts[pathname] ?? Bun.file(resolveAsset(pathname)!).text();
 
 /** Canvas pages run in opaque-origin iframes, so module imports from here need CORS. */
 const corsHeaders = { "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=3600" };
@@ -75,6 +89,8 @@ export function serveCanvasAssets(port: number, { certificate = null, knownOrigi
         if (!media || !(await Bun.file(media).exists())) return new Response("not found", { status: 404, headers: corsHeaders });
         return new Response(Bun.file(media), { headers: appMediaHeaders });
       }
+      const script = generatedScripts[pathname];
+      if (script) return new Response(script, { headers: { ...corsHeaders, "Content-Type": "text/javascript; charset=utf-8", "Cache-Control": "no-cache" } });
       const file = resolveAsset(pathname);
       if (!file || !(await Bun.file(file).exists())) return new Response("not found", { status: 404, headers: corsHeaders });
       return new Response(Bun.file(file), { headers: corsHeaders });

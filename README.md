@@ -187,6 +187,7 @@ Windows support is new and experimental: expect rough edges, and please report w
   - In a folder that is not a git repository, *This turn* lists the files written since the turn began, a script's included, along with the agent's edits. Mirador checks up to 50,000 files there, and says when a folder holds more.
   - Changes leaves out the folders beads, Dolt and IntelliJ IDEA keep their own state in.
 - **Export** (*Export ▾* in the canvas bar): copy the page as an image or as HTML, download it or save it to the project, or ask the agent to write it as Markdown, in the chat or as a file in the project.
+- **Walkthroughs:** when something moves through an explanation, the agent draws it in Mermaid and adds steps: Back, Play and Next light up each step's boxes and arrows and run a dot along them. A page's only diagram plays by itself; with more than one, each waits for Play.
 - **As you left it**: coming back to a conversation brings its canvas back as it was, with *Changes* still open or the page still shown.
 - **History**: everything shown or asked is kept per conversation, across reloads and restarts. *Older* and *Newer* step through it, and *History* lists it newest first, with each question's outcome. *Clear* empties the canvas without deleting anything.
 - **Hide, show and full screen**: the canvas keeps receiving pages while hidden.

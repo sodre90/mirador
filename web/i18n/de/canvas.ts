@@ -3,6 +3,7 @@ import type { Messages } from "../en/index.ts";
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
 export const canvas: Messages["canvas"] = {
+  diagramSteps: { back: "Zurück", play: "Abspielen", pause: "Pause", next: "Weiter" },
   ask: {
     recommended: "Empfohlen",
     somethingElseLabel: "Etwas anderes",

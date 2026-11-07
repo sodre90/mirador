@@ -1,6 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
 export const canvas: Messages["canvas"] = {
+  diagramSteps: { back: "Vissza", play: "Lejátszás", pause: "Szünet", next: "Tovább" },
   ask: {
     recommended: "Ajánlott",
     somethingElseLabel: "Valami más",

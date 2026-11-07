@@ -34,6 +34,7 @@ describe("buildCanvasDocument", () => {
 
   test("puts the CSP before any agent markup, even for a full document with its own doctype", () => {
     const document = buildCanvasDocument("<!DOCTYPE html><html><head><script>evil()</script></head></html>", "item", assetsOrigin, "light");
+    expect(document).not.toContain("data-mirador-language");
     expect(document.startsWith("<!doctype html>\n<meta http-equiv=\"Content-Security-Policy\"")).toBe(true);
     expect(document.match(/<!doctype/gi)).toHaveLength(1);
     expect(document.indexOf("connect-src 'none'")).toBeLessThan(document.indexOf("evil()"));
@@ -490,4 +491,11 @@ describe("the messages that answer what an app view asks for", () => {
 test("a plugin's view can open files only where its page says files open, as Mirador's canvas does and the phone doesn't", () => {
   expect(pluginItemPage("https://assets/view.js", "item-1", { opensFiles: true })).toContain('kind: "item-open-file"');
   expect(pluginItemPage("https://assets/view.js", "item-1")).not.toContain("openFile");
+});
+
+describe("the language of Mirador's own words in a page", () => {
+  test("goes on the root as data, leaving lang for the page, which is in the agent's language", () => {
+    const document = buildCanvasDocument('<html lang="en"><p>plan</p></html>', "item", "http://127.0.0.1:4601", "light", { language: "hu" });
+    expect(document.split("\n")[1]).toBe('<html data-mirador-language="hu">');
+  });
 });
