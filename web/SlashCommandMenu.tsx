@@ -11,24 +11,32 @@ import { t } from "./i18n/index.ts";
 
 const LIST_ID = "slash-commands";
 
+interface AgentOfConversation {
+  conversationId: string;
+  harness: HarnessId;
+  profileId: string | null;
+}
+
 /**
  * The commands the agent last listed in this conversation's events; until it has (its session starts with the first
- * message), the host's best guess from other conversations with the same agent. Looked up only once wanted.
+ * message), the host's best guess from other conversations with the same agent, asked again when the conversation
+ * moves to another agent or profile. Looked up only once wanted.
  */
-function useSlashCommands(conversationId: string, events: StoredEvent[], wanted: boolean) {
+function useSlashCommands({ conversationId, harness, profileId }: AgentOfConversation, events: StoredEvent[], wanted: boolean) {
   const listed = useMemo(() => (wanted ? latestSlashCommands(events) : null), [wanted, events]);
-  const [guessed, setGuessed] = useState<{ conversationId: string; commands: SlashCommand[] } | null>(null);
-  const hasGuess = guessed?.conversationId === conversationId;
+  const guessKey = JSON.stringify([conversationId, harness, profileId]);
+  const [guessed, setGuessed] = useState<{ key: string; commands: SlashCommand[] } | null>(null);
+  const hasGuess = guessed?.key === guessKey;
 
   useEffect(() => {
     if (!wanted || listed || hasGuess) return;
     const requestId = crypto.randomUUID();
     const unsubscribe = connection.onMessage((message) => {
-      if (message.type === "slash-commands.listed" && message.requestId === requestId) setGuessed({ conversationId, commands: message.commands });
+      if (message.type === "slash-commands.listed" && message.requestId === requestId) setGuessed({ key: guessKey, commands: message.commands });
     });
     connection.send({ type: "slash-commands.list", requestId, conversationId });
     return unsubscribe;
-  }, [wanted, listed, hasGuess, conversationId]);
+  }, [wanted, listed, hasGuess, guessKey, conversationId]);
 
   return listed ?? (hasGuess ? guessed.commands : []);
 }
@@ -56,20 +64,19 @@ const withMiradorCommands = (commands: SlashCommand[], own: SlashCommand[]) => [
 export function useSlashCommandMenu({
   conversationId,
   harness,
+  profileId,
   events,
   text,
   setText,
   run,
-}: {
-  conversationId: string;
-  harness: HarnessId;
+}: AgentOfConversation & {
   events: StoredEvent[];
   text: string;
   setText: (text: string) => void;
   run: (message: string, event: KeyboardEvent<HTMLTextAreaElement>) => void;
 }) {
   const query = slashQuery(text);
-  const commands = useSlashCommands(conversationId, events, query !== null);
+  const commands = useSlashCommands({ conversationId, harness, profileId }, events, query !== null);
   const matches = useMemo(
     () => (query === null ? [] : matchingCommands(withMiradorCommands(commands, miradorCommandsFor(harness)), query)),
     [commands, harness, query],

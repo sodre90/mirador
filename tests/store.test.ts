@@ -709,6 +709,40 @@ describe("Store", () => {
     store.close();
   });
 
+  test("a conversation that moved to another agent no longer counts for the commands of the agent it left, and counts for the one it joined only once that one lists", () => {
+    const { store, conversation } = seededStore();
+    const listing = (name: string) => ({
+      type: "acp" as const,
+      update: { sessionUpdate: "available_commands_update" as const, availableCommands: [{ name, description: name }] },
+    });
+    const movedToOpencode = { type: "profile-changed" as const, profileName: "local", agent: "opencode" as const };
+    const opencode = { ...conversation, harness: "opencode" as const };
+    const names = (id: string) => store.latestAvailableCommands({ ...opencode, id }).map(({ name }) => name);
+    store.insertConversation({ ...opencode, id: "moved" });
+    store.insertConversation({ ...opencode, id: "fresh" });
+
+    store.appendEvent("moved", listing("claude-only"));
+    store.appendEvent("moved", movedToOpencode);
+    expect(names("moved")).toEqual([]);
+    expect(names("fresh")).toEqual([]);
+
+    store.appendEvent("moved", listing("opencode-only"));
+    expect(names("moved")).toEqual(["opencode-only"]);
+    expect(names("fresh")).toEqual(["opencode-only"]);
+    store.close();
+  });
+
+  test("a change of profile on the same agent keeps a conversation's commands", () => {
+    const { store, conversation } = seededStore();
+    store.appendEvent(conversation.id, {
+      type: "acp",
+      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "kept", description: "kept" }] },
+    });
+    store.appendEvent(conversation.id, { type: "profile-changed", profileName: "other" });
+    expect(store.latestAvailableCommands(conversation).map(({ name }) => name)).toEqual(["kept"]);
+    store.close();
+  });
+
   test("what was typed in a workspace's other conversations comes newest first, without other events or workspaces", () => {
     const { store, conversation } = seededStore();
     store.insertWorkspace({ id: "w2", name: "other", path: "/tmp/other", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
