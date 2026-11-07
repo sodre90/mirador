@@ -1338,11 +1338,14 @@ export function buildCanvasDocument(
     policy = {},
     markable = false,
     measuresNaturalWidth = false,
-  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean } = {},
+    language,
+  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean; language?: string } = {},
 ) {
   const withoutDoctype = html.replace(/^\s*<!doctype[^>]*>/i, "");
   return [
     "<!doctype html>",
+    // A data attribute rather than lang, which would say the agent's page is in the language of Mirador's own words.
+    ...(language ? [`<html data-mirador-language="${escapeAttribute(language)}">`] : []),
     `<meta http-equiv="Content-Security-Policy" content="${escapeAttribute(canvasContentSecurityPolicy([assetsOrigin], [assetsOrigin], policy))}">`,
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,

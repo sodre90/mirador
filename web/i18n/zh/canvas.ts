@@ -1,6 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
 export const canvas: Messages["canvas"] = {
+  diagramSteps: { back: "上一步", play: "播放", pause: "暂停", next: "下一步" },
   ask: {
     recommended: "推荐",
     somethingElseLabel: "其他",
