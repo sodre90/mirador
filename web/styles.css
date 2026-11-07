@@ -422,7 +422,30 @@ body.resizing iframe {
   text-overflow: ellipsis;
 }
 
+.banner.plugins-updated {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.banner.plugins-updated ul {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.banner.plugins-updated li + li {
+  margin-top: 4px;
+}
+
+.plugin-undo-problem {
+  margin-left: 8px;
+}
+
 /* The banner is the same orange with black text in both themes, so its button is too. */
+.banner.plugins-updated button,
 .banner.host-code-changed button,
 .banner.newer-version button {
   font-size: calc(12px * var(--font-scale));
@@ -432,6 +455,7 @@ body.resizing iframe {
   border: 1px solid rgb(0 0 0 / 0.25);
 }
 
+.banner.plugins-updated button:hover,
 .banner.host-code-changed button:hover,
 .banner.newer-version button:hover {
   background: #fff;
@@ -6792,6 +6816,20 @@ body.reordering * {
   text-align: center;
 }
 
+.plugin-update-mode,
+.plugin-updates-by-itself {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+
+.plugin-goes-in {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .plugin-update-all {
   display: flex;
   flex-direction: column;
@@ -7136,7 +7174,8 @@ body.reordering * {
   white-space: nowrap;
 }
 
-.plugin-badge.plugin-has-update {
+.plugin-badge.plugin-has-update,
+.plugin-badge.plugin-update-ready {
   border-color: var(--accent);
   color: var(--accent);
 }

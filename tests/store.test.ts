@@ -557,6 +557,27 @@ describe("Store", () => {
     reopened.close();
   });
 
+  test("asks before each plugin update until Plugins say otherwise, and keeps the choices for plugins updating by themselves, also after reopening", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const store = new Store(path);
+    expect(store.pluginUpdateMode()).toBe("ask");
+    expect(store.pluginUpdatesByItself()).toEqual({});
+    expect(store.pluginUpdatesUndone()).toEqual({});
+    expect(store.miradorStartedAs()).toBeNull();
+    store.setPluginUpdateMode("with-mirador");
+    store.setPluginUpdatesByItself("review", false);
+    store.setPluginUpdatesByItself("counter", true);
+    store.rememberPluginUpdateUndone("review", "1.0.12");
+    store.rememberMiradorStartedAs("0.9.0");
+    store.close();
+    const reopened = new Store(path);
+    expect(reopened.pluginUpdateMode()).toBe("with-mirador");
+    expect(reopened.pluginUpdatesByItself()).toEqual({ review: false, counter: true });
+    expect(reopened.pluginUpdatesUndone()).toEqual({ review: "1.0.12" });
+    expect(reopened.miradorStartedAs()).toBe("0.9.0");
+    reopened.close();
+  });
+
   test("tells Claude Code to use the canvas often until Settings say otherwise, also after reopening", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);

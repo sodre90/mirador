@@ -73,6 +73,8 @@ export const problems = {
     "push-relay-is-origin": "The push relay's address is just its origin, like https://push.example.com.",
     "push-relay-needs-token": "The push relay needs this Mac's token.",
     "join-number-wrong": "That is not the number the device shows, so its request was denied. It can ask again.",
+    "plugin-update-not-undoable":
+      "That update can't be undone anymore: the plugin has changed since Mirador started, or the update was already undone.",
     "plugin-clone-gone": "Mirador no longer has that plugin's clone, as after a restart; add it again to see what it brings.",
     "plugin-needs-repo-address": "Give the git URL or the path of the plugin's repo.",
     "plugin-json-missing": "there's no plugin.json at the top of its folder",
@@ -153,6 +155,7 @@ export const problems = {
   notADirectory: (path: string) => `${path} is not a directory.`,
   unknownCanvasUse: (value: string) => `Unknown canvas use ${value}`,
   unknownKeepAwake: (value: string) => `Unknown keep awake setting ${value}`,
+  unknownPluginUpdateMode: (value: string) => `Unknown plugin update setting ${value}`,
   unknownKeepDeletedCanvas: (value: string) => `Unknown setting for keeping deleted canvases: ${value}`,
   unknownWorkspaceColour: (value: string) => `Unknown workspace colour ${value}`,
   notAMachineAddress: (address: string) => `"${address}" is not a machine's address.`,

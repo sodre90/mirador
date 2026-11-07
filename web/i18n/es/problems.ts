@@ -75,6 +75,8 @@ export const problems: Messages["problems"] = {
     "push-relay-is-origin": "La dirección del relé push es solo su origen, como https://push.example.com.",
     "push-relay-needs-token": "El relé push necesita el token de este Mac.",
     "join-number-wrong": "Ese no es el número que muestra el dispositivo, así que se rechazó su solicitud. Puede volver a pedirlo.",
+    "plugin-update-not-undoable":
+      "Esa actualización ya no se puede deshacer: el plugin cambió desde que se inició Mirador, o la actualización ya se deshizo.",
     "plugin-clone-gone": "Mirador ya no tiene el clon de ese plugin, como pasa tras un reinicio; vuelve a agregarlo para ver qué trae.",
     "plugin-needs-repo-address": "Indica la URL git o la ruta del repositorio del plugin.",
     "plugin-json-missing": "no hay ningún plugin.json en la raíz de su carpeta",
@@ -155,6 +157,7 @@ export const problems: Messages["problems"] = {
   notADirectory: (path) => `No es una carpeta: ${path}`,
   unknownCanvasUse: (value) => `Uso del lienzo desconocido: ${value}`,
   unknownKeepAwake: (value) => `Ajuste de mantener activo desconocido: ${value}`,
+  unknownPluginUpdateMode: (value) => `Ajuste desconocido de actualizaciones de plugins: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Ajuste desconocido para conservar lienzos eliminados: ${value}`,
   unknownWorkspaceColour: (value) => `Color de espacio de trabajo desconocido: ${value}`,
   notAMachineAddress: (address) => `“${address}” no es la dirección de una máquina.`,

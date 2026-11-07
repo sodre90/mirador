@@ -75,6 +75,8 @@ export const problems: Messages["problems"] = {
     "push-relay-is-origin": "Die Adresse des Push-Relays ist nur sein Origin, etwa https://push.example.com.",
     "push-relay-needs-token": "Das Push-Relay braucht das Token dieses Macs.",
     "join-number-wrong": "Das ist nicht die Zahl, die das Gerät anzeigt, daher wurde seine Anfrage abgelehnt. Es kann erneut fragen.",
+    "plugin-update-not-undoable":
+      "Dieses Update lässt sich nicht mehr rückgängig machen: Das Plugin hat sich seit dem Start von Mirador geändert, oder das Update wurde bereits rückgängig gemacht.",
     "plugin-clone-gone": "Mirador hat den Klon dieses Plugins nicht mehr, etwa nach einem Neustart; füge es erneut hinzu, um zu sehen, was es mitbringt.",
     "plugin-needs-repo-address": "Gib die git-URL oder den Pfad des Repos des Plugins an.",
     "plugin-json-missing": "oben in seinem Ordner liegt keine plugin.json",
@@ -156,6 +158,7 @@ export const problems: Messages["problems"] = {
   notADirectory: (path) => `Kein Ordner: ${path}`,
   unknownCanvasUse: (value) => `Unbekannte Canvas-Nutzung: ${value}`,
   unknownKeepAwake: (value) => `Unbekannte Wachhalte-Einstellung: ${value}`,
+  unknownPluginUpdateMode: (value) => `Unbekannte Einstellung für Plugin-Updates: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Unbekannte Einstellung zum Aufbewahren gelöschter Canvas: ${value}`,
   unknownWorkspaceColour: (value) => `Unbekannte Arbeitsbereichsfarbe: ${value}`,
   notAMachineAddress: (address) => `„${address}“ ist keine Adresse eines Rechners.`,

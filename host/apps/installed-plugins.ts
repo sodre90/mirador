@@ -5,6 +5,7 @@ import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, type PluginKind, 
 import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
+import { parkedFolderOf, swapPlugin } from "./plugin-swaps.ts";
 import { AppProblem, messageOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
 import { causeOf, HostProblemError, problemFieldsOf, type HostProblem } from "../../shared/host-problems.ts";
 
@@ -21,7 +22,7 @@ export const withoutCredentials = (text: string) => text.replace(/([a-z][a-z0-9+
 const lastPart = (output: string) => (output.length > OUTPUT_SHOWN_CHARACTERS ? `…${output.slice(-OUTPUT_SHOWN_CHARACTERS)}` : output);
 
 /** Its output, or null when git fails or isn't installed. */
-async function gitOutput(folder: string, args: string[]): Promise<string | null> {
+export async function gitOutput(folder: string, args: string[]): Promise<string | null> {
   try {
     const child = Bun.spawn(["git", "-C", folder, ...args], { env: environmentWithoutPrompts(), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
     const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
@@ -148,6 +149,18 @@ const isLink = (folder: string) => lstatSync(folder).isSymbolicLink();
 
 const byTitle = ({ title, folder }: PluginInfo) => title ?? folder;
 
+/** What decides whether a plugin's releases may go in without asking. */
+export type UpdatesByItself = (plugin: Pick<PluginInfo, "folder" | "name" | "source">) => boolean;
+
+/** A release cloned for an update that may go in without asking, next to the plugin it would replace. */
+export interface ClonedRelease {
+  staged: string;
+  manifest: PluginManifest;
+  installed: PluginManifest | null;
+  installedCommit: string | null;
+  commit: string | null;
+}
+
 /**
  * The plugins folder: what the Plugins settings list, and the plugins they add from a git repo, update and remove. A change takes effect at Mirador's next start, which is when plugins load.
  */
@@ -163,6 +176,7 @@ export class InstalledPlugins {
   private lastChange: Promise<unknown> = Promise.resolve();
   private changesStarted = 0;
   private changesEnded = 0;
+  private updatesByItself: UpdatesByItself = () => false;
 
   constructor(
     readonly folder: string,
@@ -175,6 +189,10 @@ export class InstalledPlugins {
 
   get restartNeeded() {
     return this.changed.size > 0;
+  }
+
+  decidesUpdatesByItselfWith(updatesByItself: UpdatesByItself) {
+    this.updatesByItself = updatesByItself;
   }
 
   /** Lists again once the changes are done when one was under way while it listed, so that it never shows a plugin half gone. */
@@ -192,13 +210,15 @@ export class InstalledPlugins {
   private async info(folder: string, source: PluginSource): Promise<PluginInfo> {
     const waitsForRestart = this.changed.has(basename(folder));
     const loadedCanvas = this.loadedCanvases.find((canvas) => canvas.folder === folder);
+    const fields = await manifestFields(folder);
     return {
       folder: basename(folder),
-      ...(await manifestFields(folder)),
+      ...fields,
       source,
       ...this.loadProblemOf(folder),
       waitsForRestart,
       tools: loadedCanvas && !waitsForRestart ? toolsOf(loadedCanvas) : [],
+      updatesByItself: source.kind === "git" && this.updatesByItself({ folder: basename(folder), name: fields.name, source }),
     };
   }
 
@@ -353,13 +373,44 @@ export class InstalledPlugins {
     const found = await Promise.all(
       fromGit.map(async ({ folder, title, from }) => {
         try {
-          return { folder, title: title ?? folder, from, ...(await this.news(folder)) };
+          return { folder, title: title ?? folder, from, ...(await this.news(folder)), ready: false, heldBack: null };
         } catch {
           return last?.find((update) => update.folder === folder) ?? null;
         }
       }),
     );
     return found.filter((update): update is PluginUpdate => update !== null && (update.release !== null || update.commits.length > 0));
+  }
+
+  /**
+   * Clones the plugin's release into the staging folder, without building it, for an update that may go in without
+   * asking; the caller builds it or removes it.
+   */
+  async cloneRelease(folderName: string, release: string): Promise<ClonedRelease> {
+    const folder = this.clonedPlugin(folderName);
+    const followed = await this.followed(folder);
+    if (followed.branch !== null) throw new HostProblemError({ code: "plugin-has-nothing-to-update-from", folder: folderName });
+    const [installed, installedCommit] = await Promise.all([readManifest(folder).catch(() => null), gitOutput(folder, ["rev-parse", "HEAD"])]);
+    const { staged, manifest } = await this.cloned(followed.remote, releaseTag(release));
+    return { staged, manifest, installed, installedCommit, commit: await gitOutput(staged, ["rev-parse", "HEAD"]) };
+  }
+
+  /** Builds a clone from cloneRelease where it is. */
+  buildClone(staged: string, manifest: PluginManifest): Promise<void> {
+    return this.built(staged, manifest);
+  }
+
+  /**
+   * Puts `replacement` in the plugin's place for the next start, remembering `undoneRelease` should the swap be cut
+   * short; the plugin as it is now waits in the parked folder, since the running host may hold its code.
+   */
+  putBack(folderName: string, replacement: string, undoneRelease: string): Promise<void> {
+    return this.oneAtATime(async () => {
+      this.installedFolder(folderName);
+      const movedOutTo = join(parkedFolderOf(this.folder), `${folderName}-${crypto.randomUUID()}`);
+      await swapPlugin(this.folder, { folder: folderName, movedOutTo, movingIn: replacement, whenCutShort: "finish", undoneRelease });
+      this.changed.add(folderName);
+    });
   }
 
   /** Takes the plugin out of the plugins folder; a link goes, the folder it points to stays. The plugin's name, for forgetting where its app was open. */
