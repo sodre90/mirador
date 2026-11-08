@@ -66,6 +66,15 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await expect(agentBubbles(page).filter({ hasText: "The rest about" })).toHaveCount(0);
   });
 
+  await test.step("a turn stopped while only a background subagent's command runs loses its late reply too", async () => {
+    await sendMessage(page, "STOPPED BESIDE SUBAGENT the watched one");
+    await waitsForStop("STOPPED BESIDE SUBAGENT the watched one");
+    await stop();
+    await waitTurnCancelled(2);
+    await expect(page.locator(".timeline:visible .subagent-work").filter({ hasText: "A subagent reports on the watched one" })).toHaveCount(1);
+    await expect(agentBubbles(page).filter({ hasText: "The rest about" })).toHaveCount(0);
+  });
+
   await test.step("the turn started after the stops answers as usual", async () => {
     await sendMessage(page, "SAY Carrying on after the stops");
     await waitForTurnToEnd(page);
@@ -76,7 +85,7 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await sendMessage(page, "STOPPED QUIET nothing comes");
     await waitsForStop("STOPPED QUIET nothing comes");
     await stop();
-    await waitTurnCancelled(2);
+    await waitTurnCancelled(3);
     await sendMessage(page, "REPLY TOOL REPLY the file");
     await waitForTurnToEnd(page);
     await expect(agentBubbles(page).filter({ hasText: /Looking into the file|Found the file/ })).toHaveText(["Looking into the file", "Found the file"]);
@@ -89,7 +98,7 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await sendMessage(page, "STOPPED QUIET nor here");
     await waitsForStop("STOPPED QUIET nor here");
     await stop();
-    await waitTurnCancelled(3);
+    await waitTurnCancelled(4);
     await sendMessage(page, "REPLY STEERED the plan");
     await waitsForStop("REPLY STEERED the plan");
     await page.locator(".composer:visible textarea").fill("Steered in");

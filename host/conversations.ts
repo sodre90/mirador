@@ -830,9 +830,10 @@ export class ConversationService {
       // its first request merged with a steer: a reply already streaming, or one the API has yet
       // to answer. A stop that interrupted the request may owe no reply, so a reply beginning in the
       // next turn waits for that turn to tell whose it is. A stop the agent waited on the user for
-      // owes no reply, nor does one its tools were busy with, nor a killed process.
+      // owes no reply, nor does one its own tools were busy with, nor a killed process. Its background subagents'
+      // tools don't count: they run on beside the turn.
       runtime.cancelledReply =
-        response?.stopReason === "cancelled" && !turn.awaitedUser && (turn.lastReplyMessageId !== null || runtime.openToolCalls.size === 0)
+        response?.stopReason === "cancelled" && !turn.awaitedUser && (turn.lastReplyMessageId !== null || runtime.openToolCalls.oldestOfMainAgent() === null)
           ? { messageId: turn.lastReplyMessageId }
           : undefined;
       await this.returnUnansweredSteers(conversationId, runtime, turn.steered, response).catch((error: unknown) =>

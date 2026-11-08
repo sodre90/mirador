@@ -23,6 +23,7 @@ import * as acp from "@agentclientprotocol/sdk";
  * `STOPPED REPLY ` streams half of a reply and `STOPPED BEFORE ` streams none of it: either ends its turn as cancelled
  * once `session/cancel` arrives, and a moment after the stop streams the reply's rest under the id it streamed under
  * before, together with a subagent's report — the late chunks claude-agent-acp sends for a turn its cancel cut short.
+ * `STOPPED BESIDE SUBAGENT ` does as `STOPPED BEFORE ` while a background subagent's command is still running at the stop.
  * `STOPPED QUIET ` streams nothing, ends as cancelled on the stop and sends nothing after it, as a stop that interrupted
  * the request leaves things. `FINISHED ON STOP ` begins a reply, and once `session/cancel` arrives finishes it and
  * ends the turn as done, as Claude Code does when its answer was already complete as the stop came.
@@ -279,10 +280,11 @@ const stopWaiters = new Map<string, () => void>();
 let nextStoppedReply = 0;
 
 /** A turn the user stops: half a reply streamed, or none yet, ends as cancelled on the stop; the reply's rest and a subagent's report follow it, as claude-agent-acp's late chunks do. */
-async function stoppedReply(client: acp.AgentContext, sessionId: string, text: string, streamedHalf: boolean) {
+async function stoppedReply(client: acp.AgentContext, sessionId: string, text: string, streamedHalf: boolean, backgroundSubagentRunning = false) {
   const notify = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId, update });
   const messageId = `msg-stopped-${process.pid}-${++nextStoppedReply}`;
   const subagentCallId = `subagent-${++nextToolCall}`;
+  if (backgroundSubagentRunning) await startBackgroundSubagentCommand(notify);
   if (streamedHalf) await notify({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: `Half a reply about ${text}` }, messageId });
   await new Promise<void>((resolve) => stopWaiters.set(sessionId, resolve));
   setTimeout(() => {
@@ -300,6 +302,14 @@ async function stoppedReply(client: acp.AgentContext, sessionId: string, text: s
     void notify({ sessionUpdate: "tool_call_update", toolCallId: subagentCallId, status: "completed" });
   }, 300);
   return { stopReason: "cancelled" as const };
+}
+
+/** A subagent launched in the background, whose own command still runs: its launch has returned, its command's call stays open. */
+async function startBackgroundSubagentCommand(notify: (update: acp.SessionUpdate) => Promise<void>) {
+  const launchId = `subagent-${++nextToolCall}`;
+  await notify({ sessionUpdate: "tool_call", toolCallId: launchId, title: "Task", kind: "think", status: "in_progress", rawInput: { description: "watch", prompt: "watch", run_in_background: true }, _meta: { claudeCode: { toolName: "Task" } } });
+  await notify({ sessionUpdate: "tool_call_update", toolCallId: launchId, status: "completed" });
+  await notify({ sessionUpdate: "tool_call", toolCallId: `${launchId}-step`, title: "sleep 60", kind: "execute", status: "in_progress", _meta: { claudeCode: { parentToolUseId: launchId } } });
 }
 
 /** A turn the user stops before any reply, whose request the stop interrupted, so no late reply follows. */
@@ -476,6 +486,7 @@ acp
     if (startsWith(ctx.params.prompt, "FINISHED ON STOP ")) return finishedOnStop(ctx.client, ctx.params.sessionId, text.slice("FINISHED ON STOP ".length));
     if (startsWith(ctx.params.prompt, "STOPPED REPLY ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED REPLY ".length), true);
     if (startsWith(ctx.params.prompt, "STOPPED BEFORE ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED BEFORE ".length), false);
+    if (startsWith(ctx.params.prompt, "STOPPED BESIDE SUBAGENT ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED BESIDE SUBAGENT ".length), false, true);
     if (startsWith(ctx.params.prompt, "STOPPED QUIET ")) return stoppedQuietly(ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "REPLY TOOL REPLY ")) return replyAroundATool(ctx.client, ctx.params.sessionId, text.slice("REPLY TOOL REPLY ".length));
     if (startsWith(ctx.params.prompt, "TOOL UNTIL ")) return toolUntil(ctx.client, ctx.params.sessionId, text.slice("TOOL UNTIL ".length));
