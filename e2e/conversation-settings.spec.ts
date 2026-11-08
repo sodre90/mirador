@@ -33,6 +33,9 @@ test("the bar names the profile and model, and opens the rest as this conversati
   await expect(settings.getByRole("heading", { name: "This conversation's settings" })).toBeVisible();
   await expect(settings).toContainText("The profile only gives them their first values");
   for (const label of ["Profile", "Model", "YOLO", "Questions"]) await expect(settings.getByLabel(label, { exact: true })).toBeVisible();
+  const questions = settings.getByLabel("Questions", { exact: true });
+  await expect(questions, "the page draws the select, not the system's button and arrow").toHaveCSS("appearance", "none");
+  await expect(questions, "its own chevron").toHaveCSS("background-image", /svg/);
 
   await settings.getByLabel("Questions", { exact: true }).selectOption("next-message");
   await expect(settings, "a change keeps the settings open").toBeVisible();
