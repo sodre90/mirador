@@ -40,7 +40,7 @@ export const minutesOfFailedChecks = (wait: Pick<JobWait, "job" | "sshHost">) =>
 export const describeJob = ({ job, sshHost }: Pick<JobWait, "job" | "sshHost">) =>
   `${job.kind === "process" ? `process ${job.pid}` : `container ${job.name}`}${sshHost ? ` on ${sshHost}` : ""}`;
 
-const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
+export const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 
 export const jobEndedMessage = (wait: Pick<JobWait, "job" | "sshHost">) => `${capitalized(describeJob(wait))} ended.`;
 

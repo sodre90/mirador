@@ -2,7 +2,7 @@ import { createMcpHandler, McpServer, type McpHttpHandler, type ServerContext } 
 import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
-import { JobWaitRefused, jobWaitToolDescription } from "../job-waits.ts";
+import { BACKGROUNDED_COMMAND_NEEDS_NO_WAIT, JobWaitRefused, jobWaitToolDescription } from "../job-waits.ts";
 import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./guidance.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
@@ -217,7 +217,7 @@ function buildCanvasServer(
     {
       description: jobWaitToolDescription(),
       inputSchema: z.object({
-        pid: z.number().optional().describe("The process to wait for, by its pid."),
+        pid: z.number().optional().describe(`The process to wait for, by the pid \`$!\` gave right after you started it. ${BACKGROUNDED_COMMAND_NEEDS_NO_WAIT}`),
         container: z.string().optional().describe("Or the Docker or Podman container to wait for, by its name or id."),
         host: z.string().optional().describe("For a job on another machine: user@host, or a name from your ssh config. Mirador checks on it over ssh."),
         message: z.string().optional().describe("Your instruction for picking up the work once the job ends. Without one, the message says the job ended."),

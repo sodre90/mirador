@@ -1,4 +1,4 @@
-import { checkInterval, describeJob, FAILED_CHECKS_BEFORE_GIVING_UP, jobEndedMessage, type JobWaitRequest } from "../shared/job-waits.ts";
+import { capitalized, checkInterval, describeJob, FAILED_CHECKS_BEFORE_GIVING_UP, jobEndedMessage, type JobWaitRequest } from "../shared/job-waits.ts";
 import type { JobWait, JobWaitEnd, WaitedJob } from "../shared/model.ts";
 import type { Store } from "./store.ts";
 import type { TerminalProgram } from "./terminals.ts";
@@ -71,6 +71,7 @@ export class JobWaits {
 
   /** Only for a job that runs now: a mistyped pid or container would otherwise end its wait at once. */
   async add(conversationId: string, { job, sshHost, message, resume }: JobWaitRequest): Promise<JobWait> {
+    if (job.kind === "process" && job.pid === INIT_PID) throw new JobWaitRefused(initRefusal({ job, sshHost }));
     const state = await this.check({ job, sshHost });
     if (state === "ended") throw new JobWaitRefused(`There is no running ${describeJob({ job, sshHost })}.`);
     if (state === "unknown") throw new JobWaitRefused(`Mirador could not check ${describeJob({ job, sshHost })}${sshHost ? `: is ${sshHost} reachable with ssh, without a password prompt?` : "."}`);
@@ -139,6 +140,16 @@ export class JobWaits {
     this.watched.delete(watched.wait.id);
   }
 }
+
+/** Init, in every pid namespace: it runs as long as its machine does. An agent with no pid at hand guesses it. */
+const INIT_PID = 1;
+
+/** Refused before the job's check, so a host ssh cannot reach does not hide it. */
+const initRefusal = (wait: Pick<JobWait, "job" | "sshHost">) =>
+  `${capitalized(describeJob(wait))} is init, which runs as long as its machine does, so its wait would never end. Give the pid of the job you started, as \`$!\` gave it right after starting it. ${BACKGROUNDED_COMMAND_NEEDS_NO_WAIT}`;
+
+export const BACKGROUNDED_COMMAND_NEEDS_NO_WAIT =
+  "A command your harness moved to the background needs no wait: the harness tells you when it ends, and Mirador shows it under Background tasks. Don't guess a pid.";
 
 /** Whether a process of this machine runs; one of another user's that this host may not signal runs too. */
 function processRuns(pid: number) {

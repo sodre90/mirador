@@ -132,6 +132,20 @@ describe("JobWaits", () => {
     await expect(waitsAnswering(["unknown"]).waits.add("c1", { ...sleepProcess, sshHost: "me@fedora" })).rejects.toThrow(/is me@fedora reachable with ssh/);
   });
 
+  test("refuses process 1, init, which an agent with no pid guesses, before checking it, so a host ssh cannot reach does not hide why", async () => {
+    for (const [state, sshHost] of [["running", null], ["unknown", "me@fedora"]] as const) {
+      const { waits, store, checks } = waitsAnswering([state]);
+      const refusal = waits.add("c1", { ...sleepProcess, job: { kind: "process", pid: 1 }, sshHost });
+      await expect(refusal).rejects.toThrow(
+        new JobWaitRefused(
+          `Process 1${sshHost ? ` on ${sshHost}` : ""} is init, which runs as long as its machine does, so its wait would never end. Give the pid of the job you started, as \`$!\` gave it right after starting it. A command your harness moved to the background needs no wait: the harness tells you when it ends, and Mirador shows it under Background tasks. Don't guess a pid.`,
+        ),
+      );
+      expect(checks()).toBe(0);
+      expect(store.listJobWaits()).toEqual([]);
+    }
+  });
+
   test("checks the job until it ends, then forgets the wait and reports the end", async () => {
     const { waits, store, changed, ended, checks } = waitsAnswering(["running", "running", "unknown", "running", "ended"]);
     const wait = await waits.add("c1", sleepProcess);
