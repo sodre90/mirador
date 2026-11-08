@@ -2099,15 +2099,23 @@ input.picker-search {
   margin-top: 8px;
 }
 
-.undo-files {
+.turn-actions {
+  display: flex;
+  gap: 12px;
   align-self: flex-start;
+}
+
+.undo-files,
+.fork-through-turn {
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
   visibility: hidden;
 }
 
 .timeline-entry:hover .undo-files,
-.undo-files:focus-visible {
+.undo-files:focus-visible,
+.timeline-entry:hover .fork-through-turn,
+.fork-through-turn:focus-visible {
   visibility: visible;
 }
 

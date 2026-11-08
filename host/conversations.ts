@@ -65,6 +65,7 @@ import { summarizeWaiting, waitingTones, type WaitingConversation, type WaitingS
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
 import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.ts";
+import { forkPointThrough, forkTitle, shownSessionTitle, withoutForkMarks } from "../shared/forks.ts";
 import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
@@ -146,7 +147,21 @@ export interface LoadedSession {
   harness: HarnessId;
   sessionId: string;
   mode: AdoptMode;
+  /** A fork cut short at a turn holds the canvas items shown before this time only. */
+  canvasShownBefore?: number;
 }
+
+/** Where a fork's session copy ends: after the agent's reply with this mark. */
+export interface SessionForkPoint {
+  messageId: string;
+  canvasShownBefore: number;
+}
+
+/** The fork point as claude-agent-acp asks for it; an agent that ignores it forks the whole session. */
+const forkPointMeta = (messageId: string, atSteeredMessage = false) => ({
+  jetbrains: { air: { fork: { version: 1, messageId } } },
+  ...(atSteeredMessage && { steering: { atSteeredMessage } }),
+});
 
 export type RestoreCanvas = (conversationId: string, source: LoadedSession, events: StoredEvent[]) => Promise<void>;
 
@@ -517,21 +532,32 @@ export class ConversationService {
   }
 
   /** Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation. */
-  adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title">, mode: AdoptMode): Conversation {
+  adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title">, mode: AdoptMode, forkPoint: SessionForkPoint | null = null): Conversation {
     if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
       throw new HostProblemError({ code: "session-already-open" });
     }
     const title = session.title || UNTITLED;
-    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? `Fork: ${title}` : title);
-    this.ensureSession(conversation.id, () => this.loadExternalSession(conversation.id, session.sessionId, mode)).catch(() => {});
+    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title));
+    this.ensureSession(conversation.id, () => this.loadExternalSession(conversation.id, session.sessionId, mode, forkPoint)).catch(() => {});
     return conversation;
   }
 
-  /** Copies the agent's session as it stands into a new conversation on the same profile; a turn running in it goes on undisturbed. */
-  fork(conversationId: string): Conversation {
+  /**
+   * Copies the agent's session into a new conversation on the same profile: as it stands, or through the turn begun
+   * with the message at `throughTurnSeq`, its reply included. A turn running in it goes on undisturbed.
+   */
+  fork(conversationId: string, throughTurnSeq?: number): Conversation {
     const { workspaceId, harness, profileId, acpSessionId, title } = this.get(conversationId);
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
-    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title }, "fork");
+    const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
+    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title }, "fork", forkPoint);
+  }
+
+  private forkPointThrough(conversationId: string, seq: number): SessionForkPoint | null {
+    if (this.store.findEvent(conversationId, seq)?.event.type !== "user-message") throw new HostProblemError({ code: "rewind-only-to-own-message" });
+    const point = forkPointThrough(this.get(conversationId).harness, this.store.listEvents(conversationId), seq);
+    if (point && !("messageId" in point)) throw new HostProblemError(point);
+    return point && { messageId: point.messageId, canvasShownBefore: point.canvasBefore };
   }
 
   /** The agent has a session to copy once it has worked on a message there. */
@@ -1025,7 +1051,7 @@ export class ConversationService {
     const { sessionId } = await harness.forkSession({
       sessionId: conversation.acpSessionId!,
       cwd: await recordedDirectory(this.existingWorkspace(conversation.workspaceId)),
-      _meta: { jetbrains: { air: { fork: { version: 1, messageId: point } } }, ...(atSteeredMessage && { steering: { atSteeredMessage } }) },
+      _meta: forkPointMeta(point, atSteeredMessage),
     });
     return sessionId;
   }
@@ -1587,7 +1613,7 @@ export class ConversationService {
     const held = runtime.heldCodexSession;
     if (held) {
       runtime.heldCodexSession = undefined;
-      return this.loadExternalSession(conversationId, held, "continue");
+      return this.loadExternalSession(conversationId, held, "continue", null);
     }
     const conversation = this.get(conversationId);
     const isFirstSession = conversation.acpSessionId === null;
@@ -1647,7 +1673,7 @@ export class ConversationService {
   }
 
   /** Replayed history arrives as session updates before the load request returns, so the session is bound first. */
-  private async loadExternalSession(conversationId: string, sessionId: string, mode: AdoptMode): Promise<string> {
+  private async loadExternalSession(conversationId: string, sessionId: string, mode: AdoptMode, forkPoint: SessionForkPoint | null): Promise<string> {
     const conversation = this.get(conversationId);
     const harness = this.harnessFor(conversation);
     this.runtime(conversationId).harness = harness;
@@ -1656,7 +1682,8 @@ export class ConversationService {
     if (mode === "fork" && !capabilities.agentCapabilities.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-fork-sessions", agent: harness.spec.label });
     this.setBusy(conversationId, "loading-history");
     const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
-    const loadedId = mode === "fork" ? (await harness.forkSession({ sessionId, cwd: sessionRequest.cwd })).sessionId : sessionId;
+    const loadedId =
+      mode === "fork" ? (await harness.forkSession({ sessionId, cwd: sessionRequest.cwd, ...(forkPoint && { _meta: forkPointMeta(forkPoint.messageId) }) })).sessionId : sessionId;
     this.muteNotifier(conversation, loadedId);
     this.save({ ...this.get(conversationId), acpSessionId: loadedId });
     this.sessions.bind(conversationId, loadedId);
@@ -1670,7 +1697,8 @@ export class ConversationService {
     this.bindSession(conversationId, loadedId, loaded.configOptions);
     if (conversation.harness === "claude") await this.restoreTranscriptModel(conversationId, loadedId, sessionId);
     await this.applyProfileChoices(conversationId, loadedId);
-    await this.restoreCanvas(conversationId, { harness: conversation.harness, sessionId, mode }, this.store.listEvents(conversationId)).catch((error: unknown) =>
+    const source: LoadedSession = { harness: conversation.harness, sessionId, mode, ...(forkPoint && { canvasShownBefore: forkPoint.canvasShownBefore }) };
+    await this.restoreCanvas(conversationId, source, this.store.listEvents(conversationId)).catch((error: unknown) =>
       console.error(`restoring the canvas of conversation ${conversationId} failed:`, error),
     );
     this.setStatus(conversationId, "idle");
@@ -1896,7 +1924,7 @@ export class ConversationService {
       this.save({ ...this.get(conversationId), configOptions: update.configOptions });
     }
     if (update.sessionUpdate === "session_info_update" && update.title && !this.get(conversationId).titleSetByUser) {
-      this.save({ ...this.get(conversationId), title: update.title });
+      this.save({ ...this.get(conversationId), title: shownSessionTitle(this.get(conversationId).title, update.title) });
     }
     if (this.dropsCancelledReplyChunk(conversationId, update)) return;
     if (isTurnsOwnToolCall(update)) this.showHeldBackReply(conversationId);

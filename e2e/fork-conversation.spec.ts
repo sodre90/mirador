@@ -168,3 +168,59 @@ test("a conversation's right-click menu in the sidebar forks it while its turn r
   await waitForTurnToEnd(page);
   await expect(userMessages()).toHaveText(["First task", "Second task", "Third task"]);
 });
+
+test("Fork from here on a turn copies the conversation through that turn and its reply, while a later turn runs, and the agent's copy forgets the turns after it", async () => {
+  test.setTimeout(300_000);
+  await openConversation(claudeOriginalId);
+  await expect(userMessages()).toHaveText(["First task", "Second task", "Third task"]);
+  api.hold();
+  await sendMessage(page, "Fourth task");
+  await expect.poll(() => api.held.includes("Fourth task"), { timeout: 60_000 }).toBe(true);
+
+  const firstTurn = page.locator(".timeline:visible .timeline-entry").filter({ has: page.locator(".message.user", { hasText: "First task" }) });
+  await firstTurn.hover();
+  await firstTurn.getByRole("button", { name: "Fork from here" }).click();
+  await expect(page).not.toHaveURL(new RegExp(`#/c/${claudeOriginalId}$`));
+  const forkId = shownConversationId();
+  await expect(agentMessages().filter({ hasText: "Answered: First task" })).toHaveCount(1, { timeout: 60_000 });
+  await waitForTurnToEnd(page);
+  await expect(userMessages()).toHaveText(["First task"]);
+  await expect(agentMessages().filter({ hasText: /Answered: (Second|Third) task/ })).toHaveCount(0);
+
+  api.answerHeld();
+  await openConversation(claudeOriginalId);
+  await expect(lastAgentMessage(page)).toHaveText("Answered: Fourth task", { timeout: 120_000 });
+  await waitForTurnToEnd(page);
+
+  await openConversation(forkId);
+  await sendMessage(page, "After the fork");
+  await expect(lastAgentMessage(page)).toHaveText("Answered: After the fork", { timeout: 120_000 });
+  await waitForTurnToEnd(page);
+  const forkHistory = api.history.findLast((messages) => messages.join("\n").includes("After the fork"))!.join("\n");
+  expect(forkHistory).toContain("Answered: First task");
+  expect(forkHistory).not.toContain("Second task");
+  await expect(header().locator("h2")).toHaveText(/^Fork: /);
+  await expect(header().locator("h2")).not.toHaveText(/Fork: Fork: |\(fork\)/);
+});
+
+test("Fork from here brings what the canvas showed through that turn, and not what a later turn showed", async () => {
+  test.setTimeout(300_000);
+  const shownPage = () => page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1");
+  await openConversation(claudeOriginalId);
+  await sendMessage(page, 'CALL mcp__canvas__show {"title": "Page A", "html": "<h1>Page A</h1>"}\nTHEN Shown A.');
+  await expect(lastAgentMessage(page)).toHaveText("Shown A.", { timeout: 120_000 });
+  await waitForTurnToEnd(page);
+  await sendMessage(page, 'CALL mcp__canvas__show {"title": "Page B", "html": "<h1>Page B</h1>"}\nTHEN Shown B.');
+  await expect(lastAgentMessage(page)).toHaveText("Shown B.", { timeout: 120_000 });
+  await waitForTurnToEnd(page);
+  await expect(shownPage()).toHaveText("Page B");
+
+  const pageATurn = page.locator(".timeline:visible .timeline-entry").filter({ has: page.locator(".message.user", { hasText: "Page A" }) });
+  await pageATurn.hover();
+  await pageATurn.getByRole("button", { name: "Fork from here" }).click();
+  await expect(page).not.toHaveURL(new RegExp(`#/c/${claudeOriginalId}$`));
+  await expect(agentMessages().filter({ hasText: "Shown A." })).toHaveCount(1, { timeout: 60_000 });
+  await waitForTurnToEnd(page);
+  await expect(agentMessages().filter({ hasText: "Shown B." })).toHaveCount(0);
+  await expect(shownPage()).toHaveText("Page A");
+});

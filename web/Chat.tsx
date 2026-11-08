@@ -198,7 +198,7 @@ function ChatHeader({
             <button type="button" className="icon header-icon find-trigger" aria-label={words.header.find} data-hint={hints.find} data-shortcut={shortcutKeys().find} onClick={onFind}>
               <HeaderIcon shape="find" />
             </button>
-            <button type="button" className="icon header-icon fork-conversation" aria-label={words.header.fork} data-hint={hints.fork} disabled={!forkable} onClick={onFork}>
+            <button type="button" className="icon header-icon fork-conversation" aria-label={words.header.fork} data-hint={hints.fork} disabled={!forkable} onClick={() => onFork()}>
               <HeaderIcon shape="fork" />
             </button>
             <button
@@ -815,6 +815,19 @@ const TimestampedEntry = memo(function TimestampedEntry({
   );
 });
 
+/** The entries of a long timeline are memoized, so the fork reaches each message as context; null until there is a session to fork. */
+const ForkThroughTurn = createContext<((throughTurnSeq: number) => void) | null>(null);
+
+function ForkThroughTurnButton({ turnSeq }: { turnSeq: number }) {
+  const forkThrough = useContext(ForkThroughTurn);
+  if (!forkThrough) return null;
+  return (
+    <button type="button" className="link fork-through-turn" data-hint={hints.forkThroughTurn} onClick={() => forkThrough(turnSeq)}>
+      {words.forkFromHere}
+    </button>
+  );
+}
+
 function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }: { block: TimelineBlock; conversationId: string; harness: HarnessId; canRewind: boolean; endsReply?: boolean }) {
   const askToRevert = useContext(AskToRevert);
   switch (block.kind) {
@@ -826,7 +839,10 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
             <MessageImages conversationId={conversationId} imageIds={block.imageIds} carried={block.images} />
           </div>
           {block.turnSeq !== undefined && (block.filesKept || canRewind) && (
-            <UndoButton turn={{ seq: block.turnSeq, text: block.text }} rewind={canRewind} ask={askToRevert} />
+            <div className="turn-actions">
+              <UndoButton turn={{ seq: block.turnSeq, text: block.text }} rewind={canRewind} ask={askToRevert} />
+              {canRewind && <ForkThroughTurnButton turnSeq={block.turnSeq} />}
+            </div>
           )}
         </>
       );
@@ -1969,7 +1985,7 @@ export function ChatPanel({
   onManageTemplates: () => void;
   open: OpenConversation;
   canvasVisible: boolean;
-  onFork: () => void;
+  onFork: (throughTurnSeq?: number) => void;
   reminderMorning: number;
   dispatch: Dispatch<AppAction>;
 }) {
@@ -2062,26 +2078,28 @@ export function ChatPanel({
                     />
                     {find.query !== null && <FindBar find={find} />}
                     <MatchesFind.Provider value={find.matches}>
-                      <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
-                        {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
-                        {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
-                        {(firstLoaded > 0 || earlier.available) && (
-                          <button type="button" className="notice-line load-earlier" onClick={loadEarlier}>
-                            {earlierEntriesLabel(firstLoaded, earlier)}
-                          </button>
-                        )}
-                        {timeline.slice(firstLoaded).map((block, offset) => (
-                          <TimestampedEntry
-                            key={block.key}
-                            block={block}
-                            startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
-                            harness={conversation.harness}
-                            conversationId={conversation.id}
-                            endsReply={endsOfReplies.has(block.key)}
-                          />
-                        ))}
-                        {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
-                      </div>
+                      <ForkThroughTurn.Provider value={canFork(conversation, open) ? onFork : null}>
+                        <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
+                          {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
+                          {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
+                          {(firstLoaded > 0 || earlier.available) && (
+                            <button type="button" className="notice-line load-earlier" onClick={loadEarlier}>
+                              {earlierEntriesLabel(firstLoaded, earlier)}
+                            </button>
+                          )}
+                          {timeline.slice(firstLoaded).map((block, offset) => (
+                            <TimestampedEntry
+                              key={block.key}
+                              block={block}
+                              startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
+                              harness={conversation.harness}
+                              conversationId={conversation.id}
+                              endsReply={endsOfReplies.has(block.key)}
+                            />
+                          ))}
+                          {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
+                        </div>
+                      </ForkThroughTurn.Provider>
                     </MatchesFind.Provider>
                     {approvalsOutOfView.length > 0 && <ApprovalsWaiting approvals={approvalsOutOfView} timeline={timeline} onShow={showApproval} />}
                     {runningSubagents.length > 0 && <RunningSubagents conversationId={conversation.id} subagents={runningSubagents} onShow={showSubagent} />}

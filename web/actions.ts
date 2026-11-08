@@ -15,9 +15,10 @@ export function startConversationIn(workspace: Workspace, dispatch: Dispatch<App
 export const canFork = (conversation: Conversation, history: { loaded: boolean; events: StoredEvent[] }) =>
   conversation.acpSessionId !== null && history.loaded && sessionHasRecord(history.events);
 
-export function forkConversation(conversation: Conversation, dispatch: Dispatch<AppAction>) {
+/** Into a new conversation: the whole of this one, or its history through the turn begun with the message at `throughTurnSeq`. */
+export function forkConversation(conversation: Conversation, dispatch: Dispatch<AppAction>, throughTurnSeq?: number) {
   dispatch({ type: "awaiting-conversation", workspaceId: conversation.workspaceId });
-  connection.send({ type: "conversation.fork", conversationId: conversation.id });
+  connection.send({ type: "conversation.fork", conversationId: conversation.id, ...(throughTurnSeq !== undefined && { throughTurnSeq }) });
 }
 
 /** Hidden conversations kept in the page have the same elements as the one on screen. */

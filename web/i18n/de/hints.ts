@@ -175,6 +175,7 @@ export const hints: Messages["hints"] = {
   searchAll: "Durchsucht jede Unterhaltung in jedem Arbeitsbereich. Ein geöffneter Treffer wird in seiner Unterhaltung gezeigt.",
   find: "Sucht Text überall in dieser Unterhaltung: in früheren Einträgen, die noch nicht geladen sind, und in eingeklappten Karten, die sich dort aufklappen, wo er gefunden wird.",
   fork: "Kopiert diese Unterhaltung in eine neue mit demselben Profil und lässt diese, wie sie ist. Eine Runde, die hier läuft, geht weiter; die Kopie enthält, was der Agent bisher davon gespeichert hat. Möglich, sobald der Agent hier an einer Nachricht gearbeitet hat.",
+  forkThroughTurn: "Kopiert diese Unterhaltung bis zu dieser Runde samt Antwort in eine neue mit demselben Profil, mit dem, was der Canvas bis dahin zeigte, und lässt diese, wie sie ist. Die Kopie arbeitet mit denselben Dateien, so wie sie jetzt sind.",
   findOlder: "Vorheriger Treffer, weiter oben (Enter)",
   findNewer: "Nächster Treffer, weiter unten (Shift+Enter)",
   findMatchCase: "Groß-/Kleinschreibung beachten: Groß- und Kleinbuchstaben gelten als verschieden.",

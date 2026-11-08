@@ -6,6 +6,7 @@ export const chat: Messages["chat"] = {
   status: { idle: "inaktiv", starting: "startet", running: "läuft", error: "Fehler" },
   askMode: { wait: "Der Agent wartet auf meine Antwort", "next-message": "Meine Antwort wird als nächste Nachricht gesendet" },
   terminalActivity: { working: "arbeitet", waiting: "wartet auf dich", idle: "inaktiv" },
+  forkFromHere: "Ab hier forken",
   header: {
     profile: "Profil",
     pickProfile: "Wähle ein Profil",

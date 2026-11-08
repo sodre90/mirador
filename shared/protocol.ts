@@ -155,8 +155,8 @@ export type ClientMessage =
       session: Pick<ExternalSession, "sessionId" | "title">;
       mode: AdoptMode;
     }
-  /** A new conversation with a copy of this one's agent session, which goes on as it was. */
-  | { type: "conversation.fork"; conversationId: string }
+  /** A new conversation with a copy of this one's agent session, which goes on as it was: whole, or through the turn begun with the message at `throughTurnSeq`. */
+  | { type: "conversation.fork"; conversationId: string; throughTurnSeq?: number }
   /** Whether the conversation can be forked yet, for a page that does not hold its history. */
   | { type: "conversation.check-fork"; requestId: string; conversationId: string }
   | { type: "conversation.delete"; conversationId: string }

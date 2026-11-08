@@ -166,6 +166,7 @@ export const hints: Messages["hints"] = {
   searchAll: "Keresés minden munkaterület minden beszélgetésében. Egy találatot megnyitva a beszélgetésében mutatja.",
   find: "Szöveg keresése bárhol ebben a beszélgetésben: a még be nem töltött korábbi bejegyzésekben és az összecsukott kártyákban is, amelyek ott nyílnak ki, ahol találat van.",
   fork: "Ennek a beszélgetésnek a másolata egy új beszélgetésbe, ugyanazon a profilon; ez a beszélgetés változatlan marad. Az itt futó kör folytatódik, a másolatban az lesz, amit az ágens eddig elmentett belőle. Akkor lehetséges, ha az ágens már dolgozott egy üzeneten itt.",
+  forkThroughTurn: "Ezt a beszélgetést e körig, a válaszával együtt, egy új beszélgetésbe másolja ugyanazon a profilon, azzal együtt, amit a vászon addig mutatott; ez a beszélgetés változatlan marad. A másolat ugyanazokon a fájlokon dolgozik, úgy, ahogy most vannak.",
   findOlder: "Előző találat, feljebb (Enter)",
   findNewer: "Következő találat, lejjebb (Shift+Enter)",
   findMatchCase: "Kis- és nagybetű megkülönböztetése.",

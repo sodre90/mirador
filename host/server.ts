@@ -1129,7 +1129,7 @@ export function startServer(services: HostServices) {
         conversations.adopt(message.workspaceId, message.launch, message.session, message.mode);
         return;
       case "conversation.fork":
-        conversations.fork(message.conversationId);
+        conversations.fork(message.conversationId, message.throughTurnSeq);
         return;
       case "conversation.check-fork":
         return reply({ type: "conversation.fork-checked", requestId: message.requestId, forkable: conversations.canFork(message.conversationId) });

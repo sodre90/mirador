@@ -192,6 +192,15 @@ describe("restoreCanvas", () => {
     expect(store.listCanvasItems("c2")).toMatchObject([{ id: "p1" }]);
   });
 
+  test("a fork through a turn copies only what the canvas showed before the next turn began", async () => {
+    const { store, plugins, canvas } = await setUp();
+    store.insertConversation({ ...store.findConversation("c1")!, id: "c2", acpSessionId: "s1" });
+    store.saveCanvasItem({ ...page("shown in the turn", "c2"), createdAt: 10 });
+    store.saveCanvasItem({ ...page("shown in the next turn", "c2"), createdAt: 20 });
+    await restoreCanvas("c1", { ...continued, mode: "fork", canvasShownBefore: 20 }, [], store, canvas, plugins);
+    expect(store.listCanvasItems("c1")).toMatchObject([{ title: "shown in the turn" }]);
+  });
+
   test("without a kept canvas, the canvas is rebuilt from the session's history", async () => {
     const { store, plugins, canvas } = await setUp();
     await restoreCanvas("c1", continued, stored(claudeCall("t1", "mcp__canvas__show", { title: "From history", html: "x" }, "Shown.")), store, canvas, plugins);

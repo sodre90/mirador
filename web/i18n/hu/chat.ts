@@ -4,6 +4,7 @@ export const chat: Messages["chat"] = {
   status: { idle: "tétlen", starting: "indul", running: "fut", error: "hiba" },
   askMode: { wait: "Az ágens vár a válaszomra", "next-message": "A válaszom a következő üzenetként megy el" },
   terminalActivity: { working: "dolgozik", waiting: "rád vár", idle: "tétlen" },
+  forkFromHere: "Elágaztatás innen",
   header: {
     profile: "Profil",
     pickProfile: "Válassz profilt",

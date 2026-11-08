@@ -10,6 +10,7 @@ export const chat = {
   status: { idle: "idle", starting: "starting", running: "running", error: "error" } satisfies Record<ConversationStatus, string>,
   askMode: { wait: "Agent waits for my answer", "next-message": "My answer is sent as the next message" } satisfies Record<AskMode, string>,
   terminalActivity: { working: "working", waiting: "waiting for you", idle: "idle" } satisfies Record<TerminalActivity, string>,
+  forkFromHere: "Fork from here",
   header: {
     profile: "Profile",
     pickProfile: "Pick a profile",

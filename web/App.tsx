@@ -576,7 +576,7 @@ export function App() {
                       onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
                       open={kept}
                       canvasVisible={canvasInView}
-                      onFork={() => forkConversation(keptConversation, dispatch)}
+                      onFork={(throughTurnSeq) => forkConversation(keptConversation, dispatch, throughTurnSeq)}
                       reminderMorning={state.reminderMorning}
                       dispatch={dispatch}
                     />

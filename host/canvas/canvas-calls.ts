@@ -22,13 +22,24 @@ export interface CanvasCall {
 /**
  * Brings back the canvas of the session a conversation continues or forks: as the conversation that holds the session
  * has it, or had it when deleted, else as the session's history tells. A continued session's deleted canvas is then
- * the new conversation's own.
+ * the new conversation's own. A fork cut short at a turn takes only the items shown before the next one began.
  */
-export async function restoreCanvas(conversationId: string, { harness, sessionId, mode }: LoadedSession, events: StoredEvent[], store: Store, canvas: CanvasService, plugins: CanvasPlugins) {
+export async function restoreCanvas(
+  conversationId: string,
+  { harness, sessionId, mode, canvasShownBefore = Infinity }: LoadedSession,
+  events: StoredEvent[],
+  store: Store,
+  canvas: CanvasService,
+  plugins: CanvasPlugins,
+) {
   const holder = store.listConversations().find((conversation) => conversation.id !== conversationId && conversation.harness === harness && conversation.acpSessionId === sessionId);
   const kept = holder ? store.listCanvasItems(holder.id) : store.deletedCanvas(harness, sessionId);
   if (!kept) return rebuildCanvas(conversationId, events, canvas, plugins);
-  canvas.restoreItems(conversationId, kept, { sameIds: mode === "continue" && !holder });
+  canvas.restoreItems(
+    conversationId,
+    kept.filter(({ createdAt }) => createdAt < canvasShownBefore),
+    { sameIds: mode === "continue" && !holder },
+  );
   if (mode === "continue" && !holder) store.forgetDeletedCanvas(harness, sessionId);
 }
 

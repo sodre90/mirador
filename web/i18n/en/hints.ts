@@ -157,6 +157,7 @@ export const hints = {
   searchAll: "Search every conversation in every workspace. Opening a match shows it in its conversation.",
   find: "Find text anywhere in this conversation: in earlier entries not loaded yet, and in folded cards, which unfold where it is found.",
   fork: "Copy this conversation into a new one on the same profile and leave this one as it is. A turn running here goes on; the copy holds what the agent has saved of it so far. Possible once the agent has worked on a message here.",
+  forkThroughTurn: "Copy this conversation, through this turn and its reply, into a new one on the same profile, with what the canvas showed until then, and leave this one as it is. The copy works on the same files, as they are now.",
   findOlder: "Previous match, further up (Enter)",
   findNewer: "Next match, further down (Shift+Enter)",
   findMatchCase: "Match case: capital and small letters count as different.",

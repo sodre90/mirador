@@ -4,6 +4,7 @@ export const chat: Messages["chat"] = {
   status: { idle: "空闲", starting: "启动中", running: "运行中", error: "出错" },
   askMode: { wait: "Agent 等待我的回答", "next-message": "我的回答作为下一条消息发送" },
   terminalActivity: { working: "工作中", waiting: "等你操作", idle: "空闲" },
+  forkFromHere: "从这里 fork",
   header: {
     profile: "配置",
     pickProfile: "选择配置",

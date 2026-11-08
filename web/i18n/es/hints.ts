@@ -175,6 +175,7 @@ export const hints: Messages["hints"] = {
   searchAll: "Busca en todas las conversaciones de todos los espacios de trabajo. Abrir una coincidencia la muestra en su conversación.",
   find: "Busca texto en cualquier parte de esta conversación: en entradas anteriores que aún no se han cargado y en tarjetas contraídas, que se expanden donde se encuentra.",
   fork: "Copia esta conversación en una nueva con el mismo perfil y deja esta como está. Un turno en curso aquí sigue; la copia tiene lo que el agente ha guardado de él hasta ahora. Disponible cuando el agente ya ha trabajado en un mensaje aquí.",
+  forkThroughTurn: "Copia esta conversación, hasta este turno y su respuesta, en una nueva con el mismo perfil, con lo que el lienzo mostraba hasta entonces, y deja esta como está. La copia trabaja con los mismos archivos, tal como están ahora.",
   findOlder: "Coincidencia anterior, más arriba (Enter)",
   findNewer: "Coincidencia siguiente, más abajo (Shift+Enter)",
   findMatchCase: "Distinguir mayúsculas y minúsculas: las letras mayúsculas y minúsculas cuentan como distintas.",
