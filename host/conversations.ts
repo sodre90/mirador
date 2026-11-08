@@ -25,6 +25,7 @@ import {
   type PendingAsk,
   type PendingPermissionRequest,
   type PendingRequest,
+  type Profile,
   type QueuedMessage,
   type RestoreFiles,
   type RestorePlan,
@@ -302,8 +303,8 @@ const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity"
 
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
-  /** One agent process per profile, by its id. */
-  private readonly harnessesByProfile = new Map<string, HarnessProcess>();
+  /** Agent processes by `processKey`: one per profile, except Antigravity's conversations, which each get their own. */
+  private readonly agentProcesses = new Map<string, HarnessProcess>();
   private readonly sessions = new ConversationSessions();
   private readonly subagentSessions = new SubagentSessions();
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
@@ -1418,8 +1419,8 @@ export class ConversationService {
    * before its exit is noticed, which on Windows, where ending a process tree takes a while, it would.
    */
   private moveIdleConversationsOff(harness: HarnessProcess) {
-    this.harnessesByProfile.forEach((current, profileId) => {
-      if (current === harness) this.harnessesByProfile.delete(profileId);
+    this.agentProcesses.forEach((current, profileId) => {
+      if (current === harness) this.agentProcesses.delete(profileId);
     });
     this.runtimes.forEach((runtime) => {
       if (runtime.harness !== harness || runtime.running) return;
@@ -1488,20 +1489,21 @@ export class ConversationService {
    * changed profile they continue where they left off.
    */
   restartProfile(profileId: string) {
-    const harness = this.harnessesByProfile.get(profileId);
-    this.harnessesByProfile.delete(profileId);
-    if (!harness) return;
-    void this.killAgent(harness, { kind: "restarted-for-profile" }).then((stopped) => {
-      if (this.store.findProfile(profileId)) this.continueStoppedTurns(stopped);
+    const keys = [...this.agentProcesses.keys()].filter((key) => key === profileId || key.startsWith(`${profileId}/`));
+    if (keys.length === 0) return;
+    const harnesses = keys.map((key) => this.agentProcesses.get(key)!);
+    keys.forEach((key) => this.agentProcesses.delete(key));
+    void Promise.all(harnesses.map((harness) => this.killAgent(harness, { kind: "restarted-for-profile" }))).then((stopped) => {
+      if (this.store.findProfile(profileId)) this.continueStoppedTurns(stopped.flat());
     });
   }
 
   /** Claude Code agents start again with the program now set, as a profile's agent does when the profile changes. */
   restartClaudeAgents() {
-    [...this.harnessesByProfile]
-      .filter(([profileId]) => this.store.findProfile(profileId)?.harness === "claude")
-      .forEach(([profileId, harness]) => {
-        this.harnessesByProfile.delete(profileId);
+    [...this.agentProcesses]
+      .filter(([key]) => this.store.findProfile(key.split("/")[0])?.harness === "claude")
+      .forEach(([key, harness]) => {
+        this.agentProcesses.delete(key);
         void this.killAgent(harness, { kind: "restarted-for-claude-program" }).then((stopped) => this.continueStoppedTurns(stopped));
       });
   }
@@ -1535,7 +1537,7 @@ export class ConversationService {
     this.stopping = true;
     clearTimeout(this.reminderTimer);
     this.jobWaits.stopAll();
-    return Promise.all([this.commands.shutdown(), ...[...this.harnessesByProfile.values()].map((harness) => harness.stop())]);
+    return Promise.all([this.commands.shutdown(), ...[...this.agentProcesses.values()].map((harness) => harness.stop())]);
   }
 
   /** An open that fails after another has replaced it, as when the agent it was on is stopped, leaves the newer one be. */
@@ -1845,9 +1847,19 @@ export class ConversationService {
     };
   }
 
-  private harnessFor(launch: Launch): HarnessProcess {
+  /**
+   * The agent process serving a conversation. Antigravity keeps one canvas MCP server per process, the one its first
+   * session registered, so every conversation on one profile would reach that first conversation's canvas; it takes a
+   * process of its own. The others share one per profile.
+   */
+  private processKey(profile: Profile, launch: Launch & { id?: string }) {
+    return profile.harness === "antigravity" && launch.id ? `${profile.id}/${launch.id}` : profile.id;
+  }
+
+  private harnessFor(launch: Launch & { id?: string }): HarnessProcess {
     const profile = this.profileOf(launch);
-    const existing = this.harnessesByProfile.get(profile.id);
+    const key = this.processKey(profile, launch);
+    const existing = this.agentProcesses.get(key);
     if (existing) return existing;
     const spec = harnessSpec(profile, this.store.claudeProgramSetting());
     const harness = new HarnessProcess(
@@ -1860,7 +1872,7 @@ export class ConversationService {
       },
       agentLogsDirectory(this.config.dataDir),
     );
-    this.harnessesByProfile.set(profile.id, harness);
+    this.agentProcesses.set(key, harness);
     return harness;
   }
 
@@ -2237,8 +2249,8 @@ export class ConversationService {
   }
 
   private handleHarnessExit(harness: HarnessProcess) {
-    this.harnessesByProfile.forEach((current, key) => {
-      if (current === harness) this.harnessesByProfile.delete(key);
+    this.agentProcesses.forEach((current, key) => {
+      if (current === harness) this.agentProcesses.delete(key);
     });
     this.runtimes.forEach((runtime, conversationId) => {
       if (runtime.harness !== harness) return;

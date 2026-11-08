@@ -45,7 +45,7 @@ function hostWithAConversationOnOpencode({ canFork = true } = {}) {
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const conversations = new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const fake = agentThatForks({ canFork });
-  (conversations as unknown as { harnessesByProfile: Map<string, unknown> }).harnessesByProfile.set("opencode-profile", fake.agent);
+  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set("opencode-profile", fake.agent);
   const original = conversations.create("w1", { harness: "opencode", profileId: "opencode-profile" });
   return { store, conversations, original, ...fake };
 }
