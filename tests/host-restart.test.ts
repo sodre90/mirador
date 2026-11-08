@@ -358,8 +358,11 @@ describe("HostRestart", () => {
 
 describe("relaunchOf", () => {
   test("re-executes the host in place where the system can", () => {
-    expect(relaunchOf({}, "darwin", true)).toEqual({ by: "re-executing" });
-    expect(relaunchOf({ MIRADOR_RESTART_EXIT_CODE: "75" }, "linux", true)).toEqual({ by: "re-executing" });
+    expect(relaunchOf({}, "darwin", true)).toEqual({ by: "re-executing", exitCodeIfItFails: 1 });
+  });
+
+  test("exits with the code its supervisor restarts it on when re-executing fails, so it does not live on half stopped", () => {
+    expect(relaunchOf({ MIRADOR_RESTART_EXIT_CODE: "75" }, "linux", true)).toEqual({ by: "re-executing", exitCodeIfItFails: 75 });
   });
 
   test("on Windows, leaves it to the scheduled task or the desktop app that started the host", () => {

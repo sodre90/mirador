@@ -21,7 +21,8 @@ export function hostCommandLine(argv0: string, entry: string, cwd: string, args:
   return [argv0, relative(cwd, entry), ...args];
 }
 
-export type Relaunch = { by: "re-executing" } | { by: "scheduled-task"; task: string } | { by: "exit-code"; exitCode: number };
+/** A host that cannot re-execute exits with `exitCodeIfItFails`, for whatever supervises it to start it again. */
+export type Relaunch = { by: "re-executing"; exitCodeIfItFails: number } | { by: "scheduled-task"; task: string } | { by: "exit-code"; exitCode: number };
 
 /**
  * How a host comes back after it stops for a restart: re-executed in place, keeping its pid for whoever supervises it
@@ -29,11 +30,12 @@ export type Relaunch = { by: "re-executing" } | { by: "scheduled-task"; task: st
  * it again: its scheduled task, or the desktop app on the exit code it named. Null for a host nothing would start again.
  */
 export function relaunchOf(env: Record<string, string | undefined>, platform: NodeJS.Platform, canReexecute: boolean): Relaunch | null {
-  if (platform !== "win32" && canReexecute) return { by: "re-executing" };
+  const exitCode = Number(env[HOST_RELAUNCH.restartExitCode]);
+  const restartExitCode = Number.isInteger(exitCode) && exitCode > 0 ? exitCode : null;
+  if (platform !== "win32" && canReexecute) return { by: "re-executing", exitCodeIfItFails: restartExitCode ?? 1 };
   const task = env[HOST_RELAUNCH.scheduledTask];
   if (task) return { by: "scheduled-task", task };
-  const exitCode = Number(env[HOST_RELAUNCH.restartExitCode]);
-  return Number.isInteger(exitCode) && exitCode > 0 ? { by: "exit-code", exitCode } : null;
+  return restartExitCode === null ? null : { by: "exit-code", exitCode: restartExitCode };
 }
 
 /**
@@ -41,7 +43,7 @@ export function relaunchOf(env: Record<string, string | undefined>, platform: No
  * queued the run: a run asked for by a process that exits at once never happens.
  */
 export function relaunch(how: Relaunch) {
-  if (how.by === "re-executing") return process.execve!(process.execPath, hostCommandLine(process.argv0, Bun.main, process.cwd(), process.argv.slice(2)), process.env);
+  if (how.by === "re-executing") return reexecuteOrExit(how.exitCodeIfItFails);
   if (how.by === "scheduled-task") {
     const schtasks = join(process.env.SystemRoot ?? "C:\\Windows", "System32", "schtasks.exe");
     const queued = Bun.spawnSync([schtasks, "/run", "/tn", how.task], { windowsHide: true });
@@ -49,6 +51,16 @@ export function relaunch(how: Relaunch) {
     process.exit(0);
   }
   process.exit(how.exitCode);
+}
+
+/** A host left running after its services stopped would hold every queue for good, so one that cannot re-execute exits. */
+function reexecuteOrExit(exitCodeIfItFails: number) {
+  try {
+    process.execve!(process.execPath, hostCommandLine(process.argv0, Bun.main, process.cwd(), process.argv.slice(2)), process.env);
+  } catch (error) {
+    console.error(`the host could not start again, so it exits with ${exitCodeIfItFails}:`, error);
+    process.exit(exitCodeIfItFails);
+  }
 }
 
 /** For the desktop app, which does not start a background host itself and so does not learn its pid otherwise. */
