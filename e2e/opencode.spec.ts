@@ -66,11 +66,22 @@ test("an opencode conversation asks for permission in the browser and uses the c
   await expect((await conversationSettings(page)).getByLabel("Profile", { exact: true }).locator("option:checked")).toHaveText(PROFILE);
   const modelPicker = page.getByRole("button", { name: "Model", exact: true });
   await expect(modelPicker).toHaveText("e2e/Scripted");
+  const modelPill = page.locator(".config.picker:visible");
+  await modelPill.hover();
+  expect(await modelPill.evaluate((element) => getComputedStyle(element).backgroundColor), "the pill highlights while its list is closed").not.toBe("rgba(0, 0, 0, 0)");
   await modelPicker.click();
   const search = page.getByRole("combobox", { name: "Search model choices" });
   await expect(search).toBeFocused();
   const choices = page.getByRole("listbox", { name: "Model choices" });
   await expect(choices.getByRole("option")).toHaveCount(1 + SPARE_MODELS);
+  const drawnChevron = await modelPicker.evaluate((element) => {
+    const after = getComputedStyle(element, "::after");
+    return after.maskImage === "none" ? after.webkitMaskImage : after.maskImage;
+  });
+  expect(drawnChevron, "the picker draws its own arrow beside the chosen name").toContain("data:image/svg");
+  await expect(modelPill, "the pill stops highlighting while its list is open").toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await choices.getByRole("option").first().hover();
+  await expect(modelPill, "and stays unlit as the pointer moves over the list").toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
   await search.fill("spare 7");
   await expect(choices.getByRole("option")).toHaveCount(2);
   await expect(choices.getByRole("group", { name: "Spare" }).getByRole("option", { name: "Spare model 17" })).toBeVisible();

@@ -33,8 +33,10 @@
   --rail-selected: light-dark(rgb(24 24 48 / 0.08), rgb(255 255 255 / 0.09));
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
   --font-scale: 1;
-  /* A mid grey that reads on both themes: an image can't follow light-dark() */
-  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23878a93' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  /* A url() image cannot read light-dark() or currentColor, so the theme rules below swap in a variant stroked as
+     --muted is in that theme. (Consumers that paint through a mask follow the token by themselves.) */
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2362656e' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --select-chevron-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%238d909a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   color-scheme: light;
   font-family: "Inter var", Inter, -apple-system, BlinkMacSystemFont, system-ui, "Segoe UI", sans-serif;
   font-size: calc(13.5px * var(--font-scale));
@@ -43,10 +45,18 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
+  --select-chevron: var(--select-chevron-dark);
 }
 
 :root[data-theme="system"] {
   color-scheme: light dark;
+}
+
+/* Keep this beside the theme rules it follows: which scheme Match system is in is only knowable by media query */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --select-chevron: var(--select-chevron-dark);
+  }
 }
 
 * {
@@ -157,6 +167,14 @@ select {
 select:disabled {
   cursor: default;
   opacity: 0.6;
+}
+
+/* High-contrast mode strips drawn arrows as decoration, so there the system draws its own button and arrow again */
+@media (forced-colors: active) {
+  select {
+    -webkit-appearance: auto;
+    appearance: auto;
+  }
 }
 
 /* The open list is drawn by the browser, which can paint it light while the options inherit a dark theme's light text */
@@ -1089,8 +1107,25 @@ button.icon.favourite-star.on,
 }
 
 .agent-chip::after {
-  content: "▾";
+  content: "";
   flex: none;
+  width: 9px;
+  height: 6px;
+  -webkit-mask: var(--select-chevron) no-repeat center / contain;
+  mask: var(--select-chevron) no-repeat center / contain;
+  background-color: currentColor;
+}
+
+/* High-contrast mode strips drawn arrows, masks included: there the old text arrow serves */
+@media (forced-colors: active) {
+  .agent-chip::after {
+    content: "▾";
+    width: auto;
+    height: auto;
+    -webkit-mask: none;
+    mask: none;
+    background-color: transparent;
+  }
 }
 
 .profile-dot {
@@ -1831,8 +1866,14 @@ button.subagents-running {
   max-width: 220px;
 }
 
-.config:hover:not(:has(:disabled)) {
+/* Only the pill's own control can stop the hover: :disabled also matches the greyed <option> entries inside a usable
+   select, and while a searchable picker's list is open the pointer is over the popover, not the pill. */
+.config:hover:not(:has(select:disabled, input:disabled, textarea:disabled, button:disabled)):not(:has(.picker-popover)) {
   background: var(--panel-2);
+}
+
+.config:has(select:disabled, input:disabled, textarea:disabled, button:disabled) {
+  cursor: default;
 }
 
 .config select:focus-visible {
@@ -1852,26 +1893,45 @@ button.subagents-running {
 }
 
 button.picker-button {
+  position: relative;
   border: none;
   background: transparent;
   color: var(--text);
   font-weight: 500;
   font-size: calc(12px * var(--font-scale));
-  padding: 2px 4px;
+  padding: 2px 18px 2px 4px;
   max-width: 260px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Out of the text flow: an arrow in the inline flow would sit past the ellipsis, where overflow clips it away on a long name.
+   A mask over a colour, so the arrow follows --muted in every theme instead of baking a stroke into the image. */
 button.picker-button::after {
   content: "";
-  display: inline-block;
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
   width: 9px;
   height: 6px;
-  margin: 0 2px 0 8px;
-  vertical-align: middle;
-  background: var(--select-chevron) no-repeat center / contain;
+  -webkit-mask: var(--select-chevron) no-repeat center / contain;
+  mask: var(--select-chevron) no-repeat center / contain;
+  background-color: var(--muted);
+}
+
+/* High-contrast mode strips drawn arrows, masks included, and a button has no system arrow to restore: there the
+   chevron falls back to a text glyph, still out of the text flow so an ellipsis cannot clip it away */
+@media (forced-colors: active) {
+  button.picker-button::after {
+    content: "▾";
+    width: auto;
+    height: auto;
+    -webkit-mask: none;
+    mask: none;
+    background-color: transparent;
+  }
 }
 
 button.picker-button:hover:not(:disabled) {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, conversationSettings, createProfile, signIn, startConversation, turnOnYolo } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseInSettings, conversationSettings, createProfile, sendMessage, signIn, startConversation, turnOnYolo } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -36,6 +36,9 @@ test("the bar names the profile and model, and opens the rest as this conversati
   const questions = settings.getByLabel("Questions", { exact: true });
   await expect(questions, "the page draws the select, not the system's button and arrow").toHaveCSS("appearance", "none");
   await expect(questions, "its own chevron").toHaveCSS("background-image", /svg/);
+  for (const select of await settings.locator("select").all()) {
+    await expect(select, "the page draws its own arrow: a background shorthand anywhere on it would wipe this away").toHaveCSS("background-image", /data:image\/svg/);
+  }
 
   await settings.getByLabel("Questions", { exact: true }).selectOption("next-message");
   await expect(settings, "a change keeps the settings open").toBeVisible();
@@ -47,6 +50,28 @@ test("the bar names the profile and model, and opens the rest as this conversati
   await expect(settings, "a press outside closes them").toBeHidden();
 });
 
+test("a begun conversation's pills all highlight on hover, though its Profile list holds greyed entries", async ({ page }) => {
+  await signInWithWorkspace(page);
+  const dialog = await createProfile(page, "spare agent", "", "", "opencode");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await startConversation(page);
+  await sendMessage(page, "hello");
+  const settings = await conversationSettings(page);
+  const profileSelect = settings.getByLabel("Profile", { exact: true });
+  // Not toBeDisabled: Playwright reads an element inside a label as the label's control, here the usable select
+  await expect(
+    profileSelect.locator("option", { hasText: "spare agent · opencode" }),
+    "the begun conversation greys the other agent's entry out"
+  ).toHaveAttribute("disabled");
+  const profilePill = profileSelect.locator("xpath=ancestor::label[1]");
+  const questionsPill = settings.getByLabel("Questions", { exact: true }).locator("xpath=ancestor::label[1]");
+  await questionsPill.hover();
+  const hovered = await questionsPill.evaluate((element) => getComputedStyle(element).backgroundColor);
+  expect(hovered, "the Questions pill highlights").not.toBe("rgba(0, 0, 0, 0)");
+  await profilePill.hover();
+  await expect(profilePill, "the Profile pill highlights as much while its list holds greyed entries").toHaveCSS("background-color", hovered);
+});
+
 test("YOLO shows in the bar while it is on", async ({ page }) => {
   await signInWithWorkspace(page);
   await startConversation(page);
@@ -56,6 +81,20 @@ test("YOLO shows in the bar while it is on", async ({ page }) => {
   await expect(yoloBadge).toHaveText("YOLO");
   await (await conversationSettings(page)).getByLabel("YOLO", { exact: true }).click();
   await expect(yoloBadge).toHaveCount(0);
+});
+
+test("the drawn chevron follows the theme's muted tone", async ({ page }) => {
+  await signInWithWorkspace(page);
+  await startConversation(page);
+  const chevronOf = async () => {
+    const settings = await conversationSettings(page);
+    return settings.getByLabel("Questions", { exact: true }).evaluate((element) => getComputedStyle(element).backgroundImage);
+  };
+  await chooseInSettings(page, "Theme", "Light");
+  expect(await chevronOf(), "light strokes the arrow as light --muted").toMatch(/62656e/);
+  await chooseInSettings(page, "Theme", "Dark");
+  expect(await chevronOf(), "dark swaps in the arrow stroked as dark --muted").toMatch(/8d909a/);
+  await chooseInSettings(page, "Theme", "Match system");
 });
 
 test("the agent shows beside a profile whose name doesn't say it, and beside a deleted profile", async ({ page }) => {
