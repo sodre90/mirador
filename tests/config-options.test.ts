@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
-import { knownChoices, offersValue } from "../shared/config-options.ts";
+import { categoryChoices, knownChoices, offersValue } from "../shared/config-options.ts";
 import type { Conversation, HarnessId } from "../shared/model.ts";
 
 const selectOption = (category: "mode" | "thought_level", values: string[]): SessionConfigOption => ({
@@ -34,6 +34,14 @@ test("an agent's effort levels come from its latest conversation whose model has
     conversation("claude", 5, [modeOption(["default"])]),
   ];
   expect(knownChoices(conversations, "claude", "thought_level").map(({ value }) => value)).toEqual(["low", "medium", "high", "max"]);
+});
+
+test("an agent's choices of a kind come from the options it answered with, of that category alone", () => {
+  const answered = [modeOption(["default", "accept-edits"]), effortOption(["low", "high"]), { id: "fast", name: "Fast", type: "boolean", currentValue: false } as SessionConfigOption];
+  expect(categoryChoices(answered, "mode").map(({ value }) => value)).toEqual(["default", "accept-edits"]);
+  expect(categoryChoices(answered, "thought_level").map(({ value }) => value)).toEqual(["low", "high"]);
+  expect(categoryChoices([modeOption(["default"])], "thought_level")).toEqual([]);
+  expect(categoryChoices([], "mode")).toEqual([]);
 });
 
 test("an option offers only the values it lists", () => {

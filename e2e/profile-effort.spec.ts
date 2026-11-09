@@ -49,7 +49,7 @@ test("a profile sets the effort of the conversations that start with it or move 
   await addWorkspace(page, host.projectDir);
   for (const name of ["plain", "thorough"]) {
     const profiles = await createProfile(page, name, `FAKE_ACP_MODES=1\nFAKE_ACP_NAME=${name}`, "", "opencode");
-    await expect(profiles.getByLabel("Profile effort").locator("option")).toHaveText(["Agent's default"]);
+    await expect(profiles.getByLabel("Profile effort").locator("option")).toHaveText(["Agent's default", "Low", "High"]);
     await profiles.getByRole("button", { name: "Close" }).click();
   }
   const effort = async () => (await conversationSettings(page)).getByLabel("Effort", { exact: true });

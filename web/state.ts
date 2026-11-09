@@ -403,6 +403,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "fs.completions":
     case "pong":
     case "profile.saved":
+    case "profile.choices":
     case "sessions.listed":
     case "sessions.searched":
     case "sessions.failed":

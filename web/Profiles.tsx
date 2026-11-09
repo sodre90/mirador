@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import { profileSettingValue } from "../shared/apps.ts";
-import { knownChoices } from "../shared/config-options.ts";
+import { categoryChoices, knownChoices } from "../shared/config-options.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
 import type { ProfileDraft } from "../shared/protocol.ts";
@@ -99,10 +100,25 @@ function EnvironmentField({
 const AGENTS_OWN_CHOICE = "";
 
 /** Agent's default first, then the choices the agent listed last, and the profile's own if the agent has not listed it yet. */
-function profileChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level", saved: string) {
-  const known = knownChoices(conversations, harness, category).map(({ value, name }) => ({ value, name }));
+function profileChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level", saved: string, fetched: SessionConfigOption[] | null) {
+  const known = (fetched ? categoryChoices(fetched, category) : knownChoices(conversations, harness, category)).map(({ value, name }) => ({ value, name }));
   const savedButUnknown = saved !== AGENTS_OWN_CHOICE && !known.some(({ value }) => value === saved) ? [{ value: saved, name: saved }] : [];
   return [{ value: AGENTS_OWN_CHOICE, name: words.agentsDefault }, ...known, ...savedButUnknown];
+}
+
+/** What the profile's agent itself says it offers, asked each time its editor opens; null while it answers or when it did not. */
+function useAgentChoices(profileId: string | undefined) {
+  const [fetched, setFetched] = useState<SessionConfigOption[] | null>(null);
+  useEffect(() => {
+    if (!profileId) return;
+    const requestId = crypto.randomUUID();
+    const stopListening = connection.onMessage((message) => {
+      if (message.type === "profile.choices" && message.requestId === requestId) setFetched(message.configOptions);
+    });
+    connection.send({ type: "profile.fetch-choices", requestId, profileId });
+    return stopListening;
+  }, [profileId]);
+  return fetched;
 }
 
 /** A new profile runs an agent this machine has; one named after its agent keeps following the agent picked until it is renamed. */
@@ -166,6 +182,7 @@ function ProfileEditor({
   const choosePluginSetting = (plugin: string, settingId: string, value: string) =>
     setPluginSettings((settings) => ({ ...settings, [plugin]: { ...settings[plugin], [settingId]: value } }));
   const [savedOnce, setSavedOnce] = useState(false);
+  const agentChoices = useAgentChoices(profile?.id);
   const typingAidAttributes = useTypingAidAttributes();
   const { save, saving } = useSaveProfile((profileId) => {
     setSavedOnce(true);
@@ -226,7 +243,7 @@ function ProfileEditor({
       <label>
         <span>{words.mode}</span>
         <select aria-label={words.modeLabel} value={mode} onChange={(event) => setMode(event.target.value)}>
-          {profileChoices(conversations, harness, "mode", mode).map((choice) => (
+          {profileChoices(conversations, harness, "mode", mode, agentChoices).map((choice) => (
             <option key={choice.value} value={choice.value}>
               {choice.name}
             </option>
@@ -236,7 +253,7 @@ function ProfileEditor({
       <label>
         <span>{words.effort}</span>
         <select aria-label={words.effortLabel} value={effort} onChange={(event) => setEffort(event.target.value)}>
-          {profileChoices(conversations, harness, "thought_level", effort).map((choice) => (
+          {profileChoices(conversations, harness, "thought_level", effort, agentChoices).map((choice) => (
             <option key={choice.value} value={choice.value}>
               {choice.name}
             </option>

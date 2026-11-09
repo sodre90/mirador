@@ -12,14 +12,19 @@ export function flatSelectOptions(option: SelectOption): SessionConfigSelectOpti
 export const offersValue = (option: SessionConfigOption, value: string) =>
   option.type === "select" && flatSelectOptions(option).some((choice) => choice.value === value);
 
+/** An agent's choices of a kind, such as its modes, from the options it last answered with; none when it lists no such option. */
+export function categoryChoices(options: SessionConfigOption[], category: "mode" | "thought_level"): SessionConfigSelectOption[] {
+  const option = options.find((candidate): candidate is SelectOption => candidate.category === category && candidate.type === "select");
+  return option ? flatSelectOptions(option) : [];
+}
+
 /** The agent's choices of a kind, such as its modes, as its most recently active conversation lists them; none until one of its conversations has run. */
 export function knownChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level"): SessionConfigSelectOption[] {
-  const option = conversations
-    .filter((conversation) => conversation.harness === harness)
-    .sort((a, b) => b.updatedAt - a.updatedAt)
-    .flatMap(({ configOptions }) => configOptions)
-    .find((candidate): candidate is SelectOption => candidate.category === category && candidate.type === "select");
-  return option ? flatSelectOptions(option) : [];
+  for (const { configOptions } of conversations.filter((conversation) => conversation.harness === harness).sort((a, b) => b.updatedAt - a.updatedAt)) {
+    const choices = categoryChoices(configOptions, category);
+    if (choices.length > 0) return choices;
+  }
+  return [];
 }
 
 /** What a request on the model costs against the plan, as Copilot says it, e.g. "15x" for Claude Opus; null from an agent that says nothing. */

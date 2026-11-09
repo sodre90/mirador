@@ -1,4 +1,5 @@
 import { realpath } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import type { PluginActivity } from "../shared/canvas-plugins.ts";
 import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
 import { isDeepStrictEqual } from "node:util";
@@ -117,6 +118,10 @@ const PROMPT_RECORD_WAIT_MS = 3_000;
 const SESSION_CLOSE_TIMEOUT_MS = 5_000;
 const REMINDER_CHECK_MS = 30_000;
 const OPTION_ANSWER_TIMEOUT_MS = 10_000;
+/** What a profile's agent says it offers is kept for its editors this long: it costs starting the agent to ask again. */
+const PROFILE_CHOICES_TTL_MS = 15 * 60_000;
+/** An agent that does not answer a probe within this leaves the editor with what it knew from its conversations. */
+const PROFILE_PROBE_TIMEOUT_MS = 30_000;
 /** Like Claude Code: the agent continues a minute after its usage limit resets, at most twice in a row by itself. */
 const USAGE_LIMIT_RESET_MARGIN_MS = 60_000;
 const AUTOMATIC_CONTINUES_IN_A_ROW = 2;
@@ -315,6 +320,9 @@ export class ConversationService {
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
   private readonly sessionsSlowToAnswer = new Set<string>();
   private readonly updatesForUnknownSessions = new UnknownSessionUpdates();
+  /** What each profile's agent last said it offers, and the probe asking one now. */
+  private readonly profileChoicesCache = new Map<string, { at: number; options: acp.SessionConfigOption[] }>();
+  private readonly profileChoiceProbes = new Map<string, Promise<acp.SessionConfigOption[] | null>>();
   private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail" | "busyWith" | "statusProblem">>();
   private readonly terminalActivity = new Map<string, TerminalActivity>();
   private readonly terminalWork = new TerminalWork();
@@ -832,6 +840,51 @@ export class ConversationService {
     const sessionId = await this.ensureSession(conversationId);
     const response = await this.harnessFor(this.get(conversationId)).setConfigOption(sessionId, configId, value);
     this.save({ ...this.get(conversationId), configOptions: response.configOptions });
+  }
+
+  /**
+   * What a profile's agent offers, from the agent itself, so a profile editor can list modes and efforts before one of
+   * its conversations has run; null when the agent was not there to answer, and the editor keeps what its own
+   * conversations last listed. An answer stands until the profile launches its agent differently.
+   */
+  async profileChoices(profileId: string): Promise<acp.SessionConfigOption[] | null> {
+    const remembered = this.profileChoicesCache.get(profileId);
+    if (remembered && Date.now() - remembered.at < PROFILE_CHOICES_TTL_MS) return remembered.options;
+    const asking = this.profileChoiceProbes.get(profileId);
+    if (asking) return asking;
+    const probe = this.askProfileChoices(profileId).then((options) => {
+      if (options) this.profileChoicesCache.set(profileId, { at: Date.now(), options });
+      return options;
+    });
+    this.profileChoiceProbes.set(profileId, probe);
+    return Promise.race([probe, Bun.sleep(PROFILE_PROBE_TIMEOUT_MS).then(() => null as acp.SessionConfigOption[] | null)]);
+  }
+
+  /** Starts the profile's agent as a conversation would, asks a new session what it offers, and stops it again. */
+  private async askProfileChoices(profileId: string): Promise<acp.SessionConfigOption[] | null> {
+    const profile = this.store.findProfile(profileId);
+    if (!profile) return null;
+    let harness: HarnessProcess | null = null;
+    try {
+      const spec = harnessSpec(profile, this.store.claudeProgramSetting());
+      harness = new HarnessProcess(
+        { ...spec, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH) } },
+        {
+          onSessionUpdate: () => {},
+          onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" as const } }),
+          onElicitationRequest: async () => ({ action: "decline" as const }),
+          onExit: () => {},
+        },
+        agentLogsDirectory(this.config.dataDir),
+      );
+      await harness.start();
+      const created = await harness.newSession({ cwd: tmpdir(), mcpServers: [] });
+      return created.configOptions ?? null;
+    } catch {
+      return null;
+    } finally {
+      void harness?.stop();
+    }
   }
 
   async prompt(conversationId: string, text: string, { imageIds = [], fromScript = false, fromMirador = false, fromPlugin, startsTurn = false }: PromptStart = {}) {
@@ -1526,6 +1579,7 @@ export class ConversationService {
    * changed profile they continue where they left off.
    */
   restartProfile(profileId: string) {
+    this.profileChoicesCache.delete(profileId);
     const keys = [...this.agentProcesses.keys()].filter((key) => key === profileId || key.startsWith(`${profileId}/`));
     if (keys.length === 0) return;
     const harnesses = keys.map((key) => this.agentProcesses.get(key)!);

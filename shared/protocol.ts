@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { NotificationKind } from "./system-notifications.ts";
-import type { ToolCallContent } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk";
 import type {
   AdoptMode,
   AskAnswerEntry,
@@ -104,6 +104,8 @@ export type ClientMessage =
   | { type: "workspace-group.delete"; groupId: string }
   | { type: "profile.save"; requestId: string; profile: ProfileDraft }
   | { type: "profile.delete"; profileId: string }
+  /** Asks what the profile's agent offers now, so a profile editor can list modes and efforts without one of its conversations having run. */
+  | { type: "profile.fetch-choices"; requestId: string; profileId: string }
   /** Creates the template, or changes the one with this id. */
   | { type: "prompt-template.save"; template: Pick<PromptTemplate, "id" | "name" | "text"> }
   | { type: "prompt-template.delete"; templateId: string }
@@ -416,6 +418,8 @@ export type ServerMessage =
   | { type: "profile.upserted"; profile: Profile }
   | { type: "profile.deleted"; profileId: string }
   | { type: "profile.saved"; requestId: string; profileId: string }
+  /** What the profile's agent said it offers; null when it was not there to answer. */
+  | { type: "profile.choices"; requestId: string; profileId: string; configOptions: SessionConfigOption[] | null }
   | { type: "prompt-template.upserted"; template: PromptTemplate }
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }

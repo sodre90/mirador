@@ -23,7 +23,7 @@ test("a profile sets the mode, YOLO and Questions of the conversations that star
   const plainProfile = await createProfile(page, "plain", scriptedOpencodeEnvironment(model, host.root), "", "opencode");
   await plainProfile.getByRole("button", { name: "Close" }).click();
   const created = await createProfile(page, PROFILE, scriptedOpencodeEnvironment(model, host.root), "", "opencode");
-  await expect(created.getByLabel("Profile mode").locator("option")).toHaveText(["Agent's default"]);
+  await expect(created.getByLabel("Profile mode").locator("option")).toHaveText(["Agent's default", "Build", "Plan"]);
   await created.getByRole("button", { name: "Close" }).click();
 
   const sessionMode = async () => (await conversationSettings(page)).getByLabel("Session Mode", { exact: true });

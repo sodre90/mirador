@@ -1050,6 +1050,10 @@ export function startServer(services: HostServices) {
         return reply({ type: "profile.saved", requestId: message.requestId, profileId: profiles.save(message.profile).id });
       case "profile.delete":
         return profiles.delete(message.profileId);
+      case "profile.fetch-choices":
+        return void conversations
+          .profileChoices(message.profileId)
+          .then((configOptions) => reply({ type: "profile.choices", requestId: message.requestId, profileId: message.profileId, configOptions }));
       case "prompt-template.save":
         return savePromptTemplate(message.template);
       case "prompt-template.delete":
