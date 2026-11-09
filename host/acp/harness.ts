@@ -112,10 +112,13 @@ export class HarnessProcess {
   ) {}
 
   start(): Promise<acp.InitializeResponse> {
-    this.initialized ??= this.launchInTurn().catch((error) => {
-      this.initialized = undefined;
-      throw error;
-    });
+    if (!this.initialized) {
+      this.stopReason = undefined;
+      this.initialized = this.launchInTurn().catch((error) => {
+        this.initialized = undefined;
+        throw error;
+      });
+    }
     return this.initialized;
   }
 
@@ -245,8 +248,9 @@ export class HarnessProcess {
   }
 
   private async launch() {
-    this.stopReason = undefined;
+    this.endIfStoppedBeforeSpawning();
     await this.runPrelaunch();
+    this.endIfStoppedBeforeSpawning();
     const [command, ...args] = this.spec.command;
     const child = spawnAgent(command!, args, this.spec.environment);
     this.child = child;
@@ -295,6 +299,14 @@ export class HarnessProcess {
       setTimeout(() => connection.close(), LAST_OUTPUT_AFTER_EXIT_MS).unref();
     });
     return this.initialize();
+  }
+
+  /**
+   * A stop that comes while the start waits its turn or runs the pre-launch command finds no process to end; the
+   * start ends there, as it would had the process been running, rather than start one its owner has let go of.
+   */
+  private endIfStoppedBeforeSpawning() {
+    if (this.stopReason) throw new HostProblemError({ code: "agent-gone", agent: this.spec.label, gone: this.stopReason });
   }
 
   /** An agent that never answers would hold up every later start of its kind, when they start one at a time. */
