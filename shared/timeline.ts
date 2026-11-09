@@ -11,7 +11,7 @@ import type {
   ToolCallStatus,
   ToolCallUpdate,
   ToolKind,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import { hookNoticeIn } from "./hook-message.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { StoredEvent } from "./model.ts";

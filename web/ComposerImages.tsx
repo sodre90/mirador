@@ -1,5 +1,5 @@
 import { useRef, useState, type ClipboardEvent, type Dispatch, type DragEvent, type RefObject, type SetStateAction } from "react";
-import type { ImageContent } from "@agentclientprotocol/sdk";
+import type { ImageContent } from "@agentclientprotocol/sdk/unstable";
 import { carriedImageSource, imageUrl } from "../shared/images.ts";
 import { useDraftAttachments } from "./drafts.ts";
 import { useImagePreview } from "./ImagePreview.tsx";

@@ -1,4 +1,4 @@
-import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { AskOption, AskQuestion, StoredEvent } from "../../shared/model.ts";
 import { toolNameOf } from "../../shared/tool-title.ts";
 import { canvasToolName } from "./tool-names.ts";

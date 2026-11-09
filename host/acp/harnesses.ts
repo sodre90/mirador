@@ -1,4 +1,4 @@
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError, type SystemPrompt } from "@agentclientprotocol/sdk/unstable";
 import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
@@ -243,7 +243,7 @@ export function sessionMeta(
  * ACP's own appended system prompt, which Codex takes; the others get theirs through `_meta`. The canvas server's
  * instructions reach Codex as the description of the canvas tools, and its job waits go through the when_done tool.
  */
-export function sessionSystemPrompt(harness: HarnessId, canvasUse: CanvasUse, canvasPlugins = NO_CANVAS_PLUGINS) {
+export function sessionSystemPrompt(harness: HarnessId, canvasUse: CanvasUse, canvasPlugins = NO_CANVAS_PLUGINS): SystemPrompt | undefined {
   if (harness !== "codex" || canvasUse !== "often") return undefined;
   return { mode: "append", content: [{ type: "text", text: canvasUseGuidance(canvasPlugins) }] };
 }

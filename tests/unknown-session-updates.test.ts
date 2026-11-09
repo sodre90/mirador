@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { UnknownSessionUpdates } from "../host/unknown-session-updates.ts";
 
 const note = (sessionId: string, text: string): acp.SessionNotification => ({

@@ -40,7 +40,7 @@ export class FakeGateway {
   }
 
   messageRequests() {
-    return this.requests.filter(({ method, path }) => method === "POST" && path.startsWith("/v1/messages"));
+    return this.requests.filter(({ method, path }) => method === "POST" && path.startsWith("/v1/messages") && !path.startsWith("/v1/messages/count_tokens"));
   }
 
   tokensSentToMessages() {

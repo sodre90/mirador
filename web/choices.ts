@@ -1,4 +1,4 @@
-import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk/unstable";
 import { nameWithMultiplier } from "../shared/config-options.ts";
 
 type SelectOption = Extract<SessionConfigOption, { type: "select" }>;

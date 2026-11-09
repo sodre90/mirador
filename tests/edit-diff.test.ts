@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, test } from "bun:test";
-import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { editDiff, editDiffsOf, fileChangeDiff, shownPath, snippetDiff, type FileBefore } from "../host/edit-diff.ts";
 import type { DiffRow, EditDiff } from "../shared/review.ts";
 

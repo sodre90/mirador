@@ -1,4 +1,4 @@
-import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { codexMcpToolName } from "../../shared/tool-title.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS } from "./tool-names.ts";

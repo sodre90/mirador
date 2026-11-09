@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { choiceGroups, filterChoiceGroups } from "../web/choices.ts";
 
 type SelectOption = Extract<SessionConfigOption, { type: "select" }>;

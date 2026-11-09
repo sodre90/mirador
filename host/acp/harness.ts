@@ -2,7 +2,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { appendFileSync, closeSync, createWriteStream, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { Readable, Writable } from "node:stream";
-import * as acp from "@agentclientprotocol/sdk";
+import * as acp from "@agentclientprotocol/sdk/unstable";
 import { HostProblemError, type AgentGone, type PrelaunchFailure } from "../../shared/host-problems.ts";
 import type { HarnessId } from "../../shared/model.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
@@ -236,12 +236,12 @@ export class HarnessProcess {
    * and only once the process has exited, so by then the process is known to be gone.
    */
   private async failingWithExitReason<T>(request: (agent: acp.ClientConnection["agent"]) => Promise<T>): Promise<T> {
-    const { connection, exited } = this;
+    const connection = this.connection;
     try {
       return await request(this.agent());
     } catch (error) {
       if (!connection?.signal.aborted) throw error;
-      const reason = await Promise.race([exited, Bun.sleep(EXIT_WAIT_MS).then(() => null)]);
+      const reason = await Promise.race([this.exited, Bun.sleep(EXIT_WAIT_MS).then(() => null)]);
       throw reason === null ? error : new HostProblemError({ code: "agent-gone", agent: this.spec.label, gone: reason });
     }
   }

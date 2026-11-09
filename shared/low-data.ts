@@ -1,4 +1,4 @@
-import type { ContentBlock, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ContentBlock, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type { CanvasItem } from "./model.ts";
 
 /**

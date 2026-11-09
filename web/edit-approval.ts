@@ -1,4 +1,4 @@
-import type { PermissionOption } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import type { StoredEvent } from "../shared/model.ts";
 import type { EditDiff } from "../shared/review.ts";
 import type { SettledNote } from "./SettledNote.tsx";

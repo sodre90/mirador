@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 
 /** The bridge exists to cross the race where updates arrive before the session's conversation is known; a session stuck outside it may not fill the host's memory. */
 const MAX_BRIDGED_UPDATES = 1_000;

@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { expect, test } from "bun:test";
 import { TerminalWork, updatesAfter } from "../host/terminal-catch-up.ts";
 

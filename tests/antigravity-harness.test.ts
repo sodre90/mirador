@@ -9,7 +9,7 @@ import { canvasToolName } from "../host/canvas/tool-names.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { harnessRewinds, type Profile } from "../shared/model.ts";
 import { antigravityMcpToolName, readableToolTitle } from "../shared/tool-title.ts";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { buildTimeline } from "../shared/timeline.ts";
 import { harnessSteers } from "../web/busy-sending.ts";
 import { fakeProgram } from "./fake-program.ts";

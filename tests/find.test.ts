@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
 import { isValidQuery, matchCount, matchOffsets, occurrencesIn, textsOf } from "../shared/find.ts";
 import { snippetAround } from "../host/search.ts";

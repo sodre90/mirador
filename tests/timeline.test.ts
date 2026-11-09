@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";

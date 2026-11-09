@@ -14,7 +14,8 @@ if (store.listProfiles().length === 0) {
     harness: "claude",
     environment: "",
     prelaunch: "",
-    mode: null,
+    // Claude Code starts in Auto mode on its own, which approves tools without asking; the specs see its prompts.
+    mode: "default",
     effort: null,
     bypassPermissions: false,
     askMode: "wait",

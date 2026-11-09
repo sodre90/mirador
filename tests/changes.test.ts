@@ -3,7 +3,7 @@ import { realpathSync } from "node:fs";
 import { chmod, mkdir, mkdtemp, realpath, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { ToolKind } from "@agentclientprotocol/sdk";
+import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
 import { agentEditsIn, Changes, COMMAND_WINDOW_SLACK_MS, commandWindows, OutsideWorkspace, toolCallWindows, writerOf } from "../host/changes.ts";
 import { Checkpoints } from "../host/checkpoints.ts";
 import { Store } from "../host/store.ts";

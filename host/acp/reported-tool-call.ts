@@ -1,4 +1,4 @@
-import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 
 /**
  * A permission request's tool call, completed from the reports of it the agent sent before. claude-agent-acp asks a

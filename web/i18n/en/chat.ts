@@ -1,5 +1,5 @@
 import type { AskMode, AsyncTaskState, BusyWith, ConversationStatus, DelegatedReply, TerminalActivity } from "../../../shared/model.ts";
-import type { StopReason } from "@agentclientprotocol/sdk";
+import type { StopReason } from "@agentclientprotocol/sdk/unstable";
 import type { SubagentState } from "../../../shared/timeline.ts";
 
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);

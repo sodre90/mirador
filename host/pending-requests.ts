@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { questionsOf } from "../shared/ask.ts";
 import type { AskItem, PendingAsk, PendingPermissionRequest } from "../shared/model.ts";
 import { cutWithEllipsis } from "../shared/text-cut.ts";

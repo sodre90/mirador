@@ -1,4 +1,4 @@
-import type { PlanEntry } from "@agentclientprotocol/sdk";
+import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasShellUrl, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";

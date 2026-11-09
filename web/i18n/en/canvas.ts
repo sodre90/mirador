@@ -1,4 +1,4 @@
-import type { PermissionOption } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import type { ChangedFile, ChangeScope, ChangesBase } from "../../../shared/changes.ts";
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);

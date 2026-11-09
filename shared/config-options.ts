@@ -1,4 +1,4 @@
-import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk/unstable";
 import type { RanOn } from "./canvas-plugins.ts";
 import { isClaudeModelId, modelLabel } from "./claude-models.ts";
 import type { Conversation, HarnessId } from "./model.ts";

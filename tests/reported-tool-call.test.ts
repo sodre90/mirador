@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { withReportedToolCall } from "../host/acp/reported-tool-call.ts";
 
 const diff = { type: "diff" as const, path: "/work/a.ts", oldText: "one", newText: "two" };

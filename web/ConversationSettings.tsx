@@ -1,4 +1,4 @@
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { useRef, useState, type CSSProperties, type RefObject } from "react";
 import { profileSettingValue } from "../shared/apps.ts";
 import { chosenModel, flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";

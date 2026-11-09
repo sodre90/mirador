@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { currentActivity, OpenToolCalls } from "../host/activity.ts";
 
 const started = (toolCallId: string, title: string): acp.SessionUpdate => ({ sessionUpdate: "tool_call", toolCallId, title, status: "in_progress" });

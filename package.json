@@ -10,9 +10,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@agentclientprotocol/claude-agent-acp": "0.88.0",
-    "@agentclientprotocol/codex-acp": "2.5.0",
-    "@agentclientprotocol/sdk": "1.5.1",
+    "@agentclientprotocol/claude-agent-acp": "0.101.1",
+    "@agentclientprotocol/codex-acp": "2.6.0",
+    "@agentclientprotocol/sdk": "2.5.0",
     "@anthropic-ai/sdk": "0.129.0",
     "@lexical/code": "0.52.0",
     "@lexical/link": "0.52.0",
@@ -52,8 +52,8 @@
     "typescript": "^7.0.2"
   },
   "patchedDependencies": {
-    "@agentclientprotocol/claude-agent-acp@0.88.0": "patches/@agentclientprotocol%2Fclaude-agent-acp@0.88.0.patch",
     "pi-acp@0.0.34": "patches/pi-acp@0.0.34.patch",
-    "@agentclientprotocol/codex-acp@2.5.0": "patches/@agentclientprotocol%2Fcodex-acp@2.5.0.patch"
+    "@agentclientprotocol/claude-agent-acp@0.101.1": "patches/@agentclientprotocol%2Fclaude-agent-acp@0.101.1.patch",
+    "@agentclientprotocol/codex-acp@2.6.0": "patches/@agentclientprotocol%2Fcodex-acp@2.6.0.patch"
   }
 }

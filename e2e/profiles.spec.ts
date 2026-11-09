@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, createProfile, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings, turnOnYolo } from "./helpers.ts";
+import { addWorkspace, createProfile, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings, turnOnYolo, startInManualMode } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -20,8 +20,9 @@ let sharedConversationId = "";
 const profilePicker = async (page: Page) => (await conversationSettings(page)).getByLabel("Profile", { exact: true });
 const chosenProfile = async (page: Page) => (await profilePicker(page)).locator("option:checked");
 
+/** The turn's own request with the text, not the one Claude Code sends on the side to title the session. */
 async function requestContaining(text: string) {
-  const find = () => gateway.messageRequests().find(({ body }) => body.includes(text));
+  const find = () => gateway.messageRequests().find(({ body }) => body.includes(text) && !body.includes("naming a coding session"));
   await expect.poll(find, { timeout: 60_000 }).toBeDefined();
   return find()!;
 }
@@ -170,6 +171,7 @@ test("a conversation whose profile was deleted continues after picking another o
 test("switching profile while the agent works stops the turn, moves the session and continues it there, then sends the queue", async ({ page }) => {
   await signIn(page, host);
   const saved = await createProfile(page, "scripted claude", `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${host.claudeConfigDir}`);
+  await startInManualMode(saved);
   await saved.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "scripted claude · Claude Code" });
   await startConversation(page);

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import type { PluginActivity } from "../shared/canvas-plugins.ts";
 import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
 import { isDeepStrictEqual } from "node:util";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {
   busyTexts,
   harnessLabels,

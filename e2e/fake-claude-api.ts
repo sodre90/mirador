@@ -88,6 +88,10 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * background that does the rest. The agent ends its turn at once, and the subagent's request waits for a moment before it is
  * refused with the usage limit, the way the limit reached a live turn; every request after it is refused too.
  */
+/** Claude Code counts the tokens of its prompt's parts on its own; a rough count serves, and it is no message to answer. */
+const countTokens = (body: string, response: ServerResponse) =>
+  response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ input_tokens: Math.ceil(body.length / 4) }));
+
 export class FakeClaudeApi {
   limited = true;
   failing = false;
@@ -136,7 +140,9 @@ export class FakeClaudeApi {
       request.on("data", (chunk: Buffer) => chunks.push(chunk));
       request.on("end", () => {
         if (request.method !== "POST" || !request.url!.startsWith("/v1/messages")) return response.writeHead(200).end("{}");
-        this.reply(JSON.parse(Buffer.concat(chunks).toString()) as MessagesRequest, response);
+        const body = Buffer.concat(chunks).toString();
+        if (request.url!.startsWith("/v1/messages/count_tokens")) return countTokens(body, response);
+        this.reply(JSON.parse(body) as MessagesRequest, response);
       });
     });
     await new Promise<void>((resolve) => this.server!.listen(0, "127.0.0.1", resolve));

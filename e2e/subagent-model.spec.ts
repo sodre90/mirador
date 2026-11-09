@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, sendMessage, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, createProfile, sendMessage, signIn, startConversation, startInManualMode } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -27,6 +27,7 @@ test("subagents run on the model the user's Claude Code settings choose for them
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const dialog = await createProfile(page, "settings only", `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${claudeConfigDir}`);
+  await startInManualMode(dialog);
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "settings only · Claude Code" });
   await startConversation(page);

@@ -1,4 +1,4 @@
-import type { ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type PointerEvent, type RefObject, type SetStateAction } from "react";
 import { modelLabel } from "../shared/claude-models.ts";
 import { hasBegun } from "../shared/conversation-begun.ts";

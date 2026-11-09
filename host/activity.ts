@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import type { Activity } from "../shared/model.ts";
 
 const hasFinished = (status: acp.ToolCallStatus | null | undefined) => status === "completed" || status === "failed";

@@ -1,4 +1,4 @@
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import type { TerminalActivity } from "../shared/model.ts";
 
 /** What a replayed session holds after the agent's message `messageId`: the turns taken since, elsewhere. Nothing when the message is not in it. */

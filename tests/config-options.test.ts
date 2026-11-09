@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { categoryChoices, knownChoices, offersValue } from "../shared/config-options.ts";
 import type { Conversation, HarnessId } from "../shared/model.ts";
 

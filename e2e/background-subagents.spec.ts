@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, eventsInOrderOn, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
+import { addWorkspace, createProfile, eventsInOrderOn, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo, startInManualMode } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -34,6 +34,7 @@ test("while only a background subagent works, a message joins the turn and the a
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const dialog = await createProfile(page, PROFILE, `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${claudeConfigDir}`);
+  await startInManualMode(dialog);
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
   await startConversation(page);

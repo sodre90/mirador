@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import type { AskItem } from "../shared/model.ts";
 import { pendingAsk, pendingPermission } from "../host/pending-requests.ts";
 

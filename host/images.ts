@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { extensionFor, isImageId, mimeTypeOf } from "../shared/images.ts";
 

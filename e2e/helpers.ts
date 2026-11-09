@@ -244,6 +244,13 @@ export async function createProfile(page: Page, name: string, environment: strin
   return dialog;
 }
 
+/** Claude Code starts in Auto, which runs tools without asking, and refuses them where its safety check can't run. */
+export async function startInManualMode(profileEditor: Locator) {
+  await profileEditor.getByLabel("Profile mode").selectOption("default", { timeout: 60_000 });
+  await profileEditor.getByRole("button", { name: "Save" }).click();
+  await expect(profileEditor.locator(".saved")).toHaveText("Saved");
+}
+
 export async function answerCanvasQuestion(page: Page, label: string) {
   const ask = page.locator(".ask");
   await ask.getByRole("radio", { name: label, exact: true }).check({ timeout: 240_000 });

@@ -1,4 +1,4 @@
-import type { PermissionOptionKind, StopReason, ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { PermissionOptionKind, StopReason, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { askModeLabels, harnessLabels, type ConversationEvent, type HarnessId, type StoredEvent, type TurnUsage } from "../shared/model.ts";
 import { toolNameOf } from "../shared/tool-title.ts";
 import { PLUGIN_INSTALL_TOOL } from "./canvas/guidance.ts";

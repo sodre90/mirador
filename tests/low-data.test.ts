@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { connect } from "node:net";
 import { inflateRawSync } from "node:zlib";
-import type { SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import { Hub, socketData, webSocketCompression, type BrowserSocket } from "../host/hub.ts";
 import { imagesOf, lowDataEvent, pageEvent, wholeToolOutput } from "../host/low-data.ts";
 import { canvasChangedSince, eventImagePath, isRawOutputOnHost, newestCanvasChange, rawOutputOnHost, shortenedOutputOf } from "../shared/low-data.ts";

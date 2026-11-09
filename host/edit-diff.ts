@@ -1,6 +1,6 @@
 import { open } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { ToolCallContent, ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallContent, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { structuredPatch } from "diff";
 import type { DiffHunk, DiffRow, EditDiff } from "../shared/review.ts";
 import { MAX_ROWS_PER_FILE } from "./review/diff.ts";

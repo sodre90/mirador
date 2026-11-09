@@ -1,4 +1,4 @@
-import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { ContentBlock, SessionUpdate, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import { eventImagePath, rawOutputOnHost, shortenedMark } from "../shared/low-data.ts";
 import type { StoredEvent } from "../shared/model.ts";
 

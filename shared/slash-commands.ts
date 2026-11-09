@@ -1,4 +1,4 @@
-import type { AvailableCommand } from "@agentclientprotocol/sdk";
+import type { AvailableCommand } from "@agentclientprotocol/sdk/unstable";
 import type { StoredEvent } from "./model.ts";
 
 /** A command the agent takes as a message starting with /name, e.g. /compact; hint describes what may follow it. */

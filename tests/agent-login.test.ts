@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { RequestError } from "@agentclientprotocol/sdk";
+import { RequestError } from "@agentclientprotocol/sdk/unstable";
 import { isAuthRequiredError, loginCommand } from "../host/acp/harnesses.ts";
 
 test("a prompt the agent refuses until the user signs in again is told apart from other failures", () => {

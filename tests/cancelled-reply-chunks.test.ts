@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { cancelledReplyChunks, type CancelledReplyChunks } from "../host/conversations.ts";
 
 const chunk = (text: string, messageId?: string): SessionUpdate => ({ sessionUpdate: "agent_message_chunk", content: { type: "text", text }, messageId });

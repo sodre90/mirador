@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, posix, resolve, sep } from "node:path";
-import type { ToolCallContent, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk";
+import type { ToolCallContent, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk/unstable";
 import type { ChangedFile, ChangeList, ChangeScope, ChangesBase, FileChanges, ProjectFiles } from "../shared/changes.ts";
 import type { StoredEvent, Workspace } from "../shared/model.ts";
 import type { Checkpoints } from "./checkpoints.ts";

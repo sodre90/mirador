@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from "react";
-import type { PermissionOption } from "@agentclientprotocol/sdk";
+import type { PermissionOption } from "@agentclientprotocol/sdk/unstable";
 import type { DiffRow, EditDiff } from "../shared/review.ts";
 import { connection } from "./connection.ts";
 import { splitRows, type EditRequest } from "./edit-approval.ts";

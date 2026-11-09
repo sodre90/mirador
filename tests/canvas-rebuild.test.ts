@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { canvasCallsIn, rebuildCanvas, restoreCanvas } from "../host/canvas/canvas-calls.ts";
 import { answerAsToolResult, CanvasService, pastAnswerOf } from "../host/canvas/service.ts";
 import type { ConversationService } from "../host/conversations.ts";

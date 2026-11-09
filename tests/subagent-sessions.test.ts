@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { opencodeSubagentSessionOf } from "../host/conversations.ts";
 import { SubagentSessions } from "../host/subagent-sessions.ts";
 

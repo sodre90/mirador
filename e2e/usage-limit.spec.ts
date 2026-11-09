@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, lastAgentMessage, reloadFromRestartedHost, sendMessage, signIn, startConversation, turnOnYolo, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, lastAgentMessage, reloadFromRestartedHost, sendMessage, signIn, startConversation, startInManualMode, turnOnYolo, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -30,6 +30,7 @@ test("at Claude's usage limit, queued messages wait for the reset instead of fai
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const profiles = await createProfile(page, PROFILE, `${subscriptionEnvironment(api)}\nCLAUDE_CODE_AUTO_COMPACT_WINDOW=${AUTO_COMPACT_WINDOW}`);
+  await startInManualMode(profiles);
   await profiles.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
   await startConversation(page);

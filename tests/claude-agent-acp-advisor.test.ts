@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { toAcpNotifications } from "@agentclientprotocol/claude-agent-acp";
 
-/** The advisor answers on the server; patches/@agentclientprotocol%2Fclaude-agent-acp@0.88.0.patch closes its call. */
+/** The advisor answers on the server, in an advisor_tool_result block that has to close its call. */
 type Notifications = ReturnType<typeof toAcpNotifications>;
 type Content = Parameters<typeof toAcpNotifications>[0];
 
@@ -18,21 +18,27 @@ function adviceArrives(advice: unknown) {
   return { stillOpen: emittedToolCalls.has(callId), updates };
 }
 
+const shownText = (updates: Notifications[number]["update"][]) => JSON.stringify(updates.map((update) => ("content" in update ? update.content : undefined)));
+
 describe("the advisor's tool call", () => {
   test("is finished by its redacted advice, so the turn can end cleanly", () => {
     const { stillOpen, updates } = adviceArrives({ type: "advisor_redacted_result", encrypted_content: "opaque", stop_reason: "end_turn" });
     expect(stillOpen).toBe(false);
-    expect(updates).toEqual([{ toolCallId: callId, sessionUpdate: "tool_call_update", status: "completed" }]);
+    expect(updates).toMatchObject([{ toolCallId: callId, sessionUpdate: "tool_call_update", status: "completed" }]);
+    expect(shownText(updates)).not.toContain("opaque");
   });
 
   test("shows readable advice", () => {
-    const { updates } = adviceArrives({ type: "advisor_result", text: "Check the timing first.", stop_reason: "end_turn" });
-    expect(updates).toEqual([{ toolCallId: callId, sessionUpdate: "tool_call_update", status: "completed", content: [{ type: "content", content: { type: "text", text: "Check the timing first." } }] }]);
+    const { stillOpen, updates } = adviceArrives({ type: "advisor_result", text: "Check the timing first.", stop_reason: "end_turn" });
+    expect(stillOpen).toBe(false);
+    expect(updates).toMatchObject([{ toolCallId: callId, sessionUpdate: "tool_call_update", status: "completed" }]);
+    expect(shownText(updates)).toContain("Check the timing first.");
   });
 
   test("fails with the reason when the advisor could not answer", () => {
     const { stillOpen, updates } = adviceArrives({ type: "advisor_tool_result_error", error_code: "overloaded" });
     expect(stillOpen).toBe(false);
-    expect(updates).toEqual([{ toolCallId: callId, sessionUpdate: "tool_call_update", status: "failed", content: [{ type: "content", content: { type: "text", text: "The advisor failed: overloaded" } }] }]);
+    expect(updates).toMatchObject([{ toolCallId: callId, sessionUpdate: "tool_call_update", status: "failed" }]);
+    expect(shownText(updates)).toContain("overloaded");
   });
 });

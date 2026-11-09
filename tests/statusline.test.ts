@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { chosenModel } from "../shared/config-options.ts";
 import type { Conversation } from "../shared/model.ts";
 import { claudeTranscriptPath, runStatusLineCommand, statusLineCommandIn, statuslineInput } from "../host/statusline.ts";

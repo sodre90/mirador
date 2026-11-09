@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import type * as acp from "@agentclientprotocol/sdk";
+import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { askFormOnCanvas, askOfElicitation, elicitationContent } from "../host/acp/elicitation.ts";
 import type { AskItem, CanvasAnswer } from "../shared/model.ts";
 

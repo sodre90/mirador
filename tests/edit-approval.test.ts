@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PermissionOption, ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { PermissionOption, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
 import type { DiffRow, EditDiff } from "../shared/review.ts";
 import { editRequestsIn, settledEditNote, splitRows } from "../web/edit-approval.ts";

@@ -3,7 +3,7 @@ import { CUSTOM_ORDER, isConversationOrder, type ConversationOrder } from "../sh
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
 import { Database } from "bun:sqlite";
 import { isPluginUpdateMode, type AppStorageItems, type PluginUpdateMode, type TakenBackBecause } from "../shared/apps.ts";
-import type { AvailableCommand, ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { AvailableCommand, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import type {
   AskMode,
   CanvasItem,

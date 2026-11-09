@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionUpdate } from "@agentclientprotocol/sdk";
+import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { ConversationEvent, StoredEvent } from "../shared/model.ts";
 import { replyEndingAt, replyEnds } from "../shared/replies.ts";
 import { buildTimeline } from "../shared/timeline.ts";

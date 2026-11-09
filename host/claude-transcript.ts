@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { resolveModelPreference } from "@agentclientprotocol/claude-agent-acp/dist/session-model.js";
 import { isRealModel } from "../shared/claude-models.ts";
 import { flatSelectOptions } from "../shared/config-options.ts";

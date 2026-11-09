@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import type { PermissionOption, ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { PermissionOption, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { optionThatAllows } from "../host/conversations.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "../host/canvas/permission.ts";
 

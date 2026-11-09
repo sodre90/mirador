@@ -1,4 +1,4 @@
-import type { ToolCallUpdate } from "@agentclientprotocol/sdk";
+import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 
 /**
  * codex-acp sends an MCP tool's call as a command titled `mcp.<server>.<tool>`; it goes by the name Claude Code gives

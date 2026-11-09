@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { chmodSync, existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ToolKind } from "@agentclientprotocol/sdk";
+import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
 import type { Conversation, ConversationEvent, HarnessId, Profile } from "../shared/model.ts";
 import { Store } from "../host/store.ts";
 import { UsageData } from "../host/usage-data.ts";

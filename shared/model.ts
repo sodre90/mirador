@@ -5,7 +5,7 @@ import type {
   StopReason,
   ToolCallUpdate,
   ToolKind,
-} from "@agentclientprotocol/sdk";
+} from "@agentclientprotocol/sdk/unstable";
 import type { ConversationReply, PluginItemPlacement } from "./canvas-plugins.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { Reminder } from "./reminders.ts";

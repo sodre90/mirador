@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { NotificationKind } from "./system-notifications.ts";
-import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
   AdoptMode,
   AskAnswerEntry,

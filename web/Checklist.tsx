@@ -1,4 +1,4 @@
-import type { PlanEntry } from "@agentclientprotocol/sdk";
+import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { CanvasItem, PluginCanvasItem } from "../shared/model.ts";
 import { hints } from "./hints.ts";

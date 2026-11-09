@@ -1,0 +1,62 @@
+diff --git a/dist/acp-agent.js b/dist/acp-agent.js
+index a92039b..cfb0665 100644
+--- a/dist/acp-agent.js
++++ b/dist/acp-agent.js
+@@ -3428,6 +3428,22 @@ export class ClaudeAcpAgent {
+             settleLiveBackgroundTask(session, taskId);
+             this.syncAwaitingUser(params.sessionId, session);
+         };
++        /** Tells the client how a subagent's task stands, on the Agent tool call
++         *  that started it: a client that takes no native subagent sessions hears
++         *  no other way when a background subagent ends or is resumed. */
++        const announceSubagentTaskStatus = async (taskId, status) => {
++            const record = session.liveBackgroundTasks.get(taskId);
++            if (!record?.isSubagent || !record.parentToolUseId)
++                return;
++            await sendUpdate({
++                sessionId: params.sessionId,
++                update: {
++                    sessionUpdate: "tool_call_update",
++                    toolCallId: record.parentToolUseId,
++                    _meta: { claudeCode: { subagentTaskStatus: status } },
++                },
++            });
++        };
+         /** Registers a settled subagent again when the SDK resumes it without a
+          *  new `task_started`. The active turn is the one that resumed it, so it
+          *  holds until the subagent settles again, unless the client declared
+@@ -4761,6 +4777,7 @@ export class ClaudeAcpAgent {
+                                 if (message.status === "stopped") {
+                                     await closeStoppedSubagentToolCalls(message.tool_use_id);
+                                 }
++                                await announceSubagentTaskStatus(message.task_id, message.status);
+                                 settleLiveTask(message.task_id);
+                                 break;
+                             case "task_updated":
+@@ -4795,6 +4812,7 @@ export class ClaudeAcpAgent {
+                                     if (message.patch.status === "killed") {
+                                         await closeStoppedSubagentToolCalls(parentToolUseId);
+                                     }
++                                    await announceSubagentTaskStatus(message.task_id, message.patch.status);
+                                     settleLiveTask(message.task_id);
+                                 }
+                                 else if (message.patch.status === "paused") {
+@@ -4810,6 +4828,7 @@ export class ClaudeAcpAgent {
+                                     // The SDK can resume a finished subagent under the same
+                                     // agent id without a new task_started.
+                                     resumeLiveTask(message.task_id);
++                                    await announceSubagentTaskStatus(message.task_id, "running");
+                                     await subagents.taskResumed(message.task_id, sendUpdate, sendMessageResumePrompt(session.toolUseCache, message.task_id));
+                                 }
+                                 break;
+@@ -10844,7 +10863,9 @@ function recordDispatchedToolUses(session, content) {
+     if (!Array.isArray(content))
+         return;
+     for (const block of content) {
+-        if (isToolUseBlock(block))
++        // A server_tool_use, such as the advisor's, runs on the API, not in the tool runner, and one without a result
++        // never ran: the API skips a server tool that follows a tool_use in the same response.
++        if (isToolUseBlock(block) && block.type !== "server_tool_use")
+             recordDispatchedToolCall(session, block.id);
+     }
+ }

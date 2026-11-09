@@ -2,7 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { modelChoiceFor } from "../host/claude-transcript.ts";
 import { loadConfig } from "../host/config.ts";
 import { ConversationService, type HearReply } from "../host/conversations.ts";
