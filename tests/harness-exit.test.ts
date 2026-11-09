@@ -41,13 +41,13 @@ const isRunning = (pid: number) => {
   }
 };
 
-function crashingHarness(agent = crashingAgent) {
+function crashingHarness(agent = crashingAgent, onExit: (harness: HarnessProcess) => void = () => {}) {
   const directory = mkdtempSync(join(tmpdir(), "mirador-harness-exit-"));
   const script = join(directory, "crashing-agent.js");
   writeFileSync(script, agent);
   return new HarnessProcess(
     { id: "opencode", label: "Crashing agent", logName: "crashing", command: [process.execPath, script], environment: {}, prelaunch: "", startsOneAtATime: false },
-    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
+    { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } } as never), onElicitationRequest: async () => ({ action: "cancel" }), onExit },
     directory,
   );
 }
@@ -95,6 +95,18 @@ describe("HarnessProcess.prompt", () => {
     await harness.start();
     const { sessionId } = await harness.newSession({ cwd: tmpdir(), mcpServers: [] });
     await expect(harness.prompt(sessionId, [{ type: "text", text: "hello" }])).rejects.toThrow("The Crashing agent agent process exited with 3.");
+  }, 15_000);
+
+  test("fails with how its own agent process went away, even when the next one starts while that one's output is still open", async () => {
+    let startedAgain: Promise<unknown> | undefined;
+    const harness = crashingHarness(crashingAgentWhoseChildHoldsItsOutput, (exited) => {
+      startedAgain ??= exited.start();
+    });
+    await harness.start();
+    const { sessionId } = await harness.newSession({ cwd: tmpdir(), mcpServers: [] });
+    await expect(harness.prompt(sessionId, [{ type: "text", text: "hello" }])).rejects.toThrow("The Crashing agent agent process exited with 3.");
+    await startedAgain;
+    await harness.stop();
   }, 15_000);
 
   test("fails with how the agent process went away even when its output never ends", async () => {
