@@ -38,7 +38,7 @@ import {
   type WaitingFor,
   type Workspace,
 } from "../shared/model.ts";
-import { chosenModel, flatSelectOptions, offersValue } from "../shared/config-options.ts";
+import { chosenModel, flatSelectOptions, offersValue, ranOnOf } from "../shared/config-options.ts";
 import { MIN_SEARCH_LENGTH } from "../shared/find.ts";
 import { causeOf, englishProblem, HostProblemError, problemOf, type AgentGone, type HostProblem } from "../shared/host-problems.ts";
 import { messageAtEnd, type JobWaitRequest } from "../shared/job-waits.ts";
@@ -51,7 +51,7 @@ import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromComman
 import { lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
-import type { ConversationReply, StartedConversation } from "../shared/canvas-plugins.ts";
+import type { ConversationChoices, ConversationReply, RanOn, StartedConversation } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
@@ -434,27 +434,34 @@ export class ConversationService {
   /**
    * Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a
    * prompt, working on it at once; with a title that isn't blank, named as if by the user, so neither its first message
-   * nor its agent renames it.
+   * nor its agent renames it; with `choices`, on that model and effort from its first message on.
    */
-  create(workspaceId: string, launch: Launch = this.existingWorkspace(workspaceId).defaultLaunch, prompt?: string, title?: string): Conversation {
+  create(
+    workspaceId: string,
+    launch: Launch = this.existingWorkspace(workspaceId).defaultLaunch,
+    prompt?: string,
+    title?: string,
+    choices: ConversationChoices = {},
+  ): Conversation {
     const givenTitle = titleFrom(title ?? "");
     const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "");
-    this.ensureSession(conversation.id).catch(() => {});
+    this.ensureSession(conversation.id, () => this.openSession(conversation.id, choices)).catch(() => {});
     if (prompt?.trim()) this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return conversation;
   }
 
   /**
    * For a plugin's tool: a conversation beside the caller's, on another profile, working on `prompt` at once. It works
-   * for the caller, which hears through the plugin how its work ended. A `title` names it for good, as `create` does.
+   * for the caller, which hears through the plugin how its work ended. A `title` names it for good, and `choices` set
+   * its model and effort, as `create` does.
    */
-  startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string): StartedConversation {
+  startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): StartedConversation {
     const caller = this.get(callerId);
     if (caller.startedBy) throw new Error("A plugin's tool started this conversation, so it can't start another; do the task here.");
     const profiles = this.store.listProfiles();
     const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
     if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
-    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title);
+    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices);
     this.store.recordStartedBy(conversation.id, { conversationId: callerId, plugin });
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
@@ -478,7 +485,7 @@ export class ConversationService {
 
   /**
    * Once, when the work of a conversation a plugin's tool started ends. The reply is kept before the plugin hears it, so
-   * a crash in between can't tell it twice; a caller deleted since hears nothing.
+   * a crash in between can't tell it twice; a caller deleted since hears nothing. What it ran on is read as it ended.
    */
   private deliverOwedReply(conversationId: string, endedAs?: ConversationReply["ended"]) {
     const conversation = this.store.findConversation(conversationId);
@@ -491,9 +498,21 @@ export class ConversationService {
     this.republish(conversationId);
     if (!this.store.hasConversation(startedBy.conversationId)) return;
     const started = { id: conversationId, profile: (conversation.profileId && this.store.findProfile(conversation.profileId)?.name) || harnessLabels[conversation.harness] };
-    Promise.resolve()
-      .then(() => this.hearReply(started, startedBy, told))
+    this.ranOn(conversation)
+      .then((ranOn) => this.hearReply(started, startedBy, ranOn ? { ...told, ranOn } : told))
       .catch((error: unknown) => console.error(`the ${startedBy.plugin} plugin failed to hear the reply of ${conversationId}:`, error));
+  }
+
+  /** For Claude Code, the model that answered last in its transcript; otherwise, or with no answer there to read, the one chosen. */
+  private async ranOn(conversation: Conversation): Promise<RanOn | null> {
+    const transcript = await this.claudeTranscriptOf(conversation).catch(() => "");
+    return ranOnOf(conversation.configOptions, lastAnsweringModel(transcript));
+  }
+
+  /** Empty for other agents, and for a conversation whose agent has no session yet. */
+  private async claudeTranscriptOf(conversation: Conversation) {
+    const { harness, acpSessionId } = conversation;
+    return harness === "claude" && acpSessionId ? claudeTranscript(this.claudeConfigDirOf(conversation), acpSessionId) : "";
   }
 
   /** The newest sessions the harness knows for the workspace directory, including ones started outside the app. */
@@ -1628,7 +1647,7 @@ export class ConversationService {
     return sessionHasRecord(this.store.listEvents(conversationId));
   }
 
-  private async openSession(conversationId: string): Promise<string> {
+  private async openSession(conversationId: string, choices: ConversationChoices = {}): Promise<string> {
     const runtime = this.runtime(conversationId);
     const held = runtime.heldCodexSession;
     if (held) {
@@ -1669,6 +1688,7 @@ export class ConversationService {
     await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
     if (isFirstSession) await this.applyProfileChoices(conversationId, created.sessionId);
     if (this.onUsersOwnSetup(conversation)) await this.applyTestModelOverride(conversationId, created.sessionId);
+    await this.applyStartChoices(conversationId, created.sessionId, choices);
     return created.sessionId;
   }
 
@@ -1818,6 +1838,39 @@ export class ConversationService {
   }
 
   /**
+   * What a plugin chose for a conversation it starts goes last, over the profile's effort and a test host's model. The
+   * model goes first, as the efforts on offer depend on it. Unlike other changes, these hold the first message back for
+   * as long as the agent takes to answer them, so it goes out on them.
+   */
+  private async applyStartChoices(conversationId: string, sessionId: string, { model, effort }: ConversationChoices) {
+    if (model) await this.applyChosenModel(conversationId, sessionId, model);
+    if (effort) await this.applyChosenEffort(conversationId, sessionId, effort);
+  }
+
+  /** An agent that offers no models has none to set. */
+  private async applyChosenModel(conversationId: string, sessionId: string, model: string) {
+    const { configOptions } = this.get(conversationId);
+    const modelOption = configOptions.find(({ category }) => category === "model");
+    if (!modelOption) return;
+    const choice = modelChoiceFor(configOptions, model);
+    if (choice === null) return this.showChoiceNotOffered(conversationId, modelOption.name, model);
+    await this.changeConfigOption(conversationId, sessionId, modelOption.id, choice)?.answered;
+  }
+
+  /** A model with no effort, such as Claude's Haiku, has none to set. */
+  private async applyChosenEffort(conversationId: string, sessionId: string, effort: string) {
+    const effortOption = this.get(conversationId).configOptions.find(({ category }) => category === "thought_level");
+    if (!effortOption) return;
+    if (!offersValue(effortOption, effort)) return this.showChoiceNotOffered(conversationId, effortOption.name, effort);
+    await this.changeConfigOption(conversationId, sessionId, effortOption.id, effort)?.answered;
+  }
+
+  private showChoiceNotOffered(conversationId: string, option: string, value: string) {
+    const notOffered = new HostProblemError({ code: "not-a-setting-choice", value, setting: option });
+    this.append(conversationId, problemEvent({ code: "could-not-set-option", option, value, ...causeOf(notOffered, notOffered.message) }));
+  }
+
+  /**
    * Options depend on each other (haiku has no effort option), so one that no longer exists
    * or is refused must not cost the user their session. Nor may an agent that doesn't answer: Claude Code answers one
    * request at a time, and its first, counting its context's tokens, can wait for a model server to load the model.
@@ -1825,9 +1878,27 @@ export class ConversationService {
    * A session whose agent process has gone has nothing to change.
    */
   private async trySetConfigOption(conversationId: string, sessionId: string, configId: string, value: ConfigValue) {
+    const change = this.changeConfigOption(conversationId, sessionId, configId, value);
+    if (!change || this.sessionsSlowToAnswer.has(sessionId)) return;
+    const answeredInTime = await Promise.race([change.answered.then(() => true), Bun.sleep(OPTION_ANSWER_TIMEOUT_MS).then(() => false)]);
+    if (answeredInTime) return;
+    this.sessionsSlowToAnswer.add(sessionId);
+    const { current } = change;
+    this.append(
+      conversationId,
+      problemEvent({ code: "option-change-unanswered", option: current.name, current: String(current.currentValue), value: String(value), seconds: OPTION_ANSWER_TIMEOUT_MS / 1000 }),
+    );
+  }
+
+  /**
+   * Asks the agent for the change, unless the option doesn't exist, has that value already, or its agent process has
+   * gone. `answered` settles, never failing, once the agent answered: with the options it reports kept, or with the
+   * reason it gave shown. An agent process that goes away fails its unanswered requests, so it settles then too.
+   */
+  private changeConfigOption(conversationId: string, sessionId: string, configId: string, value: ConfigValue) {
     const current = this.get(conversationId).configOptions.find(({ id }) => id === configId);
     const harness = this.runtime(conversationId).harness;
-    if (!current || current.currentValue === value || !harness) return;
+    if (!current || current.currentValue === value || !harness) return undefined;
     const answered = harness.setConfigOption(sessionId, configId, value).then(
       (response) => {
         this.sessionsSlowToAnswer.delete(sessionId);
@@ -1837,14 +1908,7 @@ export class ConversationService {
         if (this.isOnSession(conversationId, sessionId)) this.append(conversationId, problemEvent({ code: "could-not-set-option", option: current.name, value: String(value), ...causeOf(error, errorMessage(error)) }));
       },
     );
-    if (this.sessionsSlowToAnswer.has(sessionId)) return;
-    const answeredInTime = await Promise.race([answered.then(() => true), Bun.sleep(OPTION_ANSWER_TIMEOUT_MS).then(() => false)]);
-    if (answeredInTime) return;
-    this.sessionsSlowToAnswer.add(sessionId);
-    this.append(
-      conversationId,
-      problemEvent({ code: "option-change-unanswered", option: current.name, current: String(current.currentValue), value: String(value), seconds: OPTION_ANSWER_TIMEOUT_MS / 1000 }),
-    );
+    return { current, answered };
   }
 
   /** The conversation whose agent runs a session, or one of its subagents. */

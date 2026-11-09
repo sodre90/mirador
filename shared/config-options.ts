@@ -1,4 +1,6 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk";
+import type { RanOn } from "./canvas-plugins.ts";
+import { modelLabel } from "./claude-models.ts";
 import type { Conversation, HarnessId } from "./model.ts";
 
 type SelectOption = Extract<SessionConfigOption, { type: "select" }>;
@@ -42,4 +44,16 @@ export function chosenModel(configOptions: SessionConfigOption[]): ChosenModel |
   if (!option) return null;
   const choice = flatSelectOptions(option).find(({ value }) => value === option.currentValue);
   return { id: option.currentValue, name: choice?.name ?? option.currentValue, multiplier: choice ? modelMultiplier(choice) : null };
+}
+
+/**
+ * What a conversation ran on: the model that answered, by the id its agent recorded, else the one chosen in its options,
+ * and the effort chosen; null when neither names a model.
+ */
+export function ranOnOf(configOptions: SessionConfigOption[], answeringModel: string | null): RanOn | null {
+  const chosen = chosenModel(configOptions);
+  const model = answeringModel ? { id: answeringModel, name: modelLabel(answeringModel) } : chosen && { id: chosen.id, name: chosen.name };
+  if (!model) return null;
+  const effortOption = configOptions.find(({ category }) => category === "thought_level");
+  return { model, effort: effortOption ? String(effortOption.currentValue) : null };
 }

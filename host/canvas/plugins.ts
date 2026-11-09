@@ -10,6 +10,7 @@ import {
   type PluginActivity,
   type PluginActivityEvent,
   type PluginWindowContext,
+  type ConversationChoices,
   type WorkspaceTabContext,
   type ConversationReply,
   type PluginItemType,
@@ -55,7 +56,7 @@ const WINDOW_STATE_SETTLES_MS = 100;
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
 
-export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string) => StartedConversation;
+export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices) => StartedConversation;
 
 /**
  * The canvas plugins Mirador loaded when it started: their tools on every conversation's canvas server, the items those
@@ -414,7 +415,7 @@ export class CanvasPlugins {
       caller,
       publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
       prompt: this.promptOfItsOwn(plugin, conversationId),
-      startConversation: async ({ profile, prompt, title }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title),
+      startConversation: async ({ profile, prompt, title, model, effort }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title, { model, effort }),
     };
   }
 

@@ -112,7 +112,19 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
      * `prompt` titles it, and the agent may rename it later. Plugin API 8 brought it.
      */
     title?: string;
-  }): Promise<StartedConversation>;
+  } & ConversationChoices): Promise<StartedConversation>;
+}
+
+/**
+ * What a plugin chooses for a conversation it starts, over its profile's choices; its first message waits until the
+ * agent has taken them. One the agent doesn't offer leaves the agent's own and shows the user why in that conversation,
+ * rather than throw: what an agent offers is known only once its session has started. Plugin API 8 brought them.
+ */
+export interface ConversationChoices {
+  /** A model, by id or name, matched to the agent's models as Mirador matches them, e.g. "opus"; skipped on an agent that offers none. */
+  model?: string;
+  /** An effort the conversation's model offers, e.g. "high"; skipped on a model that has no effort, such as Claude's Haiku. */
+  effort?: string;
 }
 
 export interface StartedConversation {
@@ -121,10 +133,24 @@ export interface StartedConversation {
   profile: string;
 }
 
-/** The agent's last message in the turn, null when it said nothing in words; `ended` says how the turn ended. */
+/**
+ * The model a conversation ran on, by its id and the name Mirador shows for it, and its effort as the agent has it,
+ * null when the model has none.
+ */
+export interface RanOn {
+  model: { id: string; name: string };
+  effort: string | null;
+}
+
+/**
+ * The agent's last message in the turn, null when it said nothing in words; `ended` says how the turn ended. `ranOn`,
+ * which plugin API 8 brought, is what the conversation ran on: for Claude Code, the model that answered last; for other
+ * agents, the one chosen in the conversation. It is absent when the agent named no model.
+ */
 export interface ConversationReply {
   text: string | null;
   ended: "finished" | "stopped" | "failed";
+  ranOn?: RanOn;
 }
 
 /**

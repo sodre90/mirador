@@ -118,12 +118,23 @@ const host: CanvasHost<BoardData> = {
       },
     },
     hand_over: {
-      description: "Hand a task to a conversation on another profile, by default the one this profile hands over to, titled `title` if given; its reply comes as your next message.",
-      input: { type: "object", properties: { profile: { type: "string" }, task: { type: "string" }, title: { type: "string" } }, required: ["task"] },
+      description:
+        "Hand a task to a conversation on another profile, by default the one this profile hands over to, titled `title` and on `model` at `effort` if given; its reply comes as your next message.",
+      input: {
+        type: "object",
+        properties: { profile: { type: "string" }, task: { type: "string" }, title: { type: "string" }, model: { type: "string" }, effort: { type: "string" } },
+        required: ["task"],
+      },
       async run(input, context) {
-        const { profile = context.profileSetting("hand-over-to"), task, title } = input as { profile?: string | null; task: string; title?: string };
+        const { profile = context.profileSetting("hand-over-to"), task, title, model, effort } = input as {
+          profile?: string | null;
+          task: string;
+          title?: string;
+          model?: string;
+          effort?: string;
+        };
         if (!profile) throw new Error("Name a profile; this one hands over to none.");
-        const started = await context.startConversation({ profile, prompt: task, title });
+        const started = await context.startConversation({ profile, prompt: task, title, model, effort });
         return `Handed over to ${started.id}.`;
       },
     },
@@ -164,8 +175,9 @@ const host: CanvasHost<BoardData> = {
       },
     };
   },
-  async replied(_started, { text, ended }, context) {
-    await context.prompt(`The handed-over task ${ended}: ${text ?? "no reply"}`, { afterTurn: true });
+  async replied(_started, { text, ended, ranOn }, context) {
+    const ranOnText = ranOn ? ` — ran on ${ranOn.model.name} (${ranOn.model.id}), effort ${ranOn.effort ?? "none"}` : "";
+    await context.prompt(`The handed-over task ${ended}: ${text ?? "no reply"}${ranOnText}`, { afterTurn: true });
   },
 };
 

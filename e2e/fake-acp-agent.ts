@@ -41,7 +41,9 @@ import * as acp from "@agentclientprotocol/sdk";
  * `_session/async_task/stop` request stops one and says so, logging it.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
- * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, and
+ * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
+ * `FAKE_ACP_MODELS=1` a Model option before them too, whose Haiku has no Effort option, as Claude Code's hasn't, and
+ * then `CHOICES` answers with what the session is on, such as "On model opus, mode default, effort high.". And
  * `FAKE_ACP_ANSWERS_AFTER_MS` answers option changes and closes that late, as Claude Code does while its first
  * request waits for a model server to load the model. Starts, changes and closes go to the file in `FAKE_ACP_LOG`,
  * each with the name in `FAKE_ACP_NAME`. FAKE_ACP_IGNORES_SIGTERM=1 makes it survive SIGTERM, and FAKE_ACP_PID_FILE
@@ -53,6 +55,7 @@ import * as acp from "@agentclientprotocol/sdk";
 const promptsFile = process.env.FAKE_ACP_PROMPTS;
 const availableCommands: acp.AvailableCommand[] | null = process.env.FAKE_ACP_COMMANDS ? JSON.parse(process.env.FAKE_ACP_COMMANDS) : null;
 const offersModes = process.env.FAKE_ACP_MODES === "1";
+const offersModels = process.env.FAKE_ACP_MODELS === "1";
 const answersAfterMs = Number(process.env.FAKE_ACP_ANSWERS_AFTER_MS ?? 0);
 const ignoresSigterm = process.env.FAKE_ACP_IGNORES_SIGTERM === "1";
 const offersSteering = process.env.FAKE_ACP_STEERS === "1";
@@ -98,6 +101,29 @@ const configOptions = (sessionId: string): acp.SessionConfigOption[] => [
     ],
   },
 ];
+
+/** Its default names the model in its description, as Claude Code's does. */
+const modelOption = (sessionId: string): acp.SessionConfigOption => ({
+  id: "model",
+  name: "Model",
+  category: "model",
+  type: "select",
+  currentValue: choice(sessionId, "model", "default"),
+  options: [
+    { value: "default", name: "Default (recommended)", description: "Sonnet 5" },
+    { value: "opus", name: "Opus" },
+    { value: "haiku", name: "Haiku" },
+  ],
+});
+
+const offeredOptions = (sessionId: string): acp.SessionConfigOption[] => {
+  if (!offersModels) return configOptions(sessionId);
+  const options = [modelOption(sessionId), ...configOptions(sessionId)];
+  return choice(sessionId, "model", "default") === "haiku" ? options.filter(({ category }) => category !== "thought_level") : options;
+};
+
+const sayChoices = (client: acp.AgentContext, sessionId: string) =>
+  sayText(client, sessionId, `On ${offeredOptions(sessionId).map(({ id, currentValue }) => `${id} ${currentValue}`).join(", ")}.`);
 
 /** Whether the client can present `notice` updates, taken from its initialize request the way claude-agent-acp takes it. */
 let noticesAdvertised = false;
@@ -439,7 +465,7 @@ acp
     if (resumes) log(`new ${sessionId}`);
     if (availableCommands)
       setTimeout(() => ctx.client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands } }), 50);
-    return offersModes ? { sessionId, configOptions: configOptions(sessionId) } : { sessionId };
+    return offersModes ? { sessionId, configOptions: offeredOptions(sessionId) } : { sessionId };
   })
   .onRequest(acp.methods.agent.session.list, (ctx) => ({
     sessions: history ? [{ sessionId: history.sessionId, cwd: ctx.params.cwd ?? process.cwd(), title: history.title, updatedAt: new Date().toISOString() }] : [],
@@ -458,7 +484,7 @@ acp
     answerLate(() => {
       chosen.set(ctx.params.sessionId, { ...chosen.get(ctx.params.sessionId), [ctx.params.configId]: String(ctx.params.value) });
       log(`set ${ctx.params.configId} to ${ctx.params.value}`);
-      return { configOptions: configOptions(ctx.params.sessionId) };
+      return { configOptions: offeredOptions(ctx.params.sessionId) };
     }),
   )
   .onRequest(acp.methods.agent.session.close, (ctx) =>
@@ -481,6 +507,7 @@ acp
     }
     if (startsWith(ctx.params.prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
     if (startsWith(ctx.params.prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
+    if (startsWith(ctx.params.prompt, "CHOICES")) return sayChoices(ctx.client, ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
     if (startsWith(ctx.params.prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);
