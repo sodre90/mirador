@@ -192,7 +192,7 @@ export const STORYBOARD: Scene[] = [
   },
 ];
 
-/** Where the end card sends people. The repository is private for now, so check this before publishing. */
+/** Where the end card sends people: the public repository. */
 export const WHERE_TO_GET_IT = "github.com/sodre90/mirador";
 
 /** The official plugins' catalog, which the end card names under it. */
