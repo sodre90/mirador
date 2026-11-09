@@ -13,8 +13,8 @@ export function worldIn(root: string) {
   return { home, projects: { shopApi: join(code, "shop-api"), mobileApp: join(code, "mobile-app"), storefront: join(code, "storefront"), infra: join(code, "infra") } };
 }
 
-/** Claude Code runs commands and the canvas's tools, its plugins' too, without asking; edits it still asks for. */
-export const CLAUDE_SETTINGS = JSON.stringify({ permissions: { allow: ["Bash", "mcp__canvas"] } }, null, 2);
+/** Claude Code runs commands and the canvas's tools, its plugins' too, without asking; edits it still asks for. It suggests no next prompt, since no script answers one. */
+export const CLAUDE_SETTINGS = JSON.stringify({ permissions: { allow: ["Bash", "mcp__canvas"] }, promptSuggestionEnabled: false }, null, 2);
 
 /** Writes the world's files; Playwright also imports specs in a process that never runs their hooks, so call it from one. */
 export function createWorld({ home, projects }: ReturnType<typeof worldIn>) {

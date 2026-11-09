@@ -141,7 +141,7 @@ describe.skipIf(!filmed)("the storyboard, with the clips filmed", () => {
   });
 
   test("gives each of the score's sections whole bars, so none bends its tempo", () => {
-    const sectionStarts = ["show", "review", "edit", "plugins", "voice", "backdrop"];
+    const sectionStarts = ["show", "review", "plugins", "jobs", "backdrop"];
     const placed = placeScenes(STORYBOARD, clips, lines, 60, 18);
     const startOf = (id: string) => placed.find(({ scene }) => scene.id === id)!.from / 60;
     for (const [from, to] of sectionStarts.slice(0, -1).map((id, index) => [id, sectionStarts[index + 1]!])) {

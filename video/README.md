@@ -1,6 +1,6 @@
 # The Mirador trailer
 
-A trailer of about 75 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
+A trailer of about 60 seconds at 4K and 60 fps, made from footage of a real Mirador: a throwaway host on a fake home folder,
 running the real Claude Code and opencode against a scripted stand-in for the model. Nothing in it is mocked up by hand, and no
 account, conversation or setting of yours is used.
 
@@ -30,30 +30,33 @@ camera logic, and that the storyboard speaks every line.
 
 - **A scene's cut, camera or slam**: `src/storyboard.ts`. Shots and camera moves are keyed to the moments the capture
   marked, such as `["sent", 0.2]`, so they stay right when the footage is filmed again. A scene's `seconds` sets its
-  length. A scene with a `slam` cuts straight in with a flash, a punch of zoom and its words, giant
-  (`src/components/Slam.tsx`), which clear after 1.3 s; the score hits on every slam. A line of narration's
+  length. A scene with `slam: true` cuts straight in with a flash and a punch of zoom
+  (`src/components/Hit.tsx`); the score hits on every slam. A line of narration's
   `musicDipsTo` makes the music dip less under it. The score's last chord rings out over the `backdrop` scene before
   the end card.
 - **Keeping the cuts on the beat**: every slammed scene lasts whole beats of the score (`beats(n)`, at `TEMPO`), long
-  enough for its narration, and each of the score's sections (from show, review, edit, plugins and voice) adds up to
+  enough for its narration, and each of the score's sections (from show, review, plugins and jobs) adds up to
   whole bars, so no section bends its tempo. `tests/timeline.test.ts` checks the scenes; when you change a scene's
   length, keep its section's beats a multiple of four.
 - **The cold open**: `COLD_OPEN` in `src/storyboard.ts` is six slammed cuts of two beats each, one moment of a clip
   apiece.
-- **The opening**: the `hook` scene slams STOP READING, then START SEEING (`HEADLINES` in `src/Trailer.tsx`) over a
-  drawing of the checkout diagram the agent draws in the show clip (`capture/checkout-flow.ts`), and the show scene
-  picks up once the app has drawn it, so it is never drawn twice. The score builds under the picture into a hit on the
-  cut to show. The cold open and the hook replace the old 14-second text-wall opening, during which YouTube's retention
-  showed a third of viewers leaving.
+- **The opening**: the `hook` scene opens on an agent's answer racing past as a wall of text
+  (`src/scenes/WallOfText.tsx`), speeding up while the camera pulls back, and at `CANVAS_AT` in `src/Trailer.tsx` it
+  hits (`HITS_AT`) and cuts to a drawing of the checkout diagram the agent draws in the show clip
+  (`capture/checkout-flow.ts`). The show scene picks up once the app has drawn it, so it is never drawn twice. The
+  score builds under the picture into a hit on the cut to show. The wall used to be a 14-second opening of its own,
+  during which YouTube's retention showed a third of viewers leaving; now it lasts 3.5 seconds, after the cold open.
+- **The corner labels**: each feature scene names its feature in the bottom-left corner for the whole scene
+  (`featureTag` in `src/storyboard.ts`, drawn by `src/components/CaptionCard.tsx`).
 - **What the agents say and draw**: `capture/scenes.ts`, then film again.
 - **The plugins**: `capture/plugins.ts` clones the plugins that come with Mirador, at the tags `plugins/defaults.json`
   names, and Media at `MEDIA`'s tag, once into `~/.cache/mirador-video/plugins`. Mirador installs Media on camera from
   a catalog that names its GitHub repo, and git fetches it from that cache. Delete a release's folder there to clone it
   again.
-- **The voice scene**: the microphone plays the spoken `voiceAsk` line, and a stand-in voice server transcribes it and
-  reads `voiceReply` back. A line with its own `voice` in `narration/lines.ts` is said by someone other than the
-  narrator. In the storyboard, a line's `from` names a moment of the clip that its `at` counts from, so the question and
-  the reply stay with the footage however the shots speed it up.
+- **The voice clip**: the capture still films it, though the trailer no longer shows it: the microphone plays the
+  spoken `voiceAsk` line, and a stand-in voice server transcribes it and reads `voiceReply` back (`CAPTURE_ONLY_LINES`).
+  A line's `from` in the storyboard names a moment of the clip that its `at` counts from, so a line stays with the
+  footage however the shots speed it up.
 - **The narration**: edit `narration/lines.ts` and run `bun run narrate`. The render stops with an error while the
   spoken lines don't match the text.
 - **The voice**: `bun run narrate --samples` speaks a line in eight voices into `out/voice-samples`. Set `VOICE` in

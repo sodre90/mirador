@@ -29,20 +29,6 @@
       "voice": "am_fenrir",
       "speed": 1
     },
-    "overview": {
-      "text": "Every project at once. See who needs you.",
-      "file": "overview.wav",
-      "seconds": 2.304,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "edit": {
-      "text": "Approve every edit with its diff, and see every change.",
-      "file": "edit.wav",
-      "seconds": 3.029333333333333,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
     "plugins": {
       "text": "Your agent installs official plugins when you say so.",
       "file": "plugins.wav",
@@ -58,9 +44,9 @@
       "speed": 1
     },
     "delegate": {
-      "text": "It runs the agents you already have. Here, Claude Code hands a long read to a local model.",
+      "text": "It runs the agents you already have. Here, Claude Code hands a long read to a local model on opencode.",
       "file": "delegate.wav",
-      "seconds": 5.8453333333333335,
+      "seconds": 6.848,
       "voice": "am_fenrir",
       "speed": 1
     },
@@ -68,13 +54,6 @@
       "text": "Long jobs? Mirador keeps watch, and wakes your agent when they're done.",
       "file": "jobs.wav",
       "seconds": 3.7546666666666666,
-      "voice": "am_fenrir",
-      "speed": 1
-    },
-    "voice": {
-      "text": "Or just talk to it.",
-      "file": "voice.wav",
-      "seconds": 1.0666666666666667,
       "voice": "am_fenrir",
       "speed": 1
     },

@@ -15,7 +15,7 @@ import { CHECKOUT_TEST, checkoutTest, CLAUDE_SETTINGS, createWorld, git, REPLAY_
 import { Director } from "./director.ts";
 import { MEDIA_FROM_CACHE, setUpPlugins } from "./plugins.ts";
 import { ClipRecorder } from "./recorder.ts";
-import { BUILD_SERVER, DEAD_FLAGS_ANSWER, E2E_ANSWER, LAYOUT_CHOICE, MEDIA_INSTALLED, MEDIA_INSTALLED_REPLY, PULL_REQUEST, prompts, scripts } from "./scenes.ts";
+import { BUILD_SERVER, DEAD_FLAGS_ANSWER, E2E_ANSWER, CAR_MODE_CHOICE, MEDIA_INSTALLED, MEDIA_INSTALLED_REPLY, PULL_REQUEST, prompts, scripts } from "./scenes.ts";
 import { expect, test } from "./studio.ts";
 import { typeLikeAPerson } from "./typing.ts";
 
@@ -292,7 +292,7 @@ test("the trailer's clips", async ({ page }) => {
     explainCheckout: await newConversationIn(page, shopApi),
     tightenVideo: await newConversationIn(page, storefront),
     coldStart: await newConversationIn(page, mobileApp),
-    settingsLayout: await newConversationIn(page, mobileApp),
+    carMode: await newConversationIn(page, mobileApp),
     deadFlags: await newConversationIn(page, mobileApp),
     translate: await newConversationIn(page, storefront),
     postgres: await newConversationIn(page, infra),
@@ -324,7 +324,7 @@ test("the trailer's clips", async ({ page }) => {
       ]),
       conversation(ids.explainCheckout, "Explain the checkout flow", 1, []),
       conversation(ids.coldStart, "Speed up the cold start", 30, [userSays("Profile the cold start on a mid-range phone and cut it below a second."), agentSays("Starting a trace on the emulator…"), { type: "turn-end", stopReason: "refusal" }], "error"),
-      conversation(ids.settingsLayout, "Pick a settings layout", 2, []),
+      conversation(ids.carMode, "Design car mode", 2, []),
       conversation(ids.deadFlags, "Find the dead feature flags", 5, []),
       conversation(ids.translate, "Translate the checkout pages", 2, []),
       conversation(ids.tightenVideo, "Tighten the checkout video", 4, []),
@@ -394,7 +394,7 @@ test("the trailer's clips", async ({ page }) => {
   });
 
   await scene("overview: agents at work across the projects", async () => {
-    await sendOffCamera(page, ids.settingsLayout, prompts.settingsLayout);
+    await sendOffCamera(page, ids.carMode, prompts.carMode);
     await sendOffCamera(page, ids.translate, prompts.translate);
     await sendOffCamera(page, ids.postgres, prompts.runbook);
     await openConversation(page, ids.explainCheckout);
@@ -402,13 +402,13 @@ test("the trailer's clips", async ({ page }) => {
       await recorder.markRect("sidebar", page.locator("nav.sidebar"));
       await recorder.markRect("shop", page.locator(".workspace-group").first());
       await cursor.glideTo({ x: 420, y: 520 });
-      await expect(sidebarItem(page, mobileApp, "Pick a settings layout")).toContainText("Needs you", { timeout: 30_000 });
+      await expect(sidebarItem(page, mobileApp, "Design car mode")).toContainText("Needs you", { timeout: 30_000 });
       recorder.mark("needsYou");
       await expect(sidebarItem(page, storefront, "Translate the checkout pages")).toContainText("Done", { timeout: 30_000 });
       recorder.mark("translateDone");
       await expect(sidebarItem(page, infra, "Plan the Postgres 18 upgrade")).toContainText("Done", { timeout: 30_000 });
       recorder.mark("runbookDone");
-      await cursor.glideToElement(sidebarItem(page, mobileApp, "Pick a settings layout"), { offsetX: 0.35 });
+      await cursor.glideToElement(sidebarItem(page, mobileApp, "Design car mode"), { offsetX: 0.35 });
       await page.waitForTimeout(900);
     });
   });
@@ -416,7 +416,7 @@ test("the trailer's clips", async ({ page }) => {
   await scene("ask: the agent asks with pictures", async () => {
     await film("ask", async () => {
       await page.waitForTimeout(400);
-      await cursor.click(sidebarItem(page, mobileApp, "Pick a settings layout"), { offsetX: 0.35 });
+      await cursor.click(sidebarItem(page, mobileApp, "Design car mode"), { offsetX: 0.35 });
       recorder.mark("opened");
       const ask = page.locator(".ask");
       await expect(ask.locator(".ask-option")).toHaveCount(3);
@@ -426,11 +426,11 @@ test("the trailer's clips", async ({ page }) => {
       await recorder.markRect("options", ask.locator(".ask-options"));
       recorder.mark("questionShown");
       const option = (label: string) => ask.locator(".ask-option", { hasText: label });
-      await cursor.glideToElement(option("Search first"), { offsetY: 0.6 });
+      await cursor.glideToElement(option("Words on screen"), { offsetY: 0.6 });
       await page.waitForTimeout(500);
-      await cursor.glideToElement(option("Tabs per area"), { offsetY: 0.6 });
+      await cursor.glideToElement(option("Dark, for night"), { offsetY: 0.6 });
       await page.waitForTimeout(450);
-      await cursor.click(option(LAYOUT_CHOICE).locator(".ask-option-label"));
+      await cursor.click(option(CAR_MODE_CHOICE).locator(".ask-option-label"));
       recorder.mark("picked");
       await page.waitForTimeout(500);
       await cursor.click(ask.getByRole("button", { name: "Submit" }));

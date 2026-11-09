@@ -1,0 +1,30 @@
+/** What a busy agent prints in a terminal: the wall of text the trailer opens on. */
+export type TranscriptBlock = { kind: "prose"; text: string } | { kind: "tool"; name: string; target: string } | { kind: "diff"; lines: string[] };
+
+export const TRANSCRIPT: TranscriptBlock[] = [
+  { kind: "prose", text: "I'll start by reading how checkout is wired together, then trace where an order can get stuck." },
+  { kind: "tool", name: "Read", target: "src/checkout.ts" },
+  { kind: "tool", name: "Read", target: "src/services/inventory.ts" },
+  { kind: "tool", name: "Read", target: "src/services/payments.ts" },
+  { kind: "tool", name: "Bash", target: 'grep -rn "reserve\\|capture\\|release" src' },
+  { kind: "prose", text: "Checkout reserves the stock first, then captures the payment, then creates the order and sends the confirmation inside the same request. There are three places where this can go wrong, and I want to walk through each of them before changing anything, because two of them interact." },
+  { kind: "tool", name: "Edit", target: "src/checkout.ts" },
+  { kind: "diff", lines: ["-  const payment = await payments.capture(card, cart.total);", "+  const payment = await withRetries(() => payments.capture(card, cart.total), {", "+    attempts: 3,", "+    idempotencyKey: cart.id,", "+  });"] },
+  { kind: "tool", name: "Write", target: "src/retry.ts" },
+  { kind: "tool", name: "Edit", target: "src/services/inventory.ts" },
+  { kind: "tool", name: "Edit", target: "src/services/orders.ts" },
+  { kind: "diff", lines: ["+  if (await orders.exists(cart.id)) return orders.find(cart.id);", "   const order = await orders.create(cart, reservation, payment);", "-  await mail.sendConfirmation(order);", "+  await queue.enqueue(\"confirmation\", { orderId: order.id });"] },
+  { kind: "tool", name: "Bash", target: "bun test src/checkout.test.ts" },
+  { kind: "prose", text: "The first problem is the reservation: when the card is declined, the stock stays reserved until the nightly job releases it, so a popular item can look sold out for hours. I've added a release in the failure path, and a test that declines a card and checks the stock comes back. The second problem is subtler. The capture has no idempotency key, so when the bank accepts a capture but the response times out, our retry captures again and the customer is charged twice. I've passed the cart's id as the key, which the payment provider already supports, and the retry now reuses it." },
+  { kind: "tool", name: "Edit", target: "src/services/mail.ts" },
+  { kind: "tool", name: "Edit", target: "src/queue/workers.ts" },
+  { kind: "tool", name: "Edit", target: "src/checkout.test.ts" },
+  { kind: "tool", name: "Edit", target: "src/types.ts" },
+  { kind: "diff", lines: ["+export type CaptureOptions = { idempotencyKey: string; attempts?: number };", "-export type Payment = { id: string };", "+export type Payment = { id: string; capturedAt: Date; key: string };"] },
+  { kind: "tool", name: "Bash", target: "bun test" },
+  { kind: "prose", text: "The third problem is the confirmation email. It is sent inside the request, so a slow mail server holds the order open and the customer stares at a spinner. I moved it onto the queue, which already retries on its own. That touches the worker setup, so I also updated the worker registration and its test, and checked the queue's dead-letter handling still covers the new job type." },
+  { kind: "tool", name: "Edit", target: "src/queue/registry.ts" },
+  { kind: "tool", name: "Edit", target: "src/queue/registry.test.ts" },
+  { kind: "tool", name: "Bash", target: "bun run lint && bun run typecheck" },
+  { kind: "prose", text: "All 214 tests pass, lint and the type check are clean. Here is a summary of every change, file by file, with the reasoning behind each one, the alternatives I considered, and what I'd suggest looking at first when you review it." },
+];

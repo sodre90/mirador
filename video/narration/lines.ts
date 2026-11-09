@@ -15,13 +15,10 @@ export const LINES = {
   show: "Flows, mockups and charts, drawn right beside your chat.",
   ask: "When it's your call, it asks with pictures.",
   review: "Reviews become a guided tour of the change, with findings pinned to the lines.",
-  overview: "Every project at once. See who needs you.",
-  edit: "Approve every edit with its diff, and see every change.",
   plugins: "Your agent installs official plugins when you say so.",
   media: "Mark what's wrong on the frame, and the agent cuts the video.",
-  delegate: "It runs the agents you already have. Here, Claude Code hands a long read to a local model.",
+  delegate: "It runs the agents you already have. Here, Claude Code hands a long read to a local model on opencode.",
   jobs: "Long jobs? Mirador keeps watch, and wakes your agent when they're done.",
-  voice: "Or just talk to it.",
   voiceAsk: { text: "How long will the switch-over take, and what could go wrong?", voice: USER_VOICE },
   voiceReply: { text: "About ten minutes, read-only. It waits for replication to catch up before it switches.", voice: AGENT_VOICE },
   mirador: "Mirador.",
@@ -30,6 +27,9 @@ export const LINES = {
 } as const satisfies Record<string, string | Voiced>;
 
 export type LineName = keyof typeof LINES;
+
+/** Lines the capture plays in the voice clip, which the trailer no longer shows; they go once that filming does (vcs-tk89). */
+export const CAPTURE_ONLY_LINES: LineName[] = ["voiceAsk", "voiceReply"];
 
 const voiced = (name: LineName): Voiced => {
   const line: string | Voiced = LINES[name];
