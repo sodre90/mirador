@@ -413,6 +413,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "changes.listed":
     case "changes.diffed":
     case "changes.files-listed":
+    case "changes.committable-listed":
+    case "changes.committed":
     case "changes.failed":
     case "slash-commands.listed":
     case "conversation.fork-checked":

@@ -379,6 +379,9 @@ export const hints: Messages["hints"] = {
     "Escritos mientras se ejecutaban los comandos de esta conversación, pero también mientras otra conversación de esta carpeta ejecutaba un comando o una edición, y lo que ejecutaron las dos no indica cuál lo escribió. Los archivos que solo nombran las llamadas a herramientas de otra conversación se omiten.",
   changesFromCommit: "Un commit desde que empezó el turno cambió este archivo, como el de un pull o uno del propio agente.",
   changesRefresh: "Carga la lista de nuevo. También se carga después de cada llamada a una herramienta que termina el agente y cuando termina el turno.",
+  changesCommit: "Haz commit de archivos de esta carpeta con un mensaje que escribes tú. Los cambios de esta conversación empiezan marcados; lo que preparaste tú mismo queda como está.",
+  commitOthers: "Los demás cambios sin commit de la carpeta: tuyos, de otra conversación, o un archivo que borró un comando de esta conversación y que nada vincula a ella. Marca los que este commit también debe llevar.",
+  commitConfirm: "Hace commit de los archivos marcados tal como están ahora, enteros. El commit es tuyo: se aplican tu identidad de git, tu firma y tus hooks. ⌘Enter hace lo mismo.",
   changesByAgent: "El agente de esta conversación cambió este archivo con sus herramientas de edición.",
   changesOpenInEditor: "Abre el archivo en su primera línea cambiada, en el editor que elijas en Configuración › Conversaciones.",
   editDiffStyle:

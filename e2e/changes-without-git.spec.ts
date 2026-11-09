@@ -41,6 +41,7 @@ test("in a folder that is no git repository, a file a script wrote shows in Chan
   await expect(row.locator(".change-status")).toHaveText("A");
   await expect(row.locator(".by-agent")).toHaveCount(0);
   await expect(changes(page)).toContainText("not a git repository");
+  await expect(changes(page).getByRole("button", { name: "Commit…" }), "nothing can be committed outside a repository").toHaveCount(0);
   await expect(changes(page).locator(".changed-file")).toHaveCount(1);
   await row.click();
   await expect(changes(page).locator(".changes-diff .code-row.added")).toContainText("made by a script");

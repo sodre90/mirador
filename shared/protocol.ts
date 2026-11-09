@@ -36,7 +36,7 @@ import type {
   WorkspaceGroup,
   Pastel,
 } from "./model.ts";
-import type { ChangeList, ChangeScope, FileChanges, ProjectFiles } from "./changes.ts";
+import type { ChangeList, ChangeScope, Committable, FileChanges, MadeCommit, ProjectFiles } from "./changes.ts";
 import type { ConversationOrder } from "./conversation-order.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
@@ -261,6 +261,8 @@ export type ClientMessage =
   | { type: "changes.list"; requestId: string; conversationId: string; scope: ChangeScope }
   | { type: "changes.diff"; requestId: string; conversationId: string; scope: ChangeScope; path: string }
   | { type: "changes.files"; requestId: string; conversationId: string }
+  | { type: "changes.committable"; requestId: string; conversationId: string }
+  | { type: "changes.commit"; requestId: string; conversationId: string; paths: string[]; message: string }
   | { type: "changes.open-in-editor"; conversationId: string; path: string; line: number }
   /**
    * Opens a file in the program the host's system uses for it, when it is in the workspace or the agent changed it, or
@@ -511,6 +513,8 @@ export type ServerMessage =
   | { type: "changes.listed"; requestId: string; list: ChangeList }
   | { type: "changes.diffed"; requestId: string; changes: FileChanges }
   | { type: "changes.files-listed"; requestId: string; files: ProjectFiles }
+  | { type: "changes.committable-listed"; requestId: string; committable: Committable }
+  | { type: "changes.committed"; requestId: string; commit: MadeCommit }
   | { type: "changes.failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "terminals.listed"; conversationId: string; tabs: TerminalTab[] }
   | { type: "terminal.opened"; requestId: string; tabId: string; terminalId: string }

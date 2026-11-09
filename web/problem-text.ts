@@ -147,6 +147,12 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.snapshotBlobUnreadable(problem.blob, problem.directory);
     case "not-in-git-repository":
       return words.notInGitRepository(problem.directory);
+    case "commit-needs-message":
+      return words.commitNeedsMessage;
+    case "commit-needs-files":
+      return words.commitNeedsFiles;
+    case "not-an-uncommitted-change":
+      return words.notAnUncommittedChange(problem.path);
     case "save-path-absolute":
       return words.savePathAbsolute(problem.name);
     case "save-path-outside":

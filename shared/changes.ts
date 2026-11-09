@@ -32,6 +32,8 @@ export type ChangesBase = "head" | "turn-start" | "turn-file-times" | "no-turn" 
 export interface ChangeList {
   scope: ChangeScope;
   base: ChangesBase;
+  /** Whether the folder is in a git repository, so its changes can be committed. */
+  inRepository: boolean;
   project: ChangedFile[];
   /** In a turn, the project's files that commits since the turn began changed, such as a pull's or the agent's own, apart from the rest. */
   committed: ChangedFile[];
@@ -52,4 +54,21 @@ export interface FileChanges {
   path: string;
   source: "files" | "agent";
   diffs: EditDiff[];
+}
+
+/**
+ * What a commit from a conversation can take: the files of its session that differ from HEAD, apart from the folder's
+ * other uncommitted changes, such as a file one of its commands deleted, which nothing ties to it, or the user's own
+ * work. The branch is the one the commit would go on, null on a detached HEAD.
+ */
+export interface Committable {
+  ofConversation: ChangedFile[];
+  others: ChangedFile[];
+  branch: string | null;
+}
+
+export interface MadeCommit {
+  /** The commit's abbreviated hash. */
+  revision: string;
+  subject: string;
 }

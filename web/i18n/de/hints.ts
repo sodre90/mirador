@@ -382,6 +382,9 @@ export const hints: Messages["hints"] = {
     "Geschrieben, während die Befehle dieser Unterhaltung liefen, aber auch, während eine andere Unterhaltung in diesem Ordner einen Befehl oder eine Bearbeitung ausführte, und was die beiden ausgeführt haben, verrät nicht, welche sie geschrieben hat. Dateien, die nur die Tool-Aufrufe einer anderen Unterhaltung nennen, sind ausgelassen.",
   changesFromCommit: "Ein Commit seit Beginn der Runde hat diese Datei geändert, etwa der eines Pulls oder einer des Agenten selbst.",
   changesRefresh: "Lade die Liste neu. Sie lädt auch nach jedem Tool-Aufruf, den der Agent abschließt, und wenn die Runde endet.",
+  changesCommit: "Committe Dateien dieses Ordners mit einer Nachricht, die du schreibst. Die Änderungen dieser Unterhaltung sind anfangs angehakt; was du selbst vorgemerkt hast, bleibt, wie es ist.",
+  commitOthers: "Die übrigen nicht committeten Änderungen des Ordners: deine, die einer anderen Unterhaltung oder eine Datei, die ein Befehl dieser Unterhaltung gelöscht hat und die nichts mit ihr verbindet. Hake an, was dieser Commit auch mitnehmen soll.",
+  commitConfirm: "Committet die angehakten Dateien ganz, so wie sie jetzt sind. Der Commit ist deiner: deine git-Identität, Signatur und Hooks gelten. ⌘Enter macht dasselbe.",
   changesByAgent: "Der Agent dieser Unterhaltung hat diese Datei mit seinen Bearbeitungs-Tools geändert.",
   changesOpenInEditor: "Öffne die Datei an ihrer ersten geänderten Zeile, in dem Editor, der unter Einstellungen › Unterhaltungen gewählt ist.",
   editDiffStyle:

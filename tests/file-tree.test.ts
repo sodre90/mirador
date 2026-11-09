@@ -77,7 +77,7 @@ test("keeps each file's own item", () => {
 });
 
 const change = (path: string): ChangedFile => ({ path, status: "modified", added: 1, removed: 0, byAgent: false });
-const list = (project: string[], committed: string[] = []): ChangeList => ({ scope: "turn", base: "turn-start", project: project.map(change), committed: committed.map(change), outside: [] });
+const list = (project: string[], committed: string[] = []): ChangeList => ({ scope: "turn", base: "turn-start", inRepository: true, project: project.map(change), committed: committed.map(change), outside: [] });
 
 test("every project file shows once: the changed ones with their changes, a commit's tagged, a deleted one though git no longer lists it", () => {
   const files = projectFilesWithChanges(list(["src/a.ts", "gone.ts"], ["pulled.ts"]), ["src/a.ts", "src/b.ts", "pulled.ts", "README.md"]);

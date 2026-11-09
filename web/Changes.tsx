@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
 import { changeScopes, type ChangedFile, type ChangeList, type ChangeScope, type ChangesBase, type FileChanges, type ProjectFiles } from "../shared/changes.ts";
 import { fileTree, type TreeFolder, type TreeNode } from "../shared/file-tree.ts";
-import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
+import { changesRequest } from "./changes-request.ts";
+import { CommitChangesDialog } from "./CommitChanges.tsx";
 import { changedFiles, firstChangedLine, projectFilesWithChanges, startsFolded, type ListedFile } from "./changes.ts";
 import { connection } from "./connection.ts";
 import { DiffStyleChoice, diffStyle, EditedFile } from "./EditApproval.tsx";
@@ -9,7 +10,6 @@ import { hints } from "./hints.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { storedChoice } from "./stored-choice.ts";
 import { withHomeAsTilde } from "./workspace-folder.ts";
-import { hostErrorText } from "./host-error.ts";
 import { openInLabel, useOpensIn } from "./opens-in.ts";
 
 const words = t.canvas.changes;
@@ -25,13 +25,6 @@ const listView = storedChoice<ListView>("mirador-changes-view", listViews, "all"
 const listNotes: Partial<Record<ChangesBase, string>> = words.notes;
 const nothingChanged = (list: ChangeList) =>
   list.base === "no-turn" ? words.noTurnYet : list.scope === "turn" ? words.nothingThisTurn : list.scope === "session" ? words.nothingThisSession : words.nothingUncommitted;
-
-function changesRequest<T>(send: (requestId: string) => ClientMessage, picked: (message: ServerMessage) => T | undefined) {
-  return connection.sendAndAwait(send, (message, requestId) => {
-    if (message.type === "changes.failed" && message.requestId === requestId) throw new Error(hostErrorText(message));
-    return "requestId" in message && message.requestId === requestId ? picked(message) : undefined;
-  });
-}
 
 const listChanges = (conversationId: string, scope: ChangeScope) =>
   changesRequest(
@@ -287,6 +280,8 @@ function SelectedFile({ conversationId, file, loaded, homeDir }: { conversationI
 export function ChangesView({ conversationId, refreshPoint, homeDir }: { conversationId: string; refreshPoint: number; homeDir: string }) {
   const scope = changesScope.use();
   const [refreshes, setRefreshes] = useState(0);
+  const [committing, setCommitting] = useState(false);
+  const [madeCommit, setMadeCommit] = useState<string | null>(null);
   const reloadWhen = `${refreshPoint} ${refreshes}`;
   const [selectedPath, setSelectedPath] = useState(selectedPaths.get(conversationId) ?? null);
   const loadedList = useKeptLoad(`list ${conversationId} ${scope}`, () => listChanges(conversationId, scope), reloadWhen);
@@ -390,7 +385,28 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
         <button type="button" className="link" data-hint={hints.changesRefresh} onClick={() => setRefreshes((count) => count + 1)}>
           {words.refresh}
         </button>
+        {list?.inRepository && (
+          <button type="button" className="link" data-hint={hints.changesCommit} onClick={() => setCommitting(true)}>
+            {words.commitDialog.open}
+          </button>
+        )}
       </div>
+      {committing && (
+        <CommitChangesDialog
+          conversationId={conversationId}
+          onClose={() => setCommitting(false)}
+          onCommitted={({ revision, subject }, fileCount) => {
+            setCommitting(false);
+            setMadeCommit(words.commitDialog.committed(fileCount, revision, subject));
+            setRefreshes((count) => count + 1);
+          }}
+        />
+      )}
+      {madeCommit && (
+        <p className="hint commit-made" role="status">
+          {madeCommit}
+        </p>
+      )}
       {loadedList && "error" in loadedList ? <p className="review-empty">{loadedList.error}</p> : !visible && <p className="changes-none">{words.loading}</p>}
       {visible && listNotes[visible.base] && <p className="hint">{listNotes[visible.base]}</p>}
       {visible?.filesCheckedAtMost !== undefined && (

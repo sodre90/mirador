@@ -2,9 +2,11 @@ import { realpathSync } from "node:fs";
 import { lstat, readlink, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, normalize, posix, resolve, sep } from "node:path";
 import type { ToolCallContent, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk/unstable";
-import type { ChangedFile, ChangeList, ChangeScope, ChangesBase, FileChanges, ProjectFiles } from "../shared/changes.ts";
+import type { ChangedFile, ChangeList, ChangeScope, ChangesBase, Committable, FileChanges, MadeCommit, ProjectFiles } from "../shared/changes.ts";
 import type { StoredEvent, Workspace } from "../shared/model.ts";
 import type { Checkpoints } from "./checkpoints.ts";
+import { commitFiles } from "./commit-files.ts";
+import { currentGitBranch } from "./statusline.ts";
 import { fileChangeDiff, shownPath, snippetDiff, textFileAt } from "./edit-diff.ts";
 import type { FileBefore } from "./edit-diff.ts";
 import type { Store } from "./store.ts";
@@ -282,8 +284,8 @@ export class Changes {
 
   async list(conversationId: string, scope: ChangeScope): Promise<ChangeList> {
     const workspace = this.workspaceOf(conversationId);
-    const start = await this.startOf(conversationId, workspace, scope);
-    if (start.base === "no-turn") return { scope, base: start.base, project: [], committed: [], outside: [] };
+    const [start, inRepository] = await Promise.all([this.startOf(conversationId, workspace, scope), isRepository(workspace.path)]);
+    if (start.base === "no-turn") return { scope, base: start.base, inRepository, project: [], committed: [], outside: [] };
     const directories = await projectDirectories(workspace);
     const edits = this.agentEdits(conversationId, workspace, start.fromSeq);
     const agentProjectFiles = new Map(edits.flatMap((edit) => (projectPathOf(edit.path, directories) === null ? [] : [[projectPathOf(edit.path, directories)!, edit] as const])));
@@ -300,11 +302,41 @@ export class Changes {
     return {
       scope,
       base: start.base,
+      inRepository,
       project: project.filter((file) => !fromCommits(file)).sort(byPath),
       committed: project.filter(fromCommits).sort(byPath),
       outside: outside.sort(byPath),
       ...(truncated && { filesCheckedAtMost: MAX_SCANNED_FILES }),
     };
+  }
+
+  /**
+   * What a commit from the conversation can take: every uncommitted change of the folder, those its session lists apart
+   * from the rest, without the files git ignores. One another conversation may have written instead stays marked.
+   */
+  async committable(conversationId: string): Promise<Committable> {
+    const workspace = this.workspaceOf(conversationId);
+    const [session, uncommitted, branch] = await Promise.all([this.list(conversationId, "session"), uncommittedChanges(workspace.path), currentGitBranch(workspace.path)]);
+    if (uncommitted === null) throw new HostProblemError({ code: "not-in-git-repository", directory: workspace.path });
+    const ofSession = new Map(session.project.map((file) => [file.path, file]));
+    const files = uncommitted
+      .map(({ path, status, added, removed }): ChangedFile => {
+        const listed = ofSession.get(path);
+        return { path, status, added, removed, byAgent: listed?.byAgent ?? false, ...(listed?.othersMayHaveWritten && { othersMayHaveWritten: true }) };
+      })
+      .sort(byPath);
+    return { ofConversation: files.filter(({ path }) => ofSession.has(path)), others: files.filter(({ path }) => !ofSession.has(path)), branch };
+  }
+
+  /** Commits the chosen uncommitted files, as they are now, with the user's message and as the user. */
+  async commit(conversationId: string, paths: string[], message: string): Promise<MadeCommit> {
+    if (message.trim() === "") throw new HostProblemError({ code: "commit-needs-message" });
+    if (paths.length === 0) throw new HostProblemError({ code: "commit-needs-files" });
+    const { ofConversation, others } = await this.committable(conversationId);
+    const uncommittedPaths = new Set([...ofConversation, ...others].map(({ path }) => path));
+    const unchanged = paths.find((path) => !uncommittedPaths.has(path));
+    if (unchanged !== undefined) throw new HostProblemError({ code: "not-an-uncommitted-change", path: unchanged });
+    return commitFiles(this.workspaceOf(conversationId).path, paths, message);
   }
 
   async files(conversationId: string): Promise<ProjectFiles> {

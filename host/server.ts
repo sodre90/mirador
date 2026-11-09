@@ -1380,6 +1380,18 @@ export function startServer(services: HostServices) {
           .then((files) => reply({ type: "changes.files-listed", requestId: message.requestId, files }))
           .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
         return;
+      case "changes.committable":
+        conversations.changes
+          .committable(message.conversationId)
+          .then((committable) => reply({ type: "changes.committable-listed", requestId: message.requestId, committable }))
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
+        return;
+      case "changes.commit":
+        conversations.changes
+          .commit(message.conversationId, message.paths, message.message)
+          .then((commit) => reply({ type: "changes.committed", requestId: message.requestId, commit }))
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
+        return;
       case "changes.open-in-editor":
         return conversations.changes.openInEditor(message.conversationId, message.path, message.line);
       case "files.open":

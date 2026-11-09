@@ -310,7 +310,7 @@ test("a file the agent edits in a folder is listed once, by the path git gives i
 });
 
 test("before the first turn there is nothing to list for this turn", async () => {
-  expect(await changes.list("c1", "turn")).toEqual({ scope: "turn", base: "no-turn", project: [], committed: [], outside: [] });
+  expect(await changes.list("c1", "turn")).toEqual({ scope: "turn", base: "no-turn", inRepository: true, project: [], committed: [], outside: [] });
 });
 
 test("a file's diff has the file's line numbers against the turn's start, and against HEAD for uncommitted", async () => {
@@ -983,7 +983,7 @@ test("before the first message the session scope lists only the agent's edits, s
   store.appendEvent("c1", { type: "acp", update: { sessionUpdate: "current_mode_update", currentModeId: "default" } });
   await mkdir(join(projectDir, "build"));
   await writeFile(join(projectDir, "build", "hook.js"), "written as the session started\n");
-  expect(await changes.list("c1", "session")).toEqual({ scope: "session", base: "session", project: [], committed: [], outside: [] });
+  expect(await changes.list("c1", "session")).toEqual({ scope: "session", base: "session", inRepository: true, project: [], committed: [], outside: [] });
 
   agentEdits("replayed", join(projectDir, "kept.txt"), "two", "TWO");
   expect((await changes.list("c1", "session")).project).toEqual([{ path: "kept.txt", status: "modified", added: null, removed: null, byAgent: true }]);
@@ -1005,6 +1005,78 @@ test("outside a git repository, the session lists the files the agent's commands
   await agentRuns("script", () => write("doomed.txt", "rewritten by a script\n"));
   const session = await changes.list("c1", "session");
   expect(session.base).toBe("session");
+  expect(session.inRepository).toBe(false);
   expect(session.project.map((file) => file.path)).toEqual(["doomed.txt"]);
   expect((await changes.diff("c1", "session", "doomed.txt")).diffs[0]).toMatchObject({ hiddenBecause: expect.stringContaining("not a git repository") });
+});
+
+const identifyCommitter = async () => {
+  await git(projectDir, ["config", "user.name", "Owner"]);
+  await git(projectDir, ["config", "user.email", "owner@example.test"]);
+};
+
+/** The agent edits kept.txt, and its command adds made.txt, deletes doomed.txt and writes the ignored build/out.js. */
+async function agentWorks() {
+  await startTurn();
+  await write("kept.txt", "one\nTWO\nthree\n");
+  agentEdits("edit", join(projectDir, "kept.txt"), "two", "TWO");
+  await agentRuns("script", async () => {
+    await write("made.txt", "made\n");
+    await rm(join(projectDir, "doomed.txt"));
+    await mkdir(join(projectDir, "build"));
+    await writeFile(join(projectDir, "build", "out.js"), "built\n");
+  });
+  await pastTheCommand();
+}
+
+test("what a conversation can commit is the folder's uncommitted changes, its session's apart from the rest, such as a file its command deleted or one changed by hand, and none git ignores", async () => {
+  await agentWorks();
+  await write(".gitignore", "build\nchanged by hand\n");
+  expect(await changes.committable("c1")).toEqual({
+    ofConversation: [
+      { path: "kept.txt", status: "modified", added: 1, removed: 1, byAgent: true },
+      { path: "made.txt", status: "added", added: 1, removed: 0, byAgent: false },
+    ],
+    others: [
+      { path: ".gitignore", status: "modified", added: 1, removed: 0, byAgent: false },
+      { path: "doomed.txt", status: "deleted", added: 0, removed: 1, byAgent: false },
+    ],
+    branch: await git(projectDir, ["branch", "--show-current"]),
+  });
+  await write("kept.txt", "one\ntwo\nthree\n");
+  expect((await changes.committable("c1")).ofConversation.map(({ path }) => path)).toEqual(["made.txt"]);
+});
+
+test("a commit takes the chosen files as they are, an untracked and a deleted one too, as the user, and leaves what was staged by hand and the unchosen files as they were", async () => {
+  await identifyCommitter();
+  await write("by-hand.txt", "staged by hand\n");
+  await git(projectDir, ["add", "by-hand.txt"]);
+  await pastTheFileTimeTick();
+  await agentWorks();
+  const commit = await changes.commit("c1", ["doomed.txt", "made.txt"], "Make one, drop one\n\nWith a body.");
+  expect(commit).toEqual({ revision: await git(projectDir, ["rev-parse", "--short", "HEAD"]), subject: "Make one, drop one" });
+  expect(await git(projectDir, ["log", "-1", "--format=%an <%ae>: %s / %b"])).toBe("Owner <owner@example.test>: Make one, drop one / With a body.");
+  expect(await git(projectDir, ["show", "--format=", "--name-status", "HEAD"])).toBe("D\tdoomed.txt\nA\tmade.txt");
+  expect(await git(projectDir, ["status", "--porcelain"])).toBe("A  by-hand.txt\n M kept.txt");
+  const left = await changes.committable("c1");
+  expect([left.ofConversation.map(({ path }) => path), left.others.map(({ path }) => path)]).toEqual([["kept.txt"], ["by-hand.txt"]]);
+});
+
+test("a commit is refused without a message, without files, for a file with no uncommitted change, and outside a repository", async () => {
+  await agentWorks();
+  await expect(changes.commit("c1", ["kept.txt"], "  \n")).rejects.toMatchObject({ problem: { code: "commit-needs-message" } });
+  await expect(changes.commit("c1", [], "Message")).rejects.toMatchObject({ problem: { code: "commit-needs-files" } });
+  await expect(changes.commit("c1", ["kept.txt", ".gitignore"], "Message")).rejects.toMatchObject({ problem: { code: "not-an-uncommitted-change", path: ".gitignore" } });
+  await expect(changes.commit("c1", ["build/out.js"], "Message")).rejects.toMatchObject({ problem: { code: "not-an-uncommitted-change", path: "build/out.js" } });
+  await write("doomed.txt", "back\n");
+  await leaveGit();
+  await expect(changes.committable("c1")).rejects.toMatchObject({ problem: { code: "not-in-git-repository" } });
+});
+
+test("a commit git refuses says why, and an untracked file it was to take is untracked again", async () => {
+  await identifyCommitter();
+  await agentWorks();
+  await writeFile(join(projectDir, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho the hook says no >&2\nexit 1\n", { mode: 0o755 });
+  await expect(changes.commit("c1", ["made.txt"], "Message")).rejects.toMatchObject({ problem: { code: "git-failed", command: "commit", output: expect.stringContaining("the hook says no") } });
+  expect(await git(projectDir, ["status", "--porcelain", "made.txt"])).toBe("?? made.txt");
 });
