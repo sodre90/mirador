@@ -40,6 +40,7 @@ export type Overlay =
   | { kind: "plugins" }
   | { kind: "sessions"; workspaceId: string }
   | { kind: "workspace-color"; workspaceId: string }
+  | { kind: "worktrees"; workspaceId: string }
   | { kind: "add-workspace" }
   | { kind: "add-workspace-group" }
   /** `rewind` takes the conversation and the files back; without it only the files are put back. */
@@ -111,6 +112,8 @@ export interface AppState {
   noticesEverShown: number;
   /** A file outside the workspace that the agent did not change, which a link of a conversation leads to and opens once the owner agrees. */
   fileToOpen: { conversationId: string; file: string } | null;
+  /** A conversation the user asked to delete, whose worktree holds uncommitted files that would go with it. */
+  worktreeToDelete: { conversationId: string; uncommittedFiles: number; branch: string } | null;
   /** The host process run this page last heard from; another one means the host restarted, maybe with new code. */
   hostRunId: string | null;
   hostCodeChanged: boolean;
@@ -144,6 +147,7 @@ export type AppAction =
   | { type: "close-overlay" }
   | { type: "dismiss-notice"; id: number }
   | { type: "dismiss-file-to-open" }
+  | { type: "dismiss-worktree-to-delete" }
   | { type: "reminder-set"; undo: ReminderUndo }
   | { type: "dismiss-reminder-undo" };
 
@@ -201,6 +205,7 @@ export const initialState: AppState = {
   notices: [],
   noticesEverShown: 0,
   fileToOpen: null,
+  worktreeToDelete: null,
 };
 
 export function initialStateFor(conversationId: string | null): AppState {
@@ -397,9 +402,11 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "prompt-template.deleted":
       return { ...state, promptTemplates: state.promptTemplates.filter(({ id }) => id !== message.templateId) };
     case "error":
-      return withNotice(state, hostErrorText(message));
+      return withNotice(message.problem?.code === "worktree-needs-repository" ? { ...state, awaitingConversationIn: null } : state, hostErrorText(message));
     case "files.ask-to-open":
       return { ...state, fileToOpen: { conversationId: message.conversationId, file: message.file } };
+    case "conversation.delete-asks":
+      return { ...state, worktreeToDelete: { conversationId: message.conversationId, uncommittedFiles: message.uncommittedFiles, branch: message.branch } };
     case "fs.completions":
     case "pong":
     case "profile.saved":
@@ -504,6 +511,8 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, notices: state.notices.filter(({ id }) => id !== action.id) };
     case "dismiss-file-to-open":
       return { ...state, fileToOpen: null };
+    case "dismiss-worktree-to-delete":
+      return { ...state, worktreeToDelete: null };
     case "reminder-set":
       return { ...state, reminderUndo: { ...action.undo, id: (state.reminderUndo?.id ?? 0) + 1 } };
     case "dismiss-reminder-undo":

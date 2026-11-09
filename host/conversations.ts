@@ -7,6 +7,7 @@ import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {
   busyTexts,
   harnessLabels,
+  isConversationPlace,
   isUntitled,
   UNTITLED,
   type Activity,
@@ -17,6 +18,8 @@ import {
   type ContextUsage,
   type Conversation,
   type ConversationEvent,
+  type ConversationPlace,
+  type ConversationWorktree,
   type ConversationStatus,
   type ExternalSession,
   type HarnessId,
@@ -98,6 +101,7 @@ import { copilotHomeOf, copilotSessionCredits } from "./copilot-credits.ts";
 import { claudeTranscript, lastAnsweringModel, modelChoiceFor, recordsUserMessage, userMessageTakenInAt } from "./claude-transcript.ts";
 import { claudeTranscriptPaths, messageSnippetOf, openOpencodeDatabase, opencodeDatabasePath } from "./session-transcripts.ts";
 import { UserCommandRunner } from "./user-commands.ts";
+import { Worktrees, workingCopyOf } from "./worktrees.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
@@ -352,6 +356,7 @@ export class ConversationService {
   private readonly jobWaits: JobWaits;
   private readonly asyncTasks = new AsyncTasks();
   private readonly checkpoints: Checkpoints;
+  private readonly worktrees: Worktrees;
   readonly changes: Changes;
   /** While the host stops or restarts, messages wait in the queue for the next host, and turns it ends are not the agent's failures. */
   private stopping = false;
@@ -376,6 +381,7 @@ export class ConversationService {
     private readonly canvasPlugins: (conversationId: string) => CanvasPluginGuidance = () => NO_CANVAS_PLUGINS,
   ) {
     this.checkpoints = new Checkpoints(config.dataDir);
+    this.worktrees = new Worktrees(config.dataDir);
     this.changes = new Changes(store, this.checkpoints, (conversationId) => this.workspaceOf(conversationId), (file, line) => launchEditor(store.editorSetting(), file, line), openWithSystemDefault, (file) =>
       openAsText(file, store.scriptProgramSetting()),
     );
@@ -442,7 +448,7 @@ export class ConversationService {
   }
 
   async mentionSuggestions(conversationId: string, query: string) {
-    return mentionSuggestions(this.existingWorkspace(this.get(conversationId).workspaceId).path, query);
+    return mentionSuggestions(this.workspaceOf(conversationId).path, query);
   }
 
   /** What the conversation's subagents spent so far, from Claude Code's transcripts of them. */
@@ -455,7 +461,8 @@ export class ConversationService {
   /**
    * Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a
    * prompt, working on it at once; with a title that isn't blank, named as if by the user, so neither its first message
-   * nor its agent renames it; with `choices`, on that model and effort from its first message on.
+   * nor its agent renames it; with `choices`, on that model and effort from its first message on; with a `worktree`,
+   * working there rather than in the workspace's folder.
    */
   create(
     workspaceId: string,
@@ -463,19 +470,39 @@ export class ConversationService {
     prompt?: string,
     title?: string,
     choices: ConversationChoices = {},
+    worktree?: ConversationWorktree,
   ): Conversation {
     const givenTitle = titleFrom(title ?? "");
-    const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "");
+    const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "", worktree);
     if (choices.model || choices.effort) this.runtime(conversation.id).startChoices = choices;
-    this.ensureSession(conversation.id).catch(() => {});
-    if (prompt?.trim()) this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
+    const opened = this.ensureSession(conversation.id).catch(() => {});
+    if (prompt?.trim()) {
+      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true });
+      (this.unmadeWorktreeOf(conversation.id) ? opened.then(startTurn) : startTurn()).catch(() => {});
+    }
     return conversation;
   }
 
+  /** Like `create`, where the workspace starts its conversations unless `startsIn` names the other place. */
+  async start(workspaceId: string, launch?: Launch, prompt?: string, startsIn?: ConversationPlace): Promise<Conversation> {
+    const workspace = this.existingWorkspace(workspaceId);
+    const worktree = (startsIn ?? workspace.newConversationsIn) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    return this.create(workspaceId, launch, prompt, undefined, {}, worktree);
+  }
+
+  /** Where the workspace's new conversations work, and the command that sets each new worktree up. */
+  async setWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
+    const workspace = this.existingWorkspace(workspaceId);
+    if (!isConversationPlace(newConversationsIn)) return;
+    if (newConversationsIn === "worktree") await this.worktrees.mustHold(workspace);
+    this.store.setWorktreeSettings(workspaceId, newConversationsIn, worktreeSetup.trim());
+    this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
+  }
+
   /**
-   * For a plugin's tool: a conversation beside the caller's, on another profile, working on `prompt` at once. It works
-   * for the caller, which hears through the plugin how its work ended. A `title` names it for good, and `choices` set
-   * its model and effort, as `create` does.
+   * For a plugin's tool: a conversation beside the caller's, on another profile, working on `prompt` at once, in the
+   * caller's worktree if it has one. It works for the caller, which hears through the plugin how its work ended. A
+   * `title` names it for good, and `choices` set its model and effort, as `create` does.
    */
   startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): StartedConversation {
     const caller = this.get(callerId);
@@ -483,7 +510,7 @@ export class ConversationService {
     const profiles = this.store.listProfiles();
     const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
     if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
-    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices);
+    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices, caller.worktree);
     this.store.recordStartedBy(conversation.id, { conversationId: callerId, plugin });
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
@@ -602,12 +629,13 @@ export class ConversationService {
     session: Pick<ExternalSession, "sessionId" | "title"> & { titleSetByUser?: boolean },
     mode: AdoptMode,
     forkPoint: SessionForkPoint | null = null,
+    worktree?: ConversationWorktree,
   ): Conversation {
     if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
       throw new HostProblemError({ code: "session-already-open" });
     }
     const title = session.title || UNTITLED;
-    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title), session.titleSetByUser);
+    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title), session.titleSetByUser, worktree);
     this.ensureSession(conversation.id, () => this.loadExternalSession(conversation.id, session.sessionId, mode, forkPoint)).catch(() => {});
     return conversation;
   }
@@ -615,13 +643,14 @@ export class ConversationService {
   /**
    * Copies the agent's session into a new conversation on the same profile: as it stands, or through the turn begun
    * with the message at `throughTurnSeq`, its reply included. A turn running in it goes on undisturbed. A title the
-   * user or a plugin gave it stays theirs in the fork, safe from the agent's renaming.
+   * user or a plugin gave it stays theirs in the fork, safe from the agent's renaming. The fork works where the
+   * conversation does, as the agent keeps a session by its folder.
    */
   fork(conversationId: string, throughTurnSeq?: number): Conversation {
-    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser } = this.get(conversationId);
+    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree } = this.get(conversationId);
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
-    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint);
+    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree);
   }
 
   private forkPointThrough(conversationId: string, seq: number): SessionForkPoint | null {
@@ -636,7 +665,7 @@ export class ConversationService {
     return this.get(conversationId).acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId));
   }
 
-  private insertConversation(workspaceId: string, launch: Launch, title: string, titleSetByUser = false): Conversation {
+  private insertConversation(workspaceId: string, launch: Launch, title: string, titleSetByUser = false, worktree?: ConversationWorktree): Conversation {
     this.existingWorkspace(workspaceId);
     const profile = profileToLaunch(this.store, launch);
     const now = Date.now();
@@ -663,6 +692,7 @@ export class ConversationService {
       lastWords: null,
       activity: null,
       configOptions: [],
+      ...(worktree && { worktree }),
       createdAt: now,
       updatedAt: now,
     });
@@ -685,7 +715,18 @@ export class ConversationService {
       .forEach((conversation) => this.publish(conversation));
   }
 
-  delete(conversationId: string) {
+  /**
+   * The files only the conversation's worktree holds, which deleting the conversation deletes with it: none while
+   * another conversation works there too.
+   */
+  async uncommittedFilesLostWith(conversationId: string) {
+    const { worktree } = this.get(conversationId);
+    if (!worktree || this.store.conversationsInWorktree(worktree.id).length > 1) return 0;
+    return this.worktrees.uncommittedFiles(worktree);
+  }
+
+  /** Its worktree goes once no other conversation works there; with `keepsUncommittedWork`, only one that holds none. */
+  delete(conversationId: string, { keepsUncommittedWork = false } = {}) {
     const conversation = this.get(conversationId);
     this.deliverOwedReply(conversationId, "stopped");
     if (conversation.acpSessionId) {
@@ -711,12 +752,21 @@ export class ConversationService {
     this.lastWords.delete(conversationId);
     this.asksWaitedOn.delete(conversationId);
     this.keepCanvasOf(conversation);
+    const workspace = this.store.findWorkspace(conversation.workspaceId);
     this.store.deleteConversation(conversationId);
     this.images.deleteConversation(conversationId);
     this.droppedFiles.deleteConversation(conversationId);
     this.hub.broadcast({ type: "conversation.deleted", conversationId });
     this.announceWaiting();
     if (wasRunning) this.announceRunningTurnsCount();
+    if (workspace && conversation.worktree && this.store.conversationsInWorktree(conversation.worktree.id).length === 0)
+      this.removeWorktree(workspace, conversation.worktree, keepsUncommittedWork).catch((error: unknown) => console.error(`could not remove the worktree ${conversation.worktree?.root}:`, error));
+  }
+
+  private async removeWorktree(workspace: Workspace, worktree: ConversationWorktree, keepsUncommittedWork: boolean) {
+    if (keepsUncommittedWork && (await this.worktrees.uncommittedFiles(worktree)) > 0) return;
+    await this.worktrees.remove(workspace, worktree);
+    await this.checkpoints.forget(workingCopyOf(workspace, { worktree }), workspace);
   }
 
   /** Continuing the conversation's session later brings its canvas back as it was. */
@@ -1180,7 +1230,7 @@ export class ConversationService {
     if (!capabilities.agentCapabilities?.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-go-back-in-session" });
     const { sessionId } = await harness.forkSession({
       sessionId: conversation.acpSessionId!,
-      cwd: await recordedDirectory(this.existingWorkspace(conversation.workspaceId)),
+      cwd: await recordedDirectory(this.workspaceOf(conversationId)),
       _meta: forkPointMeta(point, atSteeredMessage),
     });
     return sessionId;
@@ -1205,8 +1255,10 @@ export class ConversationService {
     if (checkpoint) this.append(conversationId, { type: "files-kept", turnSeq, checkpoint });
   }
 
+  /** The folder the conversation works in, as a workspace: its own worktree if it has one. */
   private workspaceOf(conversationId: string) {
-    return this.existingWorkspace(this.get(conversationId).workspaceId);
+    const conversation = this.get(conversationId);
+    return workingCopyOf(this.existingWorkspace(conversation.workspaceId), conversation);
   }
 
   /** A turn works without this, so a failure costs that turn its undo and nothing else. */
@@ -1410,13 +1462,13 @@ export class ConversationService {
     if (this.store.hasConversation(conversationId)) this.publish(this.get(conversationId));
   }
 
-  /** Runs a `!` command from the message box in the conversation's workspace, with the environment its agent gets. */
+  /** Runs a `!` command from the message box where the conversation works, with the environment its agent gets. */
   runCommand(conversationId: string, command: string) {
     const conversation = this.get(conversationId);
-    const directory = this.store.findWorkspace(conversation.workspaceId)?.path;
-    if (!directory) throw new HostProblemError({ code: "conversation-workspace-gone" });
+    const workspace = this.store.findWorkspace(conversation.workspaceId);
+    if (!workspace) throw new HostProblemError({ code: "conversation-workspace-gone" });
     const environment = profileEnvironment(this.profileOf(conversation));
-    void this.commands.run(command, directory, environment, (event) => this.append(conversationId, event));
+    void this.commands.run(command, workingCopyOf(workspace, conversation).path, environment, (event) => this.append(conversationId, event));
   }
 
   /** A command the host no longer runs (it was restarted meanwhile) is marked as stopped, so its card stops waiting. */
@@ -1680,7 +1732,8 @@ export class ConversationService {
   private ensureSession(conversationId: string, open = () => this.openSession(conversationId)): Promise<string> {
     const runtime = this.runtime(conversationId);
     if (runtime.sessionId) return runtime.sessionId;
-    const opening: Promise<string> = open().catch((error) => {
+    const unmadeWorktree = this.unmadeWorktreeOf(conversationId);
+    const opening: Promise<string> = (unmadeWorktree ? this.prepareWorktree(conversationId, unmadeWorktree).then(open) : open()).catch((error) => {
       if (runtime.sessionId && runtime.sessionId !== opening) throw error;
       runtime.sessionId = undefined;
       this.setStatus(conversationId, "error", errorMessage(error), problemOf(error).problem);
@@ -1688,6 +1741,46 @@ export class ConversationService {
     });
     runtime.sessionId = opening;
     return opening;
+  }
+
+  private unmadeWorktreeOf(conversationId: string) {
+    const { worktree } = this.get(conversationId);
+    return worktree && !this.worktrees.isMade(worktree) ? worktree : undefined;
+  }
+
+  /** Before the agent of a worktree conversation first starts, the worktree is made and set up; a turn waiting for that is starting meanwhile. */
+  private async prepareWorktree(conversationId: string, worktree: ConversationWorktree) {
+    try {
+      await this.makeWorktree(this.get(conversationId), worktree);
+    } finally {
+      this.setStatus(conversationId, this.runtime(conversationId).running ? "starting" : "idle");
+    }
+  }
+
+  /**
+   * The worktree, then the workspace's setup command in it, which shows in the conversation as a command the user ran,
+   * so its output is there to read. The agent starts when the command ends, however it ends, and hears of it with the
+   * next message only when it failed.
+   */
+  private async makeWorktree(conversation: Conversation, worktree: ConversationWorktree) {
+    const workspace = this.existingWorkspace(conversation.workspaceId);
+    this.setBusy(conversation.id, "making-worktree");
+    await this.worktrees.make(workspace, worktree);
+    if (!this.store.hasConversation(conversation.id)) {
+      await this.worktrees.remove(workspace, worktree);
+      throw new HostProblemError({ code: "conversation-deleted-while-opening" });
+    }
+    if (!workspace.worktreeSetup) return;
+    this.setBusy(conversation.id, "setting-up-worktree");
+    const environment = { ...profileEnvironment(this.profileOf(conversation)), MIRADOR_WORKSPACE: workspace.path };
+    let setupCommandId: string | undefined;
+    let succeeded = false;
+    await this.commands.run(workspace.worktreeSetup, worktree.folder, environment, (event) => {
+      if (event.type === "user-command") setupCommandId = event.commandId;
+      if (event.type === "user-command-ended") succeeded = event.exitCode === 0;
+      this.append(conversation.id, event);
+    });
+    if (succeeded && setupCommandId) this.dropCommandOutputs(conversation.id, [setupCommandId]);
   }
 
   private releaseSession(conversationId: string, runtime: Runtime, sessionId: string | null) {
@@ -1758,7 +1851,7 @@ export class ConversationService {
     const harness = this.harnessFor(conversation);
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
-    const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
+    const sessionRequest = await this.sessionRequest(conversationId);
 
     const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume) && !replaysHistoryOnResume(conversation.harness);
     const canLoad = Boolean(capabilities.agentCapabilities?.loadSession);
@@ -1819,7 +1912,7 @@ export class ConversationService {
     if (!capabilities.agentCapabilities?.loadSession) throw new HostProblemError({ code: "agent-cannot-load-sessions", agent: harness.spec.label });
     if (mode === "fork" && !capabilities.agentCapabilities.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-fork-sessions", agent: harness.spec.label });
     this.setBusy(conversationId, "loading-history");
-    const sessionRequest = await this.sessionRequest(conversationId, this.existingWorkspace(conversation.workspaceId));
+    const sessionRequest = await this.sessionRequest(conversationId);
     const loadedId =
       mode === "fork" ? (await harness.forkSession({ sessionId, cwd: sessionRequest.cwd, ...(forkPoint && { _meta: forkPointMeta(forkPoint.messageId) }) })).sessionId : sessionId;
     this.muteNotifier(conversation, loadedId);
@@ -1850,11 +1943,10 @@ export class ConversationService {
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.loadSession) throw new HostProblemError({ code: "agent-cannot-load-sessions", agent: harness.spec.label });
     this.setBusy(conversationId, "reading-terminal-turns");
-    const workspace = this.existingWorkspace(conversation.workspaceId);
     const replay: acp.SessionNotification[] = [];
     this.replaysBeingRead.set(sessionId, replay);
     try {
-      const loaded = await harness.loadSession({ ...(await this.sessionRequest(conversationId, workspace)), sessionId });
+      const loaded = await harness.loadSession({ ...(await this.sessionRequest(conversationId)), sessionId });
       this.bindSession(conversationId, sessionId, loaded.configOptions);
     } finally {
       this.replaysBeingRead.delete(sessionId);
@@ -1867,7 +1959,7 @@ export class ConversationService {
   }
 
   /** A test host's own Claude Code works without the settings and instructions of the user who runs the tests. */
-  private async sessionRequest(conversationId: string, workspace: Workspace) {
+  private async sessionRequest(conversationId: string) {
     const conversation = this.get(conversationId);
     const withoutUserSettings = this.config.testSkipsUserSettings && this.onUsersOwnSetup(conversation);
     const canvasUse = this.store.canvasUse();
@@ -1875,7 +1967,7 @@ export class ConversationService {
     const systemPrompt = sessionSystemPrompt(conversation.harness, canvasUse, canvasPlugins);
     const idleCompaction = conversation.profileId === null || this.store.findProfile(conversation.profileId)?.idleCompaction !== false;
     return {
-      cwd: await recordedDirectory(workspace),
+      cwd: await recordedDirectory(this.workspaceOf(conversationId)),
       mcpServers: [this.canvasServerFor(conversationId)],
       _meta: sessionMeta(conversation.harness, canvasUse, {
         canvasAssetsOrigin: this.config.canvasAssetsOrigin,
@@ -2448,7 +2540,7 @@ export class ConversationService {
   /** Read before the user answers, since the file changes once they allow the edit. */
   private async editsAskedFor(conversationId: string, toolCall: acp.ToolCallUpdate) {
     try {
-      const workspace = this.existingWorkspace(this.get(conversationId).workspaceId);
+      const workspace = this.workspaceOf(conversationId);
       return await editDiffsOf(toolCall, [await recordedDirectory(workspace), workspace.path]);
     } catch {
       return undefined;

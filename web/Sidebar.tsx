@@ -35,6 +35,7 @@ import { shownTitle } from "./shown-title.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import type { AppAction, AppState, DevicesListed, Overlay } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
+import { WorktreeIcon, WorktreeMark } from "./Worktrees.tsx";
 import { canMarkUnread, markRead, markUnread } from "./unread.ts";
 import { lastsUntilOpened, waitingByUrgency, waitingLabels, waitingShowsOnDot, waitingTones } from "./waiting.ts";
 import { scrollToNearestWaiting, useWaitingOutOfView, waitingInFoldedGroup, type HiddenWaiting } from "./waiting-edges.ts";
@@ -491,6 +492,7 @@ function WorkspaceSection({
               <ProfileEdge profile={profileOf(profiles, conversation)} />
               {statusDot(conversation)}
               <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
+              {conversation.worktree && <WorktreeMark branch={conversation.worktree.branch} />}
               <DelegatedToggle callerId={conversation.id} delegated={delegatedTo(conversation)} open={openedDelegations.has(conversation.id)} />
               {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
               <ReminderChip conversation={conversation} dispatch={dispatch} />
@@ -524,6 +526,15 @@ function WorkspaceSection({
             {words.newConversation}
           </button>
           <LaunchPicker workspace={workspace} profiles={profiles} dispatch={dispatch} />
+          <button
+            className="icon worktrees-open"
+            aria-label={t.shell.worktrees.open}
+            data-hint={hints.worktrees}
+            data-place={workspace.newConversationsIn}
+            onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } })}
+          >
+            <WorktreeIcon />
+          </button>
           <button
             className="link continue-session"
             aria-label={words.continueSessionLabel}

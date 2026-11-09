@@ -18,6 +18,7 @@ import { standalonePage } from "./export.ts";
 import { saveIntoWorkspace } from "./save-to-project.ts";
 import { noteOfPageErrors, type CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
+import { workingCopyOf } from "../worktrees.ts";
 
 const RENDER_REPORT_TIMEOUT_MS = 6000;
 
@@ -216,9 +217,10 @@ export class CanvasService {
     const page = this.store.findCanvasItem(itemId);
     if (page?.kind !== "show" || page.html === undefined) throw new HostProblemError({ code: "only-shown-pages-saved" });
     const file = typeof content === "string" ? (await this.exportPage(itemId, content)).html : content;
-    const workspace = this.store.findWorkspace(this.conversations.get(page.conversationId).workspaceId);
+    const conversation = this.conversations.get(page.conversationId);
+    const workspace = this.store.findWorkspace(conversation.workspaceId);
     if (!workspace) throw new HostProblemError({ code: "workspace-gone" });
-    return saveIntoWorkspace(workspace.path, path, file, { replace });
+    return saveIntoWorkspace(workingCopyOf(workspace, conversation).path, path, file, { replace });
   }
 
   /** Takes back a question no one waits for any more, so that a late answer doesn't arrive as a message. */

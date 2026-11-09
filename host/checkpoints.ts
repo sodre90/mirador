@@ -192,6 +192,19 @@ export class Checkpoints {
     this.chainsLookedFor.add(lookedFor);
   }
 
+  /**
+   * Drops what was kept for a folder that is gone, such as a conversation's worktree: its snapshots, which `repository`
+   * still holds, and our index files for it.
+   */
+  forget(gone: Workspace, repository: Workspace) {
+    return this.inOrder(gone.id, async () => {
+      const refs = await this.git.run(repository, ["for-each-ref", "--format=%(refname)", snapshotRefsOf(gone.id)]);
+      const kept = refs.stdout.split("\n").filter(Boolean);
+      if (kept.length > 0) await this.git.run(repository, ["update-ref", "--stdin"], { input: kept.map((ref) => `delete ${ref}\n`).join("") });
+      await this.git.deleteFilesOf(gone);
+    });
+  }
+
   private async dropAllButNewest(workspace: Workspace) {
     const refs = await this.git.mustRun(workspace, ["for-each-ref", "--sort=-refname", "--format=%(refname)", snapshotRefsOf(workspace.id)]);
     const dropped = refs.stdout.split("\n").filter(Boolean).slice(this.keep);

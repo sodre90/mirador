@@ -255,7 +255,29 @@ export interface Workspace {
   position: number;
   /** The group it is shown in, or null for one among the groups. */
   groupId: string | null;
+  /** Where its new conversations work unless one is started otherwise. */
+  newConversationsIn: ConversationPlace;
+  /** A command run in each new worktree before its agent starts, such as one installing dependencies; "" for none. */
+  worktreeSetup: string;
   createdAt: number;
+}
+
+/** Where a conversation works: in its workspace's folder, with every other conversation there, or in a git worktree of its own. */
+export const conversationPlaces = ["folder", "worktree"] as const;
+export type ConversationPlace = (typeof conversationPlaces)[number];
+export const isConversationPlace = (value: unknown): value is ConversationPlace => conversationPlaces.includes(value as ConversationPlace);
+
+/**
+ * A git worktree of the workspace's repository that Mirador made for a conversation, on a branch of its own. The
+ * conversation works in `folder`: the worktree's top, or the workspace's own place below it when the workspace is a
+ * folder inside its repository. A fork works in the worktree of the conversation it copies, so `id` names the
+ * worktree, not a conversation.
+ */
+export interface ConversationWorktree {
+  id: string;
+  root: string;
+  folder: string;
+  branch: string;
 }
 
 /** A folding heading in the sidebar for some of the workspaces, e.g. a project's or a client's. */
@@ -450,7 +472,7 @@ export interface Activity {
   title: string;
 }
 
-export type BusyWith = "switching-profile" | "clearing-context" | "going-back" | "loading-history" | "reading-terminal-turns";
+export type BusyWith = "switching-profile" | "clearing-context" | "going-back" | "loading-history" | "reading-terminal-turns" | "making-worktree" | "setting-up-worktree";
 
 export const busyTexts: Record<BusyWith, string> = {
   "switching-profile": "Switching profile…",
@@ -458,6 +480,8 @@ export const busyTexts: Record<BusyWith, string> = {
   "going-back": "Going back…",
   "loading-history": "Loading the session's history…",
   "reading-terminal-turns": "Reading the turns taken in the terminal…",
+  "making-worktree": "Making the worktree…",
+  "setting-up-worktree": "Setting up the worktree…",
 };
 
 /** The title a conversation has until its first message, the agent or the user names it. */
@@ -510,6 +534,8 @@ export interface Conversation {
   lastMessageAt?: number;
   /** When the agent last finished a turn in it. */
   lastReplyAt?: number;
+  /** Only on a conversation that works in a git worktree rather than in its workspace's folder. */
+  worktree?: ConversationWorktree;
   /** Only on a conversation a plugin's tool started, such as a delegated task. */
   startedBy?: StartedBy;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */

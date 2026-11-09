@@ -196,6 +196,7 @@ export const hints = {
   workspaceColorStyle:
     "How a workspace you gave a colour shows it: on its whole card, on its heading only, or as a stripe down its edge over a softer tint. Click a workspace's initials to give it a colour.",
   newConversation: "Start a conversation in this workspace, on the profile picked next to this button.",
+  worktrees: "Where this workspace's new conversations work: all in the project folder, or each in a git worktree of its own, with a setup command for new worktrees.",
   addWorkspace: "Add a project directory. Its conversations run with it as the working directory.",
   hideSidebar: "Hide the sidebar, to give the conversation, canvas and terminal the whole width. Remembered in this browser.",
   showSidebar: "Show the sidebar with the workspaces and conversations again.",
@@ -211,7 +212,7 @@ export const hints = {
   deleteWorkspaceGroupArmed: "Click again to delete this group. Its workspaces stay where it is.",
   removeWorkspace: "Remove this workspace and its conversations from the app. The directory and its files are not touched.",
   removeWorkspaceArmed: "Click again to remove this workspace and its conversations from the app. The directory and its files are not touched.",
-  deleteConversation: "Delete this conversation, its timeline and its canvas history from the app. The agent's own session files stay on disk.",
+  deleteConversation: "Delete this conversation, its timeline and its canvas history from the app. The agent's own session files stay on disk. A worktree of its own goes too; one that holds uncommitted files asks first.",
   deleteConversationArmed: "Click again to delete this conversation. The agent's own session files stay on disk.",
   deleteProfileArmed: "Click again to delete this profile. Its conversations can continue with another profile.",
   profileColour: "A dot in this colour goes before the profile's name wherever it shows, and its conversations get an edge of it in the sidebar.",

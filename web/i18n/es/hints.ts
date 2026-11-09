@@ -216,6 +216,7 @@ export const hints: Messages["hints"] = {
   workspaceColorStyle:
     "Cómo muestra su color un espacio de trabajo al que se lo diste: en toda su tarjeta, solo en su encabezado, o como una franja en su borde sobre un tono más suave. Haz clic en las iniciales de un espacio de trabajo para darle un color.",
   newConversation: "Inicia una conversación en este espacio de trabajo, con el perfil elegido junto a este botón.",
+  worktrees: "Dónde trabajan las conversaciones nuevas de este espacio de trabajo: todas en la carpeta del proyecto, o cada una en su propio worktree de git, con un comando de preparación para los worktrees nuevos.",
   addWorkspace: "Agrega un directorio de proyecto. Sus conversaciones se ejecutan con él como directorio de trabajo.",
   hideSidebar: "Oculta la barra lateral para dar todo el ancho a la conversación, el lienzo y la terminal. Este navegador lo recuerda.",
   showSidebar: "Vuelve a mostrar la barra lateral con los espacios de trabajo y las conversaciones.",
@@ -233,7 +234,7 @@ export const hints: Messages["hints"] = {
   removeWorkspace: "Quita este espacio de trabajo y sus conversaciones de la aplicación. El directorio y sus archivos no se tocan.",
   removeWorkspaceArmed: "Haz clic de nuevo para quitar este espacio de trabajo y sus conversaciones de la aplicación. El directorio y sus archivos no se tocan.",
   deleteConversation:
-    "Elimina de la aplicación esta conversación, su línea de tiempo y su historial del lienzo. Los archivos de sesión del propio agente se quedan en el disco.",
+    "Elimina de la aplicación esta conversación, su línea de tiempo y su historial del lienzo. Los archivos de sesión del propio agente se quedan en el disco. Su propio worktree también se elimina; si tiene archivos sin commit, pregunta antes.",
   deleteConversationArmed: "Haz clic de nuevo para eliminar esta conversación. Los archivos de sesión del propio agente se quedan en el disco.",
   deleteProfileArmed: "Haz clic de nuevo para eliminar este perfil. Sus conversaciones pueden continuar con otro perfil.",
   profileColour: "Un punto de este color va delante del nombre del perfil dondequiera que aparezca, y sus conversaciones llevan un borde de este color en la barra lateral.",

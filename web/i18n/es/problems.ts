@@ -198,6 +198,7 @@ export const problems: Messages["problems"] = {
   commitNeedsMessage: "Un commit necesita un mensaje.",
   commitNeedsFiles: "Elige al menos un archivo para el commit.",
   notAnUncommittedChange: (path) => `${path} no es un cambio sin commit de esta carpeta.`,
+  worktreeNeedsRepository: (directory) => `Una conversación solo tiene su propio worktree en un repositorio git con algún commit, y ${directory} no está en uno.`,
   savePathAbsolute: (name) => `“${name}” es una ruta absoluta. Indica una ruta dentro de la carpeta del proyecto.`,
   savePathOutside: (name) => `“${name}” no es un archivo dentro de la carpeta del proyecto.`,
   savePathIsFolder: (name) => `“${name}” es una carpeta. Ponle otro nombre a la página.`,

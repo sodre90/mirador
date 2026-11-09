@@ -81,6 +81,7 @@ export type HostProblem =
   | { code: "commit-needs-message" }
   | { code: "commit-needs-files" }
   | { code: "not-an-uncommitted-change"; path: string }
+  | { code: "worktree-needs-repository"; directory: string }
   | { code: "save-path-absolute"; name: string }
   | { code: "save-path-outside"; name: string }
   | { code: "save-path-is-folder"; name: string }

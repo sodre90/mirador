@@ -82,6 +82,8 @@ export const chat = {
     "going-back": "Going back…",
     "loading-history": "Loading the session's history…",
     "reading-terminal-turns": "Reading the turns taken in the terminal…",
+    "making-worktree": "Making the worktree…",
+    "setting-up-worktree": "Setting up the worktree…",
   } satisfies Record<BusyWith, string>,
   notice: {
     lines: (count: number) => `${count} lines`,

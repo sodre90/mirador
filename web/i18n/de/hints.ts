@@ -216,6 +216,7 @@ export const hints: Messages["hints"] = {
   workspaceColorStyle:
     "Wie ein Arbeitsbereich, dem du eine Farbe gegeben hast, sie zeigt: auf seiner ganzen Karte, nur an seiner Überschrift oder als Streifen an seinem Rand über einer zarteren Tönung. Klicke auf die Initialen eines Arbeitsbereichs, um ihm eine Farbe zu geben.",
   newConversation: "Starte eine Unterhaltung in diesem Arbeitsbereich, mit dem Profil, das neben diesem Button gewählt ist.",
+  worktrees: "Wo die neuen Unterhaltungen dieses Arbeitsbereichs arbeiten: alle im Projektordner oder jede in einem eigenen git-Worktree, mit einem Einrichtungsbefehl für neue Worktrees.",
   addWorkspace: "Füge ein Projektverzeichnis hinzu. Seine Unterhaltungen laufen mit ihm als Arbeitsverzeichnis.",
   hideSidebar: "Blende die Seitenleiste aus, um Unterhaltung, Canvas und Terminal die ganze Breite zu geben. Wird in diesem Browser gespeichert.",
   showSidebar: "Zeige die Seitenleiste mit den Arbeitsbereichen und Unterhaltungen wieder.",
@@ -234,7 +235,7 @@ export const hints: Messages["hints"] = {
   removeWorkspaceArmed:
     "Klicke erneut, um diesen Arbeitsbereich und seine Unterhaltungen aus der App zu entfernen. Das Verzeichnis und seine Dateien bleiben unberührt.",
   deleteConversation:
-    "Lösche diese Unterhaltung, ihre Zeitleiste und ihren Canvas-Verlauf aus der App. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte.",
+    "Lösche diese Unterhaltung, ihre Zeitleiste und ihren Canvas-Verlauf aus der App. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte. Ihr eigener Worktree wird mit gelöscht; enthält er nicht committete Dateien, wird vorher gefragt.",
   deleteConversationArmed: "Klicke erneut, um diese Unterhaltung zu löschen. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte.",
   deleteProfileArmed: "Klicke erneut, um dieses Profil zu löschen. Seine Unterhaltungen können mit einem anderen Profil weitergehen.",
   profileColour: "Ein Punkt in dieser Farbe steht überall vor dem Namen des Profils, und seine Unterhaltungen bekommen in der Seitenleiste einen Rand in dieser Farbe.",

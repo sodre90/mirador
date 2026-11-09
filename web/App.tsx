@@ -15,6 +15,7 @@ import { JoinMachine } from "./Devices.tsx";
 import { JoinRequestPrompts } from "./JoinRequests.tsx";
 import { KeptCanvases } from "./KeptCanvases.tsx";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
+import { WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
 import { tellTheRailThePlace } from "./machine-place.ts";
 import { MachineFrames, MachineRail, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
 import { MachinesDialog, openMachine } from "./Machines.tsx";
@@ -178,6 +179,13 @@ function paletteEntries(
       label: words.continueSessionIn(workspace.name),
       kind: "action",
       run: () => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } }),
+    },
+    {
+      id: `worktrees-${workspace.id}`,
+      label: `${t.shell.worktrees.title(workspace.name)}…`,
+      detail: t.shell.worktrees[workspace.newConversationsIn],
+      kind: "action",
+      run: () => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } }),
     },
     {
       id: `color-${workspace.id}`,
@@ -544,6 +552,7 @@ export function App() {
   const overlay = state.overlay;
   const reminderConversation = overlay?.kind === "reminder" ? state.conversations.find(({ id }) => id === overlay.conversationId) : undefined;
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
+  const worktreesWorkspace = overlay?.kind === "worktrees" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const layoutToggles = {
     sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
     canvas: { visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) },
@@ -660,6 +669,7 @@ export function App() {
       <HintLayer />
       <JoinRequestPrompts joinRequests={state.joinRequests} />
       <FileToOpenPrompt fileToOpen={state.fileToOpen} dispatch={dispatch} />
+      <WorktreeDeletePrompt worktreeToDelete={state.worktreeToDelete} dispatch={dispatch} />
       <div className="notices">
         {state.notices.map((notice) => (
           <div key={notice.id} className="notice" onClick={() => dispatch({ type: "dismiss-notice", id: notice.id })}>
@@ -746,6 +756,7 @@ export function App() {
         />
       )}
       {sessionsWorkspace && <SessionsDialog workspace={sessionsWorkspace} profiles={state.profiles} dispatch={dispatch} onClose={closeOverlay} />}
+      {worktreesWorkspace && <WorktreesDialog key={worktreesWorkspace.id} workspace={worktreesWorkspace} dispatch={dispatch} onClose={closeOverlay} />}
     </div>
   );
 }

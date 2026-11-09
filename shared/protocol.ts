@@ -35,6 +35,7 @@ import type {
   Workspace,
   WorkspaceGroup,
   Pastel,
+  ConversationPlace,
 } from "./model.ts";
 import type { ChangeList, ChangeScope, Committable, FileChanges, MadeCommit, ProjectFiles } from "./changes.ts";
 import type { ConversationOrder } from "./conversation-order.ts";
@@ -96,6 +97,7 @@ export type ClientMessage =
    */
   | { type: "workspace.move"; workspaceId: string; groupId?: string | null; beforeWorkspaceId: string | null; beforeGroupId?: string | null }
   | { type: "workspace.set-color"; workspaceId: string; color: Pastel | null }
+  | { type: "workspace.set-worktree-settings"; workspaceId: string; newConversationsIn: ConversationPlace; worktreeSetup: string }
   | { type: "workspace-group.create"; name: string }
   | { type: "workspace-group.rename"; groupId: string; name: string }
   /** Puts the group just before another, or before a workspace in no group, in the sidebar; or last. */
@@ -135,7 +137,8 @@ export type ClientMessage =
   | { type: "settings.set-avatar"; image: string | null }
   /** Without a launch, the conversation starts on the workspace's default as the host has it when the message arrives. */
   /** With a prompt, the new conversation's agent starts on it at once. */
-  | { type: "conversation.create"; workspaceId: string; launch?: Launch; prompt?: string }
+  /** Without `startsIn`, where the workspace starts its conversations. */
+  | { type: "conversation.create"; workspaceId: string; launch?: Launch; prompt?: string; startsIn?: ConversationPlace }
   /** Puts the conversation just before another of its workspace in the sidebar, or last. */
   | { type: "conversation.move"; conversationId: string; beforeConversationId: string | null }
   | { type: "sessions.list"; requestId: string; workspaceId: string; launch: Launch }
@@ -161,7 +164,8 @@ export type ClientMessage =
   | { type: "conversation.fork"; conversationId: string; throughTurnSeq?: number }
   /** Whether the conversation can be forked yet, for a page that does not hold its history. */
   | { type: "conversation.check-fork"; requestId: string; conversationId: string }
-  | { type: "conversation.delete"; conversationId: string }
+  /** Without `discardsUncommitted`, a conversation whose worktree holds uncommitted files stays, and the host answers `conversation.delete-asks`. */
+  | { type: "conversation.delete"; conversationId: string; discardsUncommitted?: boolean }
   | { type: "conversation.rename"; conversationId: string; title: string }
   | { type: "conversation.set-favourite"; conversationId: string; favourite: boolean }
   | { type: "conversation.set-unread"; conversationId: string; unread: boolean }
@@ -543,6 +547,7 @@ export type ServerMessage =
   | { type: "pong" }
   /** A file link leads to a file outside the workspace that the agent did not change: the page asks before it opens `file`, the real file. */
   | { type: "files.ask-to-open"; conversationId: string; file: string }
+  | { type: "conversation.delete-asks"; conversationId: string; uncommittedFiles: number; branch: string }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */
   /** peerToPeer is null when this host doesn't connect peer to peer. */
   | { type: "devices.listed"; devices: ListedDevice[]; thisDeviceId: string | null; reachability: ReachabilitySettings; peerToPeer: PeerToPeerStatus | null }

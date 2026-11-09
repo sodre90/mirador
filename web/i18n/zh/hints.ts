@@ -195,6 +195,7 @@ export const hints: Messages["hints"] = {
   workspaceColorStyle:
     "你给工作区设置的颜色显示在哪里：整张卡片上、仅标题上，或者在边缘显示色条并配以更淡的底色。点击工作区的首字母可给它设置颜色。",
   newConversation: "在这个工作区中开始一个对话，使用这个按钮旁边所选的配置。",
+  worktrees: "这个工作区的新对话在哪里工作：全部在项目文件夹中，或各自在自己的 git 工作树中，并可为新工作树设置准备命令。",
   addWorkspace: "添加一个项目目录。它的对话以该目录作为工作目录运行。",
   hideSidebar: "隐藏侧边栏，让对话、画布和终端占满整个宽度。此浏览器会记住这个设置。",
   showSidebar: "重新显示包含工作区和对话的侧边栏。",
@@ -210,7 +211,7 @@ export const hints: Messages["hints"] = {
   deleteWorkspaceGroupArmed: "再次点击，将删除这个分组。它的工作区保留在原处。",
   removeWorkspace: "从应用中移除这个工作区及其对话。目录及其文件不受影响。",
   removeWorkspaceArmed: "再次点击，将从应用中移除这个工作区及其对话。目录及其文件不受影响。",
-  deleteConversation: "从应用中删除这个对话、它的时间线和画布历史。Agent 自己的会话文件仍保留在磁盘上。",
+  deleteConversation: "从应用中删除这个对话、它的时间线和画布历史。Agent 自己的会话文件仍保留在磁盘上。它自己的工作树也会被删除；如果其中有未提交的文件，会先询问。",
   deleteConversationArmed: "再次点击，将删除这个对话。Agent 自己的会话文件仍保留在磁盘上。",
   deleteProfileArmed: "再次点击，将删除这个配置。它的对话可以改用其他配置继续。",
   profileColour: "这个颜色的圆点会出现在配置名称前（凡是显示名称的地方），它的对话在侧边栏中也会带一道这个颜色的边。",

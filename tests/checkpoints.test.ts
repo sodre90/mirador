@@ -30,7 +30,7 @@ beforeEach(async () => {
   await git(projectDir, ["add", "-A"]);
   await git(projectDir, ["commit", "-qm", "base"]);
   checkpoints = new Checkpoints(dataDir);
-  workspace = { id: "ws-1", name: "project", path: projectDir, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, createdAt: 0 };
+  workspace = { id: "ws-1", name: "project", path: projectDir, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", createdAt: 0 };
 });
 
 afterEach(() => rm(dataDir, { recursive: true, force: true }));
@@ -905,3 +905,26 @@ test("a turn's snapshots, list of changes, preview and restore start no more git
     "snapshot of no change": 10,
   });
 }, 15_000);
+
+test("what was kept for a worktree that is gone is dropped from the repository and the data folder, and the workspace's own stays", async () => {
+  const worktreeDir = join(dataDir, "worktree");
+  await git(projectDir, ["worktree", "add", "-q", "-b", "side", worktreeDir, "HEAD"]);
+  const worktree: Workspace = { ...workspace, id: "wt-1", path: worktreeDir };
+  await writeFile(join(worktreeDir, "kept.txt"), "changed in the worktree\n");
+  const ofWorktree = (await checkpoints.snapshot(worktree))!;
+  const ofWorkspace = (await checkpoints.snapshot(workspace))!;
+  const refs = async () => (await git(projectDir, ["for-each-ref", "--format=%(refname)", "refs/mirador/"])).stdout;
+  const ourFiles = async () => readdir(join(dataDir, "checkpoints"));
+  expect(await refs()).toContain("refs/mirador/turns/wt-1/");
+  expect((await ourFiles()).some((name) => name.startsWith("wt-1"))).toBe(true);
+  await git(projectDir, ["worktree", "remove", "--force", worktreeDir]);
+
+  await checkpoints.forget(worktree, workspace);
+
+  expect(await refs()).not.toContain("refs/mirador/turns/wt-1/");
+  expect(await refs()).toContain("refs/mirador/turns/ws-1/");
+  expect((await ourFiles()).some((name) => name.startsWith("wt-1"))).toBe(false);
+  expect((await ourFiles()).some((name) => name.startsWith("ws-1"))).toBe(true);
+  expect(await checkpoints.keeps(workspace, ofWorkspace)).toBe(true);
+  expect(ofWorktree).toMatch(/^[0-9a-f]{40}$/);
+});

@@ -76,6 +76,8 @@ export const chat: Messages["chat"] = {
     "going-back": "正在回退…",
     "loading-history": "正在加载会话历史…",
     "reading-terminal-turns": "正在读取在终端中进行的轮次…",
+    "making-worktree": "正在创建工作树…",
+    "setting-up-worktree": "正在准备工作树…",
   },
   notice: {
     lines: (count) => `${count} 行`,

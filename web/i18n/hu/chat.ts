@@ -76,6 +76,8 @@ export const chat: Messages["chat"] = {
     "going-back": "Visszalépés…",
     "loading-history": "A munkamenet előzményeinek betöltése…",
     "reading-terminal-turns": "A terminálban lezajlott körök beolvasása…",
+    "making-worktree": "A worktree létrehozása…",
+    "setting-up-worktree": "A worktree beállítása…",
   },
   notice: {
     lines: (count) => `${count} sor`,

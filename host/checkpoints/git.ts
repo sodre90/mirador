@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Workspace } from "../../shared/model.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
@@ -50,6 +50,12 @@ export class CheckpointGit {
   /** One of our files for the workspace, such as its staging index, named by the workspace and the suffix. */
   fileOf(workspace: Workspace, suffix: string) {
     return join(this.dataDir, "checkpoints", `${workspace.id}${suffix}`);
+  }
+
+  async deleteFilesOf(workspace: Workspace) {
+    const folder = join(this.dataDir, "checkpoints");
+    const ours = (await readdir(folder).catch(() => [])).filter((name) => name.startsWith(workspace.id));
+    await Promise.all(ours.map((name) => rm(join(folder, name), { force: true })));
   }
 
   async run(workspace: Workspace, args: string[], options: GitOptions = {}) {

@@ -33,6 +33,8 @@ const workspace = (id: string, groupId: string | null, position: number): Worksp
   color: null,
   position,
   groupId,
+  newConversationsIn: "folder",
+  worktreeSetup: "",
   createdAt: 0,
 });
 

@@ -207,6 +207,7 @@ export const hints: Messages["hints"] = {
   workspaceColorStyle:
     "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára, hogy színt adj neki.",
   newConversation: "Beszélgetés indítása ezen a munkaterületen, a gomb mellett kiválasztott profilon.",
+  worktrees: "Hol dolgoznak ennek a munkaterületnek az új beszélgetései: mind a projektmappában, vagy mindegyik saját git worktree-ben, az új worktree-k beállító parancsával.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",
   hideSidebar: "Elrejti az oldalsávot, hogy a beszélgetés, a vászon és a terminál kapja a teljes szélességet. Ez a böngésző megjegyzi.",
   showSidebar: "Újra megjeleníti az oldalsávot a munkaterületekkel és a beszélgetésekkel.",
@@ -223,7 +224,7 @@ export const hints: Messages["hints"] = {
   deleteWorkspaceGroupArmed: "Kattints újra a csoport törléséhez. A munkaterületei a helyükön maradnak.",
   removeWorkspace: "A munkaterület és a beszélgetései eltávolítása az alkalmazásból. A könyvtár és a fájljai érintetlenek maradnak.",
   removeWorkspaceArmed: "Kattints újra, hogy eltávolítsd a munkaterületet és a beszélgetéseit az alkalmazásból. A könyvtár és a fájljai érintetlenek maradnak.",
-  deleteConversation: "A beszélgetés, az idővonala és a vászon-előzményei törlése az alkalmazásból. Az ágens saját munkamenetfájljai a lemezen maradnak.",
+  deleteConversation: "A beszélgetés, az idővonala és a vászon-előzményei törlése az alkalmazásból. Az ágens saját munkamenetfájljai a lemezen maradnak. A saját worktree-je is törlődik; ha nem commitolt fájlok vannak benne, előbb rákérdez.",
   deleteConversationArmed: "Kattints újra a beszélgetés törléséhez. Az ágens saját munkamenetfájljai a lemezen maradnak.",
   deleteProfileArmed: "Kattints újra a profil törléséhez. A beszélgetései egy másik profillal folytatódhatnak.",
   profileColour: "Ilyen színű pötty áll a profil neve előtt mindenhol, ahol megjelenik, és a beszélgetései ilyen színű szegélyt kapnak az oldalsávban.",

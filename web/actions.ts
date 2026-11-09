@@ -1,14 +1,17 @@
 import type { Dispatch } from "react";
 import { sessionHasRecord } from "../shared/conversation-begun.ts";
-import type { Conversation, StoredEvent, Workspace } from "../shared/model.ts";
+import type { Conversation, ConversationPlace, StoredEvent, Workspace } from "../shared/model.ts";
 import { connection } from "./connection.ts";
 import type { AppAction } from "./state.ts";
 
-/** Without a profile yet, the main pane offers to set one up instead, as it does with no conversation open. */
-export function startConversationIn(workspace: Workspace, dispatch: Dispatch<AppAction>, prompt?: string) {
+/**
+ * Without a profile yet, the main pane offers to set one up instead, as it does with no conversation open. Without
+ * `startsIn`, the conversation works where the workspace starts its conversations.
+ */
+export function startConversationIn(workspace: Workspace, dispatch: Dispatch<AppAction>, prompt?: string, startsIn?: ConversationPlace) {
   if (workspace.defaultLaunch.profileId === null) return dispatch({ type: "select", conversationId: null });
   dispatch({ type: "awaiting-conversation", workspaceId: workspace.id });
-  connection.send({ type: "conversation.create", workspaceId: workspace.id, ...(prompt && { prompt }) });
+  connection.send({ type: "conversation.create", workspaceId: workspace.id, ...(prompt && { prompt }), ...(startsIn && { startsIn }) });
 }
 
 /** The agent has a session to copy once it has worked on a message there, as the conversation's loaded history shows. */

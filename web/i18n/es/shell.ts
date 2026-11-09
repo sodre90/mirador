@@ -80,6 +80,27 @@ export const shell: Messages["shell"] = {
     paletteBar: "Conversaciones y acciones…",
     shortcuts: "Atajos",
   },
+  worktrees: {
+    open: "Dónde trabajan las conversaciones",
+    title: (workspace) => `Dónde trabajan las conversaciones en ${workspace}`,
+    startIn: "Las conversaciones nuevas empiezan en",
+    folder: "La carpeta del proyecto",
+    folderDetail: "Comparten sus archivos, como todas las conversaciones de aquí hasta ahora.",
+    worktree: "Un worktree propio",
+    worktreeDetail: "Cada una recibe un worktree de git en una rama nueva, así no cambian los archivos de las demás.",
+    setup: "Comando de preparación para un worktree nuevo",
+    setupDetail:
+      "Se ejecuta en cada worktree nuevo antes de que empiece su agente, y se muestra en la conversación. Un worktree solo contiene los archivos que git sigue: instala aquí las dependencias y copia lo que git ignora, como .env, desde $MIRADOR_WORKSPACE, la carpeta del proyecto.",
+    save: "Guardar",
+    cancel: "Cancelar",
+    startOne: { folder: "Empezar una ahora en la carpeta del proyecto", worktree: "Empezar una ahora en un worktree" },
+    inWorktree: (branch) => `Trabaja en un worktree propio, en la rama ${branch}`,
+    deleteTitle: "¿Eliminar la conversación y su worktree?",
+    deleteLoses: (count) =>
+      plural(count, "Su worktree tiene 1 archivo sin commit, que se elimina con él.", `Su worktree tiene ${count} archivos sin commit, que se eliminan con él.`),
+    deleteKeeps: (branch) => `Los commits hechos allí se conservan, en la rama ${branch}.`,
+    deleteBoth: "Eliminar ambos",
+  },
   sessions: {
     label: "Continuar una sesión",
     title: (workspace) => `Continuar una sesión en ${workspace}`,

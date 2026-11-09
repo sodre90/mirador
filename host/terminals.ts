@@ -12,6 +12,7 @@ import type { Store } from "./store.ts";
 import { TrimmedOutput } from "./trimmed-output.ts";
 import { childProgramNames, killProcessTree } from "./windows-processes.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
+import { workingCopyOf } from "./worktrees.ts";
 
 const SCROLLBACK_CHARACTERS = 256 * 1024;
 const SCROLLBACK_SAVE_DELAY_MS = 15_000;
@@ -269,7 +270,8 @@ export class TerminalService {
 
   private folderOf(conversationId: string) {
     const conversation = this.store.findConversation(conversationId);
-    return conversation && this.store.findWorkspace(conversation.workspaceId)?.path;
+    const workspace = conversation && this.store.findWorkspace(conversation.workspaceId);
+    return workspace && workingCopyOf(workspace, conversation).path;
   }
 
   private existingFolderOf(conversationId: string) {

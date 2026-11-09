@@ -14,6 +14,8 @@ These terms stay the same everywhere:
 | canvas | vászon | lienzo | 画布 | Canvas (der) |
 | host | host | host | host | Host |
 | workspace | munkaterület | espacio de trabajo | 工作区 | Arbeitsbereich |
+| worktree (git) | worktree | worktree | 工作树 | Worktree (der) |
+| project folder | projektmappa | carpeta del proyecto | 项目文件夹 | Projektordner |
 | conversation | beszélgetés | conversación | 对话 | Unterhaltung |
 | favourite (conversation) | kedvenc | favorita | 收藏 | Favorit |
 | session | munkamenet | sesión | 会话 | Sitzung |

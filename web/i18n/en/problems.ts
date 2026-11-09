@@ -196,6 +196,7 @@ export const problems = {
   commitNeedsMessage: "A commit needs a message.",
   commitNeedsFiles: "Choose at least one file to commit.",
   notAnUncommittedChange: (path: string) => `${path} is not an uncommitted change of this folder.`,
+  worktreeNeedsRepository: (directory: string) => `A conversation gets its own worktree only in a git repository with a commit, and ${directory} is not in one.`,
   savePathAbsolute: (name: string) => `"${name}" is an absolute path. Give a path inside the project folder.`,
   savePathOutside: (name: string) => `"${name}" is not a file inside the project folder.`,
   savePathIsFolder: (name: string) => `"${name}" is a folder. Name the page differently.`,

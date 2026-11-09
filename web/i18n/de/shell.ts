@@ -80,6 +80,27 @@ export const shell: Messages["shell"] = {
     paletteBar: "Unterhaltungen und Aktionen…",
     shortcuts: "Tastenkürzel",
   },
+  worktrees: {
+    open: "Wo Unterhaltungen arbeiten",
+    title: (workspace) => `Wo Unterhaltungen in ${workspace} arbeiten`,
+    startIn: "Neue Unterhaltungen starten",
+    folder: "Im Projektordner",
+    folderDetail: "Sie teilen sich dessen Dateien, wie hier bisher alle Unterhaltungen.",
+    worktree: "In einem eigenen Worktree",
+    worktreeDetail: "Jede bekommt einen git-Worktree auf einem neuen Branch, sodass sie die Dateien der anderen nicht ändern.",
+    setup: "Einrichtungsbefehl für einen neuen Worktree",
+    setupDetail:
+      "Läuft in jedem neuen Worktree, bevor dessen Agent startet, und erscheint in der Unterhaltung. Ein Worktree enthält nur die Dateien, die git verfolgt: Installiere hier die Abhängigkeiten und kopiere, was git ignoriert, etwa .env, aus $MIRADOR_WORKSPACE, dem Projektordner.",
+    save: "Speichern",
+    cancel: "Abbrechen",
+    startOne: { folder: "Jetzt eine im Projektordner starten", worktree: "Jetzt eine in einem Worktree starten" },
+    inWorktree: (branch) => `Arbeitet in einem eigenen Worktree, auf dem Branch ${branch}`,
+    deleteTitle: "Unterhaltung und ihren Worktree löschen?",
+    deleteLoses: (count) =>
+      plural(count, "Ihr Worktree enthält 1 nicht committete Datei, die mit gelöscht wird.", `Ihr Worktree enthält ${count} nicht committete Dateien, die mit gelöscht werden.`),
+    deleteKeeps: (branch) => `Dort gemachte Commits bleiben erhalten, auf dem Branch ${branch}.`,
+    deleteBoth: "Beides löschen",
+  },
   sessions: {
     label: "Sitzung fortsetzen",
     title: (workspace) => `Sitzung fortsetzen in ${workspace}`,

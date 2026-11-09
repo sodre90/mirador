@@ -10,6 +10,7 @@ import { claudeConfigDir } from "./terminal-sessions.ts";
 import { commandLine, commandShell } from "./command-shell.ts";
 import { killProcessTree } from "./windows-processes.ts";
 import { englishProblem, HostProblemError, type HostProblem } from "../shared/host-problems.ts";
+import { workingCopyOf } from "./worktrees.ts";
 
 const COMMAND_TIMEOUT_MS = 5_000;
 /** A command may leave a background job holding its output open; what it printed before exiting is what counts. */
@@ -158,8 +159,9 @@ export class StatuslineService {
 
   async render(conversationId: string, columns: number, runCommand: boolean): Promise<StatuslineRender> {
     const conversation = this.conversations.get(conversationId);
-    const directory = this.store.findWorkspace(conversation.workspaceId)?.path;
-    if (!directory) throw new HostProblemError({ code: "unknown-workspace", id: conversation.workspaceId });
+    const workspace = this.store.findWorkspace(conversation.workspaceId);
+    if (!workspace) throw new HostProblemError({ code: "unknown-workspace", id: conversation.workspaceId });
+    const directory = workingCopyOf(workspace, conversation).path;
     const now = Date.now();
     const quotas = this.conversations.planQuotasOf(conversationId, now);
     const environment = this.environmentOf(conversation);

@@ -808,11 +808,18 @@ export function startServer(services: HostServices) {
     return upgraded ? undefined : new Response("upgrade failed", { status: 400 });
   }
 
-  function deleteConversation(conversationId: string) {
+  function deleteConversation(conversationId: string, worktree: { keepsUncommittedWork?: boolean } = {}) {
     canvas.withdrawWaitingAsks(conversationId);
     terminals.closeConversation(conversationId);
-    conversations.delete(conversationId);
+    conversations.delete(conversationId, worktree);
     mcp.forget(conversationId);
+  }
+
+  /** Deleting a conversation deletes its worktree, so one that holds uncommitted files asks first. */
+  async function deleteConversationOrAsk(socket: BrowserSocket, conversationId: string, discardsUncommitted: boolean) {
+    const uncommittedFiles = discardsUncommitted ? 0 : await conversations.uncommittedFilesLostWith(conversationId);
+    if (uncommittedFiles === 0) return deleteConversation(conversationId);
+    hub.send(socket, { type: "conversation.delete-asks", conversationId, uncommittedFiles, branch: conversations.get(conversationId).worktree!.branch });
   }
 
   const sidebarNow = () => ({ workspaces: store.listWorkspaces(), groups: store.listWorkspaceGroups() });
@@ -1028,7 +1035,7 @@ export function startServer(services: HostServices) {
         conversations
           .list()
           .filter((conversation) => conversation.workspaceId === message.workspaceId)
-          .forEach((conversation) => deleteConversation(conversation.id));
+          .forEach((conversation) => deleteConversation(conversation.id, { keepsUncommittedWork: true }));
         apps.forgetWorkspace(message.workspaceId);
         store.deleteWorkspace(message.workspaceId);
         return hub.broadcast({ type: "workspace.deleted", workspaceId: message.workspaceId });
@@ -1038,6 +1045,8 @@ export function startServer(services: HostServices) {
         return moveWorkspace(message.workspaceId, message.groupId, message.beforeWorkspaceId, message.beforeGroupId ?? null);
       case "workspace.set-color":
         return colorWorkspace(message.workspaceId, message.color);
+      case "workspace.set-worktree-settings":
+        return conversations.setWorktreeSettings(message.workspaceId, message.newConversationsIn, message.worktreeSetup);
       case "workspace-group.create":
         return createWorkspaceGroup(message.name);
       case "workspace-group.rename":
@@ -1094,7 +1103,7 @@ export function startServer(services: HostServices) {
       case "settings.set-avatar":
         return setAvatar(message.image);
       case "conversation.create":
-        conversations.create(message.workspaceId, message.launch, message.prompt);
+        await conversations.start(message.workspaceId, message.launch, message.prompt, message.startsIn);
         return;
       case "sessions.list":
         conversations
@@ -1138,7 +1147,7 @@ export function startServer(services: HostServices) {
       case "conversation.check-fork":
         return reply({ type: "conversation.fork-checked", requestId: message.requestId, forkable: conversations.canFork(message.conversationId) });
       case "conversation.delete":
-        return deleteConversation(message.conversationId);
+        return deleteConversationOrAsk(socket, message.conversationId, message.discardsUncommitted ?? false);
       case "conversation.move":
         return conversations.move(message.conversationId, message.beforeConversationId);
       case "conversation.subscribe":

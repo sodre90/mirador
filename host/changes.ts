@@ -436,7 +436,7 @@ export class Changes {
     if (timed.length === 0) return changes;
     const own = withProjectPaths(toolCalls, directories);
     const others = this.store
-      .othersToolCallsSince(conversationId, workspace.id, timed.reduce((earliest, { writtenAtMs }) => Math.min(earliest, writtenAtMs), Infinity) - COMMAND_WINDOW_SLACK_MS)
+      .othersToolCallsSince(conversationId, timed.reduce((earliest, { writtenAtMs }) => Math.min(earliest, writtenAtMs), Infinity) - COMMAND_WINDOW_SLACK_MS)
       .flatMap(({ events, turnEnds, firstMessageAt, lastEventAt, running }) => withProjectPaths(toolCallWindows(events, turnEnds, firstMessageAt, running ? Date.now() : lastEventAt), directories));
     if (others.length === 0) return changes;
     return changes.flatMap((change) => {

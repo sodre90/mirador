@@ -24,6 +24,7 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
  * `STOPPED REPLY ` streams half of a reply and `STOPPED BEFORE ` streams none of it: either ends its turn as cancelled
  * once `session/cancel` arrives, and a moment after the stop streams the reply's rest under the id it streamed under
  * before, together with a subagent's report — the late chunks claude-agent-acp sends for a turn its cancel cut short.
+ * `FOLDER` says the folder the session was started in.
  * `STOPPED BESIDE SUBAGENT ` does as `STOPPED BEFORE ` while a background subagent's command is still running at the stop.
  * `STOPPED QUIET ` streams nothing, ends as cancelled on the stop and sends nothing after it, as a stop that interrupted
  * the request leaves things. `FINISHED ON STOP ` begins a reply, and once `session/cancel` arrives finishes it and
@@ -312,6 +313,7 @@ async function titleSession(client: acp.AgentContext, sessionId: string, title: 
 
 /** The turns waiting for the user's stop, by session. */
 const stopWaiters = new Map<string, () => void>();
+const sessionFolders = new Map<string, string>();
 let nextStoppedReply = 0;
 
 /** A turn the user stops: half a reply streamed, or none yet, ends as cancelled on the stop; the reply's rest and a subagent's report follow it, as claude-agent-acp's late chunks do. */
@@ -470,6 +472,7 @@ acp
   })
   .onRequest(acp.methods.agent.session.new, (ctx) => {
     const sessionId = `fake-session-${process.pid}-${++nextSession}`;
+    sessionFolders.set(sessionId, ctx.params.cwd);
     if (resumes) log(`new ${sessionId}`);
     if (availableCommands)
       setTimeout(() => ctx.client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands } }), 50);
@@ -522,6 +525,7 @@ acp
     if (startsWith(ctx.params.prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
     if (startsWith(ctx.params.prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
     if (startsWith(ctx.params.prompt, "CHOICES")) return sayChoices(ctx.client, ctx.params.sessionId);
+    if (startsWith(ctx.params.prompt, "FOLDER")) return sayText(ctx.client, ctx.params.sessionId, `Working in ${sessionFolders.get(ctx.params.sessionId)}`);
     if (startsWith(ctx.params.prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
     if (startsWith(ctx.params.prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);

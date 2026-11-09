@@ -25,7 +25,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "../shared/model.ts";
-import { isCanvasUse, isKeepAwake, isKeepDeletedCanvas, isPastel, keptForMs, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
+import { isCanvasUse, isConversationPlace, isKeepAwake, isKeepDeletedCanvas, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationWorktree, type KeepAwake, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
 import { computerName } from "./machine-name.ts";
@@ -170,6 +170,9 @@ const addedColumns = [
   { table: "conversations", column: "favourite", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "last_message_at", definition: "INTEGER" },
   { table: "conversations", column: "last_reply_at", definition: "INTEGER" },
+  { table: "workspaces", column: "new_conversations_in", definition: "TEXT NOT NULL DEFAULT 'folder'" },
+  { table: "workspaces", column: "worktree_setup", definition: "TEXT NOT NULL DEFAULT ''" },
+  { table: "conversations", column: "worktree", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -193,6 +196,8 @@ type WorkspaceRow = {
   color: string | null;
   position: number;
   group_id: string | null;
+  new_conversations_in: string;
+  worktree_setup: string;
   created_at: number;
 };
 
@@ -235,6 +240,7 @@ type ConversationRow = {
   favourite: number;
   last_message_at: number | null;
   last_reply_at: number | null;
+  worktree: string | null;
   created_at: number;
   updated_at: number;
 };
@@ -247,6 +253,8 @@ const toWorkspace = (row: WorkspaceRow): Workspace => ({
   color: isPastel(row.color) ? row.color : null,
   position: row.position,
   groupId: row.group_id,
+  newConversationsIn: isConversationPlace(row.new_conversations_in) ? row.new_conversations_in : "folder",
+  worktreeSetup: row.worktree_setup,
   createdAt: row.created_at,
 });
 
@@ -318,6 +326,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   activity: null,
   configOptions: JSON.parse(row.config_options),
   position: row.position,
+  ...(row.worktree && { worktree: JSON.parse(row.worktree) as ConversationWorktree }),
   ...startedByOf(row),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
@@ -413,12 +422,12 @@ export class Store {
   }
 
   /** Adds the workspace first in the sidebar, in no group. */
-  insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId">): Workspace {
+  insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId" | "newConversationsIn" | "worktreeSetup">): Workspace {
     const position = this.firstSidebarPosition();
     this.db
       .query("INSERT INTO workspaces (id, name, path, default_harness, default_profile_id, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(workspace.id, workspace.name, workspace.path, workspace.defaultLaunch.harness, workspace.defaultLaunch.profileId, position, workspace.createdAt);
-    return { ...workspace, color: null, position, groupId: null };
+    return { ...workspace, color: null, position, groupId: null, newConversationsIn: "folder", worktreeSetup: "" };
   }
 
   /** Numbers the positions of the workspaces and the groups, which share one order, in the given order. */
@@ -477,6 +486,10 @@ export class Store {
 
   setWorkspaceColor(workspaceId: string, color: Pastel | null) {
     this.db.query("UPDATE workspaces SET color = ? WHERE id = ?").run(color, workspaceId);
+  }
+
+  setWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
+    this.db.query("UPDATE workspaces SET new_conversations_in = ?, worktree_setup = ? WHERE id = ?").run(newConversationsIn, worktreeSetup, workspaceId);
   }
 
   deleteWorkspace(id: string) {
@@ -647,8 +660,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -662,10 +675,17 @@ export class Store {
         Number(conversation.bypassPermissions),
         JSON.stringify(conversation.configOptions),
         position,
+        conversation.worktree ? JSON.stringify(conversation.worktree) : null,
         conversation.createdAt,
         conversation.updatedAt,
       );
     return { ...conversation, position };
+  }
+
+  /** The conversations that work in the worktree, a conversation's own and its forks. */
+  conversationsInWorktree(worktreeId: string): string[] {
+    const rows = this.db.query("SELECT id FROM conversations WHERE json_extract(worktree, '$.id') = ?").all(worktreeId) as { id: string }[];
+    return rows.map(({ id }) => id);
   }
 
   /** The conversation a plugin's tool started works for the caller, which is owed word of how its work ends. */
@@ -1357,13 +1377,19 @@ export class Store {
   }
 
   /**
-   * The tool calls of the workspace's other conversations that were still at work at `since` or later, or whose turn still
+   * The tool calls of the other conversations working in the conversation's folder, its workspace's or its worktree's,
+   * that were still at work at `since` or later, or whose turn still
    * runs, each from the last message it was sent before then, so a call already running then comes whole. Only a
    * conversation's own events are read, through its key, as the events of every conversation are too many to look
    * through for their times.
    */
-  othersToolCallsSince(conversationId: string, workspaceId: string, since: number): OtherConversationToolCalls[] {
-    const others = this.db.query("SELECT id FROM conversations WHERE workspace_id = ? AND id != ?").all(workspaceId, conversationId) as { id: string }[];
+  othersToolCallsSince(conversationId: string, since: number): OtherConversationToolCalls[] {
+    const others = this.db
+      .query(
+        `SELECT others.id FROM conversations own JOIN conversations others ON others.workspace_id = own.workspace_id AND others.id != own.id
+         WHERE own.id = ? AND json_extract(others.worktree, '$.id') IS json_extract(own.worktree, '$.id')`,
+      )
+      .all(conversationId) as { id: string }[];
     return others.flatMap(({ id }) => {
       const last = this.db.query("SELECT at FROM events WHERE conversation_id = ? ORDER BY seq DESC LIMIT 1").get(id) as { at: number } | null;
       const running = this.db.query("SELECT 1 FROM running_turns WHERE conversation_id = ?").get(id) !== null;

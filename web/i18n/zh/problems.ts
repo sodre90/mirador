@@ -191,6 +191,7 @@ export const problems: Messages["problems"] = {
   commitNeedsMessage: "提交需要一条说明。",
   commitNeedsFiles: "请至少选择一个要提交的文件。",
   notAnUncommittedChange: (path) => `${path} 不是此文件夹未提交的更改。`,
+  worktreeNeedsRepository: (directory) => `只有在已有提交的 git 仓库中，对话才能拥有自己的工作树，而 ${directory} 不在这样的仓库中。`,
   savePathAbsolute: (name) => `“${name}”是绝对路径。请提供项目文件夹内的路径。`,
   savePathOutside: (name) => `“${name}”不是项目文件夹内的文件。`,
   savePathIsFolder: (name) => `“${name}”是一个文件夹。请给页面换个名称。`,

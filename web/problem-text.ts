@@ -153,6 +153,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.commitNeedsFiles;
     case "not-an-uncommitted-change":
       return words.notAnUncommittedChange(problem.path);
+    case "worktree-needs-repository":
+      return words.worktreeNeedsRepository(problem.directory);
     case "save-path-absolute":
       return words.savePathAbsolute(problem.name);
     case "save-path-outside":

@@ -82,6 +82,27 @@ export const shell = {
     paletteBar: "Conversations and actions…",
     shortcuts: "Shortcuts",
   },
+  worktrees: {
+    open: "Where conversations work",
+    title: (workspace: string) => `Where conversations work in ${workspace}`,
+    startIn: "New conversations start in",
+    folder: "The project folder",
+    folderDetail: "They share its files, as every conversation here did so far.",
+    worktree: "A worktree of their own",
+    worktreeDetail: "Each gets a git worktree on a new branch, so they don't change each other's files.",
+    setup: "Setup command for a new worktree",
+    setupDetail:
+      "Runs in each new worktree before its agent starts, and shows in the conversation. A worktree holds only the files git tracks: install dependencies here, and copy what git ignores, such as .env, from $MIRADOR_WORKSPACE, the project folder.",
+    save: "Save",
+    cancel: "Cancel",
+    startOne: { folder: "Start one in the project folder now", worktree: "Start one in a worktree now" },
+    inWorktree: (branch: string) => `Works in a worktree of its own, on the branch ${branch}`,
+    deleteTitle: "Delete the conversation and its worktree?",
+    deleteLoses: (count: number) =>
+      plural(count, "Its worktree holds 1 uncommitted file, which is deleted with it.", `Its worktree holds ${count} uncommitted files, which are deleted with it.`),
+    deleteKeeps: (branch: string) => `Commits made there stay, on the branch ${branch}.`,
+    deleteBoth: "Delete both",
+  },
   sessions: {
     label: "Continue a session",
     title: (workspace: string) => `Continue a session in ${workspace}`,

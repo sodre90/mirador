@@ -1,23 +1,6 @@
 import type { MadeCommit } from "../shared/changes.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
-import { environmentWithoutPrompts } from "./git-environment.ts";
-
-async function git(directory: string, args: string[], input = "") {
-  const child = Bun.spawn(["git", "-C", directory, ...args], {
-    env: { ...environmentWithoutPrompts(), GIT_LITERAL_PATHSPECS: "1" },
-    stdin: new Blob([input]),
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-  const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
-  return { stdout, output: stderr.trim() || stdout.trim(), exitCode };
-}
-
-async function mustGit(directory: string, args: string[], input?: string) {
-  const result = await git(directory, args, input);
-  if (result.exitCode !== 0) throw new HostProblemError({ code: "git-failed", command: args[0]!, directory, output: result.output });
-  return result.stdout;
-}
+import { git, mustGit } from "./git-command.ts";
 
 const untrackedAmong = async (directory: string, paths: string[]) =>
   (await mustGit(directory, ["ls-files", "--others", "-z", "--", ...paths])).split("\0").filter(Boolean);

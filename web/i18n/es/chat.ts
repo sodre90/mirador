@@ -78,6 +78,8 @@ export const chat: Messages["chat"] = {
     "going-back": "Retrocediendo…",
     "loading-history": "Cargando el historial de la sesión…",
     "reading-terminal-turns": "Leyendo los turnos hechos en la terminal…",
+    "making-worktree": "Creando el worktree…",
+    "setting-up-worktree": "Preparando el worktree…",
   },
   notice: {
     lines: (count) => plural(count, "1 línea", `${count} líneas`),

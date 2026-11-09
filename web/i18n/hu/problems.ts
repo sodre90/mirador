@@ -198,6 +198,7 @@ export const problems: Messages["problems"] = {
   commitNeedsMessage: "A commithoz üzenet kell.",
   commitNeedsFiles: "Válassz legalább egy fájlt a commithoz.",
   notAnUncommittedChange: (path) => `Ez nem ennek a mappának a még nem commitolt változása: ${path}`,
+  worktreeNeedsRepository: (directory) => `Egy beszélgetés csak olyan git-tárolóban kap saját worktree-t, amelyben van commit, és ez nincs ilyenben: ${directory}`,
   savePathAbsolute: (name) => `Ez abszolút útvonal: „${name}”. Adj meg egy útvonalat a projektmappán belül.`,
   savePathOutside: (name) => `Ez nem a projektmappán belüli fájl: „${name}”.`,
   savePathIsFolder: (name) => `Ez egy mappa: „${name}”. Adj más nevet az oldalnak.`,
