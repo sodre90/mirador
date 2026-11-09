@@ -6,9 +6,9 @@ import type { HostProblem } from "./host-problems.ts";
  * conversation on another profile, and brings profile settings; API 6 brings a canvas plugin's own window, the
  * conversations' activity, canvas tools the user runs from the slash menu, and lets an app's view list the
  * workspace's files, read any of them, and open the app on another one; API 7 brings a canvas plugin's workspace tab,
- * whose view can start a conversation and add to the composer.
+ * whose view can start a conversation and add to the composer; API 8 lets a plugin title a conversation it starts.
  */
-export const APP_PLUGIN_API = 7;
+export const APP_PLUGIN_API = 8;
 
 /** The first plugin API whose canvas host may have a workspace tab. */
 export const WORKSPACE_TAB_API = 7;

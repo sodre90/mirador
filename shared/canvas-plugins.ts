@@ -103,7 +103,16 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
    * plugin's `replied` hears when it ends its work. Throws, naming the profiles there are, when none has that name, and
    * when a plugin's tool started this conversation, which keeps to one level of them.
    */
-  startConversation(start: { profile: string; prompt: string }): Promise<StartedConversation>;
+  startConversation(start: {
+    profile: string;
+    prompt: string;
+    /**
+     * The conversation's title, its first line cut to 60 characters, kept as one the user typed is: neither the first
+     * message nor the agent renames it, while the user still can. Without one, or with a blank one, the first line of
+     * `prompt` titles it, and the agent may rename it later. Plugin API 8 brought it.
+     */
+    title?: string;
+  }): Promise<StartedConversation>;
 }
 
 export interface StartedConversation {

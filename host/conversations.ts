@@ -104,6 +104,8 @@ const MAX_TITLE_LENGTH = 200;
 const LISTED_SESSIONS = 30;
 const SEARCHED_SESSIONS = 50;
 const TITLE_LENGTH = 60;
+/** The text's first line, short enough for the sidebar; empty when the text is blank. */
+const titleFrom = (text: string) => cutWithEllipsis(text.trim().split("\n")[0] ?? "", TITLE_LENGTH - 1, TITLE_LENGTH);
 const CONTINUE_AFTER_INTERRUPTION = "Continue where you left off.";
 const NO_FILES_KEPT: HostProblem = { code: "no-files-kept" };
 const FILES_NO_LONGER_KEPT: HostProblem = { code: "files-no-longer-kept", turns: SNAPSHOTS_KEPT };
@@ -426,9 +428,14 @@ export class ConversationService {
     return this.subagentUsageReader.usageOf(this.claudeConfigDirOf(conversation), conversation.acpSessionId, toolCallIds);
   }
 
-  /** Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a prompt, working on it at once. */
-  create(workspaceId: string, launch: Launch = this.existingWorkspace(workspaceId).defaultLaunch, prompt?: string): Conversation {
-    const conversation = this.insertConversation(workspaceId, launch, UNTITLED);
+  /**
+   * Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a
+   * prompt, working on it at once; with a title that isn't blank, named as if by the user, so neither its first message
+   * nor its agent renames it.
+   */
+  create(workspaceId: string, launch: Launch = this.existingWorkspace(workspaceId).defaultLaunch, prompt?: string, title?: string): Conversation {
+    const givenTitle = titleFrom(title ?? "");
+    const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "");
     this.ensureSession(conversation.id).catch(() => {});
     if (prompt?.trim()) this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return conversation;
@@ -436,15 +443,15 @@ export class ConversationService {
 
   /**
    * For a plugin's tool: a conversation beside the caller's, on another profile, working on `prompt` at once. It works
-   * for the caller, which hears through the plugin how its work ended.
+   * for the caller, which hears through the plugin how its work ended. A `title` names it for good, as `create` does.
    */
-  startBeside(callerId: string, plugin: string, profileName: string, prompt: string): StartedConversation {
+  startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string): StartedConversation {
     const caller = this.get(callerId);
     if (caller.startedBy) throw new Error("A plugin's tool started this conversation, so it can't start another; do the task here.");
     const profiles = this.store.listProfiles();
     const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
     if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
-    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id });
+    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title);
     this.store.recordStartedBy(conversation.id, { conversationId: callerId, plugin });
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
@@ -566,7 +573,7 @@ export class ConversationService {
     return this.get(conversationId).acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId));
   }
 
-  private insertConversation(workspaceId: string, launch: Launch, title: string): Conversation {
+  private insertConversation(workspaceId: string, launch: Launch, title: string, titleSetByUser = false): Conversation {
     this.existingWorkspace(workspaceId);
     const profile = profileToLaunch(this.store, launch);
     const now = Date.now();
@@ -576,7 +583,7 @@ export class ConversationService {
       harness: launch.harness,
       profileId: launch.profileId,
       title,
-      titleSetByUser: false,
+      titleSetByUser,
       acpSessionId: null,
       askMode: profile.askMode,
       bypassPermissions: profile.bypassPermissions,
@@ -2404,8 +2411,7 @@ export class ConversationService {
   private retitleFromFirstMessage(conversationId: string, text: string) {
     const conversation = this.get(conversationId);
     if (conversation.title !== UNTITLED || conversation.titleSetByUser) return;
-    const firstLine = text.trim().split("\n")[0] ?? "";
-    const title = cutWithEllipsis(firstLine, TITLE_LENGTH - 1, TITLE_LENGTH);
+    const title = titleFrom(text);
     if (title) this.save({ ...conversation, title });
   }
 

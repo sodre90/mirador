@@ -96,7 +96,7 @@ describe("loadPlugins", () => {
     const problemOf = (name: string) => problems.find((problem) => problem.folder.endsWith(name))?.message;
     expect(problems).toHaveLength(7);
     expect(problemOf("short-version")).toContain("a version as x.y.z if any");
-    expect(problemOf("old-api")).toContain("plugin API 99; this Mirador speaks plugin API 1 to 7, so the plugin needs a newer Mirador");
+    expect(problemOf("old-api")).toContain("plugin API 99; this Mirador speaks plugin API 1 to 8, so the plugin needs a newer Mirador");
     expect(problemOf("taskless")).toContain("the host module's tasks render need a title and a run function");
     expect(problemOf("no-exports")).toContain("serialize, apply, describe");
     expect(problemOf("unbuilt")).toContain("dist/view.js doesn't exist");

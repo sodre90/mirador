@@ -14,7 +14,8 @@ import * as acp from "@agentclientprotocol/sdk";
  * `WRITE ` and a JSON array of steps changes files as it goes: `{"edit": path, "content": text}` writes the file with
  * an edit tool call and its diff, `{"shell": path, "content": text}` writes it from a shell command, `{"read": path}`
  * reads it with a tool call that names it, and `{"waitFor": path}` holds the turn until that file exists. `SAY `
- * followed by text answers with that text, as markdown,
+ * followed by text answers with that text, as markdown, `TITLE ` followed by text titles the session so, as agents
+ * rename a conversation from its work, and answers,
  * `USAGE ` followed by the tokens used and the window's size reports that context usage,
  * and `FAIL ` followed by text fails the turn with that text as its error. `SUBAGENT ASKS ` followed by a title starts a
  * subagent whose step asks permission, and ends the turn with what the user answered.
@@ -275,6 +276,11 @@ async function sayText(client: acp.AgentContext, sessionId: string, text: string
   return { stopReason: "end_turn" as const };
 }
 
+async function titleSession(client: acp.AgentContext, sessionId: string, title: string) {
+  await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "session_info_update", title } });
+  return sayText(client, sessionId, `Titled ${title}.`);
+}
+
 /** The turns waiting for the user's stop, by session. */
 const stopWaiters = new Map<string, () => void>();
 let nextStoppedReply = 0;
@@ -474,6 +480,7 @@ acp
       return reportUsage(ctx.client, ctx.params.sessionId, used, size);
     }
     if (startsWith(ctx.params.prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
+    if (startsWith(ctx.params.prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
     if (startsWith(ctx.params.prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
     if (startsWith(ctx.params.prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
     if (startsWith(ctx.params.prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);

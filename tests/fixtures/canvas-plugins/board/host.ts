@@ -118,12 +118,12 @@ const host: CanvasHost<BoardData> = {
       },
     },
     hand_over: {
-      description: "Hand a task to a conversation on another profile, by default the one this profile hands over to; its reply comes as your next message.",
-      input: { type: "object", properties: { profile: { type: "string" }, task: { type: "string" } }, required: ["task"] },
+      description: "Hand a task to a conversation on another profile, by default the one this profile hands over to, titled `title` if given; its reply comes as your next message.",
+      input: { type: "object", properties: { profile: { type: "string" }, task: { type: "string" }, title: { type: "string" } }, required: ["task"] },
       async run(input, context) {
-        const { profile = context.profileSetting("hand-over-to"), task } = input as { profile?: string | null; task: string };
+        const { profile = context.profileSetting("hand-over-to"), task, title } = input as { profile?: string | null; task: string; title?: string };
         if (!profile) throw new Error("Name a profile; this one hands over to none.");
-        const started = await context.startConversation({ profile, prompt: task });
+        const started = await context.startConversation({ profile, prompt: task, title });
         return `Handed over to ${started.id}.`;
       },
     },
