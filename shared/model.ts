@@ -597,7 +597,18 @@ export type ConversationEvent =
    * `endsTurn`: the turn failed with it, where other errors come before a turn starts or beside one.
    */
   /** `problem`: what the message says, when the host wrote it, for the page to say in its own language. */
-  | { type: "error"; message: string; problem?: HostProblem; usageLimit?: { resetsAt: number | null }; authRequired?: true; continuable?: true; endsTurn?: true }
+  | {
+      type: "error";
+      message: string;
+      problem?: HostProblem;
+      usageLimit?: { resetsAt: number | null };
+      authRequired?: true;
+      continuable?: true;
+      endsTurn?: true;
+      /** What the turn spent before a usage limit ended it as if it had ended by itself. */
+      usage?: TurnUsage;
+      model?: string;
+    }
   /** The agent's sign-in, started from the conversation in a terminal tab, ended. */
   | { type: "login-ended"; signedIn: boolean }
   | { type: "usage-limit-wait-stopped" }

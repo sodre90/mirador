@@ -51,6 +51,8 @@ const RUN = "RUN ";
 const SUBAGENT = "SUBAGENT ";
 const ADVISOR_AFTER_BASH = "ADVISOR AFTER BASH ";
 const WRITE = "WRITE ";
+const LIMITED_SUBAGENT = "LIMITED SUBAGENT ";
+const LIMITED_SUBAGENT_RUNS_FOR_MS = 1500;
 
 const offersBash = ({ tools }: MessagesRequest) => (tools ?? []).some(({ name }) => name === "Bash");
 
@@ -79,7 +81,9 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * every reply in text ends with it. While `contextTokens` is
  * set, answers report it as their input usage, so Claude Code compacts its context on the next request; a message equal
  * to `refuseAfterCompaction` is answered with a Bash call so the turn keeps going after the compaction, and every
- * request after it runs into the usage limit.
+ * request after it runs into the usage limit. A message starting with `LIMITED SUBAGENT ` starts a subagent in the
+ * background that does the rest. The agent ends its turn at once, and the subagent's request waits for a moment before it is
+ * refused with the usage limit, the way the limit reached a live turn; every request after it is refused too.
  */
 export class FakeClaudeApi {
   limited = true;
@@ -115,6 +119,9 @@ export class FakeClaudeApi {
   /** Every request held since `hold`, its messages role by role: what the agent's history held when it asked. */
   readonly heldRequests: string[][] = [];
   private server?: Server;
+  private limitedSubagentPrompt: string | null = null;
+  private limitedSubagentTimer: ReturnType<typeof setTimeout> | null = null;
+  private limitedSubagentReplies: (() => void)[] = [];
   private heldReplies: (() => void)[] | null = null;
   private heldNotificationReplies: (() => void)[] = [];
   private replies = 0;
@@ -181,11 +188,11 @@ export class FakeClaudeApi {
       response.writeHead(502, { "content-type": "application/json" });
       return response.end(JSON.stringify({ error: "<urlopen error [Errno 8] nodename nor servname provided, or not known>" }));
     }
-    if (this.limited) {
-      this.refused.push(typed);
-      response.writeHead(429, { "content-type": "application/json", ...this.limitHeaders() });
-      return response.end(JSON.stringify({ type: "error", error: { type: "rate_limit_error", message: "Rate limited" } }));
+    if (this.limitedSubagentPrompt !== null) {
+      if (typed === this.limitedSubagentPrompt) return void this.limitedSubagentReplies.push(() => this.refuseLimitedSubagent(typed, response));
+      if (!this.limitedSubagentTimer) this.limitedSubagentTimer = setTimeout(() => this.limitedSubagentReplies.splice(0).forEach((refuse) => refuse()), LIMITED_SUBAGENT_RUNS_FOR_MS);
     }
+    if (this.limited) return this.refuseWithLimit(typed, response);
     if (this.refuseAfterCompaction === typed) {
       this.refuseAfterCompaction = null;
       this.limited = true;
@@ -195,6 +202,12 @@ export class FakeClaudeApi {
     }
     if (offersBash(body) && answersEndedBackgroundCommand(body)) return void this.heldNotificationReplies.push(() => this.send(body, response, [this.bashCall("true", false)]));
     this.answered.push(typed);
+    if (offersAgent(body) && typed.startsWith(LIMITED_SUBAGENT)) {
+      this.limitedSubagentPrompt = typed.slice(LIMITED_SUBAGENT.length);
+      this.limitedSubagentTimer = null;
+      const agent: Answer = { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt: this.limitedSubagentPrompt, subagent_type: "general-purpose", run_in_background: true } };
+      return this.send(body, response, [agent]);
+    }
     if (offersAgent(body) && typed.startsWith(SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(SUBAGENT.length))]);
     const results = resultsOfCalls(body);
     if (results !== null) {
@@ -203,6 +216,20 @@ export class FakeClaudeApi {
     }
     if (typed.startsWith(CALL)) return this.send(body, response, this.toolCalls(typed));
     this.send(body, response, this.answerTo(typed, offersBash(body)));
+  }
+
+  /** The agent has ended its turn by now, and the subagent it left running is the first to run into the limit; every request after its is refused too. */
+  private refuseLimitedSubagent(typed: string, response: ServerResponse) {
+    this.limitedSubagentPrompt = null;
+    this.limitedSubagentTimer = null;
+    this.limited = true;
+    this.refuseWithLimit(typed, response);
+  }
+
+  private refuseWithLimit(typed: string, response: ServerResponse) {
+    this.refused.push(typed);
+    response.writeHead(429, { "content-type": "application/json", ...this.limitHeaders() });
+    response.end(JSON.stringify({ type: "error", error: { type: "rate_limit_error", message: "Rate limited" } }));
   }
 
   private answerTo(typed: string, bashOffered: boolean): Answer[] {
