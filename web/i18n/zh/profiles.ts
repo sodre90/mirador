@@ -26,7 +26,7 @@ export const profiles: Messages["profiles"] = {
   questions: "提问",
   questionsLabel: "配置提问",
   takenAtStart:
-    "对话在使用这个配置启动或切换到它时，会采用它的模式、思考强度、YOLO 和提问设置；之后可以用对话自己的菜单更改。模式和思考强度是 Agent 上次列出的，所以要等它的某个对话运行过之后才会显示。如果对话的模型不支持该强度，则保留对话自己的思考强度。",
+    "对话在使用这个配置启动或切换到它时，会采用它的模式、思考强度、YOLO 和提问设置；之后可以用对话自己的菜单更改。模式和思考强度以 Agent 提供的为准；每次打开配置时，Mirador 都会向它询问。如果对话的模型不支持该强度，则保留对话自己的思考强度。",
   environmentFormat: {
     onePerLine: "每行一个：",
     afterKeyValue: "，",

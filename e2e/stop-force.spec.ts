@@ -241,7 +241,8 @@ test("A profile switch goes on without an agent that doesn't answer: its options
 
   await test.step("Force stop ends a switch that waits for the agent, and starts no other agent for the changes left", async () => {
     const slowStarts = () => agentLog().filter((line) => line === "slow started").length;
-    expect(slowStarts()).toBe(1);
+    const startsOnArrival = slowStarts();
+    expect(startsOnArrival).toBeGreaterThanOrEqual(1);
     const errorsBefore = await timeline(page).locator(".error-line").count();
     await (await profilePicker(page)).selectOption({ label: "slow" });
     const stop = page.locator(".composer:visible .stop");
@@ -251,7 +252,7 @@ test("A profile switch goes on without an agent that doesn't answer: its options
     await expect(status(page)).toHaveText("idle", { timeout: 5_000 });
     await expect(timeline(page).locator(".error-line")).toHaveCount(errorsBefore + 1);
     await expect(timeline(page).locator(".error-line").last()).toHaveText("Could not set Mode to plan: The opencode (slow) agent process was force stopped.");
-    expect(slowStarts()).toBe(1);
+    expect(slowStarts()).toBe(startsOnArrival);
   });
 });
 

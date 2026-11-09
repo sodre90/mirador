@@ -882,12 +882,15 @@ export class ConversationService {
     if (remembered && Date.now() - remembered.at < PROFILE_CHOICES_TTL_MS) return remembered.options;
     const asking = this.profileChoiceProbes.get(profileId);
     if (asking) return asking;
-    const probe = this.askProfileChoices(profileId).then((options) => {
-      if (options) this.profileChoicesCache.set(profileId, { at: Date.now(), options });
+    const probe: Promise<acp.SessionConfigOption[] | null> = this.askProfileChoices(profileId).then((options) => {
+      if (options && this.profileChoiceProbes.get(profileId) === probe) this.profileChoicesCache.set(profileId, { at: Date.now(), options });
       return options;
     });
     this.profileChoiceProbes.set(profileId, probe);
-    return Promise.race([probe, Bun.sleep(PROFILE_PROBE_TIMEOUT_MS).then(() => null as acp.SessionConfigOption[] | null)]);
+    void probe.finally(() => {
+      if (this.profileChoiceProbes.get(profileId) === probe) this.profileChoiceProbes.delete(profileId);
+    });
+    return probe;
   }
 
   /** Starts the profile's agent as a conversation would, asks a new session what it offers, and stops it again. */
@@ -907,9 +910,12 @@ export class ConversationService {
         },
         agentLogsDirectory(this.config.dataDir),
       );
-      await harness.start();
-      const created = await harness.newSession({ cwd: tmpdir(), mcpServers: [] });
-      return created.configOptions ?? null;
+      const agent = harness;
+      const session = agent.start().then(() => agent.newSession({ cwd: tmpdir(), mcpServers: [] }));
+      // The timed-out agent may still fail the session later; by then the probe has stopped it and no longer cares.
+      session.catch(() => {});
+      const created = await Promise.race([session, Bun.sleep(PROFILE_PROBE_TIMEOUT_MS).then(() => null)]);
+      return created?.configOptions ?? null;
     } catch {
       return null;
     } finally {
@@ -1610,6 +1616,7 @@ export class ConversationService {
    */
   restartProfile(profileId: string) {
     this.profileChoicesCache.delete(profileId);
+    this.profileChoiceProbes.delete(profileId);
     const keys = [...this.agentProcesses.keys()].filter((key) => key === profileId || key.startsWith(`${profileId}/`));
     if (keys.length === 0) return;
     const harnesses = keys.map((key) => this.agentProcesses.get(key)!);
@@ -1621,6 +1628,11 @@ export class ConversationService {
 
   /** Claude Code agents start again with the program now set, as a profile's agent does when the profile changes. */
   restartClaudeAgents() {
+    this.store.listProfiles().forEach(({ id, harness }) => {
+      if (harness !== "claude") return;
+      this.profileChoicesCache.delete(id);
+      this.profileChoiceProbes.delete(id);
+    });
     [...this.agentProcesses]
       .filter(([key]) => this.store.findProfile(key.split("/")[0])?.harness === "claude")
       .forEach(([key, harness]) => {

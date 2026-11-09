@@ -36,6 +36,12 @@ test("an agent's effort levels come from its latest conversation whose model has
   expect(knownChoices(conversations, "claude", "thought_level").map(({ value }) => value)).toEqual(["low", "medium", "high", "max"]);
 });
 
+test("a mode option that lists no choices does not hide the modes an earlier conversation listed", () => {
+  const emptyMode: SessionConfigOption = { id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "", options: [] };
+  const conversations = [conversation("claude", 1, [modeOption(["default", "plan"])]), conversation("claude", 3, [emptyMode])];
+  expect(knownChoices(conversations, "claude", "mode").map(({ value }) => value)).toEqual(["default", "plan"]);
+});
+
 test("an agent's choices of a kind come from the options it answered with, of that category alone", () => {
   const answered = [modeOption(["default", "accept-edits"]), effortOption(["low", "high"]), { id: "fast", name: "Fast", type: "boolean", currentValue: false } as SessionConfigOption];
   expect(categoryChoices(answered, "mode").map(({ value }) => value)).toEqual(["default", "accept-edits"]);

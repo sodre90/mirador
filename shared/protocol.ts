@@ -105,7 +105,7 @@ export type ClientMessage =
   | { type: "profile.save"; requestId: string; profile: ProfileDraft }
   | { type: "profile.delete"; profileId: string }
   /** Asks what the profile's agent offers now, so a profile editor can list modes and efforts without one of its conversations having run. */
-  | { type: "profile.fetch-choices"; requestId: string; profileId: string }
+  | { type: "profile.choices.get"; requestId: string; profileId: string }
   /** Creates the template, or changes the one with this id. */
   | { type: "prompt-template.save"; template: Pick<PromptTemplate, "id" | "name" | "text"> }
   | { type: "prompt-template.delete"; templateId: string }
@@ -419,7 +419,7 @@ export type ServerMessage =
   | { type: "profile.deleted"; profileId: string }
   | { type: "profile.saved"; requestId: string; profileId: string }
   /** What the profile's agent said it offers; null when it was not there to answer. */
-  | { type: "profile.choices"; requestId: string; profileId: string; configOptions: SessionConfigOption[] | null }
+  | { type: "profile.choices.got"; requestId: string; profileId: string; configOptions: SessionConfigOption[] | null }
   | { type: "prompt-template.upserted"; template: PromptTemplate }
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }

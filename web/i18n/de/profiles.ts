@@ -26,7 +26,7 @@ export const profiles: Messages["profiles"] = {
   questions: "Fragen",
   questionsLabel: "Fragen des Profils",
   takenAtStart:
-    "Eine Unterhaltung übernimmt Modus, Denkaufwand, YOLO und Fragen, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändern ihre eigenen Menüs sie. Die Modi und Stufen des Denkaufwands sind die, die der Agent zuletzt gemeldet hat, sie erscheinen also, sobald eine seiner Unterhaltungen gelaufen ist. Eine Unterhaltung, deren Modell die Stufe nicht anbietet, behält ihren eigenen Denkaufwand.",
+    "Eine Unterhaltung übernimmt Modus, Denkaufwand, YOLO und Fragen, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändern ihre eigenen Menüs sie. Die Modi und Stufen des Denkaufwands sind die, die der Agent anbietet; Mirador fragt ihn jedes Mal, wenn du das Profil öffnest. Eine Unterhaltung, deren Modell die Stufe nicht anbietet, behält ihren eigenen Denkaufwand.",
   environmentFormat: {
     onePerLine: "Eine Variable pro Zeile: ",
     afterKeyValue: ", ",

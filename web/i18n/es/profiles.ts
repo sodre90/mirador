@@ -26,7 +26,7 @@ export const profiles: Messages["profiles"] = {
   questions: "Preguntas",
   questionsLabel: "Preguntas del perfil",
   takenAtStart:
-    "Una conversación toma el modo, el esfuerzo, YOLO y Preguntas cuando empieza con este perfil o se mueve a él; después, sus propios menús los cambian. Los modos y niveles de esfuerzo son los que el agente listó por última vez, así que aparecen cuando ya se ha ejecutado alguna de sus conversaciones. Una conversación cuyo modelo no ofrece el nivel conserva su propio esfuerzo.",
+    "Una conversación toma el modo, el esfuerzo, YOLO y Preguntas cuando empieza con este perfil o se mueve a él; después, sus propios menús los cambian. Los modos y niveles de esfuerzo son los que ofrece el agente; Mirador se los pregunta cada vez que abres el perfil. Una conversación cuyo modelo no ofrece el nivel conserva su propio esfuerzo.",
   environmentFormat: {
     onePerLine: "Una por línea: ",
     afterKeyValue: ", ",

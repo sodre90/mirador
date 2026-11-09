@@ -24,7 +24,7 @@ export const profiles = {
   questions: "Questions",
   questionsLabel: "Profile questions",
   takenAtStart:
-    "A conversation takes the mode, effort, YOLO and Questions when it starts with this profile or moves to it; its own menus change them after that. The modes and effort levels are the ones the agent last listed, so they show once one of its conversations has run. A conversation whose model does not offer the level keeps its own effort.",
+    "A conversation takes the mode, effort, YOLO and Questions when it starts with this profile or moves to it; its own menus change them after that. The modes and effort levels are the ones the agent offers; Mirador asks it each time you open the profile. A conversation whose model does not offer the level keeps its own effort.",
   environmentFormat: {
     onePerLine: "One per line: ",
     afterKeyValue: ", ",

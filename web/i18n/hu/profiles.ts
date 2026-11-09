@@ -26,7 +26,7 @@ export const profiles: Messages["profiles"] = {
   questions: "Kérdések",
   questionsLabel: "Profil kérdései",
   takenAtStart:
-    "Egy beszélgetés akkor veszi át a módot, az erőfeszítést, a YOLO-t és a Kérdéseket, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját menüi módosítják őket. A módok és az erőfeszítési szintek azok, amelyeket az ágens legutóbb felsorolt, így akkor jelennek meg, amikor már futott egy beszélgetése. Az a beszélgetés, amelynek a modellje nem kínálja a szintet, megtartja a saját erőfeszítését.",
+    "Egy beszélgetés akkor veszi át a módot, az erőfeszítést, a YOLO-t és a Kérdéseket, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját menüi módosítják őket. A módok és az erőfeszítési szintek azok, amelyeket az ágens kínál; a Mirador minden alkalommal megkérdezi tőle, amikor megnyitod a profilt. Az a beszélgetés, amelynek a modellje nem kínálja a szintet, megtartja a saját erőfeszítését.",
   environmentFormat: {
     onePerLine: "Soronként egy: ",
     afterKeyValue: ", ",
