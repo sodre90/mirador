@@ -260,6 +260,11 @@ describe("an API error Claude Code also says as the agent's message", () => {
     expect(buildTimeline(stored([agentText("All done."), { type: "error", message: "ACP connection closed" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);
     expect(buildTimeline(stored([agentText("Done."), { type: "error", message: "Done. Then the agent stopped" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);
   });
+
+  test("keeps the whole reply that ends in the words of an error other than a usage limit", () => {
+    const reply = "The tests stopped because of ACP connection closed";
+    expect(buildTimeline(stored([agentText(reply), { type: "error", message: "ACP connection closed", endsTurn: true }]))[0]).toMatchObject({ kind: "agent", text: reply });
+  });
 });
 
 describe("a failed turn the user can try again", () => {

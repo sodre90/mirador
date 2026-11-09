@@ -58,9 +58,14 @@ const CLAUDE_CODES_OWN = "a441307b-1f36-4e04-93d4-4bb661066437";
 const endedWith = (lastMessage: string, stopReason = "end_turn", messageId: string | null = CLAUDE_CODES_OWN) => ({ stopReason, lastMessage, messageId });
 
 describe("a usage limit that ends a turn as a reply", () => {
-  test("is Claude Code's words alone as the turn's last message, as when a steered turn or a background subagent's notice meets the limit", () => {
+  test("is Claude Code's words alone as the turn's last message, as when a background subagent's notice meets the limit", () => {
     expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm (Europe/Zagreb)"), "claude")).toBe("You've hit your 5-hour limit · resets 10:30pm (Europe/Zagreb)");
     expect(usageLimitReplyIn(endedWith("\nYou're out of extra usage · resets Nov 12, 9am\n"), "claude")).toBe("You're out of extra usage · resets Nov 12, 9am");
+  });
+
+  test("is also a team's spent budget, which Claude Code's words name without the word limit", () => {
+    expect(usageLimitReplyIn(endedWith("You've hit your team's shared budget. Switch to another model to continue."), "claude")).toBe("You've hit your team's shared budget. Switch to another model to continue.");
+    expect(usageLimitReplyIn(endedWith("You've hit your team's shared budget. /model to switch models."), "claude")).toBe("You've hit your team's shared budget. /model to switch models.");
   });
 
   test("is not an agent's own sentence that opens the same way, a longer reply, or another agent's words", () => {

@@ -54,6 +54,9 @@ const WRITE = "WRITE ";
 const LIMITED_SUBAGENT = "LIMITED SUBAGENT ";
 const LIMITED_SUBAGENT_RUNS_FOR_MS = 1500;
 
+/** The background subagent `LIMITED SUBAGENT ` starts: its request is refused a moment after both it and another request have come. */
+type LimitedSubagent = { prompt: string; refuse?: () => void; anotherRequestArrived: boolean; refusing?: ReturnType<typeof setTimeout> };
+
 const offersBash = ({ tools }: MessagesRequest) => (tools ?? []).some(({ name }) => name === "Bash");
 
 const offersAgent = ({ tools }: MessagesRequest) => (tools ?? []).some(({ name }) => name === "Agent");
@@ -119,9 +122,7 @@ export class FakeClaudeApi {
   /** Every request held since `hold`, its messages role by role: what the agent's history held when it asked. */
   readonly heldRequests: string[][] = [];
   private server?: Server;
-  private limitedSubagentPrompt: string | null = null;
-  private limitedSubagentTimer: ReturnType<typeof setTimeout> | null = null;
-  private limitedSubagentReplies: (() => void)[] = [];
+  private limitedSubagent: LimitedSubagent | null = null;
   private heldReplies: (() => void)[] | null = null;
   private heldNotificationReplies: (() => void)[] = [];
   private replies = 0;
@@ -188,9 +189,14 @@ export class FakeClaudeApi {
       response.writeHead(502, { "content-type": "application/json" });
       return response.end(JSON.stringify({ error: "<urlopen error [Errno 8] nodename nor servname provided, or not known>" }));
     }
-    if (this.limitedSubagentPrompt !== null) {
-      if (typed === this.limitedSubagentPrompt) return void this.limitedSubagentReplies.push(() => this.refuseLimitedSubagent(typed, response));
-      if (!this.limitedSubagentTimer) this.limitedSubagentTimer = setTimeout(() => this.limitedSubagentReplies.splice(0).forEach((refuse) => refuse()), LIMITED_SUBAGENT_RUNS_FOR_MS);
+    const subagent = this.limitedSubagent;
+    if (subagent && typed === subagent.prompt) {
+      subagent.refuse = () => this.refuseLimitedSubagent(typed, response);
+      return this.refuseLimitedSubagentSoon(subagent);
+    }
+    if (subagent) {
+      subagent.anotherRequestArrived = true;
+      this.refuseLimitedSubagentSoon(subagent);
     }
     if (this.limited) return this.refuseWithLimit(typed, response);
     if (this.refuseAfterCompaction === typed) {
@@ -203,9 +209,9 @@ export class FakeClaudeApi {
     if (offersBash(body) && answersEndedBackgroundCommand(body)) return void this.heldNotificationReplies.push(() => this.send(body, response, [this.bashCall("true", false)]));
     this.answered.push(typed);
     if (offersAgent(body) && typed.startsWith(LIMITED_SUBAGENT)) {
-      this.limitedSubagentPrompt = typed.slice(LIMITED_SUBAGENT.length);
-      this.limitedSubagentTimer = null;
-      const agent: Answer = { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt: this.limitedSubagentPrompt, subagent_type: "general-purpose", run_in_background: true } };
+      const prompt = typed.slice(LIMITED_SUBAGENT.length);
+      this.limitedSubagent = { prompt, anotherRequestArrived: false };
+      const agent: Answer = { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose", run_in_background: true } };
       return this.send(body, response, [agent]);
     }
     if (offersAgent(body) && typed.startsWith(SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(SUBAGENT.length))]);
@@ -218,10 +224,15 @@ export class FakeClaudeApi {
     this.send(body, response, this.answerTo(typed, offersBash(body)));
   }
 
+  /** Whichever of the two requests comes first, the subagent's waits for the other, then a moment more, so the agent has ended its turn by then. */
+  private refuseLimitedSubagentSoon(subagent: LimitedSubagent) {
+    if (!subagent.refuse || !subagent.anotherRequestArrived || subagent.refusing) return;
+    subagent.refusing = setTimeout(subagent.refuse, LIMITED_SUBAGENT_RUNS_FOR_MS);
+  }
+
   /** The agent has ended its turn by now, and the subagent it left running is the first to run into the limit; every request after its is refused too. */
   private refuseLimitedSubagent(typed: string, response: ServerResponse) {
-    this.limitedSubagentPrompt = null;
-    this.limitedSubagentTimer = null;
+    this.limitedSubagent = null;
     this.limited = true;
     this.refuseWithLimit(typed, response);
   }

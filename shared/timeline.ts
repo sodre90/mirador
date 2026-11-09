@@ -440,7 +440,7 @@ class TimelineBuilder {
         return this.push(noticeBlock(origin, { kind: "turn-ended", stopReason: event.stopReason }));
       case "error": {
         this.endTurn("cancelled");
-        this.dropAgentEchoOf(event.message);
+        this.dropAgentEchoOf(event);
         const block: ErrorBlock = {
           kind: "error",
           ...origin,
@@ -597,19 +597,20 @@ class TimelineBuilder {
 
   /**
    * Claude Code says an API error as the agent's message, and the failed prompt reports it again as an error. Its words
-   * can also join the agent's own last words in one block, as when a background subagent's end met a usage limit.
+   * for a usage limit can also join the agent's own last words in one block, as when a background subagent's end met
+   * the limit.
    */
-  private dropAgentEchoOf(errorMessage: string) {
+  private dropAgentEchoOf({ message, usageLimit }: { message: string; usageLimit?: object }) {
     const last = this.blocks.at(-1);
     if (last?.kind !== "agent") return;
     const echo = last.text.trim();
-    if (echo.length >= SHORTEST_ERROR_ECHO && errorMessage.includes(echo)) {
+    if (echo.length >= SHORTEST_ERROR_ECHO && message.includes(echo)) {
       this.blocks.pop();
       return;
     }
-    const error = errorMessage.trim();
+    const banner = message.trim();
     const text = last.text.trimEnd();
-    if (error.length >= SHORTEST_ERROR_ECHO && text.endsWith(error)) last.text = text.slice(0, -error.length);
+    if (usageLimit && banner.length >= SHORTEST_ERROR_ECHO && text.endsWith(banner)) last.text = text.slice(0, -banner.length);
   }
 
   private appendText(kind: TextBlockKind, origin: Origin, text: string, into: TimelineBlock[]) {

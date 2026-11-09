@@ -837,7 +837,7 @@ export class ConversationService {
     const turnSeq = this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) }, notes);
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
-    let limitReply: string | null = null;
+    let endedOnItsOwn: acp.PromptResponse | undefined;
     try {
       const sessionId = await this.ensureSession(conversationId);
       this.setStatus(conversationId, "running");
@@ -848,12 +848,13 @@ export class ConversationService {
       if (turn.stoppedBeforePrompt) this.cancel(conversationId).catch((error) => console.error(`stopping the turn of conversation ${conversationId} failed:`, error));
       response = await answered;
       this.showHeldBackReply(conversationId);
-      limitReply = usageLimitReplyIn({ stopReason: response.stopReason, lastMessage: turn.lastMessage, messageId: turn.lastReplyMessageId }, this.get(conversationId).harness);
+      const limitReply = usageLimitReplyIn({ stopReason: response.stopReason, lastMessage: turn.lastMessage, messageId: turn.lastReplyMessageId }, this.get(conversationId).harness);
       const model = runtime.reportedModel ?? chosenModel(this.get(conversationId).configOptions)?.id;
       const spent = { ...turnUsageOf(response), ...(model && { model }) };
       if (limitReply !== null) {
         this.notifyTurnEnded(conversationId, this.recordTurnFailure(conversationId, { message: limitReply }, true, spent));
       } else {
+        endedOnItsOwn = response;
         this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...spent });
         runtime.automaticContinues = 0;
         this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
@@ -880,7 +881,6 @@ export class ConversationService {
         response?.stopReason === "cancelled" && !turn.awaitedUser && (turn.lastReplyMessageId !== null || runtime.openToolCalls.oldestOfMainAgent() === null)
           ? { messageId: turn.lastReplyMessageId }
           : undefined;
-      const endedOnItsOwn = limitReply === null ? response : undefined;
       await this.returnUnansweredSteers(conversationId, runtime, turn.steered, endedOnItsOwn).catch((error: unknown) =>
         console.error(`could not tell whether the agent answered the messages that joined the turn of conversation ${conversationId}: ${errorMessage(error)}`),
       );
@@ -894,7 +894,7 @@ export class ConversationService {
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
     this.sendNextQueuedMessage(conversationId);
-    if (limitReply === null && !this.nudgeAfterStall(conversationId, turn, response)) this.followUpOnCanvasUse(conversationId, turn, response);
+    if (!this.nudgeAfterStall(conversationId, turn, endedOnItsOwn)) this.followUpOnCanvasUse(conversationId, turn, endedOnItsOwn);
   }
 
   /**

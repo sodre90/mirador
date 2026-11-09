@@ -85,3 +85,13 @@ test("text the agent wrote before its tool call does not keep the banner after t
   expect(eventsOfTurn().some((event) => event.type === "turn-end")).toBe(false);
   expect(conversations.get(conversation.id).usageLimit).not.toBeNull();
 });
+
+test("a turn the limit ended this way is no stall, so a script's next stalled turn is nudged afresh", async () => {
+  const { conversations, conversation } = turnThatPlays([says(banner, bannerId)]);
+  const runtime = (conversations as unknown as { runtime(conversationId: string): { stallNudges: number } }).runtime(conversation.id);
+  runtime.stallNudges = 2;
+
+  await conversations.send(conversation.id, "go");
+
+  expect(runtime.stallNudges).toBe(0);
+});

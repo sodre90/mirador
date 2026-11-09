@@ -84,13 +84,17 @@ const USAGE_LIMIT_OPENINGS = [
 /** claude-agent-acp gives a model's message the API's id (msg_…), and one of Claude Code's own, such as a limit's, its SDK's uuid. */
 const isClaudeCodesOwnMessage = (messageId: string | null) => messageId !== null && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
 
-/** Every one of Claude Code's limit messages names a limit, usage or credits, which an agent's own sentence opening the same way may not. */
-const NAMES_A_LIMIT = /limit|usage|credits/i;
+/**
+ * Every one of Claude Code's limit messages names a limit, usage, credits or a budget. A model's message gets the SDK's
+ * uuid too when its backend gave it no id, so this keeps an agent's own sentence that opens the same way from counting.
+ */
+const NAMES_A_LIMIT = /limit|usage|credits|budget/i;
 
 /**
- * A usage limit that stops a turn a message joined midway, a steer or Claude Code's notice that a background subagent
- * ended, reaches the client as an ordinary end of turn: claude-agent-acp leaves that error to a later cycle of the turn,
- * which the limit never lets come. Claude Code's words are then the turn's last message, on a line of their own.
+ * A usage limit that stops the cycle Claude Code starts for a background subagent's end, while claude-agent-acp holds the
+ * turn open for that subagent, reaches the client as an ordinary end of turn: acp settles the held turn with the end it
+ * had stored, and keeps that cycle's error from it. Claude Code's words are then the turn's last message, on a line of
+ * their own.
  */
 export function usageLimitReplyIn({ stopReason, lastMessage, messageId }: { stopReason: string; lastMessage: string; messageId: string | null }, harness: HarnessId): string | null {
   const banner = lastMessage.trim();
