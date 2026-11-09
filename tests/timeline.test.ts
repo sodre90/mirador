@@ -244,6 +244,18 @@ describe("an API error Claude Code also says as the agent's message", () => {
     expect(buildTimeline(stored([agentText(limit), { type: "error", message: limit, usageLimit: { resetsAt: 1 } }]))).toEqual([expect.objectContaining({ kind: "error", usageLimit: true })]);
   });
 
+  test("cuts the banner off the end of the agent's last words it was glued to, and still drops a block that is only the banner", () => {
+    const limit = "You've hit your 5-hour limit · resets 3:30am (Europe/Zagreb)";
+    const says = (text: string, messageId: string) => acp({ sessionUpdate: "agent_message_chunk", content: { type: "text", text }, messageId });
+    const error: ConversationEvent = { type: "error", message: limit, usageLimit: { resetsAt: 1 }, endsTurn: true };
+    const reply = "I'll pick up its report when it comes.";
+    const glued = buildTimeline(stored([{ type: "user-message", text: "go" }, says(reply, "msg_a"), says(limit, "6f1c2a3e-9b7d-4c58-8e21-0a5d3b9c7e41"), error]));
+    expect(glued.map(({ kind }) => kind)).toEqual(["user", "agent", "error"]);
+    expect(glued[1]).toMatchObject({ kind: "agent", text: reply });
+    expect(glued[2]).toMatchObject({ kind: "error", usageLimit: true });
+    expect(buildTimeline(stored([agentText(limit), error])).map(({ kind }) => kind)).toEqual(["error"]);
+  });
+
   test("keeps a reply an unrelated error follows, even one the error happens to contain", () => {
     expect(buildTimeline(stored([agentText("All done."), { type: "error", message: "ACP connection closed" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);
     expect(buildTimeline(stored([agentText("Done."), { type: "error", message: "Done. Then the agent stopped" }])).map(({ kind }) => kind)).toEqual(["agent", "error"]);

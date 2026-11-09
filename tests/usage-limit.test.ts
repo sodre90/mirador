@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { isUsageLimitError, usageLimitMessage, usageLimitResetIn } from "../shared/usage-limit.ts";
+import { isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn } from "../shared/usage-limit.ts";
 
 const at = (iso: string) => new Date(iso).getTime();
 
@@ -50,5 +50,33 @@ describe("a usage limit's reset", () => {
     expect(isUsageLimitError({ message: "Internal error: You've hit your session limit · resets 11:20pm (Europe/Budapest)" }, "opencode")).toBe(false);
     expect(isUsageLimitError({ message: "You've reached your rate limit for this model" }, "pi")).toBe(false);
     expect(isUsageLimitError({ message: "Internal error", data: { errorKind: "rate_limit" } }, "opencode")).toBe(true);
+  });
+});
+
+/** Claude Code's own messages carry its SDK's uuid; a model's carry the API's id. */
+const CLAUDE_CODES_OWN = "a441307b-1f36-4e04-93d4-4bb661066437";
+const endedWith = (lastMessage: string, stopReason = "end_turn", messageId: string | null = CLAUDE_CODES_OWN) => ({ stopReason, lastMessage, messageId });
+
+describe("a usage limit that ends a turn as a reply", () => {
+  test("is Claude Code's words alone as the turn's last message, as when a steered turn or a background subagent's notice meets the limit", () => {
+    expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm (Europe/Zagreb)"), "claude")).toBe("You've hit your 5-hour limit · resets 10:30pm (Europe/Zagreb)");
+    expect(usageLimitReplyIn(endedWith("\nYou're out of extra usage · resets Nov 12, 9am\n"), "claude")).toBe("You're out of extra usage · resets Nov 12, 9am");
+  });
+
+  test("is not an agent's own sentence that opens the same way, a longer reply, or another agent's words", () => {
+    expect(usageLimitReplyIn(endedWith("You've reached your goal: all tests pass."), "claude")).toBeNull();
+    expect(usageLimitReplyIn(endedWith("Done.\nYou've hit your 5-hour limit · resets 10:30pm"), "claude")).toBeNull();
+    expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm"), "opencode")).toBeNull();
+    expect(usageLimitReplyIn(endedWith(""), "claude")).toBeNull();
+  });
+
+  test("is not a model's one-line reply in the same words, which carries the API's message id", () => {
+    expect(usageLimitReplyIn(endedWith("You've hit your GitHub API rate limit; wait an hour or set a token.", "end_turn", "msg_011CgrBVwC3vaAnZhL9ySkso"), "claude")).toBeNull();
+    expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm", "end_turn", null), "claude")).toBeNull();
+  });
+
+  test("is only a turn that ended by itself: a stopped one, or one at its token limit, is not waited out", () => {
+    expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm", "cancelled"), "claude")).toBeNull();
+    expect(usageLimitReplyIn(endedWith("You've hit your 5-hour limit · resets 10:30pm", "max_tokens"), "claude")).toBeNull();
   });
 });

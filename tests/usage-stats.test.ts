@@ -284,6 +284,21 @@ describe("permissions", () => {
 });
 
 describe("turns and models", () => {
+  test("a turn a usage limit ended as an error that carries what it spent counts that usage and model", () => {
+    const store = seededStore();
+    write(store, "c1", 0, message);
+    write(store, "c1", 30, {
+      type: "error",
+      message: "You've hit your 5-hour limit · resets 3:30am (Europe/Zagreb)",
+      usageLimit: { resetsAt: 1 },
+      endsTurn: true,
+      usage: { inputTokens: 100, outputTokens: 400, cachedReadTokens: 800, cachedWriteTokens: 100 },
+      model: "claude-opus-5-5",
+    });
+
+    expect(reportOn(store).models.find(({ model }) => model === "claude-opus-5-5")).toMatchObject({ turns: 1, turnsWithTokens: 1, inputTokens: 100, outputTokens: 400, cachedReadTokens: 800, cachedWriteTokens: 100 });
+  });
+
   test("tokens and speed per model, where speed is output tokens per second of the turn's time outside its tool calls", () => {
     const store = seededStore();
     write(store, "c1", 0, message);

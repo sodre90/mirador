@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, lastAgentMessage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, lastAgentMessage, reloadFromRestartedHost, sendMessage, signIn, startConversation, turnOnYolo, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -120,4 +120,31 @@ test("a limit the same turn's context compaction ran into waits for the reset to
     await expect(notice(page).filter({ visible: true })).toContainText("the agent continues by itself at");
     await waitForTurnToEnd(page);
   });
+});
+
+test("a limit that reaches the agent after its background subagent's own waits for the reset, though Claude Code ends the turn as if it ended normally", async ({ page }) => {
+  test.setTimeout(300_000);
+  api.limited = false;
+  api.resetsAt = Math.floor(Date.now() / 1000) + 3 * 60 * 60;
+  api.contextTokens = null;
+  await signIn(page, host);
+  await page.getByRole("navigation").getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
+  await startConversation(page);
+  await turnOnYolo(page);
+
+  await sendMessage(page, "LIMITED SUBAGENT look into the notes");
+  await expect(page.locator(".timeline:visible .usage-limit-line")).toContainText(LIMIT_REACHED, { timeout: 120_000 });
+  await expect(page.locator(".timeline:visible .error-line")).toHaveCount(0);
+  await expect(notice(page).filter({ visible: true })).toContainText("the agent continues by itself at");
+  await expect(page.locator(".timeline:visible .message.agent", { hasText: "You've hit your" })).toHaveCount(0);
+  await waitForTurnToEnd(page);
+
+  api.limited = false;
+  await notice(page).filter({ visible: true }).getByRole("button", { name: "Continue now" }).click();
+  await expect(notice(page)).toHaveCount(0);
+  await expect(page.locator(".timeline:visible .message.user")).toHaveText(["LIMITED SUBAGENT look into the notes", CONTINUE], { timeout: 120_000 });
+  await expect.poll(() => api.endedCommandsWaiting, { timeout: 120_000 }).toBe(1);
+  api.answerEndedCommands();
+  await waitForTurnToEnd(page);
+  await expect(page.locator(".timeline:visible .usage-limit-line")).toHaveCount(1);
 });

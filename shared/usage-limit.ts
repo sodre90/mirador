@@ -81,6 +81,23 @@ const USAGE_LIMIT_OPENINGS = [
   "Your seat type doesn't include extra usage",
 ];
 
+/** claude-agent-acp gives a model's message the API's id (msg_…), and one of Claude Code's own, such as a limit's, its SDK's uuid. */
+const isClaudeCodesOwnMessage = (messageId: string | null) => messageId !== null && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(messageId);
+
+/** Every one of Claude Code's limit messages names a limit, usage or credits, which an agent's own sentence opening the same way may not. */
+const NAMES_A_LIMIT = /limit|usage|credits/i;
+
+/**
+ * A usage limit that stops a turn a message joined midway, a steer or Claude Code's notice that a background subagent
+ * ended, reaches the client as an ordinary end of turn: claude-agent-acp leaves that error to a later cycle of the turn,
+ * which the limit never lets come. Claude Code's words are then the turn's last message, on a line of their own.
+ */
+export function usageLimitReplyIn({ stopReason, lastMessage, messageId }: { stopReason: string; lastMessage: string; messageId: string | null }, harness: HarnessId): string | null {
+  const banner = lastMessage.trim();
+  const isBanner = stopReason === "end_turn" && harness === "claude" && isClaudeCodesOwnMessage(messageId) && !banner.includes("\n") && NAMES_A_LIMIT.test(banner) && USAGE_LIMIT_OPENINGS.some((opening) => banner.startsWith(opening));
+  return isBanner ? banner : null;
+}
+
 const bannerOf = (error: unknown) => String((error as { message?: unknown }).message ?? "").replace(/^Internal error(:\s*|$)/, "");
 
 /**

@@ -33,6 +33,7 @@ import {
   type StartedBy,
   type StoredEvent,
   type TerminalActivity,
+  type TurnUsage,
   type UsageLimitWait,
   type WaitingFor,
   type Workspace,
@@ -61,7 +62,7 @@ import { mentionSuggestions } from "./mentions.ts";
 import { PlanQuotasByProfile, reportedQuotas } from "./plan-quotas.ts";
 import { turnEndReason, type TurnOutcome } from "../shared/system-notifications.ts";
 import { hasBegun, sessionHasRecord, updatesTheAgentRecords } from "../shared/conversation-begun.ts";
-import { isUsageLimitError, usageLimitMessage, usageLimitResetIn } from "../shared/usage-limit.ts";
+import { isUsageLimitError, usageLimitMessage, usageLimitReplyIn, usageLimitResetIn } from "../shared/usage-limit.ts";
 import { summarizeWaiting, waitingTones, type WaitingConversation, type WaitingSummary } from "../shared/waiting.ts";
 import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommandOutputs, type UserCommand } from "../shared/user-commands.ts";
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
@@ -211,6 +212,8 @@ interface TurnInProgress {
   fromScript: boolean;
   /** The turn's own reply since its last tool call: whether it stopped at a step it announced, or asked in chat what ask should have. */
   reply: string;
+  /** The text of the turn's last message on its own, which is Claude Code's words when a usage limit ended the turn as if it ended by itself. */
+  lastMessage: string;
   /** When each of the turn's own tool calls started, to tell whether a page it showed was its last step. */
   toolCallsAt: number[];
   /** What kept queued messages out of the turn when the host last tried to steer them in, as the host log says it. */
@@ -814,7 +817,7 @@ export class ConversationService {
     this.endUsageLimitWait(runtime);
     let endTurn = () => {};
     runtime.turnEnded = new Promise((resolve) => (endTurn = resolve));
-    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", toolCallsAt: [] };
+    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", toolCallsAt: [] };
     runtime.turn = turn;
     runtime.openToolCalls.clear();
     this.forgetUnseenTurnEnd(conversationId);
@@ -827,6 +830,7 @@ export class ConversationService {
     const turnSeq = this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) }, notes);
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
+    let limitReply: string | null = null;
     try {
       const sessionId = await this.ensureSession(conversationId);
       this.setStatus(conversationId, "running");
@@ -837,11 +841,17 @@ export class ConversationService {
       if (turn.stoppedBeforePrompt) this.cancel(conversationId).catch((error) => console.error(`stopping the turn of conversation ${conversationId} failed:`, error));
       response = await answered;
       this.showHeldBackReply(conversationId);
+      limitReply = usageLimitReplyIn({ stopReason: response.stopReason, lastMessage: turn.lastMessage, messageId: turn.lastReplyMessageId }, this.get(conversationId).harness);
       const model = runtime.reportedModel ?? chosenModel(this.get(conversationId).configOptions)?.id;
-      this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...turnUsageOf(response), ...(model && { model }) });
-      runtime.automaticContinues = 0;
-      this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
-      this.readCreditsAfterTurn(conversationId);
+      const spent = { ...turnUsageOf(response), ...(model && { model }) };
+      if (limitReply !== null) {
+        this.notifyTurnEnded(conversationId, this.recordTurnFailure(conversationId, { message: limitReply }, true, spent));
+      } else {
+        this.append(conversationId, { type: "turn-end", stopReason: response.stopReason, ...spent });
+        runtime.automaticContinues = 0;
+        this.notifyTurnEnded(conversationId, { stopReason: response.stopReason });
+        this.readCreditsAfterTurn(conversationId);
+      }
     } catch (error) {
       this.failOpenToolCalls(conversationId);
       if (runtime.killedOnPurpose) {
@@ -863,12 +873,13 @@ export class ConversationService {
         response?.stopReason === "cancelled" && !turn.awaitedUser && (turn.lastReplyMessageId !== null || runtime.openToolCalls.oldestOfMainAgent() === null)
           ? { messageId: turn.lastReplyMessageId }
           : undefined;
-      await this.returnUnansweredSteers(conversationId, runtime, turn.steered, response).catch((error: unknown) =>
+      const endedOnItsOwn = limitReply === null ? response : undefined;
+      await this.returnUnansweredSteers(conversationId, runtime, turn.steered, endedOnItsOwn).catch((error: unknown) =>
         console.error(`could not tell whether the agent answered the messages that joined the turn of conversation ${conversationId}: ${errorMessage(error)}`),
       );
       runtime.running = false;
       this.announceRunningTurnsCount();
-      this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(response?.stopReason, runtime.killedOnPurpose === true) });
+      this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(endedOnItsOwn?.stopReason, runtime.killedOnPurpose === true) });
       runtime.killedOnPurpose = false;
       this.store.turnEnded(conversationId);
       this.setStatus(conversationId, "idle");
@@ -876,7 +887,7 @@ export class ConversationService {
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
     this.sendNextQueuedMessage(conversationId);
-    if (!this.nudgeAfterStall(conversationId, turn, response)) this.followUpOnCanvasUse(conversationId, turn, response);
+    if (limitReply === null && !this.nudgeAfterStall(conversationId, turn, response)) this.followUpOnCanvasUse(conversationId, turn, response);
   }
 
   /**
@@ -2044,13 +2055,18 @@ export class ConversationService {
     if (!turn || turn.ended) return;
     if (isTurnsOwnToolCall(update)) {
       turn.reply = "";
+      turn.lastMessage = "";
       turn.toolCallsAt.push(Date.now());
     }
     if (!isAgentReplyChunk(update) || isSubagentReport(update)) return;
     turn.awaitedUser = false;
-    if (typeof update.messageId === "string") turn.lastReplyMessageId = update.messageId;
+    if (typeof update.messageId === "string") {
+      if (update.messageId !== turn.lastReplyMessageId) turn.lastMessage = "";
+      turn.lastReplyMessageId = update.messageId;
+    }
     if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text" && !isInformational(update._meta)) {
       turn.reply += update.content.text;
+      turn.lastMessage += update.content.text;
     }
   }
 
@@ -2316,7 +2332,7 @@ export class ConversationService {
   }
 
   /** Returns the failure, as a notification tells it. A turn Claude's usage limit stopped holds the queue until the limit resets. */
-  private recordTurnFailure(conversationId: string, error: unknown, promptSent: boolean): Extract<TurnOutcome, { error: string }> {
+  private recordTurnFailure(conversationId: string, error: unknown, promptSent: boolean, spent: { usage?: TurnUsage; model?: string } = {}): Extract<TurnOutcome, { error: string }> {
     const continuable = promptSent && { continuable: true as const };
     const conversation = this.store.findConversation(conversationId);
     if (!conversation || !isUsageLimitError(error, conversation.harness)) {
@@ -2326,7 +2342,7 @@ export class ConversationService {
     }
     const limit = usageLimitMessage(error);
     const resetsAt = usageLimitResetIn(limit.message);
-    this.append(conversationId, { type: "error", ...limit, usageLimit: { resetsAt }, ...continuable, endsTurn: true });
+    this.append(conversationId, { type: "error", ...limit, usageLimit: { resetsAt }, ...continuable, endsTurn: true, ...spent });
     this.waitForUsageLimitReset(conversationId, resetsAt);
     return { error: limit.message, ...(limit.problem && { problem: limit.problem }) };
   }

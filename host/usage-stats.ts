@@ -318,8 +318,8 @@ export function foldConversation(conversationId: string, profile: string, events
       endedAt: at,
       endedBy: ending.type === "error" ? "error" : ending.stopReason,
       error: ending.type === "error" ? errorReason(ending) : null,
-      usage: ending.type === "turn-end" ? (ending.usage ?? null) : null,
-      model: ending.type === "turn-end" ? (ending.model ?? null) : null,
+      usage: ending.usage ?? null,
+      model: ending.model ?? null,
       toolCalls: turnCalls.length,
       toolIntervals: mainCalls.map((call) => [call.startedAt, call.endedAt ?? at]),
     });
