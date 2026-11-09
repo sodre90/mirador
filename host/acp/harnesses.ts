@@ -231,9 +231,14 @@ export function profileEnvironment(profile: Profile | null): Record<string, stri
 export function sessionMeta(
   harness: HarnessId,
   canvasUse: CanvasUse,
-  { canvasAssetsOrigin, withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS }: { canvasAssetsOrigin: string; withoutUserSettings?: boolean; canvasPlugins?: CanvasPluginGuidance },
+  {
+    canvasAssetsOrigin,
+    withoutUserSettings = false,
+    canvasPlugins = NO_CANVAS_PLUGINS,
+    idleCompaction = true,
+  }: { canvasAssetsOrigin: string; withoutUserSettings?: boolean; canvasPlugins?: CanvasPluginGuidance; idleCompaction?: boolean },
 ) {
-  if (harness === "claude") return claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins });
+  if (harness === "claude") return claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction });
   if (harness === "pi") return piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   if (harness === "antigravity") return antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   return undefined;
@@ -271,14 +276,16 @@ function canvasPromptAppendix(canvasUse: CanvasUse, canvasAssetsOrigin: string, 
 
 /**
  * Session options Claude Code reads from `_meta.claudeCode.options` (claude-agent-acp).
- * AskUserQuestion is disabled so questions go through the visual `ask` tool instead.
+ * AskUserQuestion is disabled so questions go through the visual `ask` tool instead. Idle compaction left on sends no
+ * setting, so a user's own `idleCompaction: false` in their Claude Code settings still holds.
  */
-export function claudeSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS } = {}) {
+export function claudeSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true } = {}) {
   return {
     systemPrompt: { append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), jobWaitGuidance()].join("\n\n") },
     claudeCode: {
       options: {
         ...(withoutUserSettings && { settingSources: ["project", "local"] }),
+        ...(!idleCompaction && { settings: { idleCompaction: false } }),
         env: { CLAUDE_NOTIFIER: "0" },
         allowedTools: [...PRE_ALLOWED_CANVAS_TOOLS, ...canvasPlugins.toolNames].map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`),
         disallowedTools: ["AskUserQuestion"],

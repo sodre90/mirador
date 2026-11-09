@@ -27,6 +27,10 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "Profil kérdései",
   takenAtStart:
     "Egy beszélgetés akkor veszi át a módot, az erőfeszítést, a YOLO-t és a Kérdéseket, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját menüi módosítják őket. A módok és az erőfeszítési szintek azok, amelyeket az ágens kínál; a Mirador minden alkalommal megkérdezi tőle, amikor megnyitod a profilt. Az a beszélgetés, amelynek a modellje nem kínálja a szintet, megtartja a saját erőfeszítését.",
+  idleCompactionLabel: "Profil tétlen tömörítése",
+  idleCompaction: "Tétlen beszélgetések tömörítése",
+  idleCompactionHint:
+    "A Claude Code összefoglalja a hosszú beszélgetést, ha nagyjából egy órája tétlen, közvetlenül azelőtt, hogy a prompt gyorsítótára lejár, így a következő üzeneted kevesebbe kerül. A beszélgetések akkor veszik át, amikor elindulnak vagy újra megnyílnak.",
   environmentFormat: {
     onePerLine: "Soronként egy: ",
     afterKeyValue: ", ",

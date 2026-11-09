@@ -1870,10 +1870,16 @@ export class ConversationService {
     const canvasUse = this.store.canvasUse();
     const canvasPlugins = this.canvasPlugins(conversationId);
     const systemPrompt = sessionSystemPrompt(conversation.harness, canvasUse, canvasPlugins);
+    const idleCompaction = conversation.profileId === null || this.store.findProfile(conversation.profileId)?.idleCompaction !== false;
     return {
       cwd: await recordedDirectory(workspace),
       mcpServers: [this.canvasServerFor(conversationId)],
-      _meta: sessionMeta(conversation.harness, canvasUse, { canvasAssetsOrigin: this.config.canvasAssetsOrigin, withoutUserSettings, canvasPlugins }),
+      _meta: sessionMeta(conversation.harness, canvasUse, {
+        canvasAssetsOrigin: this.config.canvasAssetsOrigin,
+        withoutUserSettings,
+        canvasPlugins,
+        idleCompaction,
+      }),
       ...(systemPrompt && { systemPrompt }),
     };
   }

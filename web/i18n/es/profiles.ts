@@ -27,6 +27,10 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "Preguntas del perfil",
   takenAtStart:
     "Una conversación toma el modo, el esfuerzo, YOLO y Preguntas cuando empieza con este perfil o se mueve a él; después, sus propios menús los cambian. Los modos y niveles de esfuerzo son los que ofrece el agente; Mirador se los pregunta cada vez que abres el perfil. Una conversación cuyo modelo no ofrece el nivel conserva su propio esfuerzo.",
+  idleCompactionLabel: "Compactación en reposo del perfil",
+  idleCompaction: "Compactar conversaciones en reposo",
+  idleCompactionHint:
+    "Claude Code resume una conversación larga que lleva cerca de una hora en reposo, justo antes de que caduque su caché de prompts, para que tu siguiente mensaje cueste menos. Las conversaciones lo toman cuando empiezan o se vuelven a abrir.",
   environmentFormat: {
     onePerLine: "Una por línea: ",
     afterKeyValue: ", ",

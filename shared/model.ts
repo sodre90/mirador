@@ -171,6 +171,8 @@ export interface Profile {
   bypassPermissions: boolean;
   /** Questions, taken like the mode. */
   askMode: AskMode;
+  /** Claude Code only: false stops it compacting a long conversation that sits idle. Unset leaves it on, as Claude Code has it. */
+  idleCompaction?: boolean;
   /** Shown as a dot wherever the profile is named, so a workspace on the wrong one stands out. */
   color: Pastel | null;
   /** What it set for plugins' profile settings, by plugin and setting id; a setting it didn't set has its default. */

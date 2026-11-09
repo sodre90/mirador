@@ -27,6 +27,10 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "配置提问",
   takenAtStart:
     "对话在使用这个配置启动或切换到它时，会采用它的模式、思考强度、YOLO 和提问设置；之后可以用对话自己的菜单更改。模式和思考强度以 Agent 提供的为准；每次打开配置时，Mirador 都会向它询问。如果对话的模型不支持该强度，则保留对话自己的思考强度。",
+  idleCompactionLabel: "配置空闲压缩",
+  idleCompaction: "压缩空闲对话",
+  idleCompactionHint:
+    "长对话空闲约一小时后、提示词缓存过期之前，Claude Code 会把它压缩成摘要，让你的下一条消息花费更少。对话在启动或重新打开时采用这个设置。",
   environmentFormat: {
     onePerLine: "每行一个：",
     afterKeyValue: "，",

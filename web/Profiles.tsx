@@ -179,6 +179,7 @@ function ProfileEditor({
   const [effort, setEffort] = useState(profile?.effort ?? AGENTS_OWN_CHOICE);
   const [bypassPermissions, setBypassPermissions] = useState(profile?.bypassPermissions ?? false);
   const [askMode, setAskMode] = useState<AskMode>(profile?.askMode ?? "wait");
+  const [idleCompaction, setIdleCompaction] = useState(profile?.idleCompaction ?? true);
   const [color, setColor] = useState<Pastel | null>(profile?.color ?? null);
   const [pluginSettings, setPluginSettings] = useState<ProfilePluginSettings>(profile?.pluginSettings ?? {});
   const choosePluginSetting = (plugin: string, settingId: string, value: string) =>
@@ -200,6 +201,7 @@ function ProfileEditor({
     effort === (profile.effort ?? AGENTS_OWN_CHOICE) &&
     bypassPermissions === profile.bypassPermissions &&
     askMode === profile.askMode &&
+    idleCompaction === (profile.idleCompaction ?? true) &&
     color === profile.color &&
     JSON.stringify(pluginSettings) === JSON.stringify(profile.pluginSettings ?? {});
 
@@ -210,7 +212,20 @@ function ProfileEditor({
       className="profile-editor"
       onSubmit={(event) => {
         event.preventDefault();
-        save({ id: profile?.id, name, harness, environment, prelaunch, mode: mode || null, effort: effort || null, bypassPermissions, askMode, color, pluginSettings });
+        save({
+          id: profile?.id,
+          name,
+          harness,
+          environment,
+          prelaunch,
+          mode: mode || null,
+          effort: effort || null,
+          bypassPermissions,
+          askMode,
+          ...(harness === "claude" && !idleCompaction && { idleCompaction: false }),
+          color,
+          pluginSettings,
+        });
       }}
     >
       <label>
@@ -277,6 +292,15 @@ function ProfileEditor({
         </select>
       </label>
       <div className="hint">{words.takenAtStart}</div>
+      {harness === "claude" && (
+        <>
+          <label className="checkbox">
+            <input type="checkbox" aria-label={words.idleCompactionLabel} checked={idleCompaction} onChange={(event) => setIdleCompaction(event.target.checked)} />
+            <span>{words.idleCompaction}</span>
+          </label>
+          <div className="hint">{words.idleCompactionHint}</div>
+        </>
+      )}
       <PluginProfileFields profileId={profile?.id} profiles={profiles} chosen={pluginSettings} onChoose={choosePluginSetting} />
       <div className="field-label">{words.environment}</div>
       <EnvironmentField value={environment} harness={harness} onChange={setEnvironment} startRevealed={!profile} />

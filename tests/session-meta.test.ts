@@ -32,3 +32,11 @@ test("opencode gets no session options", () => {
 test("The canvas instructions tell agents to draw diagrams as graphics, not ASCII art in a pre", () => {
   expect(canvasInstructions(ASSETS_ORIGIN)).toContain("Never draw them with ASCII or box-drawing characters");
 });
+
+test("Claude Code compacts idle conversations as its own settings say, unless the profile turns it off", () => {
+  expect(claudeSessionMeta("often").claudeCode.options).not.toHaveProperty("settings");
+  expect(claudeSessionMeta("often", { idleCompaction: false }).claudeCode.options).toMatchObject({ settings: { idleCompaction: false } });
+  expect(sessionMeta("claude", "often", { canvasAssetsOrigin: ASSETS_ORIGIN, idleCompaction: false })).toMatchObject({
+    claudeCode: { options: { settings: { idleCompaction: false } } },
+  });
+});

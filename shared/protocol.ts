@@ -82,7 +82,7 @@ export const PROFILE_LAUNCH_PARAMETER = "profile-launch";
 /** A desktop app built from a checkout opens /notifications with this query parameter naming the code it was built from. */
 export const DESKTOP_APP_CODE_PARAMETER = "desktop-app-code";
 
-export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "mode" | "effort" | "bypassPermissions" | "askMode" | "color" | "pluginSettings"> & { id?: string };
+export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings"> & { id?: string };
 
 export type ClientMessage =
   /** Its conversations start on the profile; null only while there is no profile yet. */

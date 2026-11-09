@@ -102,6 +102,7 @@ export class ProfileService {
       effort: draft.effort || null,
       bypassPermissions: draft.bypassPermissions,
       askMode: draft.askMode,
+      ...(draft.idleCompaction === false && { idleCompaction: false }),
       color: draft.color,
       ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
       createdAt: existing?.createdAt ?? Date.now(),

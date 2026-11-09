@@ -27,6 +27,10 @@ export const profiles: Messages["profiles"] = {
   questionsLabel: "Fragen des Profils",
   takenAtStart:
     "Eine Unterhaltung übernimmt Modus, Denkaufwand, YOLO und Fragen, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändern ihre eigenen Menüs sie. Die Modi und Stufen des Denkaufwands sind die, die der Agent anbietet; Mirador fragt ihn jedes Mal, wenn du das Profil öffnest. Eine Unterhaltung, deren Modell die Stufe nicht anbietet, behält ihren eigenen Denkaufwand.",
+  idleCompactionLabel: "Leerlauf-Verdichtung des Profils",
+  idleCompaction: "Ruhende Unterhaltungen verdichten",
+  idleCompactionHint:
+    "Claude Code fasst eine lange Unterhaltung zusammen, die etwa eine Stunde geruht hat, kurz bevor ihr Prompt-Cache abläuft, damit deine nächste Nachricht weniger kostet. Unterhaltungen übernehmen das, wenn sie starten oder wieder geöffnet werden.",
   environmentFormat: {
     onePerLine: "Eine Variable pro Zeile: ",
     afterKeyValue: ", ",

@@ -1,5 +1,5 @@
 diff --git a/dist/acp-agent.js b/dist/acp-agent.js
-index a92039b..cfb0665 100644
+index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..9d40eaf7ffa38c86b0cb66e67898988120e4efcb 100644
 --- a/dist/acp-agent.js
 +++ b/dist/acp-agent.js
 @@ -3428,6 +3428,22 @@ export class ClaudeAcpAgent {
@@ -49,7 +49,19 @@ index a92039b..cfb0665 100644
                                      await subagents.taskResumed(message.task_id, sendUpdate, sendMessageResumePrompt(session.toolUseCache, message.task_id));
                                  }
                                  break;
-@@ -10844,7 +10863,9 @@ function recordDispatchedToolUses(session, content) {
+@@ -9723,7 +9742,10 @@ export class ClaudeAcpAgent {
+                 isBusy: () => this.claudeIsWorking(sessionId, registered) ||
+                     (registered.openUserInputs?.size ?? 0) > 0,
+                 contextTokens: () => registered.contextUsedTokens,
+-                settings: () => registered.settingsManager.getSettings(),
++                // The client's `settings` option reaches the CLI as `--settings`, which outranks the settings files.
++                settings: () => configuredSettingsObject?.idleCompaction === undefined
++                    ? registered.settingsManager.getSettings()
++                    : { ...registered.settingsManager.getSettings(), idleCompaction: configuredSettingsObject.idleCompaction },
+                 compact: () => this.prompt({ sessionId, prompt: [{ type: "text", text: "/compact" }] }, "idleCompaction"),
+                 // The logger has no debug level.
+                 log: (message) => this.logger.log(message),
+@@ -10844,7 +10866,9 @@ function recordDispatchedToolUses(session, content) {
      if (!Array.isArray(content))
          return;
      for (const block of content) {

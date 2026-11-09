@@ -25,6 +25,10 @@ export const profiles = {
   questionsLabel: "Profile questions",
   takenAtStart:
     "A conversation takes the mode, effort, YOLO and Questions when it starts with this profile or moves to it; its own menus change them after that. The modes and effort levels are the ones the agent offers; Mirador asks it each time you open the profile. A conversation whose model does not offer the level keeps its own effort.",
+  idleCompactionLabel: "Profile idle compaction",
+  idleCompaction: "Compact idle conversations",
+  idleCompactionHint:
+    "Claude Code summarizes a long conversation that has sat idle for about an hour, just before its prompt cache expires, so your next message costs less. Conversations take this when they start or are reopened.",
   environmentFormat: {
     onePerLine: "One per line: ",
     afterKeyValue: ", ",
