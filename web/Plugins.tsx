@@ -691,7 +691,11 @@ function UpdateAll({ updates, startNow = false, onDone, onBusy }: { updates: Fou
   const [offers, setOffers] = useState<PluginOffer[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const busy = cloning !== null || offers !== null;
-  useEffect(() => onBusy?.(busy), [busy]);
+  useEffect(() => {
+    if (!busy) return;
+    onBusy?.(true);
+    return () => onBusy?.(false);
+  }, [busy]);
   const offerAll = async () => {
     setProblem(null);
     const offered: PluginOffer[] = [];
@@ -740,23 +744,41 @@ function UpdateAll({ updates, startNow = false, onDone, onBusy }: { updates: Fou
   );
 }
 
+type TileUpdate = { run: number; update: FoundUpdate; busy: boolean };
+
+/** The updates started from tiles, each on its own until it ends; one that failed stays, with its problem, until its tile's Update tries again. */
+function useTileUpdates() {
+  const [running, setRunning] = useState<TileUpdate[]>([]);
+  const runs = useRef(0);
+  const start = (update: FoundUpdate) => {
+    const run = ++runs.current;
+    setRunning((all) => [...all.filter((tileUpdate) => tileUpdate.update.folder !== update.folder), { run, update, busy: true }]);
+  };
+  const end = (run: number) => setRunning((all) => all.filter((tileUpdate) => tileUpdate.run !== run));
+  const setBusy = (run: number, busy: boolean) => setRunning((all) => all.map((tileUpdate) => (tileUpdate.run === run ? { ...tileUpdate, busy } : tileUpdate)));
+  const isBusyWith = (folder: string) => running.some(({ update, busy }) => busy && update.folder === folder);
+  return { running, start, end, setBusy, isBusyWith };
+}
+
+const updatingNothing = () => false;
+
 function TileList({
   label,
   plugins,
   newsOf,
-  updatingFolder = null,
+  isUpdating = updatingNothing,
   onOpen,
 }: {
   label: string;
   plugins: GalleryPlugin[];
   newsOf: (plugin: GalleryPlugin) => FoundUpdate | undefined;
-  updatingFolder?: string | null;
+  isUpdating?: (folder: string) => boolean;
   onOpen: (plugin: GalleryPlugin, start: Start) => void;
 }) {
   return (
     <ul className="plugin-tiles" aria-label={label}>
       {plugins.map((plugin) => (
-        <PluginTile key={plugin.key} plugin={plugin} news={newsOf(plugin)} updating={updatingFolder !== null && plugin.installed?.folder === updatingFolder} onOpen={(start) => onOpen(plugin, start)} />
+        <PluginTile key={plugin.key} plugin={plugin} news={newsOf(plugin)} updating={plugin.installed !== null && isUpdating(plugin.installed.folder)} onOpen={(start) => onOpen(plugin, start)} />
       ))}
     </ul>
   );
@@ -793,12 +815,13 @@ export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pl
   const waiting = pluginUpdates.filter(({ folder }) => listed?.plugins.some((plugin) => plugin.folder === folder && newsFor(plugin, pluginUpdates)));
   const openedPlugin = opened && [...gallery.installed, ...gallery.discover].find(({ key }) => key === opened.key);
   usePicturesFetchedAhead(listed?.official);
-  const [updatingFromTile, setUpdatingFromTile] = useState<FoundUpdate | null>(null);
-  const [tileUpdateBusy, setTileUpdateBusy] = useState(false);
+  const tileUpdates = useTileUpdates();
+  const [updatingAll, setUpdatingAll] = useState(false);
+  const isUpdating = (folder: string) => tileUpdates.isBusyWith(folder) || (updatingAll && waiting.some((update) => update.folder === folder));
   const open = (plugin: GalleryPlugin, start: Start) => {
     const found = start === "update" && newsOf(plugin) ? pluginUpdates.find(({ folder }) => folder === plugin.installed?.folder) : undefined;
-    if (found) return setUpdatingFromTile(found);
-    setOpened({ key: plugin.key, start });
+    if (!found) return setOpened({ key: plugin.key, start });
+    if (!isUpdating(found.folder)) tileUpdates.start(found);
   };
   const openedIsGone = opened !== null && listed !== null && !openedPlugin;
   useEffect(() => {
@@ -829,13 +852,12 @@ export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pl
             <>
               <p className="hint">{words.intro}</p>
               <UpdateModeChoice mode={pluginUpdateMode} />
-              {updatingFromTile ? (
-                <UpdateAll key={updatingFromTile.folder} updates={[updatingFromTile]} startNow onDone={() => setUpdatingFromTile(null)} onBusy={setTileUpdateBusy} />
-              ) : (
-                waiting.length > 0 && <UpdateAll updates={waiting} />
-              )}
+              {tileUpdates.running.map(({ run, update }) => (
+                <UpdateAll key={run} updates={[update]} startNow onDone={() => tileUpdates.end(run)} onBusy={(busy) => tileUpdates.setBusy(run, busy)} />
+              ))}
+              {waiting.length > 0 && (updatingAll || tileUpdates.running.length === 0) && <UpdateAll updates={waiting} onBusy={setUpdatingAll} />}
               <h3>{words.installed}</h3>
-              {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} updatingFolder={tileUpdateBusy ? (updatingFromTile?.folder ?? null) : null} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
+              {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} isUpdating={isUpdating} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
               {gallery.discover.length > 0 && (
                 <>
                   <h3>{words.discover}</h3>
