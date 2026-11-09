@@ -19,6 +19,23 @@ test("with no profile yet, Mirador offers the first one filled in; workspaces st
   await expect(setUp.getByLabel("Profile name")).toHaveValue("Claude Code");
   await expect(setUp.getByLabel("Profile agent")).toHaveValue("claude");
 
+  await test.step("the first profile asks for an agent and a name only; More options shows the rest", async () => {
+    await expect(setUp.getByRole("button", { name: "Create profile" })).toBeVisible();
+    await expect(setUp.getByRole("tab")).toHaveCount(0);
+    await expect(setUp.getByLabel("Environment", { exact: true })).toHaveCount(0);
+    await expect(setUp.locator("label > span, .field-label")).toHaveText(["Agent", "Name"]);
+    await setUp.getByLabel("Profile name").fill("Mine");
+    await setUp.getByRole("button", { name: "More options" }).click();
+    await expect(setUp.getByRole("button", { name: "More options" })).toHaveCount(0);
+    await expect(setUp.getByRole("tab", { name: "Launch" })).toHaveAttribute("aria-selected", "true");
+    await expect(setUp.getByLabel("Environment", { exact: true })).toBeVisible();
+    await expect(setUp.getByLabel("Profile name"), "what was typed stays").toHaveValue("Mine");
+    await setUp.getByLabel("Profile name").fill("Claude Code");
+    await setUp.getByRole("tab", { name: "Defaults" }).click();
+    await expect(setUp.getByLabel("Profile questions")).toBeVisible();
+    await expect(setUp.getByRole("button", { name: "Create profile" })).toBeVisible();
+  });
+
   await addWorkspace(page, host.projectDir);
   const card = workspaceCard(page, host.projectDir);
 
@@ -40,8 +57,8 @@ test("with no profile yet, Mirador offers the first one filled in; workspaces st
   await test.step("the only profile cannot be deleted; with another, deleting it moves the workspace to that one", async () => {
     const dialog = await openProfiles(page);
     const firstProfile = dialog.locator(".profile-list li").filter({ hasText: /^Claude CodeClaude Code$/ });
-    await expect(dialog.getByRole("button", { name: "Delete profile" })).toHaveCount(0);
-    await expect(dialog).toContainText("This is your only profile");
+    await expect(dialog.getByRole("button", { name: "Delete profile" })).toBeDisabled();
+    await expect(dialog.locator(".only-profile")).toHaveAttribute("data-hint", /This is your only profile/);
     await dialog.locator(".profile-list li", { hasText: "+ New profile" }).click();
     await dialog.getByLabel("Profile name").fill("second");
     await dialog.getByRole("button", { name: "Create profile" }).click();
@@ -49,7 +66,7 @@ test("with no profile yet, Mirador offers the first one filled in; workspaces st
     await dialog.getByRole("button", { name: "Delete profile" }).click();
     await dialog.getByRole("button", { name: "Confirm: Delete profile" }).click();
     await expect(firstProfile).toHaveCount(0);
-    await expect(dialog.getByRole("button", { name: "Delete profile" })).toHaveCount(0);
+    await expect(dialog.getByRole("button", { name: "Delete profile" })).toBeDisabled();
     await dialog.getByRole("button", { name: "Close" }).click();
     await expect(card.locator(".agent-chip-label")).toHaveText("second · Claude Code");
   });

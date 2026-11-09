@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addWorkspace, createProfile, openProfiles, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
+import { addWorkspace, createProfile, openProfiles, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings, openProfileTab } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -23,6 +23,7 @@ test("a profile sets the mode, YOLO and Questions of the conversations that star
   const plainProfile = await createProfile(page, "plain", scriptedOpencodeEnvironment(model, host.root), "", "opencode");
   await plainProfile.getByRole("button", { name: "Close" }).click();
   const created = await createProfile(page, PROFILE, scriptedOpencodeEnvironment(model, host.root), "", "opencode");
+  await openProfileTab(created, "Defaults");
   await expect(created.getByLabel("Profile mode").locator("option")).toHaveText(["Agent's default", "Build", "Plan"]);
   await created.getByRole("button", { name: "Close" }).click();
 
@@ -36,6 +37,7 @@ test("a profile sets the mode, YOLO and Questions of the conversations that star
   await test.step("the profile offers the modes the agent listed, and keeps one with YOLO and Questions", async () => {
     const editor = await openProfiles(page);
     await editor.locator(".profile-list li", { hasText: PROFILE }).click();
+    await openProfileTab(editor, "Defaults");
     await expect(editor.getByLabel("Profile mode").locator("option")).toContainText(["Agent's default", "Build", "Plan"]);
     await editor.getByLabel("Profile mode").selectOption("plan");
     await editor.getByLabel("Profile YOLO").check();

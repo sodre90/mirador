@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, openProfiles, signIn, conversationSettings } from "./helpers.ts";
+import { addWorkspace, createProfile, openProfiles, signIn, conversationSettings, openProfileTab } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -49,6 +49,7 @@ test("a profile sets the effort of the conversations that start with it or move 
   await addWorkspace(page, host.projectDir);
   for (const name of ["plain", "thorough"]) {
     const profiles = await createProfile(page, name, `FAKE_ACP_MODES=1\nFAKE_ACP_NAME=${name}`, "", "opencode");
+    await openProfileTab(profiles, "Defaults");
     await expect(profiles.getByLabel("Profile effort").locator("option")).toHaveText(["Agent's default", "Low", "High"]);
     await profiles.getByRole("button", { name: "Close" }).click();
   }
@@ -62,6 +63,7 @@ test("a profile sets the effort of the conversations that start with it or move 
   await test.step("the profile offers the effort levels the agent listed, and keeps one", async () => {
     const editor = await openProfiles(page);
     await editor.locator(".profile-list li", { hasText: "thorough" }).click();
+    await openProfileTab(editor, "Defaults");
     await expect(editor.getByLabel("Profile effort").locator("option")).toHaveText(["Agent's default", "Low", "High"]);
     await editor.getByLabel("Profile effort").selectOption("high");
     await editor.getByRole("button", { name: "Save" }).click();

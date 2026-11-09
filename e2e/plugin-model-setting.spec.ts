@@ -1,7 +1,7 @@
 import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, conversationSettings, createProfile, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, conversationSettings, createProfile, signIn, startConversation, openProfileTab } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -34,6 +34,7 @@ test("a plugin's profile setting lists the models of the profile another of its 
   await addWorkspace(page, host.projectDir);
   await (await createProfile(page, "Helper", "", "", "opencode")).getByRole("button", { name: "Close" }).click();
   const profiles = await createProfile(page, "Local", "", "", "opencode");
+  await openProfileTab(profiles, "Plugins");
   const profilesModel = profiles.getByLabel("Profile Hand over model");
 
   await test.step("without a profile to hand over to, the only model is the agent's own", async () => {

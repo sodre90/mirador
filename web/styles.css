@@ -1445,7 +1445,16 @@ button.icon.workspace-fold {
   font-weight: 600;
 }
 
+.modal.profiles {
+  display: flex;
+  flex-direction: column;
+  height: min(640px, 100%);
+}
+
+/* The dialog itself scrolls only in a window too short for this much of the editor. */
 .profiles-body {
+  flex: 1 1 0;
+  min-height: 220px;
   display: grid;
   grid-template-columns: 180px minmax(0, 1fr);
   gap: 20px;
@@ -1456,6 +1465,25 @@ button.icon.workspace-fold {
   list-style: none;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+}
+
+.unsaved-mark::before {
+  content: "•";
+  margin-left: 6px;
+  color: var(--warn);
+  font-weight: 700;
+}
+
+.unsaved-on-close {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.unsaved-on-close span {
+  flex: 1;
 }
 
 .profile-list li {
@@ -1485,6 +1513,102 @@ button.icon.workspace-fold {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  min-height: 0;
+}
+
+.profile-heading,
+.profile-tabs,
+.profile-footer {
+  flex: none;
+}
+
+.profile-heading {
+  margin: 0;
+  font-size: calc(14px * var(--font-scale));
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-heading .profile-agent {
+  margin-left: 6px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  font-weight: normal;
+}
+
+.profile-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.profile-tabs [role="tab"] {
+  padding: 6px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: none;
+  color: var(--muted);
+}
+
+.profile-tabs [role="tab"]:hover {
+  background: var(--panel-2);
+}
+
+.profile-tabs [role="tab"][aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.profile-panel:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Only the open tab scrolls: the dialog's header, the profile list and Save stay where they are. */
+.modal.profiles .profile-panels {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Room for the rings drawn outside a chosen colour or a focused field, which the scroll area would cut */
+  padding: 0 6px 2px 2px;
+}
+
+.modal.profiles .profile-footer {
+  border-top: 1px solid var(--border);
+}
+
+.name-and-colour {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 4px 20px;
+}
+
+.name-and-colour > label {
+  flex: 1;
+  min-width: 180px;
+}
+
+.name-and-colour > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.environment-format summary {
+  width: fit-content;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  cursor: pointer;
+}
+
+.only-profile button:disabled {
+  pointer-events: none;
 }
 
 .profile-editor label,
@@ -1545,7 +1669,16 @@ button.icon.workspace-fold {
 
 @media (max-width: 640px) {
   .profiles-body {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template: minmax(0, auto) minmax(0, 1fr) / minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .profiles-body {
+    min-height: 320px;
+  }
+
+  .profile-list {
+    max-height: 96px;
   }
 }
 

@@ -1,7 +1,7 @@
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseInSettings, createProfile, openProfiles, primaryModifier, reloadFromRestartedHost, sendMessage, signIn, conversationSettings } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseInSettings, createProfile, openProfiles, primaryModifier, reloadFromRestartedHost, sendMessage, signIn, conversationSettings, openProfileTab } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import type { DesktopMenuMessage } from "../shared/desktop-menu.ts";
 
@@ -371,6 +371,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
   await test.step("a plugin's profile setting shows in the Profiles dialog, offering the other profiles, and its tool takes what the profile chose", async () => {
     const dialog = await openProfiles(page);
     await dialog.locator(".profile-list li", { hasText: profileName }).click();
+    await openProfileTab(dialog, "Plugins");
     const handOverTo = dialog.getByLabel("Profile Hand over to");
     await expect(handOverTo).toHaveValue("");
     await expect(handOverTo.locator("option").first()).toHaveText("None");
@@ -382,6 +383,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await dialog.getByRole("button", { name: "Close" }).click();
     const reopened = await openProfiles(page);
     await reopened.locator(".profile-list li", { hasText: profileName }).click();
+    await openProfileTab(reopened, "Plugins");
     await expect(reopened.getByLabel("Profile Hand over to").locator("option:checked")).toHaveText("Local");
     await reopened.getByRole("button", { name: "Close" }).click();
 

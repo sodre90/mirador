@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd, openProfileTab } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -44,6 +44,7 @@ test("a Claude Code profile can stop its conversations compacting while they sit
 
   await test.step("the profile keeps the setting", async () => {
     const profiles = await createProfile(page, "quiet", subscriptionEnvironment(api));
+    await openProfileTab(profiles, "Defaults");
     const setting = profiles.getByLabel("Profile idle compaction");
     await expect(setting).toBeChecked();
     await setting.uncheck();
@@ -52,6 +53,7 @@ test("a Claude Code profile can stop its conversations compacting while they sit
     await profiles.getByRole("button", { name: "Close" }).click();
     const reopened = await openProfiles(page);
     await reopened.locator(".profile-list li", { hasText: "quiet" }).click();
+    await openProfileTab(reopened, "Defaults");
     await expect(reopened.getByLabel("Profile idle compaction")).not.toBeChecked();
     await reopened.getByRole("button", { name: "Close" }).click();
   });
@@ -63,6 +65,7 @@ test("a Claude Code profile can stop its conversations compacting while they sit
 
   await test.step("a profile left as it was lets Claude Code decide", async () => {
     const profiles = await createProfile(page, "usual", subscriptionEnvironment(api));
+    await openProfileTab(profiles, "Defaults");
     await expect(profiles.getByLabel("Profile idle compaction")).toBeChecked();
     await profiles.getByRole("button", { name: "Close" }).click();
     await chatOnProfile(page, "usual");

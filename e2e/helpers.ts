@@ -232,9 +232,15 @@ export async function openProfiles(page: Page) {
   return page.getByRole("dialog", { name: "Profiles" });
 }
 
+/** The profile editor's fields sit on tabs: Launch (name, colour, environment, pre-launch command), Defaults (mode, effort, questions, YOLO) and Plugins. */
+export async function openProfileTab(profileEditor: Locator, tab: "Launch" | "Defaults" | "Plugins") {
+  await profileEditor.getByRole("tab", { name: tab }).click();
+}
+
 export async function createProfile(page: Page, name: string, environment: string, prelaunch = "", agent = "Claude Code") {
   const dialog = await openProfiles(page);
   await dialog.locator(".profile-list li", { hasText: "+ New profile" }).click();
+  await openProfileTab(dialog, "Launch");
   await dialog.getByLabel("Profile name").fill(name);
   await dialog.getByLabel("Profile agent").selectOption({ label: agent });
   await dialog.getByLabel("Environment", { exact: true }).fill(environment);
@@ -246,6 +252,7 @@ export async function createProfile(page: Page, name: string, environment: strin
 
 /** Claude Code starts in Auto, which runs tools without asking, and refuses them where its safety check can't run. */
 export async function startInManualMode(profileEditor: Locator) {
+  await openProfileTab(profileEditor, "Defaults");
   await profileEditor.getByLabel("Profile mode").selectOption("default", { timeout: 60_000 });
   await profileEditor.getByRole("button", { name: "Save" }).click();
   await expect(profileEditor.locator(".saved")).toHaveText("Saved");

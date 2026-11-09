@@ -52,6 +52,7 @@ test("a profile's environment and pre-launch command reach Claude Code, and its 
   await expect(dialog.locator(".form-errors")).toContainText("values are not expanded");
   await expect(dialog.getByRole("button", { name: "Create profile" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Close" }).click();
+  await dialog.getByRole("button", { name: "Discard and close" }).click();
 
   const environment = [
     "-u ANTHROPIC_API_KEY",
