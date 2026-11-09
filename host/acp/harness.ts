@@ -103,6 +103,9 @@ export class HarnessProcess {
   private connection?: acp.ClientConnection;
   private initialized?: Promise<acp.InitializeResponse>;
   private stopReason?: AgentGone;
+  /** Counts the starts, so the process of an earlier one that goes away late leaves a later one be. */
+  private startsSoFar = 0;
+  private prelaunchProcess?: ChildProcess;
 
   constructor(
     readonly spec: HarnessSpec,
@@ -114,6 +117,7 @@ export class HarnessProcess {
   start(): Promise<acp.InitializeResponse> {
     if (!this.initialized) {
       this.stopReason = undefined;
+      this.startsSoFar += 1;
       this.initialized = this.launchInTurn().catch((error) => {
         this.initialized = undefined;
         throw error;
@@ -206,9 +210,12 @@ export class HarnessProcess {
    * period ends with SIGKILL; a connection left closed and uncleaned would fail every later prompt of its own kind.
    * Windows has no stop signal, so there the agent cannot end what it started: it is killed at once with all of it.
    * Either way the agent process went away because it was stopped, not with the exit code or signal that ended it.
+   * A pre-launch command still running ends the way its timeout ends it, the shell alone, so a proxy it started in the
+   * background stays up for the next start.
    */
   stop(reason: AgentGone = { kind: "stopped" }) {
     this.stopReason = reason;
+    this.prelaunchProcess?.kill();
     const child = this.child;
     this.connection?.close();
     if (process.platform === "win32" && child?.pid !== undefined) void killProcessTree(child.pid);
@@ -248,6 +255,7 @@ export class HarnessProcess {
   }
 
   private async launch() {
+    const ownStart = this.startsSoFar;
     this.endIfStoppedBeforeSpawning();
     await this.runPrelaunch();
     this.endIfStoppedBeforeSpawning();
@@ -260,11 +268,13 @@ export class HarnessProcess {
     const goneBecause = (reason: AgentGone) => {
       if (gone) return;
       gone = true;
-      this.connection = undefined;
-      this.initialized = undefined;
-      this.child = undefined;
-      this.stopReason = undefined;
-      this.listener.onExit(this, reason);
+      if (this.startsSoFar === ownStart) {
+        this.connection = undefined;
+        this.initialized = undefined;
+        this.child = undefined;
+        this.stopReason = undefined;
+        this.listener.onExit(this, reason);
+      }
       exitedBecause(reason);
     };
     child.on("error", (error) => child.pid === undefined && goneBecause({ kind: "could-not-start", cause: error.message }));
@@ -302,7 +312,7 @@ export class HarnessProcess {
   }
 
   /**
-   * A stop that comes while the start waits its turn or runs the pre-launch command finds no process to end; the
+   * A stop that comes while the start waits its turn or runs the pre-launch command finds no agent process to end; the
    * start ends there, as it would had the process been running, rather than start one its owner has let go of.
    */
   private endIfStoppedBeforeSpawning() {
@@ -358,6 +368,7 @@ export class HarnessProcess {
         env: this.spec.environment,
         stdio: ["ignore", log, log],
       });
+      this.prelaunchProcess = prelaunch;
       const timeout = setTimeout(() => {
         prelaunch.kill();
         resolve({ kind: "timed-out", seconds: PRELAUNCH_TIMEOUT_MS / 1000 });
@@ -368,8 +379,10 @@ export class HarnessProcess {
         resolve(code === 0 ? null : { kind: "exited", how: String(code ?? signal) });
       });
     });
+    this.prelaunchProcess = undefined;
     if (log !== "ignore") closeSync(log);
-    if (failure === null) return;
+    const endedByStop = this.stopReason !== undefined;
+    if (failure === null || endedByStop) return;
     const output = readFileSync(logPath).subarray(logSizeBefore).toString().trim().slice(-PRELAUNCH_OUTPUT_IN_ERRORS);
     throw new HostProblemError({ code: "prelaunch-failed", agent: this.spec.label, failure, output });
   }
