@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { useRef, useState, type CSSProperties, type RefObject } from "react";
-import { profileSettingValue } from "../shared/apps.ts";
+import { conversationSettingValue, profileSettingWhoseModelsItLists, settingValueFollowingProfile, type PluginProfileSetting } from "../shared/apps.ts";
 import { chosenModel, flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";
 import { harnessLabels, type AskMode, type Conversation, type Profile } from "../shared/model.ts";
 import { agentBesideProfile } from "../shared/profile-label.ts";
@@ -9,7 +9,7 @@ import { choiceGroups } from "./choices.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { choicesOf, usePluginSettings } from "./plugin-settings.ts";
+import { useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { SearchableSelect } from "./SearchableSelect.tsx";
 
@@ -120,40 +120,56 @@ const FOLLOWS_PROFILE = "\u0000profile";
 
 /** Each plugin's profile settings, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none. */
 function PluginSettingMenus({ conversation, profiles }: { conversation: Conversation; profiles: Profile[] }) {
-  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings }) => (profileSettings ?? []).map((setting) => ({ plugin, setting })));
+  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings = [] }) => profileSettings.map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })));
   if (conversation.startedBy) return null;
+  return withProfileSettings.map(({ plugin, setting, settingsOfPlugin }) => (
+    <PluginSettingMenu key={`${plugin}/${setting.id}`} conversation={conversation} profiles={profiles} plugin={plugin} setting={setting} settingsOfPlugin={settingsOfPlugin} />
+  ));
+}
+
+function PluginSettingMenu({
+  conversation,
+  profiles,
+  plugin,
+  setting,
+  settingsOfPlugin,
+}: {
+  conversation: Conversation;
+  profiles: Profile[];
+  plugin: string;
+  setting: PluginProfileSetting;
+  settingsOfPlugin: PluginProfileSetting[];
+}) {
   const profile = profiles.find(({ id }) => id === conversation.profileId);
-  return withProfileSettings.map(({ plugin, setting }) => {
-    const choices = choicesOf(setting, profiles, conversation.profileId);
-    const profilesValue = profileSettingValue(profile?.pluginSettings, plugin, setting);
-    const profilesLabel = choices.find(({ value }) => value === profilesValue)?.label ?? words.header.none;
-    const chosen = conversation.pluginSettings?.[plugin]?.[setting.id] ?? FOLLOWS_PROFILE;
-    return (
-      <label key={`${plugin}/${setting.id}`} className="config" data-hint={[setting.hint, hints.conversationPluginSetting].filter(Boolean).join("\n\n")}>
-        <span>{setting.label}</span>
-        <select
-          aria-label={setting.label}
-          value={chosen}
-          onChange={(event) =>
-            connection.send({
-              type: "conversation.set-plugin-setting",
-              conversationId: conversation.id,
-              plugin,
-              setting: setting.id,
-              value: event.target.value === FOLLOWS_PROFILE ? null : event.target.value,
-            })
-          }
-        >
-          <option value={FOLLOWS_PROFILE}>{words.header.profilesChoice(profilesLabel)}</option>
-          {choices.map((choice) => (
-            <option key={choice.value} value={choice.value}>
-              {choice.label}
-            </option>
-          ))}
-        </select>
-      </label>
-    );
-  });
+  const ownChoice = conversation.pluginSettings?.[plugin]?.[setting.id];
+  const choices = useChoicesOf(setting, settingsOfPlugin, profiles, conversation.profileId, (each) => conversationSettingValue(conversation, profile, plugin, each), ownChoice ?? "");
+  const profilesValue = settingValueFollowingProfile(conversation, profile, plugin, setting);
+  const profilesLabel = choices.find(({ value }) => value === profilesValue)?.label ?? (profileSettingWhoseModelsItLists(setting) ? profilesValue : words.header.none);
+  return (
+    <label className="config" data-hint={[setting.hint, hints.conversationPluginSetting].filter(Boolean).join("\n\n")}>
+      <span>{setting.label}</span>
+      <select
+        aria-label={setting.label}
+        value={ownChoice ?? FOLLOWS_PROFILE}
+        onChange={(event) =>
+          connection.send({
+            type: "conversation.set-plugin-setting",
+            conversationId: conversation.id,
+            plugin,
+            setting: setting.id,
+            value: event.target.value === FOLLOWS_PROFILE ? null : event.target.value,
+          })
+        }
+      >
+        <option value={FOLLOWS_PROFILE}>{words.header.profilesChoice(profilesLabel)}</option>
+        {choices.map((choice) => (
+          <option key={choice.value} value={choice.value}>
+            {choice.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function QuestionsMenu({ conversation }: { conversation: Conversation }) {

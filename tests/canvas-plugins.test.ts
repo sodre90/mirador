@@ -223,6 +223,38 @@ describe("CanvasPlugins", () => {
     expect(plugins.guidanceFor("c1").instructions.join("\n")).not.toContain("hand_over");
   });
 
+  test("a model the profile set for the profile it hands over to reaches the tool, a conversation's own wins, and one that chose another profile leaves the profile's model behind", async () => {
+    const store = storeWithConversation();
+    const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+    profile("local", "Qwen 27b");
+    profile("big", "Qwen 122b");
+    profile("main", "Personal", { board: { "hand-over-to": "local", "hand-over-model": "opus" } });
+    const choose = (pluginSettings: Record<string, Record<string, string>> | undefined) => store.updateConversation({ ...store.findConversation("c1")!, profileId: "main", pluginSettings });
+    choose(undefined);
+    const { plugins, callTool } = await canvasPluginHost(FIXTURES, store);
+    const started: { profileName: string; model: string | undefined }[] = [];
+    plugins.startsConversationsWith((_callerId, _plugin, profileName, _prompt, _title, choices) => (started.push({ profileName, model: choices?.model }), { id: "c2", profile: profileName }));
+    const handsOverOn = async () => {
+      await callTool("hand_over", { task: "Find the callers" });
+      return started.at(-1);
+    };
+
+    expect(await handsOverOn()).toEqual({ profileName: "Qwen 27b", model: "opus" });
+    choose({ board: { "hand-over-model": "haiku" } });
+    expect(await handsOverOn()).toEqual({ profileName: "Qwen 27b", model: "haiku" });
+    choose({ board: { "hand-over-model": "" } });
+    expect(await handsOverOn(), "the agent's own model, chosen for the conversation").toEqual({ profileName: "Qwen 27b", model: undefined });
+    choose({ board: { "hand-over-to": "big" } });
+    expect(await handsOverOn(), "the profile's model is one of the profile it set").toEqual({ profileName: "Qwen 122b", model: undefined });
+    choose({ board: { "hand-over-to": "big", "hand-over-model": "sonnet" } });
+    expect(await handsOverOn()).toEqual({ profileName: "Qwen 122b", model: "sonnet" });
+
+    expect(plugins.modelSettingsOf("board", "hand-over-to")).toEqual(["hand-over-model"]);
+    expect(plugins.modelSettingsOf("board", "hand-over-model")).toEqual([]);
+    expect(plugins.modelSettingsOf("nope", "hand-over-to")).toEqual([]);
+  });
+
   test("what the user chose in a conversation's top bar wins over its profile, and the agent hears of each change once", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
@@ -444,7 +476,15 @@ describe("loading canvas plugins", () => {
   test("refuses profile settings in plugin.json whose profiles choice has a default, or in a plugin for an API before them", async () => {
     const handOverTo = { id: "hand-over-to", label: "Hand over to", choices: "profiles", default: "" };
     const withDefault = await loadPlugins(boardCopy((manifest) => ({ ...manifest, profileSettings: [{ ...handOverTo, default: "local" }] })));
-    expect(withDefault.problems[0]!.message).toContain("or choices of profiles with an empty default");
+    expect(withDefault.problems[0]!.message).toContain("or choices of profiles, or of the models");
+    const handOverModel = { id: "hand-over-model", label: "Hand over model", choices: { modelsOf: "hand-over-to" }, default: "" };
+    const modelsOfNoSetting = await loadPlugins(boardCopy((manifest) => ({ ...manifest, profileSettings: [handOverModel] })));
+    expect(modelsOfNoSetting.problems[0]!.message).toContain("or of the models of the profile another of them chose as { modelsOf: its id }, with an empty default");
+    const modelsOfItself = await loadPlugins(boardCopy((manifest) => ({ ...manifest, profileSettings: [handOverTo, { ...handOverModel, choices: { modelsOf: "hand-over-model" } }] })));
+    expect(modelsOfItself.problems).toHaveLength(1);
+    const modelWithDefault = await loadPlugins(boardCopy((manifest) => ({ ...manifest, profileSettings: [handOverTo, { ...handOverModel, default: "opus" }] })));
+    expect(modelWithDefault.problems).toHaveLength(1);
+    expect((await loadPlugins(boardCopy((manifest) => ({ ...manifest, profileSettings: [handOverTo, handOverModel] })))).problems).toEqual([]);
     const tooOld = await loadPlugins(boardCopy((manifest) => ({ ...manifest, api: 4, profileSettings: [handOverTo] })));
     expect(tooOld.problems[0]!.message).toBe("plugin.json has profile settings, which plugin API 5 brought; it names API 4");
   });

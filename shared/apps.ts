@@ -7,9 +7,10 @@ import type { HostProblem } from "./host-problems.ts";
  * conversations' activity, canvas tools the user runs from the slash menu, and lets an app's view list the
  * workspace's files, read any of them, and open the app on another one; API 7 brings a canvas plugin's workspace tab,
  * whose view can start a conversation and add to the composer; API 8 lets a plugin title a conversation it starts and
- * choose its model and effort, and tells it what that conversation ran on.
+ * choose its model and effort, and tells it what that conversation ran on; API 9 lets a profile setting's choices be
+ * the models of the profile another of its settings chose.
  */
-export const APP_PLUGIN_API = 8;
+export const APP_PLUGIN_API = 9;
 
 /** The first plugin API whose canvas host may have a workspace tab. */
 export const WORKSPACE_TAB_API = 7;
@@ -444,18 +445,31 @@ export interface PluginSetting {
   default: string;
 }
 
+/** The models the agent of a profile offers: the profile chosen in the plugin's profile setting of this id, whose choices are the profiles. */
+export interface ModelsOfProfileSetting {
+  modelsOf: string;
+}
+
 /**
- * What a profile can set for a plugin: one of its choices, or, with `choices: "profiles"`, another profile by its id, or
- * none as "", which is then the default.
+ * What a profile can set for a plugin: one of its choices; with `choices: "profiles"`, another profile by its id, or
+ * none as ""; or, with `choices: { modelsOf }`, a model of the profile another setting chose, by the id its agent gives
+ * it, or the agent's own as "". Profiles and models have "" as their default. Plugin API 9 brought the models.
  */
 export interface PluginProfileSetting {
   id: string;
   label: string;
   /** A sentence on what it does, its tooltip in the Profiles dialog. */
   hint?: string;
-  choices: { value: string; label: string }[] | "profiles";
+  choices: { value: string; label: string }[] | "profiles" | ModelsOfProfileSetting;
   default: string;
 }
+
+/** The id of the setting whose profile's models are this setting's choices; null for a setting with other choices. */
+export const profileSettingWhoseModelsItLists = ({ choices }: PluginProfileSetting) => (typeof choices === "object" && !Array.isArray(choices) ? choices.modelsOf : null);
+
+/** The settings whose choices are the models of the profile this setting chose: a choice of theirs holds only for that profile. */
+export const modelSettingsOf = (settings: PluginProfileSetting[], profileSettingId: string) =>
+  settings.filter((setting) => profileSettingWhoseModelsItLists(setting) === profileSettingId);
 
 /** A loaded plugin's settings, with the values the user chose; a setting not chosen yet has its default. */
 export interface PluginSettings {
@@ -470,13 +484,21 @@ export interface PluginSettings {
 export const profileSettingValue = (profilePluginSettings: Record<string, Record<string, string>> | undefined, plugin: string, setting: PluginProfileSetting) =>
   profilePluginSettings?.[plugin]?.[setting.id] ?? setting.default;
 
+type WithPluginSettings = { pluginSettings?: Record<string, Record<string, string>> } | undefined;
+
+/**
+ * What the setting is for a conversation that didn't choose it itself: what its profile set, else the default. A model
+ * the profile set is of the profile it set too, so a conversation that chose another profile has the default.
+ */
+export function settingValueFollowingProfile(conversation: WithPluginSettings, profile: WithPluginSettings, plugin: string, setting: PluginProfileSetting) {
+  const modelsOf = profileSettingWhoseModelsItLists(setting);
+  const choseAnotherProfile = modelsOf !== null && conversation?.pluginSettings?.[plugin]?.[modelsOf] !== undefined;
+  return choseAnotherProfile ? setting.default : profileSettingValue(profile?.pluginSettings, plugin, setting);
+}
+
 /** What the conversation chose for the setting, else what its profile set, else the default. */
-export const conversationSettingValue = (
-  conversation: { pluginSettings?: Record<string, Record<string, string>> } | undefined,
-  profile: { pluginSettings?: Record<string, Record<string, string>> } | undefined,
-  plugin: string,
-  setting: PluginProfileSetting,
-) => conversation?.pluginSettings?.[plugin]?.[setting.id] ?? profileSettingValue(profile?.pluginSettings, plugin, setting);
+export const conversationSettingValue = (conversation: WithPluginSettings, profile: WithPluginSettings, plugin: string, setting: PluginProfileSetting) =>
+  conversation?.pluginSettings?.[plugin]?.[setting.id] ?? settingValueFollowingProfile(conversation, profile, plugin, setting);
 
 export const settingValue = (settings: PluginSettings | undefined, id: string): string | undefined =>
   settings?.chosen[id] ?? settings?.settings.find((setting) => setting.id === id)?.default;
@@ -499,12 +521,23 @@ function isPluginSetting(value: unknown): value is PluginSetting {
   );
 }
 
+const isModelsOfProfileSetting = (choices: unknown): choices is ModelsOfProfileSetting =>
+  typeof choices === "object" && choices !== null && !Array.isArray(choices) && isText((choices as Partial<ModelsOfProfileSetting>).modelsOf);
+
 function isPluginProfileSetting(value: unknown): value is PluginProfileSetting {
   if (typeof value !== "object" || value === null) return false;
   const { choices, default: fallback } = value as Partial<PluginProfileSetting>;
-  if (choices === "profiles") return isPluginSetting({ ...value, choices: [{ value: "none", label: "None" }], default: "none" }) && (fallback ?? "") === "";
+  if (choices === "profiles" || isModelsOfProfileSetting(choices)) {
+    return isPluginSetting({ ...value, choices: [{ value: "none", label: "None" }], default: "none" }) && (fallback ?? "") === "";
+  }
   return isPluginSetting(value);
 }
+
+const modelSettingsNameProfileSettings = (settings: PluginProfileSetting[]) =>
+  settings.every((setting) => {
+    const modelsOf = profileSettingWhoseModelsItLists(setting);
+    return modelsOf === null || settings.some(({ id, choices }) => id === modelsOf && choices === "profiles");
+  });
 
 const haveDistinctIds = (settings: { id: string }[]) => new Set(settings.map(({ id }) => id)).size === settings.length;
 
@@ -525,7 +558,7 @@ export function isPluginManifest(value: unknown): value is PluginManifest {
     (canvas === undefined || isHostAndView(canvas)) &&
     (build === undefined || typeof build === "string") &&
     (settings === undefined || (Array.isArray(settings) && settings.every(isPluginSetting) && haveDistinctIds(settings))) &&
-    (profileSettings === undefined || (Array.isArray(profileSettings) && profileSettings.every(isPluginProfileSetting) && haveDistinctIds(profileSettings))) &&
+    (profileSettings === undefined || (Array.isArray(profileSettings) && profileSettings.every(isPluginProfileSetting) && haveDistinctIds(profileSettings) && modelSettingsNameProfileSettings(profileSettings))) &&
     (tellsCaller === undefined || typeof tellsCaller === "boolean")
   );
 }

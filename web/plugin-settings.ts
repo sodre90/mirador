@@ -1,5 +1,6 @@
-import { useSyncExternalStore } from "react";
-import { settingValue, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { profileSettingWhoseModelsItLists, settingValue, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
+import { categoryChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { itemRooms, type ItemRoom } from "../shared/canvas-plugins.ts";
 import { connection } from "./connection.ts";
@@ -32,11 +33,48 @@ const subscribe = (listener: () => void) => {
 
 export const usePluginSettings = () => useSyncExternalStore(subscribe, () => current);
 
-/** A setting whose choices are the profiles offers the others, never the profile itself, and none. */
-export const choicesOf = (setting: PluginProfileSetting, profiles: Profile[], ownId: string | null | undefined) =>
-  setting.choices === "profiles"
-    ? [{ value: "", label: t.plugins.none }, ...profiles.filter(({ id }) => id !== ownId).map(({ id, name }) => ({ value: id, label: name }))]
-    : setting.choices;
+interface SettingChoice {
+  value: string;
+  label: string;
+}
+
+/** What the profile's agent says its models are, asked each time another profile is named; none while it answers, when it did not, and without a profile. */
+function useModelsOfProfile(profileId: string | null): SettingChoice[] {
+  const [models, setModels] = useState<SettingChoice[]>([]);
+  useEffect(() => {
+    setModels([]);
+    if (!profileId) return;
+    const requestId = crypto.randomUUID();
+    const stopListening = connection.onMessage((message) => {
+      if (message.type !== "profile.choices.got" || message.requestId !== requestId) return;
+      setModels(categoryChoices(message.configOptions ?? [], "model").map((choice) => ({ value: choice.value, label: nameWithMultiplier(choice) })));
+    });
+    connection.send({ type: "profile.choices.get", requestId, profileId });
+    return stopListening;
+  }, [profileId]);
+  return models;
+}
+
+/**
+ * What a profile setting offers. One whose choices are the profiles offers the others, never the profile itself, and
+ * none. One whose choices are a profile's models offers the agent's own and those of the profile `valueOf` its other
+ * setting, and `chosen` even while that profile's agent hasn't listed it.
+ */
+export function useChoicesOf(
+  setting: PluginProfileSetting,
+  settingsOfPlugin: PluginProfileSetting[],
+  profiles: Profile[],
+  ownId: string | null | undefined,
+  valueOf: (setting: PluginProfileSetting) => string,
+  chosen: string,
+): SettingChoice[] {
+  const profileSetting = settingsOfPlugin.find(({ id }) => id === profileSettingWhoseModelsItLists(setting));
+  const models = useModelsOfProfile(profileSetting ? valueOf(profileSetting) || null : null);
+  if (setting.choices === "profiles") return [{ value: "", label: t.plugins.none }, ...profiles.filter(({ id }) => id !== ownId).map(({ id, name }) => ({ value: id, label: name }))];
+  if (Array.isArray(setting.choices)) return setting.choices;
+  const chosenButUnlisted = chosen !== "" && !models.some(({ value }) => value === chosen) ? [{ value: chosen, label: chosen }] : [];
+  return [{ value: "", label: t.profiles.agentsDefault }, ...models, ...chosenButUnlisted];
+}
 
 export const choosePluginSetting = (plugin: string, setting: string, value: string) => connection.send({ type: "plugins.choose-setting", plugin, setting, value });
 

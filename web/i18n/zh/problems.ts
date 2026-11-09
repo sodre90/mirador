@@ -79,7 +79,7 @@ export const problems: Messages["problems"] = {
     "plugin-clone-gone": "Mirador 已经没有那个插件的克隆了（例如重启之后）；请重新添加它，看看它包含什么。",
     "plugin-needs-repo-address": "请提供插件仓库的 git URL 或路径。",
     "plugin-json-missing": "它的文件夹顶层没有 plugin.json",
-    "plugin-json-invalid": "plugin.json 需要一个名称（小写字母、数字和连字符）、一个标题、一个 x.y.z 格式的版本（如有）、一个 api 编号，以及 app.host 和 app.view、canvas.host 和 canvas.view，或两者都有；它的每个设置（如有）需要自己的 id（小写字母、数字和连字符）、一个标签、每项都有值和标签的选项，并以其中一项为默认值；它的每个配置设置（如有）同样如此，或者是以配置为选项、默认值为空",
+    "plugin-json-invalid": "plugin.json 需要一个名称（小写字母、数字和连字符）、一个标题、一个 x.y.z 格式的版本（如有）、一个 api 编号，以及 app.host 和 app.view、canvas.host 和 canvas.view，或两者都有；它的每个设置（如有）需要自己的 id（小写字母、数字和连字符）、一个标签、每项都有值和标签的选项，并以其中一项为默认值；它的每个配置设置（如有）同样如此，或者是以配置为选项，或以另一个设置所选配置的模型为选项（写作 { modelsOf: 该设置的 id }），默认值为空",
     "plugin-needs-version": "plugin.json 需要一个版本，即 x.y.z 格式的发布版本，例如 1.0.0",
     "newer-version-github-unreachable": "无法连接 GitHub",
     "diff-git-ignored": "git 忽略了这个文件，因此没有可供比较的早期版本",

@@ -1253,7 +1253,11 @@ export function startServer(services: HostServices) {
         return conversations.setAskMode(message.conversationId, message.askMode);
       case "conversation.set-plugin-setting":
         conversations.setPluginSetting(message.conversationId, message.plugin, message.setting, message.value);
-        return canvasPlugins.settingChanged(message.conversationId, message.plugin, message.setting);
+        canvasPlugins.settingChanged(message.conversationId, message.plugin, message.setting);
+        for (const modelSetting of canvasPlugins.modelSettingsOf(message.plugin, message.setting)) {
+          conversations.setPluginSetting(message.conversationId, message.plugin, modelSetting, null);
+        }
+        return;
       case "conversation.set-bypass-permissions":
         return conversations.setBypassPermissions(message.conversationId, message.bypassPermissions);
       case "conversation.set-config":

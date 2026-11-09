@@ -2,8 +2,11 @@
   "name": "board",
   "title": "Board",
   "version": "1.0.0",
-  "api": 6,
+  "api": 9,
   "tellsCaller": true,
   "canvas": { "host": "host.ts", "view": "canvas.js" },
-  "profileSettings": [{ "id": "hand-over-to", "label": "Hand over to", "hint": "The profile hand_over gives tasks to when the agent names none.", "choices": "profiles", "default": "" }]
+  "profileSettings": [
+    { "id": "hand-over-to", "label": "Hand over to", "hint": "The profile hand_over gives tasks to when the agent names none.", "choices": "profiles", "default": "" },
+    { "id": "hand-over-model", "label": "Hand over model", "hint": "The model of that profile hand_over's conversations run on.", "choices": { "modelsOf": "hand-over-to" }, "default": "" }
+  ]
 }

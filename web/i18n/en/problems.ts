@@ -78,7 +78,7 @@ export const problems = {
     "plugin-clone-gone": "Mirador no longer has that plugin's clone, as after a restart; add it again to see what it brings.",
     "plugin-needs-repo-address": "Give the git URL or the path of the plugin's repo.",
     "plugin-json-missing": "there's no plugin.json at the top of its folder",
-    "plugin-json-invalid": "plugin.json needs a name (lower case, digits and dashes), a title, a version as x.y.z if any, an api number, and app.host and app.view, canvas.host and canvas.view, or both; each of its settings, if any, an id of its own (lower case, digits and dashes), a label, choices with a value and a label each, and one of them as its default; and each of its profile settings, if any, the same, or choices of profiles with an empty default",
+    "plugin-json-invalid": "plugin.json needs a name (lower case, digits and dashes), a title, a version as x.y.z if any, an api number, and app.host and app.view, canvas.host and canvas.view, or both; each of its settings, if any, an id of its own (lower case, digits and dashes), a label, choices with a value and a label each, and one of them as its default; and each of its profile settings, if any, the same, or choices of profiles, or of the models of the profile another of them chose as { modelsOf: its id }, with an empty default",
     "plugin-needs-version": "plugin.json needs a version, its release as x.y.z, such as 1.0.0",
     "newer-version-github-unreachable": "Couldn't reach GitHub",
     "diff-git-ignored": "git ignores this file, so there is no earlier version to compare with",

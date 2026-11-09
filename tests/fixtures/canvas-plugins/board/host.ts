@@ -126,7 +126,7 @@ const host: CanvasHost<BoardData> = {
         required: ["task"],
       },
       async run(input, context) {
-        const { profile = context.profileSetting("hand-over-to"), task, title, model, effort } = input as {
+        const { profile = context.profileSetting("hand-over-to"), task, title, model = context.profileSetting("hand-over-model") ?? undefined, effort } = input as {
           profile?: string | null;
           task: string;
           title?: string;

@@ -13,7 +13,7 @@ export const offersValue = (option: SessionConfigOption, value: string) =>
   option.type === "select" && flatSelectOptions(option).some((choice) => choice.value === value);
 
 /** An agent's choices of a kind, such as its modes, from the options it last answered with; none when it lists no such option. */
-export function categoryChoices(options: SessionConfigOption[], category: "mode" | "thought_level"): SessionConfigSelectOption[] {
+export function categoryChoices(options: SessionConfigOption[], category: "mode" | "thought_level" | "model"): SessionConfigSelectOption[] {
   const option = options.find((candidate): candidate is SelectOption => candidate.category === category && candidate.type === "select");
   return option ? flatSelectOptions(option) : [];
 }

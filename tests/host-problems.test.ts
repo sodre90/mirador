@@ -461,7 +461,7 @@ const englishBeforeCodes = [
   "its tool show has the name of one of Mirador's own canvas tools",
   "its tool show has the name of a tool of kanban",
   "there's no plugin.json at the top of its folder",
-  "plugin.json needs a name (lower case, digits and dashes), a title, a version as x.y.z if any, an api number, and app.host and app.view, canvas.host and canvas.view, or both; each of its settings, if any, an id of its own (lower case, digits and dashes), a label, choices with a value and a label each, and one of them as its default; and each of its profile settings, if any, the same, or choices of profiles with an empty default",
+  "plugin.json needs a name (lower case, digits and dashes), a title, a version as x.y.z if any, an api number, and app.host and app.view, canvas.host and canvas.view, or both; each of its settings, if any, an id of its own (lower case, digits and dashes), a label, choices with a value and a label each, and one of them as its default; and each of its profile settings, if any, the same, or choices of profiles, or of the models of the profile another of them chose as { modelsOf: its id }, with an empty default",
   "plugin.json is for plugin API 4; this Mirador speaks plugin API 1 to 3, so the plugin needs a newer Mirador",
   "plugin.json has a canvas part, which plugin API 3 brought; it names API 3",
   "plugin.json has profile settings, which plugin API 3 brought; it names API 3",

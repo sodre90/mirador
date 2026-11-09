@@ -80,7 +80,7 @@ export const problems: Messages["problems"] = {
     "plugin-clone-gone": "Mirador ya no tiene el clon de ese plugin, como pasa tras un reinicio; vuelve a agregarlo para ver qué trae.",
     "plugin-needs-repo-address": "Indica la URL git o la ruta del repositorio del plugin.",
     "plugin-json-missing": "no hay ningún plugin.json en la raíz de su carpeta",
-    "plugin-json-invalid": "plugin.json necesita un nombre (minúsculas, dígitos y guiones), un título, una versión x.y.z si la tiene, un número de api, y app.host y app.view, canvas.host y canvas.view, o ambos; cada uno de sus ajustes, si los tiene, un id propio (minúsculas, dígitos y guiones), una etiqueta, opciones con un valor y una etiqueta cada una, y una de ellas como predeterminada; y cada uno de sus ajustes de perfil, si los tiene, lo mismo, u opciones de perfiles con un valor predeterminado vacío",
+    "plugin-json-invalid": "plugin.json necesita un nombre (minúsculas, dígitos y guiones), un título, una versión x.y.z si la tiene, un número de api, y app.host y app.view, canvas.host y canvas.view, o ambos; cada uno de sus ajustes, si los tiene, un id propio (minúsculas, dígitos y guiones), una etiqueta, opciones con un valor y una etiqueta cada una, y una de ellas como predeterminada; y cada uno de sus ajustes de perfil, si los tiene, lo mismo, u opciones de perfiles, o de los modelos del perfil que eligió otro de ellos como { modelsOf: su id }, con un valor predeterminado vacío",
     "plugin-needs-version": "plugin.json necesita una versión, su número de versión como x.y.z, por ejemplo 1.0.0",
     "newer-version-github-unreachable": "No se pudo contactar con GitHub",
     "diff-git-ignored": "git ignora este archivo, así que no hay una versión anterior con la que compararlo",

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
-import { profileSettingValue } from "../shared/apps.ts";
+import { modelSettingsOf, profileSettingValue, type PluginProfileSetting } from "../shared/apps.ts";
 import { categoryChoices, knownChoices } from "../shared/config-options.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
@@ -10,7 +10,7 @@ import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { choicesOf, usePluginSettings } from "./plugin-settings.ts";
+import { useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
@@ -138,19 +138,52 @@ function PluginProfileFields({
   chosen: ProfilePluginSettings;
   onChoose: (plugin: string, settingId: string, value: string) => void;
 }) {
-  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings }) => (profileSettings ?? []).map((setting) => ({ plugin, setting })));
-  return withProfileSettings.map(({ plugin, setting }) => (
-    <label key={`${plugin}/${setting.id}`} data-hint={setting.hint}>
+  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings = [] }) => profileSettings.map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })));
+  return withProfileSettings.map(({ plugin, setting, settingsOfPlugin }) => (
+    <PluginProfileField
+      key={`${plugin}/${setting.id}`}
+      setting={setting}
+      settingsOfPlugin={settingsOfPlugin}
+      profileId={profileId}
+      profiles={profiles}
+      valueOf={(each) => profileSettingValue(chosen, plugin, each)}
+      onChoose={(value) => {
+        onChoose(plugin, setting.id, value);
+        modelSettingsOf(settingsOfPlugin, setting.id).forEach((modelSetting) => onChoose(plugin, modelSetting.id, modelSetting.default));
+      }}
+    />
+  ));
+}
+
+function PluginProfileField({
+  setting,
+  settingsOfPlugin,
+  profileId,
+  profiles,
+  valueOf,
+  onChoose,
+}: {
+  setting: PluginProfileSetting;
+  settingsOfPlugin: PluginProfileSetting[];
+  profileId: string | undefined;
+  profiles: Profile[];
+  valueOf: (setting: PluginProfileSetting) => string;
+  onChoose: (value: string) => void;
+}) {
+  const value = valueOf(setting);
+  const choices = useChoicesOf(setting, settingsOfPlugin, profiles, profileId, valueOf, value);
+  return (
+    <label data-hint={setting.hint}>
       <span>{setting.label}</span>
-      <select aria-label={words.pluginSetting(setting.label)} value={profileSettingValue(chosen, plugin, setting)} onChange={(event) => onChoose(plugin, setting.id, event.target.value)}>
-        {choicesOf(setting, profiles, profileId).map((choice) => (
+      <select aria-label={words.pluginSetting(setting.label)} value={value} onChange={(event) => onChoose(event.target.value)}>
+        {choices.map((choice) => (
           <option key={choice.value} value={choice.value}>
             {choice.label}
           </option>
         ))}
       </select>
     </label>
-  ));
+  );
 }
 
 function ProfileEditor({

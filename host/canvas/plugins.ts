@@ -21,7 +21,7 @@ import type { SlashCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
 import type { PluginCanvasItem, StartedBy } from "../../shared/model.ts";
 import type { ServerMessage } from "../../shared/protocol.ts";
-import { conversationSettingValue } from "../../shared/apps.ts";
+import { conversationSettingValue, modelSettingsOf } from "../../shared/apps.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
 import type { Store } from "../store.ts";
@@ -151,6 +151,12 @@ export class CanvasPlugins {
     this.profileSettingNamed(plugin, id);
     const changed = this.changedSettings.get(conversationId) ?? new Map<string, { plugin: CanvasPlugin; id: string }>();
     this.changedSettings.set(conversationId, changed.set(`${pluginName}/${id}`, { plugin, id }));
+  }
+
+  /** The plugin's settings whose choice of a model no longer holds once the conversation chooses another profile in this one. */
+  modelSettingsOf(pluginName: string, profileSettingId: string): string[] {
+    const settings = this.plugins.find(({ manifest }) => manifest.name === pluginName)?.manifest.profileSettings ?? [];
+    return modelSettingsOf(settings, profileSettingId).map(({ id }) => id);
   }
 
   /** As the setting is now, so a profile switch since the change, which clears the conversation's choice, is told right. */
