@@ -27,6 +27,11 @@ export function lastWordsOf(turn: StoredEvent[]): string | null {
   return kept === message ? message : `…${kept.slice(cleanStart(kept)).trimStart()}`;
 }
 
+const AGENT_ANSWERS = new Set<string>(["agent_message_chunk", "agent_thought_chunk", "tool_call"]);
+
+/** Whether the agent answered anything in a turn: words, thoughts or a tool call. */
+export const agentAnsweredIn = (turn: StoredEvent[]) => turn.some(({ event }) => event.type === "acp" && AGENT_ANSWERS.has(event.update.sessionUpdate));
+
 /** What the agent said last in a turn's events, in full, and how the turn ended; a turn with no end in them failed. */
 export function replyOf(turn: StoredEvent[]): ConversationReply {
   const last = buildTimeline(turn).findLast(({ kind }) => kind === "agent");

@@ -80,6 +80,20 @@ test("forking a conversation copies its agent session into a new conversation on
   expect(store.findConversation(original.id)).toMatchObject({ acpSessionId: "original-session", title: "Plan the trip" });
 });
 
+test("a fork keeps a title the user gave the conversation safe from its agent's renaming, as the original does", async () => {
+  const renamedByItsAgent = async (titleSetByUser: boolean) => {
+    const { store, conversations, original } = hostWithAConversationOnOpencode();
+    withAFinishedTurn(store, original, { title: "Plan the trip", titleSetByUser });
+    const fork = await openedOrFailed(conversations, conversations.fork(original.id).id);
+    const update = { sessionUpdate: "session_info_update", title: "json" };
+    (conversations as unknown as { handleSessionUpdate(notification: unknown): void }).handleSessionUpdate({ sessionId: fork.acpSessionId, update });
+    return conversations.get(fork.id);
+  };
+
+  expect(await renamedByItsAgent(true)).toMatchObject({ title: "Fork: Plan the trip", titleSetByUser: true });
+  expect((await renamedByItsAgent(false)).title, "a title the agent gave stays the agent's to change").not.toBe("Fork: Plan the trip");
+});
+
 test("a conversation whose agent has no session, or one it has not worked in yet, has nothing to fork", () => {
   const { store, conversations, original } = hostWithAConversationOnOpencode();
   const nothingToFork = "This conversation has no agent session to fork yet. Send it a message first.";

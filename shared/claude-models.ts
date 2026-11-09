@@ -3,6 +3,8 @@ export const isRealModel = (model: unknown): model is string => typeof model ===
 
 const CLAUDE_MODEL_ID = /^claude-([a-z]+)-(\d+)(?:-(\d{1,2}))?(?:-\d{8})?$/;
 
+export const isClaudeModelId = (model: string) => CLAUDE_MODEL_ID.test(model);
+
 /** "claude-haiku-5-5" reads "Haiku 5.5"; a name in any other form stays as it is. */
 export function modelLabel(model: string) {
   const match = CLAUDE_MODEL_ID.exec(model);

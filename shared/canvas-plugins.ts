@@ -116,9 +116,11 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
 }
 
 /**
- * What a plugin chooses for a conversation it starts, over its profile's choices; its first message waits until the
- * agent has taken them. One the agent doesn't offer leaves the agent's own and shows the user why in that conversation,
- * rather than throw: what an agent offers is known only once its session has started. Plugin API 8 brought them.
+ * What a plugin chooses for a conversation it starts, over its profile's choices. The model goes first, so the profile's
+ * effort, and then `effort`, apply to the model chosen. Its first message waits until the agent has taken them, for up
+ * to two minutes; an agent that hasn't answered by then shows the user so in that conversation. One the agent doesn't
+ * offer leaves the agent's own and shows the user why there too, rather than throw: what an agent offers is known only
+ * once its session has started. Plugin API 8 brought them.
  */
 export interface ConversationChoices {
   /** A model, by id or name, matched to the agent's models as Mirador matches them, e.g. "opus"; skipped on an agent that offers none. */
@@ -144,8 +146,9 @@ export interface RanOn {
 
 /**
  * The agent's last message in the turn, null when it said nothing in words; `ended` says how the turn ended. `ranOn`,
- * which plugin API 8 brought, is what the conversation ran on: for Claude Code, the model that answered last; for other
- * agents, the one chosen in the conversation. It is absent when the agent named no model.
+ * which plugin API 8 brought, is what the conversation ran on: the model that answered last, where the agent says so, as
+ * Claude Code does; otherwise the one chosen in the conversation, or the model Claude Code's default stands for. It is
+ * absent when the agent named no model, and when the turn stopped or failed before the agent answered anything.
  */
 export interface ConversationReply {
   text: string | null;

@@ -63,6 +63,9 @@ const offersSteering = process.env.FAKE_ACP_STEERS === "1";
 const resumes = process.env.FAKE_ACP_RESUMES === "1";
 /** Offers to resume a session, and cannot: as an agent whose record of the session is gone. */
 const resumeFails = process.env.FAKE_ACP_RESUME_FAILS === "1";
+/** Forks sessions, and loads a fork as a session of its own with no history to replay. */
+const forks = process.env.FAKE_ACP_FORKS === "1";
+const forkedSessions = new Set<string>();
 /** A session of its own past, to list and load: `{ sessionId, title, updates }`, its updates replayed on load. */
 const history: { sessionId: string; title: string; updates: acp.SessionUpdate[] } | null = process.env.FAKE_ACP_HISTORY
   ? JSON.parse(readFileSync(process.env.FAKE_ACP_HISTORY, "utf8"))
@@ -452,10 +455,15 @@ acp
     return {
       protocolVersion: acp.PROTOCOL_VERSION,
       agentCapabilities: {
-        ...((offersModes || resumeFails || resumes || history) && {
-          sessionCapabilities: { ...((offersModes || resumes) && { close: {} }), ...((resumeFails || resumes) && { resume: {} }), ...(history && { list: {} }) },
+        ...((offersModes || resumeFails || resumes || history || forks) && {
+          sessionCapabilities: {
+            ...((offersModes || resumes) && { close: {} }),
+            ...((resumeFails || resumes) && { resume: {} }),
+            ...(history && { list: {} }),
+            ...(forks && { fork: {} }),
+          },
         }),
-        ...(history && { loadSession: true }),
+        ...((history || forks) && { loadSession: true }),
       },
       ...(offersSteering ? { _meta: { steering: { supported: true } } } : {}),
     };
@@ -470,7 +478,13 @@ acp
   .onRequest(acp.methods.agent.session.list, (ctx) => ({
     sessions: history ? [{ sessionId: history.sessionId, cwd: ctx.params.cwd ?? process.cwd(), title: history.title, updatedAt: new Date().toISOString() }] : [],
   }))
+  .onRequest(acp.methods.agent.session.fork, () => {
+    const sessionId = `fake-fork-${process.pid}-${++nextSession}`;
+    forkedSessions.add(sessionId);
+    return { sessionId };
+  })
   .onRequest(acp.methods.agent.session.load, async (ctx) => {
+    if (forkedSessions.has(ctx.params.sessionId)) return {};
     if (ctx.params.sessionId !== history?.sessionId) throw acp.RequestError.internalError(undefined, "No such session");
     for (const update of history.updates) await ctx.client.notify(acp.methods.client.session.update, { sessionId: history.sessionId, update });
     return {};

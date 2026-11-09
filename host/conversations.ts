@@ -49,7 +49,8 @@ import { customOrderAfterDrag } from "../shared/conversation-order.ts";
 import { inSidebarOrder, movedBefore } from "../shared/sidebar-order.ts";
 import { isClearCommand, toSlashCommand } from "../shared/slash-commands.ts";
 import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromCommand, type Reminder } from "../shared/reminders.ts";
-import { lastWordsOf, replyOf } from "../shared/last-words.ts";
+import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
+import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
 import type { ConversationChoices, ConversationReply, RanOn, StartedConversation } from "../shared/canvas-plugins.ts";
@@ -118,6 +119,8 @@ const PROMPT_RECORD_WAIT_MS = 3_000;
 const SESSION_CLOSE_TIMEOUT_MS = 5_000;
 const REMINDER_CHECK_MS = 30_000;
 const OPTION_ANSWER_TIMEOUT_MS = 10_000;
+/** A plugin's model and effort hold its conversation's first message back through a model server's load, but not for good. */
+const START_CHOICES_TIMEOUT_MS = 120_000;
 /** What a profile's agent says it offers is kept for its editors this long: it costs starting the agent to ask again. */
 const PROFILE_CHOICES_TTL_MS = 15 * 60_000;
 /** An agent that does not answer a probe within this leaves the editor with what it knew from its conversations. */
@@ -293,8 +296,16 @@ interface Runtime {
   killedOnPurpose?: boolean;
   /** The model the agent last said its answers came from, in its usage updates. */
   reportedModel?: string;
+  /** What a plugin chose for the conversation it started, until a session opens on them: a failed open's retry takes them too. */
+  startChoices?: ConversationChoices;
   /** The reply the last stopped turn still owes: its late chunks are dropped, or held back until another reply's id or the next turn's end tells whether they were the orphan or that turn's answer. */
   cancelledReply?: CancelledReplyChunks;
+}
+
+/** A change asked of the agent: the option as it stood, and the agent's answer, which settles without failing. */
+interface OptionChange {
+  current: acp.SessionConfigOption;
+  answered: Promise<void>;
 }
 
 interface StoppedTurn {
@@ -319,6 +330,7 @@ export class ConversationService {
   private readonly subagentSessions = new SubagentSessions();
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
   private readonly sessionsSlowToAnswer = new Set<string>();
+  private readonly startChoicesTimeoutMs = START_CHOICES_TIMEOUT_MS;
   private readonly updatesForUnknownSessions = new UnknownSessionUpdates();
   /** What each profile's agent last said it offers, and the probe asking one now. */
   private readonly profileChoicesCache = new Map<string, { at: number; options: acp.SessionConfigOption[] }>();
@@ -453,7 +465,8 @@ export class ConversationService {
   ): Conversation {
     const givenTitle = titleFrom(title ?? "");
     const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "");
-    this.ensureSession(conversation.id, () => this.openSession(conversation.id, choices)).catch(() => {});
+    if (choices.model || choices.effort) this.runtime(conversation.id).startChoices = choices;
+    this.ensureSession(conversation.id).catch(() => {});
     if (prompt?.trim()) this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return conversation;
   }
@@ -500,21 +513,31 @@ export class ConversationService {
     const startedBy = conversation?.startedBy;
     if (!conversation || !startedBy || startedBy.reply) return;
     const turnStart = this.store.latestTurnStart(conversationId)?.seq ?? 0;
-    const reply = replyOf(this.store.listEventsFrom(conversationId, turnStart));
+    const turn = this.store.listEventsFrom(conversationId, turnStart);
+    const reply = replyOf(turn);
     const told = endedAs ? { ...reply, ended: endedAs } : reply;
     this.store.recordDelegatedReply(conversationId, { ended: told.ended, opening: told.text && cutWithEllipsis(told.text, REPLY_OPENING_GRAPHEMES) });
     this.republish(conversationId);
     if (!this.store.hasConversation(startedBy.conversationId)) return;
     const started = { id: conversationId, profile: (conversation.profileId && this.store.findProfile(conversation.profileId)?.name) || harnessLabels[conversation.harness] };
-    this.ranOn(conversation)
+    this.ranOnOfTurn(conversation, turn, told.ended)
       .then((ranOn) => this.hearReply(started, startedBy, ranOn ? { ...told, ranOn } : told))
       .catch((error: unknown) => console.error(`the ${startedBy.plugin} plugin failed to hear the reply of ${conversationId}:`, error));
   }
 
-  /** For Claude Code, the model that answered last in its transcript; otherwise, or with no answer there to read, the one chosen. */
+  /** A turn that ended before its agent answered anything ran on no model. */
+  private async ranOnOfTurn(conversation: Conversation, turn: StoredEvent[], ended: ConversationReply["ended"]): Promise<RanOn | null> {
+    return ended === "finished" || agentAnsweredIn(turn) ? this.ranOn(conversation) : null;
+  }
+
+  /**
+   * The model that answered last, as the agent's usage updates named it, else as Claude Code's transcript does, which
+   * outlasts a restart; otherwise the one chosen.
+   */
   private async ranOn(conversation: Conversation): Promise<RanOn | null> {
-    const transcript = await this.claudeTranscriptOf(conversation).catch(() => "");
-    return ranOnOf(conversation.configOptions, lastAnsweringModel(transcript));
+    const reported = this.runtime(conversation.id).reportedModel;
+    const answering = isRealModel(reported) ? reported : lastAnsweringModel(await this.claudeTranscriptOf(conversation).catch(() => ""));
+    return ranOnOf(conversation.configOptions, answering);
   }
 
   /** Empty for other agents, and for a conversation whose agent has no session yet. */
@@ -570,25 +593,32 @@ export class ConversationService {
   }
 
   /** Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation. */
-  adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title">, mode: AdoptMode, forkPoint: SessionForkPoint | null = null): Conversation {
+  adopt(
+    workspaceId: string,
+    launch: Launch,
+    session: Pick<ExternalSession, "sessionId" | "title"> & { titleSetByUser?: boolean },
+    mode: AdoptMode,
+    forkPoint: SessionForkPoint | null = null,
+  ): Conversation {
     if (mode === "continue" && this.store.listConversations().some(({ acpSessionId }) => acpSessionId === session.sessionId)) {
       throw new HostProblemError({ code: "session-already-open" });
     }
     const title = session.title || UNTITLED;
-    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title));
+    const conversation = this.insertConversation(workspaceId, launch, mode === "fork" ? forkTitle(title) : withoutForkMarks(title), session.titleSetByUser);
     this.ensureSession(conversation.id, () => this.loadExternalSession(conversation.id, session.sessionId, mode, forkPoint)).catch(() => {});
     return conversation;
   }
 
   /**
    * Copies the agent's session into a new conversation on the same profile: as it stands, or through the turn begun
-   * with the message at `throughTurnSeq`, its reply included. A turn running in it goes on undisturbed.
+   * with the message at `throughTurnSeq`, its reply included. A turn running in it goes on undisturbed. A title the
+   * user or a plugin gave it stays theirs in the fork, safe from the agent's renaming.
    */
   fork(conversationId: string, throughTurnSeq?: number): Conversation {
-    const { workspaceId, harness, profileId, acpSessionId, title } = this.get(conversationId);
+    const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser } = this.get(conversationId);
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
-    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title }, "fork", forkPoint);
+    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint);
   }
 
   private forkPointThrough(conversationId: string, seq: number): SessionForkPoint | null {
@@ -1701,7 +1731,7 @@ export class ConversationService {
     return sessionHasRecord(this.store.listEvents(conversationId));
   }
 
-  private async openSession(conversationId: string, choices: ConversationChoices = {}): Promise<string> {
+  private async openSession(conversationId: string): Promise<string> {
     const runtime = this.runtime(conversationId);
     const held = runtime.heldCodexSession;
     if (held) {
@@ -1740,9 +1770,8 @@ export class ConversationService {
     this.muteNotifier(conversation, created.sessionId);
     this.bindSession(conversationId, created.sessionId, created.configOptions);
     await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
-    if (isFirstSession) await this.applyProfileChoices(conversationId, created.sessionId);
-    if (this.onUsersOwnSetup(conversation)) await this.applyTestModelOverride(conversationId, created.sessionId);
-    await this.applyStartChoices(conversationId, created.sessionId, choices);
+    await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
+    runtime.startChoices = undefined;
     return created.sessionId;
   }
 
@@ -1885,38 +1914,50 @@ export class ConversationService {
     }
   }
 
-  private async applyTestModelOverride(conversationId: string, sessionId: string) {
-    const { model, effort } = this.config.testModelOverride;
-    if (model) await this.trySetConfigOption(conversationId, sessionId, "model", model);
-    if (effort) await this.trySetConfigOption(conversationId, sessionId, "effort", effort);
-  }
-
   /**
-   * What a plugin chose for a conversation it starts goes last, over the profile's effort and a test host's model. The
-   * model goes first, as the efforts on offer depend on it. Unlike other changes, these hold the first message back for
-   * as long as the agent takes to answer them, so it goes out on them.
+   * A new session takes its model before any effort, as the efforts on offer depend on it: a plugin's model over a test
+   * host's, then the profile's mode and effort, a test host's effort over the profile's, and a plugin's over both. A
+   * plugin's choices hold the first message back until the agent has taken them, so it goes out on them, though for no
+   * longer than `startChoicesTimeoutMs` in all.
    */
-  private async applyStartChoices(conversationId: string, sessionId: string, { model, effort }: ConversationChoices) {
-    if (model) await this.applyChosenModel(conversationId, sessionId, model);
-    if (effort) await this.applyChosenEffort(conversationId, sessionId, effort);
+  private async applyNewSessionChoices(conversation: Conversation, sessionId: string, isFirstSession: boolean) {
+    const { id } = conversation;
+    const test = this.onUsersOwnSetup(conversation) ? this.config.testModelOverride : {};
+    const chosen = this.runtime(id).startChoices ?? {};
+    const holdUntil = Date.now() + this.startChoicesTimeoutMs;
+    if (test.model) await this.trySetConfigOption(id, sessionId, "model", test.model);
+    if (chosen.model) await this.applyChosenModel(id, sessionId, chosen.model, holdUntil);
+    if (isFirstSession) await this.applyProfileChoices(id, sessionId);
+    if (test.effort) await this.trySetConfigOption(id, sessionId, "effort", test.effort);
+    if (chosen.effort) await this.applyChosenEffort(id, sessionId, chosen.effort, holdUntil);
   }
 
   /** An agent that offers no models has none to set. */
-  private async applyChosenModel(conversationId: string, sessionId: string, model: string) {
+  private async applyChosenModel(conversationId: string, sessionId: string, model: string, holdUntil: number) {
     const { configOptions } = this.get(conversationId);
     const modelOption = configOptions.find(({ category }) => category === "model");
     if (!modelOption) return;
     const choice = modelChoiceFor(configOptions, model);
     if (choice === null) return this.showChoiceNotOffered(conversationId, modelOption.name, model);
-    await this.changeConfigOption(conversationId, sessionId, modelOption.id, choice)?.answered;
+    await this.holdForStartChoice(conversationId, sessionId, modelOption.id, choice, holdUntil);
   }
 
   /** A model with no effort, such as Claude's Haiku, has none to set. */
-  private async applyChosenEffort(conversationId: string, sessionId: string, effort: string) {
+  private async applyChosenEffort(conversationId: string, sessionId: string, effort: string, holdUntil: number) {
     const effortOption = this.get(conversationId).configOptions.find(({ category }) => category === "thought_level");
     if (!effortOption) return;
     if (!offersValue(effortOption, effort)) return this.showChoiceNotOffered(conversationId, effortOption.name, effort);
-    await this.changeConfigOption(conversationId, sessionId, effortOption.id, effort)?.answered;
+    await this.holdForStartChoice(conversationId, sessionId, effortOption.id, effort, holdUntil);
+  }
+
+  /**
+   * Unlike other changes, a plugin's choice waits even on a session slow to answer, as it is what the first message must
+   * go out on. Past `holdUntil` it is still asked for, without waiting: the agent takes its changes in order.
+   */
+  private async holdForStartChoice(conversationId: string, sessionId: string, configId: string, value: string, holdUntil: number) {
+    const change = this.changeConfigOption(conversationId, sessionId, configId, value);
+    const leftMs = holdUntil - Date.now();
+    if (change && leftMs > 0) await this.waitForAnswer(conversationId, sessionId, change, value, leftMs);
   }
 
   private showChoiceNotOffered(conversationId: string, option: string, value: string) {
@@ -1934,13 +1975,17 @@ export class ConversationService {
   private async trySetConfigOption(conversationId: string, sessionId: string, configId: string, value: ConfigValue) {
     const change = this.changeConfigOption(conversationId, sessionId, configId, value);
     if (!change || this.sessionsSlowToAnswer.has(sessionId)) return;
-    const answeredInTime = await Promise.race([change.answered.then(() => true), Bun.sleep(OPTION_ANSWER_TIMEOUT_MS).then(() => false)]);
+    await this.waitForAnswer(conversationId, sessionId, change, value, OPTION_ANSWER_TIMEOUT_MS);
+  }
+
+  /** An agent that hasn't answered a change within `waitMs` leaves the session slow to answer, and the conversation says so. */
+  private async waitForAnswer(conversationId: string, sessionId: string, { current, answered }: OptionChange, value: ConfigValue, waitMs: number) {
+    const answeredInTime = await Promise.race([answered.then(() => true), Bun.sleep(waitMs).then(() => false)]);
     if (answeredInTime) return;
     this.sessionsSlowToAnswer.add(sessionId);
-    const { current } = change;
     this.append(
       conversationId,
-      problemEvent({ code: "option-change-unanswered", option: current.name, current: String(current.currentValue), value: String(value), seconds: OPTION_ANSWER_TIMEOUT_MS / 1000 }),
+      problemEvent({ code: "option-change-unanswered", option: current.name, current: String(current.currentValue), value: String(value), seconds: Math.ceil(waitMs / 1000) }),
     );
   }
 
@@ -1949,7 +1994,7 @@ export class ConversationService {
    * gone. `answered` settles, never failing, once the agent answered: with the options it reports kept, or with the
    * reason it gave shown. An agent process that goes away fails its unanswered requests, so it settles then too.
    */
-  private changeConfigOption(conversationId: string, sessionId: string, configId: string, value: ConfigValue) {
+  private changeConfigOption(conversationId: string, sessionId: string, configId: string, value: ConfigValue): OptionChange | undefined {
     const current = this.get(conversationId).configOptions.find(({ id }) => id === configId);
     const harness = this.runtime(conversationId).harness;
     if (!current || current.currentValue === value || !harness) return undefined;
