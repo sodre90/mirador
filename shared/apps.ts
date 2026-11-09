@@ -60,6 +60,12 @@ export interface PluginManifest {
   settings?: PluginSetting[];
   /** What the user can set for the plugin per profile, in the Profiles dialog; plugin API 5 brought them. */
   profileSettings?: PluginProfileSetting[];
+  /**
+   * The plugin tells the conversation whose tool started a conversation how that conversation's first turn ended, with
+   * `replied`'s `prompt`, so Mirador doesn't notify the user of that turn's end. Any api may name it: an older Mirador
+   * ignores it and notifies as usual.
+   */
+  tellsCaller?: boolean;
   /** An SVG file, relative to the plugin's folder, that stands for the plugin in Plugins…; a bad one leaves its monogram. */
   icon?: string;
 }
@@ -507,7 +513,7 @@ export const isPluginVersion = (version: unknown): version is string => typeof v
 
 export function isPluginManifest(value: unknown): value is PluginManifest {
   if (typeof value !== "object" || value === null) return false;
-  const { name, title, version, api, app, canvas, build, settings, profileSettings } = value as Partial<PluginManifest>;
+  const { name, title, version, api, app, canvas, build, settings, profileSettings, tellsCaller } = value as Partial<PluginManifest>;
   return (
     typeof name === "string" &&
     /^[a-z0-9][a-z0-9-]*$/.test(name) &&
@@ -519,6 +525,7 @@ export function isPluginManifest(value: unknown): value is PluginManifest {
     (canvas === undefined || isHostAndView(canvas)) &&
     (build === undefined || typeof build === "string") &&
     (settings === undefined || (Array.isArray(settings) && settings.every(isPluginSetting) && haveDistinctIds(settings))) &&
-    (profileSettings === undefined || (Array.isArray(profileSettings) && profileSettings.every(isPluginProfileSetting) && haveDistinctIds(profileSettings)))
+    (profileSettings === undefined || (Array.isArray(profileSettings) && profileSettings.every(isPluginProfileSetting) && haveDistinctIds(profileSettings))) &&
+    (tellsCaller === undefined || typeof tellsCaller === "boolean")
   );
 }

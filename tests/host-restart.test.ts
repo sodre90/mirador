@@ -276,7 +276,10 @@ describe("a reply owed to the plugin whose tool started a conversation", () => {
       if (diedInTheTurn) store.turnStarted("c1");
     });
     const heard: unknown[] = [];
-    conversations.hearRepliesWith((started, { conversationId, plugin }, reply) => void heard.push({ started, caller: conversationId, plugin, reply }));
+    conversations.hearRepliesWith(
+      (started, { conversationId, plugin }, reply) => void heard.push({ started, caller: conversationId, plugin, reply }),
+      () => true,
+    );
     return { conversations, store, heard };
   }
 

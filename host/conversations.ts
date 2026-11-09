@@ -360,6 +360,7 @@ export class ConversationService {
   private restoreCanvas: RestoreCanvas = async () => {};
   private askForm: AskForm = async () => ({ action: "decline" });
   private hearReply: HearReply = () => {};
+  private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
   private readonly turnsCutShortByCrash: Set<string>;
@@ -489,8 +490,10 @@ export class ConversationService {
     return { id: conversation.id, profile: profile.name };
   }
 
-  hearRepliesWith(hearReply: HearReply) {
+  /** The plugin whose tool started a conversation hears how its work ended; `tellsItsCaller` says whether it passes that on. */
+  hearRepliesWith(hearReply: HearReply, tellsItsCaller: (plugin: string) => boolean) {
     this.hearReply = hearReply;
+    this.pluginTellsItsCaller = tellsItsCaller;
   }
 
   /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
@@ -2640,11 +2643,26 @@ export class ConversationService {
       resumedByAJob: this.jobWaits.in(conversationId).some(({ resume }) => resume),
     });
     if (!reason || this.stopping) return;
+    if (this.itsPluginTellsTheCaller(conversationId)) return;
     this.notifications.notify(conversationId, reason);
     if (this.hub.isWatched(conversationId)) return;
     this.unseenTurnEnds.set(conversationId, reason.kind);
     this.store.setUnseenTurnEnd(conversationId, reason.kind);
     this.keepLastWords(conversationId);
+  }
+
+  /**
+   * A plugin's tool started this conversation for a caller that is still here, and the plugin, which tells its caller, is
+   * yet to hear how its work ended: it hears of this turn and tells that caller, whose own turn end notifies the user. It
+   * hears only once, so the turns after notify as any conversation's do, as do those whose caller is gone or whose plugin
+   * won't tell (uninstalled, with no `replied`, or no `tellsCaller` in its plugin.json). Its permissions and questions ask
+   * of the user all the same, through other paths.
+   */
+  private itsPluginTellsTheCaller(conversationId: string) {
+    const startedBy = this.store.findConversation(conversationId)?.startedBy;
+    return (
+      startedBy !== undefined && startedBy.reply === null && this.store.hasConversation(startedBy.conversationId) && this.pluginTellsItsCaller(startedBy.plugin)
+    );
   }
 
   private forgetUnseenTurnEnd(conversationId: string) {

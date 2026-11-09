@@ -10,6 +10,7 @@ import type { PluginCanvasItem } from "../shared/model.ts";
 import { Store } from "../host/store.ts";
 import type { PluginCatalog } from "../host/plugin-catalog.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
+import board from "./fixtures/canvas-plugins/board/host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
 
@@ -281,6 +282,20 @@ describe("CanvasPlugins", () => {
     expect(plugins.guidanceFor("c1").instructions.join("\n")).not.toContain("hand_over");
   });
 
+  test("a plugin tells its caller when it is installed, has a replied of its own and says so in its plugin.json", async () => {
+    const { plugins } = await setUp();
+    expect(plugins.tellsItsCaller("board")).toBe(true);
+    expect(plugins.tellsItsCaller("gone")).toBe(false);
+    const { plugins: withoutReplied } = await canvasPluginHost(FIXTURES, storeWithConversation(), { board: { ...board, replied: undefined } });
+    expect(withoutReplied.tellsItsCaller("board")).toBe(false);
+    const unsaid = mkdtempSync(join(tmpdir(), "canvas-plugins-"));
+    cpSync(join(FIXTURES, "board"), join(unsaid, "board"), { recursive: true });
+    const { tellsCaller: _, ...manifest } = JSON.parse(readFileSync(join(unsaid, "board", "plugin.json"), "utf8"));
+    writeFileSync(join(unsaid, "board", "plugin.json"), JSON.stringify(manifest));
+    const { plugins: hearsButDoesntSay } = await canvasPluginHost(unsaid);
+    expect(hearsButDoesntSay.tellsItsCaller("board")).toBe(false);
+  });
+
   test("a reply for a plugin that isn't installed any more goes nowhere", async () => {
     const { plugins, prompts } = await setUp();
     await plugins.replied({ id: "c2", profile: "Local" }, { conversationId: "c1", plugin: "gone", reply: null, dismissed: false }, { text: "Found", ended: "finished" });
@@ -374,6 +389,15 @@ describe("loading canvas plugins", () => {
     const { canvases, problems } = await loadPlugins(boardCopy((manifest) => ({ ...manifest, api: 2 })));
     expect(canvases).toEqual([]);
     expect(problems.map(({ message }) => message)).toEqual(["plugin.json has a canvas part, which plugin API 3 brought; it names API 2"]);
+  });
+
+  test("takes tellsCaller in a plugin.json of any API, but only as true or false", async () => {
+    const older = await loadPlugins(boardCopy((manifest) => ({ ...manifest, api: 5, tellsCaller: true }), `export default { items: {}, tools: {}, replied() {} };`));
+    expect(older.problems).toEqual([]);
+    expect(older.canvases[0]!.manifest.tellsCaller).toBe(true);
+    const unclear = await loadPlugins(boardCopy((manifest) => ({ ...manifest, tellsCaller: "yes" })));
+    expect(unclear.canvases).toEqual([]);
+    expect(unclear.problems).toHaveLength(1);
   });
 
   test("refuses a tool named as one of Mirador's own or another plugin's, and a canvas host module that lacks what it needs", async () => {

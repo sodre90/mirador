@@ -94,7 +94,10 @@ const pluginSettings = new PluginSettingsStore(store, [...loadedPlugins.canvases
 const conversations = new ConversationService(store, hub, config, notifierMute, images, droppedFiles, notifications, (conversationId) => canvasPlugins.guidanceFor(conversationId));
 canvasPlugins.sendsPromptsWith((conversationId, text, { afterTurn, fromPlugin }) => conversations.send(conversationId, text, [], { afterTurn, fromPlugin }));
 canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt, title, choices) => conversations.startBeside(callerId, plugin, profileName, prompt, title, choices));
-conversations.hearRepliesWith((started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply));
+conversations.hearRepliesWith(
+  (started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply),
+  (plugin) => canvasPlugins.tellsItsCaller(plugin),
+);
 conversations.hearActivityWith((conversationId, activity) => {
   canvasPlugins.activity(conversationId, activity);
   const workspaceId = activity.kind === "turn-ended" ? store.findConversation(conversationId)?.workspaceId : undefined;

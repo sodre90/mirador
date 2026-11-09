@@ -388,6 +388,14 @@ export class CanvasPlugins {
     this.save({ ...item, dismissed: true });
   }
 
+  /**
+   * Whether a plugin tells the caller how the conversations its tools started ended: it is installed, with a `replied`
+   * of its own and `tellsCaller` in its plugin.json.
+   */
+  tellsItsCaller(name: string) {
+    return this.plugins.some(({ manifest, host }) => manifest.name === name && manifest.tellsCaller === true && host.replied !== undefined);
+  }
+
   /** The plugin whose tool started a conversation hears how its work ended; one no longer installed hears nothing. */
   async replied(started: StartedConversation, { conversationId, plugin: name }: StartedBy, reply: ConversationReply) {
     const plugin = this.plugins.find(({ manifest }) => manifest.name === name);

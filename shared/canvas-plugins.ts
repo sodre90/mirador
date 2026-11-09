@@ -275,7 +275,9 @@ export interface CanvasHost<Data = unknown> {
   /**
    * Once, when a conversation one of the plugin's tools started ends the turn its first message began, or the turn a
    * restart of Mirador resumed it in; the context is the conversation that started it. A turn cut short by a crash
-   * reports as failed at the next start.
+   * reports as failed at the next start. With this hook and `tellsCaller` in plugin.json, Mirador doesn't notify the user
+   * that turn ended: the plugin tells the conversation that started it (with `prompt`), whose own turn end does. Later
+   * turns notify as usual.
    */
   replied?(started: StartedConversation, reply: ConversationReply, context: CanvasActionContext<Data>): void | Promise<void>;
   /**
