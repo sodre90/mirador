@@ -1,5 +1,5 @@
 diff --git a/dist/acp-agent.js b/dist/acp-agent.js
-index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..9d40eaf7ffa38c86b0cb66e67898988120e4efcb 100644
+index a92039b..b2b6bc3 100644
 --- a/dist/acp-agent.js
 +++ b/dist/acp-agent.js
 @@ -3428,6 +3428,22 @@ export class ClaudeAcpAgent {
@@ -49,19 +49,16 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..9d40eaf7ffa38c86b0cb66e678989881
                                      await subagents.taskResumed(message.task_id, sendUpdate, sendMessageResumePrompt(session.toolUseCache, message.task_id));
                                  }
                                  break;
-@@ -9723,7 +9742,10 @@ export class ClaudeAcpAgent {
-                 isBusy: () => this.claudeIsWorking(sessionId, registered) ||
-                     (registered.openUserInputs?.size ?? 0) > 0,
-                 contextTokens: () => registered.contextUsedTokens,
--                settings: () => registered.settingsManager.getSettings(),
-+                // The client's `settings` option reaches the CLI as `--settings`, which outranks the settings files.
-+                settings: () => configuredSettingsObject?.idleCompaction === undefined
-+                    ? registered.settingsManager.getSettings()
-+                    : { ...registered.settingsManager.getSettings(), idleCompaction: configuredSettingsObject.idleCompaction },
-                 compact: () => this.prompt({ sessionId, prompt: [{ type: "text", text: "/compact" }] }, "idleCompaction"),
-                 // The logger has no debug level.
+@@ -9729,7 +9748,7 @@ export class ClaudeAcpAgent {
                  log: (message) => this.logger.log(message),
-@@ -10844,7 +10866,9 @@ function recordDispatchedToolUses(session, content) {
+             }, 
+             // The CLI's own environment: process env, the client's and the provider's.
+-            { env });
++            { env, settingsOverride: configuredSettingsObject });
+             timing.phase("register");
+             this.backgroundWork.sync(sessionId, this.sessions[sessionId], this.foregroundState(sessionId));
+             this.refreshContextWindowInBackground(sessionId, this.sessions[sessionId]);
+@@ -10844,7 +10863,9 @@ function recordDispatchedToolUses(session, content) {
      if (!Array.isArray(content))
          return;
      for (const block of content) {
@@ -72,3 +69,50 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..9d40eaf7ffa38c86b0cb66e678989881
              recordDispatchedToolCall(session, block.id);
      }
  }
+diff --git a/dist/idle-compaction.js b/dist/idle-compaction.js
+index 119ff7e..f01156f 100644
+--- a/dist/idle-compaction.js
++++ b/dist/idle-compaction.js
+@@ -35,6 +35,7 @@ function parseCacheTtl(usage) {
+ export class IdleCompaction {
+     host;
+     env;
++    settingsOverride;
+     setTimer;
+     ttl;
+     lastRequestAt;
+@@ -51,6 +52,7 @@ export class IdleCompaction {
+     constructor(host, options = {}) {
+         this.host = host;
+         this.env = options.env ?? process.env;
++        this.settingsOverride = options.settingsOverride;
+         this.setTimer = options.setTimeout ?? ((cb, ms) => setTimeout(cb, ms));
+     }
+     /** Whether an idle compaction it started is still running. `acp-agent.ts` reports
+@@ -178,7 +180,7 @@ export class IdleCompaction {
+         return undefined;
+     }
+     disabledBy() {
+-        const settings = this.host.settings();
++        const settings = this.settings();
+         if (settings.idleCompaction === false)
+             return "idleCompaction setting";
+         if (settings.autoCompactEnabled === false)
+@@ -191,7 +193,16 @@ export class IdleCompaction {
+     }
+     /** The CLI applies the settings `env` block after the launch env, so it wins. */
+     claudeCodeEnv(name) {
+-        return this.host.settings().env?.[name] ?? this.env[name];
++        return this.settings().env?.[name] ?? this.env[name];
++    }
++    /** `host.settings()` under `settingsOverride`: its keys win, and so do its `env` entries.
++     *  Upstream: agentclientprotocol/claude-agent-acp PR 1555. */
++    settings() {
++        const files = this.host.settings();
++        const override = this.settingsOverride;
++        if (!override)
++            return files;
++        return { ...files, ...override, env: { ...files.env, ...override.env } };
+     }
+     /** `0` and invalid values fall back to 200,000, as in the CLI, which declares the variable
+      *  with `min: 1` and computes `Math.max(100000, env ?? 200000)`. */
