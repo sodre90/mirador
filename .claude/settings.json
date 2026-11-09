@@ -4,7 +4,7 @@
       {
         "hooks": [
           {
-            "command": "bd prime --hook-json",
+            "command": "bun \"$CLAUDE_PROJECT_DIR/scripts/beads-session-context.ts\"",
             "type": "command"
           }
         ],
