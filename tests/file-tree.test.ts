@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ChangedFile, ChangeList } from "../shared/changes.ts";
 import { fileTree, type TreeFolder, type TreeNode } from "../shared/file-tree.ts";
-import { projectFilesWithChanges, startsFolded, type ListedFile } from "../web/changes.ts";
+import { drawnPastFirstRows, isBigFolder, projectFilesWithChanges, ROWS_AT_ONCE, startsFolded, type ListedFile } from "../web/changes.ts";
 
 const treeOf = (paths: string[]) => fileTree(paths, (path) => path);
 
@@ -97,4 +97,57 @@ test("with every file shown only the folders holding a change start open; the ch
     ["docs", true, false],
     ["src", false, false],
   ]);
+});
+
+const folderOfChanged = (count: number) => {
+  const files = Array.from({ length: count }, (_, index) => `big/f${index}.txt`);
+  const tree = fileTree(projectFilesWithChanges(list(files), files), ({ path }) => path);
+  return tree.find((node): node is TreeFolder<ListedFile> => node.kind === "folder")!;
+};
+
+test("a folder holding more than 100 changed files starts folded in both views, one holding 100 does not", () => {
+  expect([startsFolded(folderOfChanged(101), true), startsFolded(folderOfChanged(101), false)]).toEqual([true, true]);
+  expect([startsFolded(folderOfChanged(100), true), startsFolded(folderOfChanged(100), false)]).toEqual([false, false]);
+});
+
+test("a folder inside a big folder starts folded whatever it holds", () => {
+  expect(startsFolded(folderOfChanged(1), false, true)).toBe(true);
+  expect(startsFolded(folderOfChanged(1), true, true)).toBe(true);
+  expect(startsFolded(folderOfChanged(1), false, false)).toBe(false);
+});
+
+test("many files in one folder come out ordered by name, under one folder", () => {
+  const names = Array.from({ length: 1000 }, (_, index) => `${index % 3 === 0 ? "F" : "f"}${index}${index % 2 ? "a" : "B"}.txt`);
+  const tree = treeOf([...names].reverse().map((name) => `d/${name}`));
+  expect(tree).toHaveLength(1);
+  const folder = tree[0] as TreeFolder<string>;
+  expect(folder.children.map((node) => node.name)).toEqual(names.toSorted((a, b) => a.localeCompare(b)));
+});
+
+test("a folder is big when it holds more than 100 changed files", () => {
+  expect([isBigFolder(folderOfChanged(100)), isBigFolder(folderOfChanged(101))]).toEqual([false, true]);
+});
+
+const nodesOf = (changed: string[], unchanged: string[]) =>
+  fileTree(projectFilesWithChanges(list(changed), [...changed, ...unchanged]), ({ path }) => path);
+const drawn = (nodes: TreeNode<ListedFile>[], selected: string | null, everyFile: boolean) =>
+  nodes.filter(drawnPastFirstRows(nodes, selected, everyFile)).map((node) => node.name);
+
+test("rows drawn past the first ones: the folder or file holding the selected file", () => {
+  const nodes = nodesOf(["a/x.ts"], ["b/y.ts", "z.ts"]);
+  expect(drawn(nodes, "b/y.ts", false)).toEqual(["b"]);
+  expect(drawn(nodes, "z.ts", false)).toEqual(["z.ts"]);
+});
+
+test("rows drawn past the first ones: with every file shown, those holding a change", () => {
+  const nodes = nodesOf(["a/x.ts", "c.ts"], ["b/y.ts", "z.ts"]);
+  expect(drawn(nodes, null, true)).toEqual(["a", "c.ts"]);
+  expect(drawn(nodes, "z.ts", true)).toEqual(["a", "c.ts", "z.ts"]);
+});
+
+test("nothing extra is drawn without a selection unless every file is shown, nor changes when more than 200 rows hold one", () => {
+  expect(drawn(nodesOf(["a/x.ts", "c.ts"], ["z.ts"]), null, false)).toEqual([]);
+  const many = Array.from({ length: ROWS_AT_ONCE + 1 }, (_, index) => `f${index}.ts`);
+  expect(drawn(nodesOf(many, ["z.ts"]), null, true)).toEqual([]);
+  expect(drawn(nodesOf(many.slice(1), ["z.ts"]), null, true)).toHaveLength(ROWS_AT_ONCE);
 });

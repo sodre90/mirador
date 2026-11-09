@@ -1,5 +1,5 @@
 import type { ChangedFile, ChangeList, FileChanges } from "../shared/changes.ts";
-import type { TreeFolder } from "../shared/file-tree.ts";
+import type { TreeFolder, TreeNode } from "../shared/file-tree.ts";
 import type { StoredEvent } from "../shared/model.ts";
 
 /** A row of the Changes view: a file, with what changed in it, if anything did. */
@@ -19,8 +19,34 @@ export function projectFilesWithChanges(list: ChangeList, projectPaths: readonly
   return [...changed, ...projectPaths.filter((path) => !changedPaths.has(path)).map((path) => ({ path, change: null, fromCommit: false }))];
 }
 
-/** With every file shown, only the folders holding a change start open, so the changes show at once in a big project. */
-export const startsFolded = (folder: TreeFolder<ListedFile>, everyFile: boolean) => everyFile && !folder.items.some(({ change }) => change);
+/** A folder holding more changed files than this, such as a package install's, starts folded, and so does every folder in it. */
+export const BIG_FOLDER_CHANGES = 100;
+
+/** A list, or a folder's own rows, draws this many rows at first, and as many more each time Show more is pressed. */
+export const ROWS_AT_ONCE = 200;
+
+const changedCount = (folder: TreeFolder<ListedFile>) => folder.items.reduce((count, { change }) => (change ? count + 1 : count), 0);
+
+export const isBigFolder = (folder: TreeFolder<ListedFile>) => changedCount(folder) > BIG_FOLDER_CHANGES;
+
+/**
+ * Which folders start open: with every file shown, only those holding a change, so the changes show at once in a big
+ * project; and never a big folder or one inside it, so thousands of changed files are not all drawn at once.
+ */
+export const startsFolded = (folder: TreeFolder<ListedFile>, everyFile: boolean, insideBigFolder = false) =>
+  insideBigFolder || isBigFolder(folder) || (everyFile && changedCount(folder) === 0);
+
+const holdsChange = (node: TreeNode<ListedFile>) => (node.kind === "file" ? node.item.change !== null : node.items.some(({ change }) => change));
+const holdsPath = (node: TreeNode<ListedFile>, path: string) => (node.kind === "file" ? node.item.path === path : node.items.some((item) => item.path === path));
+
+/**
+ * The rows of a folder drawn even past its first ones: the selected file's, which a view opened again would otherwise
+ * hide, and with every file shown those holding a change, unless they are too many to draw at once.
+ */
+export function drawnPastFirstRows(nodes: readonly TreeNode<ListedFile>[], selectedPath: string | null, everyFile: boolean): (node: TreeNode<ListedFile>) => boolean {
+  const drawsChanges = everyFile && nodes.filter(holdsChange).length <= ROWS_AT_ONCE;
+  return (node) => (selectedPath !== null && holdsPath(node, selectedPath)) || (drawsChanges && holdsChange(node));
+}
 
 /**
  * The newest event after which the files may differ: a finished tool call, the user's own command ending, a turn

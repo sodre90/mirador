@@ -110,6 +110,7 @@ export const canvas = {
     since: "Changes since",
     ignoredFiles: "Git-ignored files",
     foldAll: "Fold all",
+    showMore: (more: string, notShown: string) => `Show ${more} more (${notShown} not shown)`,
     showAs: "Show as",
     refresh: "Refresh",
     commitDialog: {

@@ -110,6 +110,7 @@ export const canvas: Messages["canvas"] = {
     since: "Änderungen seit",
     ignoredFiles: "Von Git ignorierte Dateien",
     foldAll: "Alle einklappen",
+    showMore: (more: string, notShown: string) => `${more} weitere anzeigen (${notShown} ausgeblendet)`,
     showAs: "Zeigen als",
     refresh: "Aktualisieren",
     commitDialog: {
