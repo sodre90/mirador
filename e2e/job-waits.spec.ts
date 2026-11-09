@@ -171,6 +171,12 @@ test("the agent has the host wait for a job it left running, then resume the age
     await expect(waits).toHaveCount(0);
   });
 
+  await test.step("a guessed pid 1, the system's init, is refused, so a wait for it does not stay forever", async () => {
+    await sendMessage(page, `CALL when_done ${JSON.stringify({ pid: 1, message: "never-ends", resume: false })}`);
+    await toolResult("Process 1 is init, which runs as long as its machine does, so its wait would never end.");
+    await expect(waits).toHaveCount(0);
+  });
+
   await test.step("mirador when-done does the same from a command, given the agent's session", async () => {
     const job = startJob();
     await sendMessage(page, `RUN mirador when-done --session ${sessionId()} --pid ${job.pid} from-a-command`);
