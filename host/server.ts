@@ -22,6 +22,7 @@ import {
   type StoredEvent,
   type Workspace,
   type Pastel,
+  workingCopyIdOf,
 } from "../shared/model.ts";
 import { readJobWaitRequest } from "../shared/job-waits.ts";
 import { avatarProblem } from "../shared/avatar.ts";
@@ -1306,7 +1307,7 @@ export function startServer(services: HostServices) {
         }
       case "app.open-file":
         return void Promise.resolve()
-          .then(() => apps.open(conversations.get(message.conversationId).workspaceId, message.app, message.file, message.conversationId))
+          .then(() => apps.open(workingCopyIdOf(conversations.get(message.conversationId)), message.app, message.file, message.conversationId))
           .then(
             () => reply({ type: "app.file-opened", requestId: message.requestId, problem: null }),
             (error) => reply({ type: "app.file-opened", requestId: message.requestId, ...problemFieldsOf(error, messageOf(error)) }),

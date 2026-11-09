@@ -2,7 +2,7 @@ import { OpensIn } from "./opens-in.ts";
 import { useMouseSteps } from "./mouse-steps.ts";
 import { EMPTY_TRAIL, stepped, visited } from "./visit-trail.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
-import { harnessRewinds, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
+import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { sidebarItems } from "../shared/sidebar-order.ts";
 import { countWaiting } from "../shared/waiting.ts";
@@ -541,6 +541,10 @@ export function App() {
         kept={inFixedOrder(state.kept)}
         shownId={showCanvas ? conversation!.id : null}
         workspaceOf={(conversationId) => state.conversations.find(({ id }) => id === conversationId)?.workspaceId}
+        workingCopyOf={(conversationId) => {
+          const each = state.conversations.find(({ id }) => id === conversationId);
+          return each && workingCopyIdOf(each);
+        }}
         apps={apps}
         assetsOrigin={state.canvasAssetsOrigin}
         homeDir={state.homeDir}

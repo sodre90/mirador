@@ -106,15 +106,15 @@ const schema = `
   CREATE TABLE IF NOT EXISTS terminal_scrollback (
     terminal_id TEXT PRIMARY KEY, tab_id TEXT NOT NULL REFERENCES terminal_tabs(id) ON DELETE CASCADE, text TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS open_apps (
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL, file TEXT NOT NULL,
-    PRIMARY KEY (workspace_id, app));
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
+    PRIMARY KEY (folder_id, app));
   CREATE TABLE IF NOT EXISTS app_conversations (
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL,
     conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    PRIMARY KEY (workspace_id, app, conversation_id));
+    PRIMARY KEY (folder_id, app, conversation_id));
   CREATE TABLE IF NOT EXISTS app_storage (
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
-    PRIMARY KEY (workspace_id, app, key));
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+    PRIMARY KEY (folder_id, app, key));
   CREATE TABLE IF NOT EXISTS plugin_settings (plugin TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (plugin, id));
   CREATE TABLE IF NOT EXISTS canvas_plugin_storage (plugin TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (plugin, key));
 `;
@@ -358,6 +358,7 @@ export class Store {
     this.db.run(schema);
     const hasTurnTimes = this.hasColumn("conversations", "last_message_at");
     this.addMissingColumns();
+    this.keyAppsByFolder();
     if (!hasTurnTimes) this.fillTurnTimesFromEvents();
     this.shareSidebarOrder();
     this.handSavedChecklistsToThePlugin();
@@ -383,16 +384,34 @@ export class Store {
    */
   private noteAppsUsedBeforeTracking() {
     this.db.run(`
-      INSERT OR IGNORE INTO app_conversations (workspace_id, app, conversation_id)
-      SELECT DISTINCT c.workspace_id, o.app, c.id
+      INSERT OR IGNORE INTO app_conversations (workspace_id, folder_id, app, conversation_id)
+      SELECT DISTINCT c.workspace_id, c.workspace_id, o.app, c.id
       FROM events e
       JOIN conversations c ON c.id = e.conversation_id
-      JOIN open_apps o ON o.workspace_id = c.workspace_id
+      JOIN open_apps o ON o.folder_id = c.workspace_id
       WHERE json_extract(e.event, '$.type') = 'acp'
         AND json_extract(e.event, '$.update.sessionUpdate') = 'tool_call'
         AND json_extract(e.event, '$.update._meta.claudeCode.toolName') IN ${APP_TOOL_NAMES}
         AND coalesce(json_extract(e.event, '$.update.rawInput.app'), o.app) = o.app
     `);
+  }
+
+  /** Apps' documents were kept per workspace; they are kept per folder now, a worktree's as well as a workspace's. */
+  private keyAppsByFolder() {
+    if (this.hasColumn("open_apps", "folder_id")) return;
+    const tables = [
+      { name: "open_apps", columns: "app TEXT NOT NULL, file TEXT NOT NULL", copied: "app, file", key: "folder_id, app" },
+      { name: "app_conversations", columns: "app TEXT NOT NULL, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE", copied: "app, conversation_id", key: "folder_id, app, conversation_id" },
+      { name: "app_storage", columns: "app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL", copied: "app, key, value", key: "folder_id, app, key" },
+    ];
+    for (const { name, columns, copied, key } of tables) {
+      this.db.run(`
+        CREATE TABLE ${name}_by_folder (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, ${columns}, PRIMARY KEY (${key}));
+        INSERT INTO ${name}_by_folder (workspace_id, folder_id, ${copied}) SELECT workspace_id, workspace_id, ${copied} FROM ${name};
+        DROP TABLE ${name};
+        ALTER TABLE ${name}_by_folder RENAME TO ${name};
+      `);
+    }
   }
 
   private markTemplatesOffered(ids: string[]) {
@@ -497,7 +516,7 @@ export class Store {
   }
 
   listOpenApps(): { workspaceId: string; app: string; file: string }[] {
-    return this.db.query("SELECT workspace_id AS workspaceId, app, file FROM open_apps").all() as { workspaceId: string; app: string; file: string }[];
+    return this.db.query("SELECT folder_id AS workspaceId, app, file FROM open_apps").all() as { workspaceId: string; app: string; file: string }[];
   }
 
   forgetOpenApps(app: string) {
@@ -506,7 +525,7 @@ export class Store {
   }
 
   listAppConversations(): { workspaceId: string; app: string; conversationId: string }[] {
-    return this.db.query("SELECT workspace_id AS workspaceId, app, conversation_id AS conversationId FROM app_conversations").all() as {
+    return this.db.query("SELECT folder_id AS workspaceId, app, conversation_id AS conversationId FROM app_conversations").all() as {
       workspaceId: string;
       app: string;
       conversationId: string;
@@ -606,16 +625,20 @@ export class Store {
     }
   }
 
-  saveAppConversation(workspaceId: string, app: string, conversationId: string) {
-    this.db.query("INSERT OR IGNORE INTO app_conversations (workspace_id, app, conversation_id) VALUES (?, ?, ?)").run(workspaceId, app, conversationId);
+  saveAppConversation(folderId: string, app: string, conversationId: string) {
+    this.db
+      .query("INSERT OR IGNORE INTO app_conversations (workspace_id, folder_id, app, conversation_id) VALUES (?, ?, ?, ?)")
+      .run(this.workspaceOfFolder(folderId), folderId, app, conversationId);
   }
 
-  saveOpenApp(workspaceId: string, app: string, file: string) {
-    this.db.query("INSERT INTO open_apps (workspace_id, app, file) VALUES (?, ?, ?) ON CONFLICT (workspace_id, app) DO UPDATE SET file = excluded.file").run(workspaceId, app, file);
+  saveOpenApp(folderId: string, app: string, file: string) {
+    this.db
+      .query("INSERT INTO open_apps (workspace_id, folder_id, app, file) VALUES (?, ?, ?, ?) ON CONFLICT (folder_id, app) DO UPDATE SET file = excluded.file")
+      .run(this.workspaceOfFolder(folderId), folderId, app, file);
   }
 
-  appStorage(workspaceId: string, app: string): AppStorageItems {
-    const rows = this.db.query("SELECT key, value FROM app_storage WHERE workspace_id = ? AND app = ?").all(workspaceId, app) as { key: string; value: string }[];
+  appStorage(folderId: string, app: string): AppStorageItems {
+    const rows = this.db.query("SELECT key, value FROM app_storage WHERE folder_id = ? AND app = ?").all(folderId, app) as { key: string; value: string }[];
     return Object.fromEntries(rows.map(({ key, value }) => [key, value]));
   }
 
@@ -630,11 +653,20 @@ export class Store {
     this.db.query("INSERT INTO canvas_plugin_storage (plugin, key, value) VALUES (?, ?, ?) ON CONFLICT(plugin, key) DO UPDATE SET value = excluded.value").run(plugin, key, JSON.stringify(value));
   }
 
-  saveAppStorageItem(workspaceId: string, app: string, key: string, value: string | null) {
-    if (value === null) return void this.db.query("DELETE FROM app_storage WHERE workspace_id = ? AND app = ? AND key = ?").run(workspaceId, app, key);
+  saveAppStorageItem(folderId: string, app: string, key: string, value: string | null) {
+    if (value === null) return void this.db.query("DELETE FROM app_storage WHERE folder_id = ? AND app = ? AND key = ?").run(folderId, app, key);
     this.db
-      .query("INSERT INTO app_storage (workspace_id, app, key, value) VALUES (?, ?, ?, ?) ON CONFLICT (workspace_id, app, key) DO UPDATE SET value = excluded.value")
-      .run(workspaceId, app, key, value);
+      .query("INSERT INTO app_storage (workspace_id, folder_id, app, key, value) VALUES (?, ?, ?, ?, ?) ON CONFLICT (folder_id, app, key) DO UPDATE SET value = excluded.value")
+      .run(this.workspaceOfFolder(folderId), folderId, app, key, value);
+  }
+
+  /** The workspace an app's folder belongs to: the workspace itself, or the workspace whose conversations work in the worktree. */
+  private workspaceOfFolder(folderId: string): string {
+    if (this.findWorkspace(folderId)) return folderId;
+    const [conversationId] = this.conversationsInWorktree(folderId);
+    const workspaceId = conversationId === undefined ? undefined : this.findConversation(conversationId)?.workspaceId;
+    if (!workspaceId) throw new Error(`No workspace works in ${folderId}.`);
+    return workspaceId;
   }
 
   listConversations(): Conversation[] {

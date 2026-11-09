@@ -39,6 +39,7 @@ export function KeptCanvases({
   kept,
   shownId,
   workspaceOf,
+  workingCopyOf,
   apps,
   assetsOrigin,
   homeDir,
@@ -48,6 +49,7 @@ export function KeptCanvases({
   kept: OpenConversation[];
   shownId: string | null;
   workspaceOf: (conversationId: string) => string | undefined;
+  workingCopyOf: (conversationId: string) => string | undefined;
   apps: AppsState;
   assetsOrigin: string;
   homeDir: string;
@@ -64,6 +66,7 @@ export function KeptCanvases({
         open={open}
         shown={open.conversationId === shownId}
         workspaceId={workspaceOf(open.conversationId)}
+        workingCopyId={workingCopyOf(open.conversationId)}
         apps={apps}
         editsInCanvas={editsInCanvas}
         assetsOrigin={assetsOrigin}
@@ -78,6 +81,7 @@ const KeptCanvas = memo(function KeptCanvas({
   open,
   shown,
   workspaceId,
+  workingCopyId,
   apps: { openApps, installedApps, appDocuments, workspaceTabs, pluginTabs },
   editsInCanvas,
   assetsOrigin,
@@ -88,6 +92,7 @@ const KeptCanvas = memo(function KeptCanvas({
   open: OpenConversation;
   shown: boolean;
   workspaceId: string | undefined;
+  workingCopyId: string | undefined;
   apps: AppsState;
   editsInCanvas: boolean;
   assetsOrigin: string;
@@ -100,11 +105,11 @@ const KeptCanvas = memo(function KeptCanvas({
   const refreshPoint = useMemo(() => changesRefreshPoint(open.events), [open.events]);
   const workspaceApps = useMemo(
     () => {
-      const inWorkspace = openApps.filter((app) => app.workspaceId === workspaceId);
+      const inFolder = openApps.filter((app) => app.workspaceId === workingCopyId);
       const usedHere = (app: OpenApp) => app.conversationIds.includes(open.conversationId);
-      return { open: inWorkspace.filter(usedHere), elsewhere: inWorkspace.filter((app) => !usedHere(app)), installed: installedApps, documents: appDocuments };
+      return { open: inFolder.filter(usedHere), elsewhere: inFolder.filter((app) => !usedHere(app)), installed: installedApps, documents: appDocuments };
     },
-    [openApps, installedApps, appDocuments, workspaceId, open.conversationId],
+    [openApps, installedApps, appDocuments, workingCopyId, open.conversationId],
   );
   const workspaceStates = workspaceId ? pluginTabs[workspaceId] : undefined;
   const tabs = useMemo(() => tabsOfWorkspace(workspaceTabs, workspaceStates), [workspaceTabs, workspaceStates]);

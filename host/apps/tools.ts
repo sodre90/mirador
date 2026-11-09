@@ -2,6 +2,7 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { normalize } from "node:path";
 import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
+import { workingCopyIdOf } from "../../shared/model.ts";
 import { type AppDocuments } from "./documents.ts";
 import { AppProblem } from "./plugins.ts";
 
@@ -33,7 +34,8 @@ export function registerAppTools(
   const answered = async (ctx: ServerContext, answer: (workspaceId: string, conversationId: string) => Promise<string> | string) => {
     try {
       const conversationId = await callingConversation(ctx);
-      return toolText(await answer(conversations.get(conversationId).workspaceId, conversationId));
+      const conversation = conversations.get(conversationId);
+      return toolText(await answer(workingCopyIdOf(conversation), conversationId));
     } catch (error) {
       if (error instanceof AppProblem) return toolError(error.message);
       throw error;
@@ -43,7 +45,7 @@ export function registerAppTools(
   server.registerTool(
     "app_open",
     {
-      description: `Open an app the user installed in Mirador on a file of this workspace; the user sees it live in a tab of the canvas, and every conversation in the workspace works on the same document. A file that doesn't exist yet is started. An app may also open on a file it edits, such as a video for a video editor, with its document beside it. Installed apps: ${names}. Then read the document with app_state and change it with apply.`,
+      description: `Open an app the user installed in Mirador on a file of this workspace; the user sees it live in a tab of the canvas, and every conversation working in the same folder works on the same document. A file that doesn't exist yet is started. An app may also open on a file it edits, such as a video for a video editor, with its document beside it. Installed apps: ${names}. Then read the document with app_state and change it with apply.`,
       inputSchema: z.object({
         app: z.string().describe("The app's name, e.g. one of those installed."),
         file: z.string().min(1).describe("The document's path, or the path of a file the app edits, relative to the workspace."),

@@ -15,7 +15,7 @@ import { PluginSettingsStore } from "./plugin-settings.ts";
 import { officialPluginInstaller, PluginCatalog } from "./plugin-catalog.ts";
 import { CanvasService } from "./canvas/service.ts";
 import { restoreCanvas } from "./canvas/canvas-calls.ts";
-import { DAY_MS } from "../shared/model.ts";
+import { DAY_MS, workingCopyIdOf } from "../shared/model.ts";
 import { agentLogsDirectory, loadConfig } from "./config.ts";
 import { ConversationService } from "./conversations.ts";
 import { DeviceService } from "./devices.ts";
@@ -100,8 +100,8 @@ conversations.hearRepliesWith(
 );
 conversations.hearActivityWith((conversationId, activity) => {
   canvasPlugins.activity(conversationId, activity);
-  const workspaceId = activity.kind === "turn-ended" ? store.findConversation(conversationId)?.workspaceId : undefined;
-  if (workspaceId) apps.filesMayHaveChanged(workspaceId);
+  const conversation = activity.kind === "turn-ended" ? store.findConversation(conversationId) : undefined;
+  if (conversation) apps.filesMayHaveChanged(workingCopyIdOf(conversation));
 });
 const canvasAssetsOrigins = [
   ...new Set([

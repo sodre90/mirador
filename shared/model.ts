@@ -280,6 +280,9 @@ export interface ConversationWorktree {
   branch: string;
 }
 
+/** The id of the folder a conversation works in: its own worktree's, or its workspace's. */
+export const workingCopyIdOf = ({ workspaceId, worktree }: Pick<Conversation, "workspaceId" | "worktree">) => worktree?.id ?? workspaceId;
+
 /** A folding heading in the sidebar for some of the workspaces, e.g. a project's or a client's. */
 export interface WorkspaceGroup {
   id: string;

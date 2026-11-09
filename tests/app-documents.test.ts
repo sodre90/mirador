@@ -26,6 +26,15 @@ async function setUp(store = new Store(":memory:"), workspacePath = mkdtempSync(
   return { store, workspacePath, apps, fileText, ...recorded };
 }
 
+/** Workspace w1, in a folder of its own, with conversation c1 working in a worktree of its own. */
+async function setUpWithWorktree() {
+  const setup = await setUp();
+  const worktreeFolder = mkdtempSync(join(tmpdir(), "app-worktree-"));
+  const { position: _, ...conversation } = storeWithConversation().findConversation("c1")!;
+  setup.store.insertConversation({ ...conversation, id: "c1", worktree: { id: "wt1", root: worktreeFolder, folder: worktreeFolder, branch: "mirador/wt1" } });
+  return { ...setup, worktreeFolder };
+}
+
 /** Workspace w1, in a folder of its own, with conversations c1 and c2. */
 async function setUpWithTwoConversations() {
   const setup = await setUp();
@@ -319,6 +328,62 @@ describe("AppDocuments", () => {
     expect(apps.openApps().map(({ file }) => file)).toEqual(["second.json"]);
     expect(openAppLists.at(-1)!.map(({ file }) => file)).toEqual(["second.json"]);
     apps.stop();
+  });
+});
+
+describe("AppDocuments in a worktree", () => {
+  test("opens the worktree's copy of the file, apart from the workspace's document of the same app", async () => {
+    const { apps, workspacePath, worktreeFolder } = await setUpWithWorktree();
+    writeFileSync(join(workspacePath, "counter.json"), JSON.stringify({ count: 1 }));
+    writeFileSync(join(worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
+    await apps.open("w1", "counter", "counter.json");
+    await apps.open("wt1", "counter", "counter.json", "c1");
+    expect(apps.openApps().map(({ workspaceId, file }) => `${workspaceId} ${file}`)).toEqual(["w1 counter.json", "wt1 counter.json"]);
+    await apps.apply("wt1", "counter", { op: "add", by: 3 }, { kind: "agent", conversationId: "c1", turnSeq: 1 });
+    expect(JSON.parse(readFileSync(join(worktreeFolder, "counter.json"), "utf8"))).toEqual({ count: 5 });
+    expect(JSON.parse(readFileSync(join(workspacePath, "counter.json"), "utf8"))).toEqual({ count: 1 });
+    expect(apps.state("w1", "counter")!.document).toEqual({ count: 1 });
+    expect(apps.state("wt1", "counter")!.document).toEqual({ count: 5 });
+    apps.stop();
+  });
+
+  test("makes a new file in the worktree, not in the workspace", async () => {
+    const { apps, workspacePath, worktreeFolder } = await setUpWithWorktree();
+    await apps.open("wt1", "counter", "plans/tally.json", "c1");
+    expect(JSON.parse(readFileSync(join(worktreeFolder, "plans", "tally.json"), "utf8"))).toEqual({ count: 0 });
+    expect(existsSync(join(workspacePath, "plans", "tally.json"))).toBe(false);
+    apps.stop();
+  });
+
+  test("opens the worktree's document again when the host starts again", async () => {
+    const first = await setUpWithWorktree();
+    writeFileSync(join(first.worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
+    await first.apps.open("wt1", "counter", "counter.json", "c1");
+    await first.apps.apply("wt1", undefined, { op: "add", by: 4 }, { kind: "you" });
+    first.apps.stop();
+    const second = await setUp(first.store, first.workspacePath);
+    await second.apps.reopenAll();
+    expect(second.apps.openApps()).toEqual([{ workspaceId: "wt1", app: "counter", title: "Counter", file: "counter.json", conversationIds: ["c1"] }]);
+    expect(second.apps.state("wt1", "counter")!.document).toEqual({ count: 6 });
+    second.apps.stop();
+  });
+
+  test("skips a worktree whose conversations are gone when the host starts again", async () => {
+    const first = await setUpWithWorktree();
+    await first.apps.open("w1", "counter", "counter.json");
+    await first.apps.open("wt1", "counter", "counter.json", "c1");
+    first.apps.stop();
+    first.store.deleteConversation("c1");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const second = await setUp(first.store, first.workspacePath);
+      await second.apps.reopenAll();
+      expect(second.apps.openApps().map(({ workspaceId }) => workspaceId)).toEqual(["w1"]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Couldn't open counter on counter.json again"));
+      second.apps.stop();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

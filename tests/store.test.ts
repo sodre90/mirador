@@ -708,6 +708,35 @@ describe("Store", () => {
     store.close();
   });
 
+  test("keeps the apps a workspace had open, and their storage, when apps come to be kept per folder", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const { conversation } = seededStore();
+    const before = new Store(path);
+    before.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    before.insertConversation({ ...conversation, id: "c1" });
+    before.close();
+    new Database(path).run(`
+      DROP TABLE open_apps; DROP TABLE app_conversations; DROP TABLE app_storage;
+      CREATE TABLE open_apps (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY (workspace_id, app));
+      CREATE TABLE app_conversations (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, PRIMARY KEY (workspace_id, app, conversation_id));
+      CREATE TABLE app_storage (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+        PRIMARY KEY (workspace_id, app, key));
+      INSERT INTO open_apps VALUES ('w1', 'counter', 'counter.json');
+      INSERT INTO app_conversations VALUES ('w1', 'counter', 'c1');
+      INSERT INTO app_storage VALUES ('w1', 'counter', 'zoom', '2');
+    `);
+
+    const store = new Store(path);
+    expect(store.listOpenApps()).toEqual([{ workspaceId: "w1", app: "counter", file: "counter.json" }]);
+    expect(store.listAppConversations()).toEqual([{ workspaceId: "w1", app: "counter", conversationId: "c1" }]);
+    expect(store.appStorage("w1", "counter")).toEqual({ zoom: "2" });
+    store.deleteWorkspace("w1");
+    expect(store.listOpenApps()).toEqual([]);
+    expect(store.appStorage("w1", "counter")).toEqual({});
+    store.close();
+  });
+
   test("a conversation's slash commands are its agent's last list, else the latest of another with its agent and profile, its workspace first", () => {
     const { store, conversation } = seededStore();
     store.insertWorkspace({ id: "w2", name: "other", path: "/tmp/other", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });

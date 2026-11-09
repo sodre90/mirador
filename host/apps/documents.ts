@@ -13,10 +13,12 @@ import {
   type AppWorkspaceFiles,
   type OpenApp,
 } from "../../shared/apps.ts";
+import type { Workspace } from "../../shared/model.ts";
 import { toPosix } from "../paths.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import type { Store } from "../store.ts";
 import { projectFiles } from "../working-tree.ts";
+import { workingCopyOf } from "../worktrees.ts";
 import { AppMediaGrants } from "./media.ts";
 import { AppProblem, appViewPath, installedApp, messageOf, type AppPlugin } from "./plugins.ts";
 
@@ -58,6 +60,8 @@ interface RunningTask {
 interface AppDocument {
   plugin: AppPlugin;
   workspaceId: string;
+  /** The workspace that owns the folder: itself, or the workspace whose conversation works in the worktree. */
+  ownerId: string;
   workspacePath: string;
   /** Relative to the workspace. */
   file: string;
@@ -282,6 +286,16 @@ export class AppDocuments {
     return [...this.documents.values()].map((opened) => this.openAppOf(opened));
   }
 
+  /** The folder an app's id names: a workspace's, or the working copy of a worktree its conversations work in. */
+  private folderOf(folderId: string): { workspace: Workspace; ownerId: string } | null {
+    const workspace = this.store.findWorkspace(folderId);
+    if (workspace) return { workspace, ownerId: workspace.id };
+    const [conversationId] = this.store.conversationsInWorktree(folderId);
+    const conversation = conversationId === undefined ? undefined : this.store.findConversation(conversationId);
+    const owner = conversation ? this.store.findWorkspace(conversation.workspaceId) : undefined;
+    return owner && conversation ? { workspace: workingCopyOf(owner, conversation), ownerId: owner.id } : null;
+  }
+
   state(workspaceId: string, app: string): AppDocumentState | null {
     const opened = this.documents.get(appKey({ workspaceId, app }));
     return opened ? this.stateOf(opened) : null;
@@ -311,8 +325,9 @@ export class AppDocuments {
 
   private async openNow(workspaceId: string, appName: string, file: string, conversationId: string | undefined, inView: boolean): Promise<OpenApp> {
     const plugin = this.plugin(appName);
-    const workspace = this.store.findWorkspace(workspaceId);
-    if (!workspace) throw new AppProblem("That workspace no longer exists.");
+    const folder = this.folderOf(workspaceId);
+    if (!folder) throw new AppProblem("That workspace or worktree no longer exists.");
+    const { workspace, ownerId } = folder;
     const documentFile = this.guarded(() => plugin.host.documentFor?.(file)) ?? file;
     const target = fileInWorkspace(workspace.path, documentFile);
     const openedFile = documentFile === file ? undefined : toPosix(relative(dirname(target.path), fileInWorkspace(workspace.path, file).path));
@@ -327,6 +342,7 @@ export class AppDocuments {
     const opened: AppDocument = {
       plugin,
       workspaceId,
+      ownerId,
       workspacePath: workspace.path,
       ...target,
       document,
@@ -499,8 +515,8 @@ export class AppDocuments {
   }
 
   forgetWorkspace(workspaceId: string) {
-    const closed = [...this.documents.values()].filter((opened) => opened.workspaceId === workspaceId);
-    for (const opened of closed) this.close(workspaceId, opened.plugin.manifest.name);
+    const closed = [...this.documents.values()].filter((opened) => opened.ownerId === workspaceId);
+    for (const opened of closed) this.close(opened.workspaceId, opened.plugin.manifest.name);
     if (closed.length > 0) this.publisher.openAppsChanged(this.openApps());
   }
 

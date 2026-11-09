@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const home = scratchPath("worktrees-home");
@@ -30,6 +30,7 @@ test.beforeAll(async () => {
   git("add", "-A");
   git("commit", "-qm", "base");
   writeFileSync(join(host.projectDir, ".env"), secrets);
+  cpSync(join(import.meta.dirname, "..", "tests", "fixtures", "apps", "counter"), join(host.dataDir, "plugins", "counter"), { recursive: true });
   await host.start();
 });
 test.afterAll(async () => {
@@ -139,6 +140,30 @@ test("a workspace set to start conversations in worktrees gives each its own, se
     await expect(page.locator(".workspace li", { hasText: "FOLDER" })).toHaveCount(0);
     await expect.poll(() => existsSync(root)).toBe(false);
     expect(branches()).toEqual(["main", branch]);
+  });
+});
+
+test("an app a worktree conversation opens works on the worktree's file, apart from the project folder's copy", async ({ page }) => {
+  await signIn(page, host);
+  await startNewConversation(page, host.projectDir);
+  const conversationId = page.url().match(/#\/c\/(.+)$/)![1]!;
+  const folder = await agentFolder(page);
+  writeFileSync(join(folder, "counter.json"), JSON.stringify({ count: 1 }));
+  writeFileSync(join(host.projectDir, "counter.json"), JSON.stringify({ count: 9 }));
+
+  await test.step("app_open reads the worktree's copy, and its tab shows it", async () => {
+    const opened = await callCanvasTool(host, conversationId, "app_open", { app: "counter", file: "counter.json" });
+    expect(opened).toContain("Counter is open on counter.json");
+    expect(opened).toContain("The count is 1.");
+    await expect(page.locator(".canvas-header:visible .canvas-title")).toHaveText("Counter");
+    await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.app iframe").locator("#count")).toHaveText("1");
+  });
+
+  await test.step("the agent's operation changes the worktree's file, not the project folder's", async () => {
+    expect(await callCanvasTool(host, conversationId, "apply", { op: { op: "add", by: 1 } })).toBe("counter.json: Added 1; the count is 2.");
+    expect(JSON.parse(readFileSync(join(folder, "counter.json"), "utf8"))).toEqual({ count: 2 });
+    expect(JSON.parse(readFileSync(join(host.projectDir, "counter.json"), "utf8"))).toEqual({ count: 9 });
+    await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.app iframe").locator("#count")).toHaveText("2");
   });
 });
 
