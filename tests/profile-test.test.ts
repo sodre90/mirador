@@ -1,7 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { loadConfig } from "../host/config.ts";
 import { ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
@@ -9,21 +10,22 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { englishProblem, HostProblemError } from "../shared/host-problems.ts";
 import type { ProfileDraft } from "../shared/protocol.ts";
+import { fakeProgram } from "./fake-program.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "profile-test-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const fakeAgent = join(import.meta.dirname, "..", "e2e", "fake-acp-agent.ts");
 
-/** An `agy` that is the fake ACP agent, so a profile's test starts an agent that says what it offers. */
-function fakeAgy() {
+/** An `agy` in a folder of its own, running `script` on this Bun: Windows runs no script without an extension. */
+function agyRunning(script: string) {
   const folder = join(scratch, `programs-${crypto.randomUUID()}`);
-  const program = join(folder, "agy");
   mkdirSync(folder, { recursive: true });
-  writeFileSync(program, `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(fakeAgent)} "$@"\n`);
-  chmodSync(program, 0o755);
-  return program;
+  return fakeProgram(folder, "agy", script);
 }
+
+/** An `agy` that is the fake ACP agent, so a profile's test starts an agent that says what it offers. */
+const fakeAgy = () => agyRunning(`await import(${JSON.stringify(pathToFileURL(fakeAgent).href)});\n`);
 
 const serviceWith = (drafts: ProfileDraft[] = []) => {
   const store = new Store(":memory:");
@@ -71,11 +73,7 @@ describe("a profile's test", () => {
   });
 
   test("says the agent went away when it exits as it starts", async () => {
-    const folder = join(scratch, `broken-${crypto.randomUUID()}`);
-    const program = join(folder, "agy");
-    mkdirSync(folder, { recursive: true });
-    writeFileSync(program, `#!/bin/sh\necho "cannot reach the gateway" >&2\nexit 1\n`);
-    chmodSync(program, 0o755);
+    const program = agyRunning(`console.error("cannot reach the gateway");\nprocess.exit(1);\n`);
     const error = await failureOf(serviceWith(), draftWith(`AGY_PATH=${program}`));
     expect(error.problem).toMatchObject({ code: "agent-gone", gone: { kind: "exited", how: "1" } });
   });
