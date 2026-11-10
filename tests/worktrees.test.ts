@@ -36,6 +36,8 @@ beforeEach(async () => {
   projectDir = join(dataDir, "project");
   await mkdir(join(projectDir, "packages", "app"), { recursive: true });
   await git(projectDir, ["-c", "init.defaultBranch=main", "init", "-q"]);
+  // Git for Windows defaults to converting LF to CRLF on checkout, which the worktree's files are read against.
+  await git(projectDir, ["config", "core.autocrlf", "false"]);
   await writeFile(join(projectDir, ".gitignore"), "node_modules\n");
   await writeFile(join(projectDir, "kept.txt"), "one\n");
   await writeFile(join(projectDir, "packages", "app", "index.ts"), "export {};\n");
