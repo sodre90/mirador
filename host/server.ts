@@ -1064,6 +1064,11 @@ export function startServer(services: HostServices) {
         return void conversations
           .profileChoices(message.profileId)
           .then((configOptions) => reply({ type: "profile.choices.got", requestId: message.requestId, profileId: message.profileId, configOptions }));
+      case "profile.test":
+        return void conversations.testProfile(message.profile).then(
+          (result) => reply({ type: "profile.tested", requestId: message.requestId, result }),
+          (error) => reply({ type: "profile.tested", requestId: message.requestId, result: { ok: false, ...failure(error) } }),
+        );
       case "prompt-template.save":
         return savePromptTemplate(message.template);
       case "prompt-template.delete":

@@ -321,6 +321,7 @@ export const problems: Messages["problems"] = {
     couldNotStart: (cause) => `nem tudott elindulni: ${cause}`,
   },
   prelaunchFailed: (agent, failure, output) => `Az indítás előtti parancs (${agent}) ${failure}${output ? `: ${output}` : ""}`,
+  profileTestUnanswered: (seconds) => `Az ágens ${seconds} másodpercen belül nem válaszolt a beállításaival, ezért a Mirador leállította.`,
   prelaunch: {
     timedOut: (seconds) => `${seconds} másodperc alatt sem végzett`,
     exited: (how) => `kilépett (${how})`,

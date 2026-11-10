@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {
   busyTexts,
+  harnessIds,
   harnessLabels,
   isConversationPlace,
   isUntitled,
@@ -92,6 +93,7 @@ import type { NotifierMute } from "./notifier.ts";
 import { Changes } from "./changes.ts";
 import { Checkpoints, SNAPSHOTS_KEPT } from "./checkpoints.ts";
 import { profileToLaunch } from "./profiles.ts";
+import type { ProfileDraft, ProfileTestResult } from "../shared/protocol.ts";
 import type { Store, UnseenTurnEnd } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import type { TerminalProgram } from "./terminals.ts";
@@ -129,6 +131,8 @@ const START_CHOICES_TIMEOUT_MS = 120_000;
 const PROFILE_CHOICES_TTL_MS = 15 * 60_000;
 /** An agent that does not answer a probe within this leaves the editor with what it knew from its conversations. */
 const PROFILE_PROBE_TIMEOUT_MS = 30_000;
+/** A test the user asked for waits as long as a conversation's start does before it says the agent did not answer. */
+const PROFILE_TEST_TIMEOUT_MS = 60_000;
 /** Like Claude Code: the agent continues a minute after its usage limit resets, at most twice in a row by itself. */
 const USAGE_LIMIT_RESET_MARGIN_MS = 60_000;
 const AUTOMATIC_CONTINUES_IN_A_ROW = 2;
@@ -339,6 +343,8 @@ export class ConversationService {
   /** What each profile's agent last said it offers, and the probe asking one now. */
   private readonly profileChoicesCache = new Map<string, { at: number; options: acp.SessionConfigOption[] }>();
   private readonly profileChoiceProbes = new Map<string, Promise<acp.SessionConfigOption[] | null>>();
+  /** The agent each profile's probe runs, so a restart can stop it rather than queue the next probe behind it. */
+  private readonly activeProbeHarnesses = new Map<string, HarnessProcess>();
   private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail" | "busyWith" | "statusProblem">>();
   private readonly terminalActivity = new Map<string, TerminalActivity>();
   private readonly terminalWork = new TerminalWork();
@@ -950,6 +956,46 @@ export class ConversationService {
   private async askProfileChoices(profileId: string): Promise<acp.SessionConfigOption[] | null> {
     const profile = this.store.findProfile(profileId);
     if (!profile) return null;
+    const probe = await this.probeProfile(profile, profileId, PROFILE_PROBE_TIMEOUT_MS);
+    return "error" in probe ? null : probe.configOptions;
+  }
+
+  /**
+   * What a profile's agent offers, from a profile an editor holds and has not saved yet. A start that fails says why,
+   * both as the English its error came in and as the problem the page says in its own language.
+   */
+  async testProfile(draft: ProfileDraft): Promise<ProfileTestResult> {
+    if (!harnessIds.includes(draft.harness)) throw new HostProblemError({ code: "unknown-agent", agent: draft.harness });
+    const profile: Profile = {
+      id: draft.id ?? crypto.randomUUID(),
+      name: draft.name.trim() || harnessLabels[draft.harness],
+      harness: draft.harness,
+      environment: draft.environment,
+      prelaunch: draft.prelaunch,
+      mode: draft.mode || null,
+      effort: draft.effort || null,
+      bypassPermissions: draft.bypassPermissions,
+      askMode: draft.askMode,
+      ...(draft.idleCompaction === false && { idleCompaction: false }),
+      color: draft.color,
+      ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
+      createdAt: Date.now(),
+    };
+    const probe = await this.probeProfile(profile, `test-${crypto.randomUUID()}`, PROFILE_TEST_TIMEOUT_MS);
+    if ("error" in probe) throw probe.error;
+    return { ok: true, configOptions: probe.configOptions ?? [], tookMs: probe.tookMs };
+  }
+
+  /**
+   * Starts the profile's agent, asks a new session what it offers, and stops it again. `key` names the process for a
+   * profile restart to stop. The agent's answer is null when it listed no options at all.
+   */
+  private async probeProfile(
+    profile: Profile,
+    key: string,
+    timeoutMs: number,
+  ): Promise<{ configOptions: acp.SessionConfigOption[] | null; tookMs: number } | { error: unknown }> {
+    const startedAt = Date.now();
     let harness: HarnessProcess | null = null;
     try {
       const spec = harnessSpec(profile, this.store.claudeProgramSetting());
@@ -963,15 +1009,18 @@ export class ConversationService {
         },
         agentLogsDirectory(this.config.dataDir),
       );
+      this.activeProbeHarnesses.set(key, harness);
       const agent = harness;
       const session = agent.start().then(() => agent.newSession({ cwd: tmpdir(), mcpServers: [] }));
       // The timed-out agent may still fail the session later; by then the probe has stopped it and no longer cares.
       session.catch(() => {});
-      const created = await Promise.race([session, Bun.sleep(PROFILE_PROBE_TIMEOUT_MS).then(() => null)]);
-      return created?.configOptions ?? null;
-    } catch {
-      return null;
+      const created = await Promise.race([session, Bun.sleep(timeoutMs).then(() => null)]);
+      if (created === null) throw new HostProblemError({ code: "profile-test-unanswered", seconds: timeoutMs / 1000 });
+      return { configOptions: created.configOptions ?? null, tookMs: Date.now() - startedAt };
+    } catch (error) {
+      return { error };
     } finally {
+      if (this.activeProbeHarnesses.get(key) === harness) this.activeProbeHarnesses.delete(key);
       void harness?.stop();
     }
   }
@@ -1672,6 +1721,8 @@ export class ConversationService {
   restartProfile(profileId: string) {
     this.profileChoicesCache.delete(profileId);
     this.profileChoiceProbes.delete(profileId);
+    void this.activeProbeHarnesses.get(profileId)?.stop();
+    this.activeProbeHarnesses.delete(profileId);
     const keys = [...this.agentProcesses.keys()].filter((key) => key === profileId || key.startsWith(`${profileId}/`));
     if (keys.length === 0) return;
     const harnesses = keys.map((key) => this.agentProcesses.get(key)!);

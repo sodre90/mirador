@@ -321,6 +321,7 @@ export const problems: Messages["problems"] = {
     couldNotStart: (cause) => `no pudo iniciarse: ${cause}`,
   },
   prelaunchFailed: (agent, failure, output) => `El comando previo al inicio de ${agent} ${failure}${output ? `: ${output}` : ""}`,
+  profileTestUnanswered: (seconds) => `El agente no respondió con su configuración en ${seconds} s, así que Mirador lo detuvo.`,
   prelaunch: {
     timedOut: (seconds) => `superó el tiempo límite de ${seconds} s`,
     exited: (how) => `terminó con ${how}`,

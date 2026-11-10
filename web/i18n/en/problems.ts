@@ -319,6 +319,7 @@ export const problems = {
     couldNotStart: (cause: string) => `could not start: ${cause}`,
   },
   prelaunchFailed: (agent: string, failure: string, output: string) => `The pre-launch command of ${agent} ${failure}${output ? `: ${output}` : ""}`,
+  profileTestUnanswered: (seconds: number) => `The agent did not answer with its settings within ${seconds} s, so Mirador stopped it.`,
   prelaunch: {
     timedOut: (seconds: number) => `timed out after ${seconds} s`,
     exited: (how: string) => `exited with ${how}`,

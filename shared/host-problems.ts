@@ -178,7 +178,8 @@ export type HostProblem =
   | { code: "command-argument-unknown"; argument: string; known: string[] }
   | { code: "command-arguments-missing"; missing: string[] }
   | { code: "agent-gone"; agent: string; gone: AgentGone }
-  | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string };
+  | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string }
+  | { code: "profile-test-unanswered"; seconds: number };
 
 /** Why the agent process went away, in English. */
 export const englishAgentGone = (gone: AgentGone) => goneText(gone, englishWords);

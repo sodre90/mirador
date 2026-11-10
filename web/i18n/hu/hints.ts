@@ -229,6 +229,8 @@ export const hints: Messages["hints"] = {
   deleteProfileArmed: "Kattints újra a profil törléséhez. A beszélgetései egy másik profillal folytatódhatnak.",
   profileColour: "Ilyen színű pötty áll a profil neve előtt mindenhol, ahol megjelenik, és a beszélgetései ilyen színű szegélyt kapnak az oldalsávban.",
   profilePrelaunch: "Nem kötelező. A shelleddel és ezzel a környezettel fut, mielőtt az ágens elindul. Egy percen belül be kell fejeződnie; a hosszan futó proxykat a háttérben indítsd.",
+  profileTest:
+    "Ezekkel a beállításokkal indítja az ágenst, mentés nélkül, és felsorolja, mit kínál: modelleket, módokat és más beállításokat. Ha nem indul el, megmondja, melyik lépés hibázott.",
   profileMode: "A mód, amelyet egy beszélgetés átvesz, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját fejléce módosítja.\n\nA módok azok, amelyeket az ágens kínál: a Mirador minden alkalommal megkérdezi tőle, amikor megnyitod a profilt.",
   profileEffort: "Az erőfeszítés, amelyet egy beszélgetés átvesz, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját fejléce módosítja.\n\nA szintek azok, amelyeket az ágens kínál: a Mirador minden alkalommal megkérdezi tőle, amikor megnyitod a profilt. Az a beszélgetés, amelynek a modellje nem kínálja a szintet, megtartja a saját erőfeszítését.",
   profileYolo: "Mindent jóváhagy, amire az ágens engedélyt kér. Egy beszélgetés akkor veszi át, amikor ezzel a profillal indul, vagy átkerül rá; ezután a saját fejléce módosítja.",
@@ -271,6 +273,7 @@ export const hints: Messages["hints"] = {
   stopDelegatedTask: "A köre leállítása. Az itteni ágens megtudja, hogy a feladat leállt, azzal együtt, amit a másik ágens addig mondott.",
   dismissDelegatedTask:
     "A feladat elvetése: eltávolítja az üzenetmező fölül, a beszélgetését pedig az oldalsávból. A keresés továbbra is megtalálja a beszélgetést.",
+  clearFinishedDelegatedTasks: "Az összes befejezett átadott feladat eltávolítása az üzenetmező fölül.",
   delegatedFold: "Beszélgetések, amelyeknek ez feladatot adott át, például a delegate-tel. Kattints, hogy megjelenítsd vagy elrejtsd őket alatta.",
   delegatedWorking: "Dolgozik: egy átadott feladat még fut. A válasza ennek az ágensnek a következő üzeneteként érkezik.",
   claudeProgram: (installFolders) =>

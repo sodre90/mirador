@@ -1603,6 +1603,53 @@ button.icon.workspace-fold {
   border-top: 1px solid var(--border);
 }
 
+.profile-test-result {
+  max-height: 150px;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: calc(12px * var(--font-scale));
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.profile-test-result.problem {
+  border-color: var(--warn);
+}
+
+.profile-test-result dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0;
+}
+
+.profile-test-result dt {
+  color: var(--muted);
+}
+
+.profile-test-result dd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin: 0;
+}
+
+.profile-test-result dd span {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.profile-test-result dd span.current {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
 .name-and-colour {
   display: flex;
   flex-wrap: wrap;

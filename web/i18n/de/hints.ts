@@ -240,6 +240,8 @@ export const hints: Messages["hints"] = {
   deleteProfileArmed: "Klicke erneut, um dieses Profil zu löschen. Seine Unterhaltungen können mit einem anderen Profil weitergehen.",
   profileColour: "Ein Punkt in dieser Farbe steht überall vor dem Namen des Profils, und seine Unterhaltungen bekommen in der Seitenleiste einen Rand in dieser Farbe.",
   profilePrelaunch: "Optional. Läuft mit deiner Shell und dieser Umgebung, bevor der Agent startet. Er muss innerhalb einer Minute fertig sein; starte lang laufende Proxys im Hintergrund.",
+  profileTest:
+    "Startet den Agenten mit diesen Einstellungen, ohne sie zu speichern, und listet, was er anbietet: Modelle, Modi und weitere Einstellungen. Wenn er nicht startet, sagt es, welcher Schritt fehlgeschlagen ist.",
   profileMode: "Der Modus, den eine Unterhaltung übernimmt, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändert ihre eigene Kopfzeile ihn.\n\nDie Modi sind die, die der Agent anbietet: Mirador fragt ihn jedes Mal, wenn du das Profil öffnest.",
   profileEffort: "Der Denkaufwand, den eine Unterhaltung übernimmt, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändert ihre eigene Kopfzeile ihn.\n\nDie Stufen sind die, die der Agent anbietet: Mirador fragt ihn jedes Mal, wenn du das Profil öffnest. Eine Unterhaltung, deren Modell die Stufe nicht anbietet, behält ihren eigenen Denkaufwand.",
   profileYolo: "Alles genehmigen, wofür der Agent um Erlaubnis bittet. Eine Unterhaltung übernimmt das, wenn sie mit diesem Profil startet oder zu ihm wechselt; danach ändert ihre eigene Kopfzeile es.",
@@ -282,6 +284,7 @@ export const hints: Messages["hints"] = {
   stopDelegatedTask: "Stoppe ihre Runde. Der Agent hier erfährt, dass die Aufgabe gestoppt wurde, mit dem, was der andere Agent bis dahin gesagt hat.",
   dismissDelegatedTask:
     "Verwirf diese Aufgabe: Sie verschwindet über dem Nachrichtenfeld und ihre Unterhaltung aus der Seitenleiste. Die Suche findet die Unterhaltung weiterhin.",
+  clearFinishedDelegatedTasks: "Entferne alle fertigen delegierten Aufgaben über dem Nachrichtenfeld.",
   delegatedFold: "Unterhaltungen, denen diese hier Aufgaben übergeben hat, etwa mit delegate. Klicke, um sie darunter ein- oder auszublenden.",
   delegatedWorking: "Arbeitet: Eine delegierte Aufgabe läuft noch. Ihre Antwort kommt als nächste Nachricht dieses Agenten.",
   claudeProgram: (installFolders) =>

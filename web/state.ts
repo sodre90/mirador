@@ -411,6 +411,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "pong":
     case "profile.saved":
     case "profile.choices.got":
+    case "profile.tested":
     case "sessions.listed":
     case "sessions.searched":
     case "sessions.failed":

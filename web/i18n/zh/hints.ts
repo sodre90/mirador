@@ -216,6 +216,7 @@ export const hints: Messages["hints"] = {
   deleteProfileArmed: "再次点击，将删除这个配置。它的对话可以改用其他配置继续。",
   profileColour: "这个颜色的圆点会出现在配置名称前（凡是显示名称的地方），它的对话在侧边栏中也会带一道这个颜色的边。",
   profilePrelaunch: "可选。在 Agent 启动前，用你的 shell 和这个环境运行。它必须在一分钟内结束；长时间运行的代理请放到后台启动。",
+  profileTest: "不保存就用这些设置启动 Agent，并列出它提供的内容：模型、模式和其他设置。如果无法启动，会说明哪一步失败。",
   profileMode: "对话在使用这个配置启动或切换到它时采用的模式；之后可以在对话自己的标题栏中更改。\n\n模式以 Agent 提供的为准：每次打开配置时，Mirador 都会向它询问。",
   profileEffort: "对话在使用这个配置启动或切换到它时采用的思考强度；之后可以在对话自己的标题栏中更改。\n\n强度以 Agent 提供的为准：每次打开配置时，Mirador 都会向它询问。如果对话的模型不支持该强度，则保留对话自己的思考强度。",
   profileYolo: "Agent 请求的任何权限都批准。对话在使用这个配置启动或切换到它时采用这个设置；之后可以在对话自己的标题栏中更改。",
@@ -252,6 +253,7 @@ export const hints: Messages["hints"] = {
   openDelegatedTask: "打开处理这项任务的对话，观看进展或回答它的提问。",
   stopDelegatedTask: "停止它的轮次。这里的 Agent 会得知任务已停止，以及另一个 Agent 到目前为止说过的内容。",
   dismissDelegatedTask: "忽略这个任务：把它从消息框上方移除，并把它的对话从侧边栏移除。搜索仍能找到该对话。",
+  clearFinishedDelegatedTasks: "从消息框上方清除所有已完成的委托任务。",
   delegatedFold: "这个对话交办任务的对话，例如通过 delegate。点击可在其下显示或隐藏它们。",
   delegatedWorking: "工作中：一个委派任务仍在运行。它的回复会作为此 Agent 的下一条消息到达。",
   claudeProgram: (installFolders: string) =>

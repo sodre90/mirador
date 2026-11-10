@@ -239,6 +239,8 @@ export const hints: Messages["hints"] = {
   deleteProfileArmed: "Haz clic de nuevo para eliminar este perfil. Sus conversaciones pueden continuar con otro perfil.",
   profileColour: "Un punto de este color va delante del nombre del perfil dondequiera que aparezca, y sus conversaciones llevan un borde de este color en la barra lateral.",
   profilePrelaunch: "Opcional. Se ejecuta con tu shell y este entorno antes de que se inicie el agente. Debe terminar en menos de un minuto; inicia en segundo plano los proxies de larga duración.",
+  profileTest:
+    "Inicia el agente con esta configuración, sin guardarla, y enumera lo que ofrece: modelos, modos y otras opciones. Si no puede iniciarse, indica qué paso falló.",
   profileMode: "El modo que toma una conversación cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.\n\nLos modos son los que ofrece el agente: Mirador se los pregunta cada vez que abres el perfil.",
   profileEffort: "El esfuerzo que toma una conversación cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.\n\nLos niveles son los que ofrece el agente: Mirador se los pregunta cada vez que abres el perfil. Una conversación cuyo modelo no ofrece el nivel conserva su propio esfuerzo.",
   profileYolo: "Aprobar todo aquello para lo que el agente pida permiso. Una conversación lo toma cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.",
@@ -279,6 +281,7 @@ export const hints: Messages["hints"] = {
   openDelegatedTask: "Abre la conversación que trabaja en esta tarea, para verla o responder a lo que pregunta.",
   stopDelegatedTask: "Detiene su turno. El agente de aquí se entera de que la tarea se detuvo, con lo que el otro agente haya dicho hasta ahora.",
   dismissDelegatedTask: "Descarta esta tarea: la quita de encima del cuadro de mensaje, y su conversación de la barra lateral. La búsqueda sigue encontrando la conversación.",
+  clearFinishedDelegatedTasks: "Quita todas las tareas delegadas terminadas de encima del cuadro de mensaje.",
   delegatedFold: "Conversaciones a las que esta delegó tareas, por ejemplo con delegate. Haz clic para mostrarlas u ocultarlas debajo de ella.",
   delegatedWorking: "Trabajando: una tarea delegada sigue en marcha. Su respuesta llega como el siguiente mensaje de este agente.",
   claudeProgram: (installFolders) =>

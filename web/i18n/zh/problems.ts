@@ -300,6 +300,7 @@ export const problems: Messages["problems"] = {
     couldNotStart: (cause) => `无法启动：${cause}`,
   },
   prelaunchFailed: (agent, failure, output) => `${agent} 的启动前命令${failure}${output ? `：${output}` : ""}`,
+  profileTestUnanswered: (seconds) => `Agent 在 ${seconds} 秒内没有返回它的设置，Mirador 已将其停止。`,
   prelaunch: {
     timedOut: (seconds) => `在 ${seconds} 秒后超时`,
     exited: (how) => `已退出（${how}）`,

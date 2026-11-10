@@ -217,6 +217,8 @@ export const hints = {
   deleteProfileArmed: "Click again to delete this profile. Its conversations can continue with another profile.",
   profileColour: "A dot in this colour goes before the profile's name wherever it shows, and its conversations get an edge of it in the sidebar.",
   profilePrelaunch: "Optional. Runs with your shell and this environment before the agent starts. It must finish within a minute; start long-running proxies in the background.",
+  profileTest:
+    "Starts the agent with these settings, without saving them, and lists what it offers: models, modes and other settings. When it cannot start, it says which part failed.",
   profileMode: "The mode a conversation takes when it starts with this profile or moves to it; its own header changes it after that.\n\nThe modes are the ones the agent offers: Mirador asks it each time you open the profile.",
   profileEffort: "The effort a conversation takes when it starts with this profile or moves to it; its own header changes it after that.\n\nThe levels are the ones the agent offers: Mirador asks it each time you open the profile. A conversation whose model does not offer the level keeps its own effort.",
   profileYolo: "Approve whatever the agent asks permission for. A conversation takes this when it starts with this profile or moves to it; its own header changes it after that.",
@@ -253,6 +255,7 @@ export const hints = {
   openDelegatedTask: "Open the conversation working on this task, to watch it or answer what it asks.",
   stopDelegatedTask: "Stop its turn. The agent here hears that the task stopped, with whatever the other agent said so far.",
   dismissDelegatedTask: "Dismiss this task: remove it from above the message box, and its conversation from the sidebar. Search still finds the conversation.",
+  clearFinishedDelegatedTasks: "Clear all finished delegated tasks from above the message box.",
   delegatedFold: "Conversations this one handed tasks to, such as with delegate. Click to show or hide them under it.",
   delegatedWorking: "Working: a delegated task is still running. Its reply comes as this agent's next message.",
   claudeProgram: (installFolders: string) =>

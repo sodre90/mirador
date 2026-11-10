@@ -349,6 +349,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.agentGone(problem.agent, goneText(problem.gone, words));
     case "prelaunch-failed":
       return words.prelaunchFailed(problem.agent, prelaunchText(problem.failure, words), problem.output);
+    case "profile-test-unanswered":
+      return words.profileTestUnanswered(problem.seconds);
     default:
       return words.fixed[problem.code];
   }

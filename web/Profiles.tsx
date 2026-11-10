@@ -1,13 +1,14 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { modelSettingsOf, profileSettingValue, type PluginProfileSetting } from "../shared/apps.ts";
-import { categoryChoices, knownChoices } from "../shared/config-options.ts";
+import { categoryChoices, flatSelectOptions, knownChoices } from "../shared/config-options.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
-import type { ProfileDraft } from "../shared/protocol.ts";
+import type { ProfileDraft, ProfileTestResult } from "../shared/protocol.ts";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
+import { hostErrorText } from "./host-error.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
@@ -60,6 +61,37 @@ function useSaveProfile(onSaved: (profileId: string) => void) {
     if (connection.send({ type: "profile.save", requestId, profile })) setPendingRequest(requestId);
   };
   return { save, saving: pendingRequest !== null };
+}
+
+/**
+ * The answer to a profile's test. It comes back tagged with the launch the test was asked for, so an editor whose
+ * settings changed since then does not show an answer about settings it no longer has.
+ */
+function useProfileTest() {
+  const [asking, setAsking] = useState<{ requestId: string; launch: string } | null>(null);
+  const [answer, setAnswer] = useState<{ launch: string; result: ProfileTestResult } | null>(null);
+  useEffect(
+    () =>
+      connection.onMessage((message) => {
+        if (message.type !== "profile.tested" || message.requestId !== asking?.requestId) return;
+        setAnswer({ launch: asking.launch, result: message.result });
+        setAsking(null);
+      }),
+    [asking],
+  );
+  useEffect(
+    () =>
+      connection.onStatus((status) => {
+        if (status !== "open") setAsking(null);
+      }),
+    [],
+  );
+  const test = (profile: ProfileDraft, launch: string) => {
+    const requestId = crypto.randomUUID();
+    setAnswer(null);
+    if (connection.send({ type: "profile.test", requestId, profile })) setAsking({ requestId, launch });
+  };
+  return { test, testing: asking !== null, answer };
 }
 
 function EnvironmentField({
@@ -288,6 +320,9 @@ function ProfileEditor({
     setSavedOnce(true);
     onSaved(profileId);
   });
+  const launchKey = JSON.stringify([harness, environment, prelaunch]);
+  const { test, testing, answer } = useProfileTest();
+  const testResult = answer?.launch === launchKey ? answer.result : null;
   const { errors } = useMemo(() => parseEnvironment(environment), [environment]);
   const pluginsHaveProfileSettings = usePluginSettings().some(({ profileSettings = [] }) => profileSettings.length > 0);
   const shownTabs = editorTabs.filter((each) => each !== "plugins" || pluginsHaveProfileSettings);
@@ -299,6 +334,22 @@ function ProfileEditor({
   const offersAChoice = (choices: unknown[]) => choices.length > 1;
 
   const deleteProfile = () => profile && connection.send({ type: "profile.delete", profileId: profile.id });
+
+  /** What the form holds, as the host takes it: to save, and to test before saving. */
+  const draft = (): ProfileDraft => ({
+    id: profile?.id,
+    name,
+    harness,
+    environment,
+    prelaunch,
+    mode: mode || null,
+    effort: effort || null,
+    bypassPermissions,
+    askMode,
+    ...(harness === "claude" && !idleCompaction && { idleCompaction: false }),
+    color,
+    pluginSettings,
+  });
 
   const nameField = (
     <label>
@@ -332,6 +383,9 @@ function ProfileEditor({
       <button type="submit" disabled={saving || errors.length > 0 || !name.trim() || unchanged}>
         {profile ? words.save : words.create}
       </button>
+      <button type="button" data-hint={hints.profileTest} disabled={testing || errors.length > 0} onClick={() => test(draft(), launchKey)}>
+        {testing ? words.testing : words.test}
+      </button>
       {profile && !isOnlyProfile && (
         <ConfirmButton className="danger" label={words.deleteLabel} armedText={words.deleteArmed} armedHint={hints.deleteProfileArmed} onConfirm={deleteProfile}>
           {words.delete}
@@ -353,22 +407,47 @@ function ProfileEditor({
     </div>
   );
 
+  const testPanel = testResult && (
+    <div className={`profile-test-result${testResult.ok ? "" : " problem"}`} role={testResult.ok ? "status" : "alert"} aria-label={words.testResultLabel}>
+      {testResult.ok ? (
+        <>
+          <div className="hint">{words.testAnswered((testResult.tookMs / 1000).toFixed(1))}</div>
+          {testResult.configOptions.length === 0 ? (
+            <div className="hint">{words.testNoSettings}</div>
+          ) : (
+            <dl>
+              {testResult.configOptions.map((option) => (
+                <Fragment key={option.id}>
+                  <dt>{option.name}</dt>
+                  <dd>
+                    {option.type === "select" ? (
+                      flatSelectOptions(option).map((choice) => (
+                        <span
+                          key={choice.value}
+                          className={choice.value === option.currentValue ? "current" : undefined}
+                          aria-label={choice.value === option.currentValue ? `${choice.name} (${words.testCurrent})` : undefined}
+                        >
+                          {choice.name}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="current">{String(option.currentValue)}</span>
+                    )}
+                  </dd>
+                </Fragment>
+              ))}
+            </dl>
+          )}
+        </>
+      ) : (
+        <div>{hostErrorText(testResult)}</div>
+      )}
+    </div>
+  );
+
   const saveForm = (event: FormEvent) => {
     event.preventDefault();
-    save({
-      id: profile?.id,
-      name,
-      harness,
-      environment,
-      prelaunch,
-      mode: mode || null,
-      effort: effort || null,
-      bypassPermissions,
-      askMode,
-      ...(harness === "claude" && !idleCompaction && { idleCompaction: false }),
-      color,
-      pluginSettings,
-    });
+    save(draft());
   };
 
   if (onMoreOptions) {
@@ -376,6 +455,7 @@ function ProfileEditor({
       <form className="profile-editor" onSubmit={saveForm}>
         {agentField}
         {nameField}
+        {testPanel}
         {actions}
       </form>
     );
@@ -494,6 +574,7 @@ function ProfileEditor({
         )}
       </div>
       <footer className="profile-footer">
+        {testPanel}
         {errors.length > 0 && (
           <ul className="form-errors">
             {errors.map((error) => (

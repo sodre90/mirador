@@ -85,6 +85,11 @@ export const DESKTOP_APP_CODE_PARAMETER = "desktop-app-code";
 
 export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings"> & { id?: string };
 
+/** What a profile editor's test found: what the agent offers, or why it could not say. */
+export type ProfileTestResult =
+  | { ok: true; configOptions: SessionConfigOption[]; tookMs: number }
+  | { ok: false; message: string; problem?: HostProblem };
+
 export type ClientMessage =
   /** Its conversations start on the profile; null only while there is no profile yet. */
   | { type: "workspace.create"; path: string; profileId: string | null }
@@ -108,6 +113,8 @@ export type ClientMessage =
   | { type: "profile.delete"; profileId: string }
   /** Asks what the profile's agent offers now, so a profile editor can list modes and efforts without one of its conversations having run. */
   | { type: "profile.choices.get"; requestId: string; profileId: string }
+  /** Starts the agent the draft describes, which need not be saved, and asks what it offers. */
+  | { type: "profile.test"; requestId: string; profile: ProfileDraft }
   /** Creates the template, or changes the one with this id. */
   | { type: "prompt-template.save"; template: Pick<PromptTemplate, "id" | "name" | "text"> }
   | { type: "prompt-template.delete"; templateId: string }
@@ -426,6 +433,7 @@ export type ServerMessage =
   | { type: "profile.saved"; requestId: string; profileId: string }
   /** What the profile's agent said it offers; null when it was not there to answer. */
   | { type: "profile.choices.got"; requestId: string; profileId: string; configOptions: SessionConfigOption[] | null }
+  | { type: "profile.tested"; requestId: string; result: ProfileTestResult }
   | { type: "prompt-template.upserted"; template: PromptTemplate }
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }
