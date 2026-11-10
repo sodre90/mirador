@@ -176,7 +176,7 @@ test("one conversation starts in the other place, a clean worktree goes without 
   await test.step("the dialog starts one conversation in the project folder, which keeps starting them in worktrees", async () => {
     await worktreesButton(page, host.projectDir).click();
     await worktreesDialog(page, "project").getByRole("button", { name: "Start one in the project folder now" }).click();
-    expect(await agentFolder(page)).toBe(realpathSync(host.projectDir));
+    expect(canonicalPath(await agentFolder(page))).toBe(canonicalPath(host.projectDir));
     await expect(selectedRow(page).locator(".worktree-mark")).toHaveCount(0);
     await expect(worktreesButton(page, host.projectDir)).toHaveAttribute("data-place", "worktree");
   });
