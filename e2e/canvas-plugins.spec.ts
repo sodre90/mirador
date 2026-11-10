@@ -33,7 +33,7 @@ const toggle = (page: Page) => page.locator(".checklist-toggle:visible");
 const pageView = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-body > .canvas-frame.plugin iframe");
 const canvasPane = (page: Page) => page.locator('[data-pane="canvas"]');
 const tabView = (page: Page) => page.frameLocator(".checklist:visible .canvas-frame.plugin iframe");
-const delegatedTask = (page: Page, title: string) => page.locator(".delegated-tasks:visible li", { hasText: title });
+const delegatedTask = (page: Page, title: string) => page.locator(".delegated-tasks:visible li:not(.delegated-group)", { hasText: title });
 
 /**
  * The report opens with room, so after a reload the canvas can cover the chat again; the user goes back to the message box.
@@ -327,6 +327,45 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(page.locator(".delegated-tasks:visible")).toHaveCount(0);
   });
 
+  await test.step("multiple handed-over tasks from the same plugin group together and can be cleared at once", async () => {
+    expect(await callCanvasTool(host, conversationId, "hand_over", { profile: "local", task: "SAY Batch task one" })).toMatch(/^Handed over to [0-9a-f-]+\.$/);
+    expect(await callCanvasTool(host, conversationId, "hand_over", { profile: "local", task: "SAY Batch task two" })).toMatch(/^Handed over to [0-9a-f-]+\.$/);
+    await expect.poll(agentSaw).toContain("The handed-over task finished: Batch task two\n");
+
+    const group = page.locator(".delegated-tasks:visible .delegated-group");
+    await expect(group).toHaveCount(1);
+    await expect(group.locator(".delegated-group-name")).toHaveText("Board");
+    await expect(group.locator(".delegated-group-count")).toHaveText("2 tasks");
+    await expect(group.locator(".delegated-group-finished")).toHaveText("2 finished");
+
+    await expect(group.locator(".delegated-group-items")).toHaveCount(0);
+    const toggle = group.locator(".delegated-group-toggle");
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(group.locator(".delegated-group-items li")).toHaveCount(2);
+    await expect(delegatedTask(page, "SAY Batch task one")).toBeVisible();
+    await expect(delegatedTask(page, "SAY Batch task two")).toBeVisible();
+
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(group.locator(".delegated-group-items")).toHaveCount(0);
+
+    const clearTop = page.locator(".delegated-tasks-header:visible button", { hasText: "Clear finished" });
+    await expect(clearTop).toBeVisible();
+
+    await group.locator("button.delegated-group-clear").click();
+    await expect(page.locator(".delegated-tasks:visible")).toHaveCount(0);
+
+    expect(await callCanvasTool(host, conversationId, "hand_over", { profile: "local", task: "SAY Batch task three" })).toMatch(/^Handed over to [0-9a-f-]+\.$/);
+    expect(await callCanvasTool(host, conversationId, "hand_over", { profile: "local", task: "SAY Batch task four" })).toMatch(/^Handed over to [0-9a-f-]+\.$/);
+    await expect.poll(agentSaw).toContain("The handed-over task finished: Batch task four\n");
+    await expect(page.locator(".delegated-tasks:visible .delegated-group")).toHaveCount(1);
+    await page.locator(".delegated-tasks-header:visible button", { hasText: "Clear finished" }).click();
+    await expect(page.locator(".delegated-tasks:visible")).toHaveCount(0);
+  });
+
   await test.step("a handed-over task that a restart cuts short carries on after it, and Stop above the composer ends it, which the caller's agent hears", async () => {
     const title = "STOPPED QUIET Look for the callers";
     const timesSent = () => agentSaw().split(title).length - 1;
@@ -398,7 +437,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await (await handOverTo()).selectOption({ label: "None" });
     await expect.poll(() => callCanvasTool(host, conversationId, "hand_over", { task: "SAY Not handed over." })).toBe("Name a profile; this one hands over to none.");
     await sendAndWait(page, "SAY Noted.");
-    expect(agentSaw()).toContain("Hand over to for this conversation is now none: the user chose it, in place of what your instructions say of it.\n\nSAY Noted.");
+    expect(agentSaw()).toContain("Hand over to for this conversation is now none: the user chose it, in place of what your instructions say of it.\n\nHand over model for this conversation is back to its profile's: none.\n\nSAY Noted.");
 
     await (await handOverTo()).selectOption({ label: "Profile's (Local)" });
     await expect.poll(() => callCanvasTool(host, conversationId, "hand_over", { task: "SAY Handed over again." })).toMatch(/^Handed over to [0-9a-f-]+\.$/);
@@ -409,7 +448,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await (await conversationSettings(page)).getByLabel("Profile", { exact: true }).selectOption({ label: "Local" });
     await expect((await handOverTo()).locator("option:checked"), "switching profile goes back to following it").toHaveText("Profile's (None)");
     await sendAndWait(page, "SAY Switched.");
-    expect(agentSaw(), "the agent hears the setting as it is after the switch").toContain("Hand over to for this conversation is back to its profile's: none.\n\nSAY Switched.");
+    expect(agentSaw(), "the agent hears the setting as it is after the switch").toContain("Hand over to for this conversation is back to its profile's: none.\n\nHand over model for this conversation is back to its profile's: none.\n\nSAY Switched.");
   });
 
   await test.step("a plugin's tool call in the conversation names the plugin, where Mirador's own canvas tools name the canvas", async () => {

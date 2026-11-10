@@ -5450,7 +5450,8 @@ button.shell-more:hover {
   cursor: pointer;
 }
 
-.async-tasks-header {
+.async-tasks-header,
+.delegated-tasks-header {
   display: flex;
   justify-content: flex-end;
   padding: 0 2px 4px;
@@ -5573,6 +5574,90 @@ button.shell-more:hover {
   white-space: pre-line;
   overflow: hidden;
   color: var(--muted);
+}
+
+.delegated-tasks li.delegated-group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 0;
+  gap: 0;
+}
+
+.delegated-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  gap: 10px;
+}
+
+.delegated-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: start;
+  flex: 1;
+  min-width: 0;
+}
+
+.delegated-group-arrow {
+  color: var(--muted);
+  width: 1em;
+  text-align: center;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.delegated-group-name {
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.delegated-group-count {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.delegated-group-working {
+  color: var(--accent);
+  font-size: calc(11.5px * var(--font-scale));
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  white-space: nowrap;
+}
+
+.delegated-group-finished {
+  color: var(--muted);
+  font-size: calc(11.5px * var(--font-scale));
+  white-space: nowrap;
+}
+
+.delegated-group-clear {
+  flex-shrink: 0;
+}
+
+.delegated-tasks ul.delegated-group-items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+}
+
+.delegated-tasks ul.delegated-group-items li {
+  padding-left: 24px;
 }
 
 .job-wait-message[role="button"]:hover {

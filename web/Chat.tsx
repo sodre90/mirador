@@ -18,7 +18,7 @@ import {
   type StoredEvent,
   type UsageLimitWait,
 } from "../shared/model.ts";
-import { toolTitlesOfPlugins } from "./plugin-settings.ts";
+import { titlesOfPlugins, toolTitlesOfPlugins } from "./plugin-settings.ts";
 import { readableToolTitle as readableToolTitleOf } from "../shared/tool-title.ts";
 import { panelCommandLine, refusedPanelCommand } from "../shared/panel-commands.ts";
 import { adjacentPlaceholder, placeholdersIn, type TextRange } from "../shared/prompt-templates.ts";
@@ -1373,18 +1373,127 @@ function AsyncTaskRow({ conversationId, task }: { conversationId: string; task: 
 
 const delegatedEndLabels: Record<DelegatedReply["ended"], string> = words.delegated.ended;
 
+const isFinishedDelegation = (task: Conversation) => Boolean(task.startedBy?.reply);
+
+const pluginDisplayName = (plugin: string) => {
+  const titles = titlesOfPlugins();
+  if (titles[plugin]) return titles[plugin];
+  const toolTitles = toolTitlesOfPlugins();
+  if (toolTitles[plugin]) return toolTitles[plugin];
+  return plugin ? plugin.charAt(0).toUpperCase() + plugin.slice(1) : "";
+};
+
+const profileNameOf = (task: Conversation, profiles: Profile[]) =>
+  profiles.find(({ id }) => id === task.profileId)?.name ?? harnessLabels[task.harness];
+
 /** The conversations this one's plugin tools started, such as delegated tasks, until the user dismisses them. */
-function DelegatedTasks({ tasks, profiles }: { tasks: Conversation[]; profiles: Profile[] }) {
+function DelegatedTasks({ conversationId, tasks, profiles }: { conversationId: string; tasks: Conversation[]; profiles: Profile[] }) {
+  const finishedTasks = tasks.filter(isFinishedDelegation);
+  const groups = useMemo(() => {
+    const map = new Map<string, Conversation[]>();
+    for (const task of tasks) {
+      const plugin = task.startedBy?.plugin ?? "";
+      const list = map.get(plugin);
+      if (list) list.push(task);
+      else map.set(plugin, [task]);
+    }
+    return Array.from(map.entries()).map(([plugin, groupTasks]) => ({
+      plugin,
+      tasks: groupTasks,
+    }));
+  }, [tasks]);
+
   return (
     <section className="delegated-tasks" aria-label={words.delegated.label}>
+      {finishedTasks.length >= 2 && (
+        <header className="delegated-tasks-header">
+          <button
+            type="button"
+            className="link"
+            data-hint={hints.clearFinishedDelegatedTasks}
+            onClick={() => connection.send({ type: "conversation.delegation.clear-finished", conversationId })}
+          >
+            {words.tasks.clearFinished}
+          </button>
+        </header>
+      )}
       <ul>
-        {tasks.map((task) => (
-          <li key={task.id}>
-            <DelegatedTaskRow task={task} profile={profiles.find(({ id }) => id === task.profileId)?.name ?? harnessLabels[task.harness]} />
-          </li>
-        ))}
+        {groups.map((group) => {
+          if (group.tasks.length === 1 || !group.plugin) {
+            return group.tasks.map((task) => (
+              <li key={task.id}>
+                <DelegatedTaskRow task={task} profile={profileNameOf(task, profiles)} />
+              </li>
+            ));
+          }
+          return (
+            <DelegatedGroupRow
+              key={group.plugin}
+              conversationId={conversationId}
+              plugin={group.plugin}
+              tasks={group.tasks}
+              profiles={profiles}
+            />
+          );
+        })}
       </ul>
     </section>
+  );
+}
+
+function DelegatedGroupRow({
+  conversationId,
+  plugin,
+  tasks,
+  profiles,
+}: {
+  conversationId: string;
+  plugin: string;
+  tasks: Conversation[];
+  profiles: Profile[];
+}) {
+  const [open, setOpen] = useState(false);
+  const name = pluginDisplayName(plugin);
+  const workingCount = tasks.filter((task) => !task.startedBy?.reply).length;
+  const finishedCount = tasks.filter((task) => Boolean(task.startedBy?.reply)).length;
+
+  return (
+    <li className="delegated-group">
+      <div className="delegated-group-header">
+        <button
+          type="button"
+          className="delegated-group-toggle"
+          aria-expanded={open}
+          title={open ? words.delegated.fold(name) : words.delegated.unfold(name)}
+          onClick={() => setOpen((wasOpen) => !wasOpen)}
+        >
+          <span className="delegated-group-arrow" aria-hidden="true">{open ? "▾" : "▸"}</span>
+          <span className="delegated-group-name">{name}</span>
+          <span className="delegated-group-count">{words.delegated.tasksCount(tasks.length)}</span>
+          {workingCount > 0 && <span className="delegated-group-working">{words.delegated.workingCount(workingCount)}</span>}
+          {finishedCount > 0 && <span className="delegated-group-finished">{words.delegated.finishedCount(finishedCount)}</span>}
+        </button>
+        {finishedCount > 0 && (
+          <button
+            type="button"
+            className="link delegated-group-clear"
+            data-hint={hints.clearFinishedDelegatedTasks}
+            onClick={() => connection.send({ type: "conversation.delegation.clear-finished", conversationId, plugin })}
+          >
+            {words.tasks.clearFinished}
+          </button>
+        )}
+      </div>
+      {open && (
+        <ul className="delegated-group-items">
+          {tasks.map((task) => (
+            <li key={task.id}>
+              <DelegatedTaskRow task={task} profile={profileNameOf(task, profiles)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }
 
@@ -1817,7 +1926,7 @@ function Composer({
       <ComposerGrip textarea={textarea} />
       {conversation.usageLimit && <UsageLimitNotice conversationId={conversation.id} wait={conversation.usageLimit} />}
       {conversation.asyncTasks.length > 0 && <BackgroundTasks conversationId={conversation.id} tasks={conversation.asyncTasks} />}
-      {delegatedTasks.length > 0 && <DelegatedTasks tasks={delegatedTasks} profiles={profiles} />}
+      {delegatedTasks.length > 0 && <DelegatedTasks conversationId={conversation.id} tasks={delegatedTasks} profiles={profiles} />}
       {conversation.jobWaits.length > 0 && <JobWaits conversationId={conversation.id} waits={conversation.jobWaits} />}
       {queued.length > 0 && <QueuedMessages conversationId={conversation.id} harness={conversation.harness} messages={queued} onEdit={pullBack} onRemove={remove} />}
       <CommandOutputsAttached commands={pendingCommands} conversationId={conversation.id} />

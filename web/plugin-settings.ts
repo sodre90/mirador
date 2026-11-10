@@ -16,13 +16,20 @@ function receive(pluginSettings: PluginSettings[]) {
 }
 
 let pluginToolTitles: Record<string, string> = {};
+let pluginTitles: Record<string, string> = {};
 
 /** Each plugin's tools with the plugin's title, as the host last said; plugins change only with a restart, which sends a new snapshot. */
 export const toolTitlesOfPlugins = () => pluginToolTitles;
 
+/** Each loaded plugin's title, by name, as the host last said. */
+export const titlesOfPlugins = () => pluginTitles;
+
 connection.onMessage((message) => {
-  if (message.type === "snapshot") pluginToolTitles = message.pluginToolTitles ?? {};
-  if (message.type === "snapshot") receive(message.pluginSettings ?? []);
+  if (message.type === "snapshot") {
+    pluginToolTitles = message.pluginToolTitles ?? {};
+    pluginTitles = message.pluginTitles ?? {};
+    receive(message.pluginSettings ?? []);
+  }
   if (message.type === "plugins.settings") receive(message.pluginSettings);
 });
 

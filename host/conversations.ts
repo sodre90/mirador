@@ -568,6 +568,12 @@ export class ConversationService {
     this.republish(conversationId);
   }
 
+  /** The user dismisses finished delegated tasks of this caller; with `plugin`, only that plugin's. */
+  clearFinishedDelegations(callerId: string, plugin?: string) {
+    const dismissedIds = this.store.dismissFinishedDelegations(callerId, plugin);
+    for (const id of dismissedIds) this.republish(id);
+  }
+
   /**
    * Once, when the work of a conversation a plugin's tool started ends. The reply is kept before the plugin hears it, so
    * a crash in between can't tell it twice; a caller deleted since hears nothing. What it ran on is read as it ended.

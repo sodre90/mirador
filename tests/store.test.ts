@@ -858,4 +858,35 @@ describe("Store", () => {
     store.close();
   });
 
+  test("dismisses finished delegations of a caller, or of a specific plugin, leaving working and already-dismissed ones untouched", () => {
+    const { store, conversation } = seededStore();
+    store.insertConversation({ ...conversation, id: "c2" });
+    store.insertConversation({ ...conversation, id: "c3" });
+    store.insertConversation({ ...conversation, id: "c4" });
+    store.insertConversation({ ...conversation, id: "c5" });
+
+    store.recordStartedBy("c2", { conversationId: "c1", plugin: "council" });
+    store.recordStartedBy("c3", { conversationId: "c1", plugin: "council" });
+    store.recordStartedBy("c4", { conversationId: "c1", plugin: "board" });
+    store.recordStartedBy("c5", { conversationId: "c1", plugin: "council" });
+
+    store.recordDelegatedReply("c2", { ended: "finished", opening: "Done 2" });
+    store.recordDelegatedReply("c3", { ended: "finished", opening: "Done 3" });
+    store.recordDelegatedReply("c4", { ended: "finished", opening: "Done 4" });
+
+    const clearedCouncil = store.dismissFinishedDelegations("c1", "council");
+    expect(clearedCouncil.sort()).toEqual(["c2", "c3"]);
+    expect(store.findConversation("c2")?.startedBy?.dismissed).toBe(true);
+    expect(store.findConversation("c3")?.startedBy?.dismissed).toBe(true);
+    expect(store.findConversation("c4")?.startedBy?.dismissed).toBe(false);
+    expect(store.findConversation("c5")?.startedBy?.dismissed).toBe(false);
+
+    const clearedAll = store.dismissFinishedDelegations("c1");
+    expect(clearedAll).toEqual(["c4"]);
+    expect(store.findConversation("c4")?.startedBy?.dismissed).toBe(true);
+    expect(store.findConversation("c5")?.startedBy?.dismissed).toBe(false);
+
+    expect(store.dismissFinishedDelegations("c1")).toEqual([]);
+    store.close();
+  });
 });

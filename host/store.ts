@@ -739,6 +739,20 @@ export class Store {
     this.db.query("UPDATE conversations SET delegation_dismissed = 1 WHERE id = ? AND started_by IS NOT NULL").run(conversationId);
   }
 
+  dismissFinishedDelegations(callerId: string, plugin?: string): string[] {
+    const query = plugin
+      ? "SELECT id FROM conversations WHERE started_by = ? AND started_by_plugin = ? AND delegated_reply IS NOT NULL AND delegation_dismissed = 0"
+      : "SELECT id FROM conversations WHERE started_by = ? AND delegated_reply IS NOT NULL AND delegation_dismissed = 0";
+    const update = plugin
+      ? "UPDATE conversations SET delegation_dismissed = 1 WHERE started_by = ? AND started_by_plugin = ? AND delegated_reply IS NOT NULL AND delegation_dismissed = 0"
+      : "UPDATE conversations SET delegation_dismissed = 1 WHERE started_by = ? AND delegated_reply IS NOT NULL AND delegation_dismissed = 0";
+    const args = plugin ? [callerId, plugin] : [callerId];
+    const rows = this.db.query(query).all(...args) as { id: string }[];
+    if (rows.length === 0) return [];
+    this.db.query(update).run(...args);
+    return rows.map((r) => r.id);
+  }
+
   /** Numbers the conversations' positions in the given order. */
   setConversationOrder(conversationIds: string[]) {
     this.setPositions("conversations", conversationIds);

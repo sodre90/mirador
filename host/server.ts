@@ -1233,6 +1233,8 @@ export function startServer(services: HostServices) {
         return conversations.clearFinishedAsyncTasks(message.conversationId);
       case "conversation.delegation.dismiss":
         return conversations.dismissDelegation(message.conversationId);
+      case "conversation.delegation.clear-finished":
+        return conversations.clearFinishedDelegations(message.conversationId, message.plugin);
       case "async-task.output.get":
         return reply({
           type: "async-task.output.got",
@@ -1684,6 +1686,7 @@ export function startServer(services: HostServices) {
       openApps: apps.openApps(),
       canvasViews: canvasPlugins.viewPaths(),
       pluginToolTitles: canvasPlugins.toolTitles(),
+      pluginTitles: canvasPlugins.pluginTitles(),
       pluginCommands: canvasPlugins.commands(),
       pluginWindows: canvasPlugins.windowTitles(),
       workspaceTabs: canvasPlugins.workspaceTabTitles(),

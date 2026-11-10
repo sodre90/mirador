@@ -312,6 +312,11 @@ export class CanvasPlugins {
     return Object.fromEntries(this.plugins.flatMap(({ manifest, host }) => Object.keys(host.tools).map((tool) => [tool, manifest.title])));
   }
 
+  /** Each loaded plugin's title by its name in plugin.json. */
+  pluginTitles(): Record<string, string> {
+    return Object.fromEntries(this.plugins.map(({ manifest }) => [manifest.name, manifest.title]));
+  }
+
   /** The tools the user may run from the slash menu, as /<plugin>:<tool>. */
   commands(): SlashCommand[] {
     return this.plugins.flatMap((plugin) =>
