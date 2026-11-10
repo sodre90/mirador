@@ -3,7 +3,7 @@ import { changeScopes, type ChangedFile, type ChangeList, type ChangeScope, type
 import { fileTree, type TreeFolder, type TreeNode } from "../shared/file-tree.ts";
 import { changesRequest } from "./changes-request.ts";
 import { CommitChangesDialog } from "./CommitChanges.tsx";
-import { changedFiles, firstChangedLine, projectFilesWithChanges, startsFolded, type ListedFile } from "./changes.ts";
+import { changedFiles, drawnPastFirstRows, firstChangedLine, isBigFolder, projectFilesWithChanges, ROWS_AT_ONCE, startsFolded, type ListedFile } from "./changes.ts";
 import { connection } from "./connection.ts";
 import { DiffStyleChoice, diffStyle, EditedFile } from "./EditApproval.tsx";
 import { hints } from "./hints.ts";
@@ -110,8 +110,8 @@ interface RowContext {
 
 interface Folding {
   everyFile: boolean;
-  isFolded: (folder: TreeFolder<ListedFile>) => boolean;
-  toggle: (folder: TreeFolder<ListedFile>) => void;
+  isFolded: (folder: TreeFolder<ListedFile>, insideBigFolder: boolean) => boolean;
+  toggle: (folder: TreeFolder<ListedFile>, insideBigFolder: boolean) => void;
 }
 
 const indentedBy = (depth: number) => ({ "--depth": depth }) as CSSProperties;
@@ -163,13 +163,13 @@ function FileRow({ file, name, depth, rows }: { file: ListedFile; name: string; 
   );
 }
 
-function FolderRow({ folder, depth, rows, folding }: { folder: TreeFolder<ListedFile>; depth: number; rows: RowContext; folding: Folding }) {
-  const folded = folding.isFolded(folder);
+function FolderRow({ folder, depth, rows, folding, insideBigFolder }: { folder: TreeFolder<ListedFile>; depth: number; rows: RowContext; folding: Folding; insideBigFolder: boolean }) {
+  const folded = folding.isFolded(folder, insideBigFolder);
   const changes = folder.items.flatMap(({ change }) => (change ? [change] : []));
   const summary = folding.everyFile ? (changes.length > 0 ? words.changedInFolder(changes.length) : null) : words.filesInFolder(changes.length);
   return (
     <li>
-      <button type="button" className={`changed-folder ${changes.length === 0 ? "unchanged" : ""}`} style={indentedBy(depth)} aria-expanded={!folded} onClick={() => folding.toggle(folder)}>
+      <button type="button" className={`changed-folder ${changes.length === 0 ? "unchanged" : ""}`} style={indentedBy(depth)} aria-expanded={!folded} onClick={() => folding.toggle(folder, insideBigFolder)}>
         <FolderIcon open={!folded} />
         <span className="folder-name">{folder.name}</span>
         {folded && summary && (
@@ -181,7 +181,7 @@ function FolderRow({ folder, depth, rows, folding }: { folder: TreeFolder<Listed
       </button>
       {!folded && (
         <ul className="folder-children" style={indentedBy(depth)}>
-          <TreeRows nodes={folder.children} depth={depth + 1} rows={rows} folding={folding} />
+          <TreeRows nodes={folder.children} depth={depth + 1} rows={rows} folding={folding} insideBigFolder={insideBigFolder || isBigFolder(folder)} />
         </ul>
       )}
     </li>
@@ -203,13 +203,36 @@ function FolderIcon({ open }: { open: boolean }) {
   );
 }
 
-function TreeRows({ nodes, depth, rows, folding }: { nodes: TreeNode<ListedFile>[]; depth: number; rows: RowContext; folding: Folding }) {
-  return nodes.map((node) =>
-    node.kind === "folder" ? (
-      <FolderRow key={node.path} folder={node} depth={depth} rows={rows} folding={folding} />
-    ) : (
-      <FileRow key={node.item.path} file={node.item} name={node.name} depth={depth} rows={rows} />
-    ),
+function TreeRows({ nodes, depth, rows, folding, insideBigFolder }: { nodes: TreeNode<ListedFile>[]; depth: number; rows: RowContext; folding: Folding; insideBigFolder: boolean }) {
+  return (
+    <FirstRows items={nodes} depth={depth} drawnPastFirst={drawnPastFirstRows(nodes, rows.selectedPath, folding.everyFile)}>
+      {(node) =>
+        node.kind === "folder" ? (
+          <FolderRow key={node.path} folder={node} depth={depth} rows={rows} folding={folding} insideBigFolder={insideBigFolder} />
+        ) : (
+          <FileRow key={node.item.path} file={node.item} name={node.name} depth={depth} rows={rows} />
+        )
+      }
+    </FirstRows>
+  );
+}
+
+/** The first rows of a long list, and a button that draws more of them, so a list of thousands of files does not stall the page. */
+function FirstRows<T>({ items, depth, drawnPastFirst, children }: { items: readonly T[]; depth: number; drawnPastFirst: (item: T) => boolean; children: (item: T) => ReactNode }) {
+  const [shown, setShown] = useState(ROWS_AT_ONCE);
+  const drawn = items.filter((item, index) => index < shown || drawnPastFirst(item));
+  const notShown = items.length - drawn.length;
+  return (
+    <>
+      {drawn.map(children)}
+      {notShown > 0 && (
+        <li style={indentedBy(depth)}>
+          <button type="button" className="link more-rows" style={indentedBy(depth)} onClick={() => setShown(shown + ROWS_AT_ONCE)}>
+            {words.showMore(formatNumber(Math.min(notShown, ROWS_AT_ONCE)), formatNumber(notShown))}
+          </button>
+        </li>
+      )}
+    </>
   );
 }
 
@@ -222,9 +245,11 @@ function FileSection({ title, hint, files, asTree, rows, folding }: { title: str
       <h3 data-hint={hint}>{title}</h3>
       <ul>
         {asTree ? (
-          <TreeRows nodes={tree} depth={0} rows={rows} folding={folding} />
+          <TreeRows nodes={tree} depth={0} rows={rows} folding={folding} insideBigFolder={false} />
         ) : (
-          files.map((file) => <FileRow key={file.path} file={file} name={withHomeAsTilde(file.path, rows.homeDir)} depth={0} rows={rows} />)
+          <FirstRows items={files} depth={0} drawnPastFirst={({ path }) => path === rows.selectedPath}>
+            {(file) => <FileRow key={file.path} file={file} name={withHomeAsTilde(file.path, rows.homeDir)} depth={0} rows={rows} />}
+          </FirstRows>
         )}
       </ul>
     </section>
@@ -287,8 +312,8 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
   const loadedList = useKeptLoad(`list ${conversationId} ${scope}`, () => listChanges(conversationId, scope), reloadWhen);
   const list = loadedList && "value" in loadedList ? loadedList.value : null;
   const showIgnored = ignoredFiles.use() === "shown";
-  const hiddenIgnored = list && !showIgnored ? list.project.filter(({ ignored }) => ignored) : [];
-  const visible = list && hiddenIgnored.length > 0 ? { ...list, project: list.project.filter(({ ignored }) => !ignored) } : list;
+  const hiddenIgnored = useMemo(() => (list && !showIgnored ? list.project.filter(({ ignored }) => ignored) : []), [list, showIgnored]);
+  const visible = useMemo(() => (list && hiddenIgnored.length > 0 ? { ...list, project: list.project.filter(({ ignored }) => !ignored) } : list), [list, hiddenIgnored]);
   const files = visible ? [...visible.project, ...visible.committed, ...visible.outside] : [];
   const selected = files.find(({ path }) => path === selectedPath) ?? null;
   const loadedDiff = useKeptLoad<FileChanges | null>(
@@ -338,11 +363,12 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
   const foldEveryFolder = () => keepOverrides(new Map([...overrides].filter(([key]) => !key.startsWith(`${view} `))).set(everyFolderFoldedKey, true));
   const foldingOf = (section: string): Folding => {
     const keyOf = (folder: TreeFolder<ListedFile>) => `${view} ${section} ${folder.path}`;
-    const isFolded = (folder: TreeFolder<ListedFile>) => overrides.get(keyOf(folder)) ?? (overrides.get(everyFolderFoldedKey) || startsFolded(folder, everyFile));
+    const isFolded = (folder: TreeFolder<ListedFile>, insideBigFolder: boolean) =>
+      overrides.get(keyOf(folder)) ?? (overrides.get(everyFolderFoldedKey) || startsFolded(folder, everyFile, insideBigFolder));
     return {
       everyFile,
       isFolded,
-      toggle: (folder) => keepOverrides(new Map(overrides).set(keyOf(folder), !isFolded(folder))),
+      toggle: (folder, insideBigFolder) => keepOverrides(new Map(overrides).set(keyOf(folder), !isFolded(folder, insideBigFolder))),
     };
   };
 

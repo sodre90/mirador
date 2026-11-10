@@ -363,6 +363,62 @@ test("the tree shows the changed files in their folders, a folder holding one fo
   rmSync(join(host.projectDir, "pkg"), { recursive: true });
 });
 
+test("a folder holding more than 100 changed files starts folded with the folders in it, and a list draws 200 rows at first, then 200 more each time Show more is pressed", async ({ page }) => {
+  const big = join(host.projectDir, "big");
+  mkdirSync(join(big, "small"), { recursive: true });
+  for (let index = 0; index < 250; index++) writeFileSync(join(big, `f${String(index).padStart(3, "0")}.txt`), "x\n");
+  for (let index = 0; index < 3; index++) writeFileSync(join(big, "small", `s${index}.txt`), "x\n");
+  await signIn(page, host);
+  await page.goto(`${host.origin}/#/c/${conversationId}`);
+  await changes(page).getByRole("button", { name: "Uncommitted" }).click();
+  await changes(page).getByRole("button", { name: "Tree" }).click();
+
+  try {
+    const bigFolder = folderRow(page, "big");
+    await expect(bigFolder).toHaveAttribute("aria-expanded", "false");
+    await expect(bigFolder.locator(".folder-file-count")).toHaveText("253 files");
+    await expect(fileRow(page, "big/f000.txt")).toHaveCount(0);
+
+    await test.step("opening it draws 200 rows of its own, the folder in it folded, and Show more draws the rest", async () => {
+      await bigFolder.click();
+      await expect(bigFolder).toHaveAttribute("aria-expanded", "true");
+      await expect(folderRow(page, "small")).toHaveAttribute("aria-expanded", "false");
+      await expect(changes(page).locator(".changed-file[data-path^='big/f']")).toHaveCount(199);
+      const more = changes(page).locator(".more-rows");
+      await expect(more).toHaveText("Show 51 more (51 not shown)");
+      await more.click();
+      await expect(changes(page).locator(".changed-file[data-path^='big/f']")).toHaveCount(250);
+      await expect(more).toHaveCount(0);
+    });
+
+    await test.step("List draws 200 rows of the section, then Show more draws the rest", async () => {
+      await changes(page).getByRole("button", { name: "List" }).click();
+      await expect(section(page, "Project").locator(".changed-file")).toHaveCount(200);
+      const more = section(page, "Project").locator(".more-rows");
+      await expect(more).toHaveText(/^Show \d+ more \(\d+ not shown\)$/);
+      await more.click();
+      await expect(section(page, "Project").locator(".changed-file").nth(250)).toBeVisible();
+    });
+
+    await test.step("a file selected past the first 200 rows is still drawn, selected, with its diff, when the list is drawn again from its first rows", async () => {
+      const past = section(page, "Project").locator(".changed-file").nth(250);
+      const path = (await past.getAttribute("data-path"))!;
+      await past.click();
+      await expect(fileRow(page, path)).toHaveAttribute("aria-pressed", "true");
+      await changes(page).getByRole("button", { name: "Tree" }).click();
+      await changes(page).getByRole("button", { name: "List" }).click();
+      await expect(section(page, "Project").locator(".changed-file")).toHaveCount(201);
+      await expect(section(page, "Project").locator(".more-rows")).toBeVisible();
+      await expect(fileRow(page, path)).toHaveAttribute("aria-pressed", "true");
+      await expect(fileRow(page, path).locator("xpath=..").locator(".changes-diff")).toBeVisible();
+    });
+  } finally {
+    await changes(page).getByRole("button", { name: "Tree" }).click();
+    await changes(page).getByRole("button", { name: "This turn" }).click();
+    rmSync(big, { recursive: true, force: true });
+  }
+});
+
 test("Changes opens over a page, and a new page takes the canvas back", async ({ page }) => {
   await signIn(page, host);
   await page.goto(`${host.origin}/#/c/${conversationId}`);

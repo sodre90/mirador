@@ -106,6 +106,7 @@ export const canvas: Messages["canvas"] = {
     since: "更改自",
     ignoredFiles: "被 git 忽略的文件",
     foldAll: "全部折叠",
+    showMore: (more: string, notShown: string) => `再显示 ${more} 个（${notShown} 个未显示）`,
     showAs: "显示为",
     refresh: "刷新",
     commitDialog: {

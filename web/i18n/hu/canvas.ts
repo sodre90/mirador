@@ -108,6 +108,7 @@ export const canvas: Messages["canvas"] = {
     since: "Változások ettől kezdve",
     ignoredFiles: "Git által figyelmen kívül hagyott fájlok",
     foldAll: "Mind összecsukása",
+    showMore: (more: string, notShown: string) => `További ${more} megjelenítése (${notShown} rejtve)`,
     showAs: "Megjelenítés",
     refresh: "Frissítés",
     commitDialog: {

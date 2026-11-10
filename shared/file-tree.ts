@@ -28,6 +28,16 @@ const joined = (parent: string, name: string, separator: string) => (parent === 
 /** The items nested in the folders of their paths, folders before files and each sorted by name. Paths may be relative or absolute, with / or \ between their parts. */
 export function fileTree<T>(items: readonly T[], pathOf: (item: T) => string): TreeNode<T>[] {
   const root: TreeFolder<T> = { kind: "folder", name: "", path: "", children: [], items: [] };
+  const subfolders = new Map<TreeFolder<T>, Map<string, TreeFolder<T>>>();
+  const childFolder = (parent: TreeFolder<T>, name: string, separator: string) => {
+    const childrenByName = subfolders.get(parent) ?? subfolders.set(parent, new Map()).get(parent)!;
+    const existing = childrenByName.get(name);
+    if (existing) return existing;
+    const created: TreeFolder<T> = { kind: "folder", name, path: joined(parent.path, name, separator), children: [], items: [] };
+    parent.children.push(created);
+    childrenByName.set(name, created);
+    return created;
+  };
   for (const item of items) {
     const path = pathOf(item);
     const separator = separatorOf(path);
@@ -43,18 +53,12 @@ export function fileTree<T>(items: readonly T[], pathOf: (item: T) => string): T
   return compacted(sorted(root.children));
 }
 
-function childFolder<T>(parent: TreeFolder<T>, name: string, separator: string): TreeFolder<T> {
-  const existing = parent.children.find((child): child is TreeFolder<T> => child.kind === "folder" && child.name === name);
-  if (existing) return existing;
-  const created: TreeFolder<T> = { kind: "folder", name, path: joined(parent.path, name, separator), children: [], items: [] };
-  parent.children.push(created);
-  return created;
-}
+const byName = new Intl.Collator().compare;
 
 function sorted<T>(nodes: TreeNode<T>[]): TreeNode<T>[] {
   return nodes
     .map((node) => (node.kind === "folder" ? { ...node, children: sorted(node.children) } : node))
-    .sort((a, b) => (a.kind === b.kind ? a.name.localeCompare(b.name) : a.kind === "folder" ? -1 : 1));
+    .sort((a, b) => (a.kind === b.kind ? byName(a.name, b.name) : a.kind === "folder" ? -1 : 1));
 }
 
 function compacted<T>(nodes: TreeNode<T>[]): TreeNode<T>[] {

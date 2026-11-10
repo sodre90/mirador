@@ -8414,3 +8414,8 @@ span.voice-engine-problem {
 .chat-header .remind-conversation.set {
   color: light-dark(#9a5b00, #f0b45a);
 }
+
+button.link.more-rows {
+  padding: 2px 8px 2px calc(8px + var(--depth, 0) * 16px + 1.4ch + 8px);
+  font-size: calc(13px * var(--font-scale));
+}
