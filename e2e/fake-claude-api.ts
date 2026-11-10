@@ -282,7 +282,7 @@ export class FakeClaudeApi {
   }
 
   private agentCall(prompt: string): Answer {
-    return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose" } };
+    return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose", run_in_background: true } };
   }
 
   private advisorCall(): Answer {
