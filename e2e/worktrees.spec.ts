@@ -11,6 +11,9 @@ const host = new TestHost({ fakePrograms: true, environment: { HOME: home, ...(p
 const appFile = join(host.projectDir, "src", "app.ts");
 const secrets = "TOKEN=kept out of git\n";
 
+/** Windows spells the temp folder's path both by its short 8.3 name and its long one, so compare what the disk says. */
+const canonicalPath = (path: string) => (process.platform === "win32" ? realpathSync.native(path).toLowerCase() : realpathSync(path));
+
 const gitIn = (directory: string, ...args: string[]) => execFileSync("git", ["-C", directory, ...args], { encoding: "utf8" }).trim();
 const git = (...args: string[]) => gitIn(host.projectDir, ...args);
 const branches = () => git("branch", "--format=%(refname:short)").split("\n");
@@ -93,8 +96,8 @@ test("a workspace set to start conversations in worktrees gives each its own, se
   await expect(setupCard).toContainText("Not sent to the agent", { timeout: 60_000 });
 
   const folder = await agentFolder(page);
-  const worktreesFolder = join(realpathSync(host.dataDir), "worktrees");
-  expect(folder.startsWith(`${worktreesFolder}/project-`), `${folder} is in ${worktreesFolder}`).toBe(true);
+  const worktreesFolder = join(canonicalPath(host.dataDir), "worktrees");
+  expect(canonicalPath(folder).startsWith(join(worktreesFolder, "project-")), `${folder} is in ${worktreesFolder}`).toBe(true);
   expect(readFileSync(join(folder, ".env"), "utf8"), "the setup command copied what git ignores").toBe(secrets);
   const branch = gitIn(folder, "branch", "--show-current");
   expect(branch).toMatch(/^mirador\/[0-9a-f]{8}$/);

@@ -151,9 +151,12 @@ export class ScriptedModel {
   }
 
   /** The user's messages in the latest request for a reply, not a title: what the agent's context holds of the conversation. */
-  /** Without the environment Codex describes in a message of the user's own at a session's start. */
+  /** Without the environment Codex describes in a message of the user's own at a session's start, and the suggestion Codex asks for after a turn, which no one typed. */
   userMessagesInContext() {
-    return this.latestReplyRequest().messages.filter(({ role }) => role === "user").map(textOf).filter((text) => !text.startsWith("<environment_context>"));
+    return this.latestReplyRequest().messages
+      .filter(({ role }) => role === "user")
+      .map(textOf)
+      .filter((text) => !text.startsWith("<environment_context>") && !text.startsWith("This is an app-generated request for a suggested next user message."));
   }
 
   /** The system messages of the latest request for a reply. */
