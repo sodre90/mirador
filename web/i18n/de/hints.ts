@@ -283,6 +283,7 @@ export const hints: Messages["hints"] = {
   dismissDelegatedTask:
     "Verwirf diese Aufgabe: Sie verschwindet über dem Nachrichtenfeld und ihre Unterhaltung aus der Seitenleiste. Die Suche findet die Unterhaltung weiterhin.",
   delegatedFold: "Unterhaltungen, denen diese hier Aufgaben übergeben hat, etwa mit delegate. Klicke, um sie darunter ein- oder auszublenden.",
+  delegatedWorking: "Arbeitet: Eine delegierte Aufgabe läuft noch. Ihre Antwort kommt als nächste Nachricht dieses Agenten.",
   claudeProgram: (installFolders) =>
     `Das claude-Programm, mit dem Mirador Claude Code ausführt, auf dem Computer des Hosts. Leer: das claude im PATH, sonst das in diesen Ordnern: ${installFolders}.\n\nEin Profil kann über CLAUDE_CODE_EXECUTABLE in seiner Umgebung ein anderes ausführen.`,
   keepAwake:

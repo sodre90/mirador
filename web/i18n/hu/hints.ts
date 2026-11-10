@@ -272,6 +272,7 @@ export const hints: Messages["hints"] = {
   dismissDelegatedTask:
     "A feladat elvetése: eltávolítja az üzenetmező fölül, a beszélgetését pedig az oldalsávból. A keresés továbbra is megtalálja a beszélgetést.",
   delegatedFold: "Beszélgetések, amelyeknek ez feladatot adott át, például a delegate-tel. Kattints, hogy megjelenítsd vagy elrejtsd őket alatta.",
+  delegatedWorking: "Dolgozik: egy átadott feladat még fut. A válasza ennek az ágensnek a következő üzeneteként érkezik.",
   claudeProgram: (installFolders) =>
     `A claude program, amellyel a Mirador a Claude Code-ot futtatja a host gépén. Üresen: a PATH-on lévő claude, különben ezekben: ${installFolders}.\n\nEgy profil a környezetében a CLAUDE_CODE_EXECUTABLE-lel másikat is futtathat.`,
   keepAwake:

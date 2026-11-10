@@ -280,6 +280,7 @@ export const hints: Messages["hints"] = {
   stopDelegatedTask: "Detiene su turno. El agente de aquí se entera de que la tarea se detuvo, con lo que el otro agente haya dicho hasta ahora.",
   dismissDelegatedTask: "Descarta esta tarea: la quita de encima del cuadro de mensaje, y su conversación de la barra lateral. La búsqueda sigue encontrando la conversación.",
   delegatedFold: "Conversaciones a las que esta delegó tareas, por ejemplo con delegate. Haz clic para mostrarlas u ocultarlas debajo de ella.",
+  delegatedWorking: "Trabajando: una tarea delegada sigue en marcha. Su respuesta llega como el siguiente mensaje de este agente.",
   claudeProgram: (installFolders) =>
     `El programa claude con el que Mirador ejecuta Claude Code, en el equipo del host. Vacío: el claude del PATH o, si no, el de estas carpetas: ${installFolders}.\n\nUn perfil puede ejecutar otro mediante CLAUDE_CODE_EXECUTABLE en su entorno.`,
   keepAwake:

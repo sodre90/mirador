@@ -187,9 +187,14 @@ function AddWorkspace({ profiles, onDone }: { profiles: Profile[]; onDone: () =>
   );
 }
 
-function statusDot(conversation: Conversation) {
+/** A conversation whose turn ended after handing a task over works through its plugin while the conversations it started work. */
+const worksThroughDelegates = (conversation: Conversation, delegated: Conversation[]) => conversation.status === "idle" && delegated.some(isWorking);
+
+function statusDot(conversation: Conversation, delegated: Conversation[] = []) {
   const { waitingFor } = conversation;
-  if (waitingFor && waitingShowsOnDot(conversation)) return <span className={`dot waiting tone-${waitingTones[waitingFor]}`} data-hint={waitingHints[waitingFor]} />;
+  const delegating = worksThroughDelegates(conversation, delegated);
+  if (waitingFor && waitingShowsOnDot(delegating ? { ...conversation, status: "running" } : conversation)) return <span className={`dot waiting tone-${waitingTones[waitingFor]}`} data-hint={waitingHints[waitingFor]} />;
+  if (delegating) return <span className="dot status-running" data-hint={hints.delegatedWorking} />;
   if (conversation.status === "idle" && conversation.jobWaits.length > 0) {
     return <span className="dot waiting-on-job" data-hint={waitingOnJobsHint(conversation.jobWaits)} />;
   }
@@ -490,7 +495,7 @@ function WorkspaceSection({
               onContextMenu={(event) => onConversationMenu(conversation, event)}
             >
               <ProfileEdge profile={profileOf(profiles, conversation)} />
-              {statusDot(conversation)}
+              {statusDot(conversation, delegatedTo(conversation))}
               <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
               {conversation.worktree && <WorktreeMark branch={conversation.worktree.branch} />}
               <DelegatedToggle callerId={conversation.id} delegated={delegatedTo(conversation)} open={openedDelegations.has(conversation.id)} />

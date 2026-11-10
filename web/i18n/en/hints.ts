@@ -254,6 +254,7 @@ export const hints = {
   stopDelegatedTask: "Stop its turn. The agent here hears that the task stopped, with whatever the other agent said so far.",
   dismissDelegatedTask: "Dismiss this task: remove it from above the message box, and its conversation from the sidebar. Search still finds the conversation.",
   delegatedFold: "Conversations this one handed tasks to, such as with delegate. Click to show or hide them under it.",
+  delegatedWorking: "Working: a delegated task is still running. Its reply comes as this agent's next message.",
   claudeProgram: (installFolders: string) =>
     `The claude program Mirador runs Claude Code with, on the host's computer. Empty: the claude on PATH, else in ${installFolders}.\n\nA profile can run another one through CLAUDE_CODE_EXECUTABLE in its environment.`,
   keepAwake:

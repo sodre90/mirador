@@ -253,6 +253,7 @@ export const hints: Messages["hints"] = {
   stopDelegatedTask: "停止它的轮次。这里的 Agent 会得知任务已停止，以及另一个 Agent 到目前为止说过的内容。",
   dismissDelegatedTask: "忽略这个任务：把它从消息框上方移除，并把它的对话从侧边栏移除。搜索仍能找到该对话。",
   delegatedFold: "这个对话交办任务的对话，例如通过 delegate。点击可在其下显示或隐藏它们。",
+  delegatedWorking: "工作中：一个委派任务仍在运行。它的回复会作为此 Agent 的下一条消息到达。",
   claudeProgram: (installFolders: string) =>
     `Mirador 用来运行 Claude Code 的 claude 程序，位于 host 所在的电脑上。留空：使用 PATH 中的 claude，否则使用 ${installFolders} 中的。\n\n配置可以通过其环境中的 CLAUDE_CODE_EXECUTABLE 运行另一个程序。`,
   keepAwake:
