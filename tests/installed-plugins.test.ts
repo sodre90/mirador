@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { InstalledPlugins, withoutCredentials } from "../host/apps/installed-plugins.ts";
 import { loadPlugins } from "../host/apps/plugins.ts";
+import { APP_PLUGIN_API } from "../shared/apps.ts";
 
 const COUNTER = join(import.meta.dir, "fixtures", "apps", "counter");
 /** The counter's view as git stores it: a checkout with core.autocrlf, as on the Windows runner, gives it CRLF. */
@@ -206,6 +207,19 @@ describe("adding, updating and removing plugins", () => {
     await expect(unreachable).rejects.toThrow("git ls-remote failed:");
     await expect(unreachable).rejects.not.toThrow("s3cret");
     expect(leftInStaging(plugins)).toEqual([]);
+
+    const newerApi = join(root, "newer-api-repo");
+    mkdirSync(newerApi);
+    writeFileSync(
+      join(newerApi, "plugin.json"),
+      JSON.stringify({ name: "newer", title: "Newer", version: "1.0.0", api: APP_PLUGIN_API + 1, futureFeature: { unknownSyntax: true } }),
+    );
+    git(newerApi, "init", "--quiet", "-b", "main");
+    git(newerApi, "add", ".");
+    git(newerApi, "commit", "--quiet", "-m", "Future plugin");
+    await expect(installed.add(newerApi, null)).rejects.toThrow(
+      `The repo isn't a plugin Mirador can load: plugin.json is for plugin API ${APP_PLUGIN_API + 1}; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so the plugin needs a newer Mirador.`,
+    );
   });
 
   test("an update lists the new commits, then swaps in the new build; a failed one leaves the plugin as it was", async () => {

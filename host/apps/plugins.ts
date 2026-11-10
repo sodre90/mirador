@@ -103,6 +103,10 @@ export async function readManifest(folder: string): Promise<PluginManifest> {
   const file = join(folder, "plugin.json");
   if (!existsSync(file)) throw new HostProblemError({ code: "plugin-json-missing" });
   const manifest: unknown = await Bun.file(file).json();
+  const api = typeof manifest === "object" && manifest !== null && "api" in manifest ? (manifest as { api?: unknown }).api : undefined;
+  if (typeof api === "number" && Number.isInteger(api) && api > APP_PLUGIN_API) {
+    throw new HostProblemError({ code: "plugin-api-too-new", api, newest: APP_PLUGIN_API });
+  }
   if (!isPluginManifest(manifest)) {
     throw new HostProblemError({ code: "plugin-json-invalid" });
   }
