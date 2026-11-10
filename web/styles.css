@@ -1923,6 +1923,12 @@ button.conversation-settings-toggle.on {
   .title-line h2 {
     min-width: 2em;
   }
+
+  /* A bar this narrow keeps its room for the title; a favourite still shows its star in the sidebar. */
+  button.icon.favourite-star,
+  button.icon.favourite-star.on {
+    display: none;
+  }
 }
 
 .settings-summary {
