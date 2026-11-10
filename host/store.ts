@@ -87,6 +87,10 @@ const schema = `
     id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, joined_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS push_registrations (
     device_id TEXT PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE, registration TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS push_told (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    device_id TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    seen_waiting INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (conversation_id, device_id));
   CREATE TABLE IF NOT EXISTS invites (code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS sign_in_codes (code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS join_requests (
@@ -1017,6 +1021,33 @@ export class Store {
       .query<{ device_id: string; registration: string }, []>("SELECT device_id, registration FROM push_registrations")
       .all()
       .map(({ device_id, registration }) => ({ deviceId: device_id, registration: JSON.parse(registration) }));
+  }
+
+  /** The phones a conversation's notification was pushed to, kept so a later host can still clear it. */
+  pushTold(): { conversationId: string; devices: string[]; seenWaiting: boolean }[] {
+    const rows = this.db
+      .query<{ conversation_id: string; device_id: string; seen_waiting: number }, []>(
+        "SELECT conversation_id, device_id, seen_waiting FROM push_told ORDER BY conversation_id",
+      )
+      .all();
+    const told = new Map<string, { conversationId: string; devices: string[]; seenWaiting: boolean }>();
+    rows.forEach(({ conversation_id, device_id, seen_waiting }) => {
+      const { devices, seenWaiting } = told.get(conversation_id) ?? { devices: [], seenWaiting: seen_waiting === 1 };
+      told.set(conversation_id, { conversationId: conversation_id, devices: [...devices, device_id], seenWaiting });
+    });
+    return [...told.values()];
+  }
+
+  addPushToldDevice(conversationId: string, deviceId: string) {
+    this.db.query("INSERT OR IGNORE INTO push_told (conversation_id, device_id) VALUES (?, ?)").run(conversationId, deviceId);
+  }
+
+  markPushToldSeenWaiting(conversationId: string) {
+    this.db.query("UPDATE push_told SET seen_waiting = 1 WHERE conversation_id = ?").run(conversationId);
+  }
+
+  forgetPushTold(conversationId: string) {
+    this.db.query("DELETE FROM push_told WHERE conversation_id = ?").run(conversationId);
   }
 
   /** The user's profile picture as a PNG data URL; null when they set none. */

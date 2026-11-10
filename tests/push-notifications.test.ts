@@ -4,6 +4,7 @@ import { Store } from "../host/store.ts";
 import { openedPushBlob, PUSH_BLOB_BYTES, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRequest } from "../shared/push.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import vector from "../shared/push-test-vector.json";
+import { storeWithConversation } from "./canvas-plugin-host.ts";
 
 const pushKey: PushKey = { keyId: Buffer.alloc(16, 1).toString("base64url"), key: Buffer.alloc(32, 2).toString("base64url") };
 const message: PushMessage = {
@@ -56,7 +57,7 @@ const registration = (kinds: PushRegistration["kinds"] = ["question", "permissio
 });
 
 function pushingHost(answer: { status: number; outcome: string } = { status: 200, outcome: "sent" }) {
-  const store = new Store(":memory:");
+  const store = storeWithConversation();
   const posted: { url: string; authorization: string | null; request: PushRequest }[] = [];
   const post = (async (url: URL, init: RequestInit) => {
     posted.push({ url: String(url), authorization: new Headers(init.headers).get("authorization"), request: JSON.parse(String(init.body)) });
@@ -65,7 +66,7 @@ function pushingHost(answer: { status: number; outcome: string } = { status: 200
   const pushes = new PushNotifications(store, { shownWaitMs: 10, post });
   store.insertDevice({ id: "phone", name: "Peter's iPhone", joinedAt: 1, lastSeenAt: 1 }, "hash");
   store.setPushRelay("https://push.example.com", "relay-token");
-  return { store, pushes, posted };
+  return { store, pushes, posted, post };
 }
 
 const notification: SystemNotification = { id: "n1", kind: "question", conversationId: "c1", title: "Fix the login test", workspace: "mirador", body: "Asks: Which branch?" };
@@ -176,6 +177,31 @@ describe("pushing notifications", () => {
     await pushes.waitingChanged(new Set(["c1"]));
     await pushes.waitingChanged(new Set());
     expect(posted.map(({ request }) => request.kind)).toEqual(["clear"]);
+  });
+
+  test("a host restarted while a notified conversation waited clears it once it stops", async () => {
+    const { store, pushes, posted, post } = pushingHost();
+    pushes.register("phone", registration());
+    await pushes.notify(notification);
+    await pushes.waitingChanged(new Set(["c1"]));
+
+    const restarted = new PushNotifications(store, { shownWaitMs: 10, post });
+    await restarted.waitingChanged(new Set(["c1"]));
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert"]);
+
+    await restarted.waitingChanged(new Set());
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear"]);
+  });
+
+  test("a host restarted after its notified conversation stopped waiting clears it at once", async () => {
+    const { store, pushes, posted, post } = pushingHost();
+    pushes.register("phone", registration());
+    await pushes.notify(notification);
+    await pushes.waitingChanged(new Set(["c1"]));
+
+    const restarted = new PushNotifications(store, { shownWaitMs: 10, post });
+    await restarted.waitingChanged(new Set());
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear"]);
   });
 
   test("a conversation read before its push went out isn't pushed", async () => {

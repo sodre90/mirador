@@ -1838,7 +1838,8 @@ export class ConversationService {
   /**
    * Picks up where the previous host stopped: a turn it stopped for a restart continues where it left off, if the agent
    * recorded it. Otherwise messages still queued (also after a crash) go out, as they would have when the turn ended,
-   * and a reply the previous host owed a plugin, for a turn that ended as it stopped or that it died in, is told.
+   * and a reply the previous host owed a plugin, for a turn that ended as it stopped or that it died in, is told. The
+   * conversations that wait are announced again, so phones still showing a notification of one read meanwhile get a clear.
    */
   resumeAfterRestart(stoppedTurns: string[]) {
     this.store.listConversations().forEach(({ id, acpSessionId }) => {
@@ -1847,6 +1848,7 @@ export class ConversationService {
       if (!this.resumeUsageLimitWait(id)) this.sendNextQueuedMessage(id);
     });
     this.jobWaits.startAll();
+    this.announceWaiting();
   }
 
   shutdown() {

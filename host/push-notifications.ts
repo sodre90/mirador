@@ -47,7 +47,7 @@ const registrationOf = ({ platform, deviceToken, sandbox, keyId, key, kinds }: P
   kinds: kinds.filter((kind) => NOTIFICATION_KINDS.has(kind)),
 });
 
-/** The phones told that a conversation waits, and whether this machine has seen it waiting since. */
+/** The phones told that a conversation waits, and whether this machine has seen it waiting since; the store keeps it too, so a restart can still clear. */
 interface ToldOfWaiting {
   devices: Set<string>;
   seenWaiting: boolean;
@@ -71,6 +71,7 @@ export class PushNotifications {
   ) {
     this.shownWaitMs = shownWaitMs;
     this.post = post;
+    store.pushTold().forEach(({ conversationId, devices, seenWaiting }) => this.toldOf.set(conversationId, { devices: new Set(devices), seenWaiting }));
   }
 
   register(deviceId: string, registration: PushRegistration) {
@@ -101,6 +102,7 @@ export class PushNotifications {
         shownOn.forEach((deviceId) => told?.devices.add(deviceId));
         const unshown = this.store.pushRegistrations().filter(({ deviceId, registration }) => !shownOn.has(deviceId) && registration.kinds.includes(kind));
         unshown.forEach(({ deviceId }) => told?.devices.add(deviceId));
+        if (told) this.rememberToldDevices(conversationId!, told);
         const message: PushMessage = { id, sentAt: Date.now(), notification: { kind, conversationId, title, workspace, body } };
         void Promise.all(unshown.map(({ deviceId, registration }) => this.push(deviceId, registration, "alert", message))).then(() => resolve());
       }, this.shownWaitMs),
@@ -110,20 +112,34 @@ export class PushNotifications {
   /** The conversations that wait for you now; one that phones were told of and that stopped waiting gets cleared on them. */
   waitingChanged(waiting: Set<string>): Promise<void> {
     this.waiting = waiting;
-    const settled = [...this.toldOf].filter(([conversationId, told]) => {
-      if (waiting.has(conversationId)) told.seenWaiting = true;
-      return told.seenWaiting && !waiting.has(conversationId);
+    this.toldOf.forEach((told, conversationId) => {
+      if (waiting.has(conversationId)) this.markSeenWaiting(conversationId, told);
     });
-    settled.forEach(([conversationId]) => this.toldOf.delete(conversationId));
+    const settled = [...this.toldOf].filter(([conversationId, told]) => told.seenWaiting && !waiting.has(conversationId));
+    settled.forEach(([conversationId]) => {
+      this.toldOf.delete(conversationId);
+      this.store.forgetPushTold(conversationId);
+    });
     return Promise.all(settled.map(([conversationId, { devices }]) => this.clear(conversationId, devices))).then(() => {});
   }
 
   /** A notification can come before its conversation shows as waiting, so it counts as settled only once it has waited. */
   private toldOfWaiting(conversationId: string) {
     const told = this.toldOf.get(conversationId) ?? { devices: new Set<string>(), seenWaiting: false };
-    told.seenWaiting ||= this.waiting.has(conversationId);
+    if (this.waiting.has(conversationId)) this.markSeenWaiting(conversationId, told);
     this.toldOf.set(conversationId, told);
     return told;
+  }
+
+  private markSeenWaiting(conversationId: string, told: ToldOfWaiting) {
+    if (told.seenWaiting) return;
+    told.seenWaiting = true;
+    this.store.markPushToldSeenWaiting(conversationId);
+  }
+
+  private rememberToldDevices(conversationId: string, told: ToldOfWaiting) {
+    told.devices.forEach((deviceId) => this.store.addPushToldDevice(conversationId, deviceId));
+    if (told.seenWaiting) this.store.markPushToldSeenWaiting(conversationId);
   }
 
   private async clear(conversationId: string, devices: Set<string>) {

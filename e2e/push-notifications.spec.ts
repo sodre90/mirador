@@ -156,5 +156,26 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
     expect(relayed[3].push.kind).toBe("clear");
     expect((await openedPushBlob<ClearMessage>(pushKey, relayed[3].push.blob!)).cleared).toEqual({ conversationId: tidying });
   });
+
+  await test.step("a notification pushed before a host restart is still cleared once its conversation is read", async () => {
+    const acrossRestart = await startConversation(page);
+    api.hold();
+    await sendMessage(page, "Survive the restart");
+    await page.goto(`${host.origin}/#/c/${answerLater}`);
+    api.answerHeld();
+    await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(5);
+    expect(relayed[4].push.kind).toBe("alert");
+    expect((await openedPushBlob(pushKey, relayed[4].push.blob!)).notification).toMatchObject({ kind: "finished", conversationId: acrossRestart });
+
+    await host.restart();
+    await page.goto(`${host.origin}/#/c/${answerLater}`);
+    await phone.waitForTimeout(2_000);
+    expect(relayed, "the conversation still waits, so its notification stays").toHaveLength(5);
+
+    await page.goto(`${host.origin}/#/c/${acrossRestart}`);
+    await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(6);
+    expect(relayed[5].push.kind).toBe("clear");
+    expect((await openedPushBlob<ClearMessage>(pushKey, relayed[5].push.blob!)).cleared).toEqual({ conversationId: acrossRestart });
+  });
   await phone.close();
 });
