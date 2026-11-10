@@ -79,8 +79,8 @@ export function useReloadWhenHostRestarted(hostRunId: string | null) {
 }
 
 export function HostBanner({ status, state }: { status: ConnectionStatus; state: AppState }) {
-  if (state.hostRestarting) return <div className="banner">{t.shell.app.restartingHost}</div>;
-  if (status !== "open") return <div className="banner">{status === "connecting" ? t.shell.app.connecting : t.shell.app.reconnecting}</div>;
+  if (state.hostRestarting) return <div className="banner connection">{t.shell.app.restartingHost}</div>;
+  if (status !== "open") return <div className="banner connection">{status === "connecting" ? t.shell.app.connecting : t.shell.app.reconnecting}</div>;
   if (!state.hostCodeChanged) return null;
   return (
     <div className="banner host-code-changed">

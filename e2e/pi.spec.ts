@@ -218,7 +218,7 @@ test("deleting a pi conversation while the session it continues loads ends the p
 
 test("after a host restart, a pi conversation goes on in its own session with the canvas tools", async () => {
   await host.restart();
-  await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator(".banner.connection")).toHaveCount(0, { timeout: 30_000 });
   await sendMessage(page, "SHOW After restart");
   await expect(canvasHeading()).toHaveText("After restart", { timeout: 60_000 });
   await waitForTurnToEnd(page);

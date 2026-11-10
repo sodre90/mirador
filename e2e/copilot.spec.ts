@@ -126,7 +126,7 @@ test("a Copilot conversation continues after a host restart, with its history lo
   await expect(lastAgentMessage(page)).toContainText("zebrafish", { timeout: 60_000 });
 
   await host.restart();
-  await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator(".banner.connection")).toHaveCount(0, { timeout: 30_000 });
   const before = model.requests.length;
   await sendMessage(page, "and what was the word");
   await waitForTurnToEnd(page);

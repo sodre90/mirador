@@ -100,7 +100,7 @@ test("keeps the history across a page refresh", async () => {
 
 test("resumes the agent session and canvas tools after a host restart", async () => {
   await host.restart();
-  await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator(".banner.connection")).toHaveCount(0, { timeout: 30_000 });
   await (await conversationSettings(page)).getByLabel("Mode", { exact: true }).selectOption("acceptEdits");
   await sendMessage(page, 'CALL mcp__canvas__show {"title": "After restart", "html": "<p>The color was Blue</p>"}');
   await waitForTurnToEnd(page);
@@ -127,7 +127,7 @@ test("a conversation that never got a message starts a fresh session after a hos
   await startConversation(page);
   await expect((await conversationSettings(page)).getByLabel("Model", { exact: true })).toHaveValue("haiku");
   await host.restart();
-  await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.locator(".banner.connection")).toHaveCount(0, { timeout: 30_000 });
   await sendMessage(page, "Reply with only the word ready.");
   await waitForTurnToEnd(page);
   await expect(lastAgentMessage(page)).toContainText("ready");

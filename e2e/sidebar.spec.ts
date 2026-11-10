@@ -138,7 +138,7 @@ async function pickProfileIfAskedWhileOffline(page: Page, input: Locator, direct
 test("a workspace added while the page reconnects to the host is added once it has", async ({ page }) => {
   await signIn(page, host);
   await host.stop();
-  await expect(page.locator(".banner")).toHaveText("Connection lost, reconnecting…");
+  await expect(page.locator(".banner.connection")).toHaveText("Connection lost, reconnecting…");
   const directory = join(host.root, "added-offline");
   mkdirSync(directory, { recursive: true });
   await page.getByRole("button", { name: "Add workspace" }).click();

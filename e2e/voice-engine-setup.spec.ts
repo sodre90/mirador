@@ -343,7 +343,7 @@ test("Voice on this Mac downloads each model where it is chosen, loads them when
     const pids = serverPids();
     await host.restart();
     expect(pids.filter(isRunning)).toEqual([]);
-    await expect(page.locator(".banner")).toHaveCount(0, { timeout: 30_000 });
+    await expect(page.locator(".banner.connection")).toHaveCount(0, { timeout: 30_000 });
     await openSettings(page, "Voice");
     await expect(recognitionState).toHaveText("Unloaded");
     await expect(voiceModelState).toHaveText("Unloaded");
