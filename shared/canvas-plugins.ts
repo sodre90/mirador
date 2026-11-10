@@ -88,6 +88,12 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
    * which files its view may open. Throws, saying what would work, when the editor is not found.
    */
   openInEditor(file: string, line: number): void;
+  /**
+   * Stops the turn of a conversation this plugin's tool started from this conversation, as the user's Stop would; its
+   * `replied` then hears it end as "stopped". Resolves doing nothing for one whose turn already ended or that no longer
+   * exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
+   */
+  stopConversation(conversationId: string): Promise<void>;
 }
 
 export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<Data> {
@@ -113,6 +119,12 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
      */
     title?: string;
   } & ConversationChoices): Promise<StartedConversation>;
+  /**
+   * Stops the turn of a conversation this plugin's tool started from this conversation, as the user's Stop would; its
+   * `replied` then hears it end as "stopped". Resolves doing nothing for one whose turn already ended or that no longer
+   * exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
+   */
+  stopConversation(conversationId: string): Promise<void>;
 }
 
 /**

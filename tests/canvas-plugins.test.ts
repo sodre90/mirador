@@ -10,6 +10,7 @@ import type { PluginCanvasItem } from "../shared/model.ts";
 import { Store } from "../host/store.ts";
 import type { PluginCatalog } from "../host/plugin-catalog.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
+import type { CanvasToolContext } from "../shared/canvas-plugins.ts";
 import board from "./fixtures/canvas-plugins/board/host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
@@ -199,6 +200,29 @@ describe("CanvasPlugins", () => {
 
     await plugins.replied({ id: "c2", profile: "Local" }, { conversationId: "c1", plugin: "board", reply: null, dismissed: false }, { text: "Found 3 callers.", ended: "finished" });
     expect(prompts).toEqual([{ conversationId: "c1", text: "The handed-over task finished: Found 3 callers.", afterTurn: true, fromPlugin: "Board" }]);
+  });
+
+  test("a tool's stopConversation stops the conversation it names as its caller and plugin", async () => {
+    const stopper = {
+      ...board,
+      tools: {
+        ...board.tools,
+        stop_handed_over: {
+          description: "Stop a conversation this tool started.",
+          input: { type: "object", properties: { conversationId: { type: "string" } }, required: ["conversationId"] },
+          async run(input: unknown, context: CanvasToolContext) {
+            await context.stopConversation((input as { conversationId: string }).conversationId);
+            return "Stopped.";
+          },
+        },
+      },
+    };
+    const { plugins, callTool } = await canvasPluginHost(FIXTURES, undefined, { board: stopper });
+    const stopped: unknown[] = [];
+    plugins.stopsConversationsWith(async (callerId, plugin, conversationId) => void stopped.push({ callerId, plugin, conversationId }));
+
+    expect(await callTool("stop_handed_over", { conversationId: "c2" })).toEqual({ text: "Stopped.", isError: false });
+    expect(stopped).toEqual([{ callerId: "c1", plugin: "board", conversationId: "c2" }]);
   });
 
   test("what a conversation's profile set for a plugin reaches its tools and adds to its guidance, by the chosen profile's name as it is now", async () => {

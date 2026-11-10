@@ -523,6 +523,22 @@ export class ConversationService {
     return { id: conversation.id, profile: profile.name };
   }
 
+  /**
+   * For a plugin's tool: stops the turn of a conversation it started from the caller's, as the user's Stop does, so the
+   * plugin's `replied` hears it end as "stopped". One that no longer exists, or whose turn already ended, is let be; one
+   * this plugin's tool didn't start from that conversation throws.
+   */
+  async stopStarted(callerId: string, plugin: string, conversationId: string): Promise<void> {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) return;
+    const startedBy = conversation.startedBy;
+    if (startedBy?.conversationId !== callerId || startedBy.plugin !== plugin) {
+      throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be stopped here.`);
+    }
+    if (!this.runtime(conversationId).running) return;
+    await this.cancel(conversationId);
+  }
+
   /** The plugin whose tool started a conversation hears how its work ended; `tellsItsCaller` says whether it passes that on. */
   hearRepliesWith(hearReply: HearReply, tellsItsCaller: (plugin: string) => boolean) {
     this.hearReply = hearReply;

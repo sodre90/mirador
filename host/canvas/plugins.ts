@@ -58,6 +58,8 @@ export type SendPrompt = (conversationId: string, text: string, options: { after
 
 export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices) => StartedConversation;
 
+export type StopStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
+
 /**
  * The canvas plugins Mirador loaded when it started: their tools on every conversation's canvas server, the items those
  * tools publish, the user's actions in the items' views, and what the agent hears of with the user's next message.
@@ -69,6 +71,10 @@ export class CanvasPlugins {
 
   private startBeside: StartBeside = () => {
     throw new Error("Mirador can't start conversations yet.");
+  };
+
+  private stopStarted: StopStarted = async () => {
+    throw new Error("Mirador can't stop conversations yet.");
   };
 
   constructor(
@@ -84,6 +90,10 @@ export class CanvasPlugins {
 
   startsConversationsWith(start: StartBeside) {
     this.startBeside = start;
+  }
+
+  stopsConversationsWith(stop: StopStarted) {
+    this.stopStarted = stop;
   }
 
   private catalog: PluginCatalog | null = null;
@@ -350,6 +360,9 @@ export class CanvasPlugins {
       startConversation: async () => {
         throw new Error("Mirador doesn't start conversations while it rebuilds a canvas.");
       },
+      stopConversation: async () => {
+        throw new Error("Mirador doesn't stop conversations while it rebuilds a canvas.");
+      },
     };
     const tool = plugin.host.tools[toolName]!;
     try {
@@ -430,6 +443,7 @@ export class CanvasPlugins {
       publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
       prompt: this.promptOfItsOwn(plugin, conversationId),
       startConversation: async ({ profile, prompt, title, model, effort }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title, { model, effort }),
+      stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
     };
   }
 
@@ -446,6 +460,7 @@ export class CanvasPlugins {
         if (!isAbsolute(file) || !Number.isInteger(line) || line < 1) throw new Error(`${file}:${line} is not an absolute path and a line in it.`);
         launchEditor(this.store.editorSetting(), file, line);
       },
+      stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
     };
   }
 
