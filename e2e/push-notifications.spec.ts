@@ -169,13 +169,14 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 
     await host.restart();
     await page.goto(`${host.origin}/#/c/${answerLater}`);
-    await phone.waitForTimeout(2_000);
-    expect(relayed, "the conversation still waits, so its notification stays").toHaveLength(5);
-
-    await page.goto(`${host.origin}/#/c/${acrossRestart}`);
     await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(6);
     expect(relayed[5].push.kind).toBe("clear");
-    expect((await openedPushBlob<ClearMessage>(pushKey, relayed[5].push.blob!)).cleared).toEqual({ conversationId: acrossRestart });
+    expect((await openedPushBlob<ClearMessage>(pushKey, relayed[5].push.blob!)), "the question died with the canvas server, so its notification goes").toMatchObject({ cleared: { conversationId: asking } });
+
+    await page.goto(`${host.origin}/#/c/${acrossRestart}`);
+    await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(7);
+    expect(relayed[6].push.kind, "the turn ended before the restart, and reading it after still clears it").toBe("clear");
+    expect((await openedPushBlob<ClearMessage>(pushKey, relayed[6].push.blob!)).cleared).toEqual({ conversationId: acrossRestart });
   });
   await phone.close();
 });
