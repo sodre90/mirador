@@ -101,6 +101,17 @@ export const shell: Messages["shell"] = {
     deleteKeeps: (branch) => `Dort gemachte Commits bleiben erhalten, auf dem Branch ${branch}.`,
     deleteBoth: "Beides löschen",
   },
+  workspaceDelete: {
+    title: "Den Arbeitsbereich und seine Worktrees entfernen?",
+    loses: (count) =>
+      plural(
+        count,
+        "Seine Worktrees enthalten mindestens 1 nicht committete Datei, die mit ihnen gelöscht wird.",
+        `Seine Worktrees enthalten mindestens ${count} nicht committete Dateien, die mit ihnen gelöscht werden.`,
+      ),
+    keeps: "Der Projektordner und die in den Worktrees gemachten Commits bleiben erhalten.",
+    removeAnyway: "Trotzdem entfernen",
+  },
   sessions: {
     label: "Sitzung fortsetzen",
     title: (workspace) => `Sitzung fortsetzen in ${workspace}`,

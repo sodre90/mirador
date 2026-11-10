@@ -222,8 +222,10 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "A csoport átnevezése.",
   deleteWorkspaceGroup: "A csoport törlése. A munkaterületei a helyükön maradnak.",
   deleteWorkspaceGroupArmed: "Kattints újra a csoport törléséhez. A munkaterületei a helyükön maradnak.",
-  removeWorkspace: "A munkaterület és a beszélgetései eltávolítása az alkalmazásból. A könyvtár és a fájljai érintetlenek maradnak.",
-  removeWorkspaceArmed: "Kattints újra, hogy eltávolítsd a munkaterületet és a beszélgetéseit az alkalmazásból. A könyvtár és a fájljai érintetlenek maradnak.",
+  removeWorkspace:
+    "A munkaterület és a beszélgetései eltávolítása az alkalmazásból. A Mirador adatmappájában lévő worktree-jei is törlődnek, de a projektkönyvtár megmarad. Ha egy worktree-ben nem commitolt fájlok vannak, előbb rákérdez.",
+  removeWorkspaceArmed:
+    "Kattints újra, hogy eltávolítsd a munkaterületet és a beszélgetéseit az alkalmazásból. A Mirador adatmappájában lévő worktree-jei is törlődnek, de a projektkönyvtár megmarad. Ha egy worktree-ben nem commitolt fájlok vannak, előbb rákérdez.",
   deleteConversation: "A beszélgetés, az idővonala és a vászon-előzményei törlése az alkalmazásból. Az ágens saját munkamenetfájljai a lemezen maradnak. A saját worktree-je is törlődik; ha nem commitolt fájlok vannak benne, előbb rákérdez.",
   deleteConversationArmed: "Kattints újra a beszélgetés törléséhez. Az ágens saját munkamenetfájljai a lemezen maradnak.",
   deleteProfileArmed: "Kattints újra a profil törléséhez. A beszélgetései egy másik profillal folytatódhatnak.",

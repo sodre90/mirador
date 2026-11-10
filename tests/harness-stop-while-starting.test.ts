@@ -102,14 +102,28 @@ const spawnedPids = (spawns: string) =>
 describe.skipIf(process.platform === "win32")("HarnessProcess.stop while the agent starts", () => {
   test("a stop during the pre-launch command ends the start there, and no agent process starts after it", async () => {
     const { prelaunched, spawned } = markers();
-    const { harness } = harnessRunning(answeringAgent(spawned), { prelaunch: `touch '${prelaunched}'; sleep 1` });
+    const { harness, exits } = harnessRunning(answeringAgent(spawned), { prelaunch: `touch '${prelaunched}'; sleep 1` });
     const starting = harness.start();
     await until(() => existsSync(prelaunched));
-    await harness.stop();
+    await expect(harness.stop()).resolves.toEqual({ kind: "stopped" });
+    expect(exits).toEqual(["was stopped"]);
     await expect(starting).rejects.toThrow("The Test agent process was stopped.");
     await Bun.sleep(300);
     expect(existsSync(spawned)).toBe(false);
   }, 15_000);
+
+  test("a start right after a stop during the pre-launch command begins afresh rather than joining the stopped start", async () => {
+    const { prelaunched, spawned } = markers();
+    const { harness } = harnessRunning(answeringAgent(spawned), { prelaunch: `touch '${prelaunched}'; sleep 1` });
+    const starting = harness.start();
+    await until(() => existsSync(prelaunched));
+    await harness.stop();
+    const restarting = harness.start();
+    await expect(starting).rejects.toThrow("The Test agent process was stopped.");
+    await expect(restarting).resolves.toMatchObject({ agentCapabilities: {} });
+    expect(existsSync(spawned)).toBe(true);
+    await harness.stop();
+  }, 20_000);
 
   test("a stop ends a pre-launch command that takes long, so the start ends without waiting it out", async () => {
     const { prelaunched, spawned } = markers();
@@ -126,11 +140,12 @@ describe.skipIf(process.platform === "win32")("HarnessProcess.stop while the age
   test("a stop while the start waits behind another of its kind that starts one at a time ends it before its pre-launch command runs", async () => {
     const { prelaunched, spawned } = markers();
     const { harness: stalled } = harnessRunning(silentAgent, { startsOneAtATime: true, initializeTimeoutMs: 500 });
-    const { harness: queued } = harnessRunning(answeringAgent(spawned), { startsOneAtATime: true, prelaunch: `touch '${prelaunched}'` });
+    const { harness: queued, exits } = harnessRunning(answeringAgent(spawned), { startsOneAtATime: true, prelaunch: `touch '${prelaunched}'` });
     const stalledStart = expect(stalled.start()).rejects.toThrow("did not answer");
     const queuedStart = queued.start();
-    await queued.stop();
+    await expect(queued.stop()).resolves.toEqual({ kind: "stopped" });
     await expect(queuedStart).rejects.toThrow("The Test agent process was stopped.");
+    expect(exits).toEqual(["was stopped"]);
     await stalledStart;
     await Bun.sleep(300);
     expect(existsSync(prelaunched)).toBe(false);

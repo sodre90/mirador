@@ -45,6 +45,7 @@ AGY_LLM_GATEWAY_API_KEY=...`,
 
 function useSaveProfile(onSaved: (profileId: string) => void) {
   const [pendingRequest, setPendingRequest] = useState<string | null>(null);
+  const [saveProblem, setSaveProblem] = useState<string | null>(null);
   useEffect(
     () =>
       connection.onMessage((message) => {
@@ -52,15 +53,26 @@ function useSaveProfile(onSaved: (profileId: string) => void) {
           setPendingRequest(null);
           onSaved(message.profileId);
         }
-        if (message.type === "error") setPendingRequest(null);
+        if (message.type === "error" && pendingRequest !== null) {
+          setSaveProblem(message.message);
+          setPendingRequest(null);
+        }
       }),
     [pendingRequest, onSaved],
   );
+  useEffect(
+    () =>
+      connection.onStatus((status) => {
+        if (status !== "open") setPendingRequest(null);
+      }),
+    [],
+  );
   const save = (profile: ProfileDraft) => {
     const requestId = crypto.randomUUID();
+    setSaveProblem(null);
     if (connection.send({ type: "profile.save", requestId, profile })) setPendingRequest(requestId);
   };
-  return { save, saving: pendingRequest !== null };
+  return { save, saving: pendingRequest !== null, saveProblem };
 }
 
 /**
@@ -316,7 +328,7 @@ function ProfileEditor({
   const [savedOnce, setSavedOnce] = useState(false);
   const agentChoices = useAgentChoices(profile);
   const typingAidAttributes = useTypingAidAttributes();
-  const { save, saving } = useSaveProfile((profileId) => {
+  const { save, saving, saveProblem } = useSaveProfile((profileId) => {
     setSavedOnce(true);
     onSaved(profileId);
   });
@@ -575,6 +587,11 @@ function ProfileEditor({
       </div>
       <footer className="profile-footer">
         {testPanel}
+        {saveProblem && (
+          <div className="form-errors" role="alert">
+            {saveProblem}
+          </div>
+        )}
         {errors.length > 0 && (
           <ul className="form-errors">
             {errors.map((error) => (

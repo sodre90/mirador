@@ -98,6 +98,12 @@ export const shell: Messages["shell"] = {
     deleteKeeps: (branch) => `在那里所做的提交会保留在分支 ${branch} 上。`,
     deleteBoth: "全部删除",
   },
+  workspaceDelete: {
+    title: "移除此工作区及其工作树？",
+    loses: (count) => `它的工作树中至少有 ${count} 个未提交的文件，将一并删除。`,
+    keeps: "项目文件夹以及在工作树中完成的提交都会保留。",
+    removeAnyway: "仍然移除",
+  },
   sessions: {
     label: "继续会话",
     title: (workspace) => `在 ${workspace} 中继续会话`,

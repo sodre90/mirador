@@ -114,6 +114,8 @@ export interface AppState {
   fileToOpen: { conversationId: string; file: string } | null;
   /** A conversation the user asked to delete, whose worktree holds uncommitted files that would go with it. */
   worktreeToDelete: { conversationId: string; uncommittedFiles: number; branch: string } | null;
+  /** A workspace the user asked to remove, whose conversations' worktrees hold uncommitted files that would go with it. */
+  workspaceToDelete: { workspaceId: string; uncommittedFiles: number } | null;
   /** The host process run this page last heard from; another one means the host restarted, maybe with new code. */
   hostRunId: string | null;
   hostCodeChanged: boolean;
@@ -148,6 +150,7 @@ export type AppAction =
   | { type: "dismiss-notice"; id: number }
   | { type: "dismiss-file-to-open" }
   | { type: "dismiss-worktree-to-delete" }
+  | { type: "dismiss-workspace-to-delete" }
   | { type: "reminder-set"; undo: ReminderUndo }
   | { type: "dismiss-reminder-undo" };
 
@@ -206,6 +209,7 @@ export const initialState: AppState = {
   noticesEverShown: 0,
   fileToOpen: null,
   worktreeToDelete: null,
+  workspaceToDelete: null,
 };
 
 export function initialStateFor(conversationId: string | null): AppState {
@@ -320,7 +324,11 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "workspace.upserted":
       return { ...state, workspaces: upsert(state.workspaces, message.workspace).sort(inSidebarOrder) };
     case "workspace.deleted":
-      return { ...state, workspaces: state.workspaces.filter(({ id }) => id !== message.workspaceId) };
+      return {
+        ...state,
+        workspaces: state.workspaces.filter(({ id }) => id !== message.workspaceId),
+        workspaceToDelete: state.workspaceToDelete?.workspaceId === message.workspaceId ? null : state.workspaceToDelete,
+      };
     case "workspace-group.upserted":
       return { ...state, workspaceGroups: upsert(state.workspaceGroups, message.group).sort(inSidebarOrder) };
     case "workspace-group.deleted":
@@ -407,6 +415,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, fileToOpen: { conversationId: message.conversationId, file: message.file } };
     case "conversation.delete-asks":
       return { ...state, worktreeToDelete: { conversationId: message.conversationId, uncommittedFiles: message.uncommittedFiles, branch: message.branch } };
+    case "workspace.delete-asks":
+      return { ...state, workspaceToDelete: { workspaceId: message.workspaceId, uncommittedFiles: message.uncommittedFiles } };
     case "fs.completions":
     case "pong":
     case "profile.saved":
@@ -514,6 +524,8 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, fileToOpen: null };
     case "dismiss-worktree-to-delete":
       return { ...state, worktreeToDelete: null };
+    case "dismiss-workspace-to-delete":
+      return { ...state, workspaceToDelete: null };
     case "reminder-set":
       return { ...state, reminderUndo: { ...action.undo, id: (state.reminderUndo?.id ?? 0) + 1 } };
     case "dismiss-reminder-undo":

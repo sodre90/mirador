@@ -40,15 +40,17 @@ export function downloadedSidecar(
   };
 }
 
+const SIDECAR_DOWNLOAD_TIMEOUT_MS = 60_000;
+
 const sha256Of = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 /**
  * Puts the sidecar at `path` unless the one there already has the expected SHA-256, and takes away the ones earlier
  * versions downloaded. It lands under a temporary name first, so a download cut short is never run.
  */
-export async function installSidecar(path: string, { url, sha256 }: SidecarDownload) {
+export async function installSidecar(path: string, { url, sha256 }: SidecarDownload, timeoutMs = SIDECAR_DOWNLOAD_TIMEOUT_MS) {
   if (existsSync(path) && sha256Of(readFileSync(path)) === sha256) return;
-  const response = await fetch(url, { redirect: "follow" });
+  const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(timeoutMs) });
   if (!response.ok) throw new Error(`Downloading the peer-to-peer sidecar from ${url} failed: ${response.status} ${response.statusText}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   const got = sha256Of(bytes);

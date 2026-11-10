@@ -48,15 +48,17 @@ export async function swapPlugin(pluginsFolder: string, swap: PluginSwap, rename
   mkdirSync(dirname(journal), { recursive: true });
   mkdirSync(dirname(swap.movedOutTo), { recursive: true });
   writeFileSync(journal, JSON.stringify(swap));
-  await rename(plugin, swap.movedOutTo);
   try {
-    await rename(swap.movingIn, plugin);
-  } catch (error) {
-    await rename(swap.movedOutTo, plugin);
-    removeOrLog(journal);
-    throw error;
+    await rename(plugin, swap.movedOutTo);
+    try {
+      await rename(swap.movingIn, plugin);
+    } catch (error) {
+      await rename(swap.movedOutTo, plugin);
+      throw error;
+    }
+  } finally {
+    if (existsSync(plugin)) removeOrLog(journal);
   }
-  removeOrLog(journal);
 }
 
 const isSwap = (value: unknown): value is PluginSwap => {
@@ -88,6 +90,8 @@ export async function settleCutShortSwaps(pluginsFolder: string, rememberUndone:
         await renameWhenFree(finishing ? swap.movingIn : swap.movedOutTo, plugin);
         if (finishing && swap.undoneRelease) rememberUndone(swap.folder, swap.undoneRelease, swap.undoneBecause === "didnt-load" ? "didnt-load" : "undone");
         console.warn(`swapping the ${swap.folder} plugin was cut short, so it was ${finishing ? "finished" : "rolled back"}`);
+      } else if (swap.undoneRelease && existsSync(swap.movedOutTo) && !existsSync(swap.movingIn)) {
+        rememberUndone(swap.folder, swap.undoneRelease, swap.undoneBecause === "didnt-load" ? "didnt-load" : "undone");
       }
       removeOrLog(journal);
     } catch (error) {

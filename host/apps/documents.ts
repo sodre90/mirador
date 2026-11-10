@@ -515,7 +515,16 @@ export class AppDocuments {
   }
 
   forgetWorkspace(workspaceId: string) {
-    const closed = [...this.documents.values()].filter((opened) => opened.ownerId === workspaceId);
+    this.closeMatching((opened) => opened.ownerId === workspaceId);
+  }
+
+  /** Closes the apps open in a worktree whose folder is gone. */
+  forgetFolder(folderId: string) {
+    this.closeMatching((opened) => opened.workspaceId === folderId);
+  }
+
+  private closeMatching(matches: (opened: AppDocument) => boolean) {
+    const closed = [...this.documents.values()].filter(matches);
     for (const opened of closed) this.close(opened.workspaceId, opened.plugin.manifest.name);
     if (closed.length > 0) this.publisher.openAppsChanged(this.openApps());
   }

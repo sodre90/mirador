@@ -855,7 +855,7 @@ export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pl
               {tileUpdates.running.map(({ run, update }) => (
                 <UpdateAll key={run} updates={[update]} startNow onDone={() => tileUpdates.end(run)} onBusy={(busy) => tileUpdates.setBusy(run, busy)} />
               ))}
-              {waiting.length > 0 && (updatingAll || tileUpdates.running.length === 0) && <UpdateAll updates={waiting} onBusy={setUpdatingAll} />}
+              {waiting.length > 0 && (updatingAll || !tileUpdates.running.some(({ busy }) => busy)) && <UpdateAll updates={waiting} onBusy={setUpdatingAll} />}
               <h3>{words.installed}</h3>
               {gallery.installed.length > 0 ? <TileList label={words.installed} plugins={gallery.installed} newsOf={newsOf} isUpdating={isUpdating} onOpen={open} /> : listed && <p className="plugin-none">{words.noPlugins}</p>}
               {gallery.discover.length > 0 && (

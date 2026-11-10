@@ -55,7 +55,7 @@ test("a worktree is planned in Mirador's data folder, under the workspace's name
   expect(worktree.root).toBe(join(dataDir, "worktrees", "my-project-0a1b2c3d", shortId));
   expect(worktree.folder).toBe(worktree.root);
   expect(worktree.branch).toBe(`mirador/${shortId}`);
-  expect(worktrees.isMade(worktree)).toBe(false);
+  expect(await worktrees.isMade(worktree)).toBe(false);
 });
 
 test("a workspace that is a folder inside its repository works in that folder of the worktree", async () => {
@@ -67,6 +67,17 @@ test("a workspace that is a folder inside its repository works in that folder of
   expect(await readFile(join(worktree.folder, "index.ts"), "utf8")).toBe("export {};\n");
   expect(workingCopyOf(workspace, { worktree })).toMatchObject({ id: worktree.id, path: worktree.folder, name: "my project" });
   expect(workingCopyOf(workspace, {})).toBe(workspace);
+});
+
+test("a workspace folder inside a repository with no tracked files is created and recognized as made", async () => {
+  const emptySubdir = join(projectDir, "empty-subdir");
+  await mkdir(emptySubdir);
+  const workspace = workspaceAt(emptySubdir);
+  const worktree = await worktrees.plan(workspace);
+  expect(await worktrees.isMade(worktree)).toBe(false);
+  await worktrees.make(workspace, worktree);
+  expect(await worktrees.isMade(worktree)).toBe(true);
+  expect(existsSync(worktree.folder)).toBe(true);
 });
 
 test("a folder that is no git repository, or one without a commit, gets no worktree", async () => {
@@ -87,7 +98,7 @@ test("a made worktree holds what is committed, on its new branch, and leaves the
 
   await worktrees.make(workspace, worktree);
 
-  expect(worktrees.isMade(worktree)).toBe(true);
+  expect(await worktrees.isMade(worktree)).toBe(true);
   expect(await readFile(join(worktree.folder, "kept.txt"), "utf8")).toBe("one\n");
   expect((await git(worktree.root, ["symbolic-ref", "--short", "HEAD"])).stdout).toBe(worktree.branch);
   expect((await git(projectDir, ["symbolic-ref", "--short", "HEAD"])).stdout).toBe("main");
@@ -139,6 +150,18 @@ test("a removed worktree's branch stays when it holds commits the workspace's br
   expect((await git(projectDir, ["log", "-1", "--format=%s", worktree.branch])).stdout).toBe("feature");
 });
 
+test("a worktree a kill left half-made is not made until it is made again from scratch", async () => {
+  const workspace = workspaceAt(projectDir);
+  const worktree = await worktrees.plan(workspace);
+  await mkdir(worktree.root, { recursive: true });
+  expect(await worktrees.isMade(worktree)).toBe(false);
+
+  await worktrees.make(workspace, worktree);
+
+  expect(await worktrees.isMade(worktree)).toBe(true);
+  expect(await readFile(join(worktree.folder, "kept.txt"), "utf8")).toBe("one\n");
+});
+
 test("a worktree whose folder was deleted by hand is made again on the branch it had, with its commits", async () => {
   const workspace = workspaceAt(projectDir);
   const worktree = await worktrees.plan(workspace);
@@ -147,7 +170,7 @@ test("a worktree whose folder was deleted by hand is made again on the branch it
   await git(worktree.root, ["add", "-A"]);
   await git(worktree.root, ["commit", "-qm", "feature"]);
   await rm(worktree.root, { recursive: true, force: true });
-  expect(worktrees.isMade(worktree)).toBe(false);
+  expect(await worktrees.isMade(worktree)).toBe(false);
 
   await worktrees.make(workspace, worktree);
 

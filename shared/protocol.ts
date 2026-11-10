@@ -93,7 +93,8 @@ export type ProfileTestResult =
 export type ClientMessage =
   /** Its conversations start on the profile; null only while there is no profile yet. */
   | { type: "workspace.create"; path: string; profileId: string | null }
-  | { type: "workspace.delete"; workspaceId: string }
+  /** Without `discardsUncommitted`, a workspace whose conversations' worktrees hold uncommitted files stays, and the host answers `workspace.delete-asks`. */
+  | { type: "workspace.delete"; workspaceId: string; discardsUncommitted?: boolean }
   | { type: "workspace.set-default-launch"; workspaceId: string; launch: Launch }
   /**
    * Puts the workspace just before another of the group in the sidebar, or last in it; with a null group, among the
@@ -556,6 +557,8 @@ export type ServerMessage =
   /** A file link leads to a file outside the workspace that the agent did not change: the page asks before it opens `file`, the real file. */
   | { type: "files.ask-to-open"; conversationId: string; file: string }
   | { type: "conversation.delete-asks"; conversationId: string; uncommittedFiles: number; branch: string }
+  /** Removing the workspace would delete the uncommitted files of its conversations' worktrees, so it stays until the page sends `discardsUncommitted`. */
+  | { type: "workspace.delete-asks"; workspaceId: string; uncommittedFiles: number }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */
   /** peerToPeer is null when this host doesn't connect peer to peer. */
   | { type: "devices.listed"; devices: ListedDevice[]; thisDeviceId: string | null; reachability: ReachabilitySettings; peerToPeer: PeerToPeerStatus | null }

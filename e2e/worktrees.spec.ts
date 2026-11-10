@@ -206,3 +206,45 @@ test("one conversation starts in the other place, a clean worktree goes without 
     await expect(workspaceCard(page, notARepository).locator("li")).toHaveCount(0);
   });
 });
+
+test("removing a workspace asks before its worktrees' uncommitted files go, and a workspace with none asks nothing", async ({ page }) => {
+  await signIn(page, host);
+  await startNewConversation(page, host.projectDir);
+  const folder = await agentFolder(page);
+  const branch = gitIn(folder, "branch", "--show-current");
+  writeFileSync(join(folder, "scratch.txt"), "not committed\n");
+
+  const removeWorkspace = async (directory: string) => {
+    const card = workspaceCard(page, directory);
+    await card.hover();
+    await card.getByRole("button", { name: "Remove workspace" }).click();
+    await card.getByRole("button", { name: "Confirm: Remove workspace" }).click();
+  };
+  const question = page.getByRole("alertdialog", { name: "Remove the workspace and its worktrees?" });
+
+  await test.step("Cancel keeps the workspace, its worktree and the uncommitted file", async () => {
+    await removeWorkspace(host.projectDir);
+    await expect(question).toContainText(/Its worktrees hold at least \d+ uncommitted files?, which (?:is|are) deleted with them\./);
+    await expect(question.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await question.getByRole("button", { name: "Cancel" }).click();
+    await expect(question).toHaveCount(0);
+    await expect(workspaceCard(page, host.projectDir)).toHaveCount(1);
+    expect(existsSync(join(folder, "scratch.txt"))).toBe(true);
+  });
+
+  await test.step("Remove anyway deletes the workspace and its worktree, and leaves the project folder with its branch", async () => {
+    await removeWorkspace(host.projectDir);
+    await question.getByRole("button", { name: "Remove anyway" }).click();
+    await expect(workspaceCard(page, host.projectDir)).toHaveCount(0);
+    await expect.poll(() => existsSync(folder)).toBe(false);
+    expect(existsSync(host.projectDir)).toBe(true);
+    expect(branches()).toContain("main");
+    await expect.poll(branches).not.toContain(branch);
+  });
+
+  await test.step("a workspace with no worktrees goes on the second click, without a prompt", async () => {
+    await removeWorkspace(notARepository);
+    await expect(workspaceCard(page, notARepository)).toHaveCount(0);
+    await expect(question).toHaveCount(0);
+  });
+});

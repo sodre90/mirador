@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
 import { agentEditsIn, Changes, COMMAND_WINDOW_SLACK_MS, commandWindows, OutsideWorkspace, toolCallWindows, writerOf } from "../host/changes.ts";
 import { Checkpoints } from "../host/checkpoints.ts";
+import { commitFiles } from "../host/commit-files.ts";
 import { Store } from "../host/store.ts";
 import { createdSince, filesWrittenSince, ignoredFilesWritten, loggedCommitsIn, projectFiles, treeChangesIn, uncommittedChanges, writtenSince } from "../host/working-tree.ts";
 import type { StoredEvent } from "../shared/model.ts";
@@ -1079,4 +1080,24 @@ test("a commit git refuses says why, and an untracked file it was to take is unt
   await writeFile(join(projectDir, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho the hook says no >&2\nexit 1\n", { mode: 0o755 });
   await expect(changes.commit("c1", ["made.txt"], "Message")).rejects.toMatchObject({ problem: { code: "git-failed", command: "commit", output: expect.stringContaining("the hook says no") } });
   expect(await git(projectDir, ["status", "--porcelain", "made.txt"])).toBe("?? made.txt");
+});
+
+test("committing no files, or with no message, is refused before git marks every untracked file", async () => {
+  await write("untouched.txt", "still untracked\n");
+  const gitCalls: string[][] = [];
+  const realSpawn = Bun.spawn;
+  Bun.spawn = ((command: string[], options: object) => {
+    gitCalls.push(command);
+    return (realSpawn as (...args: unknown[]) => unknown)(command, options);
+  }) as typeof Bun.spawn;
+
+  try {
+    await expect(commitFiles(projectDir, [], "Message")).rejects.toMatchObject({ problem: { code: "commit-needs-files" } });
+    await expect(commitFiles(projectDir, ["kept.txt"], "  \n")).rejects.toMatchObject({ problem: { code: "commit-needs-message" } });
+  } finally {
+    Bun.spawn = realSpawn;
+  }
+
+  expect(gitCalls).toEqual([]);
+  expect(await git(projectDir, ["status", "--porcelain", "untouched.txt"])).toBe("?? untouched.txt");
 });

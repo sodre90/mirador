@@ -53,6 +53,11 @@ describe("a turn that ends makes it your move", () => {
     expect(turnEndReason({ error: "boom" }, { messagesQueued: true })).toBeNull();
   });
 
+  test("nor a queued message whose queue is held", () => {
+    expect(turnEndReason({ stopReason: "end_turn" }, { messagesQueued: true, holdsQueue: true })).toEqual({ kind: "finished" });
+    expect(turnEndReason({ error: "boom" }, { messagesQueued: true, holdsQueue: true })).toEqual({ kind: "error", message: "boom" });
+  });
+
   test("nor when it finished to wait for a job whose end resumes the agent, though a failure still is", () => {
     expect(turnEndReason({ stopReason: "end_turn" }, { resumedByAJob: true })).toBeNull();
     expect(turnEndReason({ error: "boom" }, { resumedByAJob: true })).toEqual({ kind: "error", message: "boom" });

@@ -15,7 +15,7 @@ import { JoinMachine } from "./Devices.tsx";
 import { JoinRequestPrompts } from "./JoinRequests.tsx";
 import { KeptCanvases } from "./KeptCanvases.tsx";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
-import { WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
+import { WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
 import { tellTheRailThePlace } from "./machine-place.ts";
 import { MachineFrames, MachineRail, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
 import { MachinesDialog, openMachine } from "./Machines.tsx";
@@ -676,6 +676,7 @@ export function App() {
       <JoinRequestPrompts joinRequests={state.joinRequests} />
       <FileToOpenPrompt fileToOpen={state.fileToOpen} dispatch={dispatch} />
       <WorktreeDeletePrompt worktreeToDelete={state.worktreeToDelete} dispatch={dispatch} />
+      <WorkspaceDeletePrompt workspaceToDelete={state.workspaceToDelete} dispatch={dispatch} />
       <div className="notices">
         {state.notices.map((notice) => (
           <div key={notice.id} className="notice" onClick={() => dispatch({ type: "dismiss-notice", id: notice.id })}>

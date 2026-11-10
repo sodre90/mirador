@@ -103,6 +103,17 @@ export const shell = {
     deleteKeeps: (branch: string) => `Commits made there stay, on the branch ${branch}.`,
     deleteBoth: "Delete both",
   },
+  workspaceDelete: {
+    title: "Remove the workspace and its worktrees?",
+    loses: (count: number) =>
+      plural(
+        count,
+        "Its worktrees hold at least 1 uncommitted file, which is deleted with them.",
+        `Its worktrees hold at least ${count} uncommitted files, which are deleted with them.`,
+      ),
+    keeps: "The project folder and the commits made in the worktrees stay.",
+    removeAnyway: "Remove anyway",
+  },
   sessions: {
     label: "Continue a session",
     title: (workspace: string) => `Continue a session in ${workspace}`,

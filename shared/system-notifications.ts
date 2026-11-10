@@ -80,9 +80,9 @@ export type TurnOutcome = { stopReason: string } | { error: string; problem?: Ho
  */
 export function turnEndReason(
   outcome: TurnOutcome,
-  { messagesQueued = false, resumedByAJob = false } = {},
+  { messagesQueued = false, resumedByAJob = false, holdsQueue = false } = {},
 ): Extract<NotificationReason, { kind: "finished" | "error" }> | null {
-  if (messagesQueued) return null;
+  if (messagesQueued && !holdsQueue) return null;
   if ("error" in outcome) return { kind: "error", message: outcome.error, ...(outcome.problem && { problem: outcome.problem }) };
   return outcome.stopReason === "cancelled" || resumedByAJob ? null : { kind: "finished" };
 }

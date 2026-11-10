@@ -823,6 +823,23 @@ export function startServer(services: HostServices) {
     hub.send(socket, { type: "conversation.delete-asks", conversationId, uncommittedFiles, branch: conversations.get(conversationId).worktree!.branch });
   }
 
+  function deleteWorkspace(workspaceId: string, { keepsUncommittedWork = false } = {}) {
+    conversations
+      .list()
+      .filter((conversation) => conversation.workspaceId === workspaceId)
+      .forEach((conversation) => deleteConversation(conversation.id, { keepsUncommittedWork }));
+    apps.forgetWorkspace(workspaceId);
+    store.deleteWorkspace(workspaceId);
+    hub.broadcast({ type: "workspace.deleted", workspaceId });
+  }
+
+  /** Removing a workspace deletes its conversations' worktrees, so one holding uncommitted files asks first. */
+  async function deleteWorkspaceOrAsk(socket: BrowserSocket, workspaceId: string, discardsUncommitted: boolean) {
+    const uncommittedFiles = discardsUncommitted ? 0 : await conversations.uncommittedFilesLostInWorkspace(workspaceId);
+    if (uncommittedFiles > 0) return hub.send(socket, { type: "workspace.delete-asks", workspaceId, uncommittedFiles });
+    deleteWorkspace(workspaceId, { keepsUncommittedWork: !discardsUncommitted });
+  }
+
   const sidebarNow = () => ({ workspaces: store.listWorkspaces(), groups: store.listWorkspaceGroups() });
 
   /** Tells every window of the workspaces and groups whose place in the sidebar changed since `before`: their position, or a workspace's group. */
@@ -1033,13 +1050,7 @@ export function startServer(services: HostServices) {
       case "workspace.create":
         return hub.broadcast({ type: "workspace.upserted", workspace: await createWorkspace(message.path, message.profileId) });
       case "workspace.delete":
-        conversations
-          .list()
-          .filter((conversation) => conversation.workspaceId === message.workspaceId)
-          .forEach((conversation) => deleteConversation(conversation.id, { keepsUncommittedWork: true }));
-        apps.forgetWorkspace(message.workspaceId);
-        store.deleteWorkspace(message.workspaceId);
-        return hub.broadcast({ type: "workspace.deleted", workspaceId: message.workspaceId });
+        return deleteWorkspaceOrAsk(socket, message.workspaceId, message.discardsUncommitted ?? false);
       case "workspace.set-default-launch":
         return profiles.setWorkspaceDefault(message.workspaceId, message.launch);
       case "workspace.move":
@@ -1271,6 +1282,7 @@ export function startServer(services: HostServices) {
         canvasPlugins.settingChanged(message.conversationId, message.plugin, message.setting);
         for (const modelSetting of canvasPlugins.modelSettingsOf(message.plugin, message.setting)) {
           conversations.setPluginSetting(message.conversationId, message.plugin, modelSetting, null);
+          canvasPlugins.settingChanged(message.conversationId, message.plugin, modelSetting);
         }
         return;
       case "conversation.set-bypass-permissions":

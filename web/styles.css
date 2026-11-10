@@ -4805,7 +4805,7 @@ button.edits-waiting {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  z-index: 10;
+  z-index: 30;
 }
 
 .notice {

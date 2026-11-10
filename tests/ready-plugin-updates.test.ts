@@ -184,6 +184,38 @@ describe("a plugin swap cut short", () => {
     const pluginsFolder = join(root, "swap-refuses", "plugins");
     await expect(swapPlugin(pluginsFolder, { folder: "..", movedOutTo: join(root, "x"), movingIn: join(root, "y"), whenCutShort: "finish" })).rejects.toThrow("isn't the name of a folder");
   });
+
+  test("a swap that fails before moving the plugin out leaves no journal to settle", async () => {
+    const pluginsFolder = join(root, "swap-first-fails", "plugins");
+    const plugin = join(pluginsFolder, "counter");
+    cpSync(COUNTER, plugin, { recursive: true });
+    const stopsAtOnce = async () => {
+      throw new Error("the host stopped here");
+    };
+    await expect(swapPlugin(pluginsFolder, { folder: "counter", movedOutTo: join(root, "swap-first-fails", "parked"), movingIn: join(root, "swap-first-fails", "replacement"), whenCutShort: "finish" }, stopsAtOnce)).rejects.toThrow();
+    expect(existsSync(plugin)).toBe(true);
+    expect(existsSync(join(`${pluginsFolder}-swaps`, "counter.json")), "nothing was cut short to settle").toBe(false);
+  });
+
+  test("a swap that finished before its journal was removed is remembered as undone at the next start", async () => {
+    const base = join(root, "swap-finished-before-journal");
+    const pluginsFolder = join(base, "plugins");
+    const plugin = join(pluginsFolder, "counter");
+    const [movedOutTo, movingIn] = [join(base, "parked", "counter-1"), join(base, "previous", "counter")];
+    cpSync(COUNTER, plugin, { recursive: true });
+    mkdirSync(join(base, "parked"), { recursive: true });
+    cpSync(COUNTER, movedOutTo, { recursive: true });
+    writeFileSync(join(movedOutTo, "plugin.json"), JSON.stringify({ ...counterManifest, version: "1.0.1" }));
+    const journal = join(`${pluginsFolder}-swaps`, "counter.json");
+    mkdirSync(join(`${pluginsFolder}-swaps`), { recursive: true });
+    writeFileSync(journal, JSON.stringify({ folder: "counter", movedOutTo, movingIn, whenCutShort: "finish", undoneRelease: "1.0.1", undoneBecause: "didnt-load" }));
+
+    const undone: [string, string, string][] = [];
+    await settleCutShortSwaps(pluginsFolder, (folder, release, because) => undone.push([folder, release, because]));
+    expect(undone).toEqual([["counter", "1.0.1", "didnt-load"]]);
+    expect(versionIn(plugin), "the finished swap is left as it put it").toBe("1.0.0");
+    expect(existsSync(journal)).toBe(false);
+  });
 });
 
 describe("the Mirador-updated check", () => {
@@ -244,6 +276,22 @@ describe("ready plugin updates", () => {
     await ready.prepare(found);
     expect(ready.marked(found)).toMatchObject([{ release: "1.0.2", ready: true }]);
     expect((await restarted(pluginsFolder, store)).applied).toMatchObject([{ from: "1.0.0", to: "1.0.2" }]);
+  });
+
+  test("a ready update goes from disk when a later release is held back, so it can't go in at the next start", async () => {
+    const { repo, pluginsFolder, store, plugins, ready } = await installedCounter("held-back-after-ready");
+    release(repo, "1.0.1");
+    await ready.prepare(await plugins.updatesFound(null));
+    expect(existsSync(join(readyFolderOf(pluginsFolder), "counter", "plugin")), "the ready update is on disk").toBe(true);
+
+    release(repo, "1.0.2");
+    store.rememberPluginUpdateUndone("counter", "1.0.2");
+    const found = await plugins.updatesFound(null);
+    expect(found).toMatchObject([{ release: "1.0.2" }]);
+    await ready.prepare(found);
+    expect(ready.marked(found)).toMatchObject([{ release: "1.0.2", ready: false, heldBack: "undone" }]);
+    expect(existsSync(join(readyFolderOf(pluginsFolder), "counter")), "the stale ready update goes").toBe(false);
+    expect((await restarted(pluginsFolder, store)).applied).toEqual([]);
   });
 
   test("a changed build command waits for the user, and its build never runs", async () => {

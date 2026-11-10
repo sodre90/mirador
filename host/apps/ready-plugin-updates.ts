@@ -243,6 +243,7 @@ export class ReadyPluginUpdates {
           console.warn(`the ${update.folder} plugin at ${update.to} didn't load, so the one it replaced is back from the next start: ${problem.message}`);
           return { ...update, restoredBecause: problem.message };
         } catch (error) {
+          this.store.rememberPluginUpdateUndone(update.folder, update.to, "didnt-load");
           console.warn(`the ${update.folder} plugin at ${update.to} didn't load, and putting back the one it replaced failed: ${messageOf(error)}`);
           return update;
         }
@@ -284,6 +285,7 @@ export class ReadyPluginUpdates {
       const heldBack = heldBackBecause(decided);
       if (heldBack || decided.release === null) {
         this.setStatus(update.folder, { release: update.release, heldBack });
+        removeOrLog(join(this.readyFolder, update.folder));
         continue;
       }
       if (!isNewerVersion(decided.release, plugin.version ?? "")) continue;

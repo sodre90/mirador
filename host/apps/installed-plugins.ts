@@ -282,8 +282,14 @@ export class InstalledPlugins {
         await this.built(staged, manifest);
         if (offer.replaces) {
           const folder = this.clonedPlugin(offer.replaces.folder);
-          await renameWhenFree(folder, join(this.staging, `${offer.replaces.folder}-replaced-${crypto.randomUUID()}`));
-          await renameWhenFree(staged, folder);
+          const replaced = join(this.staging, `${offer.replaces.folder}-replaced-${crypto.randomUUID()}`);
+          await renameWhenFree(folder, replaced);
+          try {
+            await renameWhenFree(staged, folder);
+          } catch (error) {
+            await renameWhenFree(replaced, folder);
+            throw error;
+          }
           this.changed.add(offer.replaces.folder);
         } else {
           await this.refuseTakenName(manifest.name);

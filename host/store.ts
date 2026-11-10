@@ -524,6 +524,12 @@ export class Store {
     this.db.query("DELETE FROM app_conversations WHERE app = ?").run(app);
   }
 
+  /** Forgets an app's state in a folder whose worktree is gone, which its workspace's deletion no longer carries away. */
+  forgetFolder(folderId: string) {
+    this.db.query("DELETE FROM open_apps WHERE folder_id = ?").run(folderId);
+    this.db.query("DELETE FROM app_storage WHERE folder_id = ?").run(folderId);
+  }
+
   listAppConversations(): { workspaceId: string; app: string; conversationId: string }[] {
     return this.db.query("SELECT folder_id AS workspaceId, app, conversation_id AS conversationId FROM app_conversations").all() as {
       workspaceId: string;
@@ -1294,7 +1300,7 @@ export class Store {
     const stored = this.insertEvent(conversationId, event);
     if (event.type === "user-message" && !event.fromScript && !event.fromMirador && !event.fromPlugin) {
       this.db.query("UPDATE conversations SET last_message_at = ? WHERE id = ?").run(stored.at, conversationId);
-    } else if (event.type === "turn-end") {
+    } else if (event.type === "turn-end" || (event.type === "error" && event.endsTurn)) {
       this.db.query("UPDATE conversations SET last_reply_at = ? WHERE id = ?").run(stored.at, conversationId);
     }
     return stored;
@@ -1306,6 +1312,14 @@ export class Store {
     this.nextSeq.set(conversationId, Math.max(this.nextSeq.get(conversationId) ?? 0, lastSeq + 1));
     this.db.query("UPDATE conversations SET rewound_through_seq = MAX(rewound_through_seq, ?) WHERE id = ?").run(lastSeq, conversationId);
     this.db.query("DELETE FROM events WHERE conversation_id = ? AND seq >= ?").run(conversationId, seq);
+    this.db
+      .query(
+        `UPDATE conversations SET
+           last_message_at = (SELECT MAX(at) FROM events WHERE conversation_id = ? AND json_extract(event, '$.type') = 'user-message' AND json_extract(event, '$.fromScript') IS NULL AND json_extract(event, '$.fromMirador') IS NULL AND json_extract(event, '$.fromPlugin') IS NULL),
+           last_reply_at = (SELECT MAX(at) FROM events WHERE conversation_id = ? AND (json_extract(event, '$.type') = 'turn-end' OR (json_extract(event, '$.type') = 'error' AND json_extract(event, '$.endsTurn') = 1)))
+         WHERE id = ?`,
+      )
+      .run(conversationId, conversationId, conversationId);
   }
 
   lastEventSeq(conversationId: string): number {
@@ -1706,7 +1720,7 @@ export class Store {
       `json_extract(event, '$.type') = 'user-message' AND json_extract(event, '$.fromScript') IS NULL
        AND json_extract(event, '$.fromMirador') IS NULL AND json_extract(event, '$.fromPlugin') IS NULL`,
     );
-    fill("last_reply_at", "json_extract(event, '$.type') = 'turn-end'");
+    fill("last_reply_at", "json_extract(event, '$.type') = 'turn-end' OR (json_extract(event, '$.type') = 'error' AND json_extract(event, '$.endsTurn') = 1)");
   }
 
   private allocateSeq(conversationId: string) {

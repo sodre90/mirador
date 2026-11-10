@@ -131,6 +131,7 @@ const apps = new AppDocuments(store, loadedPlugins.apps, {
   openAppsChanged: (openApps) => hub.broadcast({ type: "apps.open", openApps }),
   stateChanged: (state) => hub.publishAppState(state),
 });
+conversations.hearWorktreeRemovalsWith((folderId) => apps.forgetFolder(folderId));
 await apps.reopenAll();
 const stopWatchingViews = watchViews(loadedPlugins, () =>
   hub.broadcast({ type: "plugins.views", installedApps: apps.installed(), canvasViews: canvasPlugins.viewPaths() }),

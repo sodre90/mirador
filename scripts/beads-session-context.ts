@@ -33,7 +33,18 @@ function memoriesSection(stored: Record<string, unknown>) {
 
 const workflow = await bd("prime", "--no-memories");
 if (workflow !== null) {
-  const stored = JSON.parse((await bd("memories", "--json")) ?? "{}") as Record<string, unknown>;
+  let stored: Record<string, unknown> = {};
+  const rawMemories = await bd("memories", "--json");
+  if (rawMemories && rawMemories.trim()) {
+    try {
+      const parsed = JSON.parse(rawMemories.trim());
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        stored = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Degrades gracefully with workflow context if memories output is malformed
+    }
+  }
   const additionalContext = [workflow.trimEnd(), memoriesSection(stored)].filter(Boolean).join("\n\n");
   console.log(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext } }));
 }

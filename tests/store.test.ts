@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, test } from "bun:test";
+import { describe, expect, setSystemTime, test } from "bun:test";
 import type { CanvasItem, ContextUsage, Conversation, ConversationEvent, JobWait, Profile } from "../shared/model.ts";
 import { Store } from "../host/store.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
@@ -90,6 +90,14 @@ describe("Store", () => {
     expect(times()).toEqual({ lastMessageAt: written.at, lastReplyAt: undefined });
     const ended = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
     expect(times()).toEqual({ lastMessageAt: written.at, lastReplyAt: ended.at });
+  });
+
+  test("an error that ends the turn counts as when the agent last finished, one beside the turn does not", () => {
+    const { store } = seededStore();
+    store.appendEvent("c1", { type: "error", message: "beside the turn" });
+    expect(store.findConversation("c1")!.lastReplyAt).toBeUndefined();
+    const failed = store.appendEvent("c1", { type: "error", message: "the turn failed", endsTurn: true });
+    expect(store.findConversation("c1")!.lastReplyAt).toBe(failed.at);
   });
 
   test("a turn the host was killed in ends without counting as a reply", () => {
@@ -190,6 +198,27 @@ describe("Store", () => {
     expect(store.listEvents("c1").map(({ seq }) => seq)).toEqual([1]);
     store.appendEvent("c1", { type: "user-message", text: "d" });
     expect(store.listEvents("c1").map(({ seq }) => seq)).toEqual([1, 4]);
+  });
+
+  test("a rewind moves the times the sidebar orders by back to the events it leaves", () => {
+    const { store } = seededStore();
+    setSystemTime(new Date("2026-10-02T10:00:00Z"));
+    const first = store.appendEvent("c1", { type: "user-message", text: "a" });
+    setSystemTime(new Date("2026-10-02T10:01:00Z"));
+    const ended = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    setSystemTime(new Date("2026-10-02T10:02:00Z"));
+    const second = store.appendEvent("c1", { type: "user-message", text: "b" });
+    setSystemTime(new Date("2026-10-02T10:03:00Z"));
+    const failed = store.appendEvent("c1", { type: "error", message: "boom", endsTurn: true });
+    setSystemTime();
+
+    store.deleteEventsFrom("c1", failed.seq);
+    expect(store.findConversation("c1")).toMatchObject({ lastMessageAt: second.at, lastReplyAt: ended.at });
+    store.deleteEventsFrom("c1", second.seq);
+    expect(store.findConversation("c1")).toMatchObject({ lastMessageAt: first.at, lastReplyAt: ended.at });
+    store.deleteEventsFrom("c1", first.seq);
+    expect(store.findConversation("c1")!.lastMessageAt).toBeUndefined();
+    expect(store.findConversation("c1")!.lastReplyAt).toBeUndefined();
   });
 
   test("the numbers a rewind frees are not handed out again after reopening the database either", () => {
@@ -828,4 +857,5 @@ describe("Store", () => {
     ]);
     store.close();
   });
+
 });

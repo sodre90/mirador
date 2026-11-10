@@ -4,6 +4,7 @@ import { changesRequest } from "./changes-request.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
+import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.canvas.changes.commitDialog;
 const statusWords = t.canvas.changes.status;
@@ -60,6 +61,7 @@ export function CommitChangesDialog({ conversationId, onClose, onCommitted }: { 
   const [message, setMessage] = useState("");
   const [working, setWorking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const typingAidAttributes = useTypingAidAttributes();
   const sayProblem = (error: unknown) => setProblem(error instanceof Error ? error.message : String(error));
 
   useEffect(() => {
@@ -122,10 +124,16 @@ export function CommitChangesDialog({ conversationId, onClose, onCommitted }: { 
             <textarea
               autoFocus
               rows={3}
+              {...typingAidAttributes}
               value={message}
               placeholder={words.messagePlaceholder}
               onChange={(event) => setMessage(event.target.value)}
-              onKeyDown={(event) => event.key === "Enter" && (event.metaKey || event.ctrlKey) && commitTicked()}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  event.preventDefault();
+                  commitTicked();
+                }
+              }}
             />
           </label>
         </>

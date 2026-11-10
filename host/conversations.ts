@@ -304,6 +304,8 @@ interface Runtime {
   killedOnPurpose?: boolean;
   /** The model the agent last said its answers came from, in its usage updates. */
   reportedModel?: string;
+  /** A workspace setup command currently running in this conversation's worktree. */
+  setupCommandId?: string;
   /** What a plugin chose for the conversation it started, until a session opens on them: a failed open's retry takes them too. */
   startChoices?: ConversationChoices;
   /** The reply the last stopped turn still owes: its late chunks are dropped, or held back until another reply's id or the next turn's end tells whether they were the orphan or that turn's answer. */
@@ -373,6 +375,7 @@ export class ConversationService {
   private hearReply: HearReply = () => {};
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
+  private hearWorktreeRemoval: (folderId: string) => void = () => {};
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
   private readonly turnsCutShortByCrash: Set<string>;
 
@@ -481,11 +484,15 @@ export class ConversationService {
     const givenTitle = titleFrom(title ?? "");
     const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "", worktree);
     if (choices.model || choices.effort) this.runtime(conversation.id).startChoices = choices;
-    const opened = this.ensureSession(conversation.id).catch(() => {});
+    const opened = this.ensureSession(conversation.id);
     if (prompt?.trim()) {
       const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true });
-      (this.unmadeWorktreeOf(conversation.id) ? opened.then(startTurn) : startTurn()).catch(() => {});
-    }
+      if (worktree) opened.then(startTurn).catch(() => {});
+      else {
+        opened.catch(() => {});
+        startTurn().catch(() => {});
+      }
+    } else opened.catch(() => {});
     return conversation;
   }
 
@@ -550,6 +557,11 @@ export class ConversationService {
     this.hearActivity = hearActivity;
   }
 
+  /** What keeps documents in a worktree hears that its folder is gone, so nothing is left open or stored for it. */
+  hearWorktreeRemovalsWith(hearWorktreeRemoval: (folderId: string) => void) {
+    this.hearWorktreeRemoval = hearWorktreeRemoval;
+  }
+
   /** The user takes a started conversation off its caller's list of delegated tasks. */
   dismissDelegation(conversationId: string) {
     this.store.dismissDelegation(conversationId);
@@ -574,7 +586,12 @@ export class ConversationService {
     const started = { id: conversationId, profile: (conversation.profileId && this.store.findProfile(conversation.profileId)?.name) || harnessLabels[conversation.harness] };
     this.ranOnOfTurn(conversation, turn, told.ended)
       .then((ranOn) => this.hearReply(started, startedBy, ranOn ? { ...told, ranOn } : told))
-      .catch((error: unknown) => console.error(`the ${startedBy.plugin} plugin failed to hear the reply of ${conversationId}:`, error));
+      .catch((error: unknown) => {
+        console.error(`the ${startedBy.plugin} plugin failed to hear the reply of ${conversationId}:`, error);
+        if (this.pluginTellsItsCaller(startedBy.plugin)) {
+          this.notifications.notify(conversationId, { kind: "finished" });
+        }
+      });
   }
 
   /** A turn that ended before its agent answered anything ran on no model. */
@@ -747,6 +764,21 @@ export class ConversationService {
     return this.worktrees.uncommittedFiles(worktree);
   }
 
+  /**
+   * The files only the workspace's conversations hold, which removing the workspace deletes with it: each worktree
+   * counted once, though forks share one.
+   */
+  async uncommittedFilesLostInWorkspace(workspaceId: string) {
+    const worktrees = new Map<string, ConversationWorktree>();
+    this.store
+      .listConversations()
+      .filter((conversation) => conversation.workspaceId === workspaceId)
+      .flatMap(({ worktree }) => (worktree ? [worktree] : []))
+      .forEach((worktree) => worktrees.set(worktree.id, worktree));
+    const counts = await Promise.all([...worktrees.values()].map((worktree) => this.worktrees.uncommittedFiles(worktree)));
+    return counts.reduce((sum, count) => sum + count, 0);
+  }
+
   /** Its worktree goes once no other conversation works there; with `keepsUncommittedWork`, only one that holds none. */
   delete(conversationId: string, { keepsUncommittedWork = false } = {}) {
     const conversation = this.get(conversationId);
@@ -758,12 +790,14 @@ export class ConversationService {
     this.sessions.forget(conversationId);
     this.subagentSessions.forget(conversationId);
     const runtime = this.runtimes.get(conversationId);
+    if (runtime?.setupCommandId) this.commands.stop(runtime.setupCommandId);
     const wasRunning = runtime?.running ?? false;
     this.asyncTasks.forget(conversationId);
     if (runtime) {
       this.endUsageLimitWait(runtime);
       this.releaseSession(conversationId, runtime, conversation.acpSessionId);
     }
+    this.stopDedicatedHarness(conversation.profileId, conversationId);
     this.jobWaits.forget(conversationId);
     this.runtimes.delete(conversationId);
     this.statusOverrides.delete(conversationId);
@@ -789,6 +823,8 @@ export class ConversationService {
     if (keepsUncommittedWork && (await this.worktrees.uncommittedFiles(worktree)) > 0) return;
     await this.worktrees.remove(workspace, worktree);
     await this.checkpoints.forget(workingCopyOf(workspace, { worktree }), workspace);
+    this.store.forgetFolder(worktree.id);
+    this.hearWorktreeRemoval(worktree.id);
   }
 
   /** Continuing the conversation's session later brings its canvas back as it was. */
@@ -839,6 +875,7 @@ export class ConversationService {
     }
     const conversation = this.get(conversationId);
     const released = this.releaseSession(conversationId, runtime, conversation.acpSessionId);
+    this.stopDedicatedHarness(conversation.profileId, conversationId);
     if (changesAgent) this.forgetContextUsage(conversationId);
     runtime.reportedModel = undefined;
     this.save({
@@ -1064,8 +1101,10 @@ export class ConversationService {
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
     let endedOnItsOwn: acp.PromptResponse | undefined;
+    let sessionOpened = false;
     try {
       const sessionId = await this.ensureSession(conversationId);
+      sessionOpened = true;
       this.setStatus(conversationId, "running");
       const prompt = await this.promptContent(conversationId, withNotes(notes, text), imageIds);
       const harness = this.harnessFor(this.get(conversationId));
@@ -1115,7 +1154,7 @@ export class ConversationService {
       this.hearActivity(conversationId, { kind: "turn-ended", ended: turnEndedAs(endedOnItsOwn?.stopReason, runtime.killedOnPurpose === true) });
       runtime.killedOnPurpose = false;
       this.store.turnEnded(conversationId);
-      this.setStatus(conversationId, "idle");
+      if (sessionOpened) this.setStatus(conversationId, "idle");
       endTurn();
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
@@ -1605,6 +1644,7 @@ export class ConversationService {
   async cancel(conversationId: string, { force = false } = {}): Promise<void> {
     if (force) return this.forceCancel(conversationId);
     const runtime = this.runtime(conversationId);
+    if (runtime.setupCommandId) this.commands.stop(runtime.setupCommandId);
     runtime.pendingPermissions.forEach(({ settle }) => settle(null));
     const conversation = this.get(conversationId);
     if (runtime.running && runtime.turn && !runtime.turn.promptSent) {
@@ -1799,20 +1839,24 @@ export class ConversationService {
   private ensureSession(conversationId: string, open = () => this.openSession(conversationId)): Promise<string> {
     const runtime = this.runtime(conversationId);
     if (runtime.sessionId) return runtime.sessionId;
-    const unmadeWorktree = this.unmadeWorktreeOf(conversationId);
-    const opening: Promise<string> = (unmadeWorktree ? this.prepareWorktree(conversationId, unmadeWorktree).then(open) : open()).catch((error) => {
+    const opening: Promise<string> = (this.get(conversationId).worktree ? this.openAfterItsWorktree(conversationId, open) : open()).catch((error) => {
       if (runtime.sessionId && runtime.sessionId !== opening) throw error;
       runtime.sessionId = undefined;
-      this.setStatus(conversationId, "error", errorMessage(error), problemOf(error).problem);
+      if (this.store.hasConversation(conversationId)) {
+        this.setStatus(conversationId, "error", errorMessage(error), problemOf(error).problem);
+      }
       throw error;
     });
     runtime.sessionId = opening;
     return opening;
   }
 
-  private unmadeWorktreeOf(conversationId: string) {
+  /** A worktree conversation opens once its worktree is a real checkout, making again one a kill left half-made. */
+  private async openAfterItsWorktree(conversationId: string, open: () => Promise<string>) {
     const { worktree } = this.get(conversationId);
-    return worktree && !this.worktrees.isMade(worktree) ? worktree : undefined;
+    if (!worktree) return open();
+    if (!(await this.worktrees.isMade(worktree))) await this.prepareWorktree(conversationId, worktree);
+    return open();
   }
 
   /** Before the agent of a worktree conversation first starts, the worktree is made and set up; a turn waiting for that is starting meanwhile. */
@@ -1820,7 +1864,9 @@ export class ConversationService {
     try {
       await this.makeWorktree(this.get(conversationId), worktree);
     } finally {
-      this.setStatus(conversationId, this.runtime(conversationId).running ? "starting" : "idle");
+      if (this.store.hasConversation(conversationId)) {
+        this.setStatus(conversationId, this.runtime(conversationId).running ? "starting" : "idle");
+      }
     }
   }
 
@@ -1842,11 +1888,20 @@ export class ConversationService {
     const environment = { ...profileEnvironment(this.profileOf(conversation)), MIRADOR_WORKSPACE: workspace.path };
     let setupCommandId: string | undefined;
     let succeeded = false;
+    const runtime = this.runtimes.get(conversation.id);
     await this.commands.run(workspace.worktreeSetup, worktree.folder, environment, (event) => {
-      if (event.type === "user-command") setupCommandId = event.commandId;
+      if (event.type === "user-command") {
+        setupCommandId = event.commandId;
+        if (runtime) runtime.setupCommandId = setupCommandId;
+      }
       if (event.type === "user-command-ended") succeeded = event.exitCode === 0;
       this.append(conversation.id, event);
     });
+    if (runtime) runtime.setupCommandId = undefined;
+    if (!this.store.hasConversation(conversation.id)) {
+      await this.worktrees.remove(workspace, worktree);
+      throw new HostProblemError({ code: "conversation-deleted-while-opening" });
+    }
     if (succeeded && setupCommandId) this.dropCommandOutputs(conversation.id, [setupCommandId]);
   }
 
@@ -1858,6 +1913,20 @@ export class ConversationService {
     // Once the session is released, nothing can stop or report its background tasks through this conversation.
     this.forgetAsyncTasks(conversationId);
     return Promise.race([harness.closeSession(sessionId).catch(() => {}), Bun.sleep(SESSION_CLOSE_TIMEOUT_MS)]);
+  }
+
+  /**
+   * An Antigravity conversation's own agent process serves only it, so it goes with the conversation or with the profile
+   * it moves off. With no profile left to name it by, as when the conversation was deleted already, its id finds the key.
+   */
+  private stopDedicatedHarness(profileId: string | null, conversationId: string) {
+    const keys = profileId ? [`${profileId}/${conversationId}`] : [...this.agentProcesses.keys()].filter((key) => key.endsWith(`/${conversationId}`));
+    keys.forEach((key) => {
+      const harness = this.agentProcesses.get(key);
+      if (!harness) return;
+      this.agentProcesses.delete(key);
+      void harness.stop();
+    });
   }
 
   /**
@@ -1967,6 +2036,7 @@ export class ConversationService {
   private closeSessionIfConversationDeleted(conversationId: string, harness: HarnessProcess, sessionId: string) {
     if (this.store.findConversation(conversationId)) return;
     harness.closeSession(sessionId).catch(() => {});
+    this.stopDedicatedHarness(null, conversationId);
     throw new HostProblemError({ code: "conversation-deleted-while-opening" });
   }
 
@@ -2676,7 +2746,7 @@ export class ConversationService {
   private whatHoldsQueue(runtime: Runtime) {
     if (runtime.holdingQueue) return "the queue waits for a profile switch or for a stopped turn to go on";
     if (this.stopping) return "the host is stopping";
-    if (runtime.usageLimit !== undefined) return "the queue waits for the usage limit to reset";
+    if (runtime.usageLimit?.timer !== undefined) return "the queue waits for the usage limit to reset";
     if (runtime.steerInFlight) return "messages are on their way into the turn";
     return null;
   }
@@ -2789,7 +2859,7 @@ export class ConversationService {
     if (!this.store.hasConversation(conversationId)) return;
     const stored = this.store.appendEvent(conversationId, event);
     this.hub.publishEvent(conversationId, stored);
-    if (event.type === "user-message" || event.type === "turn-end") this.republish(conversationId);
+    if (event.type === "user-message" || event.type === "turn-end" || (event.type === "error" && event.endsTurn)) this.republish(conversationId);
     const activity = activityOf(event);
     if (activity) this.hearActivity(conversationId, activity);
     return stored.seq;
@@ -2797,9 +2867,11 @@ export class ConversationService {
 
   private notifyTurnEnded(conversationId: string, outcome: TurnOutcome) {
     if (!this.store.hasConversation(conversationId)) return;
+    const runtime = this.runtime(conversationId);
     const reason = turnEndReason(outcome, {
-      messagesQueued: this.runtime(conversationId).queuedMessages.length > 0,
+      messagesQueued: runtime.queuedMessages.length > 0,
       resumedByAJob: this.jobWaits.in(conversationId).some(({ resume }) => resume),
+      holdsQueue: runtime.holdingQueue || this.holdsQueue(runtime),
     });
     if (!reason || this.stopping) return;
     if (this.itsPluginTellsTheCaller(conversationId)) return;

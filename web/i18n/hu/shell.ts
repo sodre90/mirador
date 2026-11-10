@@ -98,6 +98,12 @@ export const shell: Messages["shell"] = {
     deleteKeeps: (branch) => `Az ott készült commitok megmaradnak a(z) ${branch} ágon.`,
     deleteBoth: "Mindkettő törlése",
   },
+  workspaceDelete: {
+    title: "Eltávolítod a munkaterületet és a worktree-jeit?",
+    loses: (count) => `A worktree-jeiben legalább ${count} nem commitolt fájl van, ez is törlődik velük.`,
+    keeps: "A projektkönyvtár és a worktree-kben készült commitok megmaradnak.",
+    removeAnyway: "Eltávolítás mindenképp",
+  },
   sessions: {
     label: "Munkamenet folytatása",
     title: (workspace) => `Munkamenet folytatása itt: ${workspace}`,

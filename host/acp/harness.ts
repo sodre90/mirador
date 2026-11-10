@@ -127,26 +127,26 @@ export class HarnessProcess {
   }
 
   async newSession(request: acp.NewSessionRequest) {
-    return this.agent().request(acp.methods.agent.session.new, request);
+    return this.failingWithExitReason((agent) => agent.request(acp.methods.agent.session.new, request));
   }
 
   async resumeSession(request: acp.ResumeSessionRequest) {
-    return this.agent().request(acp.methods.agent.session.resume, request);
+    return this.failingWithExitReason((agent) => agent.request(acp.methods.agent.session.resume, request));
   }
 
   async loadSession(request: acp.LoadSessionRequest) {
-    return this.agent().request(acp.methods.agent.session.load, request);
+    return this.failingWithExitReason((agent) => agent.request(acp.methods.agent.session.load, request));
   }
 
   async forkSession(request: acp.ForkSessionRequest) {
-    return this.agent().request(acp.methods.agent.session.fork, request);
+    return this.failingWithExitReason((agent) => agent.request(acp.methods.agent.session.fork, request));
   }
 
   /** Lets go of a session so another agent process can take it over; a process that is not running holds none. */
   async closeSession(sessionId: string) {
     const capabilities = await this.initialized;
     if (!capabilities?.agentCapabilities?.sessionCapabilities?.close) return;
-    await this.agent().request(acp.methods.agent.session.close, { sessionId });
+    await this.failingWithExitReason((agent) => agent.request(acp.methods.agent.session.close, { sessionId }));
   }
 
   /** What lets a session be let go of and picked up again later: closing it, and resuming or loading it. */
@@ -213,7 +213,7 @@ export class HarnessProcess {
    * A pre-launch command still running ends the way its timeout ends it, the shell alone, so a proxy it started in the
    * background stays up for the next start.
    */
-  stop(reason: AgentGone = { kind: "stopped" }) {
+  async stop(reason: AgentGone = { kind: "stopped" }): Promise<AgentGone> {
     this.stopReason = reason;
     this.prelaunchProcess?.kill();
     const child = this.child;
@@ -223,6 +223,9 @@ export class HarnessProcess {
       child.kill();
       setTimeout(() => child.exitCode === null && child.signalCode === null && child.kill("SIGKILL"), FORCE_KILL_GRACE_MS).unref();
     }
+    // A start still waiting its turn or running the pre-launch command has no process to wait for; settles once its
+    // launch has ended and let go of `initialized`, so the next start begins afresh rather than join this one.
+    if (this.initialized && !this.child) await this.initialized.catch(() => {});
     return this.exited;
   }
 
@@ -236,12 +239,12 @@ export class HarnessProcess {
    * and only once the process has exited, so by then the process is known to be gone.
    */
   private async failingWithExitReason<T>(request: (agent: acp.ClientConnection["agent"]) => Promise<T>): Promise<T> {
-    const connection = this.connection;
+    const { connection, exited } = this;
     try {
       return await request(this.agent());
     } catch (error) {
       if (!connection?.signal.aborted) throw error;
-      const reason = await Promise.race([this.exited, Bun.sleep(EXIT_WAIT_MS).then(() => null)]);
+      const reason = await Promise.race([exited, Bun.sleep(EXIT_WAIT_MS).then(() => null)]);
       throw reason === null ? error : new HostProblemError({ code: "agent-gone", agent: this.spec.label, gone: reason });
     }
   }
@@ -256,9 +259,9 @@ export class HarnessProcess {
 
   private async launch() {
     const ownStart = this.startsSoFar;
-    this.endIfStoppedBeforeSpawning();
+    this.endIfStoppedBeforeSpawning(ownStart);
     await this.runPrelaunch();
-    this.endIfStoppedBeforeSpawning();
+    this.endIfStoppedBeforeSpawning(ownStart);
     const [command, ...args] = this.spec.command;
     const child = spawnAgent(command!, args, this.spec.environment);
     this.child = child;
@@ -315,8 +318,18 @@ export class HarnessProcess {
    * A stop that comes while the start waits its turn or runs the pre-launch command finds no agent process to end; the
    * start ends there, as it would had the process been running, rather than start one its owner has let go of.
    */
-  private endIfStoppedBeforeSpawning() {
-    if (this.stopReason) throw new HostProblemError({ code: "agent-gone", agent: this.spec.label, gone: this.stopReason });
+  private endIfStoppedBeforeSpawning(ownStart: number) {
+    const reason = this.stopReason;
+    if (!reason) return;
+    this.exited = Promise.resolve(reason);
+    if (this.startsSoFar === ownStart) {
+      this.connection = undefined;
+      this.initialized = undefined;
+      this.child = undefined;
+      this.stopReason = undefined;
+      this.listener.onExit(this, reason);
+    }
+    throw new HostProblemError({ code: "agent-gone", agent: this.spec.label, gone: reason });
   }
 
   /** An agent that never answers would hold up every later start of its kind, when they start one at a time. */
@@ -373,7 +386,10 @@ export class HarnessProcess {
         prelaunch.kill();
         resolve({ kind: "timed-out", seconds: PRELAUNCH_TIMEOUT_MS / 1000 });
       }, PRELAUNCH_TIMEOUT_MS);
-      prelaunch.once("error", (error) => resolve({ kind: "could-not-run", cause: error.message }));
+      prelaunch.once("error", (error) => {
+        clearTimeout(timeout);
+        resolve({ kind: "could-not-run", cause: error.message });
+      });
       prelaunch.once("exit", (code, signal) => {
         clearTimeout(timeout);
         resolve(code === 0 ? null : { kind: "exited", how: String(code ?? signal) });

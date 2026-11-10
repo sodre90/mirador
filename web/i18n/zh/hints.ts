@@ -209,8 +209,10 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "重命名这个分组。",
   deleteWorkspaceGroup: "删除这个分组。它的工作区保留在原处。",
   deleteWorkspaceGroupArmed: "再次点击，将删除这个分组。它的工作区保留在原处。",
-  removeWorkspace: "从应用中移除这个工作区及其对话。目录及其文件不受影响。",
-  removeWorkspaceArmed: "再次点击，将从应用中移除这个工作区及其对话。目录及其文件不受影响。",
+  removeWorkspace:
+    "从应用中移除这个工作区及其对话。它在 Mirador 数据文件夹中的工作树也会被删除，但项目目录会保留。工作树中有未提交的文件时会先询问。",
+  removeWorkspaceArmed:
+    "再次点击，将从应用中移除这个工作区及其对话。它在 Mirador 数据文件夹中的工作树也会被删除，但项目目录会保留。工作树中有未提交的文件时会先询问。",
   deleteConversation: "从应用中删除这个对话、它的时间线和画布历史。Agent 自己的会话文件仍保留在磁盘上。它自己的工作树也会被删除；如果其中有未提交的文件，会先询问。",
   deleteConversationArmed: "再次点击，将删除这个对话。Agent 自己的会话文件仍保留在磁盘上。",
   deleteProfileArmed: "再次点击，将删除这个配置。它的对话可以改用其他配置继续。",

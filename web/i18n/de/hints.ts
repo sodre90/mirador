@@ -231,9 +231,10 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "Benenne diese Gruppe um.",
   deleteWorkspaceGroup: "Lösche diese Gruppe. Ihre Arbeitsbereiche bleiben, wo sie sind.",
   deleteWorkspaceGroupArmed: "Klicke erneut, um diese Gruppe zu löschen. Ihre Arbeitsbereiche bleiben, wo sie sind.",
-  removeWorkspace: "Entferne diesen Arbeitsbereich und seine Unterhaltungen aus der App. Das Verzeichnis und seine Dateien bleiben unberührt.",
+  removeWorkspace:
+    "Entferne diesen Arbeitsbereich und seine Unterhaltungen aus der App. Seine Worktrees im Datenordner von Mirador werden ebenfalls entfernt, das Projektverzeichnis bleibt. Enthält ein Worktree nicht committete Dateien, wird vorher gefragt.",
   removeWorkspaceArmed:
-    "Klicke erneut, um diesen Arbeitsbereich und seine Unterhaltungen aus der App zu entfernen. Das Verzeichnis und seine Dateien bleiben unberührt.",
+    "Klicke erneut, um diesen Arbeitsbereich und seine Unterhaltungen aus der App zu entfernen. Seine Worktrees im Datenordner von Mirador werden ebenfalls entfernt, das Projektverzeichnis bleibt. Enthält ein Worktree nicht committete Dateien, wird vorher gefragt.",
   deleteConversation:
     "Lösche diese Unterhaltung, ihre Zeitleiste und ihren Canvas-Verlauf aus der App. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte. Ihr eigener Worktree wird mit gelöscht; enthält er nicht committete Dateien, wird vorher gefragt.",
   deleteConversationArmed: "Klicke erneut, um diese Unterhaltung zu löschen. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte.",

@@ -12,6 +12,8 @@ const untrackedAmong = async (directory: string, paths: string[]) =>
  * commit is the user's own: their identity, signing and hooks apply.
  */
 export async function commitFiles(directory: string, paths: string[], message: string): Promise<MadeCommit> {
+  if (paths.length === 0) throw new HostProblemError({ code: "commit-needs-files" });
+  if (message.trim() === "") throw new HostProblemError({ code: "commit-needs-message" });
   const untracked = await untrackedAmong(directory, paths);
   if (untracked.length > 0) await mustGit(directory, ["add", "--intent-to-add", "--", ...untracked]);
   const committed = await git(directory, ["commit", "--quiet", "--only", "--file=-", "--", ...paths], message);

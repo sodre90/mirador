@@ -210,8 +210,10 @@ export const hints = {
   renameWorkspaceGroup: "Rename this group.",
   deleteWorkspaceGroup: "Delete this group. Its workspaces stay where it is.",
   deleteWorkspaceGroupArmed: "Click again to delete this group. Its workspaces stay where it is.",
-  removeWorkspace: "Remove this workspace and its conversations from the app. The directory and its files are not touched.",
-  removeWorkspaceArmed: "Click again to remove this workspace and its conversations from the app. The directory and its files are not touched.",
+  removeWorkspace:
+    "Remove this workspace and its conversations from the app. Its worktrees under Mirador's data folder go too, but the project directory stays. A worktree holding uncommitted files asks first.",
+  removeWorkspaceArmed:
+    "Click again to remove this workspace and its conversations from the app. Its worktrees under Mirador's data folder go too, but the project directory stays. A worktree holding uncommitted files asks first.",
   deleteConversation: "Delete this conversation, its timeline and its canvas history from the app. The agent's own session files stay on disk. A worktree of its own goes too; one that holds uncommitted files asks first.",
   deleteConversationArmed: "Click again to delete this conversation. The agent's own session files stay on disk.",
   deleteProfileArmed: "Click again to delete this profile. Its conversations can continue with another profile.",

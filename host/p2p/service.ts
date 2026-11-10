@@ -191,7 +191,9 @@ export class PeerToPeer {
       this.setStatus("ready");
       this.brokerAnswered.forEach((answered) => answered());
       this.brokerAnswered.clear();
-    } else if (this.status === "ready") {
+    } else if (this.status === "ready" || this.status === "connecting") {
+      if (this.unreachableTimer) clearTimeout(this.unreachableTimer);
+      this.unreachableTimer = null;
       this.setStatus("broker-unreachable");
     }
   }

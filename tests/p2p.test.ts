@@ -329,3 +329,15 @@ unixOnlyTest("a sidecar that couldn't be downloaded says so", async () => {
   expect(await p2p.invite(code, expiresAt)).toBeNull();
   expect(p2p.peerToPeerStatus()).toBe("sidecar-unavailable");
 });
+
+unixOnlyTest("a sidecar that exits immediately on startup reports broker-unreachable without waiting for timeout", async () => {
+  const binary = join(folder, "crashing-sidecar");
+  writeFileSync(binary, `#!/bin/sh\nexit 1\n`);
+  chmodSync(binary, 0o755);
+  const { p2p, devices, statuses } = host({ binary });
+  const { code, expiresAt } = devices.invite();
+  await p2p.invite(code, expiresAt, 200);
+  for (const _ of Array(50)) if (p2p.peerToPeerStatus() !== "broker-unreachable") await Bun.sleep(20);
+  expect(statuses).toEqual(["connecting", "broker-unreachable"]);
+  expect(p2p.peerToPeerStatus()).toBe("broker-unreachable");
+});

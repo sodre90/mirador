@@ -368,6 +368,52 @@ describe("AppDocuments in a worktree", () => {
     second.apps.stop();
   });
 
+  test("forgets the apps open in a worktree whose folder is gone, and their stored state", async () => {
+    const { apps, store, openAppLists, worktreeFolder } = await setUpWithWorktree();
+    writeFileSync(join(worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
+    await apps.open("w1", "counter", "counter.json");
+    await apps.open("wt1", "counter", "counter.json", "c1");
+    store.saveAppStorageItem("wt1", "counter", "zoom", "2");
+    const { ended } = apps.startTask("wt1", undefined, "wait", { kind: "you" });
+    const { pathname } = new URL(apps.mediaGrant("wt1", "counter", "counter.json").path, "http://assets");
+
+    apps.forgetFolder("wt1");
+
+    expect(apps.openApps().map(({ workspaceId }) => workspaceId)).toEqual(["w1"]);
+    expect(openAppLists.at(-1)!.map(({ workspaceId }) => workspaceId)).toEqual(["w1"]);
+    await expect(ended).rejects.toThrow("Wait until stopped was stopped before it ended.");
+    expect(apps.mediaFile(pathname)).toBeNull();
+
+    store.forgetFolder("wt1");
+    expect(store.listOpenApps().map(({ workspaceId }) => workspaceId)).toEqual(["w1"]);
+    expect(store.appStorage("wt1", "counter")).toEqual({});
+    apps.stop();
+  });
+
+  test("reopens the workspace's apps with no warning once a removed worktree's state is forgotten", async () => {
+    const first = await setUpWithWorktree();
+    writeFileSync(join(first.worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
+    await first.apps.open("w1", "counter", "counter.json");
+    await first.apps.open("wt1", "counter", "counter.json", "c1");
+    first.store.saveAppStorageItem("wt1", "counter", "zoom", "2");
+    first.apps.forgetFolder("wt1");
+    first.store.forgetFolder("wt1");
+    first.store.deleteConversation("c1");
+    expect(first.store.listAppConversations()).toEqual([]);
+    first.apps.stop();
+
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const second = await setUp(first.store, first.workspacePath);
+      await second.apps.reopenAll();
+      expect(second.apps.openApps().map(({ workspaceId }) => workspaceId)).toEqual(["w1"]);
+      expect(warn).not.toHaveBeenCalled();
+      second.apps.stop();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test("skips a worktree whose conversations are gone when the host starts again", async () => {
     const first = await setUpWithWorktree();
     await first.apps.open("w1", "counter", "counter.json");

@@ -231,8 +231,10 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "Renombra este grupo.",
   deleteWorkspaceGroup: "Elimina este grupo. Sus espacios de trabajo se quedan donde está.",
   deleteWorkspaceGroupArmed: "Haz clic de nuevo para eliminar este grupo. Sus espacios de trabajo se quedan donde está.",
-  removeWorkspace: "Quita este espacio de trabajo y sus conversaciones de la aplicación. El directorio y sus archivos no se tocan.",
-  removeWorkspaceArmed: "Haz clic de nuevo para quitar este espacio de trabajo y sus conversaciones de la aplicación. El directorio y sus archivos no se tocan.",
+  removeWorkspace:
+    "Quita este espacio de trabajo y sus conversaciones de la aplicación. Sus worktrees en la carpeta de datos de Mirador también se eliminan, pero el directorio del proyecto se conserva. Si un worktree tiene archivos sin commitear, se pregunta antes.",
+  removeWorkspaceArmed:
+    "Haz clic de nuevo para quitar este espacio de trabajo y sus conversaciones de la aplicación. Sus worktrees en la carpeta de datos de Mirador también se eliminan, pero el directorio del proyecto se conserva. Si un worktree tiene archivos sin commitear, se pregunta antes.",
   deleteConversation:
     "Elimina de la aplicación esta conversación, su línea de tiempo y su historial del lienzo. Los archivos de sesión del propio agente se quedan en el disco. Su propio worktree también se elimina; si tiene archivos sin commit, pregunta antes.",
   deleteConversationArmed: "Haz clic de nuevo para eliminar esta conversación. Los archivos de sesión del propio agente se quedan en el disco.",

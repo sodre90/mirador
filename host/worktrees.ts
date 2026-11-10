@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { rm } from "node:fs/promises";
+import { mkdir, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { Conversation, ConversationWorktree, Workspace } from "../shared/model.ts";
@@ -8,6 +8,9 @@ import { git, mustGit } from "./git-command.ts";
 const SHORT_ID_LENGTH = 8;
 
 const folderNameOf = ({ name, id }: Workspace) => `${name.replace(/[^\p{L}\p{N}._-]+/gu, "-")}-${id.slice(0, SHORT_ID_LENGTH)}`;
+
+/** macOS temp folders reach their real place through a symlink, and git answers with the real one. */
+const realPathOf = (path: string) => realpath(path).catch(() => resolve(path));
 
 /**
  * Where the conversation works, as a workspace: its worktree, under the worktree's own id, so what Mirador keeps per
@@ -18,7 +21,16 @@ export const workingCopyOf = (workspace: Workspace, { worktree }: Pick<Conversat
 
 /** The git worktrees conversations work in, kept in Mirador's data folder: `worktrees/<workspace>/<worktree>`. */
 export class Worktrees {
+  private readonly queues = new Map<string, Promise<unknown>>();
+
   constructor(private readonly dataDir: string) {}
+
+  private queue<T>(workspacePath: string, task: () => Promise<T>): Promise<T> {
+    const previous = this.queues.get(workspacePath) ?? Promise.resolve();
+    const current = previous.catch(() => {}).then(task);
+    this.queues.set(workspacePath, current);
+    return current;
+  }
 
   /** A worktree for a conversation of the workspace, not made yet: making it takes a while, and the conversation shows meanwhile. */
   async plan(workspace: Workspace): Promise<ConversationWorktree> {
@@ -39,31 +51,50 @@ export class Worktrees {
     return placeInRepository.stdout.trim();
   }
 
-  isMade(worktree: ConversationWorktree) {
-    return existsSync(worktree.folder);
+  /** git alone tells a finished checkout from the folder a kill part-way through one leaves behind. */
+  async isMade(worktree: ConversationWorktree) {
+    if (!(await this.isCheckout(worktree.root))) return false;
+    await mkdir(worktree.folder, { recursive: true });
+    return true;
+  }
+
+  private async isCheckout(root: string) {
+    const top = await git(root, ["rev-parse", "--show-toplevel"]);
+    if (top.exitCode !== 0) return false;
+    return (await realPathOf(top.stdout.trim())) === (await realPathOf(root));
   }
 
   /** On a new branch from what the workspace has checked out; a worktree whose folder was deleted comes back on the branch it had. */
-  async make(workspace: Workspace, worktree: ConversationWorktree) {
-    await git(workspace.path, ["worktree", "prune"]);
-    const hasBranch = (await git(workspace.path, ["rev-parse", "--verify", "--quiet", `refs/heads/${worktree.branch}`])).exitCode === 0;
-    await mustGit(workspace.path, ["worktree", "add", "--quiet", ...(hasBranch ? [worktree.root, worktree.branch] : ["-b", worktree.branch, worktree.root, "HEAD"])]);
+  make(workspace: Workspace, worktree: ConversationWorktree): Promise<void> {
+    return this.queue(workspace.path, async () => {
+      if (!(await this.isCheckout(worktree.root))) await rm(worktree.root, { recursive: true, force: true });
+      await git(workspace.path, ["worktree", "prune"]);
+      const hasBranch = (await git(workspace.path, ["rev-parse", "--verify", "--quiet", `refs/heads/${worktree.branch}`])).exitCode === 0;
+      await mustGit(workspace.path, ["worktree", "add", "--quiet", ...(hasBranch ? [worktree.root, worktree.branch] : ["-b", worktree.branch, worktree.root, "HEAD"])]);
+      await mkdir(worktree.folder, { recursive: true });
+    });
   }
 
-  /** The files that deleting the worktree would lose: changed or new, and not committed. */
+  /** The files that deleting the worktree would lose: changed or new, and not committed. Untracked files are capped so unignored installs don't inflate the count to tens of thousands. */
   async uncommittedFiles(worktree: ConversationWorktree) {
     if (!existsSync(worktree.root)) return 0;
     const status = await git(worktree.root, ["status", "--porcelain", "-z", "--no-renames", "--untracked-files=all"]);
-    return status.exitCode === 0 ? status.stdout.split("\0").filter(Boolean).length : 0;
+    if (status.exitCode !== 0) return 0;
+    const entries = status.stdout.split("\0").filter(Boolean);
+    const trackedChanges = entries.filter((entry) => !entry.startsWith("??")).length;
+    const untracked = entries.length - trackedChanges;
+    return trackedChanges + Math.min(untracked, 1000);
   }
 
   /** With its uncommitted files. Its branch goes too unless it has commits the workspace's branch lacks, which git keeps. */
-  async remove(workspace: Workspace, worktree: ConversationWorktree) {
-    const removed = await git(workspace.path, ["worktree", "remove", "--force", worktree.root]);
-    if (removed.exitCode !== 0) {
-      await rm(worktree.root, { recursive: true, force: true });
-      await git(workspace.path, ["worktree", "prune"]);
-    }
-    await git(workspace.path, ["branch", "--delete", worktree.branch]);
+  remove(workspace: Workspace, worktree: ConversationWorktree): Promise<void> {
+    return this.queue(workspace.path, async () => {
+      const removed = await git(workspace.path, ["worktree", "remove", "--force", worktree.root]);
+      if (removed.exitCode !== 0) {
+        await rm(worktree.root, { recursive: true, force: true });
+        await git(workspace.path, ["worktree", "prune"]);
+      }
+      await git(workspace.path, ["branch", "--delete", worktree.branch]);
+    });
   }
 }
