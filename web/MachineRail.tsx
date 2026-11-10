@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { markInitials } from "../shared/marks.ts";
 import { spacedNumber } from "../shared/join-requests.ts";
 import { inviteIn } from "../shared/machines.ts";
-import type { Machine, MachineStatus, Pastel } from "../shared/model.ts";
+import type { Machine, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
@@ -72,8 +72,7 @@ export function useShownMachine(machines: Machine[], machinesLoaded: boolean) {
   return { shownId, shown, visited, opening, show, openIn, rememberPlace, placeOf };
 }
 
-function WaitingBadge({ status }: { status: MachineStatus | undefined }) {
-  const waiting = status?.waiting ?? [];
+function WaitingBadge({ waiting }: { waiting: WaitingFor[] }) {
   if (waiting.length === 0) return null;
   return <span className={`rail-waiting tone-${mostUrgentTone(waiting)}`}>{waiting.length}</span>;
 }
@@ -92,16 +91,19 @@ const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
 export function MachineRail({
   machines,
   statuses,
+  waitingHere,
   shownId,
   onShow,
   onManage,
 }: {
   machines: Machine[];
   statuses: MachineStatus[];
+  waitingHere: WaitingFor[];
   shownId: string | null;
   onShow: (machineId: string | null) => void;
   onManage: () => void;
 }) {
+  const thisComputerHint = [hints.thisComputer, waitingHere.length > 0 && words.waitingForYou(waitingHere.length)].filter(Boolean).join(" · ");
   return (
     <nav className="machine-rail" aria-label={words.title}>
       <button
@@ -109,10 +111,11 @@ export function MachineRail({
         className={`rail-machine this-computer ${shownId === null ? "shown" : ""}`}
         aria-label={words.thisComputer}
         aria-current={shownId === null}
-        data-hint={hints.thisComputer}
+        data-hint={thisComputerHint}
         onClick={() => onShow(null)}
       >
         ⌂
+        <WaitingBadge waiting={waitingHere} />
       </button>
       {machines.map((machine) => {
         const status = statuses.find(({ machineId }) => machineId === machine.id);
@@ -129,7 +132,7 @@ export function MachineRail({
             onClick={() => onShow(machine.id)}
           >
             {markInitials(machine.name)}
-            <WaitingBadge status={status} />
+            <WaitingBadge waiting={status?.waiting ?? []} />
           </button>
         );
       })}

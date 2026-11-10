@@ -236,6 +236,23 @@ test("the laptop joins the server with an invite link and shows its own Mirador 
     await expect(workspaceCard(frame, serverOnly)).toBeVisible();
     await expect(serverButton).not.toHaveClass(/\baway\b/);
   });
+
+  await test.step("this computer shows its own waiting count on its rail button too, as each machine does", async () => {
+    const thisComputer = rail.getByRole("button", { name: "This computer" });
+    await thisComputer.click();
+    await addWorkspace(page, laptop.projectDir);
+    const conversation = await startConversation(page);
+    const row = page.locator(`.workspace li[data-reorder-id="${conversation}"]`);
+
+    await row.click({ button: "right" });
+    await page.getByRole("menu").getByRole("menuitem", { name: "Mark as unread" }).click();
+    await expect(thisComputer.locator(".rail-waiting")).toHaveText("1");
+    await expect(thisComputer.locator(".rail-waiting")).toHaveClass(/tone-unread/);
+    await expect(thisComputer).toHaveAttribute("data-hint", /1 waiting for you/);
+
+    await row.click();
+    await expect(thisComputer.locator(".rail-waiting")).toHaveCount(0);
+  });
   await server.close();
 });
 

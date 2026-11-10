@@ -356,6 +356,7 @@ export function App() {
   const showMachine = (machine: Machine) => (showsMachinesHere() ? machines.show(machine.id) : openMachine(machine.origin));
   const railShown = showsMachinesHere() && state.machines.length > 0;
   const shownMachine = railShown ? machines.shown : null;
+  const waitingHere = state.conversations.flatMap(({ waitingFor }) => (waitingFor ? [waitingFor] : []));
   const status = useConnectionStatus();
   useReloadWhenHostRestarted(state.hostRunId);
   const conversationLayouts = useConversationLayouts();
@@ -623,6 +624,7 @@ export function App() {
         <MachineRail
           machines={state.machines}
           statuses={state.machineStatuses}
+          waitingHere={waitingHere}
           shownId={shownMachine?.id ?? null}
           onShow={machines.show}
           onManage={() => dispatch({ type: "open-overlay", overlay: { kind: "machines" } })}
