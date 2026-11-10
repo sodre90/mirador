@@ -562,16 +562,18 @@ export class ConversationService {
     this.hearWorktreeRemoval = hearWorktreeRemoval;
   }
 
-  /** The user takes a started conversation off its caller's list of delegated tasks. */
+  /** The user takes a started conversation off its caller's list of delegated tasks, and with it off the sidebar, so its mark goes too. */
   dismissDelegation(conversationId: string) {
-    this.store.dismissDelegation(conversationId);
+    if (this.store.dismissDelegation(conversationId)) this.forgetUnseenTurnEnd(conversationId);
     this.republish(conversationId);
   }
 
   /** The user dismisses finished delegated tasks of this caller; with `plugin`, only that plugin's. */
   clearFinishedDelegations(callerId: string, plugin?: string) {
-    const dismissedIds = this.store.dismissFinishedDelegations(callerId, plugin);
-    for (const id of dismissedIds) this.republish(id);
+    for (const id of this.store.dismissFinishedDelegations(callerId, plugin)) {
+      this.forgetUnseenTurnEnd(id);
+      this.republish(id);
+    }
   }
 
   /**

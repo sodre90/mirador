@@ -366,6 +366,12 @@ export class Store {
     if (!keptTrackOfAppConversations) this.noteAppsUsedBeforeTracking();
     if (hadPromptTemplates && !keptTrackOfOfferedTemplates) this.markTemplatesOffered(TEMPLATES_OFFERED_BEFORE_TRACKING);
     this.offerNewDefaultTemplates();
+    this.forgetMarksOfDismissedDelegations();
+  }
+
+  /** Dismissing a delegated task once kept its Done mark, which counted as waiting for you though no list showed it. */
+  private forgetMarksOfDismissedDelegations() {
+    this.db.run("UPDATE conversations SET unseen_turn_end = NULL WHERE delegation_dismissed = 1 AND unseen_turn_end IS NOT NULL");
   }
 
   private offerNewDefaultTemplates() {
@@ -735,8 +741,8 @@ export class Store {
     this.db.query("UPDATE conversations SET delegated_reply = ? WHERE id = ?").run(JSON.stringify(reply), conversationId);
   }
 
-  dismissDelegation(conversationId: string) {
-    this.db.query("UPDATE conversations SET delegation_dismissed = 1 WHERE id = ? AND started_by IS NOT NULL").run(conversationId);
+  dismissDelegation(conversationId: string): boolean {
+    return this.db.query("UPDATE conversations SET delegation_dismissed = 1 WHERE id = ? AND started_by IS NOT NULL").run(conversationId).changes > 0;
   }
 
   dismissFinishedDelegations(callerId: string, plugin?: string): string[] {

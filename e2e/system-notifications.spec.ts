@@ -179,4 +179,16 @@ test("a conversation started by a plugin that doesn't say it tells its caller no
   const started = handedOver.match(/^Handed over to ([0-9a-f-]+)\.$/)![1]!;
   await expect.poll(() => notificationBodiesAbout(page, started)).toEqual(["project · Finished, waiting for you"]);
   expect(await notificationBodiesAbout(page, caller)).toEqual([]);
+
+  await test.step("dismissing it takes its Done mark, so it no longer counts as waiting once the sidebar hides it", async () => {
+    await page.evaluate((id) => (location.hash = `#/c/${id}`), caller);
+    const dismiss = page.locator(".delegated-tasks:visible li", { hasText: "Find the callers" }).getByRole("button", { name: "Dismiss" });
+    await expect(dismiss).toBeVisible();
+    const waitingInTitle = async () => Number((await page.title()).match(/^\((\d+)\) Mirador$/)?.[1] ?? 0);
+    const waitingBefore = await waitingInTitle();
+    expect(waitingBefore, "the task's Done mark counts as waiting").toBeGreaterThan(0);
+    await dismiss.click();
+    await expect(page.locator(".delegated-tasks:visible")).toHaveCount(0);
+    await expect.poll(waitingInTitle).toBe(waitingBefore - 1);
+  });
 });

@@ -889,4 +889,24 @@ describe("Store", () => {
     expect(store.dismissFinishedDelegations("c1")).toEqual([]);
     store.close();
   });
+
+  test("forgets the marks dismissed delegated tasks kept from before dismissing took them, on reopening the database", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const store = new Store(path);
+    const { conversation } = seededStore();
+    store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    ["c1", "c2", "c3"].forEach((id) => store.insertConversation({ ...conversation, id }));
+    store.recordStartedBy("c2", { conversationId: "c1", plugin: "delegate" });
+    store.recordStartedBy("c3", { conversationId: "c1", plugin: "delegate" });
+    ["c1", "c2", "c3"].forEach((id) => store.setUnseenTurnEnd(id, "finished"));
+    store.dismissDelegation("c2");
+    store.close();
+
+    const reopened = new Store(path);
+    expect(reopened.listUnseenTurnEnds()).toEqual([
+      ["c1", "finished"],
+      ["c3", "finished"],
+    ]);
+    reopened.close();
+  });
 });
