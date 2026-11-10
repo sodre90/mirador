@@ -7,8 +7,8 @@ const ASSERTION_LIFETIME_S = 3600;
 /** An access token is used until this close to its expiry, then replaced. */
 const RENEWED_BEFORE_EXPIRY_MS = 5 * 60_000;
 const ANSWER_TIMEOUT_MS = 15_000;
-/** How long Google keeps a push for a phone that is off, the same day Apple keeps one. */
-const KEPT_FOR_AN_OFF_PHONE = "86400s";
+/** How long Google keeps a push for a phone that is off, as Apple does: one that needs you is stale long before a day passes. */
+const KEPT_FOR_AN_OFF_PHONE = "1800s";
 
 /** A clear goes at normal priority: Google lowers an app's high priority when its messages show nothing, which would slow its alerts. */
 export interface FcmPush {

@@ -8,8 +8,8 @@ export const APNS_SANDBOX = "https://api.sandbox.push.apple.com";
 /** Apple refuses a provider token re-signed more often than every 20 minutes, and one older than an hour. */
 const PROVIDER_TOKEN_KEPT_MS = 40 * 60_000;
 const ANSWER_TIMEOUT_MS = 15_000;
-/** How long Apple keeps a push for a phone that is off. */
-const KEPT_FOR_AN_OFF_PHONE_S = 86_400;
+/** How long Apple keeps a push for a phone that is off: one that needs you is stale long before a day passes. */
+const KEPT_FOR_AN_OFF_PHONE_S = 1_800;
 
 export interface ApnsSettings {
   /** The .p8 key's PEM text. */

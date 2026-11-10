@@ -147,7 +147,7 @@ describe("Apple", () => {
     const sender = apns();
     expect(await Promise.all([sender.send(alert), sender.send(alert), sender.send(alert)])).toEqual(["sent", "sent", "sent"]);
     expect(new Set(received.map(({ headers }) => headers.authorization)).size).toBe(1);
-    expect(Number(received[0].headers["apns-expiration"])).toBe(clock / 1000 + 86_400);
+    expect(Number(received[0].headers["apns-expiration"])).toBe(clock / 1000 + 1_800);
     received.length = 0;
     clock += 60_000;
     answers = [answerWith(403, "ExpiredProviderToken"), answerWith(403, "ExpiredProviderToken")];
@@ -218,7 +218,7 @@ describe("Google", () => {
     expect(await fcm().send(androidAlert)).toBe("sent");
     const { authorization, body } = sends.at(-1)!;
     expect(authorization).toBe(`Bearer access-${issued}`);
-    expect(body.message).toEqual({ token: androidToken, data: { m: fullBlob }, android: { priority: "high", ttl: "86400s" } });
+    expect(body.message).toEqual({ token: androidToken, data: { m: fullBlob }, android: { priority: "high", ttl: "1800s" } });
     const jwt = partsOf(assertions.at(-1)!);
     expect(jwt.header.alg).toBe("RS256");
     expect(jwt.claims).toMatchObject({ iss: "relay@mirador.iam.gserviceaccount.com", scope: "https://www.googleapis.com/auth/firebase.messaging", aud: `${google.url}token` });
@@ -227,7 +227,7 @@ describe("Google", () => {
 
   test("a clear goes at normal priority, so messages that show nothing don't cost the alerts their high priority", async () => {
     expect(await fcm().send({ ...androidAlert, kind: "clear" })).toBe("sent");
-    expect(sends.at(-1)!.body.message).toEqual({ token: androidToken, data: { m: fullBlob }, android: { priority: "normal", ttl: "86400s" } });
+    expect(sends.at(-1)!.body.message).toEqual({ token: androidToken, data: { m: fullBlob }, android: { priority: "normal", ttl: "1800s" } });
   });
 
   test("the access token is reused until near its end, and replaced when Google refuses it", async () => {
