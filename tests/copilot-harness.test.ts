@@ -5,7 +5,7 @@ import { delimiter, join } from "node:path";
 import { harnessSpec, installedHarnesses, launchEnvironment, loginCommand, sessionMeta, sessionSystemPrompt } from "../host/acp/harnesses.ts";
 import { findCopilot } from "../host/acp/copilot-program.ts";
 import { canvasServerInstructions } from "../host/canvas/mcp.ts";
-import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS } from "../host/canvas/guidance.ts";
+import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance } from "../host/canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS } from "../host/canvas/tool-names.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { Profile } from "../shared/model.ts";
@@ -123,8 +123,10 @@ test("Copilot hears the canvas through the canvas server's own instructions, not
 
 const origin = "http://127.0.0.1:4601";
 
-test("Copilot's canvas instructions carry the canvas use guidance when the canvas is used often", () => {
-  expect(canvasServerInstructions("copilot", "often", origin, NO_CANVAS_PLUGINS)).toBe(`${canvasInstructions(origin)}\n\n${canvasUseGuidance()}`);
-  expect(canvasServerInstructions("copilot", "as-needed", origin, NO_CANVAS_PLUGINS)).toBe(canvasInstructions(origin));
+test("Copilot's canvas instructions carry the canvas use guidance when the canvas is used often, and always the title guidance", () => {
+  expect(canvasServerInstructions("copilot", "often", origin, NO_CANVAS_PLUGINS)).toBe(
+    `${canvasInstructions(origin)}\n\n${canvasUseGuidance()}\n\n${titleGuidance()}`,
+  );
+  expect(canvasServerInstructions("copilot", "as-needed", origin, NO_CANVAS_PLUGINS)).toBe(`${canvasInstructions(origin)}\n\n${titleGuidance()}`);
   expect(canvasServerInstructions("claude", "often", origin, NO_CANVAS_PLUGINS)).toBe(canvasInstructions(origin));
 });

@@ -1,4 +1,6 @@
 import type { CatalogPlugin } from "../../shared/apps.ts";
+import type { HarnessId } from "../../shared/model.ts";
+import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 
 /** What the loaded canvas plugins add to what agents are told and allowed: their tools, and a line each of guidance. */
 export interface CanvasPluginGuidance {
@@ -36,6 +38,16 @@ Rendering environment: every page renders in a sandboxed iframe with NO network 
 - Mermaid: <script src="${assetsOrigin}/mermaid.min.js"></script><script>mermaid.initialize({ startOnLoad: true, theme: getComputedStyle(document.documentElement).colorScheme === "dark" ? "dark" : "default" })</script> with <pre class="mermaid">...</pre>
 When someone is viewing the conversation, show reports back script errors from the page so you can fix them.`;
 }
+
+/** Claude Code and Codex publish a title after their first turn; the others are asked to name their conversation instead. */
+export const namesItsOwnConversation = (harness: HarnessId | undefined) => harness === "claude" || harness === "codex";
+
+/**
+ * For the agents that publish no title of their own, so a conversation reads as what it is about rather than as the
+ * first line of the user's message.
+ */
+export const titleGuidance = () => `# Conversation title
+Mirador names this conversation after the first line of the user's first message. Once the first turn's work is done and you know what the conversation is about, call ${TITLE_CONVERSATION_TOOL} with a short title of a few words, in the language the user writes in, before your reply. Call it once; a name the user gives the conversation always stays.`;
 
 /** Appended to Claude Code's and pi's system prompt when Settings ask for the canvas often; the canvas server's own instructions stay the reference for how pages render. */
 export const canvasUseGuidance = (plugins = NO_CANVAS_PLUGINS) => `# Canvas

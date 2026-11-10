@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile } from "../../shared/model.ts";
-import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "../canvas/guidance.ts";
+import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
@@ -271,7 +271,7 @@ export function antigravitySessionMeta(canvasUse: CanvasUse, canvasAssetsOrigin:
 
 function canvasPromptAppendix(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins: CanvasPluginGuidance) {
   const canvasServerInstructions = `# Canvas server instructions\n${canvasInstructions(canvasAssetsOrigin, canvasPlugins)}`;
-  return [canvasServerInstructions, ...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : [])].join("\n\n");
+  return [canvasServerInstructions, ...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), titleGuidance()].join("\n\n");
 }
 
 /**

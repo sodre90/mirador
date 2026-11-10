@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { harnessSpec, installedHarnesses, launchEnvironment, loginCommand, sessionMeta, sessionSystemPrompt } from "../host/acp/harnesses.ts";
 import { findAntigravity } from "../host/acp/antigravity-program.ts";
-import { canvasInstructions, canvasUseGuidance } from "../host/canvas/guidance.ts";
+import { canvasInstructions, canvasUseGuidance, titleGuidance } from "../host/canvas/guidance.ts";
 import { canvasToolName } from "../host/canvas/tool-names.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { harnessRewinds, type Profile } from "../shared/model.ts";
@@ -84,8 +84,8 @@ test("signing in to Antigravity runs agy itself, which asks for the sign-in", ()
 test("Antigravity hears the canvas instructions, and the canvas use guidance when used often, in its system prompt's appendix", () => {
   const appendixOf = (canvasUse: "often" | "as-needed") =>
     (sessionMeta("antigravity", canvasUse, { canvasAssetsOrigin: origin }) as { antigravity: { systemPrompt: { append: string } } }).antigravity.systemPrompt.append;
-  expect(appendixOf("often")).toBe(`# Canvas server instructions\n${canvasInstructions(origin)}\n\n${canvasUseGuidance()}`);
-  expect(appendixOf("as-needed")).toBe(`# Canvas server instructions\n${canvasInstructions(origin)}`);
+  expect(appendixOf("often")).toBe(`# Canvas server instructions\n${canvasInstructions(origin)}\n\n${canvasUseGuidance()}\n\n${titleGuidance()}`);
+  expect(appendixOf("as-needed")).toBe(`# Canvas server instructions\n${canvasInstructions(origin)}\n\n${titleGuidance()}`);
   expect(sessionSystemPrompt("antigravity", "often")).toBeUndefined();
 });
 

@@ -3,7 +3,8 @@ import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
 import { BACKGROUNDED_COMMAND_NEEDS_NO_WAIT, JobWaitRefused, jobWaitToolDescription } from "../job-waits.ts";
-import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./guidance.ts";
+import { canvasInstructions, canvasUseGuidance, namesItsOwnConversation, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "./guidance.ts";
+import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { answerAsToolResult, type CanvasService, type RenderOutcome } from "./service.ts";
@@ -92,8 +93,10 @@ const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null)
  * comes in the canvas server's instructions.
  */
 export function canvasServerInstructions(harness: HarnessId | undefined, canvasUse: CanvasUse, assetsOrigin: string, plugins: CanvasPluginGuidance) {
-  const instructions = canvasInstructions(assetsOrigin, plugins);
-  return harness === "copilot" && canvasUse === "often" ? `${instructions}\n\n${canvasUseGuidance(plugins)}` : instructions;
+  const parts = [canvasInstructions(assetsOrigin, plugins)];
+  if (harness === "copilot" && canvasUse === "often") parts.push(canvasUseGuidance(plugins));
+  if (!namesItsOwnConversation(harness)) parts.push(titleGuidance());
+  return parts.join("\n\n");
 }
 
 function buildCanvasServer(
@@ -240,6 +243,24 @@ function buildCanvasServer(
         if (error instanceof JobWaitRefused) return toolError(error.message);
         throw error;
       }
+    },
+  );
+
+  server.registerTool(
+    TITLE_CONVERSATION_TOOL,
+    {
+      description:
+        "Name this conversation in Mirador's sidebar, which otherwise shows the first line of the user's message. Call it once, when the first turn's work is done, with a few words saying what the conversation is about. A name the user gives the conversation always stays.",
+      inputSchema: z.object({
+        title: z.string().min(1).describe("A few words saying what this conversation is about, in the language the user writes in."),
+      }),
+      _meta: loadedUpFront,
+      ...reviewFree,
+    },
+    async ({ title }, ctx) => {
+      const named = conversations.retitleFromAgent(await callingConversation(ctx), title);
+      const text = named === null ? "The user has named this conversation; their name stays." : `This conversation is now titled “${named}”.`;
+      return { content: [{ type: "text", text }] };
     },
   );
 

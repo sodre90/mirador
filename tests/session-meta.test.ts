@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { claudeSessionMeta, piSessionMeta, sessionMeta } from "../host/acp/harnesses.ts";
-import { canvasInstructions, canvasUseGuidance } from "../host/canvas/guidance.ts";
+import { canvasInstructions, canvasUseGuidance, titleGuidance } from "../host/canvas/guidance.ts";
 import type { CanvasUse } from "../shared/model.ts";
 
 test("Claude Code runs every tool of the canvas's own without a permission prompt", () => {
@@ -9,6 +9,7 @@ test("Claude Code runs every tool of the canvas's own without a permission promp
     "mcp__canvas__ask",
     "mcp__canvas__when_done",
     "mcp__canvas__usage_stats",
+    "mcp__canvas__title_conversation",
   ]);
 });
 
@@ -23,6 +24,12 @@ test("pi gets the canvas server's instructions, and the canvas guidance only whe
 
 test("pi waits for jobs with the canvas's when_done tool, as its commands can't name their session to mirador when-done", () => {
   expect(appendedForPi("often")).not.toContain("mirador when-done");
+});
+
+test("pi, which publishes no title, is asked to name its conversation once the first turn's work is done", () => {
+  expect(appendedForPi("as-needed")).toContain(titleGuidance());
+  expect(titleGuidance()).toContain("title_conversation");
+  expect(claudeSessionMeta("often").systemPrompt.append).not.toContain(titleGuidance());
 });
 
 test("opencode gets no session options", () => {

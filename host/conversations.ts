@@ -853,6 +853,19 @@ export class ConversationService {
   }
 
   /**
+   * The agent working in a conversation names it, as Claude Code does with the title it publishes; a name the user gave
+   * the conversation stays. Returns the name it took, or null when there was none to take.
+   */
+  retitleFromAgent(conversationId: string, title: string): string | null {
+    const name = firstGraphemes(title.trim().split("\n")[0]?.trim() ?? "", MAX_TITLE_LENGTH);
+    if (!name) throw new HostProblemError({ code: "conversation-needs-name" });
+    const conversation = this.get(conversationId);
+    if (conversation.titleSetByUser) return null;
+    this.save({ ...conversation, title: name });
+    return name;
+  }
+
+  /**
    * Moves the conversation's session to the agent process of another profile of its agent. A turn in progress
    * is stopped first and, once the session is back, continued under the new profile; queued messages follow.
    * A conversation that has not begun may move to another agent's profile, in a fresh session of that agent.
