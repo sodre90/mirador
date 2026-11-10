@@ -37,7 +37,10 @@ export const startsFolded = (folder: TreeFolder<ListedFile>, everyFile: boolean,
   insideBigFolder || isBigFolder(folder) || (everyFile && changedCount(folder) === 0);
 
 const holdsChange = (node: TreeNode<ListedFile>) => (node.kind === "file" ? node.item.change !== null : node.items.some(({ change }) => change));
-const holdsPath = (node: TreeNode<ListedFile>, path: string) => (node.kind === "file" ? node.item.path === path : node.items.some((item) => item.path === path));
+
+/** The selected file's own row, or a folder holding it. */
+export const holdsSelection = (node: TreeNode<ListedFile>, selectedPath: string | null) =>
+  selectedPath !== null && (node.kind === "file" ? node.item.path === selectedPath : node.items.some((item) => item.path === selectedPath));
 
 /**
  * The rows of a folder drawn even past its first ones: the selected file's, which a view opened again would otherwise
@@ -45,7 +48,7 @@ const holdsPath = (node: TreeNode<ListedFile>, path: string) => (node.kind === "
  */
 export function drawnPastFirstRows(nodes: readonly TreeNode<ListedFile>[], selectedPath: string | null, everyFile: boolean): (node: TreeNode<ListedFile>) => boolean {
   const drawsChanges = everyFile && nodes.filter(holdsChange).length <= ROWS_AT_ONCE;
-  return (node) => (selectedPath !== null && holdsPath(node, selectedPath)) || (drawsChanges && holdsChange(node));
+  return (node) => holdsSelection(node, selectedPath) || (drawsChanges && holdsChange(node));
 }
 
 /**

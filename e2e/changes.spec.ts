@@ -412,6 +412,16 @@ test("a folder holding more than 100 changed files starts folded with the folder
       await expect(fileRow(page, path)).toHaveAttribute("aria-pressed", "true");
       await expect(fileRow(page, path).locator("xpath=..").locator(".changes-diff")).toBeVisible();
     });
+
+    await test.step("a file picked in List view inside a folded folder shows in the tree, its folders open", async () => {
+      const more = section(page, "Project").locator(".more-rows");
+      if ((await more.count()) > 0) await more.click();
+      await fileRow(page, "big/small/s1.txt").click();
+      await changes(page).getByRole("button", { name: "Tree" }).click();
+      await expect(folderRow(page, "small")).toHaveAttribute("aria-expanded", "true");
+      await expect(fileRow(page, "big/small/s1.txt")).toHaveAttribute("aria-pressed", "true");
+      await expect(fileRow(page, "big/small/s1.txt").locator("xpath=..").locator(".changes-diff")).toBeVisible();
+    });
   } finally {
     await changes(page).getByRole("button", { name: "Tree" }).click();
     await changes(page).getByRole("button", { name: "This turn" }).click();

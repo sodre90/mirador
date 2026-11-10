@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import type { ChangedFile, ChangeList } from "../shared/changes.ts";
 import { fileTree, type TreeFolder, type TreeNode } from "../shared/file-tree.ts";
-import { drawnPastFirstRows, isBigFolder, projectFilesWithChanges, ROWS_AT_ONCE, startsFolded, type ListedFile } from "../web/changes.ts";
+import { drawnPastFirstRows, holdsSelection, isBigFolder, projectFilesWithChanges, ROWS_AT_ONCE, startsFolded, type ListedFile } from "../web/changes.ts";
 
 const treeOf = (paths: string[]) => fileTree(paths, (path) => path);
 
@@ -137,6 +137,13 @@ test("rows drawn past the first ones: the folder or file holding the selected fi
   const nodes = nodesOf(["a/x.ts"], ["b/y.ts", "z.ts"]);
   expect(drawn(nodes, "b/y.ts", false)).toEqual(["b"]);
   expect(drawn(nodes, "z.ts", false)).toEqual(["z.ts"]);
+});
+
+test("the selected file's row, or a folder holding it however deep, is known", () => {
+  const [folder, file, other] = nodesOf(["a/b/x.ts", "c.ts"], ["z.ts"]);
+  expect([holdsSelection(folder, "a/b/x.ts"), holdsSelection(file, "a/b/x.ts")]).toEqual([true, false]);
+  expect([holdsSelection(file, "c.ts"), holdsSelection(other, "c.ts")]).toEqual([true, false]);
+  expect([holdsSelection(folder, null), holdsSelection(folder, "z.ts")]).toEqual([false, false]);
 });
 
 test("rows drawn past the first ones: with every file shown, those holding a change", () => {

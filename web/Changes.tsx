@@ -3,7 +3,7 @@ import { changeScopes, type ChangedFile, type ChangeList, type ChangeScope, type
 import { fileTree, type TreeFolder, type TreeNode } from "../shared/file-tree.ts";
 import { changesRequest } from "./changes-request.ts";
 import { CommitChangesDialog } from "./CommitChanges.tsx";
-import { changedFiles, drawnPastFirstRows, firstChangedLine, isBigFolder, projectFilesWithChanges, ROWS_AT_ONCE, startsFolded, type ListedFile } from "./changes.ts";
+import { changedFiles, drawnPastFirstRows, firstChangedLine, holdsSelection, isBigFolder, projectFilesWithChanges, ROWS_AT_ONCE, startsFolded, type ListedFile } from "./changes.ts";
 import { connection } from "./connection.ts";
 import { DiffStyleChoice, diffStyle, EditedFile } from "./EditApproval.tsx";
 import { hints } from "./hints.ts";
@@ -364,7 +364,7 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
   const foldingOf = (section: string): Folding => {
     const keyOf = (folder: TreeFolder<ListedFile>) => `${view} ${section} ${folder.path}`;
     const isFolded = (folder: TreeFolder<ListedFile>, insideBigFolder: boolean) =>
-      overrides.get(keyOf(folder)) ?? (overrides.get(everyFolderFoldedKey) || startsFolded(folder, everyFile, insideBigFolder));
+      overrides.get(keyOf(folder)) ?? (overrides.get(everyFolderFoldedKey) || (!holdsSelection(folder, selectedPath) && startsFolded(folder, everyFile, insideBigFolder)));
     return {
       everyFile,
       isFolded,
