@@ -57,7 +57,7 @@ import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
-import type { ConversationChoices, ConversationReply, RanOn, StartedConversation } from "../shared/canvas-plugins.ts";
+import type { ConversationChoices, ConversationReply, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
@@ -483,7 +483,7 @@ export class ConversationService {
    * Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a
    * prompt, working on it at once; with a title that isn't blank, named as if by the user, so neither its first message
    * nor its agent renames it; with `choices`, on that model and effort from its first message on; with a `worktree`,
-   * working there rather than in the workspace's folder.
+   * working there rather than in the workspace's folder; with `fromPlugin`, its first message shown as that plugin's.
    */
   create(
     workspaceId: string,
@@ -492,13 +492,14 @@ export class ConversationService {
     title?: string,
     choices: ConversationChoices = {},
     worktree?: ConversationWorktree,
+    fromPlugin?: string,
   ): Conversation {
     const givenTitle = titleFrom(title ?? "");
     const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "", worktree);
     if (choices.model || choices.effort) this.runtime(conversation.id).startChoices = choices;
     const opened = this.ensureSession(conversation.id);
     if (prompt?.trim()) {
-      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true });
+      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true, ...(fromPlugin && { fromPlugin }) });
       if (worktree) opened.then(startTurn).catch(() => {});
       else {
         opened.catch(() => {});
@@ -532,14 +533,32 @@ export class ConversationService {
   startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): StartedConversation {
     const caller = this.get(callerId);
     if (caller.startedBy) throw new Error("A plugin's tool started this conversation, so it can't start another; do the task here.");
-    const profiles = this.store.listProfiles();
-    const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
-    if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
+    const profile = this.profileNamed(profileName);
     const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices, caller.worktree);
     this.store.recordStartedBy(conversation.id, { conversationId: callerId, plugin });
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return { id: conversation.id, profile: profile.name };
+  }
+
+  /**
+   * For a plugin's own work, such as a routine that is due: a conversation in the workspace, where the workspace starts
+   * its conversations, on the profile of that name, working on `prompt` at once, its first message shown as the plugin's.
+   * It works for nobody, so it stands in the sidebar as any other and tells the user when its turns end.
+   */
+  async startForPlugin(workspaceId: string, pluginTitle: string, { profile: profileName, prompt, title, model, effort }: WorkspaceConversationStart): Promise<StartedConversation> {
+    const workspace = this.existingWorkspace(workspaceId);
+    const profile = this.profileNamed(profileName);
+    const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    const conversation = this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle);
+    return { id: conversation.id, profile: profile.name };
+  }
+
+  private profileNamed(profileName: string) {
+    const profiles = this.store.listProfiles();
+    const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
+    if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
+    return profile;
   }
 
   /**

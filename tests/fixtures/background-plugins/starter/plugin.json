@@ -1,0 +1,8 @@
+{
+  "name": "starter",
+  "title": "Starter",
+  "version": "1.0.0",
+  "api": 11,
+  "startsConversations": true,
+  "canvas": { "host": "host.ts", "view": "view.js" }
+}
