@@ -75,6 +75,7 @@ export const chat: Messages["chat"] = {
   busyWith: {
     "switching-profile": "Cambiando de perfil…",
     "clearing-context": "Borrando el contexto…",
+    "reloading-agent": "Recargando el agente…",
     "going-back": "Retrocediendo…",
     "loading-history": "Cargando el historial de la sesión…",
     "reading-terminal-turns": "Leyendo los turnos hechos en la terminal…",
@@ -101,6 +102,7 @@ export const chat: Messages["chat"] = {
     gaveUpOnJob: (job, minutes) => `Se dejó de esperar: ${job}. No se pudo comprobar durante ${minutes} minutos, así que puede que siga en marcha`,
     stoppedWaitingForJob: (job) => `Se dejó de esperar: ${job}`,
     contextCleared: "Contexto borrado: el agente empieza de cero",
+    agentReloaded: "Agente recargado: toma su configuración y sus servidores MCP actuales",
     agentsOwnSetup: "Ahora se usa la configuración propia del agente, sin perfil",
     agentWithProfile: (agent, profile) => `Ahora se usa ${agent}, con el perfil “${profile}”`,
     profile: (profile) => `Ahora se usa el perfil “${profile}”`,
@@ -289,6 +291,7 @@ export const chat: Messages["chat"] = {
   },
   slashCommandDescriptions: {
     clear: "Reinicia el agente sin la conversación hasta ahora en su contexto; sigue visible en pantalla",
+    reload: "Reinicia el agente para que tome la configuración cambiada, como un servidor MCP recién añadido; la conversación sigue",
     login: "Vuelve a iniciar la sesión del agente, en una pestaña de terminal",
     later: "Aparta esta conversación hasta una hora: /later tomorrow 9 y, si quieres, una nota",
     remind: "Te recuerda esta conversación a una hora, dejándola en la lista: /remind 3h",

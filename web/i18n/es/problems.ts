@@ -316,6 +316,7 @@ export const problems: Messages["problems"] = {
     "force-stopped": "se detuvo a la fuerza",
     "restarted-for-profile": "se reinició porque cambió su perfil",
     "restarted-for-claude-program": "se reinició porque cambió el programa de Claude Code",
+    "restarted-for-reload": "se reinició para tomar la configuración cambiada",
     noAnswer: (seconds) => `no respondió en los ${seconds} s siguientes a su inicio`,
     exited: (how) => `terminó con ${how}`,
     couldNotStart: (cause) => `no pudo iniciarse: ${cause}`,

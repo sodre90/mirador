@@ -29,6 +29,7 @@ const notices: NoticeAbout[] = [
   { kind: "job-wait-ended", wait: wait({ sshHost: "me@box" }), end: "gave-up" },
   { kind: "job-wait-ended", wait: wait(), end: "stopped" },
   { kind: "context-cleared" },
+  { kind: "agent-reloaded" },
   { kind: "profile-changed", profileName: null },
   { kind: "profile-changed", profileName: "Work" },
   { kind: "profile-changed", profileName: "Radiance", agent: "opencode" },

@@ -466,6 +466,8 @@ class TimelineBuilder {
         return this.push(noticeBlock(origin, { kind: "job-wait-ended", wait: event.wait, end: event.end }));
       case "context-cleared":
         return this.push(noticeBlock(origin, { kind: "context-cleared" }));
+      case "agent-reloaded":
+        return this.push(noticeBlock(origin, { kind: "agent-reloaded" }));
       case "profile-changed":
         return this.push(noticeBlock(origin, { kind: "profile-changed", profileName: event.profileName, agent: event.agent }));
       case "permission": {

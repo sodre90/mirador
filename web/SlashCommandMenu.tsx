@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { HarnessId, StoredEvent } from "../shared/model.ts";
 import { panelSlashCommands } from "../shared/panel-commands.ts";
-import { clearSlashCommand, latestSlashCommands, matchingCommands, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
+import { clearSlashCommand, latestSlashCommands, matchingCommands, reloadSlashCommand, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { loginSlashCommand } from "./login-request.ts";
 import { laterSlashCommand, remindSlashCommand } from "./reminders.ts";
@@ -43,7 +43,7 @@ function useSlashCommands({ conversationId, harness, profileId }: AgentOfConvers
 
 const inPageLanguage = (command: SlashCommand) => ({ ...command, description: t.chat.slashCommandDescriptions[command.name] ?? command.description });
 
-const miradorCommands = [clearSlashCommand, loginSlashCommand, laterSlashCommand, remindSlashCommand].map(inPageLanguage);
+const miradorCommands = [clearSlashCommand, reloadSlashCommand, loginSlashCommand, laterSlashCommand, remindSlashCommand].map(inPageLanguage);
 
 /** The commands Mirador runs itself, so they stand even where the agent does not list them. */
 const miradorCommandsFor = (harness: HarnessId) => [

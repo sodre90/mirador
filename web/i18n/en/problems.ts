@@ -314,6 +314,7 @@ export const problems = {
     "force-stopped": "was force stopped",
     "restarted-for-profile": "was restarted because its profile changed",
     "restarted-for-claude-program": "was restarted because the Claude Code program changed",
+    "restarted-for-reload": "was restarted to pick up changed settings",
     noAnswer: (seconds: number) => `did not answer within ${seconds} s of starting`,
     exited: (how: string) => `exited with ${how}`,
     couldNotStart: (cause: string) => `could not start: ${cause}`,

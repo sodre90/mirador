@@ -51,7 +51,7 @@ import { panelCommandRun } from "../shared/panel-commands.ts";
 import { historyEntry } from "../shared/prompt-history.ts";
 import { customOrderAfterDrag } from "../shared/conversation-order.ts";
 import { inSidebarOrder, movedBefore } from "../shared/sidebar-order.ts";
-import { isClearCommand, toSlashCommand } from "../shared/slash-commands.ts";
+import { isClearCommand, isReloadCommand, replacesSession, toSlashCommand } from "../shared/slash-commands.ts";
 import { isPending, isPutAway, isReminder, reminderCommandIn, reminderFromCommand, type Reminder } from "../shared/reminders.ts";
 import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
@@ -331,6 +331,13 @@ const SESSION_STATE_UPDATES = new Set<acp.SessionUpdate["sessionUpdate"]>(["avai
 
 /** Antigravity sends the whole history again on session/resume, as on session/load, so its sessions reopen by a load whose replay is left out. */
 const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity";
+
+/**
+ * Agents that read their settings, MCP servers among them, anew for each session they open, so a /reload reopens only the
+ * conversation's session. opencode reads them once per process, so a /reload starts that again, as it does Antigravity's,
+ * which serves only its own conversation.
+ */
+const readsSettingsPerSession = (harness: HarnessId) => harness === "claude" || harness === "pi" || harness === "codex" || harness === "copilot";
 
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
@@ -965,6 +972,35 @@ export class ConversationService {
     this.sendNextQueuedMessage(conversationId);
   }
 
+  /**
+   * The agent starts again on the same session and reads its settings anew, such as an MCP server added since. Other
+   * conversations on a process that has to start again lose a turn in progress, which then continues where it left off.
+   */
+  private async reloadAgent(conversationId: string) {
+    const runtime = this.runtime(conversationId);
+    await runtime.sessionId?.catch(() => {});
+    const conversation = this.get(conversationId);
+    const left = readsSettingsPerSession(conversation.harness)
+      ? this.releaseSession(conversationId, runtime, conversation.acpSessionId)
+      : this.restartAgentProcessOf(conversation);
+    this.append(conversationId, { type: "agent-reloaded" });
+    await this.ensureSession(conversationId, async () => {
+      this.setBusy(conversationId, "reloading-agent");
+      await left;
+      const sessionId = await this.openSession(conversationId);
+      this.setStatus(conversationId, "idle");
+      return sessionId;
+    }).catch(() => {});
+    this.sendNextQueuedMessage(conversationId);
+  }
+
+  private async restartAgentProcessOf(conversation: Conversation) {
+    const harness = this.agentProcesses.get(this.processKey(this.profileOf(conversation), conversation));
+    if (!harness) return;
+    this.forgetAsyncTasks(conversation.id);
+    this.continueStoppedTurns(await this.killAgent(harness, { kind: "restarted-for-reload" }));
+  }
+
   /** A turn whose agent cannot take the cancel, such as one still starting, is waited for all the same. */
   private async stopTurn(conversationId: string) {
     const { turnEnded } = this.runtime(conversationId);
@@ -1103,6 +1139,7 @@ export class ConversationService {
     const runtime = this.runtime(conversationId);
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
+    if (isReloadCommand(text)) return this.reloadAgent(conversationId);
     runtime.running = true;
     this.announceRunningTurnsCount();
     this.endUsageLimitWait(runtime);
@@ -2551,7 +2588,7 @@ export class ConversationService {
       queueHold: this.whatHoldsQueue(runtime),
       agentSteers: (await harness?.canSteer()) ?? false,
     });
-    const messages = queuedBeforeClear(runtime.queuedMessages).filter((message) => !message.afterTurn);
+    const messages = queuedBeforeSessionChange(runtime.queuedMessages).filter((message) => !message.afterTurn);
     this.logWhatKeepsQueuedMessagesOut(conversationId, runtime, messages.length > 0 ? keptOutBy : null);
     const [first, ...rest] = messages;
     if (keptOutBy !== null || !harness || !sessionId || !first) return;
@@ -3174,10 +3211,10 @@ export const sessionIsSettled = (use: SessionUse) =>
   use.asyncTasks === 0 &&
   !use.watched;
 
-/** Messages queued after a /clear wait for it, rather than join the turn in the session it ends. */
-export const queuedBeforeClear = (queue: QueuedMessage[]) => {
-  const clearAt = queue.findIndex(({ text }) => isClearCommand(text));
-  return clearAt === -1 ? queue : queue.slice(0, clearAt);
+/** Messages queued after a /clear or a /reload wait for it, rather than join the turn in the session it replaces. */
+export const queuedBeforeSessionChange = (queue: QueuedMessage[]) => {
+  const changeAt = queue.findIndex(({ text }) => replacesSession(text));
+  return changeAt === -1 ? queue : queue.slice(0, changeAt);
 };
 
 /** Allowing once leaves no trace behind; Claude Code saves an "always" answer into the project's settings. */

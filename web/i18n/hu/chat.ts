@@ -73,6 +73,7 @@ export const chat: Messages["chat"] = {
   busyWith: {
     "switching-profile": "Profilváltás…",
     "clearing-context": "A kontextus törlése…",
+    "reloading-agent": "Az ágens újratöltése…",
     "going-back": "Visszalépés…",
     "loading-history": "A munkamenet előzményeinek betöltése…",
     "reading-terminal-turns": "A terminálban lezajlott körök beolvasása…",
@@ -99,6 +100,7 @@ export const chat: Messages["chat"] = {
     gaveUpOnJob: (job, minutes) => `Leállt a várakozás erre: ${job}. ${minutes} percig nem lehetett ellenőrizni, ezért lehet, hogy még fut`,
     stoppedWaitingForJob: (job) => `Leállt a várakozás erre: ${job}`,
     contextCleared: "Kontextus törölve: az ágens tiszta lappal indul",
+    agentReloaded: "Ágens újratöltve: átveszi a jelenlegi beállításait és MCP-szervereit",
     agentsOwnSetup: "Mostantól az ágens saját beállításai érvényesek, profil nélkül",
     agentWithProfile: (agent, profile) => `Mostantól ez fut: ${agent}, ezzel a profillal: „${profile}”`,
     profile: (profile) => `Mostantól ez a profil érvényes: „${profile}”`,
@@ -286,6 +288,7 @@ export const chat: Messages["chat"] = {
   },
   slashCommandDescriptions: {
     clear: "Az ágens újraindítása tiszta kontextussal: az eddigi beszélgetés kikerül belőle, de a képernyőn megmarad",
+    reload: "Az ágens újraindítása, hogy átvegye a megváltozott beállításokat, például egy új MCP-szervert; a beszélgetés folytatódik",
     login: "Az ágens újbóli bejelentkeztetése egy terminállapon",
     later: "Félreteszi ezt a beszélgetést egy időpontig: /later tomorrow 9, utána egy jegyzet, ha kell",
     remind: "Emlékeztet erre a beszélgetésre egy időpontban, a listában hagyva: /remind 3h",

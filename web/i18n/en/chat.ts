@@ -79,6 +79,7 @@ export const chat = {
   busyWith: {
     "switching-profile": "Switching profile…",
     "clearing-context": "Clearing the context…",
+    "reloading-agent": "Reloading the agent…",
     "going-back": "Going back…",
     "loading-history": "Loading the session's history…",
     "reading-terminal-turns": "Reading the turns taken in the terminal…",
@@ -105,6 +106,7 @@ export const chat = {
     gaveUpOnJob: (job: string, minutes: number) => `Stopped waiting for ${job}: it could not be checked for ${minutes} minutes, so it may still run`,
     stoppedWaitingForJob: (job: string) => `Stopped waiting for ${job}`,
     contextCleared: "Context cleared: the agent starts afresh",
+    agentReloaded: "Agent reloaded: it picks up its current settings and MCP servers",
     agentsOwnSetup: "Now using the agent's own setup, without a profile",
     agentWithProfile: (agent: string, profile: string) => `Now using ${agent}, with the profile “${profile}”`,
     profile: (profile: string) => `Now using the profile “${profile}”`,
@@ -293,6 +295,7 @@ export const chat = {
   /** Mirador's own slash commands, by name; the agent's own keep the descriptions the agent gives them. */
   slashCommandDescriptions: {
     clear: "Start the agent afresh, without the conversation so far in its context; it stays on screen",
+    reload: "Start the agent again so it picks up changed settings, such as a newly added MCP server; the conversation goes on",
     login: "Sign the agent in again, in a terminal tab",
     later: "Put this conversation away until a time: /later tomorrow 9, then an optional note",
     remind: "Remind me about this conversation at a time, keeping it in the list: /remind 3h",

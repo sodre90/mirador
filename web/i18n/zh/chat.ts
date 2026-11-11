@@ -73,6 +73,7 @@ export const chat: Messages["chat"] = {
   busyWith: {
     "switching-profile": "正在切换配置…",
     "clearing-context": "正在清除上下文…",
+    "reloading-agent": "正在重新加载 Agent…",
     "going-back": "正在回退…",
     "loading-history": "正在加载会话历史…",
     "reading-terminal-turns": "正在读取在终端中进行的轮次…",
@@ -99,6 +100,7 @@ export const chat: Messages["chat"] = {
     gaveUpOnJob: (job, minutes) => `已停止等待 ${job}：已有 ${minutes} 分钟无法检查它，它可能仍在运行`,
     stoppedWaitingForJob: (job) => `已停止等待 ${job}`,
     contextCleared: "上下文已清除：Agent 从头开始",
+    agentReloaded: "Agent 已重新加载：使用当前的设置和 MCP 服务器",
     agentsOwnSetup: "现在使用 Agent 自己的设置，不使用配置",
     agentWithProfile: (agent, profile) => `现在使用 ${agent}，配置为“${profile}”`,
     profile: (profile) => `现在使用配置“${profile}”`,
@@ -286,6 +288,7 @@ export const chat: Messages["chat"] = {
   },
   slashCommandDescriptions: {
     clear: "让 Agent 重新开始，上下文中不再带有此前的对话；对话仍留在屏幕上",
+    reload: "重新启动 Agent，让它使用更改后的设置，例如新添加的 MCP 服务器；对话继续",
     login: "让 Agent 重新登录，在终端标签页中进行",
     later: "把这个对话放一边直到某个时间：/later tomorrow 9，后面可加备注",
     remind: "在某个时间提醒我这个对话，并留在列表中：/remind 3h",

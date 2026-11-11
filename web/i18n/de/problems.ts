@@ -321,6 +321,7 @@ export const problems: Messages["problems"] = {
     "force-stopped": "wurde zwangsweise gestoppt",
     "restarted-for-profile": "wurde neu gestartet, weil sich sein Profil geändert hat",
     "restarted-for-claude-program": "wurde neu gestartet, weil sich das Claude-Code-Programm geändert hat",
+    "restarted-for-reload": "wurde neu gestartet, um geänderte Einstellungen zu übernehmen",
     noAnswer: (seconds) => `hat nicht innerhalb von ${seconds} s nach dem Start geantwortet`,
     exited: (how) => `endete mit ${how}`,
     couldNotStart: (cause) => `konnte nicht starten: ${cause}`,

@@ -24,7 +24,7 @@ const problems: HostProblem[] = [
   { code: "claude-not-installed", installFolders: "~/.local/bin", installCommand: "curl -fsSL https://claude.ai/install.sh | bash" },
   { code: "profile-environment-invalid", profile: "Work", errors: "Line 2 has no =" },
   { code: "agent-not-running", agent: "Claude Code" },
-  ...(["not-running", "stopped", "force-stopped", "restarted-for-profile", "restarted-for-claude-program"] as const).map(
+  ...(["not-running", "stopped", "force-stopped", "restarted-for-profile", "restarted-for-claude-program", "restarted-for-reload"] as const).map(
     (kind): HostProblem => ({ code: "agent-gone", agent: "Claude Code", gone: { kind } }),
   ),
   { code: "agent-gone", agent: "Claude Code", gone: { kind: "no-answer", seconds: 30 } },
@@ -319,6 +319,7 @@ const englishBeforeCodes = [
   "The Claude Code agent process was force stopped.",
   "The Claude Code agent process was restarted because its profile changed.",
   "The Claude Code agent process was restarted because the Claude Code program changed.",
+  "The Claude Code agent process was restarted to pick up changed settings.",
   "The Claude Code agent process did not answer within 30 s of starting.",
   "The Claude Code agent process exited with 1.",
   "The Claude Code agent process could not start: ENOENT.",

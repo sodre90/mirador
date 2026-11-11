@@ -8,6 +8,7 @@ export type AgentGone =
   | { kind: "force-stopped" }
   | { kind: "restarted-for-profile" }
   | { kind: "restarted-for-claude-program" }
+  | { kind: "restarted-for-reload" }
   | { kind: "no-answer"; seconds: number }
   | { kind: "exited"; how: string }
   | { kind: "could-not-start"; cause: string };

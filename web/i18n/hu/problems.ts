@@ -316,6 +316,7 @@ export const problems: Messages["problems"] = {
     "force-stopped": "kényszerített leállítással leállt",
     "restarted-for-profile": "újraindult, mert megváltozott a profilja",
     "restarted-for-claude-program": "újraindult, mert megváltozott a Claude Code program",
+    "restarted-for-reload": "újraindult, hogy átvegye a megváltozott beállításokat",
     noAnswer: (seconds) => `nem válaszolt az indulás utáni ${seconds} másodpercben`,
     exited: (how) => `kilépett (${how})`,
     couldNotStart: (cause) => `nem tudott elindulni: ${cause}`,

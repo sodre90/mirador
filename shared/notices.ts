@@ -11,6 +11,7 @@ export type NoticeAbout =
   | { kind: "usage-limit-wait-stopped" }
   | { kind: "job-wait-ended"; wait: JobWait; end: JobWaitEnd }
   | { kind: "context-cleared" }
+  | { kind: "agent-reloaded" }
   | { kind: "profile-changed"; profileName: string | null; agent?: HarnessId }
   | { kind: "mode"; modeId: string; modeName?: string };
 
@@ -39,6 +40,8 @@ export function englishNoticeText(about: NoticeAbout) {
       return jobWaitEndedNotice(about.wait, about.end);
     case "context-cleared":
       return "Context cleared: the agent starts afresh";
+    case "agent-reloaded":
+      return "Agent reloaded: it picks up its current settings and MCP servers";
     case "profile-changed":
       return profileChangedNotice(about.profileName, about.agent);
     case "mode":

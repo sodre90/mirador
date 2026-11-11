@@ -475,11 +475,20 @@ export interface Activity {
   title: string;
 }
 
-export type BusyWith = "switching-profile" | "clearing-context" | "going-back" | "loading-history" | "reading-terminal-turns" | "making-worktree" | "setting-up-worktree";
+export type BusyWith =
+  | "switching-profile"
+  | "clearing-context"
+  | "reloading-agent"
+  | "going-back"
+  | "loading-history"
+  | "reading-terminal-turns"
+  | "making-worktree"
+  | "setting-up-worktree";
 
 export const busyTexts: Record<BusyWith, string> = {
   "switching-profile": "Switching profile…",
   "clearing-context": "Clearing the context…",
+  "reloading-agent": "Reloading the agent…",
   "going-back": "Going back…",
   "loading-history": "Loading the session's history…",
   "reading-terminal-turns": "Reading the turns taken in the terminal…",
@@ -621,6 +630,8 @@ export type ConversationEvent =
   | { type: "profile-changed"; profileName: string | null; agent?: HarnessId; from?: { profileId: string | null; profileName: string | null; harness: HarnessId } }
   /** From here on the agent works in a fresh session, with nothing of the conversation before in its context. */
   | { type: "context-cleared" }
+  /** From here on the agent goes on in the same session, started again with its settings read anew. */
+  | { type: "agent-reloaded" }
   /**
    * `usageLimit`: Claude's usage limit stopped the turn; it resets at `resetsAt`, when the message names a time.
    * `authRequired`: the agent refused the prompt until the user signs in again.

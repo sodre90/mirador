@@ -295,6 +295,7 @@ export const problems: Messages["problems"] = {
     "force-stopped": "已被强制停止",
     "restarted-for-profile": "因配置更改已重启",
     "restarted-for-claude-program": "因 Claude Code 程序更改已重启",
+    "restarted-for-reload": "已重启以使用更改后的设置",
     noAnswer: (seconds) => `启动后 ${seconds} 秒内未响应`,
     exited: (how) => `已退出（${how}）`,
     couldNotStart: (cause) => `无法启动：${cause}`,

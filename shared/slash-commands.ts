@@ -46,6 +46,18 @@ export const clearSlashCommand: SlashCommand = {
 
 export const isClearCommand = (message: string) => message.trim() === `/${clearSlashCommand.name}`;
 
+/** Mirador's own /reload: the agent starts again on the same conversation and reads its settings anew, such as an MCP server added since it started. */
+export const reloadSlashCommand: SlashCommand = {
+  name: "reload",
+  description: "Start the agent again so it picks up changed settings, such as a newly added MCP server; the conversation goes on",
+  hint: null,
+};
+
+export const isReloadCommand = (message: string) => message.trim() === `/${reloadSlashCommand.name}`;
+
+/** /clear and /reload replace the agent's session, so messages sent after one go to the session it opens. */
+export const replacesSession = (message: string) => isClearCommand(message) || isReloadCommand(message);
+
 export const toSlashCommand = ({ name, description, input }: AvailableCommand): SlashCommand => ({
   name,
   description,
