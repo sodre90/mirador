@@ -6,10 +6,12 @@ import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
 import { addWorkspace, createProfile, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import {
   ScriptedModel,
+  antigravityProgram,
   codexProgram,
   copilotProgram,
   forgetPiAcpSessionsUnder,
   piProgram,
+  scriptedAntigravityEnvironment,
   scriptedCodexEnvironment,
   scriptedCopilotEnvironment,
   scriptedOpencodeEnvironment,
@@ -47,11 +49,12 @@ test.afterAll(async () => {
 
 /**
  * Offered as a tool of its own, or by opencode 2 in its Code Mode catalog: in the instructions of a session that starts
- * with it, or in a note among the user's messages of one that goes on with a catalog changed since.
+ * with it, or in a note among the user's messages of one that goes on with a catalog changed since. Antigravity lists the
+ * server and its tools under its own name in its instructions, without their descriptions.
  */
 const probeOffered = () =>
   model.toolDescription(PROBE_TOOL) === PROBE_TOOL_DESCRIPTION ||
-  [model.systemPromptInContext(), ...model.userMessagesInContext()].some((text) => text.includes(PROBE_TOOL_DESCRIPTION));
+  [model.systemPromptInContext(), ...model.userMessagesInContext()].some((text) => text.includes(PROBE_TOOL_DESCRIPTION) || text.includes(`# ${PROBE_SERVER}`));
 
 const reloadedNotices = () => page.locator(".timeline:visible .notice-line", { hasText: "Agent reloaded" });
 
@@ -130,6 +133,15 @@ test("/reload has pi pick up an MCP server added to its mcp.json", async () => {
   await expectReloadToPickUpAddedServer("pi", scriptedPiEnvironment(model, host.root), () =>
     writeFileSync(join(host.root, "pi-agent", "mcp.json"), JSON.stringify({ mcpServers: { [PROBE_SERVER]: { command: "bun", args: probeArguments, exposure: "direct" } } })),
   );
+});
+
+test("/reload has Antigravity pick up an MCP server added to its mcp_config.json", async () => {
+  test.skip(antigravityProgram() === null, "Antigravity e2e runs only where the Antigravity CLI, agy, is installed");
+  await expectReloadToPickUpAddedServer("Antigravity", scriptedAntigravityEnvironment(model, host.root), () => {
+    const configFolder = join(host.root, "antigravity-home", ".gemini", "config");
+    mkdirSync(configFolder, { recursive: true });
+    writeFileSync(join(configFolder, "mcp_config.json"), JSON.stringify({ mcpServers: { [PROBE_SERVER]: { command: "bun", args: probeArguments, disabled: false } } }));
+  });
 });
 
 test("/reload has Codex pick up an MCP server added to its config.toml", async () => {
