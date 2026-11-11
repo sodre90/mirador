@@ -951,6 +951,7 @@ export class ConversationService {
       this.setBusy(conversationId, "switching-profile");
       await released;
       const sessionId = await this.openSession(conversationId);
+      await this.applyProfileModel(conversationId, sessionId, Date.now() + this.startChoicesTimeoutMs);
       await this.applyProfileChoices(conversationId, sessionId);
       this.setStatus(conversationId, "idle");
       return sessionId;
@@ -1106,6 +1107,7 @@ export class ConversationService {
       harness: draft.harness,
       environment: draft.environment,
       prelaunch: draft.prelaunch,
+      model: draft.model || null,
       mode: draft.mode || null,
       effort: draft.effort || null,
       bypassPermissions: draft.bypassPermissions,
@@ -2229,6 +2231,17 @@ export class ConversationService {
     return claudeConfigDir(profileEnvironment(profileId === null ? null : (this.store.findProfile(profileId) ?? null)));
   }
 
+  /**
+   * A conversation takes its profile's model when it starts with the profile or moves to it, before its own, a plugin's or
+   * a test host's choice can move it again; after that its own choice stands. The first message waits for it, as for a
+   * plugin's choice: the profile names the model the conversation was started on.
+   */
+  private async applyProfileModel(conversationId: string, sessionId: string, holdUntil: number) {
+    const { profileId } = this.get(conversationId);
+    const model = profileId === null ? undefined : this.store.findProfile(profileId)?.model;
+    if (model) await this.applyChosenModel(conversationId, sessionId, model, holdUntil);
+  }
+
   /** A conversation takes its profile's mode and effort when it starts with the profile or moves to it; after that its own choice stands. */
   private async applyProfileChoices(conversationId: string, sessionId: string) {
     const { profileId } = this.get(conversationId);
@@ -2249,16 +2262,17 @@ export class ConversationService {
   }
 
   /**
-   * A new session takes its model before any effort, as the efforts on offer depend on it: a plugin's model over a test
-   * host's, then the profile's mode and effort, a test host's effort over the profile's, and a plugin's over both. A
-   * plugin's choices hold the first message back until the agent has taken them, so it goes out on them, though for no
-   * longer than `startChoicesTimeoutMs` in all.
+   * A new session takes its model before any effort, as the efforts on offer depend on it: the profile's model under a test
+   * host's and a plugin's, then the profile's mode and effort, a test host's effort over the profile's, and a plugin's over
+   * both. The profile's model and a plugin's choices hold the first message back until the agent has taken them, so it goes
+   * out on them, though for no longer than `startChoicesTimeoutMs` in all.
    */
   private async applyNewSessionChoices(conversation: Conversation, sessionId: string, isFirstSession: boolean) {
     const { id } = conversation;
     const test = this.onUsersOwnSetup(conversation) ? this.config.testModelOverride : {};
     const chosen = this.runtime(id).startChoices ?? {};
     const holdUntil = Date.now() + this.startChoicesTimeoutMs;
+    if (isFirstSession) await this.applyProfileModel(id, sessionId, holdUntil);
     if (test.model) await this.trySetConfigOption(id, sessionId, "model", test.model);
     if (chosen.model) await this.applyChosenModel(id, sessionId, chosen.model, holdUntil);
     if (isFirstSession) await this.applyProfileChoices(id, sessionId);

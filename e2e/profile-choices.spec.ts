@@ -41,7 +41,7 @@ test("a profile editor lists the modes and efforts its agent offers before one o
   await addWorkspace(page, host.projectDir);
   const profiles = await createProfile(page, "asked", `FAKE_ACP_MODES=1\nFAKE_ACP_LOG=${agentLogFile}`, "", "opencode");
   await openProfileTab(profiles, "Defaults");
-  await expect(profiles.getByLabel("Profile mode").locator("option")).toHaveText(["Agent's default", "Default", "Plan"]);
+  await expect(profiles.getByLabel("Profile mode", { exact: true }).locator("option")).toHaveText(["Agent's default", "Default", "Plan"]);
   await expect(profiles.getByLabel("Profile effort").locator("option")).toHaveText(["Agent's default", "Low", "High"]);
   expect(optionChanges()).toEqual([]);
 });
@@ -53,7 +53,7 @@ test("a profile editor asks its agent again once the profile launches it differe
   await signIn(page, host);
   const editor = await createProfile(page, "re-asked", `FAKE_ACP_MODES=1\n${kept}`, "", "opencode");
   await openProfileTab(editor, "Defaults");
-  await expect(editor.getByLabel("Profile mode").locator("option")).toHaveText(["Agent's default", "Default", "Plan"]);
+  await expect(editor.getByLabel("Profile mode", { exact: true }).locator("option")).toHaveText(["Agent's default", "Default", "Plan"]);
   expect(startsOf("re-asked")).toBe(1);
 
   await openProfileTab(editor, "Launch");
@@ -64,7 +64,7 @@ test("a profile editor asks its agent again once the profile launches it differe
   await expect.poll(() => startsOf("re-asked")).toBe(2);
   await openProfileTab(editor, "Defaults");
   await expect(editor.getByLabel("Profile questions")).toBeVisible();
-  await expect(editor.getByLabel("Profile mode"), "an agent that offers no modes gets no Mode row").toHaveCount(0);
+  await expect(editor.getByLabel("Profile mode", { exact: true }), "an agent that offers no modes gets no Mode row").toHaveCount(0);
   expect(optionChanges()).toEqual([]);
 
   await editor.getByRole("button", { name: "Close" }).click();

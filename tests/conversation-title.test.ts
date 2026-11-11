@@ -19,6 +19,7 @@ function hostWithAConversation() {
     harness: "pi",
     environment: "",
     prelaunch: "",
+    model: null,
     mode: null,
     effort: null,
     bypassPermissions: false,

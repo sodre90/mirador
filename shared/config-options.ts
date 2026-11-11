@@ -19,7 +19,7 @@ export function categoryChoices(options: SessionConfigOption[], category: "mode"
 }
 
 /** The agent's choices of a kind, such as its modes, as its most recently active conversation lists them; none until one of its conversations has run. */
-export function knownChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level"): SessionConfigSelectOption[] {
+export function knownChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level" | "model"): SessionConfigSelectOption[] {
   for (const { configOptions } of conversations.filter((conversation) => conversation.harness === harness).sort((a, b) => b.updatedAt - a.updatedAt)) {
     const choices = categoryChoices(configOptions, category);
     if (choices.length > 0) return choices;

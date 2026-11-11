@@ -243,6 +243,7 @@ export const hints: Messages["hints"] = {
   profilePrelaunch: "Opcional. Se ejecuta con tu shell y este entorno antes de que se inicie el agente. Debe terminar en menos de un minuto; inicia en segundo plano los proxies de larga duración.",
   profileTest:
     "Inicia el agente con esta configuración, sin guardarla, y enumera lo que ofrece: modelos, modos y otras opciones. Si no puede iniciarse, indica qué paso falló.",
+  profileModel: "El modelo que toma una conversación cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.\n\nLos modelos son los que ofrece el agente: Mirador se los pregunta cada vez que abres el perfil. Un modelo que el agente ya no ofrece deja la conversación con el suyo, y la conversación lo dice.",
   profileMode: "El modo que toma una conversación cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.\n\nLos modos son los que ofrece el agente: Mirador se los pregunta cada vez que abres el perfil.",
   profileEffort: "El esfuerzo que toma una conversación cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.\n\nLos niveles son los que ofrece el agente: Mirador se los pregunta cada vez que abres el perfil. Una conversación cuyo modelo no ofrece el nivel conserva su propio esfuerzo.",
   profileYolo: "Aprobar todo aquello para lo que el agente pida permiso. Una conversación lo toma cuando empieza con este perfil o se mueve a él; después lo cambia su propia cabecera.",

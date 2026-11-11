@@ -228,7 +228,7 @@ describe("CanvasPlugins", () => {
   test("what a conversation's profile set for a plugin reaches its tools and adds to its guidance, by the chosen profile's name as it is now", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("main", "Personal", { board: { "hand-over-to": "local" } });
     store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
@@ -250,7 +250,7 @@ describe("CanvasPlugins", () => {
   test("a model the profile set for the profile it hands over to reaches the tool, a conversation's own wins, and one that chose another profile leaves the profile's model behind", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("big", "Qwen 122b");
     profile("main", "Personal", { board: { "hand-over-to": "local", "hand-over-model": "opus" } });
@@ -282,7 +282,7 @@ describe("CanvasPlugins", () => {
   test("what the user chose in a conversation's top bar wins over its profile, and the agent hears of each change once", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("big", "Qwen 122b");
     profile("main", "Personal", { board: { "hand-over-to": "local" } });
@@ -331,7 +331,7 @@ describe("CanvasPlugins", () => {
 
   test("a conversation a plugin's tool started gets no guidance from its profile, so it isn't told to hand over in turn", async () => {
     const store = storeWithConversation();
-    store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginSettings: { board: { "hand-over-to": "main" } }, createdAt: 1 });
+    store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginSettings: { board: { "hand-over-to": "main" } }, createdAt: 1 });
     store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
     store.recordStartedBy("c1", { conversationId: "c0", plugin: "board" });
     const { plugins } = await canvasPluginHost(FIXTURES, store);

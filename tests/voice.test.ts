@@ -78,6 +78,7 @@ const profile = (environment: string): Profile => ({
   harness: "claude",
   environment,
   prelaunch: "",
+  model: null,
   mode: null,
   effort: null,
   bypassPermissions: false,

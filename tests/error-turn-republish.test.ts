@@ -16,7 +16,7 @@ test("an error that ends a turn before its session opens republishes the convers
   const project = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(project);
   const store = new Store(":memory:");
-  store.saveProfile({ id: "p1", name: "failing", harness: "claude", environment: "CLAUDE_CODE_EXECUTABLE=/usr/bin/false", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "p1", name: "failing", harness: "claude", environment: "CLAUDE_CODE_EXECUTABLE=/usr/bin/false", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "project", path: project, defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 1 });
   const hub = new Hub();
   const received: ServerMessage[] = [];

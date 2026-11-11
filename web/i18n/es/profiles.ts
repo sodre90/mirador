@@ -15,6 +15,8 @@ export const profiles: Messages["profiles"] = {
   notInstalled: (agent) => `${agent} (no instalado)`,
   colour: "Color",
   colourLabel: "Color del perfil",
+  model: "Modelo",
+  modelLabel: "Modelo del perfil",
   mode: "Modo",
   modeLabel: "Modo del perfil",
   effort: "Esfuerzo",
