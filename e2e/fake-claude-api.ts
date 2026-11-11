@@ -50,6 +50,9 @@ const BACKGROUND = "BACKGROUND ";
 const RUN = "RUN ";
 const SUBAGENT = "SUBAGENT ";
 const ADVISOR_AFTER_BASH = "ADVISOR AFTER BASH ";
+const ADVISOR_CUT_OFF = "ADVISOR CUT OFF ";
+/** How Claude Code's own message begins when it asks again after a reply stopped streaming. */
+const CUT_OFF_NOTICE = "Your response above was cut off mid-stream";
 const WRITE = "WRITE ";
 const LIMITED_SUBAGENT = "LIMITED SUBAGENT ";
 const LIMITED_SUBAGENT_RUNS_FOR_MS = 1500;
@@ -75,7 +78,10 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * with `BACKGROUND ` runs it in the background; once a background command or subagent ends, the reply to Claude Code's
  * notification of it waits until `answerEndedCommands`, then runs `true` in Bash, so the turn Claude Code started on its
  * own asks for one more reply after it. A message starting with `ADVISOR AFTER BASH ` runs the rest in Bash and calls
- * the advisor after it in the same reply, which the real API never runs, so that call gets no result. A message
+ * the advisor after it in the same reply, which the real API never runs, so that call gets no result. A message starting
+ * with `ADVISOR CUT OFF ` calls the advisor in a reply that only pings after the call, then goes quiet at
+ * `stallAdvisorReply`, so the call gets no result; once Claude Code gives up on that reply and asks again, it runs the
+ * rest in Bash. A message
  * starting with `WRITE ` writes the file whose absolute path follows with the words after it. A message
  * starting with `SUBAGENT ` has a subagent do the rest, on the model Claude Code picks for it. A message starting with
  * `CALL ` calls the tool named after it with the JSON input that follows, such as `CALL mcp__canvas__ask {"question": …}`,
@@ -130,6 +136,9 @@ export class FakeClaudeApi {
   private heldReplies: (() => void)[] | null = null;
   private heldNotificationReplies: (() => void)[] = [];
   private replies = 0;
+  /** The command `ADVISOR CUT OFF ` runs once Claude Code asks again after its reply stopped streaming. */
+  private runAfterCutOff: string | null = null;
+  private stopPingingAdvisorReply = () => {};
   /** The `THEN ` reply of each reply of tool calls, by the id its calls' ids start with. */
   private readonly repliesAfterCalls = new Map<string, string>();
 
@@ -167,6 +176,11 @@ export class FakeClaudeApi {
     const held = this.heldReplies ?? [];
     this.heldReplies = null;
     held.forEach((answer) => answer());
+  }
+
+  /** The reply of `ADVISOR CUT OFF ` stops pinging, so Claude Code gives up on it once its stream idle timeout passes. */
+  stallAdvisorReply() {
+    this.stopPingingAdvisorReply();
   }
 
   /** How many replies to notifications of ended background commands wait for `answerEndedCommands`. */
@@ -227,6 +241,15 @@ export class FakeClaudeApi {
       return this.send(body, response, [{ type: "text", text: this.replyAfterCalls(body) ?? `Result: ${results}` }]);
     }
     if (typed.startsWith(CALL)) return this.send(body, response, this.toolCalls(typed));
+    if (offersBash(body) && typed.startsWith(ADVISOR_CUT_OFF) && this.runAfterCutOff === null) {
+      this.runAfterCutOff = typed.slice(ADVISOR_CUT_OFF.length);
+      return this.send(body, response, [this.advisorCall()], { pingsAfterBlocks: true });
+    }
+    if (this.runAfterCutOff !== null && typed.startsWith(CUT_OFF_NOTICE)) {
+      const command = this.runAfterCutOff;
+      this.runAfterCutOff = null;
+      return this.send(body, response, [this.bashCall(command, false)]);
+    }
     this.send(body, response, this.answerTo(typed, offersBash(body)));
   }
 
@@ -289,11 +312,12 @@ export class FakeClaudeApi {
     return { type: "server_tool_use", id: `srvtoolu_fake_${this.replies + 1}`, name: "advisor", input: {} };
   }
 
-  private send(body: MessagesRequest, response: ServerResponse, answers: Answer[]) {
+  private send(body: MessagesRequest, response: ServerResponse, answers: Answer[], { pingsAfterBlocks = false } = {}) {
     const blocks = answers.map((answer) => (answer.type === "text" ? { ...answer, text: answer.text + this.replySuffix } : answer));
     const id = `msg_fake_${++this.replies}`;
     const usage = { input_tokens: this.contextTokens ?? 10, output_tokens: 5 };
     const stopReason = blocks.some(({ type }) => type === "tool_use") ? "tool_use" : "end_turn";
+    if (pingsAfterBlocks && !body.stream) return;
     if (!body.stream) {
       response.writeHead(200, { "content-type": "application/json", ...this.planUsageHeaders() });
       return response.end(JSON.stringify({ id, type: "message", role: "assistant", model: body.model, content: blocks, stop_reason: stopReason, stop_sequence: null, usage }));
@@ -306,9 +330,16 @@ export class FakeClaudeApi {
       send({ type: "content_block_delta", index, delta: block.type === "text" ? { type: "text_delta", text: block.text } : { type: "input_json_delta", partial_json: JSON.stringify(block.input) } });
       send({ type: "content_block_stop", index });
     });
+    if (pingsAfterBlocks) return this.pingUntilStalled(response, () => send({ type: "ping" }));
     send({ type: "message_delta", delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 5 } });
     send({ type: "message_stop" });
     response.end();
+  }
+
+  private pingUntilStalled(response: ServerResponse, ping: () => void) {
+    const pinging = setInterval(ping, 1000);
+    this.stopPingingAdvisorReply = () => clearInterval(pinging);
+    response.on("close", this.stopPingingAdvisorReply);
   }
 
   private planUsageHeaders(): Record<string, string> {

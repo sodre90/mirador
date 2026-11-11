@@ -81,6 +81,58 @@ describe("OpenToolCalls", () => {
     open.follow(updated("left-open", { status: "failed" }));
     expect(open.oldestOfMainAgent()).toBe("next");
   });
+
+  describe("a server tool call, such as the advisor's", () => {
+    const advisor = (toolCallId: string): acp.SessionUpdate => ({ sessionUpdate: "tool_call", toolCallId, title: "advisor", kind: "other", status: "pending", _meta: { claudeCode: { toolName: "advisor" } } });
+    const chunk = (sessionUpdate: "agent_message_chunk" | "agent_thought_chunk", _meta?: acp.SessionUpdate["_meta"]): acp.SessionUpdate => ({ sessionUpdate, content: { type: "text", text: "Next," }, ...(_meta && { _meta }) });
+
+    test("whose reply was cut off ends when the agent asks again, as a finish, so a queued message is tried again", () => {
+      const open = new OpenToolCalls();
+      open.follow(advisor("srvtoolu_cut_off"));
+      open.follow(updated("srvtoolu_cut_off", { rawInput: {} }));
+      expect(open.oldestOfMainAgent()).toBe("srvtoolu_cut_off");
+      expect(open.follow(advisor("srvtoolu_asked_again"))).toBe(true);
+      expect(open.ids()).toEqual(["srvtoolu_asked_again"]);
+      expect(open.follow(updated("srvtoolu_asked_again", { status: "completed" }))).toBe(true);
+      open.follow(started("run", "Terminal"));
+      expect(open.oldestOfMainAgent()).toBe("run");
+    });
+
+    test("left without its answer ends at the agent's next call, reply or thought", () => {
+      const endsAt = (next: acp.SessionUpdate) => {
+        const open = new OpenToolCalls();
+        open.follow(started("run", "Terminal"));
+        open.follow(advisor("srvtoolu_skipped"));
+        open.follow(updated("run", { status: "completed" }));
+        return [open.follow(next), open.ids()];
+      };
+      expect(endsAt(started("read", "Read a.ts"))).toEqual([true, ["read"]]);
+      expect(endsAt(chunk("agent_message_chunk"))).toEqual([true, []]);
+      expect(endsAt(chunk("agent_thought_chunk"))).toEqual([true, []]);
+    });
+
+    test("stays open while it runs, through notices, other calls' updates and its subagents' work, until its answer", () => {
+      const open = new OpenToolCalls();
+      open.follow(started("background", "bun test"));
+      open.follow(advisor("srvtoolu_running"));
+      expect(open.follow(chunk("agent_message_chunk", { claudeCode: { kind: "informational" } }))).toBe(false);
+      expect(open.follow({ sessionUpdate: "plan", entries: [] })).toBe(false);
+      expect(open.follow(updated("background", { status: "completed" }))).toBe(true);
+      expect(open.follow(started("subagent-read", "Read a.ts"), true)).toBe(false);
+      expect(open.follow(chunk("agent_message_chunk"), true)).toBe(false);
+      expect(open.follow(advisor("srvtoolu_running"))).toBe(false);
+      expect(open.oldestOfMainAgent()).toBe("srvtoolu_running");
+      expect(open.follow(updated("srvtoolu_running", { status: "completed" }))).toBe(true);
+      expect(open.ids()).toEqual(["subagent-read"]);
+    });
+
+    test("of a subagent is not ended by the agent's own next step", () => {
+      const open = new OpenToolCalls();
+      open.follow(advisor("srvtoolu_of_subagent"), true);
+      expect(open.follow(chunk("agent_message_chunk"))).toBe(false);
+      expect(open.ids()).toEqual(["srvtoolu_of_subagent"]);
+    });
+  });
 });
 
 describe("currentActivity", () => {
