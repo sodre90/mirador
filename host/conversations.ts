@@ -407,7 +407,6 @@ export class ConversationService {
       openAsText(file, store.scriptProgramSetting()),
     );
     this.cancelPermissionsOrphanedByRestart();
-    this.cancelAsksOrphanedByRestart();
     this.turnsCutShortByCrash = new Set(this.endTurnsOrphanedByRestart());
     this.contextUsage = new Map(store.listContextUsages());
     this.unseenTurnEnds = new Map(store.listUnseenTurnEnds());
@@ -1905,6 +1904,7 @@ export class ConversationService {
    * conversations that wait are announced again, so phones still showing a notification of one read meanwhile get a clear.
    */
   resumeAfterRestart(stoppedTurns: string[]) {
+    this.withdrawAsksOrphanedByRestart(stoppedTurns);
     this.store.listConversations().forEach(({ id, acpSessionId }) => {
       if (stoppedTurns.includes(id)) return void this.resumeStoppedTurn(id, acpSessionId).catch(() => {});
       this.deliverOwedReply(id, this.turnsCutShortByCrash.has(id) ? "failed" : undefined);
@@ -2021,12 +2021,7 @@ export class ConversationService {
    */
   private async resumeStoppedTurn(conversationId: string, stoppedSessionId: string | null) {
     const request = unfinishedTurnRequest(this.store.listEvents(conversationId));
-    if (!request) {
-      this.setStatus(conversationId, "idle");
-      this.deliverOwedReply(conversationId);
-      this.sendNextQueuedMessage(conversationId);
-      return;
-    }
+    if (!request) return this.letTheTurnRest(conversationId);
     const runtime = this.runtime(conversationId);
     this.setStatus(conversationId, "starting");
     runtime.holdingQueue = true;
@@ -2037,17 +2032,52 @@ export class ConversationService {
       throw error;
     });
     runtime.holdingQueue = false;
+    const waitedOnAnswer = turnWaitedOnAnswer({ askMode: this.get(conversationId).askMode, askedAt: this.waitingAskAt(conversationId), turnBeganAt: request.beganAt });
+    // The agent has the request in its history and only the user's answer is missing: a continue would take the turn
+    // on past the question, whose answer would then reach the agent as a message beside an answer it never gave. A
+    // session that starts afresh never asked it, so the question goes and the whole request comes back instead.
+    if (waitedOnAnswer && continuation.keptItsPlace) return this.letTheTurnRest(conversationId);
+    if (waitedOnAnswer) this.withdrawWaitingAsks(conversationId);
     return this.prompt(conversationId, continuation.text, { imageIds: continuation.imageIds });
+  }
+
+  /** The turn a stop cut short gets no message of the host's: it waits for the user, whose next one carries it on. */
+  private letTheTurnRest(conversationId: string) {
+    this.setStatus(conversationId, "idle");
+    this.deliverOwedReply(conversationId);
+    this.sendNextQueuedMessage(conversationId);
+  }
+
+  /** When the question the canvas still holds an answer for went out, or null when none does. */
+  private waitingAskAt(conversationId: string) {
+    return this.store.listCanvasItems(conversationId).find((item) => item.kind === "ask" && item.status === "waiting")?.createdAt ?? null;
+  }
+
+  /**
+   * Takes back the questions a conversation still holds open, telling the pages watching it: no tool call of that
+   * conversation waits for their answers any more, and an answer given to a question nobody asked would reach no one.
+   */
+  private withdrawWaitingAsks(conversationId: string) {
+    this.store
+      .listCanvasItems(conversationId)
+      .filter((item): item is AskItem => item.kind === "ask" && item.status === "waiting")
+      .forEach((item) => {
+        const withdrawn = { ...item, status: "cancelled" as const, updatedAt: Date.now() };
+        this.store.saveCanvasItem(withdrawn);
+        this.hub.publishToConversation(conversationId, { type: "canvas.upserted", item: withdrawn });
+      });
+    this.questionsChanged(conversationId);
   }
 
   /**
    * The agent continues where it left off if it is still in the session the turn ran in and recorded the request there;
-   * otherwise, as in a fresh session, it gets the request again.
+   * otherwise, as in a fresh session, it gets the request again and `keptItsPlace` says the history it had is gone.
    */
   private async continuationOf(conversationId: string, stoppedSessionId: string | null, request: TurnRequest) {
     const sessionId = await this.ensureSession(conversationId);
-    if (sessionId === stoppedSessionId && (await this.sessionRecorded(conversationId, sessionId, request))) return { text: CONTINUE_AFTER_INTERRUPTION, imageIds: [] };
-    return { text: request.text, imageIds: request.imageIds };
+    if (sessionId === stoppedSessionId && (await this.sessionRecorded(conversationId, sessionId, request)))
+      return { text: CONTINUE_AFTER_INTERRUPTION, imageIds: [], keptItsPlace: true };
+    return { text: request.text, imageIds: request.imageIds, keptItsPlace: false };
   }
 
   /** Only Claude Code's transcript tells whether the agent recorded the message that started a turn. */
@@ -2831,14 +2861,19 @@ export class ConversationService {
 
   /**
    * The canvas MCP server died with the previous host, so no question a waiting turn left open can still be
-   * answered as its tool result; only one whose answer was always to be the next message still asks for one.
+   * answered as its tool result; only one whose answer was always to be the next message still asks for one, and one
+   * whose turn this host takes up again stays open for the answer to go to that turn as its user's next message.
    */
-  private cancelAsksOrphanedByRestart() {
-    this.store
-      .listCanvasItemsWithStatus("waiting")
-      .filter((item): item is AskItem => item.kind === "ask")
-      .filter((item) => this.store.findConversation(item.conversationId)?.askMode !== "next-message")
-      .forEach((item) => this.store.saveCanvasItem({ ...item, status: "cancelled" }));
+  private withdrawAsksOrphanedByRestart(turnsBeingResumed: string[]) {
+    const orphanedConversations = new Set(
+      this.store
+        .listCanvasItemsWithStatus("waiting")
+        .filter((item): item is AskItem => item.kind === "ask")
+        .filter((item) => !turnsBeingResumed.includes(item.conversationId))
+        .filter((item) => this.store.findConversation(item.conversationId)?.askMode !== "next-message")
+        .map(({ conversationId }) => conversationId),
+    );
+    orphanedConversations.forEach((conversationId) => this.withdrawWaitingAsks(conversationId));
   }
 
   /** The queue is kept in the database too, so messages waiting for the agent survive a host restart or crash. */
@@ -3108,6 +3143,17 @@ interface TurnRequest {
   text: string;
   firstText: string;
   imageIds: string[];
+  /** When the message that started the turn went out, so what the turn was waiting on can be told from what an earlier one left behind. */
+  beganAt: number;
+}
+
+/**
+ * Whether the turn a stop cut short was itself waiting on an answer of the user's: its question went out after the turn
+ * began, and its answer was still to come back as the tool's result. A question an earlier turn left open, or one whose
+ * answer always comes as the next message, holds nothing up.
+ */
+export function turnWaitedOnAnswer({ askMode, askedAt, turnBeganAt }: { askMode: AskMode; askedAt: number | null; turnBeganAt: number }) {
+  return askMode === "wait" && askedAt !== null && askedAt >= turnBeganAt;
 }
 
 /** opencode 2 marks what a subagent does, reported through its conversation's session, with the subagent's own session. */
@@ -3211,10 +3257,15 @@ export function agentFinishedItsTurn(events: StoredEvent[]): boolean {
 
 function turnRequestWithin(events: StoredEvent[], wholeLog: StoredEvent[]): TurnRequest | null {
   const returned = returnedSteerSeqs(wholeLog);
-  const messages = events.flatMap(({ seq, event }) => (event.type === "user-message" && !returned.has(seq) ? [event] : []));
+  const messages = events.flatMap(({ seq, at, event }) => (event.type === "user-message" && !returned.has(seq) ? [{ at, ...event }] : []));
   const [first] = messages;
   if (!first) return null;
-  return { text: messages.map(({ text }) => text).join("\n\n"), firstText: first.text, imageIds: messages.flatMap(({ imageIds = [] }) => imageIds) };
+  return {
+    text: messages.map(({ text }) => text).join("\n\n"),
+    firstText: first.text,
+    imageIds: messages.flatMap(({ imageIds = [] }) => imageIds),
+    beganAt: first.at,
+  };
 }
 
 interface SteeringState {

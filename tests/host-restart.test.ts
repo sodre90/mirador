@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
-import { ConversationService, agentFinishedItsTurn, lastTurnRequest, openTurnTheAgentWorkedOn, unfinishedTurnRequest } from "../host/conversations.ts";
+import { ConversationService, agentFinishedItsTurn, lastTurnRequest, openTurnTheAgentWorkedOn, turnWaitedOnAnswer, unfinishedTurnRequest } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { HostRestart, hostCommandLine, relaunchOf, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "../host/restart.ts";
@@ -147,7 +147,7 @@ describe("a host continuing turns the previous one stopped for a restart", () =>
 
   test("re-sends an open turn's own message, not the previous turn's", () => {
     const events = [said("What colour is the sky?"), worked, ended, said("Fix the build")].map((event, index) => ({ seq: index + 1, at: index, event }));
-    expect(unfinishedTurnRequest(events)).toEqual({ text: "Fix the build", firstText: "Fix the build", imageIds: [] });
+    expect(unfinishedTurnRequest(events)).toEqual({ text: "Fix the build", firstText: "Fix the build", imageIds: [], beganAt: 3 });
   });
 
   test("still continues a turn the stop really cut short", () => {
@@ -248,6 +248,7 @@ describe("questions still waiting when a new host starts", () => {
 
   test("the question a blocked tool call waited on is withdrawn, as the host that was waiting on it is gone", () => {
     const { store, conversations } = hostWithWaitingAsks();
+    conversations.resumeAfterRestart([]);
     expect(store.findCanvasItem("ask-on-waiting-turn")?.status).toBe("cancelled");
     expect(conversations.get("blocked-turn").waitingFor).toBeNull();
     void conversations.shutdown();
@@ -255,10 +256,34 @@ describe("questions still waiting when a new host starts", () => {
 
   test("the question whose answer comes as the next message goes on needing one", () => {
     const { store, conversations } = hostWithWaitingAsks();
+    conversations.resumeAfterRestart([]);
     expect(store.findCanvasItem("ask-for-next-message")?.status).toBe("waiting");
     expect(conversations.get("next-message-turn").waitingFor).toBe("question");
     expect(conversations.get("next-message-turn").pendingRequest).not.toBeNull();
     void conversations.shutdown();
+  });
+
+  test("the question of a turn the new host takes up again stays open for the answer to go to that turn", () => {
+    const { store, conversations } = hostWithWaitingAsks();
+    conversations.resumeAfterRestart(["blocked-turn"]);
+    expect(store.findCanvasItem("ask-on-waiting-turn")?.status).toBe("waiting");
+    expect(conversations.get("blocked-turn").waitingFor).toBe("question");
+    void conversations.shutdown();
+  });
+});
+
+describe("turnWaitedOnAnswer", () => {
+  const asked = (createdAt: number) => ({ askMode: "wait" as AskMode, askedAt: createdAt, turnBeganAt: 1_000 });
+
+  test("is the question the turn was blocked on: asked after it began, and answered as the tool's result", () => {
+    expect(turnWaitedOnAnswer(asked(1_500))).toBe(true);
+    expect(turnWaitedOnAnswer({ ...asked(1_500), askMode: "next-message" })).toBe(false);
+  });
+
+  test("is none a question an earlier turn left open, or none when nothing waits", () => {
+    expect(turnWaitedOnAnswer(asked(900))).toBe(false);
+    expect(turnWaitedOnAnswer(asked(1_000))).toBe(true);
+    expect(turnWaitedOnAnswer({ ...asked(1_500), askedAt: null })).toBe(false);
   });
 });
 
@@ -395,12 +420,12 @@ describe("lastTurnRequest", () => {
 
   test("is what the user asked in the turn a restart stopped: the message that started it and those that joined it", () => {
     const events = stored([said("first"), { type: "turn-end", stopReason: "end_turn" }, said("Fix the build", ["img-1"]), said("and the docs"), cancelled]);
-    expect(lastTurnRequest(events)).toEqual({ text: "Fix the build\n\nand the docs", firstText: "Fix the build", imageIds: ["img-1"] });
+    expect(lastTurnRequest(events)).toEqual({ text: "Fix the build\n\nand the docs", firstText: "Fix the build", imageIds: ["img-1"], beganAt: 2 });
   });
 
   test("leaves out a message that joined the turn but went out again after it, as the agent never answered it", () => {
     const events = stored([said("Fix the build"), said("and the docs"), cancelled, { type: "steered-messages-returned", seqs: [2] }]);
-    expect(lastTurnRequest(events)).toEqual({ text: "Fix the build", firstText: "Fix the build", imageIds: [] });
+    expect(lastTurnRequest(events)).toEqual({ text: "Fix the build", firstText: "Fix the build", imageIds: [], beganAt: 0 });
   });
 
   test("counts a turn that failed as ended, and finds nothing in a turn without a message", () => {
