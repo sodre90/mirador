@@ -59,7 +59,7 @@ import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
 import type { ConversationChoices, ConversationReply, RanOn, StartedConversation } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
-import { currentActivity, OpenToolCalls } from "./activity.ts";
+import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { pendingAsk, pendingPermission } from "./pending-requests.ts";
 import { launchEditor } from "./editor.ts";
@@ -236,6 +236,11 @@ interface TurnInProgress {
   toolCallsAt: number[];
   /** What kept queued messages out of the turn when the host last tried to steer them in, as the host log says it. */
   queuedMessagesKeptOutBy?: string | null;
+  /**
+   * Queued messages came before the agent had taken the turn: its session was still opening, or the agent had the
+   * turn's prompt but not yet queued it. Its next step shows it holds the turn, so they are tried again then.
+   */
+  steersAtAgentsNextStep?: boolean;
 }
 
 /**
@@ -2561,9 +2566,16 @@ export class ConversationService {
     const runtime = this.runtime(conversationId);
     if (!runtime.running) return;
     const activityBefore = this.activity(conversationId);
-    const finishedOne = runtime.openToolCalls.follow(update, isSubagentReport(update));
+    const madeBySubagent = isSubagentReport(update);
+    const finishedOne = runtime.openToolCalls.follow(update, madeBySubagent);
     if (!isDeepStrictEqual(this.activity(conversationId), activityBefore)) this.publish(this.get(conversationId));
-    if (finishedOne) this.steerQueuedMessages(conversationId);
+    if (finishedOne || this.tookTurnSinceSteerCameEarly(runtime.turn, update, madeBySubagent)) this.steerQueuedMessages(conversationId);
+  }
+
+  private tookTurnSinceSteerCameEarly(turn: TurnInProgress | undefined, update: acp.SessionUpdate, madeBySubagent: boolean) {
+    if (!turn?.steersAtAgentsNextStep || madeBySubagent || !isAgentsNextStep(update)) return false;
+    turn.steersAtAgentsNextStep = false;
+    return true;
   }
 
   private steerQueuedMessages(conversationId: string) {
@@ -2582,8 +2594,9 @@ export class ConversationService {
     const { harness } = runtime;
     const sessionId = this.get(conversationId).acpSessionId;
     if (!runtime.running) return;
+    const hasSession = harness !== undefined && sessionId !== null;
     const keptOutBy = whatKeepsQueuedMessagesOut({
-      hasSession: harness !== undefined && sessionId !== null,
+      hasSession,
       ownToolCall: this.oldestOwnToolCall(runtime),
       queueHold: this.whatHoldsQueue(runtime),
       agentSteers: (await harness?.canSteer()) ?? false,
@@ -2591,13 +2604,14 @@ export class ConversationService {
     const messages = queuedBeforeSessionChange(runtime.queuedMessages).filter((message) => !message.afterTurn);
     this.logWhatKeepsQueuedMessagesOut(conversationId, runtime, messages.length > 0 ? keptOutBy : null);
     const [first, ...rest] = messages;
+    const { turn } = runtime;
+    if (!hasSession && first && turn) turn.steersAtAgentsNextStep = true;
     if (keptOutBy !== null || !harness || !sessionId || !first) return;
     this.setQueue(conversationId, runtime, runtime.queuedMessages.filter((message) => !messages.includes(message)));
     this.publish(this.get(conversationId));
     const notes = this.notesForAgent(conversationId);
     const text = messages.map((message) => message.text).join("\n\n");
     const imageIds = messages.flatMap((message) => message.imageIds);
-    const { turn } = runtime;
     const steeredAt = Date.now();
     this.showHeldBackReply(conversationId);
     runtime.steerInFlight = true;
@@ -2607,6 +2621,7 @@ export class ConversationService {
     runtime.steerInFlight = false;
     if (outcome !== "injected") {
       console.error(`could not steer queued messages into the turn of conversation ${conversationId}, so they go back to the queue: ${outcome}`);
+      if (outcome === "promptRequired" && turn && !turn.ended) turn.steersAtAgentsNextStep = true;
       this.setQueue(conversationId, runtime, [...messages, ...runtime.queuedMessages]);
       this.publish(this.get(conversationId));
       if (!runtime.running) this.sendNextQueuedMessage(conversationId);

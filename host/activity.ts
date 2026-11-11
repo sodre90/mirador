@@ -5,10 +5,11 @@ import { isInformational, isServerToolCallId } from "../shared/timeline.ts";
 const hasFinished = (status: acp.ToolCallStatus | null | undefined) => status === "completed" || status === "failed";
 
 /**
- * What the agent writes or starts next. The API answers a server tool call before anything else in the reply that made
- * it, so one still open by then never gets its answer: its reply was cut off, or the API skipped it.
+ * What the agent writes or starts next: the model at work on the turn, which the agent must hold by then. The API
+ * answers a server tool call before anything else in the reply that made it, so one still open by then never gets its
+ * answer: its reply was cut off, or the API skipped it.
  */
-const isAgentsNextStep = (update: acp.SessionUpdate) =>
+export const isAgentsNextStep = (update: acp.SessionUpdate) =>
   update.sessionUpdate === "tool_call" ||
   ((update.sessionUpdate === "agent_message_chunk" || update.sessionUpdate === "agent_thought_chunk") && !isInformational(update._meta));
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
-import { currentActivity, OpenToolCalls } from "../host/activity.ts";
+import { currentActivity, isAgentsNextStep, OpenToolCalls } from "../host/activity.ts";
 
 const started = (toolCallId: string, title: string): acp.SessionUpdate => ({ sessionUpdate: "tool_call", toolCallId, title, status: "in_progress" });
 const updated = (toolCallId: string, change: Partial<acp.ToolCallUpdate>): acp.SessionUpdate => ({ sessionUpdate: "tool_call_update", toolCallId, ...change });
@@ -132,6 +132,23 @@ describe("OpenToolCalls", () => {
       expect(open.follow(chunk("agent_message_chunk"))).toBe(false);
       expect(open.ids()).toEqual(["srvtoolu_of_subagent"]);
     });
+  });
+});
+
+describe("isAgentsNextStep", () => {
+  const text = { type: "text" as const, text: "Next," };
+
+  test("is a tool call the agent starts, or a reply or thought it writes", () => {
+    expect(isAgentsNextStep(started("read", "Read a.ts"))).toBe(true);
+    expect(isAgentsNextStep({ sessionUpdate: "agent_message_chunk", content: text })).toBe(true);
+    expect(isAgentsNextStep({ sessionUpdate: "agent_thought_chunk", content: text })).toBe(true);
+  });
+
+  test("is not a notice the agent writes itself, a tool call's update, a plan or the user's own message", () => {
+    expect(isAgentsNextStep({ sessionUpdate: "agent_message_chunk", content: text, _meta: { claudeCode: { kind: "informational" } } })).toBe(false);
+    expect(isAgentsNextStep(updated("read", { status: "completed" }))).toBe(false);
+    expect(isAgentsNextStep({ sessionUpdate: "plan", entries: [] })).toBe(false);
+    expect(isAgentsNextStep({ sessionUpdate: "user_message_chunk", content: text })).toBe(false);
   });
 });
 

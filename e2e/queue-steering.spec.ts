@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, eventsInOrderOn, lastAgentMessage, openSettings, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
+import { addWorkspace, createProfile, eventsInOrderOn, lastAgentMessage, openSettings, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -15,6 +15,8 @@ test.describe.configure({ mode: "serial" });
 
 // Claude Code refuses a foreground `sleep 30` in the command itself, so the long tool call runs a script that waits.
 const SLOW_SCRIPT = "wait-then-print.sh";
+/** The pre-launch command of a profile holds its agent back this long, so a conversation on it has no agent session yet. */
+const AGENT_STARTS_AFTER_S = 5;
 
 test.beforeAll(async () => {
   api.limited = false;
@@ -122,4 +124,28 @@ test("a message sent while Claude Code writes, with no tool running, joins the t
   });
 
   expect(eventsInOrder).toEqual([story("Ada"), stopWith("PINEAPPLE"), "turn-end", story("Bo"), stopWith("MANGO"), "turn-end"]);
+});
+
+test("a message sent to join the turn before the agent has taken it joins once the agent starts writing, rather than waiting for the turn to end", async ({ page }) => {
+  const eventsInOrder = eventsInOrderOn(page);
+  const writing = "KEEP WRITING Here is the first part.";
+  const joining = "Reply with the word JOINED.";
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const profiles = await createProfile(page, "starts slowly", "", `sleep ${AGENT_STARTS_AFTER_S}`);
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "starts slowly · Claude Code" });
+  await startConversation(page, { withModels: false });
+
+  await sendMessage(page, writing);
+  const composer = page.locator(".composer:visible textarea");
+  await composer.fill(joining);
+  await composer.press("Enter");
+  await expect(page.locator(".queued-delivery")).toHaveText(["joins the turn"]);
+  await expect.poll(keptOutLines, { message: "the message came while the agent's session was still opening" }).toContainEqual(expect.stringMatching(/: the conversation has no agent session$/));
+
+  await expect(page.locator(".timeline:visible .message.user"), "the message joined the turn once the agent wrote").toHaveText([writing, joining], { timeout: 30_000 });
+  await waitForTurnToEnd(page);
+  await expect(lastAgentMessage(page)).toHaveText(`Answered: ${joining}`);
+  expect(eventsInOrder).toEqual([writing, joining, "turn-end"]);
 });
