@@ -30,7 +30,6 @@ import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
 import { computerName } from "./machine-name.ts";
 import type { PushRegistration, PushRelaySetting } from "../shared/push.ts";
-import { APP_TOOLS } from "./canvas/tool-names.ts";
 import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checklists.ts";
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
@@ -42,8 +41,6 @@ const TYPED_IN_WORKSPACE_LIMIT = 100;
 /** A host made before hosts kept track was offered these when it was created, so one the user deleted since stays deleted. */
 const TEMPLATES_OFFERED_BEFORE_TRACKING = ["default-deep-pr-review"];
 
-/** The app tools as Claude Code names them in a tool call's metadata, as an SQL list. */
-const APP_TOOL_NAMES = `(${APP_TOOLS.map((tool) => `'mcp__canvas__${tool}'`).join(", ")})`;
 const deviceColumns = "id, name, joined_at AS joinedAt, last_seen_at AS lastSeenAt";
 const joinRequestColumns = `id, secret_hash AS secretHash, name, from_address AS fromAddress, tailscale_user AS tailscaleUser,
   authority_fingerprint AS authorityFingerprint, commitment, machine_nonce AS machineNonce, requester_nonce AS requesterNonce, answer, expires_at AS expiresAt`;
@@ -110,12 +107,9 @@ const schema = `
   CREATE TABLE IF NOT EXISTS terminal_scrollback (
     terminal_id TEXT PRIMARY KEY, tab_id TEXT NOT NULL REFERENCES terminal_tabs(id) ON DELETE CASCADE, text TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS open_apps (
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
-    PRIMARY KEY (folder_id, app));
-  CREATE TABLE IF NOT EXISTS app_conversations (
-    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL,
-    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-    PRIMARY KEY (folder_id, app, conversation_id));
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, app TEXT NOT NULL,
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, file TEXT NOT NULL,
+    PRIMARY KEY (conversation_id, app));
   CREATE TABLE IF NOT EXISTS app_storage (
     workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
     PRIMARY KEY (folder_id, app, key));
@@ -358,16 +352,15 @@ export class Store {
   private bringUpToDate() {
     const hadPromptTemplates = this.hasTable("prompt_templates");
     const keptTrackOfOfferedTemplates = this.hasTable("offered_prompt_templates");
-    const keptTrackOfAppConversations = this.hasTable("app_conversations");
     this.db.run(schema);
     const hasTurnTimes = this.hasColumn("conversations", "last_message_at");
     this.addMissingColumns();
     this.keyAppsByFolder();
+    this.keyOpenAppsByConversation();
     if (!hasTurnTimes) this.fillTurnTimesFromEvents();
     this.shareSidebarOrder();
     this.handSavedChecklistsToThePlugin();
     this.handSavedWalkthroughsToThePlugin();
-    if (!keptTrackOfAppConversations) this.noteAppsUsedBeforeTracking();
     if (hadPromptTemplates && !keptTrackOfOfferedTemplates) this.markTemplatesOffered(TEMPLATES_OFFERED_BEFORE_TRACKING);
     this.offerNewDefaultTemplates();
     this.forgetMarksOfDismissedDelegations();
@@ -388,24 +381,6 @@ export class Store {
       });
   }
 
-  /**
-   * Each conversation whose Claude Code agent called an app tool before Mirador kept track, for the app it named, or
-   * every app open in its workspace when it named none. Other agents' tool calls don't record the tool's name.
-   */
-  private noteAppsUsedBeforeTracking() {
-    this.db.run(`
-      INSERT OR IGNORE INTO app_conversations (workspace_id, folder_id, app, conversation_id)
-      SELECT DISTINCT c.workspace_id, c.workspace_id, o.app, c.id
-      FROM events e
-      JOIN conversations c ON c.id = e.conversation_id
-      JOIN open_apps o ON o.folder_id = c.workspace_id
-      WHERE json_extract(e.event, '$.type') = 'acp'
-        AND json_extract(e.event, '$.update.sessionUpdate') = 'tool_call'
-        AND json_extract(e.event, '$.update._meta.claudeCode.toolName') IN ${APP_TOOL_NAMES}
-        AND coalesce(json_extract(e.event, '$.update.rawInput.app'), o.app) = o.app
-    `);
-  }
-
   /** Apps' documents were kept per workspace; they are kept per folder now, a worktree's as well as a workspace's. */
   private keyAppsByFolder() {
     if (this.hasColumn("open_apps", "folder_id")) return;
@@ -413,7 +388,7 @@ export class Store {
       { name: "open_apps", columns: "app TEXT NOT NULL, file TEXT NOT NULL", copied: "app, file", key: "folder_id, app" },
       { name: "app_conversations", columns: "app TEXT NOT NULL, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE", copied: "app, conversation_id", key: "folder_id, app, conversation_id" },
       { name: "app_storage", columns: "app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL", copied: "app, key, value", key: "folder_id, app, key" },
-    ];
+    ].filter(({ name }) => this.hasTable(name));
     for (const { name, columns, copied, key } of tables) {
       this.db.run(`
         CREATE TABLE ${name}_by_folder (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, ${columns}, PRIMARY KEY (${key}));
@@ -422,6 +397,27 @@ export class Store {
         ALTER TABLE ${name}_by_folder RENAME TO ${name};
       `);
     }
+  }
+
+  /**
+   * An app was open once per folder, on one file, with a note of which conversations showed it; each conversation is
+   * open on a document of its own now, so those notes become the conversations' rows. An open no conversation showed
+   * wasn't seen anywhere, and one from before Mirador noted who showed it starts with nothing open.
+   */
+  private keyOpenAppsByConversation() {
+    if (this.hasColumn("open_apps", "conversation_id")) return;
+    const shownIn = this.hasTable("app_conversations") ? "JOIN app_conversations a ON a.folder_id = o.folder_id AND a.app = o.app" : "WHERE 0";
+    this.db.run(`
+      CREATE TABLE open_apps_by_conversation (
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
+        PRIMARY KEY (conversation_id, app));
+      INSERT INTO open_apps_by_conversation (conversation_id, workspace_id, folder_id, app, file)
+        SELECT a.conversation_id, o.workspace_id, o.folder_id, o.app, o.file FROM open_apps o ${shownIn};
+      DROP TABLE open_apps;
+      ALTER TABLE open_apps_by_conversation RENAME TO open_apps;
+      ${this.hasTable("app_conversations") ? "DROP TABLE app_conversations;" : ""}
+    `);
   }
 
   private markTemplatesOffered(ids: string[]) {
@@ -525,27 +521,26 @@ export class Store {
     this.db.query("DELETE FROM workspaces WHERE id = ?").run(id);
   }
 
-  listOpenApps(): { workspaceId: string; app: string; file: string }[] {
-    return this.db.query("SELECT folder_id AS workspaceId, app, file FROM open_apps").all() as { workspaceId: string; app: string; file: string }[];
+  /** What each conversation had open in each app, which Mirador opens again as it starts. */
+  listOpenApps(): { conversationId: string; workspaceId: string; app: string; file: string }[] {
+    return this.db
+      .query("SELECT conversation_id AS conversationId, folder_id AS workspaceId, app, file FROM open_apps")
+      .all() as { conversationId: string; workspaceId: string; app: string; file: string }[];
   }
 
   forgetOpenApps(app: string) {
     this.db.query("DELETE FROM open_apps WHERE app = ?").run(app);
-    this.db.query("DELETE FROM app_conversations WHERE app = ?").run(app);
+  }
+
+  /** Forgets one conversation's open app, as when it can't be opened again: its folder or file is gone. */
+  forgetOpenApp(conversationId: string, app: string) {
+    this.db.query("DELETE FROM open_apps WHERE conversation_id = ? AND app = ?").run(conversationId, app);
   }
 
   /** Forgets an app's state in a folder whose worktree is gone, which its workspace's deletion no longer carries away. */
   forgetFolder(folderId: string) {
     this.db.query("DELETE FROM open_apps WHERE folder_id = ?").run(folderId);
     this.db.query("DELETE FROM app_storage WHERE folder_id = ?").run(folderId);
-  }
-
-  listAppConversations(): { workspaceId: string; app: string; conversationId: string }[] {
-    return this.db.query("SELECT folder_id AS workspaceId, app, conversation_id AS conversationId FROM app_conversations").all() as {
-      workspaceId: string;
-      app: string;
-      conversationId: string;
-    }[];
   }
 
   /** The values the user chose, by plugin and setting. */
@@ -641,16 +636,11 @@ export class Store {
     }
   }
 
-  saveAppConversation(folderId: string, app: string, conversationId: string) {
+  /** What a conversation has open in an app, which Mirador opens again for it as it starts. */
+  saveOpenApp(conversationId: string, workspaceId: string, folderId: string, app: string, file: string) {
     this.db
-      .query("INSERT OR IGNORE INTO app_conversations (workspace_id, folder_id, app, conversation_id) VALUES (?, ?, ?, ?)")
-      .run(this.workspaceOfFolder(folderId), folderId, app, conversationId);
-  }
-
-  saveOpenApp(folderId: string, app: string, file: string) {
-    this.db
-      .query("INSERT INTO open_apps (workspace_id, folder_id, app, file) VALUES (?, ?, ?, ?) ON CONFLICT (folder_id, app) DO UPDATE SET file = excluded.file")
-      .run(this.workspaceOfFolder(folderId), folderId, app, file);
+      .query("INSERT INTO open_apps (conversation_id, workspace_id, folder_id, app, file) VALUES (?, ?, ?, ?, ?) ON CONFLICT (conversation_id, app) DO UPDATE SET file = excluded.file, folder_id = excluded.folder_id, workspace_id = excluded.workspace_id")
+      .run(conversationId, workspaceId, folderId, app, file);
   }
 
   appStorage(folderId: string, app: string): AppStorageItems {

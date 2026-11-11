@@ -44,7 +44,7 @@ export const canvas: Messages["canvas"] = {
     clear: "Kiürítés",
     pointAndAsk: "Mutass és kérdezz",
     findOnPage: "Keresés ezen az oldalon",
-    showApp: (app) => `Megjelenítés: ${app}`,
+    showApp: (app, file) => `Megjelenítés: ${app} – ${file}`,
     agentsPlan: "Az ágens terve",
     closeChecklist: "Az ellenőrzőlista bezárása",
     dismissChecklist: "Az ellenőrzőlista elvetése",

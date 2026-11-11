@@ -82,7 +82,7 @@ function hostWithAWorktreeConversation(uncommittedFiles: number) {
   const worktree = worktreeAt("wt1");
   const { position: _, ...conversation } = store.findConversation("c1")!;
   store.insertConversation({ ...conversation, id: "c2", worktree });
-  store.saveOpenApp("wt1", "counter", "counter.json");
+  store.saveOpenApp("c2", "w1", "wt1", "counter", "counter.json");
   store.saveAppStorageItem("wt1", "counter", "zoom", "2");
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const files = { deleteConversation: () => {} };
@@ -112,6 +112,6 @@ test("keeps a worktree's app state when uncommitted files keep the worktree", as
   await Bun.sleep(10);
 
   expect(forgotten).toEqual([]);
-  expect(store.listOpenApps()).toHaveLength(1);
+  expect(store.listOpenApps()).toEqual([]);
   expect(store.appStorage("wt1", "counter")).toEqual({ zoom: "2" });
 });

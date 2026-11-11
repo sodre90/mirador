@@ -46,7 +46,7 @@ export const canvas: Messages["canvas"] = {
     clear: "Borrar",
     pointAndAsk: "Señala y pregunta",
     findOnPage: "Buscar en esta página",
-    showApp: (app) => `Mostrar ${app}`,
+    showApp: (app, file) => `Mostrar ${app}: ${file}`,
     agentsPlan: "Plan del agente",
     closeChecklist: "Cerrar la checklist",
     dismissChecklist: "Descartar la checklist",

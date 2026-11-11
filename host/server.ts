@@ -677,13 +677,19 @@ export function startServer(services: HostServices) {
   const appRefusal = (error: unknown) =>
     new Response(errorMessage(error), { status: error instanceof AppFileRefused ? error.status : error instanceof AppProblem ? 400 : 500 });
 
-  /** A file of the workspace an open app is in, for the app's view in the signed-in page. */
+  /** The document an app's view shows, which its request names: two conversations of a workspace can have the app open on different files. */
+  const documentAskedFor = (request: { url: string }) => {
+    const documentId = new URL(request.url).searchParams.get("document");
+    if (documentId === null) throw new AppFileRefused(400, "Say which document of the app the view shows.");
+    return documentId;
+  };
+
+  /** A file of the workspace an open document is in, for its view in the signed-in page. */
   function serveAppFile(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/file">) {
     const refused = refusedPageRequest(request);
     if (refused) return refused;
-    const { workspaceId, app } = request.params;
     try {
-      const file = Bun.file(apps.fileForView(workspaceId, app, new URL(request.url).searchParams.get("path")));
+      const file = Bun.file(apps.fileForView(documentAskedFor(request), new URL(request.url).searchParams.get("path")));
       return new Response(file, { headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
     } catch (error) {
       return appRefusal(error);
@@ -694,33 +700,37 @@ export function startServer(services: HostServices) {
   function grantAppMedia(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/media">) {
     const refused = refusedPageRequest(request);
     if (refused) return refused;
-    const { workspaceId, app } = request.params;
     try {
-      return Response.json(apps.mediaGrant(workspaceId, app, new URL(request.url).searchParams.get("path")));
+      return Response.json(apps.mediaGrant(documentAskedFor(request), new URL(request.url).searchParams.get("path")));
     } catch (error) {
       return appRefusal(error);
     }
   }
 
-  /** The files of the workspace an open app is in, for the app's view to list. */
+  /** The files of the workspace an open document is in, for its view to list. */
   async function listAppFiles(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/files">) {
     const refused = refusedPageRequest(request);
     if (refused) return refused;
-    const { workspaceId, app } = request.params;
     try {
-      return Response.json(await apps.workspaceFiles(workspaceId, app), { headers: { "Cache-Control": "no-store" } });
+      return Response.json(await apps.workspaceFiles(documentAskedFor(request)), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return appRefusal(error);
     }
   }
 
-  /** Opens an app on another file of its workspace, as its view asks; the pages then get its new document as they get every change. */
+  /**
+   * Opens a conversation's app on another file of its workspace, as its view asks, moving that conversation's document
+   * alone; the pages then get its new document as they get every change.
+   */
   async function openAppFromView(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/open">) {
     const refused = refusedPageRequest(request);
     if (refused) return refused;
-    const { workspaceId, app } = request.params;
+    const { app } = request.params;
+    const search = new URL(request.url).searchParams;
+    const conversationId = search.get("conversation");
+    if (conversationId === null) return appRefusal(new AppFileRefused(400, "Say which conversation the view belongs to."));
     try {
-      await apps.openFromView(workspaceId, app, new URL(request.url).searchParams.get("file"));
+      await apps.openFromView(conversationId, app, search.get("file"));
       return new Response(null, { status: 204 });
     } catch (error) {
       return appRefusal(error);
@@ -812,6 +822,7 @@ export function startServer(services: HostServices) {
   function deleteConversation(conversationId: string, worktree: { keepsUncommittedWork?: boolean } = {}) {
     canvas.withdrawWaitingAsks(conversationId);
     terminals.closeConversation(conversationId);
+    apps.forgetConversation(conversationId);
     conversations.delete(conversationId, worktree);
     mcp.forget(conversationId);
   }
@@ -1296,44 +1307,45 @@ export function startServer(services: HostServices) {
       case "ask.answer":
         return canvas.answer(message.itemId, message.label, message.note, message.answers);
       case "app.subscribe": {
-        socket.data.appSubscriptions.add(appKey(message));
+        socket.data.appSubscriptions.add(message.documentId);
+        socket.data.appStorageSubscriptions.add(appKey(message));
         hub.send(socket, { type: "app.storage", workspaceId: message.workspaceId, app: message.app, items: appStorage.items(message.workspaceId, message.app) });
-        const state = apps.state(message.workspaceId, message.app);
+        const state = apps.state(message.documentId);
         if (state) hub.send(socket, { type: "app.state", state });
         return;
       }
       case "app.unsubscribe":
-        socket.data.appSubscriptions.delete(appKey(message));
+        socket.data.appSubscriptions.delete(message.documentId);
         return;
       case "app.apply":
         return void apps
-          .apply(message.workspaceId, message.app, message.op, { kind: "you" })
+          .applyFromView(message.documentId, message.op)
           .catch((error) => {
             console.warn(`${message.app}'s view applied an operation that failed: ${messageOf(error)}`);
             hub.send(socket, { type: "error", ...appFailure(error) });
           });
       case "app.use-in":
         try {
-          return apps.useIn(message.workspaceId, message.app, message.conversationId);
+          return apps.useIn(message.conversationId, message.documentId);
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       case "app.run":
         try {
-          return void apps.runFromView(message.workspaceId, message.app, message.task);
+          return void apps.runFromView(message.documentId, message.task);
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }
       case "app.open-file":
         return void Promise.resolve()
-          .then(() => apps.open(workingCopyIdOf(conversations.get(message.conversationId)), message.app, message.file, message.conversationId))
+          .then(() => apps.open(message.conversationId, message.app, message.file))
           .then(
             () => reply({ type: "app.file-opened", requestId: message.requestId, problem: null }),
             (error) => reply({ type: "app.file-opened", requestId: message.requestId, ...problemFieldsOf(error, messageOf(error)) }),
           );
       case "app.stop-task":
         try {
-          return apps.stopTask(message.workspaceId, message.app);
+          return apps.stopTask(message.documentId);
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }
@@ -1341,7 +1353,7 @@ export function startServer(services: HostServices) {
         const { workspaceId, app } = message;
         try {
           const items = appStorage.set(workspaceId, app, message.key, message.value);
-          return hub.publishWhere((each) => each.data.appSubscriptions.has(appKey(message)), { type: "app.storage", workspaceId, app, items });
+          return hub.publishAppStorage(workspaceId, app, items);
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }

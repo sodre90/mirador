@@ -13,7 +13,9 @@ const isNews = (item: CanvasItem) => !(item.kind === "ask" && item.status !== "w
 
 export function latestCanvasNews(items: CanvasItem[], openApps: OpenApp[], conversationId: string): CanvasNews | undefined {
   const fromItems = items.filter(isNews).map(({ id, createdAt }) => ({ key: id, at: createdAt }));
-  const fromApps = openApps.flatMap(({ workspaceId, app, shownBy }) => (shownBy?.conversationId === conversationId ? [{ key: `${workspaceId}:${app}@${shownBy.at}`, at: shownBy.at }] : []));
+  const fromApps = openApps.flatMap(({ conversationId: shownIn, workspaceId, app, shownAt }) =>
+    shownIn === conversationId && shownAt !== undefined ? [{ key: `${workspaceId}:${app}@${shownAt}`, at: shownAt }] : [],
+  );
   return [...fromItems, ...fromApps].toSorted((a, b) => b.at - a.at)[0];
 }
 

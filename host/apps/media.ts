@@ -10,12 +10,12 @@ interface Grant {
 
 /**
  * Addresses on the canvas assets that stream one file each, for an app's view, whose sandboxed page has no network of
- * its own. Anyone holding one can read that file, so it is unguessable and ends when the app closes.
+ * its own. Anyone holding one can read that file, so it is unguessable and ends when its document closes.
  */
 export class AppMediaGrants {
   private readonly grants = new Map<string, Grant>();
 
-  /** The same file keeps its address while the app stays open; its version changes when the file is written again, as after a render. */
+  /** The same file keeps its address while its document stays open; its version changes when the file is written again, as after a render. */
   grant(key: string, file: string): AppMediaGrant {
     const token = [...this.grants].find(([, grant]) => grant.key === key && grant.file === file)?.[0] ?? this.granted({ key, file });
     return { path: `${APP_MEDIA_PATH}${token}/${encodeURIComponent(basename(file))}?v=${Math.round(statSync(file).mtimeMs)}` };

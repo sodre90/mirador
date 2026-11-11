@@ -700,9 +700,9 @@ const pluginTab = (plugin: string): PluginTab => `tab:${plugin}`;
 
 /** The apps open in the conversation's workspace, with what the panel needs to show them. */
 export interface WorkspaceApps {
-  /** Those the conversation uses, each with its tab. */
+  /** Those this conversation has open, each with its tab: one document per app. */
   open: OpenApp[];
-  /** Those only other conversations of the workspace use, which the user can add here. */
+  /** The documents only other conversations of the workspace have open, which the user can open here too. */
   elsewhere: OpenApp[];
   installed: InstalledApp[];
   documents: Record<string, AppDocumentState>;
@@ -710,26 +710,24 @@ export interface WorkspaceApps {
 
 const openedDocument = ({ app, file }: OpenApp) => `${app}:${file}`;
 
-/** A document, and the latest time this conversation's agent opened it or ran one of its tasks, if it was the last to: either shows its tab again. */
-const openingsHere = (conversationId: string) => (app: OpenApp) =>
-  app.shownBy?.conversationId === conversationId ? [openedDocument(app), `${openedDocument(app)}@${app.shownBy.at}`] : [openedDocument(app)];
+/** A document, and the latest time this conversation's agent opened it or ran one of its tasks, if it did: either shows its tab again. */
+const openingsHere = (app: OpenApp) => (app.shownAt === undefined ? [openedDocument(app)] : [openedDocument(app), `${openedDocument(app)}@${app.shownAt}`]);
 
 /** The app documents each conversation's canvas last saw open, kept while the panel is made again for another conversation. */
 const seenOpenApps = new Map<string, Set<string>>();
 
 /**
- * Opens an app's tab when the app opens in the workspace, or opens another file, or this conversation's agent opens it
- * again or runs one of its tasks, as app_open and app_run say the user will see it, but not for a file the user picked in the app's view: at once while the panel is up, or when the user comes back
- * to the conversation, its canvas kept hidden or made again. A question the agent waits on stays in front: an app opened
- * meanwhile comes forward once it's answered.
+ * Opens an app's tab when this conversation opens the app, opens another file, or its agent opens it again or runs one of
+ * its tasks, as app_open and app_run say the user will see it, but not for a file the user picked in the app's view: at
+ * once while the panel is up, or when the user comes back to the conversation, its canvas kept hidden or made again. A
+ * question the agent waits on stays in front: an app opened meanwhile comes forward once it's answered.
  */
 function useAppTabOnOpen(conversationId: string, open: OpenApp[], showTab: (tab: AppTab) => void, shown: boolean, questionWaiting: boolean) {
-  const openings = openingsHere(conversationId);
-  const openNow = open.flatMap(openings);
+  const openNow = open.flatMap(openingsHere);
   useEffect(() => {
     if (!shown || questionWaiting) return;
     const seen = seenOpenApps.get(conversationId) ?? new Set(openNow);
-    const opened = open.find((app) => !app.openedInView && openings(app).some((opening) => !seen.has(opening)));
+    const opened = open.find((app) => !app.openedInView && openingsHere(app).some((opening) => !seen.has(opening)));
     seenOpenApps.set(conversationId, new Set(openNow));
     if (opened) showTab(appTab(opened.app));
   }, [conversationId, openNow.join("\n"), shown, questionWaiting]);
@@ -888,10 +886,10 @@ export function CanvasPanel({
           ...pageExport.entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
         ]
       : []),
-    ...apps.elsewhere.map(({ workspaceId, app, title }, index) => ({
-      label: words.bar.showApp(title),
+    ...apps.elsewhere.map(({ workspaceId, app, documentId, title, file }, index) => ({
+      label: words.bar.showApp(title, file),
       separatorBefore: index === 0,
-      onChoose: () => connection.send({ type: "app.use-in", workspaceId, app, conversationId }),
+      onChoose: () => connection.send({ type: "app.use-in", workspaceId, app, documentId, conversationId }),
     })),
   ];
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
@@ -1105,7 +1103,7 @@ export function CanvasPanel({
           </ChecklistView>
         )}
         {shownApp && shownAppInstalled && (
-          <AppView key={`${shownApp.app} ${shownAppInstalled.viewPath}`} openApp={shownApp} installed={shownAppInstalled} documentState={apps.documents[appKey(shownApp)]} assetsOrigin={assetsOrigin} conversationId={conversationId} />
+          <AppView key={`${shownApp.app} ${shownAppInstalled.viewPath}`} openApp={shownApp} installed={shownAppInstalled} documentState={apps.documents[shownApp.documentId]} assetsOrigin={assetsOrigin} conversationId={conversationId} />
         )}
         {shownPluginTab && workspaceId && <ShownWorkspaceTab tab={shownPluginTab} viewPath={canvasViews[shownPluginTab.plugin]} assetsOrigin={assetsOrigin} workspaceId={workspaceId} conversationId={conversationId} />}
         {!tab && edit.shown && (

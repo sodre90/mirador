@@ -19,17 +19,25 @@ const checklist = (id: string, createdAt: number, dismissed = false): CanvasItem
   data: null,
   dismissed,
 });
-const app = (shownBy?: OpenApp["shownBy"]): OpenApp => ({ workspaceId: "w1", app: "media", title: "Media", file: "a.media.json", conversationIds: ["c1", "c2"], ...(shownBy && { shownBy }) });
+const app = (conversationId: string, shownAt?: number): OpenApp => ({
+  conversationId,
+  documentId: "d1",
+  workspaceId: "w1",
+  app: "media",
+  title: "Media",
+  file: "a.media.json",
+  ...(shownAt !== undefined && { shownAt }),
+});
 
 test("the latest news is the newest page, open question, checklist or app this conversation's agent opened", () => {
   expect(latestCanvasNews([page("p1", 10), question("q1", 20, "waiting")], [], "c1")).toEqual({ key: "q1", at: 20 });
-  expect(latestCanvasNews([page("p1", 10), checklist("t1", 30)], [app({ conversationId: "c1", at: 25 })], "c1")).toEqual({ key: "t1", at: 30 });
-  expect(latestCanvasNews([page("p1", 10)], [app({ conversationId: "c1", at: 25 })], "c1")).toEqual({ key: "w1:media@25", at: 25 });
+  expect(latestCanvasNews([page("p1", 10), checklist("t1", 30)], [app("c1", 25)], "c1")).toEqual({ key: "t1", at: 30 });
+  expect(latestCanvasNews([page("p1", 10)], [app("c1", 25)], "c1")).toEqual({ key: "w1:media@25", at: 25 });
 });
 
 test("an answered question, a dismissed checklist and an app another conversation's agent opened are no news here", () => {
-  expect(latestCanvasNews([page("p1", 10), question("q1", 20, "answered"), checklist("t1", 30, true)], [app({ conversationId: "c2", at: 40 }), app()], "c1")).toEqual({ key: "p1", at: 10 });
-  expect(latestCanvasNews([], [app({ conversationId: "c2", at: 40 })], "c1")).toBeUndefined();
+  expect(latestCanvasNews([page("p1", 10), question("q1", 20, "answered"), checklist("t1", 30, true)], [app("c2", 40), app("c1")], "c1")).toEqual({ key: "p1", at: 10 });
+  expect(latestCanvasNews([], [app("c2", 40)], "c1")).toBeUndefined();
 });
 
 test("news newer than the canvas had when it was hidden brings it back, however long ago, and the news it had never does", () => {

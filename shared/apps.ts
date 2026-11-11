@@ -160,27 +160,32 @@ export interface InstalledApp {
   viewPath: string;
 }
 
-/** An app open in a workspace, on one file of it. */
+/**
+ * One conversation's open app, on one document of its workspace: the app's tab shows there and nowhere else. Another
+ * conversation of the same workspace may have the same file open, which is the same document, or a file of its own.
+ */
 export interface OpenApp {
+  /** The conversation whose canvas shows this document in the app's tab. */
+  conversationId: string;
+  /** The open document, which every conversation holding this file shares. */
+  documentId: string;
   workspaceId: string;
   app: string;
   title: string;
   file: string;
-  /** The conversations whose agent used the app, or whose user added it; its tab shows only in those. */
-  conversationIds: string[];
-  /** The agent that last opened the app with app_open or ran one of its tasks with app_run, whose canvas brings its tab forward, even on the file already open. Missing from older hosts, and until an agent does either in this run of the host. */
-  shownBy?: AppShownBy;
-  /** The user picked the file in the app's view, which brings its tab forward in no other conversation. */
+  /**
+   * When this conversation's agent last opened the app with app_open or ran one of its tasks with app_run, whose canvas
+   * brings its tab forward, even on the file already open. Missing until it does, and for a document it took up itself.
+   */
+  shownAt?: number;
+  /** This conversation's user picked the file in the app's view, which brings no tab forward anywhere. */
   openedInView?: true;
 }
 
-export interface AppShownBy {
-  conversationId: string;
-  at: number;
-}
-
-/** What a view shows: sent to the pages that have the app open, on every change. */
+/** What a view shows: sent to the pages that have the document open, on every change. */
 export interface AppDocumentState {
+  /** The open document's id, which its views name it by. */
+  documentId: string;
   workspaceId: string;
   app: string;
   /** The document's file, relative to the workspace. Missing from hosts before plugin API 6. */
@@ -396,17 +401,33 @@ export const appKey = ({ workspaceId, app }: { workspaceId: string; app: string 
 
 const appPath = ({ workspaceId, app }: { workspaceId: string; app: string }) => `/workspaces/${encodeURIComponent(workspaceId)}/apps/${encodeURIComponent(app)}`;
 
+/**
+ * The document an app's view shows, which its page and device ask about. The host gives a document its id when it opens
+ * one, so two names of one file, as through a link, are the same document under either.
+ */
+export interface AppViewTarget {
+  workspaceId: string;
+  app: string;
+  documentId: string;
+}
+
+const documentParam = ({ documentId }: { documentId: string }) => `&document=${encodeURIComponent(documentId)}`;
+
 /** Where the host serves a file of the workspace to an app's view in signed-in pages and devices, `path` named from the document's folder. */
-export const appFileUrl = (openApp: { workspaceId: string; app: string }, path: string) => `${appPath(openApp)}/file?path=${encodeURIComponent(path)}`;
+export const appFileUrl = (view: AppViewTarget, path: string) => `${appPath(view)}/file?path=${encodeURIComponent(path)}${documentParam(view)}`;
 
 /** Where signed-in pages and devices ask for an address the view can stream a file of the workspace from; POST, answered with an AppMediaGrant. */
-export const appMediaGrantUrl = (openApp: { workspaceId: string; app: string }, path: string) => `${appPath(openApp)}/media?path=${encodeURIComponent(path)}`;
+export const appMediaGrantUrl = (view: AppViewTarget, path: string) => `${appPath(view)}/media?path=${encodeURIComponent(path)}${documentParam(view)}`;
 
 /** Where an app's view lists the workspace's files; GET, answered with AppWorkspaceFiles. */
-export const appFilesUrl = (openApp: { workspaceId: string; app: string }) => `${appPath(openApp)}/files`;
+export const appFilesUrl = (view: AppViewTarget) => `${appPath(view)}/files?${documentParam(view).slice(1)}`;
 
-/** Where an app's view opens the app on another file of the workspace, as app_open does; POST. */
-export const appOpenUrl = (openApp: { workspaceId: string; app: string }, file: string) => `${appPath(openApp)}/open?file=${encodeURIComponent(file)}`;
+/**
+ * Where an app's view opens the app on another file of the workspace, as app_open does: the conversation's own document
+ * moves, and no other conversation's tab follows it; POST.
+ */
+export const appOpenUrl = (view: { workspaceId: string; app: string; conversationId: string }, file: string) =>
+  `${appPath(view)}/open?file=${encodeURIComponent(file)}&conversation=${encodeURIComponent(view.conversationId)}`;
 
 /**
  * The workspace's files, relative to it with /: in a repository those git tracks and the untracked ones it doesn't

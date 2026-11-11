@@ -120,10 +120,19 @@ const canvasTitle = (page: Page) => page.locator(".canvas-header:visible .canvas
 const viewFrame = (page: Page) => page.locator(".canvas-panel:visible .canvas-frame.app iframe");
 const view = (page: Page) => viewFrame(page).contentFrame();
 const counterFile = () => join(host.projectDir, "counter.json");
+/** The conversation on screen. */
+const current = (page: Page) => new URL(page.url()).hash.slice("#/c/".length);
 
 async function showApp(page: Page) {
   await expect(appToggle(page)).toBeVisible({ timeout: 30_000 });
   if ((await appToggle(page).getAttribute("aria-pressed")) !== "true") await appToggle(page).click();
+}
+
+/** Puts the app's tab aside if it is in front, so an opening has somewhere to come forward to. */
+async function hideApp(page: Page) {
+  await expect(appToggle(page)).toBeVisible({ timeout: 30_000 });
+  if ((await appToggle(page).getAttribute("aria-pressed")) === "true") await appToggle(page).click();
+  await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
 }
 
 /** The stub agent offers no model to pick, so this is `startConversation` without that wait. */
@@ -139,7 +148,7 @@ async function sendAndWait(page: Page, text: string) {
   await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle", { timeout: 60_000 });
 }
 
-test("the agent opens an app that its changes, your clicks and outside edits all reach live, in every conversation of the workspace", async ({ page }) => {
+test("the agent opens an app that its changes, your clicks and outside edits all reach live, in each conversation on its own document", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const profiles = await createProfile(page, profileName, "", "", "opencode");
@@ -205,7 +214,7 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await expect(view(page).locator("#file-text")).toHaveText("../outside.txt is outside the workspace.");
   });
 
-  await test.step("another conversation of the workspace shows the app once its agent uses it, and reads every change", async () => {
+  await test.step("another conversation of the workspace takes the app up from the one that opened it, and reads every change", async () => {
     second = await startConversationWithoutModel(page);
     await sendAndWait(page, "Start");
     await expect(page.locator(".canvas-header:visible")).toBeVisible();
@@ -213,20 +222,23 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     const state = await callCanvasTool(host, second, "app_state", {});
     await expect(appToggle(page)).toHaveText("Counter");
     await expect(view(page).locator("#count")).toHaveText("40");
+    expect(state).toContain("Counter on counter.json was open in another conversation of this workspace, which this conversation took up.");
     expect(state).toContain("The count is 40.");
     expect(state).toContain("1. agent: Added 2; the count is 2.\n2. user: Added 1; the count is 3.\n3. edited outside Mirador: Edited outside Mirador");
   });
 
   await test.step("a conversation whose agent never used the app shows it once the user adds it from the bar's More menu", async () => {
     const { hash } = new URL(page.url());
+    const shownHere = current(page);
     await startConversationWithoutModel(page);
     await sendAndWait(page, "Start");
     await expect(appToggle(page)).toHaveCount(0);
     await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();
     await expect(page.getByRole("menu").locator("li").first(), "a menu doesn't start with a line").not.toHaveAttribute("role", "separator");
-    await page.getByRole("menuitem", { name: "Show Counter" }).click();
+    await page.getByRole("menuitem", { name: "Show Counter on counter.json" }).click();
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "true");
     await expect(view(page).locator("#count")).toHaveText("40");
+    expect(await callCanvasTool(host, shownHere, "app_state", {})).toContain("Counter on counter.json\n\nThe count is 40.");
     await page.evaluate((back) => (location.hash = back), hash);
     await expect(page).toHaveURL(new RegExp(`${hash}$`));
   });
@@ -291,12 +303,27 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await expect(view(page).locator("#task")).toHaveText("wait stopped (waiting)");
   });
 
-  await test.step("the app's tab comes forward again when the agent opens another file in it", async () => {
-    await appToggle(page).click();
-    await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
-    expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "second.json" })).toContain("Counter is open on second.json");
+  await test.step("an agent opening another file moves only its own tab; the conversation beside it keeps its document", async () => {
+    const here = current(page);
+    const elsewhere = here === first ? second : first;
+    const goTo = async (conversationId: string) => {
+      await page.evaluate((target) => (location.hash = `#/c/${target}`), conversationId);
+      await expect(page).toHaveURL(new RegExp(`#/c/${conversationId}$`));
+    };
+    await goTo(elsewhere);
+    await hideApp(page);
+    await goTo(here);
+    await showApp(page);
+    await expect(view(page).locator("#document-file")).toHaveText("counter.json");
+    expect(await callCanvasTool(host, elsewhere, "app_open", { app: "counter", file: "second.json" })).toContain("Counter is open on second.json");
+    await expect(view(page).locator("#document-file")).toHaveText("counter.json");
+    await expect(view(page).locator("#count")).toHaveText("46");
+    await goTo(elsewhere);
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(view(page).locator("#document-file")).toHaveText("second.json");
     await expect(view(page).locator("#count")).toHaveText("0");
+    await goTo(here);
+    await expect(view(page).locator("#document-file")).toHaveText("counter.json");
   });
 
   await test.step("the app's tab comes forward when the agent opens the file already open, in that agent's conversation only", async () => {
@@ -339,14 +366,17 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await expect(view(page).locator("#count")).toHaveText("0");
   });
 
-  await test.step("an app the agent opens while the user is in another conversation is in front when they come back", async () => {
+  await test.step("an app the agent opens while the user is in another conversation is in front when they come back, and gives the other one no tab", async () => {
     await appToggle(page).click();
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
     const { hash } = new URL(page.url());
+    const here = current(page);
     await startConversationWithoutModel(page);
     await sendAndWait(page, "Start");
-    expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "third.json" })).toContain("Counter is open on third.json");
-    await callCanvasTool(host, hash.slice("#/c/".length), "show", { title: "A page shown meanwhile", html: "<p>Meanwhile</p>" });
+    const away = current(page);
+    expect(await callCanvasTool(host, here, "app_open", { app: "counter", file: "third.json" })).toContain("Counter is open on third.json");
+    await callCanvasTool(host, away, "show", { title: "A page shown meanwhile", html: "<p>Meanwhile</p>" });
+    await expect(appToggle(page)).toHaveCount(0);
     await page.evaluate((back) => (location.hash = back), hash);
     await expect(page).toHaveURL(new RegExp(`${hash}$`));
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "true");
@@ -397,16 +427,19 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     expect(await clip.evaluate((video: HTMLVideoElement) => video.paused)).toBe(true);
   });
 
-  await test.step("a view kept behind another conversation still gets the changes after that conversation closes its own view", async () => {
+  await test.step("a view kept behind another conversation still gets the changes of the document the two share", async () => {
     const { hash } = new URL(page.url());
-    const elsewhere = hash.endsWith(first) ? second : first;
+    const here = current(page);
+    const elsewhere = here === first ? second : first;
+    expect(await callCanvasTool(host, here, "app_open", { app: "counter", file: "shared.json" })).toContain("Counter is open on shared.json");
+    expect(await callCanvasTool(host, elsewhere, "app_open", { app: "counter", file: "shared.json" })).toContain("Counter is open on shared.json");
     const loaded = (await view(page).locator("#page-load").textContent())!;
     await page.evaluate((other) => (location.hash = other), `#/c/${elsewhere}`);
     await showApp(page);
     await expect(view(page).locator("#count")).toHaveText("0");
     await appToggle(page).click();
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
-    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 5 } })).toBe("fourth.json: Added 5; the count is 5.");
+    expect(await callCanvasTool(host, here, "apply", { op: { op: "add", by: 5 } })).toBe("shared.json: Added 5; the count is 5.");
     await page.evaluate((back) => (location.hash = back), hash);
     await expect(view(page).locator("#count")).toHaveText("5");
     await expect(view(page).locator("#page-load")).toHaveText(loaded);
@@ -440,8 +473,9 @@ test("the agent opens an app that its changes, your clicks and outside edits all
   });
 
   await test.step("app_open on a file the app edits starts the app's document beside it, for that file", async () => {
+    const here = current(page);
     writeFileSync(join(host.projectDir, "week.tally"), "");
-    const opened = await callCanvasTool(host, first, "app_open", { app: "counter", file: "week.tally" });
+    const opened = await callCanvasTool(host, here, "app_open", { app: "counter", file: "week.tally" });
     expect(opened).toContain("Counter is open on week.json, the document for week.tally; the user sees it in the canvas.");
     expect(opened).toContain("The count is 0. Started for week.tally.");
     expect(JSON.parse(readFileSync(join(host.projectDir, "week.json"), "utf8"))).toEqual({ count: 0, startedFor: "week.tally" });
@@ -449,11 +483,12 @@ test("the agent opens an app that its changes, your clicks and outside edits all
   });
 
   await test.step("app_open refuses a file through a link that leads out of the workspace, and the view stays where it was", async () => {
+    const here = current(page);
     const outside = mkdtempSync(join(tmpdir(), "app-tab-outside-"));
     writeFileSync(join(outside, "secret.json"), '{ "count": 41 }\n');
     symlinkSync(outside, join(host.projectDir, "linked"));
-    expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "linked/secret.json" })).toContain("linked/secret.json is outside the workspace");
-    expect(await callCanvasTool(host, first, "app_open", { app: "counter", file: "linked/new.json" })).toContain("linked/new.json is outside the workspace");
+    expect(await callCanvasTool(host, here, "app_open", { app: "counter", file: "linked/secret.json" })).toContain("linked/secret.json is outside the workspace");
+    expect(await callCanvasTool(host, here, "app_open", { app: "counter", file: "linked/new.json" })).toContain("linked/new.json is outside the workspace");
     expect(readdirSync(outside)).toEqual(["secret.json"]);
     await expect(view(page).locator("#count")).toHaveText("0");
   });
@@ -479,7 +514,7 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await expect(view(page).locator("#count")).toHaveText("7");
     await expect(view(page).locator("#document-file")).toHaveText("plans/week.json");
     await expect(view(page).locator("#files-heard")).toHaveText(String(filesHeard + 1));
-    expect(await callCanvasTool(host, first, "apply", { op: { op: "add", by: 1 } })).toBe("plans/week.json: Added 1; the count is 8.");
+    expect(await callCanvasTool(host, current(page), "apply", { op: { op: "add", by: 1 } })).toBe("plans/week.json: Added 1; the count is 8.");
     await page.evaluate((other) => (location.hash = other), `#/c/${elsewhere}`);
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
     await page.evaluate((back) => (location.hash = back), hash);

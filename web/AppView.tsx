@@ -32,29 +32,28 @@ import { usePaneFullscreen } from "./Workspace.tsx";
 
 const SENT_NOTE_MS = 8000;
 
-/** How many views of each app the page shows, kept conversations' hidden canvases included. */
+/** How many views of each open document the page shows, kept conversations' hidden canvases included. */
 const viewsShowing = new Map<string, number>();
 
 /**
- * The page gets the app's document while any of its views shows the app, and again after it reconnects. Each view
- * subscribes, for the host to send it the app's storage, but only the last one to go unsubscribes.
+ * The page gets a document while any of its views shows it, and again after it reconnects. Each view subscribes, for the
+ * host to send it the app's storage, but only the last one to go unsubscribes.
  */
 function useAppSubscribed(openApp: OpenApp) {
-  const { workspaceId, app } = openApp;
+  const { workspaceId, app, documentId } = openApp;
   const [status, setStatus] = useState<ConnectionStatus>(connection.status);
   useEffect(() => connection.onStatus(setStatus), []);
   useEffect(() => {
     if (status !== "open") return;
-    const key = appKey(openApp);
-    viewsShowing.set(key, (viewsShowing.get(key) ?? 0) + 1);
-    connection.send({ type: "app.subscribe", workspaceId, app });
+    viewsShowing.set(documentId, (viewsShowing.get(documentId) ?? 0) + 1);
+    connection.send({ type: "app.subscribe", workspaceId, app, documentId });
     return () => {
-      const left = viewsShowing.get(key)! - 1;
-      if (left) return void viewsShowing.set(key, left);
-      viewsShowing.delete(key);
-      connection.send({ type: "app.unsubscribe", workspaceId, app });
+      const left = viewsShowing.get(documentId)! - 1;
+      if (left) return void viewsShowing.set(documentId, left);
+      viewsShowing.delete(documentId);
+      connection.send({ type: "app.unsubscribe", workspaceId, app, documentId });
     };
-  }, [status, workspaceId, app]);
+  }, [status, workspaceId, app, documentId]);
 }
 
 /**
@@ -121,6 +120,7 @@ async function mediaUrlForView(openApp: OpenApp, path: string, assetsOrigin: str
 
 const workspaceFilesForView = async (openApp: OpenApp): Promise<AppWorkspaceFiles> => (await answered(await fetch(appFilesUrl(openApp)))).json();
 
+/** Moves this conversation's document of the app to another file of its workspace, which no other conversation follows. */
 async function openFromView(openApp: OpenApp, file: unknown) {
   if (typeof file !== "string") throw new Error("Give the file's path relative to the workspace.");
   await answered(await fetch(appOpenUrl(openApp, file), { method: "POST" }));
@@ -173,10 +173,10 @@ export function AppView({
     }
   };
 
-  const { workspaceId, app } = openApp;
+  const { workspaceId, app, documentId } = openApp;
   const received = (message: CanvasFrameMessage) => {
     if (message.kind === "app-ready") postState();
-    if (message.kind === "app-apply") connection.send({ type: "app.apply", workspaceId, app, op: message.op });
+    if (message.kind === "app-apply") connection.send({ type: "app.apply", workspaceId, app, documentId, op: message.op });
     if (message.kind === "app-prompt" && typeof message.requestId === "string") void answer(message.requestId, () => prompt(message.text, message.images));
     if (message.kind === "app-read-file" && typeof message.path === "string" && typeof message.requestId === "string") void sendFile(message.requestId, message.path);
     if (message.kind === "app-media-url" && typeof message.path === "string" && typeof message.requestId === "string") {
@@ -185,8 +185,8 @@ export function AppView({
     }
     if (message.kind === "app-list-files" && typeof message.requestId === "string") void answer(message.requestId, () => workspaceFilesForView(openApp));
     if (message.kind === "app-open" && typeof message.requestId === "string") void answer(message.requestId, () => openFromView(openApp, message.file));
-    if (message.kind === "app-run" && typeof message.task === "string") connection.send({ type: "app.run", workspaceId, app, task: message.task });
-    if (message.kind === "app-stop-task") connection.send({ type: "app.stop-task", workspaceId, app });
+    if (message.kind === "app-run" && typeof message.task === "string") connection.send({ type: "app.run", workspaceId, app, documentId, task: message.task });
+    if (message.kind === "app-stop-task") connection.send({ type: "app.stop-task", workspaceId, app, documentId });
     if (message.kind === "app-storage-set" && typeof message.key === "string" && (typeof message.value === "string" || message.value === null)) {
       connection.send({ type: "app.storage-set", workspaceId, app, key: message.key, value: message.value });
     }

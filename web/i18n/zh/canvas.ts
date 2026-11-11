@@ -44,7 +44,7 @@ export const canvas: Messages["canvas"] = {
     clear: "清除",
     pointAndAsk: "指着问",
     findOnPage: "在此页面中查找",
-    showApp: (app) => `显示 ${app}`,
+    showApp: (app, file) => `显示 ${app}：${file}`,
     agentsPlan: "Agent 的计划",
     closeChecklist: "关闭清单",
     dismissChecklist: "忽略清单",

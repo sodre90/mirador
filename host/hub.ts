@@ -4,7 +4,7 @@ import type { ClientAddress, DeviceConnection, StoredEvent } from "../shared/mod
 import { DEFLATED_MESSAGE_MIN_LENGTH } from "../shared/low-data.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import { appKey, type AppDocumentState, type PluginUpdate } from "../shared/apps.ts";
+import { appKey, type AppDocumentState, type AppStorageItems, type PluginUpdate } from "../shared/apps.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import type { WaitingSummary } from "../shared/waiting.ts";
 import { lowDataEvent, pageEvent } from "./low-data.ts";
@@ -20,8 +20,10 @@ export interface SocketData {
   /** The joined device the socket signed in as; null for the host's own link. */
   deviceId: string | null;
   subscriptions: Set<string>;
-  /** The apps the socket's page shows, by appKey: only these pages get the apps' documents, which can be large. */
+  /** The documents the socket's page shows, by their ids: only these pages get their documents, which can be large. */
   appSubscriptions: Set<string>;
+  /** The apps whose storage the socket's page shows, by appKey: what a view keeps is one app's, not one document's. */
+  appStorageSubscriptions: Set<string>;
   /** The plugins whose own window the socket's page is. */
   pluginWindowSubscriptions: Set<string>;
   /** The workspaces whose plugin tabs the socket's page shows. */
@@ -67,6 +69,7 @@ export const socketData = (
   desktopAppCode,
   subscriptions: new Set<string>(),
   appSubscriptions: new Set<string>(),
+  appStorageSubscriptions: new Set<string>(),
   pluginWindowSubscriptions: new Set<string>(),
   pluginTabSubscriptions: new Set<string>(),
   lowDataSubscriptions: new Set<string>(),
@@ -204,8 +207,14 @@ export class Hub {
     });
   }
 
+  /** A document's whole state, to the pages that show that document. */
   publishAppState(state: AppDocumentState) {
-    this.publishWhere((socket) => socket.data.appSubscriptions.has(appKey(state)), { type: "app.state", state });
+    this.publishWhere((socket) => socket.data.appSubscriptions.has(state.documentId), { type: "app.state", state });
+  }
+
+  /** What an app's views keep in a workspace, to the pages that show any document of that app. */
+  publishAppStorage(workspaceId: string, app: string, items: AppStorageItems) {
+    this.publishWhere((socket) => socket.data.appStorageSubscriptions.has(appKey({ workspaceId, app })), { type: "app.storage", workspaceId, app, items });
   }
 
   publishToPluginWindows(plugin: string, message: ServerMessage) {

@@ -2,18 +2,16 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
-  appKey,
   type AppAuthor,
   type AppChange,
   type AppDocumentState,
   type AppMediaGrant,
-  type AppShownBy,
   type AppTaskContext,
   type AppTaskState,
   type AppWorkspaceFiles,
   type OpenApp,
 } from "../../shared/apps.ts";
-import type { Workspace } from "../../shared/model.ts";
+import { type Conversation, type Workspace, workingCopyIdOf } from "../../shared/model.ts";
 import { toPosix } from "../paths.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import type { Store } from "../store.ts";
@@ -28,6 +26,12 @@ const CHANGES_DESCRIBED = 10;
 const MAX_APP_FILE_BYTES = 10 * 1024 * 1024;
 /** A task reports its progress as often as it likes; the views hear of it this often at most. */
 const TASK_PROGRESS_INTERVAL_MS = 250;
+
+/** How a conversation comes to hold an app's document, which says whether its tab comes forward by itself. */
+export type AppOpening =
+  | /** Its agent opened it with app_open, its user opened it with /<app>:open, or its user asked to see a document open elsewhere. */ { kind: "opened" }
+  | /** Its user picked the file in the app's view, which brings no tab forward anywhere. */ { kind: "in-view" }
+  | /** Mirador started again on it, or its agent took it up from another conversation without naming it. */ { kind: "quiet" };
 
 /** Why a view can't have the file it asked for, with the HTTP status that says so. */
 export class AppFileRefused extends AppProblem {
@@ -57,15 +61,24 @@ interface RunningTask {
   progressFlush: ReturnType<typeof setTimeout> | undefined;
 }
 
+/**
+ * One file one or more conversations have open in one app: parsed once, watched once, changed in turn and stored in the
+ * file. Its change log and its one task at a time are the file's, shared by whoever holds it.
+ */
 interface AppDocument {
+  /** What an app's view and page name this document by, which no path of this machine shows in. */
+  id: string;
   plugin: AppPlugin;
+  /** The folder the document is in: a workspace's, or a worktree's. */
   workspaceId: string;
   /** The workspace that owns the folder: itself, or the workspace whose conversation works in the worktree. */
   ownerId: string;
   workspacePath: string;
-  /** Relative to the workspace. */
+  /** Relative to the workspace, as whoever opened the file first named it. */
   file: string;
   path: string;
+  /** The app and the file as it really lies, which is what makes two names of one file, as through a link, one document. */
+  key: string;
   document: unknown;
   problem: string | null;
   /** Lives as long as this run of the host; the file is what lasts. */
@@ -79,17 +92,30 @@ interface AppDocument {
   running: RunningTask | null;
   /** The latest task run on it, under way or ended. */
   task: AppTaskState | null;
-  shownBy: AppShownBy | null;
+}
+
+/** One conversation's open app: the document its tab shows, and whether its agent brought that tab forward. */
+interface OpenedIn {
+  conversationId: string;
+  app: string;
+  documentId: string;
+  shownAt: number | null;
   openedInView: boolean;
 }
 
+/** The document a conversation took up from another conversation of its workspace, in words for its agent's tools to say. */
+export type TakenUp = string | null;
+
 const hashOf = (text: string) => createHash("sha256").update(text).digest("hex");
 
-const keyOf = (opened: AppDocument) => appKey({ workspaceId: opened.workspaceId, app: opened.plugin.manifest.name });
+const documentIdOf = (key: string) => hashOf(key).slice(0, 16);
+
+const pointerKeyOf = (conversationId: string, app: string) => `${conversationId}/${app}`;
 
 const publicChange = ({ operation: _, inverse: __, ...change }: LoggedChange): AppChange => change;
 
 const documentStateOf = (opened: AppDocument, filesChange: number): AppDocumentState => ({
+  documentId: opened.id,
   workspaceId: opened.workspaceId,
   app: opened.plugin.manifest.name,
   file: opened.file,
@@ -112,9 +138,17 @@ const realPathOrNull = (path: string) => {
 
 const isInside = (folder: string, path: string) => path.startsWith(folder + sep);
 
-/** Where a path really leads, as far as it exists: the folders a new file will be made in may not be there yet. */
+/** Where a path really lies, as far as it exists: the folders a new file will be made in may not be there yet. */
 function realPathOfExistingPart(path: string): string {
   return realPathOrNull(path) ?? realPathOfExistingPart(dirname(path));
+}
+
+/**
+ * Where a path really lies, the part not made yet kept under the name it will be filed by: two new files of one folder
+ * are two documents, and one file under two names, as through a link, is one.
+ */
+function realPathOrItsFuture(path: string): string {
+  return realPathOrNull(path) ?? join(realPathOrItsFuture(dirname(path)), basename(path));
 }
 
 /** A file in the workspace, named from it: neither its name nor a link on the way may lead out of the workspace. */
@@ -168,15 +202,27 @@ function viewedFile(opened: AppDocument, path: unknown) {
 
 const taskNamesOf = (plugin: AppPlugin) => Object.keys(plugin.host.tasks ?? {});
 
-/** The document each workspace has open in each app: operations from the agent and the user change it one at a time, and the file stores it. */
+/** What the agent's tools call a document: the app and the file it is open on. */
+const documentWords = (opened: AppDocument) => `${opened.plugin.manifest.title} on ${opened.file}`;
+
+/** Out loud about a document this conversation took up from another, so its agent knows whose file it reached. */
+export const takenUpWords = (takenUp: TakenUp) => (takenUp === null ? "" : `${takenUp} was open in another conversation of this workspace, which this conversation took up.\n\n`);
+
+/**
+ * The document each conversation has open in each app, which its agent changes and its user watches. A file makes one
+ * document however many conversations have it open, so its changes reach them all and one task runs on it at a time;
+ * a conversation that opens another file leaves that document to whoever else still holds it.
+ */
 export class AppDocuments {
   private readonly documents = new Map<string, AppDocument>();
   private readonly media = new AppMediaGrants();
-  /** By app key: the open under way, which the next open of the app waits for, so each ends on the file asked for last. */
+  /** The document one conversation has open in each app, by `${conversationId}/${app}`. */
+  private readonly openedIn = new Map<string, OpenedIn>();
+  /** By pointer key: the open under way, which the next open of that app in that conversation waits for, so each ends on the file asked for last. */
   private readonly openings = new Map<string, Promise<unknown>>();
+  /** By document key: the open document being read or started, which conversations opening one file at once wait on. */
+  private readonly making = new Map<string, Promise<AppDocument>>();
   private taskRuns = 0;
-  /** By app key; kept while the app opens other files, as the store keeps it across restarts. */
-  private readonly usedIn = new Map<string, Set<string>>();
   /** By workspace: see AppDocumentState.filesChange. */
   private readonly filesChanges = new Map<string, number>();
 
@@ -185,49 +231,7 @@ export class AppDocuments {
     private readonly plugins: AppPlugin[],
     private readonly publisher: AppPublisher,
     private readonly maxFileBytes = MAX_APP_FILE_BYTES,
-  ) {
-    for (const { workspaceId, app, conversationId } of store.listAppConversations()) this.conversationsUsing(appKey({ workspaceId, app })).add(conversationId);
-  }
-
-  private conversationsUsing(key: string) {
-    const conversations = this.usedIn.get(key) ?? new Set<string>();
-    this.usedIn.set(key, conversations);
-    return conversations;
-  }
-
-  private openAppOf(opened: AppDocument): OpenApp {
-    return {
-      workspaceId: opened.workspaceId,
-      app: opened.plugin.manifest.name,
-      title: opened.plugin.manifest.title,
-      file: opened.file,
-      conversationIds: [...(this.usedIn.get(keyOf(opened)) ?? [])],
-      ...(opened.shownBy && { shownBy: opened.shownBy }),
-      ...(opened.openedInView && { openedInView: true as const }),
-    };
-  }
-
-  /** Shows the app's tab in the conversation from now on, as its agent used the app or its user added it. */
-  useIn(workspaceId: string, appName: string | undefined, conversationId: string) {
-    if (this.noteUsedIn(this.openIn(workspaceId, appName), conversationId)) this.publisher.openAppsChanged(this.openApps());
-  }
-
-  /** Brings the app's tab forward in the conversation, as its agent wants the user to see the app. */
-  private showIn(opened: AppDocument, conversationId: string) {
-    this.noteUsedIn(opened, conversationId);
-    opened.shownBy = { conversationId, at: Date.now() };
-    opened.openedInView = false;
-    this.publisher.openAppsChanged(this.openApps());
-  }
-
-  /** Whether the conversation is new to the app. */
-  private noteUsedIn(opened: AppDocument, conversationId: string) {
-    const conversations = this.conversationsUsing(keyOf(opened));
-    if (conversations.has(conversationId)) return false;
-    conversations.add(conversationId);
-    this.store.saveAppConversation(opened.workspaceId, opened.plugin.manifest.name, conversationId);
-    return true;
-  }
+  ) {}
 
   installed() {
     return this.plugins.map(installedApp);
@@ -238,113 +242,220 @@ export class AppDocuments {
     return this.plugins.find((plugin) => appViewPath(plugin) === pathname)?.view.code ?? null;
   }
 
-  /** The real path of a file for the app's view, named from the folder of the app's open document and anywhere in the workspace. */
-  fileForView(workspaceId: string, appName: string, path: unknown, maxBytes = this.maxFileBytes): string {
-    const file = viewedFile(this.openForView(workspaceId, appName), path);
+  /** What every conversation has open, each its own app tab: an app open on two files in one workspace shows twice. */
+  openApps(): OpenApp[] {
+    return [...this.openedIn.values()].map((pointer) => this.openAppOf(pointer));
+  }
+
+  /** What a page that shows an open document gets, or null when that document closed. */
+  state(documentId: string): AppDocumentState | null {
+    const opened = this.documents.get(documentId);
+    return opened ? this.stateOf(opened) : null;
+  }
+
+  /** Opens again, quietly, what each conversation had open, as the store kept it. */
+  async reopenAll() {
+    for (const { conversationId, app, file } of this.store.listOpenApps()) {
+      try {
+        await this.open(conversationId, app, file, { kind: "quiet" });
+      } catch (error) {
+        console.warn(`Couldn't open ${app} on ${file} again for ${conversationId}, which no longer holds it: ${messageOf(error)}`);
+        this.store.forgetOpenApp(conversationId, app);
+      }
+    }
+  }
+
+  /**
+   * Opens the conversation's app on the file, in its own tab. The file makes the document: a conversation that already
+   * has it open keeps its own tab on it, and one document serves them both.
+   */
+  async open(conversationId: string, appName: string, file: string, opening: AppOpening = { kind: "opened" }): Promise<OpenApp> {
+    const key = pointerKeyOf(conversationId, appName);
+    const queued = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.openNow(conversationId, appName, file, opening));
+    this.openings.set(key, queued);
+    try {
+      return await queued;
+    } finally {
+      if (this.openings.get(key) === queued) this.openings.delete(key);
+    }
+  }
+
+  /** Opens a document another conversation of the workspace has, in this conversation, as its user asked to see it here. */
+  useIn(conversationId: string, documentId: string): OpenApp {
+    const opened = this.documentOf(documentId);
+    return this.openAppOf(this.noteOpenedIn(conversationId, opened, { kind: "opened" }));
+  }
+
+  /**
+   * Starts one of the app's tasks on the conversation's document, or on the workspace's one it takes up, bringing its
+   * tab forward; `ended` resolves to the task's summary once it is done, or rejects with its problem.
+   */
+  startTask(conversationId: string, appName: string | undefined, name: string, author: AppAuthor): { ended: Promise<string>; file: string; takenUp: TakenUp } {
+    const { opened, takenUp } = this.openFor(conversationId, appName);
+    if (author.kind === "agent") this.showIn(opened, author.conversationId);
+    return { ...this.startTaskOn(opened, name, author), file: opened.file, takenUp };
+  }
+
+  /** Changes the conversation's document, and says which file it was, as another conversation may have moved it since the agent looked. */
+  async apply(conversationId: string, appName: string | undefined, operation: unknown, author: AppAuthor): Promise<AppChange & { file: string; takenUp: TakenUp }> {
+    const { opened, takenUp } = this.openFor(conversationId, appName);
+    if (author.kind === "agent") this.noteOpenedIn(author.conversationId, opened, { kind: "quiet" });
+    return { ...(await this.applyTo(opened, operation, author)), file: opened.file, takenUp };
+  }
+
+  /** An operation the user made in an open document's view. */
+  async applyFromView(documentId: string, operation: unknown): Promise<AppChange & { file: string }> {
+    const opened = this.documentOf(documentId);
+    return { ...(await this.applyTo(opened, operation, { kind: "you" })), file: opened.file };
+  }
+
+  /**
+   * The document in the plugin's words, and the latest changes, for the agent, saying first what it took up from
+   * another conversation, since the agent asked for the app without opening a file of its own.
+   */
+  describe(conversationId: string, appName: string | undefined): string {
+    const { opened, takenUp } = this.openFor(conversationId, appName);
+    return takenUpWords(takenUp) + this.described(opened);
+  }
+
+  /**
+   * Starts a task a view asked for. Two views of one document may both ask for it, as a media view asks for its probe, so
+   * the same task already running is no problem: the views show it under way.
+   */
+  runFromView(documentId: string, name: string): Promise<unknown> {
+    const opened = this.documentOf(documentId);
+    if (opened.running?.state.name === name) return Promise.resolve();
+    return this.startTaskOn(opened, name, { kind: "you" }).ended.catch(() => {});
+  }
+
+  /** Stops the task an open document has under way. */
+  stopTask(documentId: string) {
+    this.documentOf(documentId).running?.aborts.abort();
+  }
+
+  /** The real path of a file for an open document's view, named from the folder of that document and anywhere in its workspace. */
+  fileForView(documentId: string, path: unknown, maxBytes = this.maxFileBytes): string {
+    const file = viewedFile(this.documentOf(documentId), path);
     const stats = statSync(file);
     if (!stats.isFile()) throw new AppFileRefused(400, `${path} isn't a file.`);
     if (stats.size > maxBytes) throw new AppFileRefused(413, `${path} is larger than ${maxBytes / 1024 / 1024} MB.`);
     return file;
   }
 
-  /** An address on the canvas assets that streams a file for the app's view, of any size, while the app stays open. */
-  mediaGrant(workspaceId: string, appName: string, path: unknown): AppMediaGrant {
-    return this.media.grant(appKey({ workspaceId, app: appName }), this.fileForView(workspaceId, appName, path, Infinity));
+  /** An address on the canvas assets that streams a file for an open document's view, of any size, while the document stays open. */
+  mediaGrant(documentId: string, path: unknown): AppMediaGrant {
+    return this.media.grant(documentId, this.fileForView(documentId, path, Infinity));
   }
 
-  /** The files of the workspace the app is open in, for its view to show. */
-  async workspaceFiles(workspaceId: string, appName: string): Promise<AppWorkspaceFiles> {
-    return projectFiles(this.openForView(workspaceId, appName).workspacePath);
+  /** The files of the workspace an open document is in, for its view to show. */
+  async workspaceFiles(documentId: string): Promise<AppWorkspaceFiles> {
+    return projectFiles(this.documentOf(documentId).workspacePath);
   }
 
   /**
-   * Opens the app on another existing file of its workspace, as its view asks: as app_open does, but brought forward in
-   * no conversation. A task under way would stop, so it is refused until the task ends.
+   * Opens the conversation's app on another existing file of its workspace, as its view asks: as app_open does, but
+   * bringing no tab forward. The document it leaves would stop its task, so it is refused until that task ends.
    */
-  async openFromView(workspaceId: string, appName: string, file: unknown): Promise<OpenApp> {
-    const opened = this.openForView(workspaceId, appName);
+  async openFromView(conversationId: string, appName: string, file: unknown): Promise<OpenApp> {
+    const { opened } = this.openFor(conversationId, appName);
     if (typeof file !== "string" || file === "" || isAbsolute(file)) throw new AppFileRefused(400, "Give the file's path relative to the workspace.");
     if (opened.running) throw new AppFileRefused(409, `${opened.running.state.title} is still running; wait for it to end, or stop it, before opening another file.`);
     const { path, file: named } = fileInWorkspace(opened.workspacePath, file);
     if (isInGitFolder(named)) throw new AppFileRefused(403, `${file} is in the repository's .git folder.`);
     if (!statSync(path, { throwIfNoEntry: false })?.isFile()) throw new AppFileRefused(404, `${file} doesn't exist.`);
-    return this.open(workspaceId, appName, file, undefined, { inView: true });
+    return this.open(conversationId, appName, file, { kind: "in-view" });
   }
 
-  private openForView(workspaceId: string, appName: string) {
-    const opened = this.documents.get(appKey({ workspaceId, app: appName }));
-    if (!opened) throw new AppFileRefused(404, `${appName} isn't open in this workspace.`);
-    return opened;
-  }
-
-  /** The file a path on the canvas assets streams, while its app is open. */
+  /** The file a path on the canvas assets streams, while its document is open. */
   mediaFile(pathname: string): string | null {
     return this.media.fileAt(pathname);
   }
 
-  openApps(): OpenApp[] {
-    return [...this.documents.values()].map((opened) => this.openAppOf(opened));
+  /** Tells the views of the workspace's documents to list its files again, as a task, an agent's turn or an open may have changed them. */
+  filesMayHaveChanged(workspaceId: string) {
+    this.filesChanges.set(workspaceId, (this.filesChanges.get(workspaceId) ?? 0) + 1);
+    for (const opened of this.documents.values()) if (opened.workspaceId === workspaceId) this.publisher.stateChanged(this.stateOf(opened));
   }
 
-  /** The folder an app's id names: a workspace's, or the working copy of a worktree its conversations work in. */
-  private folderOf(folderId: string): { workspace: Workspace; ownerId: string } | null {
-    const workspace = this.store.findWorkspace(folderId);
-    if (workspace) return { workspace, ownerId: workspace.id };
-    const [conversationId] = this.store.conversationsInWorktree(folderId);
-    const conversation = conversationId === undefined ? undefined : this.store.findConversation(conversationId);
-    const owner = conversation ? this.store.findWorkspace(conversation.workspaceId) : undefined;
-    return owner && conversation ? { workspace: workingCopyOf(owner, conversation), ownerId: owner.id } : null;
+  forgetWorkspace(workspaceId: string) {
+    this.closeMatching((opened) => opened.ownerId === workspaceId);
   }
 
-  state(workspaceId: string, app: string): AppDocumentState | null {
-    const opened = this.documents.get(appKey({ workspaceId, app }));
-    return opened ? this.stateOf(opened) : null;
+  /** Closes the documents open in a worktree whose folder is gone. */
+  forgetFolder(folderId: string) {
+    this.closeMatching((opened) => opened.workspaceId === folderId);
   }
 
-  async reopenAll() {
-    for (const { workspaceId, app, file } of this.store.listOpenApps()) {
-      try {
-        await this.open(workspaceId, app, file);
-      } catch (error) {
-        console.warn(`Couldn't open ${app} on ${file} again: ${messageOf(error)}`);
-      }
+  /** Takes away what a conversation had open, closing the documents no other conversation holds. */
+  forgetConversation(conversationId: string) {
+    for (const pointer of this.pointersOf(conversationId)) this.openedIn.delete(pointerKeyOf(conversationId, pointer.app));
+    for (const opened of [...this.documents.values()]) if (!this.isHeld(opened)) this.close(opened.id);
+    this.publishOpenApps();
+  }
+
+  stop() {
+    for (const opened of [...this.documents.values()]) this.close(opened.id);
+    this.openedIn.clear();
+  }
+
+  /**
+   * What the agent's tools work on: the document this conversation has open in the app, or the one its workspace has,
+   * which this conversation takes up quietly and is told it did. Where the workspace holds several, they are named.
+   */
+  private openFor(conversationId: string, appName: string | undefined): { opened: AppDocument; takenUp: TakenUp } {
+    const here = this.pointersOf(conversationId, appName);
+    if (here.length > 1) throw new AppProblem(`Several apps are open in this conversation (${this.wordsOf(here.map((pointer) => this.documentOf(pointer.documentId)))}); say which with app.`);
+    if (here.length === 1) return { opened: this.documentOf(here[0]!.documentId), takenUp: null };
+    const elsewhere = this.documentsOpenIn(workingCopyIdOf(this.conversationOf(conversationId)), appName);
+    if (elsewhere.length === 1) {
+      const opened = elsewhere[0]!;
+      this.noteOpenedIn(conversationId, opened, { kind: "quiet" });
+      return { opened, takenUp: documentWords(opened) };
     }
+    if (elsewhere.length > 1) throw new AppProblem(`${this.wordsOf(elsewhere)} are open in other conversations of this workspace; open the one you want with app_open.`);
+    const others = this.pointersOf(conversationId).map((pointer) => this.documentOf(pointer.documentId));
+    if (others.length > 0) throw new AppProblem(`${appName} isn't open in this conversation; open here: ${this.wordsOf(others)}.`);
+    throw new AppProblem(`No app is open in this conversation${appName === undefined ? "" : ` called ${appName}`}. Open one with app_open; installed: ${this.plugins.map(({ manifest }) => manifest.name).join(", ")}.`);
   }
 
-  /** Opens the app on the file, shown in the conversation that opens it, if any. */
-  async open(workspaceId: string, appName: string, file: string, conversationId?: string, { inView = false } = {}): Promise<OpenApp> {
-    const key = appKey({ workspaceId, app: appName });
-    const opening = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.openNow(workspaceId, appName, file, conversationId, inView));
-    this.openings.set(key, opening);
-    try {
-      return await opening;
-    } finally {
-      if (this.openings.get(key) === opening) this.openings.delete(key);
-    }
-  }
-
-  private async openNow(workspaceId: string, appName: string, file: string, conversationId: string | undefined, inView: boolean): Promise<OpenApp> {
+  private async openNow(conversationId: string, appName: string, file: string, opening: AppOpening): Promise<OpenApp> {
     const plugin = this.plugin(appName);
-    const folder = this.folderOf(workspaceId);
-    if (!folder) throw new AppProblem("That workspace or worktree no longer exists.");
-    const { workspace, ownerId } = folder;
+    const conversation = this.conversationOf(conversationId);
+    const { workspace, ownerId } = this.folderOf(conversation);
     const documentFile = this.guarded(() => plugin.host.documentFor?.(file)) ?? file;
     const target = fileInWorkspace(workspace.path, documentFile);
     const openedFile = documentFile === file ? undefined : toPosix(relative(dirname(target.path), fileInWorkspace(workspace.path, file).path));
-    const already = this.documents.get(appKey({ workspaceId, app: appName }));
-    if (already?.file === target.file && !already.problem) {
-      if (conversationId) this.showIn(already, conversationId);
-      return this.openAppOf(already);
+    const opened = await this.documentOpening(plugin, workspace, ownerId, target, openedFile);
+    return this.openAppOf(this.noteOpenedIn(conversationId, opened, opening));
+  }
+
+  /** The document of that file, read from it or started on it: two conversations opening one file at once start it once. */
+  private async documentOpening(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, openedFile: string | undefined): Promise<AppDocument> {
+    const key = `${plugin.manifest.name}/${realPathOrItsFuture(target.path)}`;
+    const already = this.documents.get(documentIdOf(key));
+    if (already) return this.refreshUnlessRead(already);
+    const making = this.making.get(key);
+    if (making) return making;
+    const made = this.readDocument(plugin, workspace, ownerId, target, key, openedFile);
+    this.making.set(key, made);
+    try {
+      return await made;
+    } finally {
+      if (this.making.get(key) === made) this.making.delete(key);
     }
+  }
+
+  private async readDocument(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, key: string, openedFile: string | undefined): Promise<AppDocument> {
     const text = existsSync(target.path) ? readFileSync(target.path, "utf8") : null;
     const document = text === null ? this.created(plugin, target.file, openedFile) : this.guarded(() => plugin.host.parse(text));
-    this.close(workspaceId, appName);
     const opened: AppDocument = {
+      id: documentIdOf(key),
       plugin,
-      workspaceId,
+      workspaceId: workspace.id,
       ownerId,
       workspacePath: workspace.path,
       ...target,
+      key,
       document,
       problem: null,
       changes: [],
@@ -354,79 +465,106 @@ export class AppDocuments {
       settling: undefined,
       running: null,
       task: null,
-      shownBy: conversationId ? { conversationId, at: Date.now() } : null,
-      openedInView: inView,
     };
     if (text === null) await this.write(opened, this.guarded(() => plugin.host.serialize(document)));
-    this.documents.set(keyOf(opened), opened);
-    this.store.saveOpenApp(workspaceId, appName, opened.file);
-    if (conversationId) this.noteUsedIn(opened, conversationId);
+    this.documents.set(opened.id, opened);
     this.watch(opened);
-    this.publisher.openAppsChanged(this.openApps());
-    this.filesMayHaveChanged(workspaceId);
-    return this.openAppOf(opened);
+    this.filesMayHaveChanged(opened.workspaceId);
+    return opened;
   }
 
-  /** Changes the document, and says which file it was, as a view may have switched it since the agent looked. */
-  async apply(workspaceId: string, appName: string | undefined, operation: unknown, author: AppAuthor): Promise<AppChange & { file: string }> {
-    const opened = this.openIn(workspaceId, appName);
-    return { ...(await this.applyTo(opened, operation, author)), file: opened.file };
+  /** Reads a file that stopped parsing again, as whoever opens it now may have fixed it; a task under way is left to write it. */
+  private refreshUnlessRead(opened: AppDocument): Promise<AppDocument> {
+    if (!opened.problem || opened.running) return Promise.resolve(opened);
+    return this.queued(opened, async () => {
+      if (!this.documents.has(opened.id) || !existsSync(opened.path)) return opened;
+      const text = readFileSync(opened.path, "utf8");
+      const parsed = this.parses(opened.plugin, text);
+      if (parsed === null) return opened;
+      opened.document = parsed;
+      opened.knownHash = hashOf(text);
+      opened.problem = null;
+      this.publishWhileOpen(opened);
+      return opened;
+    });
   }
 
-  /**
-   * Starts one of the app's tasks on the document as it is now, refusing when it can't start; `ended` resolves to the
-   * task's summary once it is done, or rejects with its problem.
-   */
-  startTask(workspaceId: string, appName: string | undefined, name: string, author: AppAuthor): { ended: Promise<string> } {
-    const opened = this.openIn(workspaceId, appName);
-    const { manifest, host } = opened.plugin;
-    const task = Object.hasOwn(host.tasks ?? {}, name) ? host.tasks![name]! : null;
-    if (!task) {
-      const names = taskNamesOf(opened.plugin);
-      throw new AppProblem(`${manifest.title} has no task called ${name}; ${names.length > 0 ? `its tasks: ${names.join(", ")}` : "it has no tasks"}.`);
+  /** The file as the plugin reads it, or null when it still can't be read: leaving the document a problem for its app to show. */
+  private parses(plugin: AppPlugin, text: string): unknown {
+    try {
+      return plugin.host.parse(text);
+    } catch {
+      return null;
     }
-    if (opened.running) throw new AppProblem(`${opened.running.state.title} is still running; wait for it to end, or stop it in the app.`);
-    if (opened.problem) throw new AppProblem(`${opened.file} can't be read: ${opened.problem}. Fix the file, or open it again with app_open.`);
-    const running: RunningTask = {
-      state: { name, title: task.title, runId: ++this.taskRuns, state: "running", author, done: null, text: null, summary: null, problem: null, startedAt: Date.now(), endedAt: null },
-      aborts: new AbortController(),
-      progressFlush: undefined,
+  }
+
+  /** Gives this conversation the document, bringing its tab forward when its agent opened it, and closing the one it leaves that nobody else holds. */
+  private noteOpenedIn(conversationId: string, opened: AppDocument, opening: AppOpening): OpenedIn {
+    const key = pointerKeyOf(conversationId, opened.plugin.manifest.name);
+    const before = this.openedIn.get(key);
+    if (before?.documentId === opened.id && opening.kind !== "opened") return before;
+    const pointer: OpenedIn = {
+      conversationId,
+      app: opened.plugin.manifest.name,
+      documentId: opened.id,
+      shownAt: opening.kind === "opened" ? Date.now() : null,
+      openedInView: opening.kind === "in-view",
     };
-    opened.running = running;
-    this.showTask(opened, running.state);
-    if (author.kind === "agent") this.showIn(opened, author.conversationId);
-    const ended = (async () => {
-      try {
-        const summary = await task.run(this.taskContext(opened, running));
-        if (running.aborts.signal.aborted) throw new AppProblem("stopped");
-        if (typeof summary !== "string") throw new AppProblem(`${manifest.title} gave no summary of its ${name} task, which is a bug in the plugin.`);
-        this.endTask(opened, running, { state: "done", summary });
-        return summary;
-      } catch (error) {
-        const stopped = running.aborts.signal.aborted;
-        this.endTask(opened, running, stopped ? { state: "stopped" } : { state: "failed", problem: messageOf(error) });
-        throw new AppProblem(stopped ? `${task.title} was stopped before it ended.` : messageOf(error));
-      }
-    })();
-    return { ended };
+    this.openedIn.set(key, pointer);
+    this.store.saveOpenApp(conversationId, opened.ownerId, opened.workspaceId, pointer.app, opened.file);
+    if (before && before.documentId !== opened.id) this.closeUnlessHeld(before.documentId);
+    this.publishOpenApps();
+    return pointer;
   }
 
-  /**
-   * Starts a task a view asked for. Two views of one document may both ask for it, as a media view asks for its probe, so
-   * the same task already running is no problem: the views show it under way.
-   */
-  runFromView(workspaceId: string, appName: string, name: string): Promise<unknown> {
-    if (this.openIn(workspaceId, appName).running?.state.name === name) return Promise.resolve();
-    return this.startTask(workspaceId, appName, name, { kind: "you" }).ended.catch(() => {});
+  /** Brings the app's tab forward in the conversation, as its agent wants the user to see the app. */
+  private showIn(opened: AppDocument, conversationId: string) {
+    this.noteOpenedIn(conversationId, opened, { kind: "opened" });
   }
 
-  stopTask(workspaceId: string, appName: string | undefined) {
-    this.openIn(workspaceId, appName).running?.aborts.abort();
+  private pointersOf(conversationId: string, appName?: string) {
+    return [...this.openedIn.values()].filter((pointer) => pointer.conversationId === conversationId && (appName === undefined || pointer.app === appName));
+  }
+
+  /** The open documents of one app, or of every app, that any conversation of a folder holds. */
+  private documentsOpenIn(folderId: string, appName: string | undefined): AppDocument[] {
+    const held = this.openedInForFolder(folderId);
+    const ofApp = appName === undefined ? held : held.filter((pointer) => pointer.app === appName);
+    const distinct = [...new Set(ofApp.map((pointer) => pointer.documentId))];
+    return distinct.map((documentId) => this.documentOf(documentId));
+  }
+
+  private openedInForFolder(folderId: string) {
+    return [...this.openedIn.values()].filter((pointer) => this.documentOf(pointer.documentId).workspaceId === folderId);
+  }
+
+  private wordsOf(documents: AppDocument[]) {
+    return documents.map(documentWords).join(", ");
+  }
+
+  private openAppOf(pointer: OpenedIn): OpenApp {
+    const opened = this.documentOf(pointer.documentId);
+    return {
+      conversationId: pointer.conversationId,
+      documentId: opened.id,
+      workspaceId: opened.workspaceId,
+      app: pointer.app,
+      title: opened.plugin.manifest.title,
+      file: opened.file,
+      ...(pointer.shownAt !== null && { shownAt: pointer.shownAt }),
+      ...(pointer.openedInView && { openedInView: true as const }),
+    };
+  }
+
+  private documentOf(documentId: string): AppDocument {
+    const opened = this.documents.get(documentId);
+    if (!opened) throw new AppFileRefused(404, `No app has that document open anymore: ${documentId}. Open it again with app_open.`);
+    return opened;
   }
 
   private applyTo(opened: AppDocument, operation: unknown, author: AppAuthor): Promise<AppChange> {
     return this.queued(opened, async () => {
-      if (this.documents.get(keyOf(opened)) !== opened) throw new AppProblem(`${opened.plugin.manifest.title} closed on ${opened.file}.`);
+      if (!this.documents.has(opened.id)) throw new AppProblem(`${opened.plugin.manifest.title} closed on ${opened.file}.`);
       if (opened.problem) throw new AppProblem(`${opened.file} can't be read: ${opened.problem}. Fix the file, or open it again with app_open.`);
       const { host, manifest } = opened.plugin;
       const applied = this.guarded(() => host.apply(opened.document, operation, author));
@@ -439,10 +577,8 @@ export class AppDocuments {
     });
   }
 
-  /** The document in the plugin's words, and the latest changes, for the agent. */
-  describe(workspaceId: string, appName: string | undefined): string {
-    const opened = this.openIn(workspaceId, appName);
-    const heading = `${opened.plugin.manifest.title} on ${opened.file}`;
+  private described(opened: AppDocument): string {
+    const heading = documentWords(opened);
     if (opened.problem) return `${heading}\n\nThe file can't be read: ${opened.problem}`;
     const description = this.guarded(() => opened.plugin.host.describe(opened.document));
     const recent = opened.changes.slice(-CHANGES_DESCRIBED).map(({ seq, author, summary }) => `${seq}. ${authorWords(author)}: ${summary}`);
@@ -462,6 +598,38 @@ export class AppDocuments {
     if (!last) return [listed];
     const how = { running: `running${last.done === null ? "" : `, ${Math.round(last.done * 100)}%`}${last.text ? `: ${last.text}` : ""}`, done: `done: ${last.summary}`, failed: `failed: ${last.problem}`, stopped: "stopped" }[last.state];
     return [listed, `The latest task, ${last.name}, run by the ${authorWords(last.author)}: ${how}`];
+  }
+
+  private startTaskOn(opened: AppDocument, name: string, author: AppAuthor): { ended: Promise<string> } {
+    const { manifest, host } = opened.plugin;
+    const task = Object.hasOwn(host.tasks ?? {}, name) ? host.tasks![name]! : null;
+    if (!task) {
+      const names = taskNamesOf(opened.plugin);
+      throw new AppProblem(`${manifest.title} has no task called ${name}; ${names.length > 0 ? `its tasks: ${names.join(", ")}` : "it has no tasks"}.`);
+    }
+    if (opened.running) throw new AppProblem(`${opened.running.state.title} is still running; wait for it to end, or stop it in the app.`);
+    if (opened.problem) throw new AppProblem(`${opened.file} can't be read: ${opened.problem}. Fix the file, or open it again with app_open.`);
+    const running: RunningTask = {
+      state: { name, title: task.title, runId: ++this.taskRuns, state: "running", author, done: null, text: null, summary: null, problem: null, startedAt: Date.now(), endedAt: null },
+      aborts: new AbortController(),
+      progressFlush: undefined,
+    };
+    opened.running = running;
+    this.showTask(opened, running.state);
+    const ended = (async () => {
+      try {
+        const summary = await task.run(this.taskContext(opened, running));
+        if (running.aborts.signal.aborted) throw new AppProblem("stopped");
+        if (typeof summary !== "string") throw new AppProblem(`${manifest.title} gave no summary of its ${name} task, which is a bug in the plugin.`);
+        this.endTask(opened, running, { state: "done", summary });
+        return summary;
+      } catch (error) {
+        const stopped = running.aborts.signal.aborted;
+        this.endTask(opened, running, stopped ? { state: "stopped" } : { state: "failed", problem: messageOf(error) });
+        throw new AppProblem(stopped ? `${task.title} was stopped before it ended.` : messageOf(error));
+      }
+    })();
+    return { ended };
   }
 
   private taskContext(opened: AppDocument, running: RunningTask): AppTaskContext {
@@ -499,54 +667,65 @@ export class AppDocuments {
     this.publishWhileOpen(opened);
   }
 
-  /** A document the app has since closed, or left for another file, has nothing more to show the pages. */
+  /** A document no conversation holds open has nothing more to show the pages. */
   private publishWhileOpen(opened: AppDocument) {
-    if (this.documents.get(keyOf(opened)) === opened) this.publisher.stateChanged(this.stateOf(opened));
+    if (this.documents.has(opened.id)) this.publisher.stateChanged(this.stateOf(opened));
   }
 
   private stateOf(opened: AppDocument) {
     return documentStateOf(opened, this.filesChanges.get(opened.workspaceId) ?? 0);
   }
 
-  /** Tells the views of the workspace's apps to list its files again, as a task, an agent's turn or an open may have changed them. */
-  filesMayHaveChanged(workspaceId: string) {
-    this.filesChanges.set(workspaceId, (this.filesChanges.get(workspaceId) ?? 0) + 1);
-    for (const opened of this.documents.values()) if (opened.workspaceId === workspaceId) this.publisher.stateChanged(this.stateOf(opened));
+  private isHeld(opened: AppDocument) {
+    return [...this.openedIn.values()].some((pointer) => pointer.documentId === opened.id);
   }
 
-  forgetWorkspace(workspaceId: string) {
-    this.closeMatching((opened) => opened.ownerId === workspaceId);
-  }
-
-  /** Closes the apps open in a worktree whose folder is gone. */
-  forgetFolder(folderId: string) {
-    this.closeMatching((opened) => opened.workspaceId === folderId);
+  private closeUnlessHeld(documentId: string) {
+    const opened = this.documents.get(documentId);
+    if (opened && !this.isHeld(opened)) this.close(documentId);
   }
 
   private closeMatching(matches: (opened: AppDocument) => boolean) {
-    const closed = [...this.documents.values()].filter(matches);
-    for (const opened of closed) this.close(opened.workspaceId, opened.plugin.manifest.name);
-    if (closed.length > 0) this.publisher.openAppsChanged(this.openApps());
+    const closing = [...this.documents.values()].filter(matches);
+    for (const opened of closing) this.close(opened.id);
+    if (closing.length > 0) this.publishOpenApps();
   }
 
-  stop() {
-    for (const opened of [...this.documents.values()]) this.close(opened.workspaceId, opened.plugin.manifest.name);
+  /** Takes the document away from every conversation holding it, stops what it was doing, and lets its streamed files go. */
+  private close(documentId: string) {
+    const opened = this.documents.get(documentId);
+    if (!opened) return;
+    for (const [key, pointer] of [...this.openedIn]) if (pointer.documentId === documentId) this.openedIn.delete(key);
+    opened.watcher?.close();
+    clearTimeout(opened.settling);
+    opened.running?.aborts.abort();
+    this.media.revoke(documentId);
+    this.documents.delete(documentId);
+    this.publishOpenApps();
+  }
+
+  private publishOpenApps() {
+    this.publisher.openAppsChanged(this.openApps());
+  }
+
+  /** The conversation an agent works for, whose folder its apps open in. */
+  private conversationOf(conversationId: string): Conversation {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) throw new AppProblem(`No conversation ${conversationId} holds an app open.`);
+    return conversation;
+  }
+
+  /** The folder a conversation works in, and the workspace that owns it: its own worktree's, or its workspace's. */
+  private folderOf(conversation: Conversation): { workspace: Workspace; ownerId: string } {
+    const owner = this.store.findWorkspace(conversation.workspaceId);
+    if (!owner) throw new AppProblem("That workspace no longer exists.");
+    return { workspace: workingCopyOf(owner, conversation), ownerId: owner.id };
   }
 
   private plugin(name: string) {
     const plugin = this.plugins.find(({ manifest }) => manifest.name === name);
     if (!plugin) throw new AppProblem(`No app is called ${name}. Installed: ${this.plugins.map(({ manifest }) => manifest.name).join(", ") || "none"}.`);
     return plugin;
-  }
-
-  private openIn(workspaceId: string, appName: string | undefined): AppDocument {
-    const here = [...this.documents.values()].filter((opened) => opened.workspaceId === workspaceId);
-    const named = appName === undefined ? here : here.filter(({ plugin }) => plugin.manifest.name === appName);
-    if (named.length === 1) return named[0]!;
-    const names = (documents: AppDocument[]) => documents.map(({ plugin }) => plugin.manifest.name).join(", ");
-    if (here.length === 0) throw new AppProblem(`No app is open in this workspace. Open one with app_open; installed: ${this.plugins.map(({ manifest }) => manifest.name).join(", ")}.`);
-    if (appName !== undefined) throw new AppProblem(`${appName} isn't open in this workspace; open here: ${names(here)}.`);
-    throw new AppProblem(`Several apps are open here (${names(here)}); say which with app.`);
   }
 
   private created(plugin: AppPlugin, file: string, openedFile: string | undefined) {
@@ -600,7 +779,7 @@ export class AppDocuments {
 
   private readOutsideEdit(opened: AppDocument) {
     return this.queued(opened, async () => {
-      if (this.documents.get(keyOf(opened)) !== opened || !existsSync(opened.path)) return;
+      if (!this.documents.has(opened.id) || !existsSync(opened.path)) return;
       const text = readFileSync(opened.path, "utf8");
       const hash = hashOf(text);
       if (hash === opened.knownHash) return;
@@ -614,16 +793,5 @@ export class AppDocuments {
       }
       this.publishWhileOpen(opened);
     });
-  }
-
-  private close(workspaceId: string, app: string) {
-    const key = appKey({ workspaceId, app });
-    const opened = this.documents.get(key);
-    if (!opened) return;
-    opened.watcher?.close();
-    clearTimeout(opened.settling);
-    opened.running?.aborts.abort();
-    this.media.revoke(key);
-    this.documents.delete(key);
   }
 }

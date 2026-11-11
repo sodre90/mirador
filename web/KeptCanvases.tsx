@@ -106,8 +106,10 @@ const KeptCanvas = memo(function KeptCanvas({
   const workspaceApps = useMemo(
     () => {
       const inFolder = openApps.filter((app) => app.workspaceId === workingCopyId);
-      const usedHere = (app: OpenApp) => app.conversationIds.includes(open.conversationId);
-      return { open: inFolder.filter(usedHere), elsewhere: inFolder.filter((app) => !usedHere(app)), installed: installedApps, documents: appDocuments };
+      const here = inFolder.filter((app) => app.conversationId === open.conversationId);
+      /** Other conversations' documents, each once: several of them may hold one open. */
+      const elsewhere = [...new Map(inFolder.filter((app) => app.conversationId !== open.conversationId).map((app) => [app.documentId, app])).values()];
+      return { open: here, elsewhere, installed: installedApps, documents: appDocuments };
     },
     [openApps, installedApps, appDocuments, workingCopyId, open.conversationId],
   );

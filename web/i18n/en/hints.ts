@@ -333,7 +333,7 @@ export const hints = {
   pageMarkChange: "Tell the agent what to change there: it shows the page again with the change made.",
   canvasEditsWaiting: "Show the edit the agent waits for you to allow or reject.",
   canvasChanges: "The files this turn changed, or all uncommitted changes, with their line changes.",
-  canvasApp: "The app open in this workspace, which you and the agent change together. Every conversation that shows it works on the same document.",
+  canvasApp: "The app this conversation has open, which you and its agent change together. Another conversation of the workspace has a document of its own.",
   canvasWorkspaceTab: "A plugin's tab for this workspace, the same in each of its conversations.",
   canvasChecklist:
     "The steps of the agent's work, ticked as it finishes them. You can tick any of them too: the agent hears of your ticks with your next message.",

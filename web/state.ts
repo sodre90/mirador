@@ -320,7 +320,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "plugins.views":
       return { ...state, installedApps: message.installedApps, canvasViews: message.canvasViews };
     case "app.state":
-      return { ...state, appDocuments: { ...state.appDocuments, [appKey(message.state)]: message.state } };
+      return { ...state, appDocuments: { ...state.appDocuments, [message.state.documentId]: message.state } };
     case "workspace.upserted":
       return { ...state, workspaces: upsert(state.workspaces, message.workspace).sort(inSidebarOrder) };
     case "workspace.deleted":

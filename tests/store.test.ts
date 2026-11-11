@@ -715,29 +715,7 @@ describe("Store", () => {
     store.close();
   });
 
-  test("notes, once, the apps each conversation's Claude Code agent used before Mirador kept track of them", () => {
-    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
-    const { conversation } = seededStore();
-    const before = new Store(path);
-    before.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
-    ["c1", "c2", "c3"].forEach((id) => before.insertConversation({ ...conversation, id }));
-    before.saveOpenApp("w1", "counter", "counter.json");
-    before.saveOpenApp("w1", "notes", "notes.json");
-    const toolCall = (toolName: string, rawInput: object) =>
-      ({ type: "acp", update: { sessionUpdate: "tool_call", toolCallId: toolName, title: toolName, rawInput, _meta: { claudeCode: { toolName } } } }) as unknown as ConversationEvent;
-    before.appendEvent("c1", toolCall("mcp__canvas__app_open", { app: "counter", file: "counter.json" }));
-    before.appendEvent("c2", toolCall("mcp__canvas__app_state", {}));
-    before.appendEvent("c3", toolCall("Bash", { command: "grep app_open host" }));
-    before.close();
-    new Database(path).run("DROP TABLE app_conversations");
-
-    const store = new Store(path);
-    const used = store.listAppConversations().map(({ app, conversationId }) => `${conversationId} ${app}`);
-    expect(used.sort()).toEqual(["c1 counter", "c2 counter", "c2 notes"]);
-    store.close();
-  });
-
-  test("keeps the apps a workspace had open, and their storage, when apps come to be kept per folder", () => {
+  test("keeps the apps a workspace had open, and their storage, when they come to be kept per folder and per conversation", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const { conversation } = seededStore();
     const before = new Store(path);
@@ -745,7 +723,7 @@ describe("Store", () => {
     before.insertConversation({ ...conversation, id: "c1" });
     before.close();
     new Database(path).run(`
-      DROP TABLE open_apps; DROP TABLE app_conversations; DROP TABLE app_storage;
+      DROP TABLE IF EXISTS open_apps; DROP TABLE IF EXISTS app_conversations; DROP TABLE IF EXISTS app_storage;
       CREATE TABLE open_apps (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL, file TEXT NOT NULL, PRIMARY KEY (workspace_id, app));
       CREATE TABLE app_conversations (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, app TEXT NOT NULL,
         conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, PRIMARY KEY (workspace_id, app, conversation_id));
@@ -757,12 +735,46 @@ describe("Store", () => {
     `);
 
     const store = new Store(path);
-    expect(store.listOpenApps()).toEqual([{ workspaceId: "w1", app: "counter", file: "counter.json" }]);
-    expect(store.listAppConversations()).toEqual([{ workspaceId: "w1", app: "counter", conversationId: "c1" }]);
+    expect(store.listOpenApps()).toEqual([{ conversationId: "c1", workspaceId: "w1", app: "counter", file: "counter.json" }]);
     expect(store.appStorage("w1", "counter")).toEqual({ zoom: "2" });
-    store.deleteWorkspace("w1");
+    store.deleteConversation("c1");
     expect(store.listOpenApps()).toEqual([]);
+    store.deleteWorkspace("w1");
     expect(store.appStorage("w1", "counter")).toEqual({});
+    store.close();
+  });
+
+  test("an app one Mirador kept open per folder is open, in this new one, in each conversation that showed it", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const { conversation } = seededStore();
+    const before = new Store(path);
+    before.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    ["c1", "c2", "c3"].forEach((id) => before.insertConversation({ ...conversation, id }));
+    before.close();
+    new Database(path).run(`
+      DROP TABLE IF EXISTS open_apps; DROP TABLE IF EXISTS app_conversations; DROP TABLE IF EXISTS app_storage;
+      CREATE TABLE open_apps (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
+        PRIMARY KEY (folder_id, app));
+      CREATE TABLE app_conversations (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, PRIMARY KEY (folder_id, app, conversation_id));
+      CREATE TABLE app_storage (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+        PRIMARY KEY (folder_id, app, key));
+      INSERT INTO open_apps VALUES ('w1', 'w1', 'counter', 'counter.json'), ('w1', 'w1', 'notes', 'notes.json'), ('w1', 'wt1', 'counter', 'other.json');
+      INSERT INTO app_conversations VALUES ('w1', 'w1', 'counter', 'c1'), ('w1', 'w1', 'counter', 'c2'), ('w1', 'wt1', 'counter', 'c3');
+      INSERT INTO app_storage VALUES ('w1', 'wt1', 'counter', 'zoom', '2');
+    `);
+
+    const store = new Store(path);
+    expect(store.listOpenApps().map(({ conversationId, workspaceId, file }) => `${conversationId} ${workspaceId} ${file}`).toSorted()).toEqual([
+      "c1 w1 counter.json",
+      "c2 w1 counter.json",
+      "c3 wt1 other.json",
+    ]);
+    expect(store.appStorage("wt1", "counter")).toEqual({ zoom: "2" });
+    store.deleteConversation("c2");
+    expect(store.listOpenApps().map(({ conversationId }) => conversationId)).toEqual(["c1", "c3"]);
+    const tables = (new Database(path).query("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map(({ name }) => name);
+    expect(tables).not.toContain("app_conversations");
     store.close();
   });
 

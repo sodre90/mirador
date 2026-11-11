@@ -331,7 +331,7 @@ export const hints: Messages["hints"] = {
   pageMarkChange: "告诉 Agent 那里要改什么：它会重新显示改好后的页面。",
   canvasEditsWaiting: "显示 Agent 等你允许或拒绝的编辑。",
   canvasChanges: "这一轮改动的文件，或所有未提交的更改，附带各自的行更改。",
-  canvasApp: "在这个工作区中打开的应用，你和 Agent 一起修改它。每个显示它的对话都使用同一份文档。",
+  canvasApp: "此对话打开的应用，你和它的 Agent 一起修改。工作区的另一个对话有自己的文档。",
   canvasWorkspaceTab: "插件为这个工作区提供的标签页，在工作区的每个对话中都相同。",
   canvasChecklist:
     "Agent 工作的各个步骤，完成时会被勾选。你也可以勾选其中任何一项：Agent 会随你的下一条消息得知你的勾选。",

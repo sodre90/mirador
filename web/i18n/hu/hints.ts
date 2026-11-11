@@ -356,7 +356,7 @@ export const hints: Messages["hints"] = {
   pageMarkChange: "Mondd meg az ágensnek, mit változtasson ott: újra megmutatja az oldalt a változtatással.",
   canvasEditsWaiting: "Annak a szerkesztésnek a megjelenítése, amelynek engedélyezésére vagy elutasítására az ágens vár.",
   canvasChanges: "A kör által módosított fájlok, vagy az összes nem commitolt változás, a sorváltozásaikkal.",
-  canvasApp: "A munkaterületen megnyitott alkalmazás, amelyet te és az ágens együtt módosítotok. Minden beszélgetés, amely mutatja, ugyanazon a dokumentumon dolgozik.",
+  canvasApp: "Az alkalmazás, amelyet ez a beszélgetés tart nyitva, és amelyet te és az ágense együtt módosítotok. A munkaterület egy másik beszélgetésének saját dokumentuma van.",
   canvasWorkspaceTab: "Egy bővítmény lapja ehhez a munkaterülethez, amely a munkaterület minden beszélgetésében ugyanaz.",
   canvasChecklist:
     "Az ágens munkájának lépései, kipipálva, ahogy végez velük. Te is kipipálhatod bármelyiket: az ágens a következő üzeneteddel értesül a pipáidról.",

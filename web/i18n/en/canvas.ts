@@ -47,7 +47,7 @@ export const canvas = {
     clear: "Clear",
     pointAndAsk: "Point and ask",
     findOnPage: "Find on this page",
-    showApp: (app: string) => `Show ${app}`,
+    showApp: (app: string, file: string) => `Show ${app} on ${file}`,
     agentsPlan: "Agent's plan",
     closeChecklist: "Close the checklist",
     dismissChecklist: "Dismiss the checklist",

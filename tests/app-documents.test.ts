@@ -2,7 +2,7 @@ import { describe, expect, spyOn, test } from "bun:test";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { AppDocuments, AppFileRefused, type AppPublisher } from "../host/apps/documents.ts";
+import { AppDocuments, AppFileRefused, takenUpWords, type AppPublisher } from "../host/apps/documents.ts";
 import { AppProblem, loadPlugins } from "../host/apps/plugins.ts";
 import { Store } from "../host/store.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
@@ -17,8 +17,15 @@ function recordingPublisher() {
   return { publisher, states, openAppLists };
 }
 
+/** Conversations every app open belongs to: c1 and c2 of workspace w1, in the folder it has. */
+function addConversations(store: Store, ...ids: string[]) {
+  const { position: _, ...conversation } = storeWithConversation().findConversation("c1")!;
+  for (const id of ids) if (!store.findConversation(id)) store.insertConversation({ ...conversation, id });
+}
+
 async function setUp(store = new Store(":memory:"), workspacePath = mkdtempSync(join(tmpdir(), "app-workspace-")), maxFileBytes?: number) {
   if (!store.findWorkspace("w1")) store.insertWorkspace({ id: "w1", name: "p", path: workspacePath, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+  addConversations(store, "c1", "c2");
   const { apps: plugins } = await loadPlugins(FIXTURE_APPS);
   const recorded = recordingPublisher();
   const apps = new AppDocuments(store, plugins, recorded.publisher, maxFileBytes);
@@ -26,21 +33,25 @@ async function setUp(store = new Store(":memory:"), workspacePath = mkdtempSync(
   return { store, workspacePath, apps, fileText, ...recorded };
 }
 
-/** Workspace w1, in a folder of its own, with conversation c1 working in a worktree of its own. */
+/** Workspace w1, in a folder of its own, with conversation c1 working in a worktree of its own and c2 in the workspace. */
 async function setUpWithWorktree() {
   const setup = await setUp();
   const worktreeFolder = mkdtempSync(join(tmpdir(), "app-worktree-"));
-  const { position: _, ...conversation } = storeWithConversation().findConversation("c1")!;
+  const { position: _, ...conversation } = setup.store.findConversation("c1")!;
+  setup.store.deleteConversation("c1");
   setup.store.insertConversation({ ...conversation, id: "c1", worktree: { id: "wt1", root: worktreeFolder, folder: worktreeFolder, branch: "mirador/wt1" } });
   return { ...setup, worktreeFolder };
 }
 
-/** Workspace w1, in a folder of its own, with conversations c1 and c2. */
-async function setUpWithTwoConversations() {
-  const setup = await setUp();
-  const { position: _, ...conversation } = storeWithConversation().findConversation("c1")!;
-  for (const id of ["c1", "c2"]) setup.store.insertConversation({ ...conversation, id });
-  return setup;
+/** The document one conversation has open in an app. */
+function documentOf(apps: AppDocuments, conversationId = "c1", app = "counter") {
+  return apps.openApps().find((open) => open.conversationId === conversationId && open.app === app)!.documentId;
+}
+
+const openOf = (apps: AppDocuments, conversationId: string) => apps.openApps().find((open) => open.conversationId === conversationId)!;
+
+function stateOf(apps: AppDocuments, conversationId = "c1", app = "counter"): AppDocumentState {
+  return apps.state(documentOf(apps, conversationId, app))!;
 }
 
 async function eventually(check: () => void, timeoutMs = 3000) {
@@ -131,10 +142,19 @@ describe("loadPlugins", () => {
 describe("AppDocuments", () => {
   test("opens an app on a new file, which it creates", async () => {
     const { apps, fileText, openAppLists, states } = await setUp();
-    expect(await apps.open("w1", "counter", "counter.json")).toEqual({ workspaceId: "w1", app: "counter", title: "Counter", file: "counter.json", conversationIds: [] });
+    const opened = await apps.open("c1", "counter", "counter.json");
+    expect(opened).toEqual({
+      conversationId: "c1",
+      documentId: expect.stringMatching(/^[0-9a-f]{16}$/),
+      workspaceId: "w1",
+      app: "counter",
+      title: "Counter",
+      file: "counter.json",
+      shownAt: expect.any(Number),
+    });
     expect(JSON.parse(fileText())).toEqual({ count: 0 });
     expect(openAppLists.at(-1)).toHaveLength(1);
-    expect(states.at(-1)).toEqual({ workspaceId: "w1", app: "counter", file: "counter.json", filesChange: 1, document: { count: 0 }, lastChange: null, problem: null, task: null });
+    expect(states.at(-1)).toEqual({ documentId: opened.documentId, workspaceId: "w1", app: "counter", file: "counter.json", filesChange: 1, document: { count: 0 }, lastChange: null, problem: null, task: null });
     apps.stop();
   });
 
@@ -142,23 +162,24 @@ describe("AppDocuments", () => {
     const { apps, workspacePath, store } = await setUp();
     mkdirSync(join(workspacePath, "trip"));
     writeFileSync(join(workspacePath, "trip", "day1.tally"), "");
-    expect(await apps.open("w1", "counter", "trip/day1.tally")).toEqual({ workspaceId: "w1", app: "counter", title: "Counter", file: "trip/day1.json", conversationIds: [] });
+    const opened = await apps.open("c1", "counter", "trip/day1.tally");
+    expect(opened).toMatchObject({ conversationId: "c1", app: "counter", file: "trip/day1.json" });
     expect(JSON.parse(readFileSync(join(workspacePath, "trip", "day1.json"), "utf8"))).toEqual({ count: 0, startedFor: "day1.tally" });
-    await apps.apply("w1", undefined, { op: "add", by: 2 }, { kind: "you" });
-    expect(await apps.open("w1", "counter", "trip/day1.tally")).toMatchObject({ file: "trip/day1.json" });
-    expect(apps.state("w1", "counter")!.document).toEqual({ count: 2, startedFor: "day1.tally" });
+    await apps.apply("c1", undefined, { op: "add", by: 2 }, { kind: "you" });
+    expect(await apps.open("c1", "counter", "trip/day1.tally")).toMatchObject({ documentId: opened.documentId, file: "trip/day1.json" });
+    expect(stateOf(apps).document).toEqual({ count: 2, startedFor: "day1.tally" });
     apps.stop();
     const again = await setUp(store, workspacePath);
     await again.apps.reopenAll();
-    expect(again.apps.state("w1", "counter")!.document).toEqual({ count: 2, startedFor: "day1.tally" });
+    expect(stateOf(again.apps).document).toEqual({ count: 2, startedFor: "day1.tally" });
     again.apps.stop();
   });
 
   test("applies operations sent at once one after another, and the file holds them", async () => {
     const { apps, fileText } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
     const agent = { kind: "agent" as const, conversationId: "c1", turnSeq: 4 };
-    const changes = await Promise.all([apps.apply("w1", undefined, { op: "add", by: 1 }, agent), apps.apply("w1", "counter", { op: "add", by: 2 }, { kind: "you" })]);
+    const changes = await Promise.all([apps.apply("c1", undefined, { op: "add", by: 1 }, agent), apps.apply("c1", "counter", { op: "add", by: 2 }, { kind: "you" })]);
     expect(changes.map(({ seq, summary }) => [seq, summary])).toEqual([
       [1, "Added 1; the count is 1."],
       [2, "Added 2; the count is 3."],
@@ -169,26 +190,26 @@ describe("AppDocuments", () => {
   });
 
   test("tells the plugin who made each operation: the agent, the user in the view, or whoever ran the task that applied it", async () => {
-    const { apps } = await setUpWithTwoConversations();
-    await apps.open("w1", "counter", "counter.json");
-    const signed = async (author: AppAuthor) => (await apps.apply("w1", undefined, { op: "sign" }, author)).summary;
+    const { apps } = await setUp();
+    await apps.open("c1", "counter", "counter.json");
+    const signed = async (author: AppAuthor) => (await apps.apply("c1", undefined, { op: "sign" }, author)).summary;
     expect(await signed({ kind: "agent", conversationId: "c1", turnSeq: 4 })).toBe("Signed by agent.");
     expect(await signed({ kind: "you" })).toBe("Signed by you.");
-    expect(await apps.startTask("w1", undefined, "sign", { kind: "agent", conversationId: "c1", turnSeq: 5 }).ended).toBe("Signed by agent.");
-    expect(await apps.startTask("w1", undefined, "sign", { kind: "you" }).ended).toBe("Signed by you.");
-    expect(apps.state("w1", "counter")!.document).toEqual({ count: 0, signedBy: "you" });
+    expect(await apps.startTask("c1", undefined, "sign", { kind: "agent", conversationId: "c1", turnSeq: 5 }).ended).toBe("Signed by agent.");
+    expect(await apps.startTask("c1", undefined, "sign", { kind: "you" }).ended).toBe("Signed by you.");
+    expect(stateOf(apps).document).toEqual({ count: 0, signedBy: "you" });
     apps.stop();
   });
 
   test("leaves the document and the file as they were when the plugin refuses or throws", async () => {
     const { apps, fileText, states } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
-    await apps.apply("w1", undefined, { op: "add", by: 5 }, { kind: "you" });
+    await apps.open("c1", "counter", "counter.json");
+    await apps.apply("c1", undefined, { op: "add", by: 5 }, { kind: "you" });
     const before = fileText();
     const statesBefore = states.length;
-    expect(apps.apply("w1", undefined, { op: "multiply" }, { kind: "you" })).rejects.toThrow('use { op: "add", by: <number> }');
-    expect(apps.apply("w1", undefined, { op: "crash" }, { kind: "you" })).rejects.toBeInstanceOf(AppProblem);
-    await apps.apply("w1", undefined, { op: "add", by: 1 }, { kind: "you" }).catch(() => {});
+    expect(apps.apply("c1", undefined, { op: "multiply" }, { kind: "you" })).rejects.toThrow('use { op: "add", by: <number> }');
+    expect(apps.apply("c1", undefined, { op: "crash" }, { kind: "you" })).rejects.toBeInstanceOf(AppProblem);
+    await apps.apply("c1", undefined, { op: "add", by: 1 }, { kind: "you" }).catch(() => {});
     expect(JSON.parse(fileText())).toEqual({ count: 6 });
     expect(before).toBe('{\n  "count": 5\n}\n');
     expect(states.slice(statesBefore).map(({ document }) => document)).toEqual([{ count: 6 }]);
@@ -197,58 +218,96 @@ describe("AppDocuments", () => {
 
   test("doesn't take its own writes for edits made outside, and does take an outside edit", async () => {
     const { apps, workspacePath, states } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
-    await apps.apply("w1", undefined, { op: "add", by: 1 }, { kind: "you" });
+    await apps.open("c1", "counter", "counter.json");
+    await apps.apply("c1", undefined, { op: "add", by: 1 }, { kind: "you" });
     await watcherHadItsChance();
     expect(states.at(-1)!.lastChange!.author).toEqual({ kind: "you" });
     writeFileSync(join(workspacePath, "counter.json"), '{ "count": 10 }');
     await eventually(() => expect(states.at(-1)!.lastChange).toMatchObject({ seq: 2, author: { kind: "outside" }, summary: "Edited outside Mirador" }));
     expect(states.at(-1)!.document).toEqual({ count: 10 });
-    expect(apps.describe("w1", undefined)).toContain("2. edited outside Mirador: Edited outside Mirador");
+    expect(apps.describe("c1", undefined)).toContain("2. edited outside Mirador: Edited outside Mirador");
     apps.stop();
   });
 
   test("keeps the last good document while the file doesn't parse, and refuses operations until it does", async () => {
     const { apps, workspacePath, states } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
-    await apps.apply("w1", undefined, { op: "add", by: 2 }, { kind: "you" });
+    await apps.open("c1", "counter", "counter.json");
+    await apps.apply("c1", undefined, { op: "add", by: 2 }, { kind: "you" });
     writeFileSync(join(workspacePath, "counter.json"), '{ "count": ');
     await eventually(() => expect(states.at(-1)!.problem).toBeTruthy());
     expect(states.at(-1)!.document).toEqual({ count: 2 });
-    expect(apps.apply("w1", undefined, { op: "add", by: 1 }, { kind: "you" })).rejects.toThrow("counter.json can't be read");
+    expect(apps.apply("c1", undefined, { op: "add", by: 1 }, { kind: "you" })).rejects.toThrow("counter.json can't be read");
     writeFileSync(join(workspacePath, "counter.json"), '{ "count": 7 }');
     await eventually(() => expect(states.at(-1)).toMatchObject({ problem: null, document: { count: 7 } }));
     apps.stop();
   });
 
-  test("opens the same apps again when the host starts again", async () => {
+  test("opens the same apps again when the host starts again, each in the conversation that had it open", async () => {
     const first = await setUp();
-    await first.apps.open("w1", "counter", "counter.json");
-    await first.apps.apply("w1", undefined, { op: "add", by: 4 }, { kind: "you" });
+    await first.apps.open("c1", "counter", "counter.json");
+    await first.apps.apply("c1", undefined, { op: "add", by: 4 }, { kind: "you" });
     first.apps.stop();
     const second = await setUp(first.store, first.workspacePath);
     await second.apps.reopenAll();
-    expect(second.apps.openApps()).toEqual([{ workspaceId: "w1", app: "counter", title: "Counter", file: "counter.json", conversationIds: [] }]);
-    expect(second.apps.state("w1", "counter")!.document).toEqual({ count: 4 });
+    expect(second.apps.openApps()).toEqual([{ conversationId: "c1", documentId: expect.stringMatching(/^[0-9a-f]{16}$/), workspaceId: "w1", app: "counter", title: "Counter", file: "counter.json" }]);
+    expect(stateOf(second.apps).document).toEqual({ count: 4 });
     second.apps.stop();
   });
 
+  test("an app open in a conversation that was deleted reopens nowhere, and nothing is warned of it", async () => {
+    const first = await setUp();
+    await first.apps.open("c1", "counter", "counter.json");
+    await first.apps.open("c2", "counter", "counter.json");
+    first.apps.stop();
+    first.store.deleteConversation("c2");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const second = await setUp(first.store, first.workspacePath);
+      await second.apps.reopenAll();
+      expect(second.apps.openApps().map(({ conversationId }) => conversationId)).toEqual(["c1"]);
+      expect(warn).not.toHaveBeenCalled();
+      second.apps.stop();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("forgets an app whose file stopped parsing when the host starts again", async () => {
+    const first = await setUp();
+    await first.apps.open("c1", "counter", "counter.json");
+    first.apps.stop();
+    writeFileSync(join(first.workspacePath, "counter.json"), "{ not json");
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const second = await setUp(first.store, first.workspacePath);
+      await second.apps.reopenAll();
+      expect(second.apps.openApps()).toEqual([]);
+      expect(second.store.listOpenApps()).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Couldn't open counter on counter.json again"));
+      second.apps.stop();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   test("says what to do when no app or another app is asked for", async () => {
-    const { apps } = await setUp();
-    expect(() => apps.describe("w1", undefined)).toThrow("Open one with app_open; installed: counter.");
-    expect(apps.open("w1", "sketchbook", "sketch.json")).rejects.toThrow("No app is called sketchbook. Installed: counter.");
-    expect(apps.open("w1", "counter", "../elsewhere.json")).rejects.toThrow("is outside the workspace");
-    await apps.open("w1", "counter", "counter.json");
-    expect(() => apps.apply("w1", "sketchbook", { op: "add", by: 1 }, { kind: "you" })).toThrow("sketchbook isn't open in this workspace; open here: counter.");
+    const { apps, store } = await setUp();
+    expect(() => apps.describe("c1", undefined)).toThrow("No app is open in this conversation. Open one with app_open; installed: counter.");
+    await expect(apps.open("c1", "sketchbook", "sketch.json")).rejects.toThrow("No app is called sketchbook. Installed: counter.");
+    await expect(apps.open("c1", "counter", "../elsewhere.json")).rejects.toThrow("is outside the workspace");
+    await apps.open("c1", "counter", "counter.json");
+    expect(() => apps.apply("c1", "sketchbook", { op: "add", by: 1 }, { kind: "you" })).toThrow("sketchbook isn't open in this conversation; open here: Counter on counter.json.");
+    addConversations(store, "c3");
+    expect(() => apps.apply("c3", "sketchbook", { op: "add", by: 1 }, { kind: "you" })).toThrow("No app is open in this conversation called sketchbook.");
     apps.stop();
   });
 
   test("describes the document in the plugin's words, with the latest changes", async () => {
     const { apps } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
-    expect(apps.describe("w1", undefined)).toBe(`Counter on counter.json\n\nThe count is 0.\n\nNo changes yet since Mirador started.\n\n${COUNTER_TASKS}`);
-    await apps.apply("w1", undefined, { op: "add", by: 3 }, { kind: "agent", conversationId: "c1", turnSeq: null });
-    expect(apps.describe("w1", "counter")).toBe(`Counter on counter.json\n\nThe count is 3.\n\nLatest changes:\n1. agent: Added 3; the count is 3.\n\n${COUNTER_TASKS}`);
+    await apps.open("c1", "counter", "counter.json");
+    expect(apps.describe("c1", undefined)).toBe(`Counter on counter.json\n\nThe count is 0.\n\nNo changes yet since Mirador started.\n\n${COUNTER_TASKS}`);
+    await apps.apply("c1", undefined, { op: "add", by: 3 }, { kind: "agent", conversationId: "c1", turnSeq: null });
+    expect(apps.describe("c1", "counter")).toBe(`Counter on counter.json\n\nThe count is 3.\n\nLatest changes:\n1. agent: Added 3; the count is 3.\n\n${COUNTER_TASKS}`);
     apps.stop();
   });
 
@@ -259,11 +318,11 @@ describe("AppDocuments", () => {
     symlinkSync(outside, join(workspacePath, "linked"));
     symlinkSync(join(outside, "secret.json"), join(workspacePath, "alias.json"));
     symlinkSync(join(outside, "not-made-yet"), join(workspacePath, "dangling"));
-    await expect(apps.open("w1", "counter", "linked/secret.json")).rejects.toThrow("linked/secret.json is outside the workspace");
-    await expect(apps.open("w1", "counter", "linked/new.json")).rejects.toThrow("linked/new.json is outside the workspace");
-    await expect(apps.open("w1", "counter", "linked/deeper/new.json")).rejects.toThrow("is outside the workspace");
-    await expect(apps.open("w1", "counter", "alias.json")).rejects.toThrow("alias.json is outside the workspace");
-    await expect(apps.open("w1", "counter", "dangling/new.json")).rejects.toThrow();
+    await expect(apps.open("c1", "counter", "linked/secret.json")).rejects.toThrow("linked/secret.json is outside the workspace");
+    await expect(apps.open("c1", "counter", "linked/new.json")).rejects.toThrow("linked/new.json is outside the workspace");
+    await expect(apps.open("c1", "counter", "linked/deeper/new.json")).rejects.toThrow("is outside the workspace");
+    await expect(apps.open("c1", "counter", "alias.json")).rejects.toThrow("alias.json is outside the workspace");
+    await expect(apps.open("c1", "counter", "dangling/new.json")).rejects.toThrow();
     expect(readdirSync(outside)).toEqual(["secret.json"]);
     apps.stop();
   });
@@ -273,8 +332,8 @@ describe("AppDocuments", () => {
     mkdirSync(join(workspacePath, "plans"));
     writeFileSync(join(workspacePath, "plans", "week.json"), JSON.stringify({ count: 7 }));
     symlinkSync(join(workspacePath, "plans"), join(workspacePath, "shortcut"));
-    expect(await apps.open("w1", "counter", "shortcut/week.json")).toMatchObject({ file: "shortcut/week.json" });
-    expect(await apps.open("w1", "counter", "new/folder/tally.json")).toMatchObject({ file: "new/folder/tally.json" });
+    expect(await apps.open("c1", "counter", "shortcut/week.json")).toMatchObject({ file: "shortcut/week.json" });
+    expect(await apps.open("c1", "counter", "new/folder/tally.json")).toMatchObject({ file: "new/folder/tally.json" });
     expect(JSON.parse(readFileSync(join(workspacePath, "new", "folder", "tally.json"), "utf8"))).toEqual({ count: 0 });
     apps.stop();
   });
@@ -282,7 +341,7 @@ describe("AppDocuments", () => {
   test("an edit still being written when the app opens another file leaves the pages on the new file", async () => {
     const { apps, workspacePath, states } = await setUp();
     writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 50 }));
-    await apps.open("w1", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
     let finishWrite = () => {};
     const writing = new Promise<void>((resolve) => (finishWrite = resolve));
     const realWrite = Bun.write;
@@ -292,12 +351,12 @@ describe("AppDocuments", () => {
     }) as typeof Bun.write);
     let applying: Promise<unknown>;
     try {
-      applying = apps.apply("w1", "counter", { op: "add", by: 1 }, { kind: "you" });
+      applying = apps.apply("c1", "counter", { op: "add", by: 1 }, { kind: "you" });
       await eventually(() => expect(slowWrite).toHaveBeenCalled());
     } finally {
       slowWrite.mockRestore();
     }
-    await apps.open("w1", "counter", "other.json");
+    await apps.open("c1", "counter", "other.json");
     finishWrite();
     await applying;
     expect(states.at(-1)?.document).toEqual({ count: 50 });
@@ -316,9 +375,9 @@ describe("AppDocuments", () => {
     let openingFirst: Promise<unknown>;
     let openingSecond: Promise<unknown>;
     try {
-      openingFirst = apps.open("w1", "counter", "first.json");
+      openingFirst = apps.open("c1", "counter", "first.json");
       await eventually(() => expect(slowFirstWrite).toHaveBeenCalled());
-      openingSecond = apps.open("w1", "counter", "second.json");
+      openingSecond = apps.open("c1", "counter", "second.json");
       await Bun.sleep(50);
     } finally {
       slowFirstWrite.mockRestore();
@@ -329,6 +388,100 @@ describe("AppDocuments", () => {
     expect(openAppLists.at(-1)!.map(({ file }) => file)).toEqual(["second.json"]);
     apps.stop();
   });
+
+  test("each conversation of a workspace keeps its own document when they open different files", async () => {
+    const { apps, workspacePath } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 9 }));
+    await apps.open("c1", "counter", "counter.json");
+    await apps.open("c2", "counter", "other.json");
+    expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 counter.json", "c2 other.json"]);
+    await apps.apply("c1", undefined, { op: "add", by: 1 }, { kind: "agent", conversationId: "c1", turnSeq: 1 });
+    expect(JSON.parse(readFileSync(join(workspacePath, "counter.json"), "utf8"))).toEqual({ count: 1 });
+    expect(JSON.parse(readFileSync(join(workspacePath, "other.json"), "utf8"))).toEqual({ count: 9 });
+    expect(stateOf(apps, "c2").document).toEqual({ count: 9 });
+    expect(apps.describe("c2", undefined)).toStartWith("Counter on other.json\n\nThe count is 9.");
+    apps.stop();
+  });
+
+  test("two conversations opening one file share its document, its changes and its one task at a time", async () => {
+    const { apps, fileText } = await setUp();
+    const first = await apps.open("c1", "counter", "counter.json");
+    const second = await apps.open("c2", "counter", "counter.json");
+    expect(second.documentId).toBe(first.documentId);
+    await apps.apply("c1", undefined, { op: "add", by: 2 }, { kind: "agent", conversationId: "c1", turnSeq: 1 });
+    expect(apps.state(second.documentId)!.document).toEqual({ count: 2 });
+    expect(apps.state(second.documentId)!.lastChange).toMatchObject({ author: { conversationId: "c1" }, summary: "Added 2; the count is 2." });
+    const waiting = apps.startTask("c2", undefined, "wait", { kind: "agent", conversationId: "c2", turnSeq: 1 }).ended.catch(() => {});
+    expect(() => apps.startTask("c1", undefined, "count-up", { kind: "you" })).toThrow("Wait until stopped is still running");
+    apps.stopTask(first.documentId);
+    await waiting;
+    expect(JSON.parse(fileText())).toEqual({ count: 2 });
+    apps.stop();
+  });
+
+  test("one file under two names is one document, and its changes reach the conversations holding it", async () => {
+    const { apps, workspacePath } = await setUp();
+    mkdirSync(join(workspacePath, "plans"));
+    writeFileSync(join(workspacePath, "plans", "week.json"), JSON.stringify({ count: 7 }));
+    symlinkSync(join(workspacePath, "plans", "week.json"), join(workspacePath, "today.json"));
+    const named = await apps.open("c1", "counter", "plans/week.json");
+    const linked = await apps.open("c2", "counter", "today.json");
+    expect(linked).toMatchObject({ conversationId: "c2", documentId: named.documentId, file: "plans/week.json" });
+    expect(apps.openApps()).toHaveLength(2);
+    await apps.apply("c2", undefined, { op: "add", by: 1 }, { kind: "you" });
+    expect(apps.state(named.documentId)!.document).toEqual({ count: 8 });
+    expect(JSON.parse(readFileSync(join(workspacePath, "plans", "week.json"), "utf8"))).toEqual({ count: 8 });
+    apps.stop();
+  });
+
+  test("opening another file leaves the document to whoever else holds it, and closes it when nobody does", async () => {
+    const { apps, openAppLists } = await setUp();
+    const kept = await apps.open("c1", "counter", "counter.json");
+    const { pathname } = new URL(apps.mediaGrant(kept.documentId, "counter.json").path, "http://assets");
+    await apps.open("c2", "counter", "counter.json");
+    const { ended } = apps.startTask("c2", undefined, "wait", { kind: "you" });
+    await apps.open("c1", "counter", "other.json");
+    expect(stateOf(apps, "c2").document).toEqual({ count: 0 });
+    expect(apps.mediaFile(pathname)).not.toBeNull();
+    apps.forgetConversation("c2");
+    expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 other.json"]);
+    expect(openAppLists.at(-1)!.map(({ conversationId }) => conversationId)).toEqual(["c1"]);
+    await expect(ended).rejects.toThrow("Wait until stopped was stopped before it ended.");
+    expect(apps.state(kept.documentId)).toBeNull();
+    expect(apps.mediaFile(pathname)).toBeNull();
+    apps.stop();
+  });
+
+  test("a conversation that never opened the app takes up the workspace's one document, and is told it did", async () => {
+    const { apps, openAppLists } = await setUp();
+    const first = await apps.open("c1", "counter", "counter.json");
+    expect(apps.describe("c2", undefined)).toStartWith(
+      "Counter on counter.json was open in another conversation of this workspace, which this conversation took up.\n\nCounter on counter.json\n\nThe count is 0.",
+    );
+    expect(takenUpWords("Counter on counter.json")).toBe("Counter on counter.json was open in another conversation of this workspace, which this conversation took up.\n\n");
+    expect(openOf(apps, "c2")).toMatchObject({ documentId: first.documentId, file: "counter.json" });
+    expect(openOf(apps, "c2").shownAt).toBeUndefined();
+    expect(openAppLists.at(-1)!.map(({ conversationId }) => conversationId)).toEqual(["c1", "c2"]);
+    const change = await apps.apply("c1", undefined, { op: "add", by: 1 }, { kind: "agent", conversationId: "c1", turnSeq: 1 });
+    expect(change.takenUp).toBeNull();
+    expect(apps.state(first.documentId)!.document).toEqual({ count: 1 });
+    expect(apps.describe("c2", undefined)).toStartWith("Counter on counter.json\n\nThe count is 1.");
+    apps.stop();
+  });
+
+  test("documents open in several conversations of a workspace are named, not guessed", async () => {
+    const { apps, workspacePath, store } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 9 }));
+    await apps.open("c1", "counter", "counter.json");
+    await apps.open("c2", "counter", "other.json");
+    addConversations(store, "c3");
+    expect(() => apps.apply("c3", undefined, { op: "add", by: 1 }, { kind: "you" })).toThrow(
+      "Counter on counter.json, Counter on other.json are open in other conversations of this workspace; open the one you want with app_open.",
+    );
+    expect(() => apps.describe("c3", "counter")).toThrow("Counter on counter.json, Counter on other.json are open in other conversations");
+    expect(apps.openApps()).toHaveLength(2);
+    apps.stop();
+  });
 });
 
 describe("AppDocuments in a worktree", () => {
@@ -336,20 +489,20 @@ describe("AppDocuments in a worktree", () => {
     const { apps, workspacePath, worktreeFolder } = await setUpWithWorktree();
     writeFileSync(join(workspacePath, "counter.json"), JSON.stringify({ count: 1 }));
     writeFileSync(join(worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
-    await apps.open("w1", "counter", "counter.json");
-    await apps.open("wt1", "counter", "counter.json", "c1");
+    await apps.open("c2", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
     expect(apps.openApps().map(({ workspaceId, file }) => `${workspaceId} ${file}`)).toEqual(["w1 counter.json", "wt1 counter.json"]);
-    await apps.apply("wt1", "counter", { op: "add", by: 3 }, { kind: "agent", conversationId: "c1", turnSeq: 1 });
+    await apps.apply("c1", "counter", { op: "add", by: 3 }, { kind: "agent", conversationId: "c1", turnSeq: 1 });
     expect(JSON.parse(readFileSync(join(worktreeFolder, "counter.json"), "utf8"))).toEqual({ count: 5 });
     expect(JSON.parse(readFileSync(join(workspacePath, "counter.json"), "utf8"))).toEqual({ count: 1 });
-    expect(apps.state("w1", "counter")!.document).toEqual({ count: 1 });
-    expect(apps.state("wt1", "counter")!.document).toEqual({ count: 5 });
+    expect(stateOf(apps, "c2").document).toEqual({ count: 1 });
+    expect(stateOf(apps, "c1").document).toEqual({ count: 5 });
     apps.stop();
   });
 
   test("makes a new file in the worktree, not in the workspace", async () => {
     const { apps, workspacePath, worktreeFolder } = await setUpWithWorktree();
-    await apps.open("wt1", "counter", "plans/tally.json", "c1");
+    await apps.open("c1", "counter", "plans/tally.json");
     expect(JSON.parse(readFileSync(join(worktreeFolder, "plans", "tally.json"), "utf8"))).toEqual({ count: 0 });
     expect(existsSync(join(workspacePath, "plans", "tally.json"))).toBe(false);
     apps.stop();
@@ -358,24 +511,24 @@ describe("AppDocuments in a worktree", () => {
   test("opens the worktree's document again when the host starts again", async () => {
     const first = await setUpWithWorktree();
     writeFileSync(join(first.worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
-    await first.apps.open("wt1", "counter", "counter.json", "c1");
-    await first.apps.apply("wt1", undefined, { op: "add", by: 4 }, { kind: "you" });
+    await first.apps.open("c1", "counter", "counter.json");
+    await first.apps.apply("c1", undefined, { op: "add", by: 4 }, { kind: "you" });
     first.apps.stop();
     const second = await setUp(first.store, first.workspacePath);
     await second.apps.reopenAll();
-    expect(second.apps.openApps()).toEqual([{ workspaceId: "wt1", app: "counter", title: "Counter", file: "counter.json", conversationIds: ["c1"] }]);
-    expect(second.apps.state("wt1", "counter")!.document).toEqual({ count: 6 });
+    expect(second.apps.openApps()).toEqual([{ conversationId: "c1", documentId: expect.stringMatching(/^[0-9a-f]{16}$/), workspaceId: "wt1", app: "counter", title: "Counter", file: "counter.json" }]);
+    expect(stateOf(second.apps).document).toEqual({ count: 6 });
     second.apps.stop();
   });
 
   test("forgets the apps open in a worktree whose folder is gone, and their stored state", async () => {
     const { apps, store, openAppLists, worktreeFolder } = await setUpWithWorktree();
     writeFileSync(join(worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
-    await apps.open("w1", "counter", "counter.json");
-    await apps.open("wt1", "counter", "counter.json", "c1");
+    await apps.open("c2", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
     store.saveAppStorageItem("wt1", "counter", "zoom", "2");
-    const { ended } = apps.startTask("wt1", undefined, "wait", { kind: "you" });
-    const { pathname } = new URL(apps.mediaGrant("wt1", "counter", "counter.json").path, "http://assets");
+    const { ended } = apps.startTask("c1", undefined, "wait", { kind: "you" });
+    const { pathname } = new URL(apps.mediaGrant(documentOf(apps, "c1"), "counter.json").path, "http://assets");
 
     apps.forgetFolder("wt1");
 
@@ -393,13 +546,12 @@ describe("AppDocuments in a worktree", () => {
   test("reopens the workspace's apps with no warning once a removed worktree's state is forgotten", async () => {
     const first = await setUpWithWorktree();
     writeFileSync(join(first.worktreeFolder, "counter.json"), JSON.stringify({ count: 2 }));
-    await first.apps.open("w1", "counter", "counter.json");
-    await first.apps.open("wt1", "counter", "counter.json", "c1");
+    await first.apps.open("c2", "counter", "counter.json");
+    await first.apps.open("c1", "counter", "counter.json");
     first.store.saveAppStorageItem("wt1", "counter", "zoom", "2");
     first.apps.forgetFolder("wt1");
     first.store.forgetFolder("wt1");
     first.store.deleteConversation("c1");
-    expect(first.store.listAppConversations()).toEqual([]);
     first.apps.stop();
 
     const warn = spyOn(console, "warn").mockImplementation(() => {});
@@ -413,59 +565,42 @@ describe("AppDocuments in a worktree", () => {
       warn.mockRestore();
     }
   });
-
-  test("skips a worktree whose conversations are gone when the host starts again", async () => {
-    const first = await setUpWithWorktree();
-    await first.apps.open("w1", "counter", "counter.json");
-    await first.apps.open("wt1", "counter", "counter.json", "c1");
-    first.apps.stop();
-    first.store.deleteConversation("c1");
-    const warn = spyOn(console, "warn").mockImplementation(() => {});
-    try {
-      const second = await setUp(first.store, first.workspacePath);
-      await second.apps.reopenAll();
-      expect(second.apps.openApps().map(({ workspaceId }) => workspaceId)).toEqual(["w1"]);
-      expect(warn).toHaveBeenCalledWith(expect.stringContaining("Couldn't open counter on counter.json again"));
-      second.apps.stop();
-    } finally {
-      warn.mockRestore();
-    }
-  });
 });
 
 describe("AppDocuments.fileForView", () => {
   async function openIn(documentFolder: string, maxFileBytes?: number) {
     const set = await setUp(new Store(":memory:"), mkdtempSync(join(tmpdir(), "app-workspace-")), maxFileBytes);
     mkdirSync(join(set.workspacePath, documentFolder), { recursive: true });
-    await set.apps.open("w1", "counter", join(documentFolder, "counter.json"));
+    await set.apps.open("c1", "counter", join(documentFolder, "counter.json"));
     const folder = join(set.workspacePath, documentFolder);
+    const document = documentOf(set.apps);
     const refusal = (path: unknown) => {
       try {
-        set.apps.fileForView("w1", "counter", path);
+        set.apps.fileForView(document, path);
       } catch (error) {
         return error as AppFileRefused;
       }
       throw new Error(`${String(path)} was not refused.`);
     };
-    return { ...set, folder, refusal };
+    return { ...set, folder, document, refusal };
   }
 
   test("gives the file next to the document, and one in a subfolder", async () => {
-    const { apps, folder } = await openIn("plan");
+    const { apps, folder, document } = await openIn("plan");
     mkdirSync(join(folder, "textures"));
     writeFileSync(join(folder, "note.txt"), "note");
     writeFileSync(join(folder, "textures", "1.jpg"), "jpg");
-    expect(readFileSync(apps.fileForView("w1", "counter", "note.txt"), "utf8")).toBe("note");
-    expect(readFileSync(apps.fileForView("w1", "counter", "textures/1.jpg"), "utf8")).toBe("jpg");
-    expect(readFileSync(apps.fileForView("w1", "counter", "./textures/../note.txt"), "utf8")).toBe("note");
+    expect(readFileSync(apps.fileForView(document, "note.txt"), "utf8")).toBe("note");
+    expect(readFileSync(apps.fileForView(document, "textures/1.jpg"), "utf8")).toBe("jpg");
+    expect(readFileSync(apps.fileForView(document, "./textures/../note.txt"), "utf8")).toBe("note");
     apps.stop();
   });
 
   test("gives a file up in the workspace, but refuses one outside it, an absolute path, and one that is empty or not a string", async () => {
-    const { apps, workspacePath, refusal } = await openIn("plan");
+    const { apps, workspacePath, document, refusal } = await openIn("plan");
     writeFileSync(join(workspacePath, "main.tex"), "main");
     writeFileSync(join(workspacePath, "..", "outside.txt"), "secret");
-    expect(readFileSync(apps.fileForView("w1", "counter", "../main.tex"), "utf8")).toBe("main");
+    expect(readFileSync(apps.fileForView(document, "../main.tex"), "utf8")).toBe("main");
     expect(refusal("../../outside.txt")).toMatchObject({ status: 403, message: "../../outside.txt is outside the workspace." });
     expect(refusal("textures/../../../outside.txt").status).toBe(403);
     expect(refusal(join(workspacePath, "main.tex"))).toMatchObject({ status: 400, message: "Give the file's path relative to the document's folder." });
@@ -475,8 +610,18 @@ describe("AppDocuments.fileForView", () => {
     apps.stop();
   });
 
+  test("each document names the files under its own folder", async () => {
+    const { apps, workspacePath, folder } = await openIn("plan");
+    writeFileSync(join(workspacePath, "note.txt"), "at the root");
+    writeFileSync(join(folder, "note.txt"), "in the plan");
+    await apps.open("c2", "counter", "counter.json");
+    expect(readFileSync(apps.fileForView(documentOf(apps, "c2"), "note.txt"), "utf8")).toBe("at the root");
+    expect(readFileSync(apps.fileForView(documentOf(apps, "c1"), "note.txt"), "utf8")).toBe("in the plan");
+    apps.stop();
+  });
+
   test("refuses a link that leads out of the workspace, to a file or a folder, but follows one that stays in", async () => {
-    const { apps, folder, workspacePath, refusal } = await openIn("plan");
+    const { apps, folder, workspacePath, document, refusal } = await openIn("plan");
     const outside = mkdtempSync(join(tmpdir(), "outside-"));
     writeFileSync(join(outside, "secret.txt"), "secret");
     mkdirSync(join(workspacePath, "elsewhere"));
@@ -486,7 +631,7 @@ describe("AppDocuments.fileForView", () => {
     symlinkSync(join(workspacePath, "elsewhere"), join(folder, "near"));
     expect(refusal("leak.txt")).toMatchObject({ status: 403, message: "leak.txt is outside the workspace." });
     expect(refusal("../leaky/secret.txt").status).toBe(403);
-    expect(readFileSync(apps.fileForView("w1", "counter", "near/kept.txt"), "utf8")).toBe("kept");
+    expect(readFileSync(apps.fileForView(document, "near/kept.txt"), "utf8")).toBe("kept");
     apps.stop();
   });
 
@@ -498,21 +643,22 @@ describe("AppDocuments.fileForView", () => {
     apps.stop();
   });
 
-  test("refuses a directory, a missing file, and an app that is not open", async () => {
+  test("refuses a directory, a missing file, and a document that closed", async () => {
     const { apps, folder, refusal } = await openIn("plan");
     mkdirSync(join(folder, "textures"));
     expect(refusal("textures")).toMatchObject({ status: 400, message: "textures isn't a file." });
     expect(refusal("missing.txt")).toMatchObject({ status: 404, message: "missing.txt doesn't exist." });
-    expect(() => apps.fileForView("w2", "counter", "x")).toThrow(AppFileRefused);
-    expect(() => apps.fileForView("w1", "sketchbook", "x")).toThrow("sketchbook isn't open in this workspace.");
+    const document = documentOf(apps);
     apps.stop();
+    expect(() => apps.fileForView(document, "note.txt")).toThrow(AppFileRefused);
+    expect(() => apps.fileForView("no-such-document", "x")).toThrow("No app has that document open anymore: no-such-document.");
   });
 
   test("refuses a file over the size it is allowed", async () => {
-    const { apps, folder, refusal } = await openIn("plan", 10);
+    const { apps, folder, document, refusal } = await openIn("plan", 10);
     writeFileSync(join(folder, "fits.txt"), "0123456789");
     writeFileSync(join(folder, "big.bin"), "0123456789!");
-    expect(apps.fileForView("w1", "counter", "fits.txt")).toEndWith("fits.txt");
+    expect(apps.fileForView(document, "fits.txt")).toEndWith("fits.txt");
     expect(refusal("big.bin").status).toBe(413);
     apps.stop();
   });
@@ -522,15 +668,16 @@ describe("AppDocuments tasks", () => {
   const agent = { kind: "agent", conversationId: "c1", turnSeq: 4 } as const;
 
   async function opened() {
-    const set = await setUpWithTwoConversations();
-    await set.apps.open("w1", "counter", "counter.json");
+    const set = await setUp();
+    await set.apps.open("c1", "counter", "counter.json");
     const taskStates = () => set.states.map(({ task }) => task).filter((task) => task !== null);
-    return { ...set, taskStates };
+    const document = documentOf(set.apps);
+    return { ...set, document, taskStates };
   }
 
   test("runs a task that applies operations as whoever ran it, and the views see it start and end with its summary", async () => {
     const { apps, fileText, states, taskStates } = await opened();
-    expect(await apps.startTask("w1", undefined, "count-up", { kind: "you" }).ended).toBe("Counted up from 0 to 3.");
+    expect(await apps.startTask("c1", undefined, "count-up", { kind: "you" }).ended).toBe("Counted up from 0 to 3.");
     expect(JSON.parse(fileText())).toEqual({ count: 3 });
     expect(states.at(-1)!.lastChange).toMatchObject({ author: { kind: "you" }, summary: "Added 1; the count is 3." });
     expect(taskStates()[0]).toMatchObject({ name: "count-up", title: "Count up three times", state: "running", author: { kind: "you" }, done: null, endedAt: null });
@@ -540,65 +687,77 @@ describe("AppDocuments tasks", () => {
 
   test("app_state lists the tasks and says how the latest one went, and who ran it", async () => {
     const { apps } = await opened();
-    await apps.startTask("w1", "counter", "count-up", agent).ended;
-    expect(apps.describe("w1", undefined)).toEndWith(`${COUNTER_TASKS}\n\nThe latest task, count-up, run by the agent: done: Counted up from 0 to 3.`);
-    expect(apps.describe("w1", undefined)).toContain("3. agent: Added 1; the count is 3.");
+    await apps.startTask("c1", "counter", "count-up", agent).ended;
+    expect(apps.describe("c1", undefined)).toEndWith(`${COUNTER_TASKS}\n\nThe latest task, count-up, run by the agent: done: Counted up from 0 to 3.`);
+    expect(apps.describe("c1", undefined)).toContain("3. agent: Added 1; the count is 3.");
     apps.stop();
   });
 
   test("a task writes a new file next to the document, the way a render writes its output beside its source", async () => {
     const { apps, workspacePath } = await opened();
-    await apps.apply("w1", undefined, { op: "add", by: 5 }, { kind: "you" });
-    expect(await apps.startTask("w1", undefined, "write-count", agent).ended).toBe("Wrote 5 to counted.txt.");
+    await apps.apply("c1", undefined, { op: "add", by: 5 }, { kind: "you" });
+    expect(await apps.startTask("c1", undefined, "write-count", agent).ended).toBe("Wrote 5 to counted.txt.");
     expect(readFileSync(join(workspacePath, "counted.txt"), "utf8")).toBe("5\n");
     apps.stop();
   });
 
   test("refuses a task the app doesn't have, naming those it has, and a second task while one runs", async () => {
-    const { apps } = await opened();
-    expect(() => apps.startTask("w1", undefined, "render", agent)).toThrow("Counter has no task called render; its tasks: count-up, sign, write-count, wait, fail.");
-    expect(() => apps.startTask("w1", undefined, "toString", agent)).toThrow("Counter has no task called toString");
-    const waiting = apps.startTask("w1", undefined, "wait", agent).ended.catch(() => {});
-    expect(() => apps.startTask("w1", undefined, "count-up", { kind: "you" })).toThrow("Wait until stopped is still running; wait for it to end, or stop it in the app.");
-    apps.stopTask("w1", undefined);
+    const { apps, document } = await opened();
+    expect(() => apps.startTask("c1", undefined, "render", agent)).toThrow("Counter has no task called render; its tasks: count-up, sign, write-count, wait, fail.");
+    expect(() => apps.startTask("c1", undefined, "toString", agent)).toThrow("Counter has no task called toString");
+    const waiting = apps.startTask("c1", undefined, "wait", agent).ended.catch(() => {});
+    expect(() => apps.startTask("c1", undefined, "count-up", { kind: "you" })).toThrow("Wait until stopped is still running; wait for it to end, or stop it in the app.");
+    apps.stopTask(document);
     await waiting;
     apps.stop();
   });
 
   test("a view asking for the task already running joins it, but is refused another one", async () => {
-    const { apps, taskStates } = await opened();
-    const waiting = apps.runFromView("w1", "counter", "wait");
+    const { apps, document, taskStates } = await opened();
+    const waiting = apps.runFromView(document, "wait");
     const started = taskStates().length;
-    expect(() => apps.runFromView("w1", "counter", "wait")).not.toThrow();
+    expect(() => apps.runFromView(document, "wait")).not.toThrow();
     expect(taskStates()).toHaveLength(started);
-    expect(() => apps.runFromView("w1", "counter", "count-up")).toThrow("Wait until stopped is still running");
-    apps.stopTask("w1", undefined);
+    expect(() => apps.runFromView(document, "count-up")).toThrow("Wait until stopped is still running");
+    apps.stopTask(document);
     await waiting;
     apps.stop();
   });
 
   test("a task the user stops ends as stopped, and whoever ran it hears so", async () => {
-    const { apps, taskStates } = await opened();
-    const { ended } = apps.startTask("w1", undefined, "wait", agent);
-    apps.stopTask("w1", "counter");
+    const { apps, document, taskStates } = await opened();
+    const { ended } = apps.startTask("c1", undefined, "wait", agent);
+    apps.stopTask(document);
     await expect(ended).rejects.toThrow("Wait until stopped was stopped before it ended.");
     expect(taskStates().at(-1)).toMatchObject({ name: "wait", state: "stopped", problem: null, text: "waiting" });
-    expect(apps.describe("w1", undefined)).toEndWith("The latest task, wait, run by the agent: stopped");
-    expect(await apps.startTask("w1", undefined, "count-up", agent).ended).toBe("Counted up from 0 to 3.");
+    expect(apps.describe("c1", undefined)).toEndWith("The latest task, wait, run by the agent: stopped");
+    expect(await apps.startTask("c1", undefined, "count-up", agent).ended).toBe("Counted up from 0 to 3.");
+    apps.stop();
+  });
+
+  test("a task another conversation runs brings its own tab forward, but one the user runs brings none", async () => {
+    const { apps, openAppLists } = await opened();
+    const shownBefore = openOf(apps, "c1").shownAt;
+    await apps.startTask("c1", undefined, "count-up", { kind: "you" }).ended;
+    expect(openAppLists).toHaveLength(1);
+    expect(await apps.startTask("c2", undefined, "count-up", { kind: "agent", conversationId: "c2", turnSeq: 1 }).ended).toBe("Counted up from 3 to 6.");
+    expect(openAppLists.at(-1)!.map(({ conversationId }) => conversationId)).toEqual(["c1", "c2"]);
+    expect(openOf(apps, "c2").shownAt).toBeNumber();
+    expect(openOf(apps, "c1").shownAt).toBe(shownBefore);
     apps.stop();
   });
 
   test("a task that throws ends as failed, with the plugin's reason", async () => {
     const { apps, taskStates } = await opened();
-    await expect(apps.startTask("w1", undefined, "fail", { kind: "you" }).ended).rejects.toThrow("the counter can't do that");
+    await expect(apps.startTask("c1", undefined, "fail", { kind: "you" }).ended).rejects.toThrow("the counter can't do that");
     expect(taskStates().at(-1)).toMatchObject({ name: "fail", state: "failed", problem: "the counter can't do that" });
-    expect(apps.describe("w1", undefined)).toEndWith("The latest task, fail, run by the user: failed: the counter can't do that");
+    expect(apps.describe("c1", undefined)).toEndWith("The latest task, fail, run by the user: failed: the counter can't do that");
     apps.stop();
   });
 
   test("closing the app stops its task", async () => {
     const { apps } = await opened();
-    const { ended } = apps.startTask("w1", undefined, "wait", agent);
+    const { ended } = apps.startTask("c1", undefined, "wait", agent);
     apps.forgetWorkspace("w1");
     await expect(ended).rejects.toThrow("Wait until stopped was stopped before it ended.");
   });
@@ -619,15 +778,16 @@ describe("AppDocuments tasks", () => {
     });
     const store = new Store(":memory:");
     store.insertWorkspace({ id: "w1", name: "p", path: mkdtempSync(join(tmpdir(), "app-workspace-")), defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    addConversations(store, "c1");
     const recorded = recordingPublisher();
     const apps = new AppDocuments(store, (await loadPlugins(plugins)).apps, recorded.publisher);
-    await apps.open("w1", "late", "late.json");
-    expect(await apps.startTask("w1", undefined, "render", { kind: "you" }).ended).toBe("Rendered.");
+    await apps.open("c1", "late", "late.json");
+    expect(await apps.startTask("c1", undefined, "render", { kind: "you" }).ended).toBe("Rendered.");
     await Bun.sleep(400);
     const states = recorded.states.map(({ task }) => task?.state);
     expect(states).toContain("running");
     expect(states.slice(states.indexOf("done"))).toEqual(["done"]);
-    expect(apps.describe("w1", undefined)).toEndWith("The latest task, render, run by the user: done: Rendered.");
+    expect(apps.describe("c1", undefined)).toEndWith("The latest task, render, run by the user: done: Rendered.");
     apps.stop();
   });
 
@@ -649,10 +809,11 @@ describe("AppDocuments tasks", () => {
     mkdirSync(join(workspacePath, "plan", "sub"), { recursive: true });
     const store = new Store(":memory:");
     store.insertWorkspace({ id: "w1", name: "p", path: workspacePath, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    addConversations(store, "c1");
     const apps = new AppDocuments(store, (await loadPlugins(plugins)).apps, recordingPublisher().publisher);
-    await apps.open("w1", "paths", "plan/paths.json");
+    await apps.open("c1", "paths", "plan/paths.json");
     const folder = realpathSync.native(join(workspacePath, "plan"));
-    expect(JSON.parse(await apps.startTask("w1", undefined, "try", { kind: "you" }).ended)).toEqual([
+    expect(JSON.parse(await apps.startTask("c1", undefined, "try", { kind: "you" }).ended)).toEqual([
       join(folder, "new.txt"),
       join(folder, "sub", "new.txt"),
       "../outside.txt is outside the document's folder.",
@@ -666,29 +827,31 @@ describe("AppDocuments tasks", () => {
 describe("AppDocuments.mediaGrant", () => {
   test("gives an address on the canvas assets for a file next to the document, however large, that keeps its place and changes its version with the file", async () => {
     const { apps, workspacePath } = await setUp(new Store(":memory:"), mkdtempSync(join(tmpdir(), "app-workspace-")), 10);
-    await apps.open("w1", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
+    const document = documentOf(apps);
     const clip = join(workspacePath, "my clip.webm");
     writeFileSync(clip, "a video larger than the files a view may read");
     utimesSync(clip, 1000, 1000);
-    const { path } = apps.mediaGrant("w1", "counter", "my clip.webm");
+    const { path } = apps.mediaGrant(document, "my clip.webm");
     expect(path).toMatch(new RegExp(`^${APP_MEDIA_PATH}[A-Za-z0-9_-]{32}/my%20clip\\.webm\\?v=1000000$`));
     expect(apps.mediaFile(new URL(path, "http://assets").pathname)).toBe(realpathSync.native(clip));
     utimesSync(clip, 2000, 2000);
-    const again = apps.mediaGrant("w1", "counter", "my clip.webm").path;
+    const again = apps.mediaGrant(document, "my clip.webm").path;
     expect(again.split("?")[0]).toBe(path.split("?")[0]);
     expect(again).toEndWith("?v=2000000");
     expect(apps.mediaFile(`${APP_MEDIA_PATH}not-a-token/my%20clip.webm`)).toBeNull();
     apps.stop();
   });
 
-  test("streams a file up in the workspace, refuses one outside it, and ends every address when the app closes", async () => {
+  test("streams a file up in the workspace, refuses one outside it, and ends every address when the document closes", async () => {
     const { apps, workspacePath } = await setUp();
     mkdirSync(join(workspacePath, "plan"));
-    await apps.open("w1", "counter", "plan/counter.json");
+    await apps.open("c1", "counter", "plan/counter.json");
+    const document = documentOf(apps);
     writeFileSync(join(workspacePath, "..", "outside.webm"), "secret");
     writeFileSync(join(workspacePath, "clip.webm"), "clip");
-    expect(() => apps.mediaGrant("w1", "counter", "../../outside.webm")).toThrow("../../outside.webm is outside the workspace.");
-    const { pathname } = new URL(apps.mediaGrant("w1", "counter", "../clip.webm").path, "http://assets");
+    expect(() => apps.mediaGrant(document, "../../outside.webm")).toThrow("../../outside.webm is outside the workspace.");
+    const { pathname } = new URL(apps.mediaGrant(document, "../clip.webm").path, "http://assets");
     apps.forgetWorkspace("w1");
     expect(apps.mediaFile(pathname)).toBeNull();
   });
@@ -697,166 +860,155 @@ describe("AppDocuments.mediaGrant", () => {
 describe("AppDocuments for a view's files", () => {
   test("lists the workspace's files git would, named from the workspace, and every file outside git", async () => {
     const { apps, workspacePath } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
+    const document = documentOf(apps);
     mkdirSync(join(workspacePath, "chapters"));
     writeFileSync(join(workspacePath, "chapters", "one.tex"), "one");
     writeFileSync(join(workspacePath, ".gitignore"), "build/\n");
     mkdirSync(join(workspacePath, "build"));
     writeFileSync(join(workspacePath, "build", "out.pdf"), "pdf");
-    const listed = async () => (await apps.workspaceFiles("w1", "counter")).files.toSorted();
+    const listed = async () => (await apps.workspaceFiles(document)).files.toSorted();
     expect(await listed()).toEqual([".gitignore", "build/out.pdf", "chapters/one.tex", "counter.json"]);
     Bun.spawnSync(["git", "init", "-q", workspacePath]);
     expect(await listed()).toEqual([".gitignore", "chapters/one.tex", "counter.json"]);
-    await expect(apps.workspaceFiles("w1", "sketchbook")).rejects.toThrow("sketchbook isn't open in this workspace.");
+    await expect(apps.workspaceFiles("no-such-document")).rejects.toThrow("No app has that document open anymore");
     apps.stop();
   });
 
-  test("opens the app on another file of the workspace as the view asks, naming the file in its state, as news to no conversation", async () => {
-    const { apps, workspacePath, states, openAppLists } = await setUpWithTwoConversations();
-    await apps.open("w1", "counter", "counter.json", "c1");
+  test("moves this conversation's document to another file of its workspace, leaving the others alone and bringing no tab forward", async () => {
+    const { apps, workspacePath, states, openAppLists } = await setUp();
+    const first = await apps.open("c1", "counter", "counter.json");
+    await apps.open("c2", "counter", "counter.json");
     mkdirSync(join(workspacePath, "plans"));
     writeFileSync(join(workspacePath, "plans", "week.json"), JSON.stringify({ count: 7 }));
-    expect(await apps.openFromView("w1", "counter", "plans/week.json")).toMatchObject({ file: "plans/week.json", conversationIds: ["c1"], openedInView: true });
-    expect(states.at(-1)).toMatchObject({ file: "plans/week.json", document: { count: 7 } });
-    expect(openAppLists.at(-1)![0]!.shownBy).toBeUndefined();
-    expect(await apps.apply("w1", "counter", { op: "add", by: 1 }, { kind: "you" })).toMatchObject({ file: "plans/week.json", summary: "Added 1; the count is 8." });
-    expect((await apps.open("w1", "counter", "counter.json", "c2")).openedInView).toBeUndefined();
+    const moved = await apps.openFromView("c1", "counter", "plans/week.json");
+    expect(moved).toMatchObject({ conversationId: "c1", file: "plans/week.json", openedInView: true });
+    expect(moved.shownAt).toBeUndefined();
+    expect(moved.documentId).not.toBe(first.documentId);
+    expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 plans/week.json", "c2 counter.json"]);
+    expect(states.at(-1)).toMatchObject({ documentId: moved.documentId, file: "plans/week.json", document: { count: 7 } });
+    expect(openAppLists.at(-1)!.find(({ conversationId }) => conversationId === "c2")!.file).toBe("counter.json");
+    expect(await apps.apply("c1", "counter", { op: "add", by: 1 }, { kind: "you" })).toMatchObject({ file: "plans/week.json", summary: "Added 1; the count is 8." });
+    expect(apps.state(first.documentId)!.document).toEqual({ count: 0 });
     apps.stop();
   });
 
   test("opens nothing for a view of an app that isn't open, nor a file outside the workspace, a missing one, or one in .git", async () => {
     const { apps, workspacePath } = await setUp();
-    await expect(apps.openFromView("w1", "counter", "counter.json")).rejects.toThrow("counter isn't open in this workspace.");
-    await apps.open("w1", "counter", "counter.json");
-    await expect(apps.openFromView("w1", "counter", "../elsewhere.json")).rejects.toThrow("../elsewhere.json is outside the workspace");
-    await expect(apps.openFromView("w1", "counter", join(workspacePath, "counter.json"))).rejects.toThrow("Give the file's path relative to the workspace.");
-    await expect(apps.openFromView("w1", "counter", 7)).rejects.toThrow("Give the file's path relative to the workspace.");
-    await expect(apps.openFromView("w1", "counter", "plans/new.json")).rejects.toMatchObject({ status: 404, message: "plans/new.json doesn't exist." });
+    await expect(apps.openFromView("c1", "counter", "counter.json")).rejects.toThrow("No app is open in this conversation called counter.");
+    await apps.open("c1", "counter", "counter.json");
+    await expect(apps.openFromView("c1", "counter", "../elsewhere.json")).rejects.toThrow("../elsewhere.json is outside the workspace");
+    await expect(apps.openFromView("c1", "counter", join(workspacePath, "counter.json"))).rejects.toThrow("Give the file's path relative to the workspace.");
+    await expect(apps.openFromView("c1", "counter", 7)).rejects.toThrow("Give the file's path relative to the workspace.");
+    await expect(apps.openFromView("c1", "counter", "plans/new.json")).rejects.toMatchObject({ status: 404, message: "plans/new.json doesn't exist." });
     expect(existsSync(join(workspacePath, "plans"))).toBe(false);
     mkdirSync(join(workspacePath, "drafts"));
-    await expect(apps.openFromView("w1", "counter", "drafts")).rejects.toMatchObject({ status: 404 });
+    await expect(apps.openFromView("c1", "counter", "drafts")).rejects.toMatchObject({ status: 404 });
     mkdirSync(join(workspacePath, ".git"));
     writeFileSync(join(workspacePath, ".git", "x.json"), "{}");
-    await expect(apps.openFromView("w1", "counter", "plans/../.git/x.json")).rejects.toMatchObject({ status: 403 });
+    await expect(apps.openFromView("c1", "counter", "plans/../.git/x.json")).rejects.toMatchObject({ status: 403 });
     apps.stop();
   });
 
   test("refuses to open another file while a task runs, which would stop it", async () => {
     const { apps, workspacePath } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
+    const document = documentOf(apps);
     writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 3 }));
-    const { ended } = apps.startTask("w1", "counter", "wait", { kind: "you" });
-    await expect(apps.openFromView("w1", "counter", "other.json")).rejects.toMatchObject({ status: 409, message: "Wait until stopped is still running; wait for it to end, or stop it, before opening another file." });
-    expect(apps.state("w1", "counter")!.task).toMatchObject({ state: "running" });
-    apps.stopTask("w1", "counter");
+    const { ended } = apps.startTask("c1", "counter", "wait", { kind: "you" });
+    await expect(apps.openFromView("c1", "counter", "other.json")).rejects.toMatchObject({ status: 409, message: "Wait until stopped is still running; wait for it to end, or stop it, before opening another file." });
+    expect(apps.state(document)!.task).toMatchObject({ state: "running" });
+    apps.stopTask(document);
     await ended.catch(() => {});
-    expect((await apps.openFromView("w1", "counter", "other.json")).file).toBe("other.json");
+    expect((await apps.openFromView("c1", "counter", "other.json")).file).toBe("other.json");
     apps.stop();
   });
 
   test("tells the views of the workspace's apps that its files may have changed, after an open, a task's end, or when asked", async () => {
     const { apps, states } = await setUp();
-    await apps.open("w1", "counter", "counter.json");
+    await apps.open("c1", "counter", "counter.json");
     expect(states.at(-1)!.filesChange).toBe(1);
-    await apps.startTask("w1", "counter", "count-up", { kind: "you" }).ended;
+    await apps.startTask("c1", "counter", "count-up", { kind: "you" }).ended;
     expect(states.at(-1)).toMatchObject({ filesChange: 2, task: { state: "done" } });
     apps.filesMayHaveChanged("w1");
     expect(states.at(-1)!.filesChange).toBe(3);
-    expect(apps.state("w1", "counter")!.filesChange).toBe(3);
+    expect(stateOf(apps).filesChange).toBe(3);
     apps.stop();
   });
 });
 
-describe("the conversations an app shows in", () => {
-  test("an app shows only in the conversations that used it, each noted once, also once it opens another file", async () => {
-    const { apps, openAppLists } = await setUpWithTwoConversations();
-    await apps.open("w1", "counter", "counter.json");
-    apps.useIn("w1", undefined, "c1");
-    const listsSoFar = openAppLists.length;
-    apps.useIn("w1", "counter", "c1");
-    expect(openAppLists).toHaveLength(listsSoFar);
-    await apps.open("w1", "counter", "second.json");
-    expect(apps.openApps()).toEqual([{ workspaceId: "w1", app: "counter", title: "Counter", file: "second.json", conversationIds: ["c1"] }]);
-    apps.useIn("w1", "counter", "c2");
-    expect(openAppLists.at(-1)![0]!.conversationIds).toEqual(["c1", "c2"]);
+describe("what each conversation has open", () => {
+  test("the conversation that opens the app is the one shown its opening", async () => {
+    const { apps, openAppLists } = await setUp();
+    await apps.open("c1", "counter", "counter.json");
+    expect(openAppLists).toEqual([
+      [{ conversationId: "c1", documentId: expect.stringMatching(/^[0-9a-f]{16}$/), workspaceId: "w1", app: "counter", title: "Counter", file: "counter.json", shownAt: expect.any(Number) }],
+    ]);
     apps.stop();
   });
 
-  test("the conversation that opens the app shows it with the same news of the opening", async () => {
-    const { apps, openAppLists } = await setUpWithTwoConversations();
-    await apps.open("w1", "counter", "counter.json", "c1");
-    expect(openAppLists).toEqual([[{ workspaceId: "w1", app: "counter", title: "Counter", file: "counter.json", conversationIds: ["c1"], shownBy: { conversationId: "c1", at: expect.any(Number) } }]]);
-    await apps.open("w1", "counter", "counter.json", "c2");
-    expect(openAppLists.at(-1)![0]!.conversationIds).toEqual(["c1", "c2"]);
-    apps.stop();
-  });
-
-  test("an agent opening the file already open tells the pages again, naming its conversation, so that its tab comes forward there", async () => {
-    const { apps, openAppLists } = await setUpWithTwoConversations();
-    await apps.open("w1", "counter", "counter.json", "c1");
-    const firstOpening = openAppLists.at(-1)![0]!.shownBy!;
+  test("an agent opening the file already open tells its own pages again, so that its tab comes forward there", async () => {
+    const { apps, openAppLists } = await setUp();
+    await apps.open("c1", "counter", "counter.json");
+    const firstOpening = openOf(apps, "c1").shownAt!;
     await Bun.sleep(2);
-    await apps.open("w1", "counter", "counter.json", "c1");
+    await apps.open("c1", "counter", "counter.json");
     expect(openAppLists).toHaveLength(2);
-    expect(openAppLists.at(-1)![0]!.shownBy).toEqual({ conversationId: "c1", at: expect.any(Number) });
-    expect(openAppLists.at(-1)![0]!.shownBy!.at).toBeGreaterThan(firstOpening.at);
-    await apps.open("w1", "counter", "counter.json", "c2");
-    expect(openAppLists.at(-1)![0]!.shownBy!.conversationId).toBe("c2");
+    const reopened = openAppLists.at(-1)![0]!.shownAt!;
+    expect(reopened).toBeGreaterThan(firstOpening);
+    await Bun.sleep(2);
+    await apps.open("c2", "counter", "counter.json");
+    expect(openAppLists.at(-1)!.map(({ conversationId }) => conversationId)).toEqual(["c1", "c2"]);
+    expect(openOf(apps, "c1").shownAt).toBe(reopened);
+    expect(openOf(apps, "c2").shownAt!).toBeGreaterThan(reopened);
     apps.stop();
   });
 
-  test("an agent running a task brings the app's tab forward in its conversation; the user running one doesn't", async () => {
-    const { apps, openAppLists } = await setUpWithTwoConversations();
-    await apps.open("w1", "counter", "counter.json", "c1");
-    await apps.startTask("w1", undefined, "count-up", { kind: "you" }).ended;
-    expect(openAppLists).toHaveLength(1);
-    await apps.startTask("w1", undefined, "count-up", { kind: "agent", conversationId: "c2", turnSeq: 1 }).ended;
-    expect(openAppLists.at(-1)![0]).toMatchObject({ conversationIds: ["c1", "c2"], shownBy: { conversationId: "c2" } });
+  test("a document another conversation asked to see is shown in its own tab, not the one asked with", async () => {
+    const { apps, openAppLists } = await setUp();
+    const first = await apps.open("c1", "counter", "counter.json");
+    expect(apps.useIn("c2", first.documentId)).toMatchObject({ conversationId: "c2", documentId: first.documentId, file: "counter.json", shownAt: expect.any(Number) });
+    expect(openAppLists.at(-1)!.map(({ conversationId }) => conversationId)).toEqual(["c1", "c2"]);
+    expect(() => apps.useIn("c1", "no-such-document")).toThrow("No app has that document open anymore");
     apps.stop();
   });
 
-  test("keeps them when the host starts again, and forgets a conversation that is deleted", async () => {
-    const first = await setUpWithTwoConversations();
-    await first.apps.open("w1", "counter", "counter.json");
-    first.apps.useIn("w1", "counter", "c1");
-    first.apps.useIn("w1", "counter", "c2");
+  test("keeping an app open across a restart keeps which conversation had it, and its file", async () => {
+    const first = await setUp();
+    await first.apps.open("c1", "counter", "counter.json");
+    await first.apps.open("c2", "counter", "second.json");
     first.apps.stop();
-    first.store.deleteConversation("c2");
     const second = await setUp(first.store, first.workspacePath);
     await second.apps.reopenAll();
-    expect(second.apps.openApps()[0]!.conversationIds).toEqual(["c1"]);
+    expect(second.apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 counter.json", "c2 second.json"]);
+    expect(second.store.listOpenApps().map(({ conversationId, app }) => `${conversationId} ${app}`)).toEqual(["c1 counter", "c2 counter"]);
     second.apps.stop();
-  });
-
-  test("an app that isn't open in the workspace is shown nowhere", async () => {
-    const { apps } = await setUpWithTwoConversations();
-    expect(() => apps.useIn("w1", "counter", "c1")).toThrow("No app is open in this workspace.");
   });
 });
 
 describe("appMediaGrantUrl", () => {
-  test("names the workspace, the app and the path, each escaped, as the host's route for media grants reads them", () => {
-    expect(appMediaGrantUrl({ workspaceId: "w 1", app: "media" }, "clips/a&b.mp4")).toBe("/workspaces/w%201/apps/media/media?path=clips%2Fa%26b.mp4");
+  test("names the workspace, the app, the path and the document, each escaped, as the host's route for media grants reads them", () => {
+    expect(appMediaGrantUrl({ workspaceId: "w 1", app: "media", documentId: "d/1" }, "clips/a&b.mp4")).toBe("/workspaces/w%201/apps/media/media?path=clips%2Fa%26b.mp4&document=d%2F1");
   });
 });
 
 describe("appPromptText", () => {
   test("names the app and its file before the user's words, so the agent knows what they are about", () => {
-    const counter: OpenApp = { workspaceId: "w1", app: "counter", title: "Counter", file: "notes/counter.json", conversationIds: [] };
+    const counter: OpenApp = { conversationId: "c1", documentId: "d1", workspaceId: "w1", app: "counter", title: "Counter", file: "notes/counter.json" };
     expect(appPromptText(counter, "  Make it 10\n")).toBe("About notes/counter.json, open in Counter (app_state reads it, apply changes it):\n\nMake it 10");
   });
 });
 
 describe("the URLs of a view's files", () => {
-  test("name the listing, and the file to open, escaped", () => {
-    const counter = { workspaceId: "w 1", app: "counter" };
-    expect(appFilesUrl(counter)).toBe("/workspaces/w%201/apps/counter/files");
-    expect(appOpenUrl(counter, "plans/a&b.json")).toBe("/workspaces/w%201/apps/counter/open?file=plans%2Fa%26b.json");
+  test("name the listing, and the file to open and the conversation to open it for, escaped", () => {
+    const counter = { workspaceId: "w 1", app: "counter", documentId: "d/1", conversationId: "c 1" };
+    expect(appFilesUrl(counter)).toBe("/workspaces/w%201/apps/counter/files?document=d%2F1");
+    expect(appOpenUrl(counter, "plans/a&b.json")).toBe("/workspaces/w%201/apps/counter/open?file=plans%2Fa%26b.json&conversation=c%201");
   });
 });
 
 describe("appFileUrl", () => {
-  test("names the workspace, the app and the path, each escaped, as the host's route for a file next to the document reads them", () => {
-    expect(appFileUrl({ workspaceId: "w 1", app: "counter" }, "../plans/a&b.json")).toBe("/workspaces/w%201/apps/counter/file?path=..%2Fplans%2Fa%26b.json");
+  test("names the workspace, the app, the path and the document, each escaped, as the host's route for a file next to the document reads them", () => {
+    expect(appFileUrl({ workspaceId: "w 1", app: "counter", documentId: "d/1" }, "../plans/a&b.json")).toBe("/workspaces/w%201/apps/counter/file?path=..%2Fplans%2Fa%26b.json&document=d%2F1");
   });
 });

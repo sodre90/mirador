@@ -369,7 +369,7 @@ export const hints: Messages["hints"] = {
   pageMarkChange: "Sag dem Agenten, was er dort ändern soll: Er zeigt die Seite mit der Änderung erneut.",
   canvasEditsWaiting: "Zeige die Änderung, bei der der Agent darauf wartet, dass du sie erlaubst oder ablehnst.",
   canvasChanges: "Die Dateien, die diese Runde geändert hat, oder alle nicht committeten Änderungen, mit ihren Zeilenänderungen.",
-  canvasApp: "Die App, die in diesem Arbeitsbereich offen ist und die du und der Agent gemeinsam ändert. Jede Unterhaltung, die sie zeigt, arbeitet am selben Dokument.",
+  canvasApp: "Die App, die diese Unterhaltung offen hat und die du und ihr Agent gemeinsam ändert. Eine andere Unterhaltung des Arbeitsbereichs hat ein eigenes Dokument.",
   canvasWorkspaceTab: "Der Tab eines Plugins für diesen Arbeitsbereich, in jeder seiner Unterhaltungen derselbe.",
   canvasChecklist:
     "Die Schritte der Arbeit des Agenten, abgehakt, sobald er sie erledigt. Du kannst auch jeden davon abhaken: Der Agent erfährt mit deiner nächsten Nachricht von deinen Haken.",
