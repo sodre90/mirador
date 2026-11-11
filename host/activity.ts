@@ -6,8 +6,8 @@ const hasFinished = (status: acp.ToolCallStatus | null | undefined) => status ==
 
 /**
  * What the agent writes or starts next: the model at work on the turn, which the agent must hold by then. The API
- * answers a server tool call before anything else in the reply that made it, so one still open by then never gets its
- * answer: its reply was cut off, or the API skipped it.
+ * answers a server tool call before anything else follows it, in its reply or, when the reply leaves it pending, at the
+ * start of the next, so one still open by then never gets its answer: Claude Code gave up on the reply that made it.
  */
 export const isAgentsNextStep = (update: acp.SessionUpdate) =>
   update.sessionUpdate === "tool_call" ||

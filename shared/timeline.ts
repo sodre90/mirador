@@ -102,8 +102,8 @@ export const isServerToolCallId = (toolCallId: string) => toolCallId.startsWith(
 
 /**
  * The calls of a running subagent's work still at work: claude-agent-acp reports them pending until they end. The API
- * runs a server tool, such as the advisor, within its reply, so once anything follows one it has ended, even when
- * Claude Code never said so.
+ * answers a server tool call, such as the advisor's, before anything else follows it, in its reply or at the start of
+ * the next, so once anything follows one it has ended, even when Claude Code never said so.
  */
 export function stepsAtWork(work: TimelineBlock[], waitingForPermission: ReadonlySet<string> = new Set()): Set<string> {
   const unfinished = work.flatMap((block, index) =>

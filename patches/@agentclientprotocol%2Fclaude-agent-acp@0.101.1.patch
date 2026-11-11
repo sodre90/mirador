@@ -1,8 +1,18 @@
 diff --git a/dist/acp-agent.js b/dist/acp-agent.js
-index a92039b..b2b6bc3 100644
+index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a893cc6045 100644
 --- a/dist/acp-agent.js
 +++ b/dist/acp-agent.js
-@@ -3428,6 +3428,22 @@ export class ClaudeAcpAgent {
+@@ -2857,6 +2857,9 @@ export class ClaudeAcpAgent {
+         // after a cancel since their record last reset, so the record no longer
+         // matches what the client got (see the stream_event case).
+         const droppedStreams = new Set();
++        // The server tool calls of each stream that still wait for their result,
++        // which a later reply can show will get none (see UnansweredServerToolCalls).
++        const serverToolCalls = new UnansweredServerToolCalls();
+         // A client gets the consolidated subagent text when it negotiated the
+         // transcript extension or the `forwardSubagentText` session option. AIR
+         // also gets it with native subagent sessions, and AIR gets no streamed
+@@ -3428,6 +3431,22 @@ export class ClaudeAcpAgent {
              settleLiveBackgroundTask(session, taskId);
              this.syncAwaitingUser(params.sessionId, session);
          };
@@ -25,7 +35,31 @@ index a92039b..b2b6bc3 100644
          /** Registers a settled subagent again when the SDK resumes it without a
           *  new `task_started`. The active turn is the one that resumed it, so it
           *  holds until the subagent settles again, unless the client declared
-@@ -4761,6 +4777,7 @@ export class ClaudeAcpAgent {
+@@ -3522,6 +3541,17 @@ export class ClaudeAcpAgent {
+             session.toolCallParents?.delete(toolCallId);
+             await sendUpdate({ sessionId: params.sessionId, update: report });
+         };
++        /** Closes the server tool calls that a later reply on their stream showed
++         *  to have ended without their result: Claude Code gave up on the reply
++         *  that made them, so they end as calls Claude abandoned. */
++        const closeUnansweredServerToolCalls = async (ended) => {
++            const renderer = new AcpToolCallRenderer(this.toolCallCapabilities);
++            for (const toolCallId of ended) {
++                if (!session.emittedToolCalls.has(toolCallId))
++                    continue;
++                await closeToolCall(toolCallId, renderer.unfinished({ toolCallId, ran: false }));
++            }
++        };
+         /** Whether the subagent that the Agent call `agentToolUseId` started runs in
+          *  the background and has not ended. */
+         const runsInBackground = (agentToolUseId) => [...session.liveBackgroundTasks.values()].some((task) => task.isSubagent &&
+@@ -4756,11 +4786,13 @@ export class ClaudeAcpAgent {
+                                     // The subagent streams no more text under this parent.
+                                     streamedBlocksByParent.delete(message.tool_use_id);
+                                     droppedStreams.delete(message.tool_use_id);
++                                    serverToolCalls.forget(message.tool_use_id);
+                                 }
+                                 await endBackgroundTask(message.task_id, message.status);
                                  if (message.status === "stopped") {
                                      await closeStoppedSubagentToolCalls(message.tool_use_id);
                                  }
@@ -33,7 +67,13 @@ index a92039b..b2b6bc3 100644
                                  settleLiveTask(message.task_id);
                                  break;
                              case "task_updated":
-@@ -4795,6 +4812,7 @@ export class ClaudeAcpAgent {
+@@ -4790,11 +4822,13 @@ export class ClaudeAcpAgent {
+                                     if (parentToolUseId) {
+                                         streamedBlocksByParent.delete(parentToolUseId);
+                                         droppedStreams.delete(parentToolUseId);
++                                        serverToolCalls.forget(parentToolUseId);
+                                     }
+                                     await endBackgroundTask(message.task_id, message.patch.status === "killed" ? "stopped" : message.patch.status);
                                      if (message.patch.status === "killed") {
                                          await closeStoppedSubagentToolCalls(parentToolUseId);
                                      }
@@ -41,7 +81,7 @@ index a92039b..b2b6bc3 100644
                                      settleLiveTask(message.task_id);
                                  }
                                  else if (message.patch.status === "paused") {
-@@ -4810,6 +4828,7 @@ export class ClaudeAcpAgent {
+@@ -4810,6 +4844,7 @@ export class ClaudeAcpAgent {
                                      // The SDK can resume a finished subagent under the same
                                      // agent id without a new task_started.
                                      resumeLiveTask(message.task_id);
@@ -49,7 +89,40 @@ index a92039b..b2b6bc3 100644
                                      await subagents.taskResumed(message.task_id, sendUpdate, sendMessageResumePrompt(session.toolUseCache, message.task_id));
                                  }
                                  break;
-@@ -9729,7 +9748,7 @@ export class ClaudeAcpAgent {
+@@ -5662,6 +5697,7 @@ export class ClaudeAcpAgent {
+                         // it) can all be tagged with the same, replay-stable id.
+                         if (message.event.type === "message_start") {
+                             currentStreamMessageId = message.event.message.id || undefined;
++                            serverToolCalls.replyStarted(message.parent_tool_use_id, currentStreamMessageId);
+                             await subagents.reportModel(message.parent_tool_use_id, message.event.message.model, sendUpdate);
+                             // A new top-level message starts: clear any streamed-content
+                             // residue from a prior message that never reached its
+@@ -5830,6 +5866,11 @@ export class ClaudeAcpAgent {
+                             // the stamped parentToolUseId meta and are excluded there.
+                             await sendUpdate(notification);
+                         }
++                        // After the block that shows them, so a client sees the next step
++                        // start before the calls it leaves behind end.
++                        if (message.event.type === "content_block_start") {
++                            await closeUnansweredServerToolCalls(serverToolCalls.take(message.parent_tool_use_id, message.event.content_block));
++                        }
+                         break;
+                     }
+                     case "user":
+@@ -5845,6 +5886,12 @@ export class ClaudeAcpAgent {
+                                     recordReachedToolUse(session, block.id, stoppedWorkOutput);
+                                 }
+                             }
++                            if (!stoppedWorkOutput) {
++                                const replyId = message.message.id || undefined;
++                                for (const block of Array.isArray(content) ? content : []) {
++                                    await closeUnansweredServerToolCalls(serverToolCalls.take(message.parent_tool_use_id, block, replyId));
++                                }
++                            }
+                         }
+                         // Record the ACP messageId -> SDK uuid mapping for this message
+                         // (including replays). The consolidated message carries both ids, so
+@@ -9729,7 +9776,7 @@ export class ClaudeAcpAgent {
                  log: (message) => this.logger.log(message),
              }, 
              // The CLI's own environment: process env, the client's and the provider's.
@@ -58,19 +131,82 @@ index a92039b..b2b6bc3 100644
              timing.phase("register");
              this.backgroundWork.sync(sessionId, this.sessions[sessionId], this.foregroundState(sessionId));
              this.refreshContextWindowInBackground(sessionId, this.sessions[sessionId]);
-@@ -10844,7 +10863,9 @@ function recordDispatchedToolUses(session, content) {
+@@ -10839,12 +10886,72 @@ function recordDispatchedToolCall(session, toolCallId) {
+             calls.delete(oldest);
+     }
+ }
++/**
++ * The server tool calls, such as the advisor's, that still wait for their
++ * result, by the stream they belong to.
++ *
++ * The API runs a server tool right after its `server_tool_use`. A reply can
++ * leave one pending, after a client tool_use or at `pause_turn`, and then the
++ * next reply on the stream starts with its result block. So once a later reply
++ * starts any other block, a call still waiting will get no result: Claude Code
++ * gave up on the reply that made it, for example after its stream idle
++ * timeout, and asked again.
++ */
++class UnansweredServerToolCalls {
++    streams = new Map();
++    /** A reply starts streaming on the stream of `parentToolUseId` (null for
++     *  the main conversation). */
++    replyStarted(parentToolUseId, replyId) {
++        this.streamOf(parentToolUseId).replyId = replyId;
++    }
++    /**
++     * Takes a content block of a reply on the stream of `parentToolUseId`: of
++     * `replyId` when the message says, else of the reply streaming there.
++     * Returns the ids of the calls that it shows to have ended without their
++     * result, which it forgets. A reply of unknown id tells nothing: its calls
++     * are not followed.
++     */
++    take(parentToolUseId, block, replyId) {
++        const stream = this.streamOf(parentToolUseId);
++        const reply = replyId ?? stream.replyId;
++        const { type, id, tool_use_id } = (block ?? {});
++        if (typeof type !== "string")
++            return [];
++        if (typeof tool_use_id === "string" && type.endsWith("tool_result")) {
++            stream.unanswered.delete(tool_use_id);
++            return [];
++        }
++        const ended = reply === undefined
++            ? []
++            : [...stream.unanswered].filter(([, madeIn]) => madeIn !== reply).map(([call]) => call);
++        for (const call of ended)
++            stream.unanswered.delete(call);
++        if (type === "server_tool_use" && typeof id === "string" && reply !== undefined) {
++            if (!stream.unanswered.has(id))
++                stream.unanswered.set(id, reply);
++        }
++        return ended;
++    }
++    /** Forgets the stream of a subagent that ended. */
++    forget(parentToolUseId) {
++        this.streams.delete(parentToolUseId);
++    }
++    streamOf(parentToolUseId) {
++        const key = parentToolUseId ?? "";
++        let stream = this.streams.get(key);
++        if (!stream)
++            this.streams.set(key, (stream = { unanswered: new Map() }));
++        return stream;
++    }
++}
+ /** Records the tool_use blocks of a complete assistant message. */
+ function recordDispatchedToolUses(session, content) {
      if (!Array.isArray(content))
          return;
      for (const block of content) {
 -        if (isToolUseBlock(block))
-+        // A server_tool_use, such as the advisor's, runs on the API, not in the tool runner, and one without a result
-+        // never ran: the API skips a server tool that follows a tool_use in the same response.
++        // A server_tool_use, such as the advisor's, runs on the API, not in the tool runner: one still without its
++        // result when the turn ends will get none, so it ends as a call Claude stopped, not as one left incomplete.
 +        if (isToolUseBlock(block) && block.type !== "server_tool_use")
              recordDispatchedToolCall(session, block.id);
      }
  }
 diff --git a/dist/idle-compaction.js b/dist/idle-compaction.js
-index 119ff7e..f01156f 100644
+index 119ff7e905a25f4d811259583ddf7f62c44d5a97..f01156f9130849c897d174ab54fe7424f0510c2c 100644
 --- a/dist/idle-compaction.js
 +++ b/dist/idle-compaction.js
 @@ -35,6 +35,7 @@ function parseCacheTtl(usage) {

@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, eventsInOrderOn, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
@@ -11,6 +11,21 @@ const PROFILE = "advisor";
 /** Claude Code gives up on a reply that sends nothing for this long, as it does after five minutes on Bedrock. */
 const GIVES_UP_ON_STALLED_REPLY = "CLAUDE_ENABLE_BYTE_WATCHDOG=1\nCLAUDE_BYTE_STREAM_IDLE_TIMEOUT_MS=10000";
 const keptOutLines = () => host.log.split("\n").filter((line) => line.includes("wait outside its running turn"));
+
+/** When the page first hears of the advisor's call ending, and of the agent's own tool starting and finishing. */
+function advisorEndAndAgentToolOn(page: Page) {
+  const steps: string[] = [];
+  const once = (step: string) => !steps.includes(step) && steps.push(step);
+  page.on("websocket", (socket) =>
+    socket.on("framereceived", ({ payload }) => {
+      const update = JSON.parse(String(payload)).event?.event?.update;
+      if (update?.sessionUpdate === "tool_call_update" && update.toolCallId.startsWith("srvtoolu_") && update.status === "failed") once("advisor ended");
+      if (update?.sessionUpdate === "tool_call" && update.toolCallId.startsWith("toolu_")) once("agent's tool started");
+      if (update?.sessionUpdate === "tool_call_update" && update.toolCallId.startsWith("toolu_") && update.status === "completed") once("agent's tool finished");
+    }),
+  );
+  return steps;
+}
 
 test.describe.configure({ mode: "serial" });
 
@@ -27,7 +42,7 @@ test.afterAll(async () => {
   api.stop();
 });
 
-test("an advisor call Claude makes after another tool call in the same reply, which the API never runs, leaves the turn ending as usual", async ({ page }) => {
+test("an advisor call Claude makes after another tool call in the same reply, left without its result, leaves the turn ending as usual", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const profiles = await createProfile(page, PROFILE, subscriptionEnvironment(api));
@@ -47,6 +62,7 @@ test("an advisor call Claude makes after another tool call in the same reply, wh
 
 test("a message sent while the advisor runs joins the turn once Claude Code gives up on the advisor's stalled reply and the agent's next tool finishes", async ({ page }) => {
   const eventsInOrder = eventsInOrderOn(page);
+  const advisorEndAndAgentTool = advisorEndAndAgentToolOn(page);
   const stalling = "ADVISOR CUT OFF echo ran-$((40+2))";
   const joining = "Reply with the word JOINED.";
   await signIn(page, host);
@@ -69,4 +85,6 @@ test("a message sent while the advisor runs joins the turn once Claude Code give
   await expect(timeline).toContainText("ran-42");
   await expect(lastAgentMessage(page)).toHaveText(`Answered: ${joining}`);
   expect(eventsInOrder, "the message joined the turn rather than waiting for it to end").toEqual([stalling, joining, "turn-end"]);
+  expect(advisorEndAndAgentTool, "the advisor's call ended once Claude Code asked again, not at the turn's end").toEqual(["agent's tool started", "advisor ended", "agent's tool finished"]);
+  await expect(timeline).toContainText("Claude stopped this tool call before it ran.");
 });

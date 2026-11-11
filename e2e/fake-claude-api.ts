@@ -79,7 +79,8 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * with `BACKGROUND ` runs it in the background; once a background command or subagent ends, the reply to Claude Code's
  * notification of it waits until `answerEndedCommands`, then runs `true` in Bash, so the turn Claude Code started on its
  * own asks for one more reply after it. A message starting with `ADVISOR AFTER BASH ` runs the rest in Bash and calls
- * the advisor after it in the same reply, which the real API never runs, so that call gets no result. A message starting
+ * the advisor after it in the same reply, and never answers that call, though the real API would at the start of the next
+ * reply, so that call gets no result. A message starting
  * with `ADVISOR CUT OFF ` calls the advisor in a reply that only pings after the call, then goes quiet at
  * `stallAdvisorReply`, so the call gets no result; once Claude Code gives up on that reply and asks again, it runs the
  * rest in Bash. A message starting with `KEEP WRITING ` streams the rest as the reply, which then only pings and never
