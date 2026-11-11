@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { assetPackageVersion, resolveAsset } from "../host/canvas/assets.ts";
+import { assetPackageVersion, assetText, resolveAsset } from "../host/canvas/assets.ts";
 import { inlineScript, standalonePage } from "../host/canvas/export.ts";
 import { MAX_SENT_IMAGE_BYTES, refuseOversizedImage, writeImageToClipboard } from "../web/canvas-export.ts";
 
@@ -105,6 +105,20 @@ describe("standalonePage", () => {
     const output = await standalonePage(page(`<script src="${ipv6Origin}/d3.min.js"></script>`), [ipv6Origin], "inline");
     expect(output).toContain(`<script>${d3}</script>`);
     expect(output).not.toContain(ipv6Origin);
+  });
+});
+
+describe("standalonePage with the step player", () => {
+  const player = `<script src="${ORIGIN}/diagram-steps.js"></script>`;
+
+  test.each(["cdn", "inline"] as const)("%s: carries the player inside the file, as no CDN has it", async (libraries) => {
+    const output = await standalonePage(page(player), [ORIGIN], libraries);
+    expect(output).toContain(`<script>${await assetText("/diagram-steps.js")}</script>`);
+    expect(output).not.toContain(ORIGIN);
+  });
+
+  test("leaves the player out of a page that doesn't use it", async () => {
+    expect(await standalonePage(page("<p>hi</p>"), [ORIGIN], "cdn")).not.toContain("diagram-steps-bar");
   });
 });
 

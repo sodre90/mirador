@@ -4,6 +4,7 @@ import type { ChangedFile, ChangeScope, ChangesBase } from "../../../shared/chan
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
 
 export const canvas = {
+  diagramSteps: { back: "Back", play: "Play", pause: "Pause", next: "Next" },
   ask: {
     recommended: "Recommended",
     somethingElseLabel: "Something else",

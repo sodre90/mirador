@@ -13,6 +13,7 @@ import { ChecklistView, currentTabItem, isTabItem, tabCount, useFlashOnAgentEdit
 import { EditApproval } from "./EditApproval.tsx";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
+import { language } from "./language.ts";
 import { usePageExport } from "./PageExport.tsx";
 import { usePageFind } from "./PageFind.tsx";
 import { usePageMarks } from "./PageMarks.tsx";
@@ -157,7 +158,7 @@ export function CanvasFrame({
   const imagesFromOtherSites = policy?.imagesFromOtherSites ?? false;
   const measuresNaturalWidth = onContentWidth !== undefined;
   const document = useMemo(
-    () => buildCanvasDocument(html, frameId, assetsOrigin, shownTheme(), { padded, policy: { imagesFromOtherSites }, markable, measuresNaturalWidth }),
+    () => buildCanvasDocument(html, frameId, assetsOrigin, shownTheme(), { padded, policy: { imagesFromOtherSites }, markable, measuresNaturalWidth, language }),
     [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, measuresNaturalWidth],
   );
   const onRenderedRef = useRef(onRendered);
