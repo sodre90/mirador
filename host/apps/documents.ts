@@ -334,6 +334,16 @@ export class AppDocuments {
   }
 
   /**
+   * Opens the conversation's app on the file as its user asked with /<app>:open: as app_open does, but never off a task
+   * under way that only this conversation holds, which leaving would stop.
+   */
+  async openAsUserAsked(conversationId: string, appName: string, file: string): Promise<OpenApp> {
+    return this.afterOpeningsOf(conversationId, appName, () =>
+      this.openNow(conversationId, appName, file, { kind: "opened" }, (leaving) => this.taskLeftBehind(leaving, conversationId, appName)),
+    );
+  }
+
+  /**
    * Opens a document another conversation of the workspace has, in this conversation, as its user asked to see it here:
    * after any open already under way for this conversation's app, so the choice the user made last is the one that stands.
    */

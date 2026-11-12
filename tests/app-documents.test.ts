@@ -637,6 +637,25 @@ describe("AppDocuments", () => {
     apps.stop();
   });
 
+  test("the user's /<app>:open is refused while a task runs that only this conversation holds, and the agent's app_open isn't", async () => {
+    const { apps, workspacePath } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 5 }));
+    const held = await apps.open("c1", "counter", "counter.json");
+    const running = apps.startTask("c1", undefined, "wait", { kind: "you" });
+    const howItEnded = running.ended.catch((error: Error) => error.message);
+    await expect(apps.openAsUserAsked("c1", "counter", "other.json")).rejects.toMatchObject({ status: 409, message: "Wait until stopped is still running; wait for it to end, or stop it, before opening another file." });
+    await expect(apps.openAsUserAsked("c1", "counter", "counter.json")).resolves.toMatchObject({ documentId: held.documentId });
+    expect(apps.state(held.documentId)).toMatchObject({ task: { state: "running" } });
+    await apps.open("c2", "counter", "counter.json");
+    await expect(apps.openAsUserAsked("c1", "counter", "other.json")).resolves.toMatchObject({ file: "other.json" });
+    expect(apps.state(held.documentId)).toMatchObject({ task: { state: "running" } });
+    await apps.open("c1", "counter", "counter.json");
+    await apps.open("c2", "counter", "other.json");
+    await expect(apps.open("c1", "counter", "other.json")).resolves.toMatchObject({ file: "other.json" });
+    expect(await howItEnded).toBe("Wait until stopped was stopped before it ended.");
+    apps.stop();
+  });
+
   test("a view asks over the app and workspace its document belongs to, and no other", async () => {
     const { apps } = await setUp();
     const opened = await apps.open("c1", "counter", "counter.json");

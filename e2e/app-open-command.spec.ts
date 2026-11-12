@@ -77,4 +77,22 @@ test("the user opens an installed app on a file with /<app>:open, picking the fi
     await expect(composer(page)).toHaveValue("/counter:open ../elsewhere.json");
     await expect(view(page).locator("#count")).toHaveText("5");
   });
+
+  await test.step("while a task runs on the file for this conversation alone, opening another is refused and the task goes on; once it's stopped, the same message opens it", async () => {
+    writeFileSync(join(host.projectDir, "other.json"), JSON.stringify({ count: 9 }));
+    await view(page).getByRole("button", { name: "Wait" }).click();
+    await expect(view(page).locator("#task")).toHaveText("wait running (waiting)");
+    await composer(page).fill("/counter:open other.json ");
+    await expect(page.getByRole("listbox", { name: "Paths" })).toHaveCount(0);
+    await composer(page).press("Enter");
+    await expect(problem(page)).toContainText("Wait until stopped is still running; wait for it to end, or stop it, before opening another file.");
+    await expect(composer(page)).toHaveValue("/counter:open other.json ");
+    await expect(view(page).locator("#count")).toHaveText("5");
+    await expect(view(page).locator("#task")).toHaveText("wait running (waiting)");
+    await view(page).getByRole("button", { name: "Stop the task" }).click();
+    await expect(view(page).locator("#task")).toHaveText("wait stopped (waiting)");
+    await composer(page).press("Enter");
+    await expect(view(page).locator("#count")).toHaveText("9");
+    await expect(composer(page)).toHaveValue("");
+  });
 });

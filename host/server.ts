@@ -1361,7 +1361,7 @@ export function startServer(services: HostServices) {
         }
       case "app.open-file":
         return void Promise.resolve()
-          .then(() => apps.open(message.conversationId, message.app, message.file))
+          .then(() => apps.openAsUserAsked(message.conversationId, message.app, message.file))
           .then(
             () => reply({ type: "app.file-opened", requestId: message.requestId, problem: null }),
             (error) => reply({ type: "app.file-opened", requestId: message.requestId, ...problemFieldsOf(error, messageOf(error)) }),
