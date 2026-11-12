@@ -401,6 +401,93 @@ describe("AppDocuments", () => {
     apps.stop();
   });
 
+  test("two conversations starting one new file under two spellings of it end on one document where the folder folds case, and on two where it doesn't", async () => {
+    const { apps, workspacePath } = await setUp();
+    mkdirSync(join(workspacePath, "plans"));
+    const [one, two] = await Promise.all([apps.open("c1", "counter", "plans/Case.json"), apps.open("c2", "counter", "plans/case.json")]);
+    const foldsCase = readdirSync(join(workspacePath, "plans")).length === 1;
+    expect(two.documentId === one.documentId).toBe(foldsCase);
+    expect(apps.openApps().map(({ conversationId }) => conversationId).sort()).toEqual(["c1", "c2"]);
+    apps.stop();
+  });
+
+  test("one file of a folder two workspaces both cover is a document of each, answerable to its own conversations", async () => {
+    const { apps, store, workspacePath } = await setUp();
+    mkdirSync(join(workspacePath, "inner"));
+    writeFileSync(join(workspacePath, "inner", "counter.json"), JSON.stringify({ count: 4 }));
+    store.insertWorkspace({ id: "w2", name: "inner", path: join(workspacePath, "inner"), defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    const { position: _, ...ofInner } = storeWithConversation().findConversation("c1")!;
+    store.insertConversation({ ...ofInner, id: "c3", workspaceId: "w2" });
+    const outer = await apps.open("c1", "counter", "inner/counter.json");
+    const inner = await apps.open("c3", "counter", "counter.json");
+    expect(inner.documentId).not.toBe(outer.documentId);
+    expect(inner.workspaceId).toBe("w2");
+    expect(apps.state(inner.documentId)).toMatchObject({ document: { count: 4 } });
+    await apps.apply("c3", undefined, { op: "add", by: 1 }, { kind: "you" });
+    expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 inner/counter.json", "c3 counter.json"]);
+    apps.stop();
+  });
+
+  test("a view moving to another file is refused only where its own leaving would stop the task", async () => {
+    const { apps, workspacePath } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 5 }));
+    const held = await apps.open("c1", "counter", "counter.json");
+    await apps.open("c2", "counter", "counter.json");
+    const running = apps.startTask("c1", undefined, "wait", { kind: "you" });
+    await expect(apps.openFromView("c1", "counter", "other.json")).resolves.toMatchObject({ conversationId: "c1", file: "other.json" });
+    expect(apps.state(held.documentId)).toMatchObject({ task: { name: "wait", state: "running" } });
+    apps.stopTask(held.documentId);
+    await running.ended.catch(() => {});
+    await apps.open("c1", "counter", "counter.json");
+    apps.forgetConversation("c2");
+    const alone = apps.startTask("c1", undefined, "wait", { kind: "you" });
+    await expect(apps.openFromView("c1", "counter", "other.json")).rejects.toThrow("Wait until stopped is still running");
+    apps.stopTask(held.documentId);
+    await alone.ended.catch(() => {});
+    apps.stop();
+  });
+
+  test("a view's move waits for the openings under way and is judged on the file it leaves then, not the one held when it asked", async () => {
+    const { apps, workspacePath } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 5 }));
+    await apps.open("c1", "counter", "counter.json");
+    const elsewhere = await apps.open("c2", "counter", "counter.json");
+    const running = apps.startTask("c1", undefined, "wait", { kind: "you" });
+    let finishWrite = () => {};
+    const writing = new Promise<void>((resolve) => (finishWrite = resolve));
+    const realWrite = Bun.write;
+    const slowWrite = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
+      await writing;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    let moving: Promise<unknown>;
+    let opening: Promise<unknown>;
+    try {
+      opening = apps.open("c1", "counter", "plans/late.json");
+      await eventually(() => expect(slowWrite).toHaveBeenCalled());
+      moving = apps.openFromView("c1", "counter", "other.json");
+      await Bun.sleep(25);
+      finishWrite();
+    } finally {
+      slowWrite.mockRestore();
+    }
+    await Promise.all([opening, moving]);
+    expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 other.json", "c2 counter.json"]);
+    expect(apps.state(elsewhere.documentId)).toMatchObject({ task: { name: "wait", state: "running" } });
+    apps.stopTask(elsewhere.documentId);
+    await running.ended.catch(() => {});
+    apps.stop();
+  });
+
+  test("a view asks over the app and workspace its document belongs to, and no other", async () => {
+    const { apps } = await setUp();
+    const opened = await apps.open("c1", "counter", "counter.json");
+    expect(() => apps.shownOver(opened.documentId, opened.workspaceId, "counter")).not.toThrow();
+    expect(() => apps.shownOver(opened.documentId, "w2", "counter")).toThrow("No counter document of this workspace is open as");
+    expect(() => apps.shownOver(opened.documentId, opened.workspaceId, "notes")).toThrow("No notes document of this workspace is open as");
+    apps.stop();
+  });
+
   test("each conversation of a workspace keeps its own document when they open different files", async () => {
     const { apps, workspacePath } = await setUp();
     writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 9 }));

@@ -677,10 +677,14 @@ export function startServer(services: HostServices) {
   const appRefusal = (error: unknown) =>
     new Response(errorMessage(error), { status: error instanceof AppFileRefused ? error.status : error instanceof AppProblem ? 400 : 500 });
 
-  /** The document an app's view shows, which its request names: two conversations of a workspace can have the app open on different files. */
-  const documentAskedFor = (request: { url: string }) => {
+  /**
+   * The document an app's view shows, named in its request: the workspace and app of the address it asks over are what
+   * that document belongs to, so a view reaches no file of another workspace's or another app's document.
+   */
+  const documentAskedFor = (request: { url: string; params: { workspaceId: string; app: string } }) => {
     const documentId = new URL(request.url).searchParams.get("document");
     if (documentId === null) throw new AppFileRefused(400, "Say which document of the app the view shows.");
+    apps.shownOver(documentId, request.params.workspaceId, request.params.app);
     return documentId;
   };
 
