@@ -52,6 +52,7 @@ These terms stay the same everywhere:
 | Settings | Beállítások | Configuración | 设置 | Einstellungen |
 | Add / Remove / Delete | Hozzáadás / Eltávolítás / Törlés | Agregar / Quitar / Eliminar | 添加 / 移除 / 删除 | Hinzufügen / Entfernen / Löschen |
 | uncommitted | nem commitolt | sin commit | 未提交 | nicht committet |
+| merge (a worktree's commits into the project folder's branch) | beolvasztás | fusionar | 合并 | mergen |
 | effort (thinking) | erőfeszítés | esfuerzo | 思考强度 | Denkaufwand |
 | go back / rewind (a turn) | visszalépés / visszatekerés | retroceder | 回退 | zurückspulen |
 | unload (a model from memory) | kirakás | liberar (de la memoria) | 卸载 | entladen |

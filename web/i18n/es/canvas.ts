@@ -131,6 +131,13 @@ export const canvas: Messages["canvas"] = {
       committing: "Haciendo commit…",
       committed: (count, revision, subject) => `Commit de ${plural(count, "1 archivo", `${count} archivos`)} como ${revision}: ${subject}`,
     },
+    merge: {
+      open: (count, branch) => plural(count, `Fusionar 1 commit en ${branch}`, `Fusionar ${count} commits en ${branch}`),
+      merging: "Fusionando…",
+      merged: (count, branch, revision) => `${plural(count, "Se fusionó 1 commit", `Se fusionaron ${count} commits`)} en ${branch}, que ahora está en ${revision}.`,
+      mergedAfterRebase: (count, branch, revision) =>
+        `${plural(count, "Se hizo rebase de 1 commit", `Se hizo rebase de ${count} commits`)} sobre ${branch} y se fusionó; ahora está en ${revision}.`,
+    },
     loading: "Cargando…",
     checkedAtMost: (count) =>
       `Esta carpeta contiene más de ${count} archivos, así que solo se comprobó esa cantidad y puede que falten algunos archivos cambiados.`,

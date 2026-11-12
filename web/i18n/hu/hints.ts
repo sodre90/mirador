@@ -389,6 +389,7 @@ export const hints: Messages["hints"] = {
   changesFromCommit: "A kör kezdete óta egy commit módosította ezt a fájlt, például egy pullé vagy az ágens sajátja.",
   changesRefresh: "A lista újratöltése. Az ágens minden befejezett eszközhívása után és a kör végén is betöltődik.",
   changesCommit: "A mappa fájljainak commitolása az általad írt üzenettel. Ennek a beszélgetésnek a változásai eleve ki vannak jelölve; amit magad tettél a staging területre, úgy marad.",
+  changesMerge: "A worktree commitjainak beolvasztása a projektmappa kikért ágába, a mappa fájljaival együtt. Ha az ág azóta továbblépett, a commitok előbb rebase-elődnek rá. Semmi sem változik, ha ez ütközik, vagy felülírná a projektmappa nem commitolt változásait.",
   commitOthers: "A mappa többi nem commitolt változása: a tiéd, egy másik beszélgetésé, vagy egy fájl, amelyet ennek a beszélgetésnek egy parancsa törölt, de semmi nem köti hozzá. Jelöld ki, amelyiket ez a commit is vigye.",
   commitConfirm: "A kijelölt fájlok commitolása egészben, ahogy most vannak. A commit a tiéd: a git-azonosítód, az aláírás és a hookok érvényesek. A ⌘Enter ugyanezt teszi.",
   changesByAgent: "Ennek a beszélgetésnek az ágense a szerkesztőeszközeivel módosította ezt a fájlt.",

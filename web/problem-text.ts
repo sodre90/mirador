@@ -16,6 +16,13 @@ export function goneText(gone: AgentGone, { gone: words }: ProblemWords) {
   }
 }
 
+const PATHS_NAMED_AT_MOST = 5;
+
+const pathList = (paths: string[], words: ProblemWords) => {
+  const named = paths.slice(0, PATHS_NAMED_AT_MOST).join(", ");
+  return paths.length > PATHS_NAMED_AT_MOST ? `${named} ${words.andMorePaths(paths.length - PATHS_NAMED_AT_MOST)}` : named;
+};
+
 function prelaunchText(failure: PrelaunchFailure, { prelaunch: words }: ProblemWords) {
   switch (failure.kind) {
     case "timed-out":
@@ -155,6 +162,20 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.notAnUncommittedChange(problem.path);
     case "worktree-needs-repository":
       return words.worktreeNeedsRepository(problem.directory);
+    case "landing-needs-branch":
+      return words.landingNeedsBranch(problem.directory);
+    case "nothing-to-land":
+      return words.nothingToLand(problem.branch);
+    case "landing-overlaps-uncommitted":
+      return words.landingOverlapsUncommitted(problem.branch, pathList(problem.paths, words));
+    case "landing-rebase-while-working":
+      return words.landingRebaseWhileWorking(problem.branch);
+    case "landing-worktree-edits-clash":
+      return words.landingWorktreeEditsClash(problem.branch, pathList(problem.paths, words));
+    case "landing-conflicts":
+      return words.landingConflicts(problem.branch, pathList(problem.paths, words));
+    case "landing-worktree-mid-operation":
+      return words.landingWorktreeMidOperation(problem.directory);
     case "save-path-absolute":
       return words.savePathAbsolute(problem.name);
     case "save-path-outside":

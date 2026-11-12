@@ -83,6 +83,14 @@ export type HostProblem =
   | { code: "commit-needs-files" }
   | { code: "not-an-uncommitted-change"; path: string }
   | { code: "worktree-needs-repository"; directory: string }
+  | { code: "landing-needs-worktree" }
+  | { code: "landing-needs-branch"; directory: string }
+  | { code: "nothing-to-land"; branch: string }
+  | { code: "landing-overlaps-uncommitted"; branch: string; paths: string[] }
+  | { code: "landing-rebase-while-working"; branch: string }
+  | { code: "landing-worktree-edits-clash"; branch: string; paths: string[] }
+  | { code: "landing-conflicts"; branch: string; paths: string[] }
+  | { code: "landing-worktree-mid-operation"; directory: string }
   | { code: "save-path-absolute"; name: string }
   | { code: "save-path-outside"; name: string }
   | { code: "save-path-is-folder"; name: string }

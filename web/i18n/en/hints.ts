@@ -364,6 +364,7 @@ export const hints = {
   changesFromCommit: "A commit since the turn began changed this file, such as a pull's or the agent's own.",
   changesRefresh: "Load the list again. It also loads after each tool call the agent finishes and when the turn ends.",
   changesCommit: "Commit files of this folder with a message you write. This conversation's changes start ticked; what you staged yourself stays as it is.",
+  changesMerge: "Bring this worktree's commits onto the branch the project folder has checked out, and move that folder's files along. If the branch moved on, they are rebased onto it first. Nothing changes when that conflicts or would overwrite uncommitted edits in the project folder.",
   commitOthers: "The folder's other uncommitted changes: yours, another conversation's, or a file a command of this conversation deleted, which nothing ties to it. Tick the ones this commit should take too.",
   commitConfirm: "Commit the ticked files as they are now, whole. The commit is yours: your git identity, signing and hooks apply. ⌘Enter does the same.",
   changesByAgent: "This conversation's agent changed this file with its edit tools.",

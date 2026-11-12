@@ -1467,6 +1467,18 @@ export function startServer(services: HostServices) {
           .then((commit) => reply({ type: "changes.committed", requestId: message.requestId, commit }))
           .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
         return;
+      case "changes.landable":
+        conversations
+          .landable(message.conversationId)
+          .then((landable) => reply({ type: "changes.landable-listed", requestId: message.requestId, landable }))
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
+        return;
+      case "changes.land":
+        conversations
+          .land(message.conversationId, { byAgent: false })
+          .then((landed) => reply({ type: "changes.landed", requestId: message.requestId, landed }))
+          .catch((error) => reply({ type: "changes.failed", requestId: message.requestId, ...failure(error) }));
+        return;
       case "changes.open-in-editor":
         return conversations.changes.openInEditor(message.conversationId, message.path, message.line);
       case "files.open":

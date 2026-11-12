@@ -2681,6 +2681,10 @@ input.picker-search {
   color: var(--text);
 }
 
+.changes .merge-failed {
+  color: var(--danger);
+}
+
 .revert-turn {
   max-height: 8em;
   overflow-y: auto;

@@ -91,6 +91,7 @@ import { asyncTaskUpdateOf, AsyncTasks, tailTaskOutput } from "./async-tasks.ts"
 import { followJobProgram, JobWaits } from "./job-waits.ts";
 import type { NotifierMute } from "./notifier.ts";
 import { Changes } from "./changes.ts";
+import type { Landable, Landed } from "../shared/changes.ts";
 import { Checkpoints, SNAPSHOTS_KEPT } from "./checkpoints.ts";
 import { profileToLaunch } from "./profiles.ts";
 import type { ProfileDraft, ProfileTestResult } from "../shared/protocol.ts";
@@ -858,6 +859,26 @@ export class ConversationService {
     }
     const lost = [...worktrees.values()].filter((worktree) => this.store.conversationsInWorktree(worktree.id).every((id) => closing.has(id)));
     return Promise.all(lost.map(async (worktree) => ({ worktree, uncommittedFiles: await this.worktrees.uncommittedFiles(worktree) })));
+  }
+
+  /** How the conversation's worktree commits stand against its project folder's branch; null for a conversation without a worktree. */
+  async landable(conversationId: string): Promise<Landable | null> {
+    const { workspaceId, worktree } = this.get(conversationId);
+    if (!worktree || !(await this.worktrees.isMade(worktree))) return null;
+    return this.worktrees.landable(this.existingWorkspace(workspaceId), worktree);
+  }
+
+  /**
+   * Brings the worktree's commits onto the project folder's branch. A rebase rewrites the worktree's files, so it waits
+   * while any conversation working there, its forks included, is in a turn; the calling agent's own turn is the exception,
+   * as it waits for the answer.
+   */
+  async land(conversationId: string, { byAgent }: { byAgent: boolean }): Promise<Landed> {
+    const { workspaceId, worktree } = this.get(conversationId);
+    if (!worktree) throw new HostProblemError({ code: "landing-needs-worktree" });
+    const waitsForTheAnswer = (id: string) => byAgent && id === conversationId;
+    const mayRebase = this.store.conversationsInWorktree(worktree.id).every((id) => waitsForTheAnswer(id) || !this.runtimes.get(id)?.running);
+    return this.worktrees.land(this.existingWorkspace(workspaceId), worktree, { mayRebase });
   }
 
   /** The uncommitted files deleting the conversation removes with its worktrees and its delegated tasks'. */

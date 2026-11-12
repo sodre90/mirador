@@ -129,6 +129,12 @@ export const canvas: Messages["canvas"] = {
       committing: "Commitolás…",
       committed: (count, revision, subject) => `${count} fájl commitolva (${revision}): ${subject}`,
     },
+    merge: {
+      open: (count, branch) => `${count} commit beolvasztása ide: ${branch}`,
+      merging: "Beolvasztás…",
+      merged: (count, branch, revision) => `${count} commit beolvasztva ide: ${branch}. Az ág most itt tart: ${revision}`,
+      mergedAfterRebase: (count, branch, revision) => `${count} commit rebase-elve és beolvasztva ide: ${branch}. Az ág most itt tart: ${revision}`,
+    },
     loading: "Betöltés…",
     checkedAtMost: (count) => `Ebben a mappában több mint ${count} fájl van, ezért csak ennyit ellenőriztünk, és néhány módosított fájl hiányozhat.`,
     ignoredHidden: (count) => `${count} git által figyelmen kívül hagyott fájl rejtve.`,

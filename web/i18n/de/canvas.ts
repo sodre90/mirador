@@ -131,6 +131,12 @@ export const canvas: Messages["canvas"] = {
       committing: "Committe…",
       committed: (count, revision, subject) => `${plural(count, "1 Datei", `${count} Dateien`)} committet als ${revision}: ${subject}`,
     },
+    merge: {
+      open: (count, branch) => plural(count, `1 Commit in ${branch} mergen`, `${count} Commits in ${branch} mergen`),
+      merging: "Wird gemergt…",
+      merged: (count, branch, revision) => `${plural(count, "1 Commit", `${count} Commits`)} in ${branch} gemergt, jetzt bei ${revision}.`,
+      mergedAfterRebase: (count, branch, revision) => `${plural(count, "1 Commit", `${count} Commits`)} per Rebase auf ${branch} gesetzt und gemergt, jetzt bei ${revision}.`,
+    },
     loading: "Wird geladen…",
     checkedAtMost: (count) =>
       `Dieser Ordner enthält mehr als ${count} Dateien, daher wurden nur so viele geprüft, und einige geänderte Dateien fehlen vielleicht.`,

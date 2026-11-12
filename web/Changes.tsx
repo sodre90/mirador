@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from "react";
-import { changeScopes, type ChangedFile, type ChangeList, type ChangeScope, type ChangesBase, type FileChanges, type ProjectFiles } from "../shared/changes.ts";
+import { changeScopes, type ChangedFile, type ChangeList, type ChangeScope, type ChangesBase, type FileChanges, type Landable, type Landed, type ProjectFiles } from "../shared/changes.ts";
 import { fileTree, type TreeFolder, type TreeNode } from "../shared/file-tree.ts";
 import { changesRequest } from "./changes-request.ts";
 import { CommitChangesDialog } from "./CommitChanges.tsx";
@@ -36,6 +36,18 @@ const fileChanges = (conversationId: string, scope: ChangeScope, path: string) =
   changesRequest(
     (requestId) => ({ type: "changes.diff", requestId, conversationId, scope, path }),
     (message) => (message.type === "changes.diffed" ? message.changes : undefined),
+  );
+
+const landableOf = (conversationId: string) =>
+  changesRequest(
+    (requestId) => ({ type: "changes.landable", requestId, conversationId }),
+    (message) => (message.type === "changes.landable-listed" ? message.landable : undefined),
+  );
+
+const land = (conversationId: string) =>
+  changesRequest(
+    (requestId) => ({ type: "changes.land", requestId, conversationId }),
+    (message) => (message.type === "changes.landed" ? message.landed : undefined),
   );
 
 const listProjectFiles = (conversationId: string) =>
@@ -301,16 +313,50 @@ function SelectedFile({ conversationId, file, loaded, homeDir }: { conversationI
   );
 }
 
+const mergedText = ({ branch, revision, subjects, rebased }: Landed) =>
+  (rebased ? words.merge.mergedAfterRebase : words.merge.merged)(subjects.length, branch, revision);
+
+/**
+ * Brings a worktree conversation's commits onto the branch its project folder has checked out. A host too old to know
+ * about it never answers, and the button just doesn't show.
+ */
+function MergeIntoBranch({ landable, conversationId, onMerged }: { landable: Landable; conversationId: string; onMerged: (note: MergeNote) => void }) {
+  const [merging, setMerging] = useState(false);
+  if (landable.branch === null || landable.ahead === 0) return null;
+  const merge = () => {
+    setMerging(true);
+    land(conversationId)
+      .then(
+        (landed) => onMerged({ text: mergedText(landed), failed: false }),
+        (error) => onMerged({ text: errorText(error), failed: true }),
+      )
+      .finally(() => setMerging(false));
+  };
+  return (
+    <button type="button" className="link" data-hint={hints.changesMerge} disabled={merging} onClick={merge}>
+      {merging ? words.merge.merging : words.merge.open(landable.ahead, landable.branch)}
+    </button>
+  );
+}
+
+interface MergeNote {
+  text: string;
+  failed: boolean;
+}
+
 /** The files this turn, or the uncommitted work, changed; the agent's own edits are marked, and a file's line changes open under its row. */
 export function ChangesView({ conversationId, refreshPoint, homeDir }: { conversationId: string; refreshPoint: number; homeDir: string }) {
   const scope = changesScope.use();
   const [refreshes, setRefreshes] = useState(0);
   const [committing, setCommitting] = useState(false);
   const [madeCommit, setMadeCommit] = useState<string | null>(null);
+  const [mergeNote, setMergeNote] = useState<MergeNote | null>(null);
   const reloadWhen = `${refreshPoint} ${refreshes}`;
   const [selectedPath, setSelectedPath] = useState(selectedPaths.get(conversationId) ?? null);
   const loadedList = useKeptLoad(`list ${conversationId} ${scope}`, () => listChanges(conversationId, scope), reloadWhen);
   const list = loadedList && "value" in loadedList ? loadedList.value : null;
+  const loadedLandable = useKeptLoad(`landable ${conversationId}`, () => landableOf(conversationId), reloadWhen);
+  const landable = loadedLandable && "value" in loadedLandable ? loadedLandable.value : null;
   const showIgnored = ignoredFiles.use() === "shown";
   const hiddenIgnored = useMemo(() => (list && !showIgnored ? list.project.filter(({ ignored }) => ignored) : []), [list, showIgnored]);
   const visible = useMemo(() => (list && hiddenIgnored.length > 0 ? { ...list, project: list.project.filter(({ ignored }) => !ignored) } : list), [list, hiddenIgnored]);
@@ -416,6 +462,16 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
             {words.commitDialog.open}
           </button>
         )}
+        {landable && (
+          <MergeIntoBranch
+            landable={landable}
+            conversationId={conversationId}
+            onMerged={(note) => {
+              setMergeNote(note);
+              setRefreshes((count) => count + 1);
+            }}
+          />
+        )}
       </div>
       {committing && (
         <CommitChangesDialog
@@ -431,6 +487,11 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
       {madeCommit && (
         <p className="hint commit-made" role="status">
           {madeCommit}
+        </p>
+      )}
+      {mergeNote && (
+        <p className={mergeNote.failed ? "hint merge-failed" : "hint commit-made"} role={mergeNote.failed ? "alert" : "status"}>
+          {mergeNote.text}
         </p>
       )}
       {loadedList && "error" in loadedList ? <p className="review-empty">{loadedList.error}</p> : !visible && <p className="changes-none">{words.loading}</p>}

@@ -170,6 +170,67 @@ test("an app a worktree conversation opens works on the worktree's file, apart f
   });
 });
 
+test("a worktree conversation's commits merge into the project folder's branch from Changes or by its agent, rebased when main moved on, never over edits waiting there", async ({ page }) => {
+  await signIn(page, host);
+  await startNewConversation(page, host.projectDir);
+  const conversationId = page.url().match(/#\/c\/(.+)$/)![1]!;
+  const folder = await agentFolder(page);
+  const changes = page.locator(".canvas-panel:visible .changes");
+  const refresh = () => changes.getByRole("button", { name: "Refresh" }).click();
+  const projectFile = (path: string) => readFileSync(join(host.projectDir, path), "utf8");
+  const commitInWorktree = (path: string, content: string, subject: string) => {
+    writeFileSync(join(folder, path), content);
+    gitIn(folder, "add", path);
+    gitIn(folder, "commit", "-qm", subject);
+  };
+  const statusBefore = git("status", "--porcelain");
+
+  await test.step("a commit made in the worktree merges into main from Changes, and the project folder's files move along", async () => {
+    commitInWorktree("merged.txt", "from the worktree\n", "Add merged.txt");
+    await refresh();
+    await changes.getByRole("button", { name: "Merge 1 commit into main" }).click();
+    await expect(changes.locator(".commit-made")).toHaveText(/^Merged 1 commit into main, now at [0-9a-f]+\.$/);
+    expect(projectFile("merged.txt")).toBe("from the worktree\n");
+    expect(git("log", "-1", "--format=%s", "main")).toBe("Add merged.txt");
+    expect(git("status", "--porcelain")).toBe(statusBefore);
+    await expect(changes.getByRole("button", { name: /^Merge / })).toHaveCount(0);
+  });
+
+  await test.step("an edit waiting in the project folder keeps a commit to the same file from merging, and nothing moves", async () => {
+    writeFileSync(join(host.projectDir, "merged.txt"), "edited in the project folder\n");
+    commitInWorktree("merged.txt", "changed again in the worktree\n", "Change merged.txt");
+    await refresh();
+    await changes.getByRole("button", { name: "Merge 1 commit into main" }).click();
+    await expect(changes.locator(".merge-failed")).toHaveText(
+      "Nothing was merged: these commits change files with uncommitted edits in the project folder: merged.txt. Commit those edits or set them aside there, then merge into main again.",
+    );
+    expect(projectFile("merged.txt")).toBe("edited in the project folder\n");
+    expect(git("log", "-1", "--format=%s", "main")).toBe("Add merged.txt");
+    writeFileSync(join(host.projectDir, "merged.txt"), "from the worktree\n");
+  });
+
+  await test.step("the agent merges with its land tool, its commit rebased onto what main gained meanwhile", async () => {
+    writeFileSync(join(host.projectDir, "elsewhere.txt"), "merged elsewhere\n");
+    git("add", "elsewhere.txt");
+    git("commit", "-qm", "Add elsewhere.txt");
+
+    const answer = await callCanvasTool(host, conversationId, "land", {});
+
+    expect(answer).toContain("- Change merged.txt");
+    expect(answer).toContain("They were rebased onto what main gained meanwhile");
+    expect(projectFile("merged.txt")).toBe("changed again in the worktree\n");
+    expect(gitIn(folder, "rev-parse", "HEAD")).toBe(git("rev-parse", "main"));
+    expect(readFileSync(join(folder, "elsewhere.txt"), "utf8")).toBe("merged elsewhere\n");
+  });
+
+  await test.step("the conversation's changes still list after its commits were rebased", async () => {
+    await changes.getByRole("button", { name: "This session" }).click();
+    await refresh();
+    await expect(changes.locator(".changes-none", { hasText: "Loading…" })).toHaveCount(0);
+    await expect(changes.locator(".review-empty")).toHaveCount(0);
+  });
+});
+
 test("one conversation starts in the other place, a clean worktree goes without asking, and a folder without a repository gets no worktrees", async ({ page }) => {
   await signIn(page, host);
 

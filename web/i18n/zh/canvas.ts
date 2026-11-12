@@ -127,6 +127,12 @@ export const canvas: Messages["canvas"] = {
       committing: "正在提交…",
       committed: (count, revision, subject) => `已提交 ${count} 个文件，提交为 ${revision}：${subject}`,
     },
+    merge: {
+      open: (count, branch) => `将 ${count} 个提交合并到 ${branch}`,
+      merging: "正在合并…",
+      merged: (count, branch, revision) => `已将 ${count} 个提交合并到 ${branch}，现在位于 ${revision}。`,
+      mergedAfterRebase: (count, branch, revision) => `已将 ${count} 个提交变基到 ${branch} 并合并，现在位于 ${revision}。`,
+    },
     loading: "加载中…",
     checkedAtMost: (count) => `这个文件夹的文件超过 ${count} 个，所以只检查了这么多，可能漏掉一些已改动的文件。`,
     ignoredHidden: (count) => `已隐藏 ${count} 个被 git 忽略的文件。`,

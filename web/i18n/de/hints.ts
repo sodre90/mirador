@@ -402,6 +402,7 @@ export const hints: Messages["hints"] = {
   changesFromCommit: "Ein Commit seit Beginn der Runde hat diese Datei geändert, etwa der eines Pulls oder einer des Agenten selbst.",
   changesRefresh: "Lade die Liste neu. Sie lädt auch nach jedem Tool-Aufruf, den der Agent abschließt, und wenn die Runde endet.",
   changesCommit: "Committe Dateien dieses Ordners mit einer Nachricht, die du schreibst. Die Änderungen dieser Unterhaltung sind anfangs angehakt; was du selbst vorgemerkt hast, bleibt, wie es ist.",
+  changesMerge: "Bringt die Commits dieses Worktrees in den ausgecheckten Branch des Projektordners und aktualisiert dessen Dateien mit. Ist der Branch weitergegangen, werden sie zuerst per Rebase daraufgesetzt. Nichts ändert sich, wenn das Konflikte gibt oder nicht committete Änderungen im Projektordner überschreiben würde.",
   commitOthers: "Die übrigen nicht committeten Änderungen des Ordners: deine, die einer anderen Unterhaltung oder eine Datei, die ein Befehl dieser Unterhaltung gelöscht hat und die nichts mit ihr verbindet. Hake an, was dieser Commit auch mitnehmen soll.",
   commitConfirm: "Committet die angehakten Dateien ganz, so wie sie jetzt sind. Der Commit ist deiner: deine git-Identität, Signatur und Hooks gelten. ⌘Enter macht dasselbe.",
   changesByAgent: "Der Agent dieser Unterhaltung hat diese Datei mit seinen Bearbeitungs-Tools geändert.",

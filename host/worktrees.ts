@@ -2,8 +2,10 @@ import { existsSync } from "node:fs";
 import { mkdir, realpath, rm } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
+import type { Landable, Landed } from "../shared/changes.ts";
 import type { Conversation, ConversationWorktree, Workspace } from "../shared/model.ts";
 import { git, mustGit } from "./git-command.ts";
+import { landableOnto, landOnto } from "./landing.ts";
 
 const SHORT_ID_LENGTH = 8;
 
@@ -84,6 +86,15 @@ export class Worktrees {
     const trackedChanges = entries.filter((entry) => !entry.startsWith("??")).length;
     const untracked = entries.length - trackedChanges;
     return trackedChanges + Math.min(untracked, 1000);
+  }
+
+  landable(workspace: Workspace, worktree: ConversationWorktree): Promise<Landable> {
+    return landableOnto(workspace.path, worktree.root);
+  }
+
+  /** One landing at a time per project folder, so a second one finds the branch the first moved and rebases onto it. */
+  land(workspace: Workspace, worktree: ConversationWorktree, options: { mayRebase: boolean }): Promise<Landed> {
+    return this.queue(workspace.path, () => landOnto(workspace.path, worktree.root, options));
   }
 
   /** With its uncommitted files. Its branch goes too unless it has commits the workspace's branch lacks, which git keeps. */

@@ -131,6 +131,13 @@ export const canvas = {
       committing: "Committing…",
       committed: (count: number, revision: string, subject: string) => `Committed ${plural(count, "1 file", `${count} files`)} as ${revision}: ${subject}`,
     },
+    merge: {
+      open: (count: number, branch: string) => plural(count, `Merge 1 commit into ${branch}`, `Merge ${count} commits into ${branch}`),
+      merging: "Merging…",
+      merged: (count: number, branch: string, revision: string) => `Merged ${plural(count, "1 commit", `${count} commits`)} into ${branch}, now at ${revision}.`,
+      mergedAfterRebase: (count: number, branch: string, revision: string) =>
+        `Rebased ${plural(count, "1 commit", `${count} commits`)} onto ${branch} and merged, now at ${revision}.`,
+    },
     loading: "Loading…",
     checkedAtMost: (count: string) => `This folder holds more than ${count} files, so only that many were checked and some changed files may be missing.`,
     ignoredHidden: (count: number) => plural(count, "1 git-ignored file hidden.", `${count} git-ignored files hidden.`),

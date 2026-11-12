@@ -67,6 +67,25 @@ export interface Committable {
   branch: string | null;
 }
 
+/**
+ * How a worktree conversation's commits stand against the branch its project folder has checked out: how many that branch
+ * lacks, and how many it gained since the worktree left it. The branch is null on a detached HEAD.
+ */
+export interface Landable {
+  branch: string | null;
+  ahead: number;
+  behind: number;
+}
+
+/** Commits a worktree conversation brought onto its project folder's branch, rebased first when that branch had moved on. */
+export interface Landed {
+  branch: string;
+  /** The branch's new tip, abbreviated. */
+  revision: string;
+  subjects: string[];
+  rebased: boolean;
+}
+
 export interface MadeCommit {
   /** The commit's abbreviated hash. */
   revision: string;

@@ -9,11 +9,11 @@ import type { CanvasService } from "../host/canvas/service.ts";
 import type { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { CanvasHost } from "../shared/canvas-plugins.ts";
-import type { PluginCanvasItem } from "../shared/model.ts";
+import type { ConversationWorktree, PluginCanvasItem } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 
-/** A store with workspace w1 and its conversation c1. */
-export function storeWithConversation(path = ":memory:") {
+/** A store with workspace w1 and its conversation c1, in its own worktree when given one. */
+export function storeWithConversation(path = ":memory:", worktree?: ConversationWorktree) {
   const store = new Store(path);
   store.insertWorkspace({ id: "w1", name: "p", path: "/tmp/p", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
   store.insertConversation({
@@ -41,6 +41,7 @@ export function storeWithConversation(path = ":memory:") {
     configOptions: [],
     createdAt: 1,
     updatedAt: 1,
+    ...(worktree && { worktree }),
   });
   return store;
 }
