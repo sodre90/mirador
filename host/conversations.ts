@@ -127,6 +127,7 @@ const PROMPT_RECORD_WAIT_MS = 3_000;
 const SESSION_CLOSE_TIMEOUT_MS = 5_000;
 const REMINDER_CHECK_MS = 30_000;
 const OPTION_ANSWER_TIMEOUT_MS = 10_000;
+const UNUSED_PICTURES_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
 /** A plugin's model and effort hold its conversation's first message back through a model server's load, but not for good. */
 const START_CHOICES_TIMEOUT_MS = 120_000;
 /** What a profile's agent says it offers is kept for its editors this long: it costs starting the agent to ask again. */
@@ -1826,8 +1827,18 @@ export class ConversationService {
   /** Images pasted into the message box but left out of what was sent; one that a message carried or a queued one carries stays. */
   discardImages(conversationId: string, imageIds: string[]) {
     if (!this.store.hasConversation(conversationId)) return;
-    const carried = new Set([...this.store.sentImageIds(conversationId), ...this.runtime(conversationId).queuedMessages.flatMap((message) => message.imageIds)]);
+    const carried = this.picturesUsedIn(conversationId);
     imageIds.filter((imageId) => !carried.has(imageId)).forEach((imageId) => this.images.delete(conversationId, imageId));
+  }
+
+  /** Pictures of drafts given up on, or of a message the host never took, go once they have gone unused for a month. */
+  deleteUnusedPictures(now = Date.now()) {
+    return this.images.deleteUnused((conversationId) => this.picturesUsedIn(conversationId), now - UNUSED_PICTURES_KEPT_MS);
+  }
+
+  private picturesUsedIn(conversationId: string) {
+    const queued = this.runtimes.get(conversationId)?.queuedMessages ?? this.store.findConversation(conversationId)?.queuedMessages ?? [];
+    return new Set([...this.store.sentImageIds(conversationId), ...queued.flatMap((message) => message.imageIds)]);
   }
 
   removeQueuedMessage(conversationId: string, messageId: string) {

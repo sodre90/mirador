@@ -1,10 +1,13 @@
 import { mkdirSync, rmSync } from "node:fs";
+import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { extensionFor, isImageId, mimeTypeOf } from "../shared/images.ts";
 
 export const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
+
+const CONVERSATION_ID = /^[0-9a-f-]{36}$/;
 
 /** Images pasted into a conversation's messages, kept as files in a folder of their own that goes with the conversation. */
 export class ImageStore {
@@ -39,8 +42,27 @@ export class ImageStore {
     rmSync(this.folder(conversationId), { recursive: true, force: true });
   }
 
+  /**
+   * Deletes the pictures no message uses that were last changed before the given time, such as those of a draft long
+   * given up on. Only the page that keeps a draft knows its pictures, so a recent one may still be on its way.
+   */
+  async deleteUnused(usedIn: (conversationId: string) => Set<string>, changedBefore: number) {
+    const folders = await readdir(this.directory, { withFileTypes: true }).catch(() => []);
+    for (const { name: conversationId } of folders.filter((entry) => entry.isDirectory() && CONVERSATION_ID.test(entry.name))) {
+      const used = usedIn(conversationId);
+      const stored = await readdir(this.folder(conversationId)).catch(() => []);
+      const unused = stored.filter((imageId) => isImageId(imageId) && !used.has(imageId));
+      for (const imageId of unused) await this.deleteIfChangedBefore(join(this.folder(conversationId), imageId), changedBefore);
+    }
+  }
+
+  private async deleteIfChangedBefore(path: string, changedBefore: number) {
+    const changed = await stat(path).catch(() => null);
+    if (changed && changed.mtimeMs < changedBefore) await rm(path, { force: true });
+  }
+
   private folder(conversationId: string) {
-    if (!/^[0-9a-f-]{36}$/.test(conversationId)) throw new HostProblemError({ code: "unknown-conversation" });
+    if (!CONVERSATION_ID.test(conversationId)) throw new HostProblemError({ code: "unknown-conversation" });
     return join(this.directory, conversationId);
   }
 }

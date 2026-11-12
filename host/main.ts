@@ -230,6 +230,7 @@ sourceWatcher.start();
 if (config.checksForNewerVersion) newerVersion.start();
 if (config.checksForPluginUpdates) pluginUpdates.start();
 conversations.resumeAfterRestart(takeTurnsStoppedForRestart(config.dataDir));
+void conversations.deleteUnusedPictures().catch((error: unknown) => console.error("deleting unused pictures failed:", error));
 conversations.startReminders();
 canvasPlugins.startBackgroundWork();
 const terminalSessions = new TerminalSessionWatcher(
