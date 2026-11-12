@@ -93,7 +93,8 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
   /**
    * Stops the turn of a conversation this plugin's tool or action started from this conversation, as the user's Stop
    * would; its `replied` then hears it end as "stopped", and no job it left running wakes it any more. Resolves doing
-   * nothing for one whose work already ended or that no longer exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
+   * nothing for one whose work already ended or that no longer exists. Throws for a conversation this plugin didn't start
+   * from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
   /**
@@ -120,7 +121,8 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
   /**
    * Stops the turn of a conversation this plugin's tool or action started from this conversation, as the user's Stop
    * would; its `replied` then hears it end as "stopped", and no job it left running wakes it any more. Resolves doing
-   * nothing for one whose work already ended or that no longer exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
+   * nothing for one whose work already ended or that no longer exists. Throws for a conversation this plugin didn't start
+   * from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
 }
