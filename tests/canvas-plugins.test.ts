@@ -53,6 +53,16 @@ describe("CanvasPlugins", () => {
     expect(instructions).toContain("\n- app_open: open an app the user installed (counter (Counter)) on a file of this workspace");
   });
 
+  test("app_open names only the file it opened when that is the one asked for, a file in a folder too, whatever the system's separator", async () => {
+    const opened = { app: "counter", title: "Counter", file: "docs/notes.json" };
+    const apps = { installed: () => [{ name: "counter", title: "Counter" }], open: async () => opened, describe: () => "Its state is empty." } as unknown as AppDocuments;
+    const { callTool } = await canvasPluginHost(FIXTURES, undefined, {}, { apps });
+    expect(await callTool("app_open", { app: "counter", file: "docs/notes.json" })).toEqual({
+      text: "Counter is open on docs/notes.json; the user sees it in the canvas.\n\nIts state is empty.",
+      isError: false,
+    });
+  });
+
   test("official plugins not installed join the guidance, with the tool that installs one, pre-allowed since it asks the user first", async () => {
     const { plugins } = await setUp();
     const offered = [{ name: "media", title: "Media", description: "Edit a video.", recommendWhen: "the user edits a video", repo: "https://example.com/media.git" }];

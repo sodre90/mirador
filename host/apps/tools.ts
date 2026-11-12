@@ -2,6 +2,7 @@ import type { McpServer, ServerContext } from "@modelcontextprotocol/server";
 import { normalize } from "node:path";
 import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
+import { toPosix } from "../paths.ts";
 import { takenUpWords, type AppDocuments, type TakenUp } from "./documents.ts";
 import { AppProblem } from "./plugins.ts";
 
@@ -51,7 +52,8 @@ export function registerAppTools(
     ({ app, file }, ctx) =>
       answered(ctx, async (conversationId) => {
         const opened = await apps.open(conversationId, app, file);
-        const forFile = opened.file === normalize(file) ? "" : `, the document for ${normalize(file)}`;
+        const asked = toPosix(normalize(file));
+        const forFile = opened.file === asked ? "" : `, the document for ${asked}`;
         return `${opened.title} is open on ${opened.file}${forFile}; the user sees it in the canvas.\n\n${apps.describe(conversationId, opened.app)}`;
       }),
   );
