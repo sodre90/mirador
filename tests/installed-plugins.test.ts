@@ -72,7 +72,7 @@ describe("InstalledPlugins", () => {
     const listed = await new InstalledPlugins(plugins, loaded.problems).list();
 
     expect(listed).toEqual([
-      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false },
+      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false, description: null, tagline: null, screenshots: [] },
       {
         folder: "cloned",
         name: "counter",
@@ -85,8 +85,11 @@ describe("InstalledPlugins", () => {
         tools: [],
         icon: null,
         updatesByItself: false,
+        description: null,
+        tagline: null,
+        screenshots: [],
       },
-      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false },
+      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false, description: null, tagline: null, screenshots: [] },
     ]);
   });
 
@@ -108,6 +111,66 @@ describe("InstalledPlugins", () => {
     symlinkSync(join(root, "outside.svg"), join(plugins, "e-linked-out", "linked.svg"));
     const icons = (await new InstalledPlugins(plugins, []).list()).map(({ folder, icon }) => [folder, icon]);
     expect(icons).toEqual([["a-own", svg], ["b-outside", null], ["c-not-svg", null], ["d-missing", null], ["e-linked-out", null]]);
+  });
+
+  describe("a plugin's own description, tagline and pictures", () => {
+    const plugins = join(root, "with-pictures");
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", "base64");
+    const manifest = { version: "1.0.0", api: 1, app: { host: "host.ts", view: "view.js" } };
+    const pluginWith = (folder: string, fields: Record<string, unknown>) => {
+      cpSync(COUNTER, join(plugins, folder), { recursive: true });
+      mkdirSync(join(plugins, folder, "shots"), { recursive: true });
+      writeFileSync(join(plugins, folder, "shots", "board.png"), png);
+      writeFileSync(join(plugins, folder, "shots", "not-an-image.png"), "<script>alert(1)</script>");
+      writeFileSync(join(plugins, folder, "plugin.json"), JSON.stringify({ name: folder, title: folder, ...manifest, ...fields }));
+    };
+    const board = { path: "shots/board.png", caption: "The board" };
+    writeFileSync(join(root, "outside.png"), png);
+    pluginWith("own", {
+      description: "Keeps a board.",
+      tagline: "A board beside the chat.",
+      screenshots: [
+        board,
+        { path: "../../outside.png", caption: "Outside its folder" },
+        { path: "shots/linked-out.png", caption: "Linked out of its folder" },
+        { path: "shots/not-an-image.png", caption: "Not an image" },
+        { path: "shots/missing.png", caption: "Missing" },
+        { path: "shots/board.png", caption: "" },
+        "shots/board.png",
+      ],
+    });
+    symlinkSync(join(root, "outside.png"), join(plugins, "own", "shots", "linked-out.png"));
+    pluginWith("unshowable", { description: " ", tagline: "x".repeat(121), screenshots: "shots/board.png" });
+    const linkedPlugin = join(root, "linked-plugin-checkout");
+    cpSync(join(plugins, "own"), linkedPlugin, { recursive: true });
+    rmSync(join(linkedPlugin, "shots", "linked-out.png"));
+    writeFileSync(join(linkedPlugin, "plugin.json"), JSON.stringify({ name: "linked", title: "linked", ...manifest, screenshots: [board] }));
+    symlinkSync(linkedPlugin, join(plugins, "linked"));
+
+    test("lists them, with only the pictures that are images inside its folder, each at the host's URL for it", async () => {
+      const listed = (await new InstalledPlugins(plugins, []).list()).map(({ folder, description, tagline, screenshots }) => ({ folder, description, tagline, screenshots }));
+      expect(listed).toEqual([
+        { folder: "linked", description: null, tagline: null, screenshots: [{ url: "/plugin-picture?folder=linked&path=shots%2Fboard.png", caption: "The board" }] },
+        { folder: "own", description: "Keeps a board.", tagline: "A board beside the chat.", screenshots: [{ url: "/plugin-picture?folder=own&path=shots%2Fboard.png", caption: "The board" }] },
+        { folder: "unshowable", description: null, tagline: null, screenshots: [] },
+      ]);
+    });
+
+    test("serves a picture only when its plugin.json lists it and it stays inside the plugin's folder", async () => {
+      const installed = new InstalledPlugins(plugins, []);
+      expect((await installed.picture("own", "shots/board.png"))?.mimeType).toBe("image/png");
+      expect((await installed.picture("linked", "shots/board.png"))?.mimeType, "a plugin linked from a checkout elsewhere serves its own pictures").toBe("image/png");
+      for (const [folder, path] of [
+        ["own", "plugin.json"],
+        ["own", "shots/linked-out.png"],
+        ["own", "../../outside.png"],
+        ["unshowable", "shots/board.png"],
+        ["../with-pictures/own", "shots/board.png"],
+        ["nowhere", "shots/board.png"],
+      ]) {
+        expect(await installed.picture(folder!, path!), `${folder} ${path}`).toBeNull();
+      }
+    });
   });
 
   test("lists the canvas tools each plugin gave the agent when Mirador started", async () => {
@@ -171,6 +234,9 @@ describe("adding, updating and removing plugins", () => {
         tools: [],
         icon: null,
         updatesByItself: false,
+        description: null,
+        tagline: null,
+        screenshots: [],
       },
     ]);
     expect(leftInStaging(plugins)).toEqual([]);

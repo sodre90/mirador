@@ -784,6 +784,16 @@ export function startServer(services: HostServices) {
     return new Response(image.bytes, { headers: { "Content-Type": image.mimeType, "Cache-Control": "private, max-age=86400", "X-Content-Type-Options": "nosniff" } });
   }
 
+  /** A picture an installed plugin's plugin.json lists, from its folder, which a linked plugin may change at any time. */
+  async function serveInstalledPluginPicture(request: Request) {
+    const refused = refusedPageRequest(request);
+    if (refused) return refused;
+    const asked = new URL(request.url).searchParams;
+    const picture = await plugins.picture(asked.get("folder") ?? "", asked.get("path") ?? "");
+    if (!picture) return new Response("not found", { status: 404 });
+    return new Response(picture.file, { headers: { "Content-Type": picture.mimeType, "Cache-Control": "private, no-cache", "X-Content-Type-Options": "nosniff" } });
+  }
+
   const listedCanvas = (conversationId: string) => canvas.list(conversationId).map((item) => (item.kind === "plugin" ? canvasPlugins.listed(item) : item));
 
   /** A phone that held events before gets only the ones after them, unless a rewind took the last of them away; otherwise the latest turns, and earlier ones when it asks. */
@@ -1686,6 +1696,7 @@ export function startServer(services: HostServices) {
     "/conversations/:conversationId/events/:seq/images/:index": { GET: serveEventImage },
     "/conversations/:conversationId/local-image": { GET: serveLocalImage },
     "/plugin-screenshot": { GET: servePluginScreenshot },
+    "/plugin-picture": { GET: serveInstalledPluginPicture },
     "/workspaces/:workspaceId/apps/:app/file": { GET: serveAppFile },
     "/workspaces/:workspaceId/apps/:app/media": { POST: grantAppMedia },
     "/workspaces/:workspaceId/apps/:app/files": { GET: listAppFiles },

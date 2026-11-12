@@ -317,6 +317,12 @@ function PluginIcon({ plugin }: { plugin: GalleryPlugin }) {
 /** The catalog's pictures load through the host, since the page may block images from other sites. */
 const throughTheHost = (url: string) => `/plugin-screenshot?url=${encodeURIComponent(url)}`;
 
+/** An installed plugin's own words and pictures, from its plugin.json, else the catalog's. */
+const descriptionOf = ({ installed, official }: GalleryPlugin) => installed?.description ?? official?.description ?? null;
+const taglineOf = (plugin: GalleryPlugin) => plugin.installed?.tagline ?? plugin.official?.tagline ?? descriptionOf(plugin);
+const picturesOf = ({ installed, official }: GalleryPlugin): PluginScreenshot[] =>
+  installed && installed.screenshots.length > 0 ? installed.screenshots : (official?.screenshots ?? []).map(({ url, caption }) => ({ url: throughTheHost(url), caption }));
+
 /** Fetched while the gallery is open, so a plugin's page shows its pictures at once rather than after the host has fetched them. */
 function usePicturesFetchedAhead(official: CatalogPlugin[] | undefined) {
   const urls = (official ?? []).flatMap(({ screenshots }) => (screenshots ?? []).map(({ url }) => url));
@@ -334,7 +340,7 @@ function Screenshots({ title, screenshots }: { title: string; screenshots: Plugi
         {screenshots.map(({ url, caption }, index) => (
           <li key={url}>
             <button type="button" className="plugin-screenshot" onClick={() => setShown(index)}>
-              <img src={throughTheHost(url)} alt={caption} loading="lazy" />
+              <img src={url} alt={caption} loading="lazy" />
             </button>
             <span>{caption}</span>
           </li>
@@ -369,7 +375,7 @@ function PictureViewer({ screenshots, shown, onShow, onClose }: { screenshots: P
         ×
       </button>
       <figure>
-        <img src={throughTheHost(url)} alt={caption} />
+        <img src={url} alt={caption} />
         <figcaption>
           {count > 1 && (
             <button type="button" className="icon" title={words.previousPicture} aria-label={words.previousPicture} onClick={() => step(-1)}>
@@ -425,7 +431,7 @@ function PluginTile({ plugin, news, updating, onOpen }: { plugin: GalleryPlugin;
           {plugin.title}
         </button>
       </span>
-      <span className="plugin-tagline">{plugin.official?.tagline ?? plugin.official?.description}</span>
+      <span className="plugin-tagline">{taglineOf(plugin)}</span>
       <span className="plugin-tile-bottom">
         <PluginBadges plugin={plugin} news={news} />
         {action && (
@@ -587,9 +593,9 @@ function PluginDetail({ plugin, news, updateMode, start, onBack }: { plugin: Gal
         </span>
         {!plugin.installed && plugin.official && <InstallButton installing={installing} />}
       </header>
-      {plugin.official && <p className="plugin-description">{plugin.official.description}</p>}
+      {descriptionOf(plugin) && <p className="plugin-description">{descriptionOf(plugin)}</p>}
       {!plugin.installed && <InstallConsent installing={installing} />}
-      {plugin.official?.screenshots && <Screenshots title={plugin.title} screenshots={plugin.official.screenshots} />}
+      {picturesOf(plugin).length > 0 && <Screenshots title={plugin.title} screenshots={picturesOf(plugin)} />}
       {plugin.installed && <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} updateMode={updateMode} startUpdating={start === "update"} />}
     </section>
   );

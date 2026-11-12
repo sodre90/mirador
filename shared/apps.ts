@@ -80,6 +80,19 @@ export interface PluginManifest {
   startsConversations?: boolean;
   /** An SVG file, relative to the plugin's folder, that stands for the plugin in Plugins…; a bad one leaves its monogram. */
   icon?: string;
+  /** What the plugin does, in a sentence or a few, for its page in Plugins…; it shows instead of the catalog's once installed. */
+  description?: string;
+  /** A line on what it does, for its tile in Plugins…, up to 120 characters; it shows instead of the catalog's once installed. */
+  tagline?: string;
+  /** Pictures of the plugin at work, for its page in Plugins…; once installed they show instead of the catalog's. */
+  screenshots?: PluginManifestPicture[];
+}
+
+/** A picture in the plugin's folder, a PNG, JPEG, GIF or WebP file, with what it shows; any other file is left out. */
+export interface PluginManifestPicture {
+  /** Relative to the plugin's folder, which it may not leave. */
+  path: string;
+  caption: string;
 }
 
 /**
@@ -243,6 +256,11 @@ export interface PluginInfo {
   icon?: string | null;
   /** Whether a release the host finds for it may go in without asking, once the plugin update mode isn't "ask". */
   updatesByItself: boolean;
+  /** Its plugin.json's own description and tagline, null when it has none or they aren't text it can show. */
+  description: string | null;
+  tagline: string | null;
+  /** The pictures its plugin.json lists that are images inside its folder, each at the host's URL for it. */
+  screenshots: PluginScreenshot[];
 }
 
 export type PluginKind = "app" | "canvas";
@@ -273,7 +291,7 @@ export interface CatalogPlugin {
 }
 
 export interface PluginScreenshot {
-  /** An https URL, as a raw file of the plugin's repo at a release tag. */
+  /** From the catalog, an https URL, as a raw file of the plugin's repo at a release tag; from an installed plugin, the host's URL for the file. */
   url: string;
   caption: string;
 }
@@ -290,6 +308,9 @@ const isScreenshot = (value: unknown): value is PluginScreenshot => {
 
 const MAX_TAGLINE_LENGTH = 120;
 
+/** A tagline a tile can show, from the catalog or a plugin's plugin.json. */
+export const isTagline = (tagline: unknown): tagline is string => typeof tagline === "string" && tagline.trim() !== "" && tagline.length <= MAX_TAGLINE_LENGTH;
+
 const PLUGIN_KINDS: readonly PluginKind[] = ["app", "canvas"];
 
 /** A catalog entry with only the extras this Mirador can show: a bad icon, picture, tagline or kind is left out, not the plugin. */
@@ -300,7 +321,7 @@ function withShowableExtras({ icon, screenshots, tagline, kinds, ...plugin }: Ca
     ...plugin,
     ...(isPluginIcon(icon) ? { icon } : {}),
     ...(showable.length > 0 ? { screenshots: showable } : {}),
-    ...(typeof tagline === "string" && tagline.trim() !== "" && tagline.length <= MAX_TAGLINE_LENGTH ? { tagline } : {}),
+    ...(isTagline(tagline) ? { tagline } : {}),
     ...(knownKinds.length > 0 ? { kinds: knownKinds } : {}),
   };
 }

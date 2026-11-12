@@ -1,9 +1,10 @@
 import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
-import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, type PluginKind, type PluginManifest, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
+import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, isTagline, type PluginKind, type PluginManifest, type PluginManifestPicture, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
 import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
+import { localImage } from "../local-images.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import { parkedFolderOf, swapPlugin } from "./plugin-swaps.ts";
 import { AppProblem, messageOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
@@ -94,16 +95,61 @@ async function sourceOf(folder: string): Promise<PluginSource> {
 }
 
 /** What plugin.json says, as far as it can be read, for a plugin that may not load. */
-async function manifestFields(folder: string): Promise<{ name: string | null; title: string | null; version: string | null; kinds: PluginKind[]; icon: string | null }> {
+interface ManifestFields {
+  name: string | null;
+  title: string | null;
+  version: string | null;
+  kinds: PluginKind[];
+  icon: string | null;
+  description: string | null;
+  tagline: string | null;
+  pictures: PluginManifestPicture[];
+}
+
+async function manifestFields(folder: string): Promise<ManifestFields> {
   const textOrNull = (value: unknown) => (typeof value === "string" ? value : null);
   try {
-    const { name, title, version, app, canvas, icon } = await Bun.file(join(folder, "plugin.json")).json();
+    const { name, title, version, app, canvas, icon, description, tagline, screenshots } = await Bun.file(join(folder, "plugin.json")).json();
     const kinds = (["app", "canvas"] as const).filter((kind) => ({ app, canvas })[kind] !== undefined);
-    return { name: textOrNull(name), title: textOrNull(title), version: textOrNull(version), kinds, icon: await iconIn(folder, icon) };
+    return {
+      name: textOrNull(name),
+      title: textOrNull(title),
+      version: textOrNull(version),
+      kinds,
+      icon: await iconIn(folder, icon),
+      description: typeof description === "string" && description.trim() !== "" ? description : null,
+      tagline: isTagline(tagline) ? tagline : null,
+      pictures: await picturesIn(folder, screenshots),
+    };
   } catch {
-    return { name: null, title: null, version: null, kinds: [], icon: null };
+    return { name: null, title: null, version: null, kinds: [], icon: null, description: null, tagline: null, pictures: [] };
   }
 }
+
+/** The pictures plugin.json lists that have a caption and are image files inside the plugin's folder. */
+async function picturesIn(folder: string, listed: unknown): Promise<PluginManifestPicture[]> {
+  if (!Array.isArray(listed)) return [];
+  const pictures = await Promise.all(
+    listed.map(async (entry: unknown) => {
+      const { path, caption } = (typeof entry === "object" && entry !== null ? entry : {}) as Partial<PluginManifestPicture>;
+      if (typeof path !== "string" || typeof caption !== "string" || caption.trim() === "") return null;
+      return (await pictureFileIn(folder, path)) ? { path, caption } : null;
+    }),
+  );
+  return pictures.filter((picture) => picture !== null);
+}
+
+/** The image file at `path` in the plugin's folder; null for anything else, such as a path that leads out of the folder or a file whose bytes aren't an image. */
+async function pictureFileIn(folder: string, path: string) {
+  try {
+    const [inside, file] = [realpathSync(folder), realpathSync(resolve(folder, path))];
+    return file.startsWith(inside + sep) ? await localImage(file) : null;
+  } catch {
+    return null;
+  }
+}
+
+const pictureUrl = (folder: string, path: string) => `/plugin-picture?folder=${encodeURIComponent(basename(folder))}&path=${encodeURIComponent(path)}`;
 
 /** The SVG at `path` in the plugin's folder; null for anything else, such as a path that leads out of the folder. */
 async function iconIn(folder: string, path: unknown): Promise<string | null> {
@@ -210,16 +256,25 @@ export class InstalledPlugins {
   private async info(folder: string, source: PluginSource): Promise<PluginInfo> {
     const waitsForRestart = this.changed.has(basename(folder));
     const loadedCanvas = this.loadedCanvases.find((canvas) => canvas.folder === folder);
-    const fields = await manifestFields(folder);
+    const { pictures, ...fields } = await manifestFields(folder);
     return {
       folder: basename(folder),
       ...fields,
+      screenshots: pictures.map(({ path, caption }) => ({ url: pictureUrl(folder, path), caption })),
       source,
       ...this.loadProblemOf(folder),
       waitsForRestart,
       tools: loadedCanvas && !waitsForRestart ? toolsOf(loadedCanvas) : [],
       updatesByItself: source.kind === "git" && this.updatesByItself({ folder: basename(folder), name: fields.name, source }),
     };
+  }
+
+  /** A picture an installed plugin's plugin.json lists, from its folder; null for any other file. */
+  async picture(folderName: string, path: string) {
+    const folder = pluginFolders(this.folder).find((each) => basename(each) === folderName);
+    if (!folder) return null;
+    const { pictures } = await manifestFields(folder);
+    return pictures.some((picture) => picture.path === path) ? pictureFileIn(folder, path) : null;
   }
 
   private loadProblemOf(folder: string): Pick<PluginInfo, "problem" | "problemAbout"> {
