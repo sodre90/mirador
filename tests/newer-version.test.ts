@@ -183,6 +183,18 @@ describe("pulling a checkout's upstream", () => {
     expect(await pullCheckout(checkout)).toContain("fast-forward");
     expect(readFileSync(join(checkout, "own.txt"), "utf8")).toBe("own\n");
   });
+
+  test("says why when git can't even start, rather than leave the pull unanswered", async () => {
+    const { checkout } = checkoutBehindUpstream("no-git");
+    const path = process.env.PATH;
+    // An empty PATH would not do: Bun then looks in a default one.
+    process.env.PATH = join(root, "no-such-folder");
+    try {
+      expect(await pullCheckout(checkout)).toContain("not found");
+    } finally {
+      process.env.PATH = path;
+    }
+  });
 });
 
 describe("watching for a newer version", () => {
