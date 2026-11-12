@@ -44,6 +44,15 @@ interface ContentSize {
   width: number | null;
 }
 
+function MarkBatchIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M2.5 3.2h11v7.3H8.2l-3 2.5v-2.5h-2.7z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M5 6h6M5 8h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function MagnifierIcon() {
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -882,6 +891,7 @@ export function CanvasPanel({
           { label: words.bar.clear, disabled: !somethingElseShown && !checklistOpen, onChoose: clear },
           ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
           ...(shownPage ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, separatorBefore: true, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
+          ...(pageMarks.waiting > 0 ? [{ label: words.markBatch.bar(pageMarks.waiting), checked: pageMarks.listOpen, separatorBefore: true, onChoose: pageMarks.toggleList }] : []),
           ...(shownPage ? [{ label: words.bar.findOnPage, onChoose: pageFind.openFind }] : []),
           ...pageExport.entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
         ]
@@ -895,6 +905,7 @@ export function CanvasPanel({
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape") return;
     if (historyOpen) setHistoryOpen(false);
+    else if (pageMarks.listOpen) pageMarks.toggleList();
     else if (pageMarks.pointing) pageMarks.point(false);
     else return;
     event.preventDefault();
@@ -965,6 +976,19 @@ export function CanvasPanel({
           </button>
         )}
         <span className="spacer" />
+        {pageMarks.waiting > 0 && (
+          <button
+            type="button"
+            className={`icon mark-batch-toggle ${pageMarks.listOpen ? "on" : ""}`}
+            aria-pressed={pageMarks.listOpen}
+            aria-label={words.markBatch.listLabel(pageMarks.waiting)}
+            data-hint={hints.canvasMarkBatch}
+            onClick={pageMarks.toggleList}
+          >
+            <MarkBatchIcon />
+            <sup className="mark-batch-count">{pageMarks.waiting}</sup>
+          </button>
+        )}
         {shownPage && (
           <button
             type="button"

@@ -19,6 +19,16 @@ export type PageMark =
 /** Ask wants an answer in the chat; Change wants the page shown again with the change made. */
 export type MarkIntent = "ask" | "change";
 
+/** A mark the user drew a box around, whose picture goes with the message. */
+export type MarkedArea = Extract<PageMark, { kind: "area" }>;
+
+/** One comment collected on a part of a page: what was marked and the words put on it. */
+export interface MarkComment {
+  id: string;
+  mark: PageMark;
+  words: string;
+}
+
 export const MAX_MARKED_TEXT = 4000;
 export const MAX_MARKED_HTML = 1200;
 export const MAX_MARKED_PATH = 300;
@@ -81,4 +91,39 @@ function markedPart(pageTitle: string, mark: PageMark) {
 export function pageMarkPrompt(pageTitle: string, mark: PageMark, words: string, intent: MarkIntent) {
   const asked = `${markedPart(pageTitle, mark)}\n\n${words.trim()}`;
   return intent === "change" ? `${asked}\n\n${CHANGE_REQUEST}` : asked;
+}
+
+/** The most comments one message can carry: past this the page is being walked through turn by turn, not reviewed in one batch. */
+export const MAX_BATCH_COMMENTS = 20;
+
+/** One page can be shown again only once, so the change asks for the whole batch at the end, not per comment. */
+const BATCH_CHANGE_REQUEST = "Show the page again with all of this changed, under the same title, and leave the rest of it as it is.";
+
+export interface BatchedComments {
+  text: string;
+  /** The pictures of the marked areas, in the order their comments call them picture 1, picture 2. */
+  imageMarks: MarkedArea[];
+}
+
+/** A comment's own part of the batch: the page is named once above them all, and an area is known by the number of its picture. */
+function batchPart(mark: PageMark, pictureNumber: number) {
+  const html = fenced(mark.element.html, "html");
+  if (mark.kind === "text") return `About this text:\n\n${quoted(mark.text)}\n\nIt is in \`${mark.element.path}\`:\n\n${html}`;
+  if (mark.kind === "area") return `About the area in picture ${pictureNumber}, in \`${mark.element.path}\`:\n\n${html}`;
+  return `About this element, at \`${mark.element.path}\`:\n\n${html}`;
+}
+
+/**
+ * Several comments on parts of one page as a single message: the agent sees the whole review at once, each comment keeping its
+ * own anchor, and the note the user meant for all of them last, as with the answers to several questions.
+ */
+export function batchedMarkPrompt(pageTitle: string, comments: MarkComment[], note: string, intent: MarkIntent): BatchedComments {
+  const imageMarks = comments.map(({ mark }) => mark).filter((mark): mark is MarkedArea => mark.kind === "area");
+  const pictureOf = new Map<PageMark, number>(imageMarks.map((area, index) => [area, index + 1]));
+  const blocks = comments.map((comment, index) => {
+    return `${index + 1}. ${batchPart(comment.mark, pictureOf.get(comment.mark) ?? 0)}\n\nThe user's comment: ${comment.words.trim()}`;
+  });
+  const asked = [`Comments on the canvas page "${pageTitle}":`, ...blocks].join("\n\n");
+  const noted = note.trim() ? `${asked}\n\nTheir note on all the comments: ${note.trim()}` : asked;
+  return { text: intent === "change" ? `${noted}\n\n${BATCH_CHANGE_REQUEST}` : noted, imageMarks };
 }

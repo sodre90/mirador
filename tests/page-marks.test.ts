@@ -1,5 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { MAX_MARKED_HTML, MAX_MARKED_PATH, MAX_MARKED_TEXT, pageMarkFrom, pageMarkLabel, pageMarkPrompt, type PageMark } from "../shared/page-marks.ts";
+import {
+  MAX_MARKED_HTML,
+  MAX_MARKED_PATH,
+  MAX_MARKED_TEXT,
+  batchedMarkPrompt,
+  pageMarkFrom,
+  pageMarkLabel,
+  pageMarkPrompt,
+  type MarkComment,
+  type PageMark,
+} from "../shared/page-marks.ts";
+
+const comment = (mark: PageMark, words: string): MarkComment => ({ id: words, mark, words });
 
 const png = "data:image/png;base64,iVBORw0KGgo=";
 const cell = { path: "main > table > tr:nth-of-type(2) > td.pro", html: '<td class="pro">Split conversation panes</td>' };
@@ -65,6 +77,62 @@ describe("pageMarkPrompt", () => {
   test("HTML with backticks in it cannot close its fence", () => {
     const mark: PageMark = { kind: "element", element: { path: "pre", html: "<pre>```js\nx\n```</pre>" } };
     expect(pageMarkPrompt("Code", mark, "?", "ask")).toContain("````html\n<pre>```js\nx\n```</pre>\n````");
+  });
+});
+
+describe("batchedMarkPrompt", () => {
+  const text: PageMark = { kind: "text", text: "Split conversation\npanes", element: cell };
+  const element: PageMark = { kind: "element", element: { path: "button#save", html: '<button id="save">Save</button>' } };
+
+  test("names the page once, numbers each comment with its own anchor, and puts the comment after it", () => {
+    expect(batchedMarkPrompt("Workspace layout options", [comment(text, "  Why is this better than tabs?\n"), comment(element, "Make it green")], "", "ask").text).toBe(
+      [
+        'Comments on the canvas page "Workspace layout options":',
+        "",
+        "1. About this text:",
+        "",
+        "> Split conversation",
+        "> panes",
+        "",
+        "It is in `main > table > tr:nth-of-type(2) > td.pro`:",
+        "",
+        "```html",
+        '<td class="pro">Split conversation panes</td>',
+        "```",
+        "",
+        "The user's comment: Why is this better than tabs?",
+        "",
+        "2. About this element, at `button#save`:",
+        "",
+        "```html",
+        '<button id="save">Save</button>',
+        "```",
+        "",
+        "The user's comment: Make it green",
+      ].join("\n"),
+    );
+  });
+
+  test("numbers the marked areas so each comment knows which picture is its own, and returns them in that order", () => {
+    const first: PageMark = { kind: "area", element: { path: "canvas#scene", html: "<canvas></canvas>" }, image: png };
+    const second: PageMark = { kind: "area", element: { path: "div#chart", html: "<div></div>" }, image: `${png}AA` };
+    const batched = batchedMarkPrompt("Sales", [comment(first, "Why does it dip here?"), comment(text, "And this row?"), comment(second, "And this bar?")], "", "ask");
+    expect(batched.text).toContain("1. About the area in picture 1, in `canvas#scene`:");
+    expect(batched.text).toContain("3. About the area in picture 2, in `div#chart`:");
+    expect(batched.imageMarks).toEqual([first, second]);
+  });
+
+  test("the note meant for all the comments comes last, and not at all when there is none", () => {
+    expect(batchedMarkPrompt("Plan", [comment(element, "Bold this")], "  Keep the colours as they are.  ", "ask").text).toEndWith(
+      "The user's comment: Bold this\n\nTheir note on all the comments: Keep the colours as they are.",
+    );
+    expect(batchedMarkPrompt("Plan", [comment(element, "Bold this")], "   ", "ask").text).toEndWith("The user's comment: Bold this");
+  });
+
+  test("Change asks for the page again once for the whole batch, not once per comment", () => {
+    const changed = batchedMarkPrompt("Plan", [comment(element, "Bold this"), comment(text, "And centre that")], "", "change").text;
+    expect(changed.match(/Show the page again/g)).toHaveLength(1);
+    expect(changed).toEndWith("Show the page again with all of this changed, under the same title, and leave the rest of it as it is.");
   });
 });
 

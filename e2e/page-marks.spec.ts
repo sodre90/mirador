@@ -51,7 +51,40 @@ const canvasPage = (page: Page) => page.locator(".canvas-panel:visible .canvas-f
 const pointToggle = (page: Page) => page.locator(".canvas-header:visible .point-toggle");
 const wordsBox = (page: Page) => page.getByRole("dialog", { name: "Ask the agent about what you marked" });
 const sentNote = (page: Page) => page.locator(".canvas-panel:visible .page-mark-sent");
+const batchToggle = (page: Page) => page.locator(".canvas-header:visible .mark-batch-toggle");
+const batchList = (page: Page, count: number) => page.getByRole("dialog", { name: `${count} ${count === 1 ? "comment" : "comments"} waiting for the agent` });
+const userMessages = (page: Page) => page.locator(".timeline:visible .message.user");
 const recordedPrompts = () => readFileSync(promptsFile(), "utf8");
+
+/** Keeps this comment on the waiting list instead of sending it, and stays in point mode for the next part. */
+async function collect(page: Page, words: string) {
+  const box = wordsBox(page);
+  await box.getByRole("textbox").fill(words);
+  await box.getByRole("button", { name: "Add comment" }).click();
+  await expect(box).toBeHidden();
+}
+
+/** Leaves point mode, which the step before may have left on. */
+async function stopPointing(page: Page) {
+  const toggle = pointToggle(page);
+  if ((await toggle.getAttribute("aria-pressed")) === "true") await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+}
+
+/**
+ * Selects a part of the page from the panel, as the touch test does. The page offers its pill on a change of selection,
+ * so a range the page already holds is dropped first: selecting the same text again is no change.
+ */
+const selectTextIn = (element: Locator) =>
+  element.evaluate((node) => {
+    const selection = getSelection()!;
+    selection.removeAllRanges();
+    selection.selectAllChildren(node);
+  });
+
+/** The bar's waiting badge: a glyph with the number of comments it holds. */
+const waitingCount = (page: Page, count: number) =>
+  expect(batchToggle(page)).toHaveAttribute("aria-label", `${count} ${count === 1 ? "comment" : "comments"} waiting for the agent`);
 
 async function startConversationWithoutModel(page: Page) {
   const previousUrl = page.url();
@@ -216,6 +249,104 @@ test("the user selects text or points at an element on a page the agent showed, 
     await expect(wordsBox(page)).toBeHidden();
     await shown.locator("#save").click();
     await expect(shown.locator("#clicks")).toHaveText("2");
+    expect(recordedPrompts()).toBe(promptsBefore);
+  });
+
+  await test.step("comments on several parts of the page wait, and go to the agent as one message with its pictures in order", async () => {
+    await stopPointing(page);
+    await selectTextIn(shown.locator("#splits"));
+    await shown.getByRole("button", { name: "Ask about this" }).click();
+    await collect(page, "Why is this better than tabs?");
+    await waitingCount(page, 1);
+    await expect(pointToggle(page)).toHaveAttribute("aria-pressed", "true");
+
+    await shown.locator("#save").click();
+    await collect(page, "Make it stand out");
+    await waitingCount(page, 2);
+
+    const scene = (await shown.locator("#scene").boundingBox())!;
+    await page.mouse.move(scene.x + 20, scene.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(scene.x + 140, scene.y + 90, { steps: 8 });
+    await page.mouse.up();
+    await collect(page, "Why is it all green?");
+    await waitingCount(page, 3);
+
+    await stopPointing(page);
+    await batchToggle(page).click();
+    const list = batchList(page, 3);
+    await expect(list.getByRole("listitem")).toHaveCount(3);
+    await expect(list).toContainText("3 comments on “Workspace layout options”");
+    await list.getByRole("textbox").fill("Keep the colour scheme as it is.");
+    const messagesBefore = await userMessages(page).count();
+    await list.getByRole("button", { name: "Send 3 comments" }).click();
+    await expect(list).toBeHidden();
+    await expect(sentNote(page)).toHaveText("Sent 3 comments to the agent. The answer comes in the chat.");
+
+    await expect.poll(recordedPrompts).toContain(
+      [
+        'Comments on the canvas page "Workspace layout options":',
+        "",
+        "1. About this text:",
+        "",
+        "> Split conversation panes",
+        "",
+        "It is in `td#splits`:",
+        "",
+        "```html",
+        '<td class="pro" id="splits">Split conversation panes</td>',
+        "```",
+        "",
+        "The user's comment: Why is this better than tabs?",
+        "",
+        "2. About this element, at `button#save`:",
+        "",
+        "```html",
+        '<button id="save" class="primary">Save</button>',
+        "```",
+        "",
+        "The user's comment: Make it stand out",
+        "",
+        "3. About the area in picture 1, in `canvas#scene`:",
+      ].join("\n"),
+    );
+    // One message, not one per comment: the page's comments appear under a single heading in what the agent took.
+    expect(recordedPrompts().split("Comments on the canvas page").length - 1).toBe(1);
+    await expect.poll(recordedPrompts).toContain("The user's comment: Why is it all green?");
+    await expect.poll(recordedPrompts).toContain("Their note on all the comments: Keep the colour scheme as it is.");
+
+    await waitForIdle(page);
+    await expect(userMessages(page)).toHaveCount(messagesBefore + 1);
+    const sent = userMessages(page).last();
+    await expect(sent).toContainText("Make it stand out");
+    await expect(sent.locator(".message-images img")).toHaveCount(1);
+  });
+
+  await test.step("comments on a page wait through another tab opening over it, and are edited or thrown away before they go", async () => {
+    await selectTextIn(shown.locator("#splits"));
+    await shown.getByRole("button", { name: "Ask about this" }).click();
+    await collect(page, "Old words");
+    await waitingCount(page, 1);
+
+    await page.locator(".canvas-header:visible .changes-toggle").click();
+    await expect(pointToggle(page)).toHaveCount(0);
+    await waitingCount(page, 1);
+    await batchToggle(page).click();
+    const list = batchList(page, 1);
+    await expect(list.getByRole("listitem")).toContainText("Old words");
+
+    await list.getByRole("button", { name: "Edit" }).click();
+    const edited = page.getByRole("dialog", { name: "Change your comment on “Split conversation panes”" });
+    await edited.getByRole("textbox").fill("Why split panes at all?");
+    await edited.getByRole("button", { name: "Save" }).click();
+    await expect(list.getByRole("listitem")).toContainText("Why split panes at all?");
+
+    await page.locator(".canvas-header:visible .changes-toggle").click();
+    await expect(shown.locator("#splits")).toBeVisible();
+    await expect(batchList(page, 1).getByRole("listitem")).toContainText("Why split panes at all?");
+    const promptsBefore = recordedPrompts();
+    await batchList(page, 1).getByRole("button", { name: "Discard all" }).click();
+    await expect(batchToggle(page)).toHaveCount(0);
     expect(recordedPrompts()).toBe(promptsBefore);
   });
 

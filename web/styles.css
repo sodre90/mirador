@@ -4088,6 +4088,7 @@ button.edits-waiting {
 .app-toggle.on,
 .history-toggle.on,
 .point-toggle.on,
+.mark-batch-toggle.on,
 .bar-menu-toggle.on {
   color: var(--text);
   background: var(--panel-2);
@@ -4104,7 +4105,7 @@ button.edits-waiting {
 
 /* The bar folds its buttons into the More menu, the least used first, as data-fold rises with how narrow it is. */
 .canvas-header[data-fold="0"] .canvas-more:not(.offers-apps),
-.canvas-header:not([data-fold="0"]) :is(.history-toggle, .canvas-clear, .point-toggle, .page-find-toggle, .page-export, .open-in-window),
+.canvas-header:not([data-fold="0"]) :is(.history-toggle, .canvas-clear, .point-toggle, .mark-batch-toggle, .page-find-toggle, .page-export, .open-in-window),
 .canvas-header:is([data-fold="2"], [data-fold="3"]) :is(.canvas-nav, .changes-toggle),
 .canvas-header[data-fold="3"] :is(.checklist-toggle, .checklist-dismiss, .app-toggle) {
   display: none;
@@ -7090,6 +7091,7 @@ button.picture-option.chosen {
 }
 
 .ask-about-lines textarea,
+.mark-batch textarea,
 .page-mark-box textarea {
   font: inherit;
   resize: vertical;
@@ -7098,6 +7100,109 @@ button.picture-option.chosen {
 .ask-about-actions {
   display: flex;
   gap: 8px;
+}
+
+/* The waiting comments take a glyph and a number, not a word: a text button here folds "Point and ask" out of the bar. */
+.mark-batch-toggle {
+  position: relative;
+  flex-shrink: 0;
+}
+
+button.icon.mark-batch-toggle svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
+.mark-batch-count {
+  position: absolute;
+  top: 1px;
+  right: 0;
+  min-width: 13px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--accent);
+  color: var(--panel);
+  font-size: calc(9.5px * var(--font-scale));
+  font-weight: 600;
+  line-height: 13px;
+}
+
+/* The comments waiting on a page: the same box as the mark's own, docked under it. */
+.mark-batch {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+  margin: 8px 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.18);
+}
+
+.mark-batch-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mark-batch-title {
+  flex: 1;
+  min-width: 0;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+}
+
+.mark-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mark-batch-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mark-batch-number {
+  flex-shrink: 0;
+  color: var(--muted);
+  font: calc(12px * var(--font-scale)) ui-monospace, Menlo, monospace;
+}
+
+.mark-batch-body {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.mark-batch-label {
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
+}
+
+.mark-batch-words {
+  overflow-wrap: anywhere;
+}
+
+.mark-batch-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.mark-batch-full {
+  margin: 0;
+  font-size: calc(12px * var(--font-scale));
+  color: var(--muted);
 }
 
 .app-sent,

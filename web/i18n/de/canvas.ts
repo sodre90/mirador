@@ -203,9 +203,33 @@ export const canvas: Messages["canvas"] = {
     askAbout: (label) => `Frag den Agenten nach Folgendem oder sag ihm, was er dort ändern soll: ${label}`,
     areaAlt: "Der markierte Bereich",
     placeholder: (primary) => `Deine Worte (Enter fragt, ${primary}Enter ändert die Seite, Shift+Enter für eine neue Zeile, Esc bricht ab)`,
+    placeholderBatch: (primary) => `Deine Worte (Enter fügt die Anmerkung hinzu, ${primary}Enter ändert die Seite, Shift+Enter für eine neue Zeile, Esc bricht ab)`,
     ask: "Fragen",
     change: "Ändern",
     cancel: "Abbrechen",
+  },
+  markBatch: {
+    add: "Anmerkung hinzufügen",
+    bar: (count) => plural(count, "1 Anmerkung", `${count} Anmerkungen`),
+    listLabel: (count) => `${count} ${count === 1 ? "Anmerkung" : "Anmerkungen"} warten auf den Agenten`,
+    onPage: (title, count) => `${count} ${count === 1 ? "Anmerkung" : "Anmerkungen"} zu „${title}“`,
+    picture: (number) => `Bild ${number} des markierten Bereichs`,
+    overallPlaceholder: "Ein Hinweis für alle",
+    send: (count) => `${count} ${count === 1 ? "Anmerkung" : "Anmerkungen"} senden`,
+    changeAll: (count) => (count === 1 ? "Diese ändern" : `Alle ${count} ändern`),
+    discard: "Alle verwerfen",
+    edit: "Bearbeiten",
+    remove: "Entfernen",
+    save: "Speichern",
+    close: "Schließen",
+    editing: (label) => `Deine Anmerkung zu ${label}`,
+    editLabel: (label) => `Ändere deine Anmerkung zu ${label}`,
+    editPlaceholder: "Deine Worte (Enter speichert die Anmerkung, Esc bricht ab)",
+    full: (most) => `Eine Nachricht trägt höchstens ${most} Anmerkungen. Sende diese und markiere dann den Rest.`,
+    sent: (count, intent) =>
+      intent === "change"
+        ? `Agent gebeten, ${count} ${count === 1 ? "Teil" : "Teile"} der Seite zu ändern. Die neue Seite kommt im Canvas.`
+        : `${count} ${count === 1 ? "Anmerkung" : "Anmerkungen"} an den Agenten gesendet. Die Antwort kommt im Chat.`,
   },
   fileToOpen: {
     title: "Eine Datei außerhalb dieses Arbeitsbereichs öffnen?",
