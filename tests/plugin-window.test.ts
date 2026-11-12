@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { join } from "node:path";
 import type { CanvasHost, PluginActivityEvent } from "../shared/canvas-plugins.ts";
 import { isPluginName, pluginWindowName, pluginWindowRoute, pluginWindowRouteOf, pluginWindowTitle } from "../shared/item-window.ts";
@@ -74,14 +74,23 @@ describe("a plugin's window and activity", () => {
     expect(heard).toHaveLength(1);
   });
 
-  test("a plugin whose activity hook throws or rejects harms nothing", async () => {
+  test("a plugin whose activity hook throws or rejects harms nothing, and the host log says so", async () => {
     const throwing: CanvasHost = { ...board, activity: () => { throw new Error("broken"); } };
     const rejecting: CanvasHost = { ...board, activity: async () => { throw new Error("broken later"); } };
-    for (const host of [throwing, rejecting]) {
-      const { plugins } = await canvasPluginHost(FIXTURES, undefined, { board: host });
-      expect(() => plugins.activity("c1", { kind: "user-message" })).not.toThrow();
-      await nextTick();
-      await nextTick();
+    const logged = spyOn(console, "error").mockImplementation(() => {});
+    try {
+      for (const host of [throwing, rejecting]) {
+        const { plugins } = await canvasPluginHost(FIXTURES, undefined, { board: host });
+        expect(() => plugins.activity("c1", { kind: "user-message" })).not.toThrow();
+        await nextTick();
+        await nextTick();
+      }
+      expect(logged.mock.calls.map(([words, error]) => `${words} ${(error as Error).message}`)).toEqual([
+        "the activity hook of the board plugin failed: broken",
+        "the activity hook of the board plugin failed: broken later",
+      ]);
+    } finally {
+      logged.mockRestore();
     }
   });
 
