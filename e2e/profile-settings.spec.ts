@@ -24,7 +24,7 @@ test("a profile sets the mode, YOLO and Questions of the conversations that star
   await plainProfile.getByRole("button", { name: "Close" }).click();
   const created = await createProfile(page, PROFILE, scriptedOpencodeEnvironment(model, host.root), "", "opencode");
   await openProfileTab(created, "Defaults");
-  await expect(created.getByLabel("Profile mode").locator("option")).toHaveText(["Agent's default", "Build", "Plan"]);
+  await expect(created.getByLabel("Profile mode", { exact: true }).locator("option")).toHaveText(["Agent's default", "Build", "Plan"]);
   await created.getByRole("button", { name: "Close" }).click();
 
   const sessionMode = async () => (await conversationSettings(page)).getByLabel("Session Mode", { exact: true });
@@ -38,8 +38,8 @@ test("a profile sets the mode, YOLO and Questions of the conversations that star
     const editor = await openProfiles(page);
     await editor.locator(".profile-list li", { hasText: PROFILE }).click();
     await openProfileTab(editor, "Defaults");
-    await expect(editor.getByLabel("Profile mode").locator("option")).toContainText(["Agent's default", "Build", "Plan"]);
-    await editor.getByLabel("Profile mode").selectOption("plan");
+    await expect(editor.getByLabel("Profile mode", { exact: true }).locator("option")).toContainText(["Agent's default", "Build", "Plan"]);
+    await editor.getByLabel("Profile mode", { exact: true }).selectOption("plan");
     await editor.getByLabel("Profile YOLO").check();
     await editor.getByLabel("Profile questions").selectOption("next-message");
     await editor.getByRole("button", { name: "Save" }).click();

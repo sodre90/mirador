@@ -57,7 +57,7 @@ import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
-import type { ConversationChoices, ConversationReply, RanOn, StartedConversation } from "../shared/canvas-plugins.ts";
+import type { ConversationChoices, ConversationReply, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
@@ -407,7 +407,6 @@ export class ConversationService {
       openAsText(file, store.scriptProgramSetting()),
     );
     this.cancelPermissionsOrphanedByRestart();
-    this.cancelAsksOrphanedByRestart();
     this.turnsCutShortByCrash = new Set(this.endTurnsOrphanedByRestart());
     this.contextUsage = new Map(store.listContextUsages());
     this.unseenTurnEnds = new Map(store.listUnseenTurnEnds());
@@ -483,7 +482,7 @@ export class ConversationService {
    * Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a
    * prompt, working on it at once; with a title that isn't blank, named as if by the user, so neither its first message
    * nor its agent renames it; with `choices`, on that model and effort from its first message on; with a `worktree`,
-   * working there rather than in the workspace's folder.
+   * working there rather than in the workspace's folder; with `fromPlugin`, its first message shown as that plugin's.
    */
   create(
     workspaceId: string,
@@ -492,13 +491,14 @@ export class ConversationService {
     title?: string,
     choices: ConversationChoices = {},
     worktree?: ConversationWorktree,
+    fromPlugin?: string,
   ): Conversation {
     const givenTitle = titleFrom(title ?? "");
     const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "", worktree);
     if (choices.model || choices.effort) this.runtime(conversation.id).startChoices = choices;
     const opened = this.ensureSession(conversation.id);
     if (prompt?.trim()) {
-      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true });
+      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true, ...(fromPlugin && { fromPlugin }) });
       if (worktree) opened.then(startTurn).catch(() => {});
       else {
         opened.catch(() => {});
@@ -532,14 +532,32 @@ export class ConversationService {
   startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): StartedConversation {
     const caller = this.get(callerId);
     if (caller.startedBy) throw new Error("A plugin's tool started this conversation, so it can't start another; do the task here.");
-    const profiles = this.store.listProfiles();
-    const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
-    if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
+    const profile = this.profileNamed(profileName);
     const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices, caller.worktree);
     this.store.recordStartedBy(conversation.id, { conversationId: callerId, plugin });
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
     this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
     return { id: conversation.id, profile: profile.name };
+  }
+
+  /**
+   * For a plugin's own work, such as a routine that is due: a conversation in the workspace, where the workspace starts
+   * its conversations, on the profile of that name, working on `prompt` at once, its first message shown as the plugin's.
+   * It works for nobody, so it stands in the sidebar as any other and tells the user when its turns end.
+   */
+  async startForPlugin(workspaceId: string, pluginTitle: string, { profile: profileName, prompt, title, model, effort }: WorkspaceConversationStart): Promise<StartedConversation> {
+    const workspace = this.existingWorkspace(workspaceId);
+    const profile = this.profileNamed(profileName);
+    const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    const conversation = this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle);
+    return { id: conversation.id, profile: profile.name };
+  }
+
+  private profileNamed(profileName: string) {
+    const profiles = this.store.listProfiles();
+    const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
+    if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
+    return profile;
   }
 
   /**
@@ -932,6 +950,7 @@ export class ConversationService {
       this.setBusy(conversationId, "switching-profile");
       await released;
       const sessionId = await this.openSession(conversationId);
+      await this.applyProfileModel(conversationId, sessionId, Date.now() + this.startChoicesTimeoutMs);
       await this.applyProfileChoices(conversationId, sessionId);
       this.setStatus(conversationId, "idle");
       return sessionId;
@@ -1087,6 +1106,7 @@ export class ConversationService {
       harness: draft.harness,
       environment: draft.environment,
       prelaunch: draft.prelaunch,
+      model: draft.model || null,
       mode: draft.mode || null,
       effort: draft.effort || null,
       bypassPermissions: draft.bypassPermissions,
@@ -1884,6 +1904,7 @@ export class ConversationService {
    * conversations that wait are announced again, so phones still showing a notification of one read meanwhile get a clear.
    */
   resumeAfterRestart(stoppedTurns: string[]) {
+    this.withdrawAsksOrphanedByRestart(stoppedTurns);
     this.store.listConversations().forEach(({ id, acpSessionId }) => {
       if (stoppedTurns.includes(id)) return void this.resumeStoppedTurn(id, acpSessionId).catch(() => {});
       this.deliverOwedReply(id, this.turnsCutShortByCrash.has(id) ? "failed" : undefined);
@@ -2000,12 +2021,7 @@ export class ConversationService {
    */
   private async resumeStoppedTurn(conversationId: string, stoppedSessionId: string | null) {
     const request = unfinishedTurnRequest(this.store.listEvents(conversationId));
-    if (!request) {
-      this.setStatus(conversationId, "idle");
-      this.deliverOwedReply(conversationId);
-      this.sendNextQueuedMessage(conversationId);
-      return;
-    }
+    if (!request) return this.letTheTurnRest(conversationId);
     const runtime = this.runtime(conversationId);
     this.setStatus(conversationId, "starting");
     runtime.holdingQueue = true;
@@ -2016,17 +2032,52 @@ export class ConversationService {
       throw error;
     });
     runtime.holdingQueue = false;
+    const waitedOnAnswer = turnWaitedOnAnswer({ askMode: this.get(conversationId).askMode, askedAt: this.waitingAskAt(conversationId), turnBeganAt: request.beganAt });
+    // The agent has the request in its history and only the user's answer is missing: a continue would take the turn
+    // on past the question, whose answer would then reach the agent as a message beside an answer it never gave. A
+    // session that starts afresh never asked it, so the question goes and the whole request comes back instead.
+    if (waitedOnAnswer && continuation.keptItsPlace) return this.letTheTurnRest(conversationId);
+    if (waitedOnAnswer) this.withdrawWaitingAsks(conversationId);
     return this.prompt(conversationId, continuation.text, { imageIds: continuation.imageIds });
+  }
+
+  /** The turn a stop cut short gets no message of the host's: it waits for the user, whose next one carries it on. */
+  private letTheTurnRest(conversationId: string) {
+    this.setStatus(conversationId, "idle");
+    this.deliverOwedReply(conversationId);
+    this.sendNextQueuedMessage(conversationId);
+  }
+
+  /** When the question the canvas still holds an answer for went out, or null when none does. */
+  private waitingAskAt(conversationId: string) {
+    return this.store.listCanvasItems(conversationId).find((item) => item.kind === "ask" && item.status === "waiting")?.createdAt ?? null;
+  }
+
+  /**
+   * Takes back the questions a conversation still holds open, telling the pages watching it: no tool call of that
+   * conversation waits for their answers any more, and an answer given to a question nobody asked would reach no one.
+   */
+  private withdrawWaitingAsks(conversationId: string) {
+    this.store
+      .listCanvasItems(conversationId)
+      .filter((item): item is AskItem => item.kind === "ask" && item.status === "waiting")
+      .forEach((item) => {
+        const withdrawn = { ...item, status: "cancelled" as const, updatedAt: Date.now() };
+        this.store.saveCanvasItem(withdrawn);
+        this.hub.publishToConversation(conversationId, { type: "canvas.upserted", item: withdrawn });
+      });
+    this.questionsChanged(conversationId);
   }
 
   /**
    * The agent continues where it left off if it is still in the session the turn ran in and recorded the request there;
-   * otherwise, as in a fresh session, it gets the request again.
+   * otherwise, as in a fresh session, it gets the request again and `keptItsPlace` says the history it had is gone.
    */
   private async continuationOf(conversationId: string, stoppedSessionId: string | null, request: TurnRequest) {
     const sessionId = await this.ensureSession(conversationId);
-    if (sessionId === stoppedSessionId && (await this.sessionRecorded(conversationId, sessionId, request))) return { text: CONTINUE_AFTER_INTERRUPTION, imageIds: [] };
-    return { text: request.text, imageIds: request.imageIds };
+    if (sessionId === stoppedSessionId && (await this.sessionRecorded(conversationId, sessionId, request)))
+      return { text: CONTINUE_AFTER_INTERRUPTION, imageIds: [], keptItsPlace: true };
+    return { text: request.text, imageIds: request.imageIds, keptItsPlace: false };
   }
 
   /** Only Claude Code's transcript tells whether the agent recorded the message that started a turn. */
@@ -2210,6 +2261,17 @@ export class ConversationService {
     return claudeConfigDir(profileEnvironment(profileId === null ? null : (this.store.findProfile(profileId) ?? null)));
   }
 
+  /**
+   * A conversation takes its profile's model when it starts with the profile or moves to it, before its own, a plugin's or
+   * a test host's choice can move it again; after that its own choice stands. The first message waits for it, as for a
+   * plugin's choice: the profile names the model the conversation was started on.
+   */
+  private async applyProfileModel(conversationId: string, sessionId: string, holdUntil: number) {
+    const { profileId } = this.get(conversationId);
+    const model = profileId === null ? undefined : this.store.findProfile(profileId)?.model;
+    if (model) await this.applyChosenModel(conversationId, sessionId, model, holdUntil);
+  }
+
   /** A conversation takes its profile's mode and effort when it starts with the profile or moves to it; after that its own choice stands. */
   private async applyProfileChoices(conversationId: string, sessionId: string) {
     const { profileId } = this.get(conversationId);
@@ -2230,16 +2292,17 @@ export class ConversationService {
   }
 
   /**
-   * A new session takes its model before any effort, as the efforts on offer depend on it: a plugin's model over a test
-   * host's, then the profile's mode and effort, a test host's effort over the profile's, and a plugin's over both. A
-   * plugin's choices hold the first message back until the agent has taken them, so it goes out on them, though for no
-   * longer than `startChoicesTimeoutMs` in all.
+   * A new session takes its model before any effort, as the efforts on offer depend on it: the profile's model under a test
+   * host's and a plugin's, then the profile's mode and effort, a test host's effort over the profile's, and a plugin's over
+   * both. The profile's model and a plugin's choices hold the first message back until the agent has taken them, so it goes
+   * out on them, though for no longer than `startChoicesTimeoutMs` in all.
    */
   private async applyNewSessionChoices(conversation: Conversation, sessionId: string, isFirstSession: boolean) {
     const { id } = conversation;
     const test = this.onUsersOwnSetup(conversation) ? this.config.testModelOverride : {};
     const chosen = this.runtime(id).startChoices ?? {};
     const holdUntil = Date.now() + this.startChoicesTimeoutMs;
+    if (isFirstSession) await this.applyProfileModel(id, sessionId, holdUntil);
     if (test.model) await this.trySetConfigOption(id, sessionId, "model", test.model);
     if (chosen.model) await this.applyChosenModel(id, sessionId, chosen.model, holdUntil);
     if (isFirstSession) await this.applyProfileChoices(id, sessionId);
@@ -2798,14 +2861,19 @@ export class ConversationService {
 
   /**
    * The canvas MCP server died with the previous host, so no question a waiting turn left open can still be
-   * answered as its tool result; only one whose answer was always to be the next message still asks for one.
+   * answered as its tool result; only one whose answer was always to be the next message still asks for one, and one
+   * whose turn this host takes up again stays open for the answer to go to that turn as its user's next message.
    */
-  private cancelAsksOrphanedByRestart() {
-    this.store
-      .listCanvasItemsWithStatus("waiting")
-      .filter((item): item is AskItem => item.kind === "ask")
-      .filter((item) => this.store.findConversation(item.conversationId)?.askMode !== "next-message")
-      .forEach((item) => this.store.saveCanvasItem({ ...item, status: "cancelled" }));
+  private withdrawAsksOrphanedByRestart(turnsBeingResumed: string[]) {
+    const orphanedConversations = new Set(
+      this.store
+        .listCanvasItemsWithStatus("waiting")
+        .filter((item): item is AskItem => item.kind === "ask")
+        .filter((item) => !turnsBeingResumed.includes(item.conversationId))
+        .filter((item) => this.store.findConversation(item.conversationId)?.askMode !== "next-message")
+        .map(({ conversationId }) => conversationId),
+    );
+    orphanedConversations.forEach((conversationId) => this.withdrawWaitingAsks(conversationId));
   }
 
   /** The queue is kept in the database too, so messages waiting for the agent survive a host restart or crash. */
@@ -3075,6 +3143,17 @@ interface TurnRequest {
   text: string;
   firstText: string;
   imageIds: string[];
+  /** When the message that started the turn went out, so what the turn was waiting on can be told from what an earlier one left behind. */
+  beganAt: number;
+}
+
+/**
+ * Whether the turn a stop cut short was itself waiting on an answer of the user's: its question went out after the turn
+ * began, and its answer was still to come back as the tool's result. A question an earlier turn left open, or one whose
+ * answer always comes as the next message, holds nothing up.
+ */
+export function turnWaitedOnAnswer({ askMode, askedAt, turnBeganAt }: { askMode: AskMode; askedAt: number | null; turnBeganAt: number }) {
+  return askMode === "wait" && askedAt !== null && askedAt >= turnBeganAt;
 }
 
 /** opencode 2 marks what a subagent does, reported through its conversation's session, with the subagent's own session. */
@@ -3178,10 +3257,15 @@ export function agentFinishedItsTurn(events: StoredEvent[]): boolean {
 
 function turnRequestWithin(events: StoredEvent[], wholeLog: StoredEvent[]): TurnRequest | null {
   const returned = returnedSteerSeqs(wholeLog);
-  const messages = events.flatMap(({ seq, event }) => (event.type === "user-message" && !returned.has(seq) ? [event] : []));
+  const messages = events.flatMap(({ seq, at, event }) => (event.type === "user-message" && !returned.has(seq) ? [{ at, ...event }] : []));
   const [first] = messages;
   if (!first) return null;
-  return { text: messages.map(({ text }) => text).join("\n\n"), firstText: first.text, imageIds: messages.flatMap(({ imageIds = [] }) => imageIds) };
+  return {
+    text: messages.map(({ text }) => text).join("\n\n"),
+    firstText: first.text,
+    imageIds: messages.flatMap(({ imageIds = [] }) => imageIds),
+    beganAt: first.at,
+  };
 }
 
 interface SteeringState {

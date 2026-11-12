@@ -304,7 +304,7 @@ describe("Store", () => {
 
   test("updates a conversation's persisted fields but always loads it idle", () => {
     const { store, conversation } = seededStore();
-    store.saveProfile({ id: "p1", name: "work", harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+    store.saveProfile({ id: "p1", name: "work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
     store.updateConversation({ ...conversation, profileId: "p1", title: "renamed", askMode: "next-message", bypassPermissions: true, acpSessionId: "s1", status: "running" });
     expect(store.findConversation("c1")).toMatchObject({ profileId: "p1", title: "renamed", askMode: "next-message", bypassPermissions: true, acpSessionId: "s1", status: "idle" });
   });
@@ -328,7 +328,7 @@ describe("Store", () => {
 
   test("saves profiles and forgets a deleted one as a workspace default, keeping its agent", () => {
     const { store } = seededStore();
-    const profile: Profile = { id: "p1", name: "work", harness: "opencode", environment: "A=1", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 };
+    const profile: Profile = { id: "p1", name: "work", harness: "opencode", environment: "A=1", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 };
     store.saveProfile(profile);
     const changed = { ...profile, environment: "A=2", mode: "plan", effort: "high", bypassPermissions: true, askMode: "next-message" as const, color: "mint" as const };
     store.saveProfile(changed);
@@ -455,7 +455,7 @@ describe("Store", () => {
 
   test("keeps a profile's agent when it is saved again", () => {
     const { store } = seededStore();
-    const profile: Profile = { id: "p1", name: "work", harness: "claude", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 };
+    const profile: Profile = { id: "p1", name: "work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 };
     store.saveProfile(profile);
     store.saveProfile({ ...profile, harness: "opencode" });
     expect(store.findProfile("p1")?.harness).toBe("claude");

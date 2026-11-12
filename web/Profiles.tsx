@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { modelSettingsOf, profileSettingValue, type PluginProfileSetting } from "../shared/apps.ts";
-import { categoryChoices, flatSelectOptions, knownChoices } from "../shared/config-options.ts";
+import { categoryChoices, flatSelectOptions, knownChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
 import type { ProfileDraft, ProfileTestResult } from "../shared/protocol.ts";
@@ -143,9 +143,9 @@ function EnvironmentField({
 
 const AGENTS_OWN_CHOICE = "";
 
-/** Agent's default first, then the choices the agent lists, and the profile's own if the agent has not offered it. */
-function dropdownChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level", saved: string, fetched: SessionConfigOption[] | null) {
-  const known = (fetched ? categoryChoices(fetched, category) : knownChoices(conversations, harness, category)).map(({ value, name }) => ({ value, name }));
+/** Agent's default first, then the choices the agent lists, and the profile's own if the agent has not offered it. A model says what it costs where the agent says. */
+function dropdownChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level" | "model", saved: string, fetched: SessionConfigOption[] | null) {
+  const known = (fetched ? categoryChoices(fetched, category) : knownChoices(conversations, harness, category)).map((choice) => ({ value: choice.value, name: category === "model" ? nameWithMultiplier(choice) : choice.name }));
   const savedButUnknown = saved !== AGENTS_OWN_CHOICE && !known.some(({ value }) => value === saved) ? [{ value: saved, name: saved }] : [];
   return [{ value: AGENTS_OWN_CHOICE, name: words.agentsDefault }, ...known, ...savedButUnknown];
 }
@@ -234,6 +234,7 @@ interface ProfileForm {
   harness: HarnessId;
   environment: string;
   prelaunch: string;
+  model: string;
   mode: string;
   effort: string;
   bypassPermissions: boolean;
@@ -248,6 +249,7 @@ const savedForm = (profile: Profile): ProfileForm => ({
   harness: profile.harness,
   environment: profile.environment,
   prelaunch: profile.prelaunch,
+  model: profile.model ?? AGENTS_OWN_CHOICE,
   mode: profile.mode ?? AGENTS_OWN_CHOICE,
   effort: profile.effort ?? AGENTS_OWN_CHOICE,
   bypassPermissions: profile.bypassPermissions,
@@ -262,6 +264,7 @@ const blankForm = (harness: HarnessId, name: string): ProfileForm => ({
   harness,
   environment: "",
   prelaunch: "",
+  model: AGENTS_OWN_CHOICE,
   mode: AGENTS_OWN_CHOICE,
   effort: AGENTS_OWN_CHOICE,
   bypassPermissions: false,
@@ -278,7 +281,7 @@ type EditorTab = (typeof editorTabs)[number];
 
 const fieldsOfTab: Record<EditorTab, FormField[]> = {
   launch: ["name", "harness", "color", "environment", "prelaunch"],
-  defaults: ["mode", "effort", "bypassPermissions", "askMode", "idleCompaction"],
+  defaults: ["model", "mode", "effort", "bypassPermissions", "askMode", "idleCompaction"],
   plugins: ["pluginSettings"],
 };
 
@@ -321,7 +324,7 @@ function ProfileEditor({
   onMoreOptions?: () => void;
   onSaved: (profileId: string) => void;
 }) {
-  const { name, harness, environment, prelaunch, mode, effort, bypassPermissions, askMode, idleCompaction, color, pluginSettings } = form;
+  const { name, harness, environment, prelaunch, model, mode, effort, bypassPermissions, askMode, idleCompaction, color, pluginSettings } = form;
   const set = (fields: Partial<ProfileForm>) => onChange((current) => ({ ...current, ...fields }));
   const choosePluginSetting = (plugin: string, settingId: string, value: string) =>
     onChange((current) => ({ ...current, pluginSettings: { ...current.pluginSettings, [plugin]: { ...current.pluginSettings[plugin], [settingId]: value } } }));
@@ -341,6 +344,7 @@ function ProfileEditor({
   const openTab = shownTabs.includes(tab) ? tab : "launch";
   const unchanged = profile && !differsIn(form, saved, allFields);
   const restartsAgent = profile && differsIn(form, saved, ["environment", "prelaunch"]);
+  const models = dropdownChoices(conversations, harness, "model", model, agentChoices);
   const modes = dropdownChoices(conversations, harness, "mode", mode, agentChoices);
   const efforts = dropdownChoices(conversations, harness, "thought_level", effort, agentChoices);
   const offersAChoice = (choices: unknown[]) => choices.length > 1;
@@ -354,6 +358,7 @@ function ProfileEditor({
     harness,
     environment,
     prelaunch,
+    model: model || null,
     mode: mode || null,
     effort: effort || null,
     bypassPermissions,
@@ -378,7 +383,7 @@ function ProfileEditor({
         value={harness}
         onChange={(event) => {
           const picked = event.target.value as HarnessId;
-          set({ harness: picked, mode: AGENTS_OWN_CHOICE, effort: AGENTS_OWN_CHOICE, ...(name === harnessLabels[harness] && { name: harnessLabels[picked] }) });
+          set({ harness: picked, model: AGENTS_OWN_CHOICE, mode: AGENTS_OWN_CHOICE, effort: AGENTS_OWN_CHOICE, ...(name === harnessLabels[harness] && { name: harnessLabels[picked] }) });
         }}
       >
         {harnessIds.map((id) => (
@@ -534,6 +539,18 @@ function ProfileEditor({
         </div>
         <div {...panelOf("defaults")}>
           <div className="hint">{words.defaultsIntro}</div>
+          {offersAChoice(models) && (
+            <label data-hint={hints.profileModel}>
+              <span>{words.model}</span>
+              <select aria-label={words.modelLabel} value={model} onChange={(event) => set({ model: event.target.value })}>
+                {models.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {offersAChoice(modes) && (
             <label data-hint={hints.profileMode}>
               <span>{words.mode}</span>

@@ -95,6 +95,7 @@ const conversations = new ConversationService(store, hub, config, notifierMute, 
 canvasPlugins.sendsPromptsWith((conversationId, text, { afterTurn, fromPlugin }) => conversations.send(conversationId, text, [], { afterTurn, fromPlugin }));
 canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt, title, choices) => conversations.startBeside(callerId, plugin, profileName, prompt, title, choices));
 canvasPlugins.stopsConversationsWith((callerId, plugin, conversationId) => conversations.stopStarted(callerId, plugin, conversationId));
+canvasPlugins.startsWorkspaceConversationsWith((workspaceId, pluginTitle, start) => conversations.startForPlugin(workspaceId, pluginTitle, start));
 conversations.hearRepliesWith(
   (started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply),
   (plugin) => canvasPlugins.tellsItsCaller(plugin),
@@ -142,6 +143,7 @@ const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
 const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
 const networkAssetsServer = network && certificate && serveCanvasAssets(network.canvasPort, { certificate, knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
 const profiles = new ProfileService(store, hub, conversations);
+profiles.whenProfilesChange(() => canvasPlugins.profilesChanged());
 const statusline = new StatuslineService(store, conversations, config.runsUserStatusLine);
 const terminals = new TerminalService(hub, store);
 const restart = new HostRestart(hub, conversations, config.dataDir, stopServices, relaunchHow && (() => relaunch(relaunchHow)));
@@ -226,6 +228,7 @@ if (config.checksForNewerVersion) newerVersion.start();
 if (config.checksForPluginUpdates) pluginUpdates.start();
 conversations.resumeAfterRestart(takeTurnsStoppedForRestart(config.dataDir));
 conversations.startReminders();
+canvasPlugins.startBackgroundWork();
 const terminalSessions = new TerminalSessionWatcher(
   () => conversations.claudeConfigDirs(),
   (activityBySession) => conversations.showTerminalActivity(activityBySession),

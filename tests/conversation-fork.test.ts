@@ -13,7 +13,7 @@ const scratch = mkdtempSync(join(tmpdir(), "conversation-fork-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const profileOn = (id: string, harness: HarnessId) =>
-  ({ id, name: id, harness, environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 }) as const;
+  ({ id, name: id, harness, environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 }) as const;
 
 /** Stands in for the profile's agent process, keeping what the host asked of it. */
 function agentThatForks({ canFork }: { canFork: boolean }) {

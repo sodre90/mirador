@@ -221,6 +221,7 @@ export const hints = {
   profilePrelaunch: "Optional. Runs with your shell and this environment before the agent starts. It must finish within a minute; start long-running proxies in the background.",
   profileTest:
     "Starts the agent with these settings, without saving them, and lists what it offers: models, modes and other settings. When it cannot start, it says which part failed.",
+  profileModel: "The model a conversation takes when it starts with this profile or moves to it; its own header changes it after that.\n\nThe models are the ones the agent offers: Mirador asks it each time you open the profile. A model the agent no longer offers leaves the conversation on the agent's own, and the conversation says why.",
   profileMode: "The mode a conversation takes when it starts with this profile or moves to it; its own header changes it after that.\n\nThe modes are the ones the agent offers: Mirador asks it each time you open the profile.",
   profileEffort: "The effort a conversation takes when it starts with this profile or moves to it; its own header changes it after that.\n\nThe levels are the ones the agent offers: Mirador asks it each time you open the profile. A conversation whose model does not offer the level keeps its own effort.",
   profileYolo: "Approve whatever the agent asks permission for. A conversation takes this when it starts with this profile or moves to it; its own header changes it after that.",

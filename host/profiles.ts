@@ -61,6 +61,7 @@ export function moveProfilelessOntoProfiles(store: Store, installed: HarnessId[]
         harness,
         environment: "",
         prelaunch: "",
+        model: null,
         mode: null,
         effort: null,
         bypassPermissions: false,
@@ -76,11 +77,18 @@ export const profileFor = (socket: BrowserSocket, profile: Profile): Profile =>
   socket.data.readsProfileLaunch ? profile : { ...profile, environment: "", prelaunch: "" };
 
 export class ProfileService {
+  private profilesChanged = () => {};
+
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly conversations: ConversationService,
   ) {}
+
+  /** What else follows the profiles, such as plugin tabs that list them, hears each save and delete. */
+  whenProfilesChange(listener: () => void) {
+    this.profilesChanged = listener;
+  }
 
   save(draft: ProfileDraft): Profile {
     const name = draft.name.trim();
@@ -98,6 +106,7 @@ export class ProfileService {
       harness: existing?.harness ?? draft.harness,
       environment: draft.environment,
       prelaunch: draft.prelaunch,
+      model: draft.model || null,
       mode: draft.mode || null,
       effort: draft.effort || null,
       bypassPermissions: draft.bypassPermissions,
@@ -112,6 +121,7 @@ export class ProfileService {
     if (launchChanged) this.conversations.restartProfile(profile.id);
     this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile) }));
     if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
+    this.profilesChanged();
     return profile;
   }
 
@@ -124,6 +134,7 @@ export class ProfileService {
     this.conversations.restartProfile(profileId);
     this.hub.broadcast({ type: "profile.deleted", profileId });
     this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
+    this.profilesChanged();
   }
 
   private broadcastWorkspaces(workspaces: Workspace[]) {

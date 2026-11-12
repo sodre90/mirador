@@ -213,6 +213,21 @@ export interface PluginWorkspace {
   folder: string;
 }
 
+/** One of Mirador's profiles, for a plugin to offer the user a choice of them. Plugin API 11 brought it. */
+export interface PluginProfile {
+  name: string;
+  /** The agent it runs, as Mirador names it, e.g. "claude" or "codex". */
+  agent: string;
+}
+
+/** A conversation a plugin starts of its own in a workspace: on the profile of that name, working on `prompt` at once. */
+export interface WorkspaceConversationStart extends ConversationChoices {
+  profile: string;
+  prompt: string;
+  /** Its title, kept as one the user typed is, as `title` is for a conversation a tool starts. */
+  title?: string;
+}
+
 /** What a plugin's workspace tab reaches: its workspace, what it keeps for that workspace, and a way to say its state changed. */
 export interface WorkspaceTabContext {
   workspace: PluginWorkspace;
@@ -222,6 +237,26 @@ export interface WorkspaceTabContext {
   sharedStorage: CanvasPluginStorage;
   /** Mirador asks `state` again soon after, and hands it to the tab wherever the workspace is open. */
   changed(): void;
+  /** Mirador's profiles, by name. Plugin API 11 brought it. */
+  profiles(): PluginProfile[];
+  /**
+   * Starts a conversation of the plugin's own in the workspace, where the workspace starts its conversations, its first
+   * message shown as the plugin's. Unlike one a tool starts, it works for nobody: it stands in the sidebar as any other,
+   * takes its profile's defaults, YOLO included, and tells the user when its turns end; the plugin hears of them through
+   * `activity`. Throws unless the plugin's plugin.json sets `startsConversations`, and, naming the profiles there are,
+   * when none has that name. Plugin API 11 brought it.
+   */
+  startConversation(start: WorkspaceConversationStart): Promise<StartedConversation>;
+}
+
+/** What a plugin's background work reaches: the workspaces, each as its tab would. Plugin API 11 brought it. */
+export interface PluginBackgroundContext {
+  /** The workspaces open in Mirador now. */
+  workspaces(): PluginWorkspace[];
+  /** A workspace's context, as its tab gets it; throws for one that isn't open. */
+  inWorkspace(workspaceId: string): WorkspaceTabContext;
+  /** What the plugin keeps across workspaces, as a window's storage. */
+  storage: CanvasPluginStorage;
 }
 
 /**
@@ -302,4 +337,10 @@ export interface CanvasHost<Data = unknown> {
   /** A window of the plugin's own, which the user opens from the palette. */
   window?: PluginWindow;
   workspaceTab?: WorkspaceTab;
+  /**
+   * Once, as Mirador starts, after it has picked up the conversations it was running: work the plugin does on its own,
+   * such as starting a routine's conversation when it is due, with timers of its own. What it throws is logged. Plugin API
+   * 11 brought it.
+   */
+  background?(context: PluginBackgroundContext): void | Promise<void>;
 }

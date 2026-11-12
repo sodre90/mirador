@@ -9,9 +9,13 @@ import type { HostProblem } from "./host-problems.ts";
  * whose view can start a conversation and add to the composer; API 8 lets a plugin title a conversation it starts and
  * choose its model and effort, and tells it what that conversation ran on; API 9 lets a profile setting's choices be
  * the models of the profile another of its settings chose; API 10 lets a canvas plugin stop a conversation its tool
- * started.
+ * started; API 11 brings a canvas plugin's background work, lists the profiles to its workspace tab, and lets a plugin
+ * that says so in plugin.json start conversations of its own in a workspace.
  */
-export const APP_PLUGIN_API = 10;
+export const APP_PLUGIN_API = 11;
+
+/** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
+export const STARTS_CONVERSATIONS_PLUGIN_API = 11;
 
 /** The first plugin API whose canvas host may have a workspace tab. */
 export const WORKSPACE_TAB_API = 7;
@@ -68,6 +72,11 @@ export interface PluginManifest {
    * ignores it and notifies as usual.
    */
   tellsCaller?: boolean;
+  /**
+   * The plugin starts conversations of its own in a workspace, from its background work or its workspace tab, such as a
+   * routine that runs on a schedule; without it, `startConversation` there throws. Plugin API 11 brought it.
+   */
+  startsConversations?: boolean;
   /** An SVG file, relative to the plugin's folder, that stands for the plugin in Plugins…; a bad one leaves its monogram. */
   icon?: string;
 }
@@ -568,7 +577,7 @@ export const isPluginVersion = (version: unknown): version is string => typeof v
 
 export function isPluginManifest(value: unknown): value is PluginManifest {
   if (typeof value !== "object" || value === null) return false;
-  const { name, title, version, api, app, canvas, build, settings, profileSettings, tellsCaller } = value as Partial<PluginManifest>;
+  const { name, title, version, api, app, canvas, build, settings, profileSettings, tellsCaller, startsConversations } = value as Partial<PluginManifest>;
   return (
     typeof name === "string" &&
     /^[a-z0-9][a-z0-9-]*$/.test(name) &&
@@ -581,6 +590,7 @@ export function isPluginManifest(value: unknown): value is PluginManifest {
     (build === undefined || typeof build === "string") &&
     (settings === undefined || (Array.isArray(settings) && settings.every(isPluginSetting) && haveDistinctIds(settings))) &&
     (profileSettings === undefined || (Array.isArray(profileSettings) && profileSettings.every(isPluginProfileSetting) && haveDistinctIds(profileSettings) && modelSettingsNameProfileSettings(profileSettings))) &&
-    (tellsCaller === undefined || typeof tellsCaller === "boolean")
+    (tellsCaller === undefined || typeof tellsCaller === "boolean") &&
+    (startsConversations === undefined || typeof startsConversations === "boolean")
   );
 }

@@ -6,7 +6,7 @@ import { Store } from "../host/store.ts";
 describe("moveProfilelessOntoProfiles", () => {
   function storeFromBeforeProfilesWereRequired() {
     const store = new Store(":memory:");
-    store.saveProfile({ id: "p1", name: "work", harness: "claude", environment: "ANTHROPIC_MODEL=opus", prelaunch: "", mode: "plan", effort: "high", bypassPermissions: true, askMode: "next-message", color: null, createdAt: 1 });
+    store.saveProfile({ id: "p1", name: "work", harness: "claude", environment: "ANTHROPIC_MODEL=opus", prelaunch: "", model: null, mode: "plan", effort: "high", bypassPermissions: true, askMode: "next-message", color: null, createdAt: 1 });
     store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
     store.insertWorkspace({ id: "w2", name: "other", path: "/tmp/other", defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 2 });
     const conversation = (id: string, change: Partial<Conversation>): Conversation => ({
@@ -74,7 +74,7 @@ describe("moveProfilelessOntoProfiles", () => {
 
 describe("profileToLaunch", () => {
   const store = new Store(":memory:");
-  store.saveProfile({ id: "p1", name: "home llama", harness: "opencode", environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "p1", name: "home llama", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
 
   test("gives the profile when it is on its own agent", () => {
     expect(profileToLaunch(store, { harness: "opencode", profileId: "p1" }).name).toBe("home llama");
@@ -90,7 +90,7 @@ describe("profileToLaunch", () => {
 
 describe("workspace defaults", () => {
   const profile = (id: string, name: string, harness: "claude" | "opencode", createdAt: number) =>
-    ({ id, name, harness, environment: "", prelaunch: "", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt }) as const;
+    ({ id, name, harness, environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt }) as const;
   const workspace = (id: string, profileId: string | null, harness: "claude" | "opencode", createdAt: number) => ({
     id,
     name: id,

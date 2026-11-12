@@ -13,6 +13,8 @@ export const profiles = {
   notInstalled: (agent: string) => `${agent} (not installed)`,
   colour: "Colour",
   colourLabel: "Profile colour",
+  model: "Model",
+  modelLabel: "Profile model",
   mode: "Mode",
   modeLabel: "Profile mode",
   effort: "Effort",

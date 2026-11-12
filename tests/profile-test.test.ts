@@ -29,7 +29,7 @@ const fakeAgy = () => agyRunning(`await import(${JSON.stringify(pathToFileURL(fa
 
 const serviceWith = (drafts: ProfileDraft[] = []) => {
   const store = new Store(":memory:");
-  drafts.forEach((draft) => store.saveProfile({ ...draft, id: draft.id!, name: draft.name, mode: draft.mode ?? null, effort: draft.effort ?? null, createdAt: 1 }));
+  drafts.forEach((draft) => store.saveProfile({ ...draft, id: draft.id!, name: draft.name, model: draft.model ?? null, mode: draft.mode ?? null, effort: draft.effort ?? null, createdAt: 1 }));
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   return new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
 };
@@ -39,6 +39,7 @@ const draftWith = (environment: string, prelaunch = ""): ProfileDraft => ({
   harness: "antigravity",
   environment,
   prelaunch,
+  model: null,
   mode: null,
   effort: null,
   bypassPermissions: false,

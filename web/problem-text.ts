@@ -323,6 +323,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginWindowNeedsNewerApi(problem.brought, problem.named);
     case "workspace-tab-needs-newer-api":
       return words.workspaceTabNeedsNewerApi(problem.brought, problem.named);
+    case "plugin-background-needs-newer-api":
+      return words.pluginBackgroundNeedsNewerApi(problem.brought, problem.named);
     case "canvas-host-module-needs":
       return words.canvasHostModuleNeeds(problem.needs.map((need) => problemText(need, words)));
     case "canvas-need-item-shape":

@@ -146,6 +146,7 @@ const addedColumns = [
   { table: "conversations", column: "unseen_turn_end", definition: "TEXT" },
   { table: "workspaces", column: "position", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "position", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "profiles", column: "model", definition: "TEXT" },
   { table: "profiles", column: "mode", definition: "TEXT" },
   { table: "profiles", column: "bypass_permissions", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "profiles", column: "ask_mode", definition: "TEXT NOT NULL DEFAULT 'wait'" },
@@ -205,6 +206,7 @@ type ProfileRow = {
   harness: HarnessId;
   environment: string;
   prelaunch: string;
+  model: string | null;
   mode: string | null;
   effort: string | null;
   bypass_permissions: number;
@@ -267,6 +269,7 @@ const toProfile = (row: ProfileRow): Profile => ({
   harness: row.harness,
   environment: row.environment,
   prelaunch: row.prelaunch,
+  model: row.model,
   mode: row.mode,
   effort: row.effort,
   bypassPermissions: row.bypass_permissions === 1,
@@ -858,9 +861,9 @@ export class Store {
   saveProfile(profile: Profile) {
     this.db
       .query(
-        `INSERT INTO profiles (id, name, harness, environment, prelaunch, mode, effort, bypass_permissions, ask_mode, idle_compaction, color, plugin_settings, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO profiles (id, name, harness, environment, prelaunch, model, mode, effort, bypass_permissions, ask_mode, idle_compaction, color, plugin_settings, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, environment = excluded.environment, prelaunch = excluded.prelaunch,
-           mode = excluded.mode, effort = excluded.effort, bypass_permissions = excluded.bypass_permissions, ask_mode = excluded.ask_mode,
+           model = excluded.model, mode = excluded.mode, effort = excluded.effort, bypass_permissions = excluded.bypass_permissions, ask_mode = excluded.ask_mode,
            idle_compaction = excluded.idle_compaction, color = excluded.color, plugin_settings = excluded.plugin_settings`,
       )
       .run(
@@ -869,6 +872,7 @@ export class Store {
         profile.harness,
         profile.environment,
         profile.prelaunch,
+        profile.model,
         profile.mode,
         profile.effort,
         Number(profile.bypassPermissions),

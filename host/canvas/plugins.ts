@@ -9,6 +9,7 @@ import {
   type CanvasToolContext,
   type PluginActivity,
   type PluginActivityEvent,
+  type PluginBackgroundContext,
   type PluginWindowContext,
   type ConversationChoices,
   type WorkspaceTabContext,
@@ -16,6 +17,7 @@ import {
   type PluginItemType,
   type StartedConversation,
   type ToolCaller,
+  type WorkspaceConversationStart,
 } from "../../shared/canvas-plugins.ts";
 import type { SlashCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
@@ -60,6 +62,9 @@ export type StartBeside = (callerId: string, plugin: string, profileName: string
 
 export type StopStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
 
+/** `pluginTitle` names whose its first message shows as. */
+export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start: WorkspaceConversationStart) => Promise<StartedConversation>;
+
 /**
  * The canvas plugins Mirador loaded when it started: their tools on every conversation's canvas server, the items those
  * tools publish, the user's actions in the items' views, and what the agent hears of with the user's next message.
@@ -75,6 +80,10 @@ export class CanvasPlugins {
 
   private stopStarted: StopStarted = async () => {
     throw new Error("Mirador can't stop conversations yet.");
+  };
+
+  private startInWorkspace: StartInWorkspace = async () => {
+    throw new Error("Mirador can't start conversations yet.");
   };
 
   constructor(
@@ -94,6 +103,30 @@ export class CanvasPlugins {
 
   stopsConversationsWith(stop: StopStarted) {
     this.stopStarted = stop;
+  }
+
+  startsWorkspaceConversationsWith(start: StartInWorkspace) {
+    this.startInWorkspace = start;
+  }
+
+  /** Once, as Mirador starts: each plugin's background work, whose failure is the plugin's alone. */
+  startBackgroundWork() {
+    for (const plugin of this.plugins.filter(({ host }) => host.background)) {
+      const failed = (error: unknown) => console.error(`the background work of the ${plugin.manifest.name} plugin failed:`, error);
+      try {
+        Promise.resolve(plugin.host.background!(this.backgroundContext(plugin))).catch(failed);
+      } catch (error) {
+        failed(error);
+      }
+    }
+  }
+
+  private backgroundContext(plugin: CanvasPlugin): PluginBackgroundContext {
+    return {
+      workspaces: () => this.store.listWorkspaces().map(({ id, name, path }) => ({ id, name, folder: path })),
+      inWorkspace: (workspaceId) => this.workspaceTabContext(plugin, workspaceId),
+      storage: this.storageOf(plugin),
+    };
   }
 
   private catalog: PluginCatalog | null = null;
@@ -292,10 +325,28 @@ export class CanvasPlugins {
       storage: { get: (key) => shared.get(keyed(key)), set: (key, value) => shared.set(keyed(key), value) },
       sharedStorage: shared,
       changed: () => this.workspaceTabChanged(plugin, workspaceId),
+      profiles: () => {
+        if (plugin.host.workspaceTab) this.tabsListingProfiles.add(plugin);
+        return this.store.listProfiles().map(({ name, harness }) => ({ name, agent: harness }));
+      },
+      startConversation: async (start) => {
+        if (plugin.manifest.startsConversations !== true) {
+          throw new Error(`${plugin.manifest.title} can't start conversations of its own: its plugin.json doesn't set startsConversations.`);
+        }
+        return this.startInWorkspace(workspaceId, plugin.manifest.title, start);
+      },
     };
   }
 
   private readonly tabsSettling = new Set<string>();
+
+  /** The plugins with a workspace tab that read the profiles, whose tabs' state may list them. */
+  private readonly tabsListingProfiles = new Set<CanvasPlugin>();
+
+  /** A profile was saved or deleted: the tabs that read the profiles are asked for their state again, in every workspace. */
+  profilesChanged() {
+    for (const plugin of this.tabsListingProfiles) this.store.listWorkspaces().forEach(({ id }) => this.workspaceTabChanged(plugin, id));
+  }
 
   private workspaceTabChanged(plugin: CanvasPlugin, workspaceId: string) {
     const key = `${plugin.manifest.name}\n${workspaceId}`;

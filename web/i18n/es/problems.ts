@@ -128,6 +128,7 @@ export const problems: Messages["problems"] = {
     "canvas-need-activity-function": "activity solo como función",
     "canvas-need-window-shape": "window solo como { state, action }, con state como función y action también, si lo hay",
     "canvas-need-workspace-tab-shape": "workspaceTab solo como { shows, state, action }, con state como función y shows y action también, si los hay",
+    "canvas-need-background-function": "background solo como función",
   },
   couldNotResume: (cause) => `No se pudo reanudar la sesión anterior del agente (${cause}); se empieza una nueva.`,
   couldNotSetOption: (option, value, cause) => `No se pudo cambiar ${option} a ${value}: ${cause}`,
@@ -294,6 +295,7 @@ export const problems: Messages["problems"] = {
   pluginWindowNeedsNewerApi: (brought, named) =>
     `el módulo del host del lienzo tiene una ventana o escucha la actividad, que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   workspaceTabNeedsNewerApi: (brought, named) => `el módulo del host del lienzo tiene una pestaña del espacio de trabajo, que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
+  pluginBackgroundNeedsNewerApi: (brought, named) => `el módulo del host del lienzo trabaja en segundo plano, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   canvasHostModuleNeeds: (needs) => `el módulo del host del lienzo necesita ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} con un icon, un placement de ${placements.join(" o ")}, y count, outcome y listed solo como funciones`,

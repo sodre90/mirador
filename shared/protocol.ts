@@ -83,7 +83,7 @@ export const PROFILE_LAUNCH_PARAMETER = "profile-launch";
 /** A desktop app built from a checkout opens /notifications with this query parameter naming the code it was built from. */
 export const DESKTOP_APP_CODE_PARAMETER = "desktop-app-code";
 
-export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings"> & { id?: string };
+export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "model" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings"> & { id?: string };
 
 /** What a profile editor's test found: what the agent offers, or why it could not say. */
 export type ProfileTestResult =
@@ -112,7 +112,7 @@ export type ClientMessage =
   | { type: "workspace-group.delete"; groupId: string }
   | { type: "profile.save"; requestId: string; profile: ProfileDraft }
   | { type: "profile.delete"; profileId: string }
-  /** Asks what the profile's agent offers now, so a profile editor can list modes and efforts without one of its conversations having run. */
+  /** Asks what the profile's agent offers now, so a profile editor can list models, modes and efforts without one of its conversations having run. */
   | { type: "profile.choices.get"; requestId: string; profileId: string }
   /** Starts the agent the draft describes, which need not be saved, and asks what it offers. */
   | { type: "profile.test"; requestId: string; profile: ProfileDraft }

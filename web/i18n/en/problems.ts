@@ -126,6 +126,7 @@ export const problems = {
     "canvas-need-activity-function": "activity only as a function",
     "canvas-need-window-shape": "window only as { state, action } with state a function and action, if any, one too",
     "canvas-need-workspace-tab-shape": "workspaceTab only as { shows, state, action } with state a function and shows and action, if any, ones too",
+    "canvas-need-background-function": "background only as a function",
   },
   couldNotResume: (cause: string) => `Could not resume the previous agent session (${cause}); starting a fresh one.`,
   couldNotSetOption: (option: string, value: string, cause: string) => `Could not set ${option} to ${value}: ${cause}`,
@@ -293,6 +294,7 @@ export const problems = {
   pluginWindowNeedsNewerApi: (brought: number, named: number) =>
     `the canvas host module has a window or hears activity, which plugin API ${brought} brought; plugin.json names API ${named}`,
   workspaceTabNeedsNewerApi: (brought: number, named: number) => `the canvas host module has a workspace tab, which plugin API ${brought} brought; plugin.json names API ${named}`,
+  pluginBackgroundNeedsNewerApi: (brought: number, named: number) => `the canvas host module works in the background, which plugin API ${brought} brought; plugin.json names API ${named}`,
   canvasHostModuleNeeds: (needs: string[]) => `the canvas host module needs ${needs.join("; ")}`,
   canvasNeedItemShape: (item: string, placements: string[]) =>
     `items.${item} with an icon, a placement of ${placements.join(" or ")}, and count, outcome and listed only as functions`,
