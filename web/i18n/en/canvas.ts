@@ -202,9 +202,33 @@ export const canvas = {
     askAbout: (label: string) => `Ask the agent about ${label}, or tell it what to change there`,
     areaAlt: "The marked area",
     placeholder: (primary: string) => `Your words (Enter asks, ${primary}Enter changes the page, Shift+Enter for a new line, Esc cancels)`,
+    placeholderBatch: (primary: string) => `Your words (Enter adds this comment, ${primary}Enter changes the page, Shift+Enter for a new line, Esc cancels)`,
     ask: "Ask",
     change: "Change",
     cancel: "Cancel",
+  },
+  markBatch: {
+    add: "Add comment",
+    bar: (count: number) => plural(count, "1 comment", `${count} comments`),
+    listLabel: (count: number) => plural(count, "1 comment waiting for the agent", `${count} comments waiting for the agent`),
+    onPage: (title: string, count: number) => `${count} ${count === 1 ? "comment" : "comments"} on “${title}”`,
+    picture: (number: number) => `Picture ${number} of the marked area`,
+    overallPlaceholder: "A note for all of them",
+    send: (count: number) => `Send ${count} ${count === 1 ? "comment" : "comments"}`,
+    changeAll: (count: number) => (count === 1 ? "Change this" : `Change all ${count}`),
+    discard: "Discard all",
+    edit: "Edit",
+    remove: "Remove",
+    save: "Save",
+    close: "Close",
+    editing: (label: string) => `Your comment on ${label}`,
+    editLabel: (label: string) => `Change your comment on ${label}`,
+    editPlaceholder: "Your words (Enter saves the comment, Esc cancels)",
+    full: (most: number) => `One message carries at most ${most} comments. Send these, then mark the rest.`,
+    sent: (count: number, intent: "ask" | "change") =>
+      intent === "change"
+        ? `Asked the agent to change ${count} ${count === 1 ? "part" : "parts"} of the page. The new page comes on the canvas.`
+        : `Sent ${count} ${count === 1 ? "comment" : "comments"} to the agent. The answer comes in the chat.`,
   },
   fileToOpen: {
     title: "Open a file outside this workspace?",

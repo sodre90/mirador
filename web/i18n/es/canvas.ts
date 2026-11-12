@@ -203,9 +203,33 @@ export const canvas: Messages["canvas"] = {
     askAbout: (label) => `Pregunta al agente sobre ${label}, o dile qué cambiar ahí`,
     areaAlt: "El área marcada",
     placeholder: (primary) => `Tus palabras (Enter pregunta, ${primary}Enter cambia la página, Shift+Enter para una línea nueva, Esc cancela)`,
+    placeholderBatch: (primary) => `Tus palabras (Enter añade el comentario, ${primary}Enter cambia la página, Shift+Enter para una línea nueva, Esc cancela)`,
     ask: "Preguntar",
     change: "Cambiar",
     cancel: "Cancelar",
+  },
+  markBatch: {
+    add: "Añadir comentario",
+    bar: (count) => `${count} ${plural(count, "comentario", "comentarios")}`,
+    listLabel: (count) => `${count} ${count === 1 ? "comentario esperando" : "comentarios esperando"} al agente`,
+    onPage: (title, count) => `${count} ${count === 1 ? "comentario" : "comentarios"} en “${title}”`,
+    picture: (number) => `Imagen ${number} del área marcada`,
+    overallPlaceholder: "Una nota para todos",
+    send: (count) => `Enviar ${count} ${count === 1 ? "comentario" : "comentarios"}`,
+    changeAll: (count) => (count === 1 ? "Cambiar esto" : `Cambiar los ${count}`),
+    discard: "Descartar todo",
+    edit: "Editar",
+    remove: "Quitar",
+    save: "Guardar",
+    close: "Cerrar",
+    editing: (label) => `Tu comentario sobre ${label}`,
+    editLabel: (label) => `Cambia tu comentario sobre ${label}`,
+    editPlaceholder: "Tus palabras (Enter guarda el comentario, Esc cancela)",
+    full: (most) => `Un mensaje lleva como máximo ${most} comentarios. Envía estos y marca el resto.`,
+    sent: (count, intent) =>
+      intent === "change"
+        ? `Pediste al agente que cambie ${count} ${count === 1 ? "parte" : "partes"} de la página. La nueva página llega al lienzo.`
+        : `Enviaste ${count} ${count === 1 ? "comentario" : "comentarios"} al agente. La respuesta llega en el chat.`,
   },
   fileToOpen: {
     title: "¿Abrir un archivo fuera de este espacio de trabajo?",

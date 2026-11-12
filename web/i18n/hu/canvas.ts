@@ -200,9 +200,33 @@ export const canvas: Messages["canvas"] = {
     askAbout: (label) => `Kérdezd az ágenst erről: ${label}, vagy mondd meg, mit változtasson ott`,
     areaAlt: "A megjelölt terület",
     placeholder: (primary) => `Írd ide (Enter: kérdés, ${primary}Enter: az oldal módosítása, Shift+Enter: új sor, Esc: mégse)`,
+    placeholderBatch: (primary) => `Írd ide (Enter: megjegyzés a listához, ${primary}Enter: az oldal módosítása, Shift+Enter: új sor, Esc: mégse)`,
     ask: "Kérdés",
     change: "Módosítás",
     cancel: "Mégse",
+  },
+  markBatch: {
+    add: "Megjegyzés hozzáadása",
+    bar: (count) => `${count} megjegyzés`,
+    listLabel: (count) => `${count} megjegyzés vár az ágensre`,
+    onPage: (title, count) => `${count} megjegyzés ehhez: „${title}”`,
+    picture: (number) => `${number}. kép a megjelölt területről`,
+    overallPlaceholder: "Egy megjegyzés az összeshez",
+    send: (count) => `${count} megjegyzés elküldése`,
+    changeAll: (count) => (count === 1 ? "Ennek módosítása" : `Mind a ${count} módosítása`),
+    discard: "Összes eldobása",
+    edit: "Szerkesztés",
+    remove: "Eltávolítás",
+    save: "Mentés",
+    close: "Bezárás",
+    editing: (label) => `A megjegyzésed ehhez: ${label}`,
+    editLabel: (label) => `Módosítsd a megjegyzést ehhez: ${label}`,
+    editPlaceholder: "Írd ide (Enter: a megjegyzés mentése, Esc: mégse)",
+    full: (most) => `Egy üzenet legfeljebb ${most} megjegyzést visz. Küldd el ezeket, aztán jelölj meg többet.`,
+    sent: (count, intent) =>
+      intent === "change"
+        ? `Megkérted az ágenst, hogy változtasson meg ${count} részt az oldalon. Az új oldal a vásznon érkezik.`
+        : `Elküldted a ${count} megjegyzést az ágensnek. A válasz a chatben érkezik.`,
   },
   fileToOpen: {
     title: "Megnyitsz egy fájlt a munkaterületen kívül?",
