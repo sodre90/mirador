@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from "bun:test";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, renameSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AppDocuments, AppFileRefused, takenUpWords, type AppPublisher } from "../host/apps/documents.ts";
@@ -272,22 +272,45 @@ describe("AppDocuments", () => {
     }
   });
 
-  test("forgets an app whose file stopped parsing when the host starts again", async () => {
+  test("keeps an app whose file stopped parsing, or whose plugin didn't load, for a later start to open once that's fixed", async () => {
     const first = await setUp();
     await first.apps.open("c1", "counter", "counter.json");
     first.apps.stop();
     writeFileSync(join(first.workspacePath, "counter.json"), "{ not json");
     const warn = spyOn(console, "warn").mockImplementation(() => {});
     try {
-      const second = await setUp(first.store, first.workspacePath);
-      await second.apps.reopenAll();
-      expect(second.apps.openApps()).toEqual([]);
-      expect(second.store.listOpenApps()).toEqual([]);
+      const unparsed = await setUp(first.store, first.workspacePath);
+      await unparsed.apps.reopenAll();
+      expect(unparsed.apps.openApps()).toEqual([]);
       expect(warn).toHaveBeenCalledWith(expect.stringContaining("Couldn't open counter on counter.json again"));
-      second.apps.stop();
+      unparsed.apps.stop();
+      writeFileSync(join(first.workspacePath, "counter.json"), JSON.stringify({ count: 6 }));
+      const withoutPlugins = new AppDocuments(first.store, [], recordingPublisher().publisher);
+      await withoutPlugins.reopenAll();
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining("No app is called counter"));
+      const fixed = await setUp(first.store, first.workspacePath);
+      await fixed.apps.reopenAll();
+      expect(fixed.apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 counter.json"]);
+      expect(stateOf(fixed.apps).document).toEqual({ count: 6 });
+      fixed.apps.stop();
     } finally {
       warn.mockRestore();
     }
+  });
+
+  test("forgets, when the host starts again, an app a conversation kept in a folder it no longer works in, and makes no file in its own", async () => {
+    const { apps, store, workspacePath } = await setUp();
+    const worktreeFolder = mkdtempSync(join(tmpdir(), "app-worktree-"));
+    const { position: _, ...conversation } = store.findConversation("c1")!;
+    store.deleteConversation("c1");
+    store.insertConversation({ ...conversation, id: "c1", worktree: { id: "wt1", root: worktreeFolder, folder: worktreeFolder, branch: "mirador/wt1" } });
+    store.saveOpenApp("c1", "w1", "w1", "counter", "counter.json");
+    await apps.reopenAll();
+    expect(apps.openApps()).toEqual([]);
+    expect(store.listOpenApps()).toEqual([]);
+    expect(existsSync(join(worktreeFolder, "counter.json"))).toBe(false);
+    expect(existsSync(join(workspacePath, "counter.json"))).toBe(false);
+    apps.stop();
   });
 
   test("says what to do when no app or another app is asked for", async () => {
@@ -408,6 +431,124 @@ describe("AppDocuments", () => {
     const foldsCase = readdirSync(join(workspacePath, "plans")).length === 1;
     expect(two.documentId === one.documentId).toBe(foldsCase);
     expect(apps.openApps().map(({ conversationId }) => conversationId).sort()).toEqual(["c1", "c2"]);
+    apps.stop();
+  });
+
+  test("a file opened under another spelling of its name stays one document once it's saved, and hears edits made outside Mirador", async () => {
+    const { apps, store, workspacePath } = await setUp();
+    addConversations(store, "c3");
+    writeFileSync(join(workspacePath, "counter.json"), JSON.stringify({ count: 1 }));
+    const foldsCase = existsSync(join(workspacePath, "COUNTER.json"));
+    const first = await apps.open("c1", "counter", "Counter.json");
+    await apps.apply("c1", undefined, { op: "add", by: 1 }, { kind: "you" });
+    expect((await apps.open("c2", "counter", "Counter.json")).documentId).toBe(first.documentId);
+    expect((await apps.open("c3", "counter", "counter.json")).documentId === first.documentId).toBe(foldsCase);
+    writeFileSync(join(workspacePath, foldsCase ? "counter.json" : "Counter.json"), JSON.stringify({ count: 42 }));
+    await eventually(() => expect(apps.state(first.documentId)!.document).toEqual({ count: 42 }));
+    apps.stop();
+  });
+
+  test("a file another program saves under another spelling of its name stays one document, which hears that edit", async () => {
+    const { apps, workspacePath } = await setUp();
+    writeFileSync(join(workspacePath, "counter.json"), JSON.stringify({ count: 1 }));
+    const foldsCase = existsSync(join(workspacePath, "COUNTER.json"));
+    const first = await apps.open("c1", "counter", "counter.json");
+    writeFileSync(join(workspacePath, ".saving"), JSON.stringify({ count: 42 }));
+    renameSync(join(workspacePath, ".saving"), join(workspacePath, "COUNTER.json"));
+    expect((await apps.open("c2", "counter", "counter.json")).documentId).toBe(first.documentId);
+    if (foldsCase) await eventually(() => expect(apps.state(first.documentId)!.document).toEqual({ count: 42 }));
+    apps.stop();
+  });
+
+  test("a new file another conversation makes under another spelling while this one makes it is taken up, not written over", async () => {
+    const { apps, workspacePath } = await setUp();
+    let finishLateWrite = () => {};
+    const lateWriting = new Promise<void>((resolve) => (finishLateWrite = resolve));
+    const realWrite = Bun.write;
+    const slowLateWrite = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
+      await lateWriting;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    try {
+      const openingLate = apps.open("c1", "counter", "Case.json");
+      await eventually(() => expect(slowLateWrite).toHaveBeenCalled());
+      const early = await apps.open("c2", "counter", "case.json");
+      await apps.apply("c2", undefined, { op: "add", by: 5 }, { kind: "you" });
+      finishLateWrite();
+      const late = await openingLate;
+      const foldsCase = readdirSync(workspacePath).length === 1;
+      expect(late.documentId === early.documentId).toBe(foldsCase);
+      expect(apps.state(early.documentId)!.document).toEqual({ count: 5 });
+      expect(JSON.parse(readFileSync(join(workspacePath, "case.json"), "utf8"))).toEqual({ count: 5 });
+    } finally {
+      slowLateWrite.mockRestore();
+    }
+    apps.stop();
+  });
+
+  test("a file first opened through a link is saved to the file the link leads to, and the link stays a link", async () => {
+    const { apps, workspacePath } = await setUp();
+    mkdirSync(join(workspacePath, "plans"));
+    writeFileSync(join(workspacePath, "plans", "week.json"), JSON.stringify({ count: 7 }));
+    symlinkSync(join(workspacePath, "plans", "week.json"), join(workspacePath, "today.json"));
+    const linked = await apps.open("c1", "counter", "today.json");
+    expect((await apps.open("c2", "counter", "plans/week.json")).documentId).toBe(linked.documentId);
+    await apps.apply("c2", undefined, { op: "add", by: 1 }, { kind: "you" });
+    expect(JSON.parse(readFileSync(join(workspacePath, "plans", "week.json"), "utf8"))).toEqual({ count: 8 });
+    expect(lstatSync(join(workspacePath, "today.json")).isSymbolicLink()).toBe(true);
+    apps.stop();
+  });
+
+  test("a conversation that goes while it opens a new file leaves that file's document to another conversation opening it too", async () => {
+    const { apps, store } = await setUp();
+    let finishWrite = () => {};
+    const writing = new Promise<void>((resolve) => (finishWrite = resolve));
+    const realWrite = Bun.write;
+    const slowWrite = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
+      await writing;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    try {
+      const openingGone = apps.open("c1", "counter", "shared.json");
+      const openingStaying = apps.open("c2", "counter", "shared.json");
+      await eventually(() => expect(slowWrite).toHaveBeenCalled());
+      apps.forgetConversation("c1");
+      store.deleteConversation("c1");
+      finishWrite();
+      await expect(openingGone).rejects.toThrow("No conversation c1 holds an app open.");
+      const staying = await openingStaying;
+      expect(apps.state(staying.documentId)).toMatchObject({ document: { count: 0 } });
+      expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c2 shared.json"]);
+    } finally {
+      slowWrite.mockRestore();
+    }
+    apps.stop();
+  });
+
+  test("taking up a document holds nothing for a conversation that's gone or works in another folder", async () => {
+    const { apps, store } = await setUpWithWorktree();
+    const inWorkspace = await apps.open("c2", "counter", "counter.json");
+    await expect(apps.useIn("c1", inWorkspace.documentId)).rejects.toThrow("is open in another folder than the one this conversation works in");
+    addConversations(store, "c3");
+    store.deleteConversation("c3");
+    await expect(apps.useIn("c3", inWorkspace.documentId)).rejects.toThrow("No conversation c3 holds an app open.");
+    expect(apps.openApps().map(({ conversationId }) => conversationId)).toEqual(["c2"]);
+    expect(store.listOpenApps().map(({ conversationId }) => conversationId)).toEqual(["c2"]);
+    apps.stop();
+  });
+
+  test("taking up another document is refused while a task runs that only this conversation holds", async () => {
+    const { apps, workspacePath } = await setUp();
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 5 }));
+    const held = await apps.open("c1", "counter", "counter.json");
+    const elsewhere = await apps.open("c2", "counter", "other.json");
+    const running = apps.startTask("c1", undefined, "wait", { kind: "you" });
+    await expect(apps.useIn("c1", elsewhere.documentId)).rejects.toMatchObject({ status: 409, message: "Wait until stopped is still running; wait for it to end, or stop it, before opening another file." });
+    expect(apps.state(held.documentId)).toMatchObject({ task: { state: "running" } });
+    await expect(apps.useIn("c1", held.documentId)).resolves.toMatchObject({ documentId: held.documentId });
+    apps.stopTask(held.documentId);
+    await running.ended.catch(() => {});
+    await expect(apps.useIn("c1", elsewhere.documentId)).resolves.toMatchObject({ documentId: elsewhere.documentId });
     apps.stop();
   });
 
