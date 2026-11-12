@@ -85,10 +85,18 @@ const selectTextIn = (element: Locator) =>
 /** The outlines the page keeps on the marks of the comments waiting to be sent, each showing the comment's number. */
 const waitingOutlines = (shown: FrameLocator) => shown.locator("mirador-marks .waiting");
 
-/** Whether an outline sits on the element, to within a pixel or two of its edges. */
+/**
+ * Whether an outline sits on the element, to within a pixel or two of its edges. The page draws its outlines anew on
+ * every scroll, resize and change of the waiting comments, so one measured can be gone a moment later: it is measured
+ * until it sits there.
+ */
 async function expectOutlineOn(outline: Locator, element: Locator) {
-  const [drawn, marked] = await Promise.all([outline.boundingBox(), element.boundingBox()]);
-  for (const side of ["x", "y", "width", "height"] as const) expect(Math.abs(drawn![side] - marked![side])).toBeLessThan(2);
+  const furthestEdgeOff = async () => {
+    const [drawn, marked] = await Promise.all([outline.boundingBox(), element.boundingBox()]);
+    if (!drawn || !marked) return Number.POSITIVE_INFINITY;
+    return Math.max(...(["x", "y", "width", "height"] as const).map((side) => Math.abs(drawn[side] - marked[side])));
+  };
+  await expect.poll(furthestEdgeOff).toBeLessThan(2);
 }
 
 /** The bar's waiting badge: a glyph with the number of comments it holds. */
