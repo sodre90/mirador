@@ -6,7 +6,7 @@ import { AppDocuments, AppFileRefused, takenUpWords, type AppPublisher } from ".
 import { AppProblem, loadPlugins } from "../host/apps/plugins.ts";
 import { Store } from "../host/store.ts";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
-import { APP_MEDIA_PATH, appFilesUrl, appFileUrl, appMediaGrantUrl, appOpenUrl, appPromptText, type AppAuthor, type AppDocumentState, type OpenApp } from "../shared/apps.ts";
+import { APP_MEDIA_PATH, APP_PLUGIN_API, appFilesUrl, appFileUrl, appMediaGrantUrl, appOpenUrl, appPromptText, type AppAuthor, type AppDocumentState, type OpenApp } from "../shared/apps.ts";
 
 const FIXTURE_APPS = join(import.meta.dir, "fixtures", "apps");
 
@@ -116,7 +116,7 @@ describe("loadPlugins", () => {
     const problemOf = (name: string) => problems.find((problem) => problem.folder.endsWith(name))?.message;
     expect(problems).toHaveLength(7);
     expect(problemOf("short-version")).toContain("a version as x.y.z if any");
-    expect(problemOf("old-api")).toContain("plugin.json is for plugin API 99; this Mirador speaks plugin API 1 to 11, so the plugin needs a newer Mirador");
+    expect(problemOf("old-api")).toContain(`plugin.json is for plugin API 99; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so the plugin needs a newer Mirador`);
     expect(problemOf("taskless")).toContain("the host module's tasks render need a title and a run function");
     expect(problemOf("no-exports")).toContain("serialize, apply, describe");
     expect(problemOf("unbuilt")).toContain("dist/view.js doesn't exist");
