@@ -7,6 +7,7 @@ import {
   pageMarkFrom,
   pageMarkLabel,
   pageMarkPrompt,
+  waitingMarksOf,
   type MarkComment,
   type PageMark,
 } from "../shared/page-marks.ts";
@@ -153,11 +154,45 @@ describe("pageMarkFrom", () => {
     expect(pageMarkFrom({ kind: "area", element: cell, image: "javascript:alert(1)" })).toBeNull();
   });
 
+  test("keeps where the mark was on the page, and leaves out a box that can't be where it was", () => {
+    const box = { left: 12, top: 340.5, width: 120, height: 0 };
+    expect(pageMarkFrom({ kind: "element", element: cell, box })).toEqual({ kind: "element", element: cell, box });
+    expect(pageMarkFrom({ kind: "text", text: "panes", element: cell, box: { ...box, left: -4, extra: 1 } })).toEqual({ kind: "text", text: "panes", element: cell, box: { ...box, left: -4 } });
+    expect(pageMarkFrom({ kind: "area", element: cell, image: png, box })).toEqual({ kind: "area", element: cell, image: png, box });
+    for (const wrong of [{ ...box, width: -1 }, { ...box, top: Number.NaN }, { ...box, left: Infinity }, { ...box, height: 2_000_000 }, { ...box, top: "340" }, { left: 1, top: 2 }, "12,340", null]) {
+      expect(pageMarkFrom({ kind: "element", element: cell, box: wrong })).toEqual({ kind: "element", element: cell });
+    }
+  });
+
   test("cuts text, HTML and the element's path longer than a message should carry", () => {
     const mark = pageMarkFrom({ kind: "text", text: "a".repeat(MAX_MARKED_TEXT + 50), element: { path: "p > ".repeat(100), html: "b".repeat(MAX_MARKED_HTML + 50) } });
     expect(mark?.kind === "text" && mark.text.length).toBe(MAX_MARKED_TEXT);
     expect(mark?.element.html.length).toBe(MAX_MARKED_HTML);
     expect(mark?.element.path.length).toBe(MAX_MARKED_PATH);
+  });
+});
+
+describe("waitingMarksOf", () => {
+  const box = { left: 10, top: 20, width: 30, height: 40 };
+  const marks: PageMark[] = [
+    { kind: "text", text: "panes", element: cell, box },
+    { kind: "element", element: { path: "button#save", html: "<button>" } },
+    { kind: "area", element: cell, image: png, box },
+  ];
+
+  test("numbers each waiting comment's mark as the list does, with where it is and no words or pictures", () => {
+    expect(waitingMarksOf(marks.map((mark, index) => comment(mark, `comment ${index}`)))).toEqual([
+      { number: 1, kind: "text", path: cell.path, box },
+      { number: 2, kind: "element", path: "button#save" },
+      { number: 3, kind: "area", path: cell.path, box },
+    ]);
+  });
+
+  test("numbers them again once one is taken out", () => {
+    expect(waitingMarksOf([comment(marks[0]!, "kept"), comment(marks[2]!, "also kept")]).map(({ number, kind }) => [number, kind])).toEqual([
+      [1, "text"],
+      [2, "area"],
+    ]);
   });
 });
 

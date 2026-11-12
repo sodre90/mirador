@@ -7,14 +7,24 @@ export interface MarkedElement {
   html: string;
 }
 
+/** Where a mark sat on its page when it was made: CSS pixels from the page's top left corner, scrolled past or not. */
+export interface PageBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 /**
  * What the user pointed at on a canvas page: text they selected, in the element that holds it, an element they picked, or
- * an area they drew a box around, as a PNG data URL of it, in the smallest element that holds the box.
+ * an area they drew a box around, as a PNG data URL of it, in the smallest element that holds the box. `box` is where it
+ * was, for the page to keep it outlined while its comment waits; a page from before it left it out.
  */
-export type PageMark =
+export type PageMark = (
   | { kind: "text"; text: string; element: MarkedElement }
   | { kind: "element"; element: MarkedElement }
-  | { kind: "area"; element: MarkedElement; image: string };
+  | { kind: "area"; element: MarkedElement; image: string }
+) & { box?: PageBox };
 
 /** Ask wants an answer in the chat; Change wants the page shown again with the change made. */
 export type MarkIntent = "ask" | "change";
@@ -35,6 +45,8 @@ export const MAX_MARKED_PATH = 300;
 /** The longest side of an area's picture, in pixels: a model scales a larger picture down before it sees it. */
 export const MAX_AREA_SIDE = 1600;
 const MAX_AREA_IMAGE_CHARACTERS = 12_000_000;
+/** Further from the page's corner than any page reaches, a box is not where something on the page was. */
+const MAX_PAGE_PIXELS = 1_000_000;
 const PNG_DATA_URL = /^data:image\/png;base64,[A-Za-z0-9+/]+=*$/;
 
 const LABEL_CHARACTERS = 60;
@@ -52,17 +64,43 @@ function elementFrom(value: unknown): MarkedElement | null {
   return { path: clipped(path, MAX_MARKED_PATH), html: clipped(html, MAX_MARKED_HTML) };
 }
 
-/** The mark a page reported, or null when what it posted is not one. */
+const isPagePixels = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && Math.abs(value) <= MAX_PAGE_PIXELS;
+
+function boxFrom(value: unknown): PageBox | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { left, top, width, height } = value as Partial<Record<keyof PageBox, unknown>>;
+  if (!isPagePixels(left) || !isPagePixels(top) || !isPagePixels(width) || !isPagePixels(height) || width < 0 || height < 0) return null;
+  return { left, top, width, height };
+}
+
+/** The mark a page reported, or null when what it posted is not one; a box that can't be where the mark was is left out. */
 export function pageMarkFrom(value: unknown): PageMark | null {
   if (typeof value !== "object" || value === null) return null;
   const { kind, text, image } = value as { kind?: unknown; text?: unknown; image?: unknown };
   const element = elementFrom((value as { element?: unknown }).element);
   if (!element) return null;
-  if (kind === "element") return { kind, element };
-  if (kind === "area" && typeof image === "string" && image.length <= MAX_AREA_IMAGE_CHARACTERS && PNG_DATA_URL.test(image)) return { kind, element, image };
-  if (kind === "text" && typeof text === "string" && text.trim()) return { kind, text: clipped(text.trim(), MAX_MARKED_TEXT), element };
+  const box = boxFrom((value as { box?: unknown }).box);
+  const at = box ? { box } : {};
+  if (kind === "element") return { kind, element, ...at };
+  if (kind === "area" && typeof image === "string" && image.length <= MAX_AREA_IMAGE_CHARACTERS && PNG_DATA_URL.test(image)) return { kind, element, image, ...at };
+  if (kind === "text" && typeof text === "string" && text.trim()) return { kind, text: clipped(text.trim(), MAX_MARKED_TEXT), element, ...at };
   return null;
 }
+
+/**
+ * A comment waiting on a page, as the page keeps it outlined: its number in the list of waiting comments, and where its
+ * mark is. The page finds a marked element again by its path, and outlines text and areas where they were marked.
+ */
+export interface WaitingMark {
+  number: number;
+  kind: PageMark["kind"];
+  path: string;
+  box?: PageBox;
+}
+
+/** The waiting comments for the page to outline, numbered as the list of them shows. */
+export const waitingMarksOf = (comments: MarkComment[]): WaitingMark[] =>
+  comments.map(({ mark }, index) => ({ number: index + 1, kind: mark.kind, path: mark.element.path, ...(mark.box && { box: mark.box }) }));
 
 const lastStep = (path: string) => path.split(" > ").pop() ?? path;
 

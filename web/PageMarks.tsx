@@ -1,5 +1,5 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import { canvasMarkDoneMessage, canvasPointMessage, type CanvasFrameMessage } from "../shared/canvas-document.ts";
+import { canvasMarkDoneMessage, canvasPointMessage, canvasWaitingMarksMessage, type CanvasFrameMessage } from "../shared/canvas-document.ts";
 import type { ShowItem } from "../shared/model.ts";
 import {
   MAX_BATCH_COMMENTS,
@@ -7,6 +7,7 @@ import {
   pageMarkFrom,
   pageMarkLabel,
   pageMarkPrompt,
+  waitingMarksOf,
   type MarkComment,
   type MarkedArea,
   type MarkIntent,
@@ -111,6 +112,9 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
   }, [page?.id]);
 
   const postToPage = (message: object) => frame.current?.contentWindow?.postMessage(message, "*");
+  // The page comes up afresh each time it shows again, as after a tab opened over it, and asks for these once it can draw them.
+  const outlineWaitingOnPage = () => postToPage(canvasWaitingMarksMessage(page && batch?.pageId === page.id ? waitingMarksOf(batch.comments) : []));
+  useEffect(outlineWaitingOnPage, [batch, page?.id]);
   const finishMark = () => {
     setMark(null);
     postToPage(canvasMarkDoneMessage());
@@ -121,6 +125,7 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
     postToPage(canvasPointMessage(on));
   };
   const received = (message: CanvasFrameMessage) => {
+    if (message.kind === "marks-ready") outlineWaitingOnPage();
     if (message.kind === "pointing") setPointing(false);
     if (message.kind === "mark-failed") setNote({ text: phrases.couldNotDraw(String(message.message)), failed: true });
     if (message.kind !== "mark") return;

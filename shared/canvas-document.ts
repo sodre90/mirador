@@ -1,6 +1,6 @@
 import { APP_MEDIA_PATH, APP_STORAGE_CHARACTERS, type AppStorageItems } from "./apps.ts";
 import type { PluginItem } from "./canvas-plugins.ts";
-import { MAX_AREA_SIDE, MAX_MARKED_HTML, MAX_MARKED_TEXT } from "./page-marks.ts";
+import { MAX_AREA_SIDE, MAX_BATCH_COMMENTS, MAX_MARKED_HTML, MAX_MARKED_TEXT, type WaitingMark } from "./page-marks.ts";
 
 export const CANVAS_MESSAGE_SOURCE = "mirador-canvas";
 
@@ -73,6 +73,8 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-prompt"; requestId: string; text: unknown }
   /** What the user marked on a page that takes marks, a PageMark as the page posted it, for the panel to ask the agent about. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "mark"; mark: unknown }
+  /** A page that takes marks is ready to outline the comments waiting on it, which the panel sends with a "waiting-marks" message. */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "marks-ready" }
   /** The page left point mode by itself, as on Esc or once a box is drawn. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "pointing"; on: false }
   /** Why the area the user boxed could not be drawn as a picture. */
@@ -111,6 +113,11 @@ export function canvasPointMessage(on: boolean) {
 /** The panel is done with the page's last mark, sent or cancelled, so the page stops showing it. */
 export function canvasMarkDoneMessage() {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "mark-done" };
+}
+
+/** The comments waiting on a page that takes marks, for it to keep their marks outlined and numbered; an empty list clears them. */
+export function canvasWaitingMarksMessage(marks: WaitingMark[]) {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "waiting-marks", marks };
 }
 
 /** Tells a canvas page it went out of sight behind another conversation's canvas, where its videos and sounds must not play on. */
@@ -788,9 +795,9 @@ function pageDrawing(assetsOrigin: string) {
 /**
  * What lets the user mark part of a page to ask the agent about: selected text gets an "Ask about this" pill, and in point
  * mode the element under the pointer is outlined and a click picks it, or a drag draws a box whose area goes as a picture,
- * before the page's own handlers see the click or the drag. Its
- * outlines and pill live in a shadow root, out of reach of the page's styles. Like the app bridge, it takes the
- * phone's injected messages, which have no source.
+ * before the page's own handlers see the click or the drag. The marks of comments waiting to be sent stay outlined,
+ * numbered as the panel lists them, until the panel says otherwise. Its outlines and pill live in a shadow root, out of
+ * reach of the page's styles. Like the app bridge, it takes the phone's injected messages, which have no source.
  */
 function pageMarking(itemId: string, assetsOrigin: string) {
   return `(() => {
@@ -801,6 +808,7 @@ function pageMarking(itemId: string, assetsOrigin: string) {
   const SUMMARY_CHARACTERS = 200;
   const DRAG_PIXELS = 6;
   const MAX_AREA_SIDE = ${MAX_AREA_SIDE};
+  const MAX_WAITING = ${MAX_BATCH_COMMENTS};
   const post = (message) => parent.postMessage({ source, itemId, ...message }, "*");
 ${pageDrawing(assetsOrigin)}
   const host = document.createElement("mirador-marks");
@@ -809,10 +817,15 @@ ${pageDrawing(assetsOrigin)}
   shadow.innerHTML = '<style>' +
     '.outline,.chosen{position:absolute;box-sizing:border-box;border:2px solid #2563eb;border-radius:3px;background:rgb(37 99 235/0.08);display:none}' +
     '.chosen{border-color:#d97706;background:rgb(217 119 6/0.1)}' +
+    '.waiting{position:absolute;box-sizing:border-box;border:2px dashed #d97706;border-radius:3px;background:rgb(217 119 6/0.05)}' +
+    '.waiting>span{position:absolute;left:-2px;top:-2px;min-width:18px;height:18px;padding:0 4px;box-sizing:border-box;border-radius:3px 0 6px 0;background:#d97706;color:#fff;font:600 11px/18px system-ui,sans-serif;text-align:center}' +
     '.pill{position:absolute;display:none;pointer-events:auto;font:500 12px/1.4 system-ui,sans-serif;padding:4px 10px;border:none;border-radius:999px;background:#2563eb;color:#fff;box-shadow:0 2px 8px rgb(0 0 0/0.25);cursor:pointer;white-space:nowrap}' +
-    '</style><div class="outline"></div><div class="chosen"></div><button class="pill" type="button">Ask about this</button>';
-  const [outline, chosen, pill] = ["outline", "chosen", "pill"].map((name) => shadow.querySelector("." + name));
-  const attach = () => document.documentElement.append(host);
+    '</style><div class="waitings"></div><div class="outline"></div><div class="chosen"></div><button class="pill" type="button">Ask about this</button>';
+  const [waitings, outline, chosen, pill] = ["waitings", "outline", "chosen", "pill"].map((name) => shadow.querySelector("." + name));
+  const attach = () => {
+    document.documentElement.append(host);
+    post({ kind: "marks-ready" });
+  };
   if (document.readyState === "loading") addEventListener("DOMContentLoaded", attach);
   else attach();
   const crosshair = document.createElement("style");
@@ -827,7 +840,8 @@ ${pageDrawing(assetsOrigin)}
     box.style.width = area.width + "px";
     box.style.height = area.height + "px";
   };
-  const placeOver = (box, rect) => placeAt(box, { left: rect.left + scrollX, top: rect.top + scrollY, width: rect.width, height: rect.height });
+  const onPage = (rect) => ({ left: rect.left + scrollX, top: rect.top + scrollY, width: rect.width, height: rect.height });
+  const placeOver = (box, rect) => placeAt(box, onPage(rect));
   const hide = (box) => (box.style.display = "none");
   const clipped = (text, most) => (text.length > most ? text.slice(0, most - 1) + "…" : text);
   const stepTo = (element) => {
@@ -918,7 +932,7 @@ ${pageDrawing(assetsOrigin)}
     if (!selected) return;
     const holder = selected.commonAncestorContainer;
     const element = holder instanceof Element ? holder : holder.parentElement;
-    post({ kind: "mark", mark: { kind: "text", text: clipped(selected.toString().trim(), MAX_TEXT), element: described(element) } });
+    post({ kind: "mark", mark: { kind: "text", text: clipped(selected.toString().trim(), MAX_TEXT), element: described(element), box: onPage(selected.getBoundingClientRect()) } });
     hide(pill);
   });
 
@@ -971,7 +985,7 @@ ${pageDrawing(assetsOrigin)}
     post({ kind: "pointing", on: false });
     const element = described(holderOf(area));
     try {
-      post({ kind: "mark", mark: { kind: "area", element, image: await drawnArea(area) } });
+      post({ kind: "mark", mark: { kind: "area", element, image: await drawnArea(area), box: area } });
     } catch (error) {
       hide(chosen);
       post({ kind: "mark-failed", message: String((error && error.message) || error) });
@@ -990,7 +1004,7 @@ ${pageDrawing(assetsOrigin)}
     picked = element;
     stopPointing();
     placeOver(chosen, picked.getBoundingClientRect());
-    post({ kind: "mark", mark: { kind: "element", element: described(picked) } });
+    post({ kind: "mark", mark: { kind: "element", element: described(picked), box: onPage(picked.getBoundingClientRect()) } });
   };
   // The mark is made on pointerup: a touch screen fires no click once its touches were cancelled.
   addEventListener("pointerup", (event) => {
@@ -1038,7 +1052,37 @@ ${pageDrawing(assetsOrigin)}
     stopPointing();
     post({ kind: "pointing", on: false });
   }, true);
+  let waiting = [];
+  const isBox = (box) => Boolean(box) && ["left", "top", "width", "height"].every((side) => Number.isFinite(box[side]));
+  const elementAt = (path) => {
+    try {
+      return typeof path === "string" && path ? document.querySelector(path) : null;
+    } catch {
+      return null;
+    }
+  };
+  // A marked element is found again, as the page may have moved it; text and areas stay where they were marked.
+  const whereWaiting = (mark) => {
+    const element = mark.kind === "element" || !isBox(mark.box) ? elementAt(mark.path) : null;
+    if (element) return onPage(element.getBoundingClientRect());
+    return isBox(mark.box) ? mark.box : null;
+  };
+  const outlineWaiting = () => {
+    waitings.replaceChildren(...waiting.flatMap((mark) => {
+      const area = whereWaiting(mark);
+      if (!area) return [];
+      const box = document.createElement("div");
+      box.className = "waiting";
+      const number = document.createElement("span");
+      number.textContent = String(mark.number);
+      box.append(number);
+      placeAt(box, area);
+      return [box];
+    }));
+  };
+  addEventListener("load", outlineWaiting);
   const followScrolling = () => {
+    if (waiting.length > 0) outlineWaiting();
     if (selected && pill.style.display === "block") placePill();
     if (picked) placeOver(chosen, picked.getBoundingClientRect());
     if (hovered) placeOver(outline, hovered.getBoundingClientRect());
@@ -1049,6 +1093,10 @@ ${pageDrawing(assetsOrigin)}
     const data = event.data;
     if ((event.source !== parent && event.source !== null) || !data || data.source !== source) return;
     if (data.kind === "point") (data.on ? startPointing : stopPointing)();
+    if (data.kind === "waiting-marks") {
+      waiting = Array.isArray(data.marks) ? data.marks.filter((mark) => mark && Number.isFinite(mark.number)).slice(0, MAX_WAITING) : [];
+      outlineWaiting();
+    }
     if (data.kind === "mark-done") {
       picked = null;
       hide(chosen);

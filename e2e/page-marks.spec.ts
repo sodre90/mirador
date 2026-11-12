@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, createProfile, sendMessage, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -81,6 +81,15 @@ const selectTextIn = (element: Locator) =>
     selection.removeAllRanges();
     selection.selectAllChildren(node);
   });
+
+/** The outlines the page keeps on the marks of the comments waiting to be sent, each showing the comment's number. */
+const waitingOutlines = (shown: FrameLocator) => shown.locator("mirador-marks .waiting");
+
+/** Whether an outline sits on the element, to within a pixel or two of its edges. */
+async function expectOutlineOn(outline: Locator, element: Locator) {
+  const [drawn, marked] = await Promise.all([outline.boundingBox(), element.boundingBox()]);
+  for (const side of ["x", "y", "width", "height"] as const) expect(Math.abs(drawn![side] - marked![side])).toBeLessThan(2);
+}
 
 /** The bar's waiting badge: a glyph with the number of comments it holds. */
 const waitingCount = (page: Page, count: number) =>
@@ -259,10 +268,13 @@ test("the user selects text or points at an element on a page the agent showed, 
     await collect(page, "Why is this better than tabs?");
     await waitingCount(page, 1);
     await expect(pointToggle(page)).toHaveAttribute("aria-pressed", "true");
+    await expect(waitingOutlines(shown), "the page keeps the commented text outlined while the comment waits").toHaveText(["1"]);
 
     await shown.locator("#save").click();
     await collect(page, "Make it stand out");
     await waitingCount(page, 2);
+    await expect(waitingOutlines(shown)).toHaveText(["1", "2"]);
+    await expectOutlineOn(waitingOutlines(shown).nth(1), shown.locator("#save"));
 
     const scene = (await shown.locator("#scene").boundingBox())!;
     await page.mouse.move(scene.x + 20, scene.y + 20);
@@ -271,6 +283,7 @@ test("the user selects text or points at an element on a page the agent showed, 
     await page.mouse.up();
     await collect(page, "Why is it all green?");
     await waitingCount(page, 3);
+    await expect(waitingOutlines(shown)).toHaveText(["1", "2", "3"]);
 
     await stopPointing(page);
     await batchToggle(page).click();
@@ -282,6 +295,7 @@ test("the user selects text or points at an element on a page the agent showed, 
     await list.getByRole("button", { name: "Send 3 comments" }).click();
     await expect(list).toBeHidden();
     await expect(sentNote(page)).toHaveText("Sent 3 comments to the agent. The answer comes in the chat.");
+    await expect(waitingOutlines(shown), "sent comments no longer wait, so their marks go").toHaveCount(0);
 
     await expect.poll(recordedPrompts).toContain(
       [
@@ -322,11 +336,12 @@ test("the user selects text or points at an element on a page the agent showed, 
     await expect(sent.locator(".message-images img")).toHaveCount(1);
   });
 
-  await test.step("comments on a page wait through another tab opening over it, and are edited or thrown away before they go", async () => {
+  await test.step("comments on a page wait through another tab opening over it, still marked on it, and are edited, taken out or thrown away before they go", async () => {
     await selectTextIn(shown.locator("#splits"));
     await shown.getByRole("button", { name: "Ask about this" }).click();
     await collect(page, "Old words");
     await waitingCount(page, 1);
+    await expect(waitingOutlines(shown)).toHaveText(["1"]);
 
     await page.locator(".canvas-header:visible .changes-toggle").click();
     await expect(pointToggle(page)).toHaveCount(0);
@@ -344,9 +359,22 @@ test("the user selects text or points at an element on a page the agent showed, 
     await page.locator(".canvas-header:visible .changes-toggle").click();
     await expect(shown.locator("#splits")).toBeVisible();
     await expect(batchList(page, 1).getByRole("listitem")).toContainText("Why split panes at all?");
+    await expect(waitingOutlines(shown), "the page drawn again outlines the comment still waiting").toHaveText(["1"]);
+
+    await pointToggle(page).click();
+    await shown.locator("#save").click();
+    await collect(page, "Make it stand out");
+    await stopPointing(page);
+    await expect(waitingOutlines(shown)).toHaveText(["1", "2"]);
+    await batchList(page, 2).getByRole("listitem").first().getByRole("button", { name: "Remove" }).click();
+    await expect(batchList(page, 1).getByRole("listitem")).toContainText("Make it stand out");
+    await expect(waitingOutlines(shown), "the comment left is numbered again, and the one taken out is no longer marked").toHaveText(["1"]);
+    await expectOutlineOn(waitingOutlines(shown).first(), shown.locator("#save"));
+
     const promptsBefore = recordedPrompts();
     await batchList(page, 1).getByRole("button", { name: "Discard all" }).click();
     await expect(batchToggle(page)).toHaveCount(0);
+    await expect(waitingOutlines(shown)).toHaveCount(0);
     expect(recordedPrompts()).toBe(promptsBefore);
   });
 
