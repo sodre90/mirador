@@ -713,6 +713,23 @@ test("a file reached through a linked folder that leads outside the workspace is
   await expect(changes.diff("c1", "turn", "linked/secret.txt")).rejects.toThrow("linked/secret.txt leads outside this workspace, so Mirador does not show it.");
 });
 
+test("a file whose folder was replaced by a file shows as deleted", async () => {
+  await mkdir(join(projectDir, "notes"));
+  await write("notes/a.txt", "one\ntwo\n");
+  await git(projectDir, ["add", "-A"]);
+  await git(projectDir, ["commit", "-qm", "notes"]);
+  await startTurn();
+  await rm(join(projectDir, "notes"), { recursive: true, force: true });
+  await write("notes", "a file now\n");
+
+  const diff = await changes.diff("c1", "turn", "notes/a.txt");
+  expect(diff.diffs[0]).toMatchObject({ change: "deleted", added: 0, removed: 2 });
+  expect(diff.diffs[0]!.hunks.flatMap((hunk) => hunk.rows).filter(({ kind }) => kind !== "context")).toEqual([
+    { kind: "removed", oldLine: 1, newLine: null, text: "one" },
+    { kind: "removed", oldLine: 2, newLine: null, text: "two" },
+  ]);
+});
+
 test("a new untracked link counts no lines of the file it leads to", async () => {
   await writeFile(join(outsideDir, "many.txt"), "one\ntwo\nthree\n");
   await symlink(join(outsideDir, "many.txt"), join(projectDir, "link.txt"));

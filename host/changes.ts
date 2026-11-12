@@ -219,8 +219,13 @@ function withinWorkspace(workspace: Workspace, path: string) {
  */
 async function workspaceFileAt(workspace: Workspace, path: string): Promise<FileBefore> {
   const file = join(workspace.path, path);
-  const stats = await lstat(file).catch((error) => ((error as NodeJS.ErrnoException).code === "ENOENT" ? null : Promise.reject(error)));
-  if (stats === null) return { kind: "missing" };
+  let stats;
+  try {
+    stats = await lstat(file);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    return code === "ENOENT" || code === "ENOTDIR" ? { kind: "missing" } : { kind: "unreadable" };
+  }
   const realPlace = join(realPathOf(dirname(file)) ?? dirname(file), basename(file));
   if (shownPath(realPlace, [realPathOf(workspace.path) ?? workspace.path]) === realPlace)
     throw new HostProblemError({ code: "file-leads-outside-workspace", path });
