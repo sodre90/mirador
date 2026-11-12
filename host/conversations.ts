@@ -600,9 +600,9 @@ export class ConversationService {
 
   /**
    * For a plugin's tool: stops the turn of a conversation it started from the caller's, as the user's Stop does, so the
-   * plugin's `replied` hears it end as "stopped"; one still waiting for its worktree ends so once that is made, without
-   * starting. One that no longer exists, or whose turn already ended, is let be; one this plugin's tool didn't start from
-   * that conversation throws.
+   * plugin's `replied` hears it end as "stopped", and no job it left running wakes it any more; one still waiting for its
+   * worktree ends so once that is made, without starting. One that no longer exists, or whose work already ended, is let
+   * be; one this plugin's tool didn't start from that conversation throws.
    */
   async stopStarted(callerId: string, plugin: string, conversationId: string): Promise<void> {
     const conversation = this.store.findConversation(conversationId);
@@ -612,11 +612,27 @@ export class ConversationService {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be stopped here.`);
     }
     const runtime = this.runtime(conversationId);
-    if (!runtime.running) {
-      if (!startedBy.reply) runtime.stoppedBeforeItsFirstTurn = true;
-      return;
+    if (runtime.running) {
+      this.stopJobsWakingIt(conversationId);
+      return this.cancel(conversationId);
     }
-    await this.cancel(conversationId);
+    if (this.resumedByAJob(conversationId)) {
+      this.deliverOwedReply(conversationId, "stopped");
+      this.stopJobsWakingIt(conversationId);
+    } else if (!startedBy.reply) runtime.stoppedBeforeItsFirstTurn = true;
+  }
+
+  /** Mirador stops waiting for the jobs that would wake its agent, as the user stopping each wait does. */
+  private stopJobsWakingIt(conversationId: string) {
+    this.jobWaits
+      .in(conversationId)
+      .filter(({ resume }) => resume)
+      .forEach(({ id }) => this.stopWaitingForJob(conversationId, id));
+  }
+
+  /** A job it left running will wake its agent, so the turn that ended isn't the end of its work. */
+  private resumedByAJob(conversationId: string) {
+    return this.jobWaits.in(conversationId).some(({ resume }) => resume);
   }
 
   /** The plugin whose tool started a conversation hears how its work ended; `tellsItsCaller` says whether it passes that on. */
@@ -657,11 +673,13 @@ export class ConversationService {
   /**
    * Once, when the work of a conversation a plugin's tool started ends. The reply is kept before the plugin hears it, so
    * a crash in between can't tell it twice; a caller deleted since hears nothing. What it ran on is read as it ended.
+   * A turn that ends waiting for a job that will wake the agent isn't that end: the turn after the wake-up is.
    */
   private deliverOwedReply(conversationId: string, endedAs?: ConversationReply["ended"]) {
     const conversation = this.store.findConversation(conversationId);
     const startedBy = conversation?.startedBy;
     if (!conversation || !startedBy || startedBy.reply) return;
+    if (!endedAs && this.resumedByAJob(conversationId)) return;
     const turnStart = this.store.latestTurnStart(conversationId)?.seq ?? 0;
     const turn = this.store.listEventsFrom(conversationId, turnStart);
     const reply = replyOf(turn);
@@ -1578,7 +1596,9 @@ export class ConversationService {
 
   stopWaitingForJob(conversationId: string, waitId: string) {
     const wait = this.jobWaits.stop(conversationId, waitId);
-    if (wait) this.append(conversationId, { type: "job-wait-ended", wait, end: "stopped" });
+    if (!wait) return;
+    this.append(conversationId, { type: "job-wait-ended", wait, end: "stopped" });
+    if (!this.runtime(conversationId).running) this.deliverOwedReply(conversationId);
   }
 
   /** Stops one of Claude Code's own background tasks; the turn that started it keeps running. */
@@ -3108,7 +3128,7 @@ export class ConversationService {
     const runtime = this.runtime(conversationId);
     const reason = turnEndReason(outcome, {
       messagesQueued: runtime.queuedMessages.length > 0,
-      resumedByAJob: this.jobWaits.in(conversationId).some(({ resume }) => resume),
+      resumedByAJob: this.resumedByAJob(conversationId),
       holdsQueue: runtime.holdingQueue || this.holdsQueue(runtime),
     });
     if (!reason || this.stopping) return;
