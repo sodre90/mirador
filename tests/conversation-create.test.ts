@@ -77,6 +77,27 @@ test("a workspace whose conversations work in its project folder loses no uncomm
   expect(await conversations.uncommittedFilesLostInWorkspace("w1")).toBe(0);
 });
 
+test("a conversation loses its worktree's uncommitted files though a task it handed over works there, for the task closes with it", async () => {
+  const { store, conversations } = hostWithAWorkspaceOnClaude();
+  const shared = worktreeAt("shared");
+  (conversations as any).worktrees = { isMade: async () => true, uncommittedFiles: async () => 2 };
+  const caller = conversations.create("w1", undefined, undefined, undefined, {}, shared);
+  const task = conversations.create("w1", undefined, undefined, undefined, {}, shared);
+  store.recordStartedBy(task.id, { conversationId: caller.id, plugin: "board" });
+
+  expect(await conversations.uncommittedFilesLostWith(caller.id)).toBe(2);
+});
+
+test("a conversation loses no uncommitted files while a fork works in its worktree too", async () => {
+  const { conversations } = hostWithAWorkspaceOnClaude();
+  const shared = worktreeAt("shared");
+  (conversations as any).worktrees = { isMade: async () => true, uncommittedFiles: async () => 2 };
+  const own = conversations.create("w1", undefined, undefined, undefined, {}, shared);
+  conversations.create("w1", undefined, undefined, undefined, {}, shared);
+
+  expect(await conversations.uncommittedFilesLostWith(own.id)).toBe(0);
+});
+
 function hostWithAWorktreeConversation(uncommittedFiles: number) {
   const store = storeWithConversation();
   const worktree = worktreeAt("wt1");

@@ -794,11 +794,13 @@ export class ConversationService {
 
   /**
    * The files only the conversation's worktree holds, which deleting the conversation deletes with it: none while
-   * another conversation works there too.
+   * another conversation works there too, except the tasks that close with it.
    */
   async uncommittedFilesLostWith(conversationId: string) {
     const { worktree } = this.get(conversationId);
-    if (!worktree || this.store.conversationsInWorktree(worktree.id).length > 1) return 0;
+    if (!worktree) return 0;
+    const closing = new Set([conversationId, ...this.store.conversationsStartedBy(conversationId)]);
+    if (this.store.conversationsInWorktree(worktree.id).some((id) => !closing.has(id))) return 0;
     return this.worktrees.uncommittedFiles(worktree);
   }
 

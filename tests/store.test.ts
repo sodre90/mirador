@@ -949,6 +949,21 @@ describe("Store", () => {
     store.close();
   });
 
+  test("finds the conversations a plugin's tool started from a caller, dismissed ones too, and none for one that started none", () => {
+    const { store, conversation } = seededStore();
+    store.insertConversation({ ...conversation, id: "c2" });
+    store.insertConversation({ ...conversation, id: "c3" });
+    store.insertConversation({ ...conversation, id: "c4" });
+    store.recordStartedBy("c2", { conversationId: "c1", plugin: "delegate" });
+    store.recordStartedBy("c3", { conversationId: "c1", plugin: "council" });
+    store.dismissDelegation("c3");
+
+    expect(store.conversationsStartedBy("c1").sort()).toEqual(["c2", "c3"]);
+    expect(store.conversationsStartedBy("c2")).toEqual([]);
+    expect(store.conversationsStartedBy("c4")).toEqual([]);
+    store.close();
+  });
+
   test("forgets the marks dismissed delegated tasks kept from before dismissing took them, on reopening the database", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);

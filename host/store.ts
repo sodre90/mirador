@@ -739,6 +739,12 @@ export class Store {
     return rows.map(({ id }) => id);
   }
 
+  /** The conversations a plugin's tool started from the caller, which close with it. */
+  conversationsStartedBy(callerId: string): string[] {
+    const rows = this.db.query("SELECT id FROM conversations WHERE started_by = ?").all(callerId) as { id: string }[];
+    return rows.map(({ id }) => id);
+  }
+
   /** The conversation a plugin's tool started works for the caller, which is owed word of how its work ends. */
   recordStartedBy(conversationId: string, { conversationId: callerId, plugin }: { conversationId: string; plugin: string }) {
     this.db.query("UPDATE conversations SET started_by = ?, started_by_plugin = ? WHERE id = ?").run(callerId, plugin, conversationId);

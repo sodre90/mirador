@@ -819,12 +819,15 @@ export function startServer(services: HostServices) {
     return upgraded ? undefined : new Response("upgrade failed", { status: 400 });
   }
 
+  /** Deleting a conversation closes the tasks its plugin tools started with it, which work for it and share its worktree. */
   function deleteConversation(conversationId: string, worktree: { keepsUncommittedWork?: boolean } = {}) {
+    if (!store.hasConversation(conversationId)) return;
     canvas.withdrawWaitingAsks(conversationId);
     terminals.closeConversation(conversationId);
     apps.forgetConversation(conversationId);
     conversations.delete(conversationId, worktree);
     mcp.forget(conversationId);
+    store.conversationsStartedBy(conversationId).forEach((started) => deleteConversation(started, worktree));
   }
 
   /** Deleting a conversation deletes its worktree, so one that holds uncommitted files asks first. */

@@ -45,3 +45,30 @@ test("a conversation shows the working dot while a task it handed over works, an
   await page.locator(".delegated-tasks:visible li", { hasText: taskTitle }).getByRole("button", { name: "Stop", exact: true }).click();
   await expect(callerRow.locator(".dot"), "the caller is idle again once its task stopped").toHaveClass(/status-idle/);
 });
+
+test("deleting a conversation closes the tasks it handed over, instead of leaving them as conversations of their own", async ({ page }) => {
+  await signIn(page, host);
+  await page.locator(".workspace li").first().click();
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "Local · opencode" });
+  const conversationId = await startConversation(page);
+  await sendMessage(page, "Start");
+  await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle");
+
+  const taskTitle = "STOPPED QUIET Close with the caller";
+  const handedOver = await callCanvasTool(host, conversationId, "hand_over", { profile: "Local", task: taskTitle });
+  const taskId = handedOver.match(/^Handed over to ([0-9a-f-]+)\.$/)![1]!;
+  const callerRow = page.locator(`.sidebar li[data-reorder-id="${conversationId}"]`);
+  await callerRow.getByRole("button", { name: "1 delegated" }).click();
+  const taskRow = page.locator(`.sidebar li[data-reorder-id="${taskId}"]`);
+  await expect(taskRow).toBeVisible();
+
+  const deleteButton = callerRow.getByRole("button", { name: "Delete conversation" });
+  await callerRow.hover();
+  await deleteButton.click();
+  await expect(deleteButton).toHaveText("Delete?");
+  await deleteButton.click();
+
+  await expect(callerRow).toHaveCount(0);
+  await expect(taskRow, "the handed-over task closes with its caller").toHaveCount(0);
+  await expect(page.locator(".sidebar").getByText(taskTitle)).toHaveCount(0);
+});
