@@ -37,9 +37,10 @@ interface OpenedSession {
 
 /**
  * A caller in a workspace whose plugin starts conversations on the Helper profile, whose agent notes where each session
- * opens and whether the project's files were there by then, and ends each turn at once.
+ * opens and whether the project's files were there by then, and ends each turn at once; or, with `turnsWaitForAStop`,
+ * once the turn is stopped.
  */
-async function callerInWorkspace({ inRepository }: { inRepository: boolean }) {
+async function callerInWorkspace({ inRepository, turnsWaitForAStop = false }: { inRepository: boolean; turnsWaitForAStop?: boolean }) {
   const project = join(scratch, "project");
   await mkdir(project);
   if (inRepository) await repositoryWithACommit(project);
@@ -50,6 +51,7 @@ async function callerInWorkspace({ inRepository }: { inRepository: boolean }) {
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: dataDir }), {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const opened: OpenedSession[] = [];
   const prompted: string[] = [];
+  const stops = new Map<string, () => void>();
   let sessions = 0;
   const agent = {
     spec: { id: "opencode", label: "opencode" },
@@ -60,8 +62,10 @@ async function callerInWorkspace({ inRepository }: { inRepository: boolean }) {
     },
     prompt: async (sessionId: string) => {
       prompted.push(sessionId);
-      return { stopReason: "end_turn" };
+      if (!turnsWaitForAStop) return { stopReason: "end_turn" };
+      return new Promise((resolve) => stops.set(sessionId, () => resolve({ stopReason: "cancelled" })));
     },
+    cancel: async (sessionId: string) => stops.get(sessionId)?.(),
     closeSession: async () => {},
   };
   (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set("helper", agent);
@@ -141,4 +145,18 @@ test("a conversation stopped while its worktree is set up ends its work as stopp
   await replied(1);
   expect(replies).toEqual([{ started: { id: started.id, profile: "Helper", worktree: started.worktree }, reply: { text: null, ended: "stopped" } }]);
   expect(prompted).toEqual([]);
+});
+
+test("a conversation stopped just as its first turn begins, its worktree made, ends its work as stopped", async () => {
+  const { conversations, callerId, prompted, replies, replied } = await callerInWorkspace({ inRepository: true, turnsWaitForAStop: true });
+  let started: StartedConversation | undefined;
+  conversations.hearActivityWith((conversationId, activity) => {
+    if (conversationId === started?.id && activity.kind === "turn-started") void conversations.stopStarted(callerId, "race", conversationId);
+  });
+
+  started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+
+  await replied(1);
+  expect(replies).toEqual([{ started, reply: { text: null, ended: "stopped" } }]);
+  expect(prompted).toHaveLength(1);
 });
