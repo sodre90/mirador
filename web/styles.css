@@ -503,6 +503,13 @@ body.resizing iframe {
   text-decoration: underline;
 }
 
+.banner.newer-version .pull-failure {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .banner.host-code-changed kbd {
   margin-left: 4px;
   color: #333;

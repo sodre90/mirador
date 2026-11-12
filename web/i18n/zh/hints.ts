@@ -51,6 +51,7 @@ export const hints: Messages["hints"] = {
   configOption:
     "Agent 为这个会话提供的设置。更改它会把新值发送给 Agent（ACP session/set_config_option），由 Agent 应用到这个对话。",
   dismissNewerVersion: "隐藏此提示，直到出现更新的版本。设置 › 关于 仍会继续显示它。",
+  pullToUpdate: "将新提交拉取到此 checkout，仅快进（fast-forward）方式，因此你自己的提交和未提交的工作保持原样。重启主机即可运行它们。",
   restartHost:
     "原地重新启动 host，让它按现在的代码运行。正在工作的 Agent 会停止，然后从中断处继续；排队的消息会保留。终端会作为新的 shell 回来，并保留它们原有的输出。已打开的页面会自动重新加载。",
   stop: "请求 Agent 停止它的轮次，与按 Esc 相同。如果几秒内仍未停止，这个按钮会变成“强制停止”，改为结束 Agent 进程；同一配置上的其他对话会从中断处继续。",

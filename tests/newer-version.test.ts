@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from "bun:test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { NewerVersionWatcher, newerCommits, newerRelease, newerVersionLookup } from "../host/newer-version.ts";
+import { NewerVersionWatcher, newerCommits, newerRelease, newerVersionLookup, pullCheckout } from "../host/newer-version.ts";
 import { isNewerVersion, newerVersionKey, newerVersionLabel, type NewerVersion } from "../shared/newer-version.ts";
 
 describe("comparing versions", () => {
@@ -114,6 +114,74 @@ describe("new commits on a checkout's upstream", () => {
   test("are what a host with .git in its source looks for, and a release's source without it looks for a release", async () => {
     expect(await newerVersionLookup(checkout, "http://127.0.0.1:9/unused")(false)).toBeNull();
     await expect(newerVersionLookup(root, "http://127.0.0.1:9/unused")(false)).rejects.toThrow();
+  });
+});
+
+describe("pulling a checkout's upstream", () => {
+  const root = mkdtempSync(join(tmpdir(), "mirador-pull-"));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+  const git = (directory: string, ...args: string[]) =>
+    execFileSync("git", ["-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null", "-c", "user.name=Test", "-c", "user.email=test@example.com", ...args], {
+      cwd: directory,
+      encoding: "utf8",
+    }).trim();
+
+  function checkoutBehindUpstream(name: string) {
+    const base = join(root, name);
+    const origin = join(base, "origin.git");
+    const checkout = join(base, "checkout");
+    const elsewhere = join(base, "elsewhere");
+    mkdirSync(base, { recursive: true });
+    git(base, "init", "--quiet", "--bare", "-b", "main", origin);
+    mkdirSync(checkout);
+    git(checkout, "init", "--quiet", "-b", "main");
+    writeFileSync(join(checkout, "f.txt"), "base\n");
+    git(checkout, "add", "--all");
+    git(checkout, "commit", "--quiet", "-m", "first");
+    git(checkout, "remote", "add", "origin", origin);
+    git(checkout, "push", "--quiet", "-u", "origin", "main");
+    git(base, "clone", "--quiet", origin, elsewhere);
+    return { checkout, elsewhere };
+  }
+
+  const pushUpstreamChange = (elsewhere: string) => {
+    writeFileSync(join(elsewhere, "f.txt"), "upstream\n");
+    git(elsewhere, "add", "--all");
+    git(elsewhere, "commit", "--quiet", "-m", "upstream");
+    git(elsewhere, "push", "--quiet");
+  };
+
+  test("fast-forwards the checkout to its upstream, and says nothing when it did", async () => {
+    const { checkout, elsewhere } = checkoutBehindUpstream("ff");
+    pushUpstreamChange(elsewhere);
+    git(checkout, "fetch", "--quiet");
+
+    expect(await pullCheckout(checkout)).toBeNull();
+    expect(git(checkout, "rev-parse", "HEAD")).toBe(git(elsewhere, "rev-parse", "HEAD"));
+    expect(readFileSync(join(checkout, "f.txt"), "utf8")).toBe("upstream\n");
+    expect(await newerCommits(checkout, false)).toBeNull();
+  });
+
+  test("leaves uncommitted work as it is, and says why it can't pull over it", async () => {
+    const { checkout, elsewhere } = checkoutBehindUpstream("dirty");
+    pushUpstreamChange(elsewhere);
+    git(checkout, "fetch", "--quiet");
+    writeFileSync(join(checkout, "f.txt"), "local work\n");
+
+    expect(await pullCheckout(checkout)).toContain("Your local changes");
+    expect(readFileSync(join(checkout, "f.txt"), "utf8")).toBe("local work\n");
+  });
+
+  test("won't rewrite a checkout that has its own commits, and says why", async () => {
+    const { checkout, elsewhere } = checkoutBehindUpstream("diverged");
+    pushUpstreamChange(elsewhere);
+    git(checkout, "fetch", "--quiet");
+    writeFileSync(join(checkout, "own.txt"), "own\n");
+    git(checkout, "add", "--all");
+    git(checkout, "commit", "--quiet", "-m", "own");
+
+    expect(await pullCheckout(checkout)).toContain("fast-forward");
+    expect(readFileSync(join(checkout, "own.txt"), "utf8")).toBe("own\n");
   });
 });
 

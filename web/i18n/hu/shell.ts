@@ -303,7 +303,8 @@ export const shell: Messages["shell"] = {
   newerVersion: {
     releaseOut: (version) => `Megjelent: Mirador ${version}`,
     newCommits: (count, upstream) => `${count} új commit itt: ${upstream}`,
-    pullToUpdate: "Húzd le őket a frissítéshez.",
+    pull: "Lehúzás",
+    pulling: "Lehúzás…",
     downloading: "Letöltés…",
     download: "Letöltés",
     restartToUpdate: "Újraindítás a frissítéshez",

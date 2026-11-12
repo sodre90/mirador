@@ -299,7 +299,8 @@ export const shell: Messages["shell"] = {
   newerVersion: {
     releaseOut: (version) => `Mirador ${version} 已发布`,
     newCommits: (count, upstream) => `${upstream} 上有 ${count} 个新提交`,
-    pullToUpdate: "拉取它们即可更新。",
+    pull: "拉取",
+    pulling: "拉取中…",
     downloading: "正在下载…",
     download: "下载",
     restartToUpdate: "重启以更新",

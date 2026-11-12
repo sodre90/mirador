@@ -52,6 +52,7 @@ export const hints: Messages["hints"] = {
   configOption:
     "Ezt a beállítást az ágens kínálja a munkamenethez. Ha módosítod, az új értéket elküldi az ágensnek (ACP session/set_config_option), amely erre a beszélgetésre alkalmazza.",
   dismissNewerVersion: "Elrejti, amíg nem jelenik meg még újabb. A Beállítások › Névjegy továbbra is mutatja.",
+  pullToUpdate: "Lehúzza az új commitokat ebbe a checkoutba, csak fast-forward módon, így a saját commitjaid és a nem commitolt munkád változatlan marad. Indítsd újra a hostot a futtatásukhoz.",
   restartHost:
     "Helyben újraindítja a hostot, így a kódját a mostani állapotában futtatja. A dolgozó ágensek leállnak, majd ott folytatják, ahol abbahagyták; a sorba állított üzenetek megmaradnak. A terminálok új shellként térnek vissza a korábbi kimenetük alatt. A megnyitott oldalak maguktól újratöltődnek.",
   stop: "Megkéri az ágenst, hogy állítsa le a körét, ahogy az Esc is. Ha néhány másodpercen belül nem áll le, ebből Kényszerített leállítás lesz, amely inkább az ágensfolyamatot állítja le; az ugyanazon a profilon futó többi beszélgetés ott folytatja, ahol abbahagyta.",

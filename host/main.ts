@@ -40,7 +40,7 @@ import { HostRestart, relaunch, stoppedWithinTimeout, takeRelaunchEnvironment, t
 import { DesktopAppCheck } from "./desktop-app-check.ts";
 import type { PluginUpdate } from "../shared/apps.ts";
 import { Lookout } from "./lookout.ts";
-import { NewerVersionWatcher, newerVersionLookup } from "./newer-version.ts";
+import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
 import { startServer } from "./server.ts";
 import { BUILT_IN_BROKER, PeerToPeer, peerToPeerSettings } from "./p2p/service.ts";
@@ -211,7 +211,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

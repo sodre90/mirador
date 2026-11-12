@@ -111,6 +111,7 @@ export interface HostServices {
   restart: HostRestart;
   desktopApp: DesktopAppCheck;
   newerVersion: NewerVersionWatcher;
+  pullNewerVersion: () => Promise<string | null>;
   pluginUpdates: Lookout<PluginUpdate[]>;
   readyPluginUpdates: ReadyPluginUpdates;
   devices: DeviceService;
@@ -197,6 +198,7 @@ export function startServer(services: HostServices) {
     restart,
     desktopApp,
     newerVersion,
+    pullNewerVersion,
     pluginUpdates,
     readyPluginUpdates,
     devices,
@@ -1114,6 +1116,11 @@ export function startServer(services: HostServices) {
         return void newerVersion
           .lookNow()
           .then((failed) => reply({ type: "newer-version.checked", requestId: message.requestId, failure: failed?.problem ?? null, ...(failed?.problemAbout && { failureAbout: failed.problemAbout }) }));
+      case "newer-version.pull":
+        return void pullNewerVersion().then((failure) => {
+          newerVersion.recount();
+          reply({ type: "newer-version.pulled", requestId: message.requestId, failure });
+        });
       case "settings.set-script-program":
         return setScriptProgram(message.program);
       case "settings.set-editor":

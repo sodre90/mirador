@@ -45,12 +45,45 @@ function newerVersionSentence(newerVersion: NewerVersion, desktopUpdate: Desktop
   return `${label}${blockedBy}.`;
 }
 
+/** Pulls the checkout's upstream into it; on success the host's own code-changed sign offers the restart that runs it. */
+function PullToUpdate() {
+  const [pulling, setPulling] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const pull = async () => {
+    setPulling(true);
+    setFailure(null);
+    try {
+      const pulled = await connection.sendAndAwait(
+        (requestId) => ({ type: "newer-version.pull", requestId }),
+        (message, requestId) => (message.type === "newer-version.pulled" && message.requestId === requestId ? message : undefined),
+      );
+      setFailure(pulled.failure);
+    } catch (error) {
+      setFailure(error instanceof Error ? error.message : String(error));
+    } finally {
+      setPulling(false);
+    }
+  };
+  return (
+    <>
+      <button type="button" data-hint={hints.pullToUpdate} disabled={pulling} onClick={pull}>
+        {pulling ? words.pulling : words.pull}
+      </button>
+      {failure && (
+        <span className="pull-failure" title={failure}>
+          {failure}
+        </span>
+      )}
+    </>
+  );
+}
+
 /**
  * The desktop app that updates itself downloads a release, and is only asked to look again; until it has said whether it
  * does, there is nothing to offer. A pulled checkout needs no word about restarting: the host offers that itself.
  */
 function NextStep({ newerVersion, desktopUpdate }: { newerVersion: NewerVersion; desktopUpdate: DesktopUpdate | null }) {
-  if (newerVersion.kind === "checkout") return <span>{words.pullToUpdate}</span>;
+  if (newerVersion.kind === "checkout") return <PullToUpdate />;
   if (!desktopUpdate) return null;
   if (desktopUpdate.stage === "downloading") return <span>{words.downloading}</span>;
   if (desktopUpdate.stage === "idle")

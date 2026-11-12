@@ -127,6 +127,8 @@ export type ClientMessage =
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
   | { type: "newer-version.check"; requestId: string }
+  /** Pulls the checkout's upstream into it; the outcome comes as newer-version.pulled. */
+  | { type: "newer-version.pull"; requestId: string }
   /** Empty for the system's text editor. */
   | { type: "settings.set-script-program"; program: string }
   | { type: "settings.set-editor"; setting: EditorSetting }
@@ -552,6 +554,8 @@ export type ServerMessage =
   | { type: "newer-version.found"; newerVersion: NewerVersion | null }
   /** Why the check asked for failed, or null when it didn't. */
   | { type: "newer-version.checked"; requestId: string; failure: string | null; failureAbout?: HostProblem }
+  /** Why the pull asked for failed, or null when it didn't. */
+  | { type: "newer-version.pulled"; requestId: string; failure: string | null }
   /** To pages, whenever what the host found by itself of the plugins' new commits changes. */
   | { type: "plugin-updates.found"; pluginUpdates: PluginUpdate[] }
   /** The host is stopping to start again in place; pages reload once they reconnect. */

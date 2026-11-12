@@ -35,6 +35,19 @@ export async function newerCommits(checkout: string, fetching: boolean): Promise
   return { kind: "checkout", commits, upstream, upstreamCommit: await git(checkout, ["rev-parse", "@{upstream}"]) };
 }
 
+/** Pulls the checkout's upstream into it, fast-forward only, so its own commits and uncommitted work are never rewritten; git's own error shows when it can't. */
+export async function pullCheckout(checkout: string): Promise<string | null> {
+  const child = Bun.spawn(["git", "-C", checkout, "pull", "--ff-only", "--quiet"], {
+    env: environmentWithoutPrompts(),
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "pipe",
+    timeout: GIVE_UP_AFTER_MILLISECONDS,
+  });
+  const [stderr, exitCode] = await Promise.all([new Response(child.stderr).text(), child.exited]);
+  return exitCode === 0 ? null : stderr.trim() || "git pull failed";
+}
+
 /** GitHub answers 404 while the repository is private or nothing is published yet, which leaves nothing to show. */
 export async function newerRelease(latestReleaseUrl: string, current = MIRADOR_VERSION): Promise<NewerVersion | null> {
   const response = await fetch(latestReleaseUrl, { headers: { Accept: "application/vnd.github+json" }, signal: AbortSignal.timeout(GIVE_UP_AFTER_MILLISECONDS) }).catch(() => {

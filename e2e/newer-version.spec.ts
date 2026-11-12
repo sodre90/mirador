@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
@@ -203,14 +203,14 @@ test("in the desktop app, an update it has ready shows next to the new commits o
   await expect(banner.last()).toContainText("2 new commits on origin/main.");
 });
 
-test("a checkout shows the commits on its upstream that it lacks, until they are pulled", async ({ page }) => {
+test("a checkout shows the commits on its upstream that it lacks, and Pull brings them in", async ({ page }) => {
   await signIn(page, checkoutHost);
   const banner = page.locator(".banner.newer-version");
   await expect(banner).toContainText("2 new commits on origin/main.");
-  await expect(banner).toContainText("Pull them to update.");
 
-  git(checkoutHost.sourceDir, "merge", "--quiet", "--ff-only", "origin/main");
+  await banner.getByRole("button", { name: "Pull" }).click();
   await expect(banner).toHaveCount(0);
+  expect(readFileSync(join(checkoutHost.sourceDir, "web", "pulled.txt"), "utf8")).toBe("pulled\n");
 });
 
 test("Check for updates in Settings › About looks now, says when Mirador is up to date, shows a newer release, says why a check failed, and asks the desktop app to look too", async ({ page }) => {

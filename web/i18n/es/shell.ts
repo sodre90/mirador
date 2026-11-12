@@ -318,7 +318,8 @@ export const shell: Messages["shell"] = {
   newerVersion: {
     releaseOut: (version) => `Ya salió Mirador ${version}`,
     newCommits: (count, upstream) => plural(count, `1 commit nuevo en ${upstream}`, `${count} commits nuevos en ${upstream}`),
-    pullToUpdate: "Haz pull para actualizar.",
+    pull: "Pull",
+    pulling: "Haciendo pull…",
     downloading: "Descargando…",
     download: "Descargar",
     restartToUpdate: "Reiniciar para actualizar",

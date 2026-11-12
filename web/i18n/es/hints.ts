@@ -55,6 +55,7 @@ export const hints: Messages["hints"] = {
   configOption:
     "El agente ofrece este ajuste para la sesión. Cambiarlo envía el nuevo valor al agente (ACP session/set_config_option), que lo aplica a esta conversación.",
   dismissNewerVersion: "Lo oculta hasta que haya algo aún más nuevo. Configuración › Acerca de lo sigue mostrando.",
+  pullToUpdate: "Trae los nuevos commits a este checkout, solo fast-forward, para que tus propios commits y tu trabajo sin commit queden como están. Reinicia el host para ejecutarlos.",
   restartHost:
     "Reinicia el host ahí mismo, para que ejecute su código tal como está ahora. Los agentes que trabajan se detienen y luego continúan donde se quedaron; los mensajes en cola se conservan. Las terminales vuelven como shells nuevos bajo la salida que tenían. Las páginas abiertas se recargan solas.",
   stop:

@@ -320,7 +320,8 @@ export const shell: Messages["shell"] = {
   newerVersion: {
     releaseOut: (version) => `Mirador ${version} ist erschienen`,
     newCommits: (count, upstream) => plural(count, `1 neuer Commit auf ${upstream}`, `${count} neue Commits auf ${upstream}`),
-    pullToUpdate: "Zum Aktualisieren pullen.",
+    pull: "Pullen",
+    pulling: "Pullen…",
     downloading: "Wird heruntergeladen…",
     download: "Herunterladen",
     restartToUpdate: "Zum Aktualisieren neu starten",

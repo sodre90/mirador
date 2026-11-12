@@ -310,7 +310,8 @@ export const shell = {
   newerVersion: {
     releaseOut: (version: string) => `Mirador ${version} is out`,
     newCommits: (count: number, upstream: string) => plural(count, `1 new commit on ${upstream}`, `${count} new commits on ${upstream}`),
-    pullToUpdate: "Pull them to update.",
+    pull: "Pull",
+    pulling: "Pulling…",
     downloading: "Downloading…",
     download: "Download",
     restartToUpdate: "Restart to update",
