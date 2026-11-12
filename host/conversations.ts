@@ -16,6 +16,7 @@ import {
   type AskItem,
   type AskMode,
   type BusyWith,
+  type CanvasItem,
   type ContextUsage,
   type Conversation,
   type ConversationEvent,
@@ -2158,9 +2159,8 @@ export class ConversationService {
     this.sendNextQueuedMessage(conversationId);
   }
 
-  /** When the question the canvas still holds an answer for went out, or null when none does. */
   private waitingAskAt(conversationId: string) {
-    return this.store.listCanvasItems(conversationId).find((item) => item.kind === "ask" && item.status === "waiting")?.createdAt ?? null;
+    return newestWaitingAskAt(this.store.listCanvasItems(conversationId));
   }
 
   /**
@@ -3269,6 +3269,15 @@ interface TurnRequest {
  */
 export function turnWaitedOnAnswer({ askMode, askedAt, turnBeganAt }: { askMode: AskMode; askedAt: number | null; turnBeganAt: number }) {
   return askMode === "wait" && askedAt !== null && askedAt >= turnBeganAt;
+}
+
+/**
+ * When the newest question the canvas still holds an answer for went out, or null when none does. The newest, as one an
+ * earlier turn left open would otherwise hide the question the latest turn asked.
+ */
+export function newestWaitingAskAt(items: CanvasItem[]): number | null {
+  const waiting = items.filter((item) => item.kind === "ask" && item.status === "waiting").map((item) => item.createdAt);
+  return waiting.length > 0 ? Math.max(...waiting) : null;
 }
 
 /** opencode 2 marks what a subagent does, reported through its conversation's session, with the subagent's own session. */

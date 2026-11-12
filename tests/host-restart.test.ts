@@ -3,12 +3,12 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
-import { ConversationService, agentFinishedItsTurn, lastTurnRequest, openTurnTheAgentWorkedOn, turnWaitedOnAnswer, unfinishedTurnRequest } from "../host/conversations.ts";
+import { ConversationService, agentFinishedItsTurn, lastTurnRequest, newestWaitingAskAt, openTurnTheAgentWorkedOn, turnWaitedOnAnswer, unfinishedTurnRequest } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { HostRestart, hostCommandLine, relaunchOf, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "../host/restart.ts";
 import { Store } from "../host/store.ts";
-import type { AskMode, ConversationEvent } from "../shared/model.ts";
+import type { AskMode, CanvasItem, ConversationEvent } from "../shared/model.ts";
 import { isEdit, SourceWatcher } from "../host/source-watcher.ts";
 
 describe("hostCommandLine", () => {
@@ -284,6 +284,22 @@ describe("turnWaitedOnAnswer", () => {
     expect(turnWaitedOnAnswer(asked(900))).toBe(false);
     expect(turnWaitedOnAnswer(asked(1_000))).toBe(true);
     expect(turnWaitedOnAnswer({ ...asked(1_500), askedAt: null })).toBe(false);
+  });
+});
+
+describe("newestWaitingAskAt", () => {
+  const question = (createdAt: number, status: "waiting" | "answered" = "waiting"): CanvasItem => ({ id: `ask-${createdAt}`, conversationId: "c1", kind: "ask", title: "Which?", status, createdAt });
+  const page: CanvasItem = { id: "page", conversationId: "c1", kind: "show", title: "Page", status: "shown", createdAt: 2_000 };
+
+  test("is the question the latest turn asked, not one an earlier turn left open", () => {
+    const askedAt = newestWaitingAskAt([question(900), question(1_500), page]);
+    expect(askedAt).toBe(1_500);
+    expect(turnWaitedOnAnswer({ askMode: "wait", askedAt, turnBeganAt: 1_000 })).toBe(true);
+  });
+
+  test("is an earlier turn's question when only that one waits, and null when none does", () => {
+    expect(newestWaitingAskAt([question(900), question(1_500, "answered")])).toBe(900);
+    expect(newestWaitingAskAt([question(1_500, "answered"), page])).toBeNull();
   });
 });
 
