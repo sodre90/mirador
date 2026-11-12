@@ -778,6 +778,53 @@ describe("Store", () => {
     store.close();
   });
 
+  test("a conversation that showed one app in two folders comes to be open in the one it works in", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const { conversation } = seededStore();
+    const before = new Store(path);
+    before.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    before.insertConversation({ ...conversation, id: "c1", worktree: { id: "wt1", root: "/tmp/wt1", folder: "/tmp/wt1", branch: "mirador/wt1" } });
+    before.insertConversation({ ...conversation, id: "c2" });
+    before.close();
+    new Database(path).run(`
+      DROP TABLE IF EXISTS open_apps; DROP TABLE IF EXISTS app_conversations; DROP TABLE IF EXISTS app_storage;
+      CREATE TABLE open_apps (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
+        PRIMARY KEY (folder_id, app));
+      CREATE TABLE app_conversations (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL,
+        conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, PRIMARY KEY (folder_id, app, conversation_id));
+      INSERT INTO open_apps VALUES ('w1', 'w1', 'counter', 'counter.json'), ('w1', 'wt1', 'counter', 'other.json');
+      INSERT INTO app_conversations VALUES ('w1', 'w1', 'counter', 'c1'), ('w1', 'wt1', 'counter', 'c1'), ('w1', 'w1', 'counter', 'c2');
+    `);
+
+    const store = new Store(path);
+    expect(store.listOpenApps().map(({ conversationId, workspaceId, file }) => `${conversationId} ${workspaceId} ${file}`).toSorted()).toEqual([
+      "c1 wt1 other.json",
+      "c2 w1 counter.json",
+    ]);
+    store.close();
+  });
+
+  test("apps open from before Mirador noted which conversations showed them start with none open, and their storage stays", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const before = new Store(path);
+    before.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    before.close();
+    new Database(path).run(`
+      DROP TABLE IF EXISTS open_apps; DROP TABLE IF EXISTS app_conversations; DROP TABLE IF EXISTS app_storage;
+      CREATE TABLE open_apps (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
+        PRIMARY KEY (folder_id, app));
+      CREATE TABLE app_storage (workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+        PRIMARY KEY (folder_id, app, key));
+      INSERT INTO open_apps VALUES ('w1', 'w1', 'counter', 'counter.json');
+      INSERT INTO app_storage VALUES ('w1', 'w1', 'counter', 'zoom', '2');
+    `);
+
+    const store = new Store(path);
+    expect(store.listOpenApps()).toEqual([]);
+    expect(store.appStorage("w1", "counter")).toEqual({ zoom: "2" });
+    store.close();
+  });
+
   test("a conversation's slash commands are its agent's last list, else the latest of another with its agent and profile, its workspace first", () => {
     const { store, conversation } = seededStore();
     store.insertWorkspace({ id: "w2", name: "other", path: "/tmp/other", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });

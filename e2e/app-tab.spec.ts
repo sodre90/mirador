@@ -317,7 +317,8 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await expect(view(page).locator("#document-file")).toHaveText("counter.json");
     expect(await callCanvasTool(host, elsewhere, "app_open", { app: "counter", file: "second.json" })).toContain("Counter is open on second.json");
     await expect(view(page).locator("#document-file")).toHaveText("counter.json");
-    await expect(view(page).locator("#count")).toHaveText("46");
+    expect(await callCanvasTool(host, here, "apply", { op: { op: "add", by: 1 } })).toBe("counter.json: Added 1; the count is 47.");
+    await expect(view(page).locator("#count")).toHaveText("47");
     await goTo(elsewhere);
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "true");
     await expect(view(page).locator("#document-file")).toHaveText("second.json");
@@ -443,6 +444,9 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await page.evaluate((back) => (location.hash = back), hash);
     await expect(view(page).locator("#count")).toHaveText("5");
     await expect(view(page).locator("#page-load")).toHaveText(loaded);
+    await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();
+    await expect(page.getByRole("menuitem", { name: "Show Counter on shared.json" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
   });
 
   await test.step("hiding the canvas pane and showing it again finds the app's page as it was, its video paused while hidden", async () => {
@@ -498,8 +502,8 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     const elsewhere = hash.endsWith(first) ? second : first;
     await page.evaluate((other) => (location.hash = other), `#/c/${elsewhere}`);
     await showApp(page);
-    await appToggle(page).click();
-    await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
+    const keptElsewhere = await view(page).locator("#document-file").textContent();
+    await hideApp(page);
     await page.evaluate((back) => (location.hash = back), hash);
     await expect(view(page).locator("#document-file")).toHaveText("week.json");
     mkdirSync(join(host.projectDir, "plans"), { recursive: true });
@@ -517,6 +521,8 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     expect(await callCanvasTool(host, current(page), "apply", { op: { op: "add", by: 1 } })).toBe("plans/week.json: Added 1; the count is 8.");
     await page.evaluate((other) => (location.hash = other), `#/c/${elsewhere}`);
     await expect(appToggle(page)).toHaveAttribute("aria-pressed", "false");
+    await showApp(page);
+    await expect(view(page).locator("#document-file")).toHaveText(keptElsewhere!);
     await page.evaluate((back) => (location.hash = back), hash);
   });
 

@@ -406,17 +406,27 @@ export class Store {
    */
   private keyOpenAppsByConversation() {
     if (this.hasColumn("open_apps", "conversation_id")) return;
-    const shownIn = this.hasTable("app_conversations") ? "JOIN app_conversations a ON a.folder_id = o.folder_id AND a.app = o.app" : "WHERE 0";
+    const notedWhoShowedIt = this.hasTable("app_conversations");
     this.db.run(`
       CREATE TABLE open_apps_by_conversation (
         conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
         workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, folder_id TEXT NOT NULL, app TEXT NOT NULL, file TEXT NOT NULL,
         PRIMARY KEY (conversation_id, app));
-      INSERT INTO open_apps_by_conversation (conversation_id, workspace_id, folder_id, app, file)
-        SELECT a.conversation_id, o.workspace_id, o.folder_id, o.app, o.file FROM open_apps o ${shownIn};
+    `);
+    if (notedWhoShowedIt) {
+      this.db.run(`
+        INSERT OR IGNORE INTO open_apps_by_conversation (conversation_id, workspace_id, folder_id, app, file)
+          SELECT a.conversation_id, o.workspace_id, o.folder_id, o.app, o.file
+            FROM open_apps o
+            JOIN app_conversations a ON a.folder_id = o.folder_id AND a.app = o.app
+            JOIN conversations c ON c.id = a.conversation_id
+            ORDER BY (o.folder_id = coalesce(json_extract(c.worktree, '$.id'), c.workspace_id)) DESC;
+      `);
+    }
+    this.db.run(`
       DROP TABLE open_apps;
       ALTER TABLE open_apps_by_conversation RENAME TO open_apps;
-      ${this.hasTable("app_conversations") ? "DROP TABLE app_conversations;" : ""}
+      ${notedWhoShowedIt ? "DROP TABLE app_conversations;" : ""}
     `);
   }
 

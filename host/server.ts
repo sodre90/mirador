@@ -1314,9 +1314,16 @@ export function startServer(services: HostServices) {
         if (state) hub.send(socket, { type: "app.state", state });
         return;
       }
-      case "app.unsubscribe":
+      case "app.unsubscribe": {
         socket.data.appSubscriptions.delete(message.documentId);
+        const key = appKey(message);
+        const anotherDocumentOfIt = [...socket.data.appSubscriptions].some((documentId) => {
+          const shown = apps.state(documentId);
+          return shown !== null && appKey(shown) === key;
+        });
+        if (!anotherDocumentOfIt) socket.data.appStorageSubscriptions.delete(key);
         return;
+      }
       case "app.apply":
         return void apps
           .applyFromView(message.documentId, message.op)
@@ -1325,11 +1332,9 @@ export function startServer(services: HostServices) {
             hub.send(socket, { type: "error", ...appFailure(error) });
           });
       case "app.use-in":
-        try {
-          return apps.useIn(message.conversationId, message.documentId);
-        } catch (error) {
-          return hub.send(socket, { type: "error", ...appFailure(error) });
-        }
+        return void apps.useIn(message.conversationId, message.documentId).catch((error) => {
+          hub.send(socket, { type: "error", ...appFailure(error) });
+        });
       case "app.run":
         try {
           return void apps.runFromView(message.documentId, message.task);

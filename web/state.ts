@@ -224,6 +224,12 @@ function upsert<T extends { id: string }>(items: T[], item: T) {
 
 export const KEPT_CONVERSATIONS = 5;
 
+/** The documents still open somewhere: a closed one's whole state, which can be large, is no use to any view and goes. */
+function openDocumentsOnly(documents: Record<string, AppDocumentState>, openApps: OpenApp[]) {
+  const open = new Set(openApps.map(({ documentId }) => documentId));
+  return Object.fromEntries(Object.entries(documents).filter(([documentId]) => open.has(documentId)));
+}
+
 export const selectedOpen = (state: AppState) => state.kept.find(({ conversationId }) => conversationId === state.selectedConversationId) ?? null;
 
 /** The conversation open most recently before it whose Done, Failed or Unread mark opening it would not clear; null for none. */
@@ -316,7 +322,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, pluginTabs: { ...state.pluginTabs, [workspaceId]: { ...state.pluginTabs[workspaceId], [plugin]: { seq, shown, state: tabState, problem } } } };
     }
     case "apps.open":
-      return { ...state, openApps: message.openApps };
+      return { ...state, openApps: message.openApps, appDocuments: openDocumentsOnly(state.appDocuments, message.openApps) };
     case "plugins.views":
       return { ...state, installedApps: message.installedApps, canvasViews: message.canvasViews };
     case "app.state":

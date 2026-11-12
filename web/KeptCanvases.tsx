@@ -107,8 +107,9 @@ const KeptCanvas = memo(function KeptCanvas({
     () => {
       const inFolder = openApps.filter((app) => app.workspaceId === workingCopyId);
       const here = inFolder.filter((app) => app.conversationId === open.conversationId);
-      /** Other conversations' documents, each once: several of them may hold one open. */
-      const elsewhere = [...new Map(inFolder.filter((app) => app.conversationId !== open.conversationId).map((app) => [app.documentId, app])).values()];
+      /** Only other conversations' documents, each once, and none this conversation shows already. */
+      const heldHere = new Set(here.map((app) => app.documentId));
+      const elsewhere = [...new Map(inFolder.filter((app) => app.conversationId !== open.conversationId && !heldHere.has(app.documentId)).map((app) => [app.documentId, app])).values()];
       return { open: here, elsewhere, installed: installedApps, documents: appDocuments };
     },
     [openApps, installedApps, appDocuments, workingCopyId, open.conversationId],

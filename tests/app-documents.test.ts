@@ -389,6 +389,18 @@ describe("AppDocuments", () => {
     apps.stop();
   });
 
+  test("two new files of a folder that exists are two documents, each on its own file", async () => {
+    const { apps, workspacePath } = await setUp();
+    mkdirSync(join(workspacePath, "plans"));
+    const first = await apps.open("c1", "counter", "plans/one.json");
+    const second = await apps.open("c2", "counter", "plans/two.json");
+    expect(second.documentId).not.toBe(first.documentId);
+    await apps.apply("c1", undefined, { op: "add", by: 3 }, { kind: "you" });
+    expect(JSON.parse(readFileSync(join(workspacePath, "plans", "one.json"), "utf8"))).toEqual({ count: 3 });
+    expect(JSON.parse(readFileSync(join(workspacePath, "plans", "two.json"), "utf8"))).toEqual({ count: 0 });
+    apps.stop();
+  });
+
   test("each conversation of a workspace keeps its own document when they open different files", async () => {
     const { apps, workspacePath } = await setUp();
     writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 9 }));
@@ -967,9 +979,62 @@ describe("what each conversation has open", () => {
   test("a document another conversation asked to see is shown in its own tab, not the one asked with", async () => {
     const { apps, openAppLists } = await setUp();
     const first = await apps.open("c1", "counter", "counter.json");
-    expect(apps.useIn("c2", first.documentId)).toMatchObject({ conversationId: "c2", documentId: first.documentId, file: "counter.json", shownAt: expect.any(Number) });
+    expect(await apps.useIn("c2", first.documentId)).toMatchObject({ conversationId: "c2", documentId: first.documentId, file: "counter.json", shownAt: expect.any(Number) });
     expect(openAppLists.at(-1)!.map(({ conversationId }) => conversationId)).toEqual(["c1", "c2"]);
-    expect(() => apps.useIn("c1", "no-such-document")).toThrow("No app has that document open anymore");
+    await expect(apps.useIn("c1", "no-such-document")).rejects.toThrow("No app has that document open anymore");
+    apps.stop();
+  });
+
+  test("the document a user asked to see here stands when another open was already under way in that conversation", async () => {
+    const { apps } = await setUp();
+    const shared = await apps.open("c1", "counter", "counter.json");
+    const held = await apps.open("c2", "counter", "counter.json");
+    let finishWrite = () => {};
+    const writing = new Promise<void>((resolve) => (finishWrite = resolve));
+    const realWrite = Bun.write;
+    const slowWrite = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
+      await writing;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    let opening: Promise<unknown>;
+    let shown: Promise<OpenApp>;
+    try {
+      opening = apps.open("c2", "counter", "second.json");
+      await eventually(() => expect(slowWrite).toHaveBeenCalled());
+      shown = apps.useIn("c2", shared.documentId);
+    } finally {
+      slowWrite.mockRestore();
+    }
+    finishWrite();
+    await opening;
+    expect(await shown).toMatchObject({ file: "counter.json", documentId: held.documentId });
+    expect(apps.openApps().map(({ conversationId, file }) => `${conversationId} ${file}`)).toEqual(["c1 counter.json", "c2 counter.json"]);
+    apps.stop();
+  });
+
+  test("an app open whose conversation goes while its file is started holds nothing, and the app opens on afterwards", async () => {
+    const { apps, store } = await setUp();
+    let finishWrite = () => {};
+    const writing = new Promise<void>((resolve) => (finishWrite = resolve));
+    const realWrite = Bun.write;
+    const slowWrite = spyOn(Bun, "write").mockImplementationOnce((async (...args: Parameters<typeof Bun.write>) => {
+      await writing;
+      return realWrite(...args);
+    }) as typeof Bun.write);
+    let opening: Promise<unknown>;
+    try {
+      opening = apps.open("c2", "counter", "gone.json");
+      await eventually(() => expect(slowWrite).toHaveBeenCalled());
+      store.deleteConversation("c2");
+      apps.forgetConversation("c2");
+      finishWrite();
+    } finally {
+      slowWrite.mockRestore();
+    }
+    await expect(opening).rejects.toThrow("No conversation c2 holds an app open.");
+    expect(apps.openApps()).toEqual([]);
+    expect(store.listOpenApps()).toEqual([]);
+    expect(await apps.open("c1", "counter", "gone.json")).toMatchObject({ file: "gone.json" });
     apps.stop();
   });
 

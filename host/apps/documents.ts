@@ -223,6 +223,7 @@ export class AppDocuments {
   /** By document key: the open document being read or started, which conversations opening one file at once wait on. */
   private readonly making = new Map<string, Promise<AppDocument>>();
   private taskRuns = 0;
+  private writes = 0;
   /** By workspace: see AppDocumentState.filesChange. */
   private readonly filesChanges = new Map<string, number>();
 
@@ -270,20 +271,28 @@ export class AppDocuments {
    * has it open keeps its own tab on it, and one document serves them both.
    */
   async open(conversationId: string, appName: string, file: string, opening: AppOpening = { kind: "opened" }): Promise<OpenApp> {
+    return this.afterOpeningsOf(conversationId, appName, () => this.openNow(conversationId, appName, file, opening));
+  }
+
+  /**
+   * Opens a document another conversation of the workspace has, in this conversation, as its user asked to see it here:
+   * after any open already under way for this conversation's app, so the choice the user made last is the one that stands.
+   */
+  async useIn(conversationId: string, documentId: string): Promise<OpenApp> {
+    const appName = this.documentOf(documentId).plugin.manifest.name;
+    return this.afterOpeningsOf(conversationId, appName, () => this.openAppOf(this.noteOpenedIn(conversationId, this.documentOf(documentId), { kind: "opened" })));
+  }
+
+  /** Runs an opening of this conversation's app once the openings already under way have ended, so each ends on the file asked for last. */
+  private async afterOpeningsOf<T>(conversationId: string, appName: string, opening: () => T | Promise<T>): Promise<T> {
     const key = pointerKeyOf(conversationId, appName);
-    const queued = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(() => this.openNow(conversationId, appName, file, opening));
+    const queued = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(opening);
     this.openings.set(key, queued);
     try {
       return await queued;
     } finally {
       if (this.openings.get(key) === queued) this.openings.delete(key);
     }
-  }
-
-  /** Opens a document another conversation of the workspace has, in this conversation, as its user asked to see it here. */
-  useIn(conversationId: string, documentId: string): OpenApp {
-    const opened = this.documentOf(documentId);
-    return this.openAppOf(this.noteOpenedIn(conversationId, opened, { kind: "opened" }));
   }
 
   /**
@@ -426,7 +435,15 @@ export class AppDocuments {
     const target = fileInWorkspace(workspace.path, documentFile);
     const openedFile = documentFile === file ? undefined : toPosix(relative(dirname(target.path), fileInWorkspace(workspace.path, file).path));
     const opened = await this.documentOpening(plugin, workspace, ownerId, target, openedFile);
+    if (!this.store.findConversation(conversationId)) throw this.goneBeforeItWasHeld(opened, `No conversation ${conversationId} holds an app open.`);
+    if (!this.documents.has(opened.id)) throw this.goneBeforeItWasHeld(opened, `${documentWords(opened)} closed while it was being opened; open it again with app_open.`);
     return this.openAppOf(this.noteOpenedIn(conversationId, opened, opening));
+  }
+
+  /** Why an open is refused when its conversation went or its document closed while its file was read or started: a document nobody holds anymore goes with it. */
+  private goneBeforeItWasHeld(opened: AppDocument, why: string) {
+    this.closeUnlessHeld(opened.id);
+    return new AppProblem(why);
   }
 
   /** The document of that file, read from it or started on it: two conversations opening one file at once start it once. */
@@ -758,7 +775,7 @@ export class AppDocuments {
   /** Written whole and renamed into place, so neither a reader nor the watcher ever sees half a file. */
   private async write(opened: AppDocument, text: string) {
     mkdirSync(dirname(opened.path), { recursive: true });
-    const temporary = join(dirname(opened.path), `.${basename(opened.path)}.mirador-${process.pid}`);
+    const temporary = join(dirname(opened.path), `.${basename(opened.path)}.mirador-${process.pid}-${++this.writes}`);
     await Bun.write(temporary, text);
     await renameWhenFree(temporary, opened.path);
     opened.knownHash = hashOf(text);
