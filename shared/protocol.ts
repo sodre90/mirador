@@ -240,21 +240,25 @@ export type ClientMessage =
   | { type: "permission.respond"; conversationId: string; permissionId: string; optionId: string | null }
   | { type: "ask.answer"; itemId: string; label: string; note?: string; answers?: AskAnswerEntry[] }
   | { type: "canvas.report"; itemId: string; errors: string[] }
-  /** The page shows this app's document, and gets its state on every change until it unsubscribes. */
-  | { type: "app.subscribe"; workspaceId: string; app: string; documentId: string }
-  | { type: "app.unsubscribe"; workspaceId: string; app: string; documentId: string }
+  /**
+   * The page shows this app's document, and gets its state on every change until it unsubscribes. A phone from before each
+   * conversation had a document of its own names no document in this or the view's other messages, and gets the one a
+   * conversation of the workspace showed last.
+   */
+  | { type: "app.subscribe"; workspaceId: string; app: string; documentId?: string }
+  | { type: "app.unsubscribe"; workspaceId: string; app: string; documentId?: string }
   /** An operation the user made in an open document's view. */
-  | { type: "app.apply"; workspaceId: string; app: string; documentId: string; op: unknown }
+  | { type: "app.apply"; workspaceId: string; app: string; documentId?: string; op: unknown }
   /** Opens a document another conversation of the workspace has, in this conversation, whose own document of that app goes with it. */
   | { type: "app.use-in"; workspaceId: string; app: string; documentId: string; conversationId: string }
   /** The app's view set an item of its storage in the workspace; a null value removes it. */
   | { type: "app.storage-set"; workspaceId: string; app: string; key: string; value: string | null }
   /** The user runs one of the app's tasks from its view; its progress and end come in the app's state. */
-  | { type: "app.run"; workspaceId: string; app: string; documentId: string; task: string }
+  | { type: "app.run"; workspaceId: string; app: string; documentId?: string; task: string }
   /** The user opens an app on a file of the conversation's workspace, shown in that conversation, with /<app>:open; answered with "app.file-opened". */
   | { type: "app.open-file"; requestId: string; conversationId: string; app: string; file: string }
   /** The user stops the task an open document has under way. */
-  | { type: "app.stop-task"; workspaceId: string; app: string; documentId: string }
+  | { type: "app.stop-task"; workspaceId: string; app: string; documentId?: string }
   /** What the user did in a plugin item's view, for the plugin's host code; answered with "canvas.item-acted". */
   | { type: "canvas.item-action"; requestId: string; itemId: string; action: unknown }
   /** The user runs a plugin's tool from the slash menu, by its command's name, with what follows the name; answered with "canvas.command-ran". */

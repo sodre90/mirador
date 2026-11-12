@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, realpathSync, statSync, watch, type FSWatcher } from "node:fs";
+import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, watch, type FSWatcher } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   type AppAuthor,
@@ -76,8 +76,9 @@ interface AppDocument {
   workspacePath: string;
   /** Relative to the workspace, as whoever opened the file first named it. */
   file: string;
+  /** Where the file lies, under the name its folder lists it by: what saves write to and the watcher looks for. */
   path: string;
-  /** The app and the file as it really lies, which is what makes two names of one file, as through a link, one document. */
+  /** The folder, the app and the file's path, which is what makes two names of one file, as through a link, one document. */
   key: string;
   document: unknown;
   problem: string | null;
@@ -143,12 +144,42 @@ function realPathOfExistingPart(path: string): string {
   return realPathOrNull(path) ?? realPathOfExistingPart(dirname(path));
 }
 
-/**
- * Where a path really lies, the part not made yet kept under the name it will be filed by: two new files of one folder
- * are two documents, and one file under two names, as through a link, is one.
- */
+/** Where a path really lies, the part not made yet kept under the name it will be made by. */
 function realPathOrItsFuture(path: string): string {
   return realPathOrNull(path) ?? join(realPathOrItsFuture(dirname(path)), basename(path));
+}
+
+const foldedName = (name: string) => name.normalize("NFC").toLowerCase();
+
+/**
+ * Where an existing file really lies, under the name its folder lists it by. Bun's realpath gives the name the file was
+ * last renamed to instead, which on a folder that ignores case may be another spelling of it.
+ */
+function listedPathOrNull(path: string): string | null {
+  const real = realPathOrNull(path);
+  if (real === null) return null;
+  const names = readdirSync(dirname(real));
+  if (names.includes(basename(real))) return real;
+  const spellings = names.filter((name) => foldedName(name) === foldedName(basename(real)));
+  return spellings.length === 1 ? join(dirname(real), spellings[0]!) : real;
+}
+
+/**
+ * The path a document's file goes by: where it lies, under the name its folder lists it by, or, not made yet, where it
+ * will be made. Two new files of one folder are two documents, and one file under two names, as through a link or in
+ * another case, is one.
+ */
+const documentPathOf = (path: string) => listedPathOrNull(path) ?? join(realPathOrItsFuture(dirname(path)), basename(path));
+
+/** Where a document's file goes by, and so the key of its document in that folder and app. */
+interface Filed {
+  path: string;
+  key: string;
+}
+
+function filedAs(workspace: Workspace, plugin: AppPlugin, path: string): Filed {
+  const filedPath = documentPathOf(path);
+  return { path: filedPath, key: `${workspace.id}/${plugin.manifest.name}/${filedPath}` };
 }
 
 /** A file in the workspace, named from it: neither its name nor a link on the way may lead out of the workspace. */
@@ -192,7 +223,7 @@ function viewedFile(opened: AppDocument, path: unknown) {
   if (!root) throw new AppFileRefused(404, "The workspace's folder doesn't exist.");
   const refusedAsOutside = new AppFileRefused(403, `${path} is outside the workspace.`);
   const wanted = resolve(dirname(opened.path), path);
-  if (!isInside(resolve(opened.workspacePath), wanted)) throw refusedAsOutside;
+  if (!isInside(root, wanted)) throw refusedAsOutside;
   const real = realPathOrNull(wanted);
   if (!real) throw new AppFileRefused(404, `${path} doesn't exist.`);
   if (!isInside(root, real)) throw refusedAsOutside;
@@ -222,6 +253,8 @@ export class AppDocuments {
   private readonly openings = new Map<string, Promise<unknown>>();
   /** By document key: the open document being read or started, which conversations opening one file at once wait on. */
   private readonly making = new Map<string, Promise<AppDocument>>();
+  /** By document key: how many opens wait for that document and haven't yet held it or been refused, which keep it open meanwhile. */
+  private readonly opensUnderWay = new Map<string, number>();
   private taskRuns = 0;
   private writes = 0;
   /** By workspace: see AppDocumentState.filesChange. */
@@ -248,6 +281,23 @@ export class AppDocuments {
     return [...this.openedIn.values()].map((pointer) => this.openAppOf(pointer));
   }
 
+  /** Says whether an app's view asks over the app and workspace of the document it names: a view reaches no file of another's. */
+  shownOver(documentId: string, workspaceId: string, appName: string) {
+    const opened = this.documentOf(documentId);
+    if (opened.workspaceId !== workspaceId || opened.plugin.manifest.name !== appName) throw new AppFileRefused(404, `No ${appName} document of this workspace is open as ${documentId}.`);
+  }
+
+  /**
+   * The document of an app that a view naming only its folder and app shows, as phones did before each conversation had a
+   * document of its own: the one a conversation of that folder showed last, or null when none has the app open.
+   */
+  lastShownIn(folderId: string, appName: string): string | null {
+    const shownLast = this.openedInForFolder(folderId)
+      .filter((pointer) => pointer.app === appName)
+      .reduce<OpenedIn | null>((last, pointer) => (last === null || (pointer.shownAt ?? 0) >= (last.shownAt ?? 0) ? pointer : last), null);
+    return shownLast?.documentId ?? null;
+  }
+
   /** What a page that shows an open document gets, or null when that document closed. */
   state(documentId: string): AppDocumentState | null {
     const opened = this.documents.get(documentId);
@@ -256,14 +306,23 @@ export class AppDocuments {
 
   /** Opens again, quietly, what each conversation had open, as the store kept it. */
   async reopenAll() {
-    for (const { conversationId, app, file } of this.store.listOpenApps()) {
+    for (const { conversationId, workspaceId: folderId, app, file } of this.store.listOpenApps()) {
+      if (!this.worksIn(conversationId, folderId)) {
+        this.store.forgetOpenApp(conversationId, app);
+        continue;
+      }
       try {
         await this.open(conversationId, app, file, { kind: "quiet" });
       } catch (error) {
-        console.warn(`Couldn't open ${app} on ${file} again for ${conversationId}, which no longer holds it: ${messageOf(error)}`);
-        this.store.forgetOpenApp(conversationId, app);
+        console.warn(`Couldn't open ${app} on ${file} again for ${conversationId}: ${messageOf(error)}`);
       }
     }
+  }
+
+  /** Whether the conversation works in that folder, where what it kept open lies: a file it kept in a folder it no longer works in is opened nowhere else. */
+  private worksIn(conversationId: string, folderId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    return conversation !== undefined && workingCopyIdOf(conversation) === folderId;
   }
 
   /**
@@ -275,23 +334,46 @@ export class AppDocuments {
   }
 
   /**
+   * Opens the conversation's app on the file as its user asked with /<app>:open: as app_open does, but never off a task
+   * under way that only this conversation holds, which leaving would stop.
+   */
+  async openAsUserAsked(conversationId: string, appName: string, file: string): Promise<OpenApp> {
+    return this.afterOpeningsOf(conversationId, appName, () =>
+      this.openNow(conversationId, appName, file, { kind: "opened" }, (leaving) => this.taskLeftBehind(leaving, conversationId, appName)),
+    );
+  }
+
+  /**
    * Opens a document another conversation of the workspace has, in this conversation, as its user asked to see it here:
    * after any open already under way for this conversation's app, so the choice the user made last is the one that stands.
    */
   async useIn(conversationId: string, documentId: string): Promise<OpenApp> {
     const appName = this.documentOf(documentId).plugin.manifest.name;
-    return this.afterOpeningsOf(conversationId, appName, () => this.openAppOf(this.noteOpenedIn(conversationId, this.documentOf(documentId), { kind: "opened" })));
+    return this.afterOpeningsOf(conversationId, appName, () => this.takenUpByUser(conversationId, appName, documentId));
+  }
+
+  /** The take-up itself, once the conversation's other openings have settled: of a document in the folder it works in, and never off a task that only it holds. */
+  private takenUpByUser(conversationId: string, appName: string, documentId: string): OpenApp {
+    const opened = this.documentOf(documentId);
+    if (opened.workspaceId !== workingCopyIdOf(this.conversationOf(conversationId))) throw new AppProblem(`${documentWords(opened)} is open in another folder than the one this conversation works in.`);
+    const refusal = this.refusalToLeave(conversationId, appName, opened, (leaving) => this.taskLeftBehind(leaving, conversationId, appName));
+    if (refusal !== null) throw refusal;
+    return this.openAppOf(this.noteOpenedIn(conversationId, opened, { kind: "opened" }));
   }
 
   /** Runs an opening of this conversation's app once the openings already under way have ended, so each ends on the file asked for last. */
-  private async afterOpeningsOf<T>(conversationId: string, appName: string, opening: () => T | Promise<T>): Promise<T> {
-    const key = pointerKeyOf(conversationId, appName);
-    const queued = (this.openings.get(key) ?? Promise.resolve()).catch(() => {}).then(opening);
-    this.openings.set(key, queued);
+  private afterOpeningsOf<T>(conversationId: string, appName: string, opening: () => T | Promise<T>): Promise<T> {
+    return this.chainedOn(this.openings, pointerKeyOf(conversationId, appName), opening);
+  }
+
+  /** Runs its turn once what is already under way under that key has ended, and holds the key while it does. */
+  private async chainedOn<T>(underWay: Map<string, Promise<unknown>>, key: string, turn: () => T | Promise<T>): Promise<T> {
+    const queued = (underWay.get(key) ?? Promise.resolve()).catch(() => {}).then(turn);
+    underWay.set(key, queued);
     try {
       return await queued;
     } finally {
-      if (this.openings.get(key) === queued) this.openings.delete(key);
+      if (underWay.get(key) === queued) underWay.delete(key);
     }
   }
 
@@ -363,16 +445,32 @@ export class AppDocuments {
 
   /**
    * Opens the conversation's app on another existing file of its workspace, as its view asks: as app_open does, but
-   * bringing no tab forward. The document it leaves would stop its task, so it is refused until that task ends.
+   * bringing no tab forward. The task the document left would stop is refused until it ends, unless another conversation
+   * holds that document too and its task goes on running for them.
    */
   async openFromView(conversationId: string, appName: string, file: unknown): Promise<OpenApp> {
-    const { opened } = this.openFor(conversationId, appName);
     if (typeof file !== "string" || file === "" || isAbsolute(file)) throw new AppFileRefused(400, "Give the file's path relative to the workspace.");
-    if (opened.running) throw new AppFileRefused(409, `${opened.running.state.title} is still running; wait for it to end, or stop it, before opening another file.`);
+    return this.afterOpeningsOf(conversationId, appName, () => this.movedFrom(conversationId, appName, file));
+  }
+
+  /** The move itself, once the conversation's other openings have settled: the document it leaves, the task under way on it, and the file asked for are all read here, as they stand when the move happens. */
+  private async movedFrom(conversationId: string, appName: string, file: string): Promise<OpenApp> {
+    const { opened } = this.openFor(conversationId, appName);
     const { path, file: named } = fileInWorkspace(opened.workspacePath, file);
     if (isInGitFolder(named)) throw new AppFileRefused(403, `${file} is in the repository's .git folder.`);
     if (!statSync(path, { throwIfNoEntry: false })?.isFile()) throw new AppFileRefused(404, `${file} doesn't exist.`);
-    return this.open(conversationId, appName, file, { kind: "in-view" });
+    return this.openNow(conversationId, appName, file, { kind: "in-view" }, (leaving) => this.taskLeftBehind(leaving, conversationId, appName));
+  }
+
+  /** Why the app may not be moved off the document it holds: a task under way on it that no other conversation would go on holding. */
+  private taskLeftBehind(leaving: AppDocument, conversationId: string, appName: string): AppProblem | null {
+    if (!leaving.running || !this.heldOnlyBy(leaving, conversationId, appName)) return null;
+    return new AppFileRefused(409, `${leaving.running.state.title} is still running; wait for it to end, or stop it, before opening another file.`);
+  }
+
+  /** Whether this one conversation is the only one holding that document, so its leaving closes it and stops what runs on it. */
+  private heldOnlyBy(opened: AppDocument, conversationId: string, appName: string) {
+    return [...this.openedIn.values()].every((pointer) => pointer.documentId !== opened.id || (pointer.conversationId === conversationId && pointer.app === appName));
   }
 
   /** The file a path on the canvas assets streams, while its document is open. */
@@ -427,52 +525,103 @@ export class AppDocuments {
     throw new AppProblem(`No app is open in this conversation${appName === undefined ? "" : ` called ${appName}`}. Open one with app_open; installed: ${this.plugins.map(({ manifest }) => manifest.name).join(", ")}.`);
   }
 
-  private async openNow(conversationId: string, appName: string, file: string, opening: AppOpening): Promise<OpenApp> {
+  /**
+   * Opens the file and puts this conversation's app on it, refusing where the file can't be reached or the conversation
+   * or its document went while the file was being read. `refuseLeaving` is asked, at the moment of the move and not
+   * before, whether the app may leave the document it holds then.
+   */
+  private async openNow(
+    conversationId: string,
+    appName: string,
+    file: string,
+    opening: AppOpening,
+    refuseLeaving?: (leaving: AppDocument) => AppProblem | null,
+  ): Promise<OpenApp> {
     const plugin = this.plugin(appName);
     const conversation = this.conversationOf(conversationId);
     const { workspace, ownerId } = this.folderOf(conversation);
     const documentFile = this.guarded(() => plugin.host.documentFor?.(file)) ?? file;
     const target = fileInWorkspace(workspace.path, documentFile);
     const openedFile = documentFile === file ? undefined : toPosix(relative(dirname(target.path), fileInWorkspace(workspace.path, file).path));
-    const opened = await this.documentOpening(plugin, workspace, ownerId, target, openedFile);
-    if (!this.store.findConversation(conversationId)) throw this.goneBeforeItWasHeld(opened, `No conversation ${conversationId} holds an app open.`);
-    if (!this.documents.has(opened.id)) throw this.goneBeforeItWasHeld(opened, `${documentWords(opened)} closed while it was being opened; open it again with app_open.`);
+    const filed = filedAs(workspace, plugin, target.path);
+    this.opensUnderWay.set(filed.key, (this.opensUnderWay.get(filed.key) ?? 0) + 1);
+    let opened: AppDocument;
+    try {
+      opened = await this.documentOpening(plugin, workspace, ownerId, target, filed, openedFile);
+    } finally {
+      this.oneOpenLessOf(filed.key);
+    }
+    if (!this.store.findConversation(conversationId)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`No conversation ${conversationId} holds an app open.`));
+    if (!this.documents.has(opened.id)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`${documentWords(opened)} closed while it was being opened; open it again with app_open.`));
+    const refusal = refuseLeaving === undefined ? null : this.refusalToLeave(conversationId, appName, opened, refuseLeaving);
+    if (refusal !== null) throw this.goneBeforeItWasHeld(opened, refusal);
     return this.openAppOf(this.noteOpenedIn(conversationId, opened, opening));
   }
 
-  /** Why an open is refused when its conversation went or its document closed while its file was read or started: a document nobody holds anymore goes with it. */
-  private goneBeforeItWasHeld(opened: AppDocument, why: string) {
-    this.closeUnlessHeld(opened.id);
-    return new AppProblem(why);
+  /** Why the app may not leave the document it holds in that app for `going`, at this moment; null when it holds none, stays on it, or may leave it. */
+  private refusalToLeave(conversationId: string, appName: string, going: AppDocument, refuseLeaving: (leaving: AppDocument) => AppProblem | null): AppProblem | null {
+    const held = this.openedIn.get(pointerKeyOf(conversationId, appName));
+    const leaving = held === undefined ? undefined : this.documents.get(held.documentId);
+    return leaving === undefined || leaving.id === going.id ? null : refuseLeaving(leaving);
   }
 
-  /** The document of that file, read from it or started on it: two conversations opening one file at once start it once. */
-  private async documentOpening(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, openedFile: string | undefined): Promise<AppDocument> {
-    const key = `${plugin.manifest.name}/${realPathOrItsFuture(target.path)}`;
-    const already = this.documents.get(documentIdOf(key));
+  private oneOpenLessOf(key: string) {
+    const left = (this.opensUnderWay.get(key) ?? 1) - 1;
+    if (left > 0) this.opensUnderWay.set(key, left);
+    else this.opensUnderWay.delete(key);
+  }
+
+  /** Why an open is refused when its conversation went, its document closed, or it may not leave the one it holds: a document nobody holds anymore goes with it. */
+  private goneBeforeItWasHeld(opened: AppDocument, why: AppProblem) {
+    this.closeUnlessHeld(opened.id);
+    return why;
+  }
+
+  /**
+   * The document of that file in that folder, read from it or started on it: two conversations opening one file at once
+   * start it once. The folder is part of the document's name because two workspaces can cover one folder, and a file
+   * opened from each is a document of its own workspace, answerable to its own conversations.
+   */
+  private async documentOpening(
+    plugin: AppPlugin,
+    workspace: Workspace,
+    ownerId: string,
+    target: { path: string; file: string },
+    filed: Filed,
+    openedFile: string | undefined,
+  ): Promise<AppDocument> {
+    const already = this.documents.get(documentIdOf(filed.key));
     if (already) return this.refreshUnlessRead(already);
-    const making = this.making.get(key);
+    const making = this.making.get(filed.key);
     if (making) return making;
-    const made = this.readDocument(plugin, workspace, ownerId, target, key, openedFile);
-    this.making.set(key, made);
+    const made = this.readDocument(plugin, workspace, ownerId, target, filed, openedFile);
+    this.making.set(filed.key, made);
     try {
       return await made;
     } finally {
-      if (this.making.get(key) === made) this.making.delete(key);
+      if (this.making.get(filed.key) === made) this.making.delete(filed.key);
     }
   }
 
-  private async readDocument(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, key: string, openedFile: string | undefined): Promise<AppDocument> {
-    const text = existsSync(target.path) ? readFileSync(target.path, "utf8") : null;
+  private async readDocument(
+    plugin: AppPlugin,
+    workspace: Workspace,
+    ownerId: string,
+    target: { path: string; file: string },
+    filed: Filed,
+    openedFile: string | undefined,
+  ): Promise<AppDocument> {
+    const text = existsSync(filed.path) ? readFileSync(filed.path, "utf8") : null;
     const document = text === null ? this.created(plugin, target.file, openedFile) : this.guarded(() => plugin.host.parse(text));
     const opened: AppDocument = {
-      id: documentIdOf(key),
+      id: documentIdOf(filed.key),
       plugin,
       workspaceId: workspace.id,
       ownerId,
       workspacePath: workspace.path,
-      ...target,
-      key,
+      file: target.file,
+      path: filed.path,
+      key: filed.key,
       document,
       problem: null,
       changes: [],
@@ -483,11 +632,24 @@ export class AppDocuments {
       running: null,
       task: null,
     };
-    if (text === null) await this.write(opened, this.guarded(() => plugin.host.serialize(document)));
+    if (text === null && !(await this.madeFirst(opened, this.guarded(() => plugin.host.serialize(document))))) {
+      return this.madeElsewhere(plugin, workspace, ownerId, target, filed, openedFile);
+    }
     this.documents.set(opened.id, opened);
     this.watch(opened);
     this.filesMayHaveChanged(opened.workspaceId);
     return opened;
+  }
+
+  /**
+   * The document of a new file someone else made first, between this open looking for it and making it: another
+   * conversation, perhaps under another spelling of its name on a folder that ignores case, or another program.
+   */
+  private madeElsewhere(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, filed: Filed, openedFile: string | undefined) {
+    const existing = filedAs(workspace, plugin, filed.path);
+    if (existing.key === filed.key) return this.readDocument(plugin, workspace, ownerId, target, filed, openedFile);
+    const named = { path: existing.path, file: toPosix(join(dirname(target.file), basename(existing.path))) };
+    return this.documentOpening(plugin, workspace, ownerId, named, existing, undefined);
   }
 
   /** Reads a file that stopped parsing again, as whoever opens it now may have fixed it; a task under way is left to write it. */
@@ -527,8 +689,8 @@ export class AppDocuments {
       shownAt: opening.kind === "opened" ? Date.now() : null,
       openedInView: opening.kind === "in-view",
     };
-    this.openedIn.set(key, pointer);
     this.store.saveOpenApp(conversationId, opened.ownerId, opened.workspaceId, pointer.app, opened.file);
+    this.openedIn.set(key, pointer);
     if (before && before.documentId !== opened.id) this.closeUnlessHeld(before.documentId);
     this.publishOpenApps();
     return pointer;
@@ -693,8 +855,9 @@ export class AppDocuments {
     return documentStateOf(opened, this.filesChanges.get(opened.workspaceId) ?? 0);
   }
 
+  /** Whether a conversation holds the document, or an open of it is under way that is about to. */
   private isHeld(opened: AppDocument) {
-    return [...this.openedIn.values()].some((pointer) => pointer.documentId === opened.id);
+    return this.opensUnderWay.has(opened.key) || [...this.openedIn.values()].some((pointer) => pointer.documentId === opened.id);
   }
 
   private closeUnlessHeld(documentId: string) {
@@ -775,17 +938,40 @@ export class AppDocuments {
   /** Written whole and renamed into place, so neither a reader nor the watcher ever sees half a file. */
   private async write(opened: AppDocument, text: string) {
     mkdirSync(dirname(opened.path), { recursive: true });
-    const temporary = join(dirname(opened.path), `.${basename(opened.path)}.mirador-${process.pid}-${++this.writes}`);
+    const temporary = this.temporaryOf(opened);
     await Bun.write(temporary, text);
     await renameWhenFree(temporary, opened.path);
     opened.knownHash = hashOf(text);
   }
 
+  /** Makes the document's new file unless one is there by then, made by another conversation or program meanwhile: false then, and nothing is written. */
+  private async madeFirst(opened: AppDocument, text: string): Promise<boolean> {
+    mkdirSync(dirname(opened.path), { recursive: true });
+    const temporary = this.temporaryOf(opened);
+    await Bun.write(temporary, text);
+    try {
+      copyFileSync(temporary, opened.path, constants.COPYFILE_EXCL);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "EEXIST") return false;
+      throw error;
+    } finally {
+      rmSync(temporary, { force: true });
+    }
+    opened.knownHash = hashOf(text);
+    return true;
+  }
+
+  /** A file beside the document's to write into first, named for this one write, so two writes at once never share it. */
+  private temporaryOf(opened: AppDocument) {
+    return join(dirname(opened.path), `.${basename(opened.path)}.mirador-${process.pid}-${++this.writes}`);
+  }
+
+  /** Hears every change to the document's file, under any spelling of its name: on a folder that ignores case that is the same file, and elsewhere a needless look finds it unchanged. */
   private watch(opened: AppDocument) {
-    const name = basename(opened.path);
+    const name = foldedName(basename(opened.path));
     try {
       opened.watcher = watch(dirname(opened.path), (_event, changed) => {
-        if (changed !== null && changed !== name) return;
+        if (changed !== null && foldedName(changed) !== name) return;
         clearTimeout(opened.settling);
         opened.settling = setTimeout(() => void this.readOutsideEdit(opened), OUTSIDE_EDIT_SETTLE_MS);
       });

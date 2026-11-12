@@ -24,6 +24,8 @@ export interface SocketData {
   appSubscriptions: Set<string>;
   /** The apps whose storage the socket's page shows, by appKey: what a view keeps is one app's, not one document's. */
   appStorageSubscriptions: Set<string>;
+  /** By appKey: the document the view of a phone that names none subscribed to, which the view's operations then go to. */
+  appViewsNamingNoDocument: Map<string, string>;
   /** The plugins whose own window the socket's page is. */
   pluginWindowSubscriptions: Set<string>;
   /** The workspaces whose plugin tabs the socket's page shows. */
@@ -70,6 +72,7 @@ export const socketData = (
   subscriptions: new Set<string>(),
   appSubscriptions: new Set<string>(),
   appStorageSubscriptions: new Set<string>(),
+  appViewsNamingNoDocument: new Map<string, string>(),
   pluginWindowSubscriptions: new Set<string>(),
   pluginTabSubscriptions: new Set<string>(),
   lowDataSubscriptions: new Set<string>(),

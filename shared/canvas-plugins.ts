@@ -118,6 +118,13 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
      * `prompt` titles it, and the agent may rename it later. Plugin API 8 brought it.
      */
     title?: string;
+    /**
+     * "own": it works in a new git worktree of its own, on a new branch from what the workspace has checked out, rather
+     * than where this conversation works; its first message waits until the worktree is made, one that can't be made
+     * ends its work as failed, and one stopped meanwhile ends as stopped without starting. Throws when the workspace's
+     * folder isn't in a git repository with a commit. Plugin API 12 brought it.
+     */
+    worktree?: "own";
   } & ConversationChoices): Promise<StartedConversation>;
   /**
    * Stops the turn of a conversation this plugin's tool started from this conversation, as the user's Stop would; its
@@ -145,6 +152,8 @@ export interface StartedConversation {
   id: string;
   /** The profile's name as Mirador has it. */
   profile: string;
+  /** The git worktree it works in, when it works in one: its folder, absolute, and its branch. Plugin API 12 brought it. */
+  worktree?: { folder: string; branch: string };
 }
 
 /**

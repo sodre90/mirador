@@ -313,6 +313,8 @@ interface Runtime {
   setupCommandId?: string;
   /** What a plugin chose for the conversation it started, until a session opens on them: a failed open's retry takes them too. */
   startChoices?: ConversationChoices;
+  /** The plugin that started it stopped it while its worktree was being made, so its first message never goes. */
+  stoppedBeforeItsFirstTurn?: boolean;
   /** The reply the last stopped turn still owes: its late chunks are dropped, or held back until another reply's id or the next turn's end tells whether they were the orphan or that turn's answer. */
   cancelledReply?: CancelledReplyChunks;
 }
@@ -530,14 +532,49 @@ export class ConversationService {
    * `title` names it for good, and `choices` set its model and effort, as `create` does.
    */
   startBeside(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): StartedConversation {
+    const caller = this.callerThatMayStart(callerId);
+    const conversation = this.createFor(caller, plugin, this.profileNamed(profileName), title, choices, caller.worktree);
+    this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
+    return this.startedOf(conversation);
+  }
+
+  /**
+   * Like `startBeside`, in a new git worktree of its own, on a new branch from what the workspace has checked out. Its
+   * first message waits until the worktree is made; one that can't be made ends its work as failed, and one its plugin
+   * stopped meanwhile as stopped.
+   */
+  async startInOwnWorktree(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): Promise<StartedConversation> {
+    const caller = this.callerThatMayStart(callerId);
+    const profile = this.profileNamed(profileName);
+    const worktree = await this.worktrees.plan(this.existingWorkspace(caller.workspaceId));
+    const conversation = this.createFor(caller, plugin, profile, title, choices, worktree);
+    this.ensureSession(conversation.id)
+      .then(
+        () => (this.runtime(conversation.id).stoppedBeforeItsFirstTurn ? this.deliverOwedReply(conversation.id, "stopped") : this.prompt(conversation.id, prompt, { startsTurn: true })),
+        () => this.deliverOwedReply(conversation.id, "failed"),
+      )
+      .catch(() => {});
+    return this.startedOf(conversation);
+  }
+
+  private callerThatMayStart(callerId: string) {
     const caller = this.get(callerId);
     if (caller.startedBy) throw new Error("A plugin's tool started this conversation, so it can't start another; do the task here.");
-    const profile = this.profileNamed(profileName);
-    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices, caller.worktree);
-    this.store.recordStartedBy(conversation.id, { conversationId: callerId, plugin });
+    return caller;
+  }
+
+  /** A conversation that works for the caller, which hears through the plugin how its work ended. */
+  private createFor(caller: Conversation, plugin: string, profile: Profile, title?: string, choices?: ConversationChoices, worktree?: ConversationWorktree) {
+    const conversation = this.create(caller.workspaceId, { harness: profile.harness, profileId: profile.id }, undefined, title, choices, worktree);
+    this.store.recordStartedBy(conversation.id, { conversationId: caller.id, plugin });
     if (caller.bypassPermissions) this.setBypassPermissions(conversation.id, true);
-    this.prompt(conversation.id, prompt, { startsTurn: true }).catch(() => {});
-    return { id: conversation.id, profile: profile.name };
+    return conversation;
+  }
+
+  /** A conversation as the plugin that started it knows it: its profile's name, and the worktree it works in. */
+  private startedOf({ id, profileId, harness, worktree }: Conversation): StartedConversation {
+    const profile = (profileId && this.store.findProfile(profileId)?.name) || harnessLabels[harness];
+    return { id, profile, ...(worktree && { worktree: { folder: worktree.folder, branch: worktree.branch } }) };
   }
 
   /**
@@ -549,8 +586,7 @@ export class ConversationService {
     const workspace = this.existingWorkspace(workspaceId);
     const profile = this.profileNamed(profileName);
     const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
-    const conversation = this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle);
-    return { id: conversation.id, profile: profile.name };
+    return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle));
   }
 
   private profileNamed(profileName: string) {
@@ -562,8 +598,9 @@ export class ConversationService {
 
   /**
    * For a plugin's tool: stops the turn of a conversation it started from the caller's, as the user's Stop does, so the
-   * plugin's `replied` hears it end as "stopped". One that no longer exists, or whose turn already ended, is let be; one
-   * this plugin's tool didn't start from that conversation throws.
+   * plugin's `replied` hears it end as "stopped"; one still waiting for its worktree ends so once that is made, without
+   * starting. One that no longer exists, or whose turn already ended, is let be; one this plugin's tool didn't start from
+   * that conversation throws.
    */
   async stopStarted(callerId: string, plugin: string, conversationId: string): Promise<void> {
     const conversation = this.store.findConversation(conversationId);
@@ -572,7 +609,11 @@ export class ConversationService {
     if (startedBy?.conversationId !== callerId || startedBy.plugin !== plugin) {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be stopped here.`);
     }
-    if (!this.runtime(conversationId).running) return;
+    const runtime = this.runtime(conversationId);
+    if (!runtime.running) {
+      if (!startedBy.reply) runtime.stoppedBeforeItsFirstTurn = true;
+      return;
+    }
     await this.cancel(conversationId);
   }
 
@@ -621,7 +662,7 @@ export class ConversationService {
     this.store.recordDelegatedReply(conversationId, { ended: told.ended, opening: told.text && cutWithEllipsis(told.text, REPLY_OPENING_GRAPHEMES) });
     this.republish(conversationId);
     if (!this.store.hasConversation(startedBy.conversationId)) return;
-    const started = { id: conversationId, profile: (conversation.profileId && this.store.findProfile(conversation.profileId)?.name) || harnessLabels[conversation.harness] };
+    const started = this.startedOf(conversation);
     this.ranOnOfTurn(conversation, turn, told.ended)
       .then((ranOn) => this.hearReply(started, startedBy, ranOn ? { ...told, ranOn } : told))
       .catch((error: unknown) => {

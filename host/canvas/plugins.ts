@@ -58,7 +58,8 @@ const WINDOW_STATE_SETTLES_MS = 100;
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
 
-export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices) => StartedConversation;
+/** `worktree`: "own" starts it in a git worktree of its own, rather than where the caller works. */
+export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, worktree?: "own") => StartedConversation | Promise<StartedConversation>;
 
 export type StopStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
 
@@ -498,7 +499,7 @@ export class CanvasPlugins {
       caller,
       publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
       prompt: this.promptOfItsOwn(plugin, conversationId),
-      startConversation: async ({ profile, prompt, title, model, effort }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title, { model, effort }),
+      startConversation: async ({ profile, prompt, title, model, effort, worktree }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title, { model, effort }, worktree),
       stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
     };
   }
