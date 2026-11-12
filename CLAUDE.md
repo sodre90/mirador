@@ -63,6 +63,14 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - **Author and committer:** whoever owns the checkout, from its git config. Never pass `--author`, set `user.name` or `user.email`, or write a name here.
 - **Beads hook:** the beads `prepare-commit-msg` hook, which adds agent trailers, was removed on purpose. Never reinstall it.
 - **One commit per finished change**, with only that change's files. Other work in the tree stays uncommitted. Include `.beads/interactions.jsonl` when it changed.
+- **Land commits on main with `scripts/land.sh`:**
+  - In the main checkout, which several sessions share, run `scripts/land.sh -m "<message>" -- <paths>`. It commits those paths as they are on disk through an index of its own, then updates the shared index for them.
+  - It takes whole files: name files, not folders, and compare `git diff <file>` with what you wrote first. When another session's edits are in a file too, message that session rather than landing them.
+  - In a worktree, commit there and run `scripts/land.sh`, or pass it `-m` and paths the same way. It fast-forwards the main checkout, and refuses when the commits change a file someone is editing there.
+  - Then `git push origin main`.
+  - Never move main any other way:
+    - a plain `git commit` in the main checkout takes in what other sessions staged;
+    - `git update-ref` or `git branch -f` on main, or a `GIT_INDEX_FILE` left exported, leaves the main checkout's index and files behind main, where its new commits show up as staged reverts.
 - **A pull request holds a single squashed commit:** fold follow-up fixes into it and update the branch with `git push --force-with-lease`.
 - **Never amend or rebase a commit that's already on main:** make a new commit instead. Rewriting a pushed commit leaves main and origin/main with two copies of it. A pull request's own branch is the exception above.
 - **Messages:** one plain sentence saying what the user gets, as in "Reorder queued messages by dragging them".
