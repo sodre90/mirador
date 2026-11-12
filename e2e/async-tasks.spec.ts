@@ -156,3 +156,30 @@ test("Cmd+Shift+R while a background task runs restarts the host, rather than le
   await expect(page.getByText("Restarting the host…")).toHaveCount(0, { timeout: 30_000 });
   expect(host.log).not.toContain("Cannot use a closed database");
 });
+
+test("/reload in one conversation takes away the background tasks of another idle on the same agent process, which ends them", async ({ page }) => {
+  await signIn(page, host);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "async · opencode" });
+  const before = page.url();
+  await page.getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page).not.toHaveURL(before);
+  await sendMessage(page, "ASYNC TASK");
+  await waitForTurnToEnd(page);
+  const tasks = page.getByRole("region", { name: "Background tasks" });
+  await expect(tasks.locator("li")).toContainText("Running:");
+  const withTask = page.url();
+
+  await page.getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page).not.toHaveURL(withTask);
+  await sendMessage(page, "Hello");
+  await waitForTurnToEnd(page);
+  const composer = page.locator(".composer:visible textarea");
+  await composer.fill("/reload");
+  await composer.press("Enter");
+  await expect(page.locator(".timeline:visible .notice-line", { hasText: "Agent reloaded" })).toBeVisible();
+  await waitForTurnToEnd(page);
+
+  await page.goto(withTask);
+  await expect(page.locator(".timeline:visible")).toContainText("ASYNC TASK");
+  await expect(tasks).toHaveCount(0);
+});

@@ -1130,7 +1130,6 @@ export class ConversationService {
   private async restartAgentProcessOf(conversation: Conversation) {
     const harness = this.agentProcesses.get(this.processKey(this.profileOf(conversation), conversation));
     if (!harness) return;
-    this.forgetAsyncTasks(conversation.id);
     this.continueStoppedTurns(await this.killAgent(harness, { kind: "restarted-for-reload" }));
   }
 
@@ -1896,16 +1895,18 @@ export class ConversationService {
 
   /**
    * The next message of a conversation idle on an agent being stopped starts a fresh one, rather than reach this one
-   * before its exit is noticed, which on Windows, where ending a process tree takes a while, it would.
+   * before its exit is noticed, which on Windows, where ending a process tree takes a while, it would. Its background
+   * tasks end with the process, and once moved off it, its exit no longer finds the conversation to forget them for.
    */
   private moveIdleConversationsOff(harness: HarnessProcess) {
     this.agentProcesses.forEach((current, profileId) => {
       if (current === harness) this.agentProcesses.delete(profileId);
     });
-    this.runtimes.forEach((runtime) => {
+    this.runtimes.forEach((runtime, conversationId) => {
       if (runtime.harness !== harness || runtime.running) return;
       runtime.harness = undefined;
       runtime.sessionId = undefined;
+      this.forgetAsyncTasks(conversationId);
     });
   }
 
