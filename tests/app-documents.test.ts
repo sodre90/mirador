@@ -620,6 +620,23 @@ describe("AppDocuments", () => {
     apps.stop();
   });
 
+  test("a view naming only its folder and app gets the document a conversation of that folder showed last", async () => {
+    const { apps, workspacePath } = await setUp();
+    const aMomentLater = () => Bun.sleep(5);
+    writeFileSync(join(workspacePath, "other.json"), JSON.stringify({ count: 5 }));
+    expect(apps.lastShownIn("w1", "counter")).toBeNull();
+    const first = await apps.open("c1", "counter", "counter.json");
+    await aMomentLater();
+    const second = await apps.open("c2", "counter", "other.json");
+    expect(apps.lastShownIn("w1", "counter")).toBe(second.documentId);
+    await aMomentLater();
+    await apps.open("c1", "counter", "counter.json");
+    expect(apps.lastShownIn("w1", "counter")).toBe(first.documentId);
+    expect(apps.lastShownIn("wt1", "counter")).toBeNull();
+    expect(apps.lastShownIn("w1", "notes")).toBeNull();
+    apps.stop();
+  });
+
   test("a view asks over the app and workspace its document belongs to, and no other", async () => {
     const { apps } = await setUp();
     const opened = await apps.open("c1", "counter", "counter.json");

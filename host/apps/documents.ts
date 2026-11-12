@@ -287,6 +287,17 @@ export class AppDocuments {
     if (opened.workspaceId !== workspaceId || opened.plugin.manifest.name !== appName) throw new AppFileRefused(404, `No ${appName} document of this workspace is open as ${documentId}.`);
   }
 
+  /**
+   * The document of an app that a view naming only its folder and app shows, as phones did before each conversation had a
+   * document of its own: the one a conversation of that folder showed last, or null when none has the app open.
+   */
+  lastShownIn(folderId: string, appName: string): string | null {
+    const shownLast = this.openedInForFolder(folderId)
+      .filter((pointer) => pointer.app === appName)
+      .reduce<OpenedIn | null>((last, pointer) => (last === null || (pointer.shownAt ?? 0) >= (last.shownAt ?? 0) ? pointer : last), null);
+    return shownLast?.documentId ?? null;
+  }
+
   /** What a page that shows an open document gets, or null when that document closed. */
   state(documentId: string): AppDocumentState | null {
     const opened = this.documents.get(documentId);

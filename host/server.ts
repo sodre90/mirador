@@ -688,6 +688,16 @@ export function startServer(services: HostServices) {
     return documentId;
   };
 
+  /**
+   * The document an app view's message is about: the one it names, or, from a phone that names none, the one its view
+   * subscribed to, so what the user does there lands on the document they see.
+   */
+  const documentOfView = (socket: BrowserSocket, message: { workspaceId: string; app: string; documentId?: string }) => {
+    const documentId = message.documentId ?? socket.data.appViewsNamingNoDocument.get(appKey(message));
+    if (documentId === undefined) throw new AppFileRefused(404, `No ${message.app} document is open for this view; open the app again.`);
+    return documentId;
+  };
+
   /** A file of the workspace an open document is in, for its view in the signed-in page. */
   function serveAppFile(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/file">) {
     const refused = refusedPageRequest(request);
@@ -1311,16 +1321,20 @@ export function startServer(services: HostServices) {
       case "ask.answer":
         return canvas.answer(message.itemId, message.label, message.note, message.answers);
       case "app.subscribe": {
-        socket.data.appSubscriptions.add(message.documentId);
+        const documentId = message.documentId ?? apps.lastShownIn(message.workspaceId, message.app);
+        if (message.documentId === undefined && documentId !== null) socket.data.appViewsNamingNoDocument.set(appKey(message), documentId);
+        if (documentId !== null) socket.data.appSubscriptions.add(documentId);
         socket.data.appStorageSubscriptions.add(appKey(message));
         hub.send(socket, { type: "app.storage", workspaceId: message.workspaceId, app: message.app, items: appStorage.items(message.workspaceId, message.app) });
-        const state = apps.state(message.documentId);
+        const state = documentId === null ? null : apps.state(documentId);
         if (state) hub.send(socket, { type: "app.state", state });
         return;
       }
       case "app.unsubscribe": {
-        socket.data.appSubscriptions.delete(message.documentId);
         const key = appKey(message);
+        const documentId = message.documentId ?? socket.data.appViewsNamingNoDocument.get(key);
+        socket.data.appViewsNamingNoDocument.delete(key);
+        if (documentId !== undefined) socket.data.appSubscriptions.delete(documentId);
         const anotherDocumentOfIt = [...socket.data.appSubscriptions].some((documentId) => {
           const shown = apps.state(documentId);
           return shown !== null && appKey(shown) === key;
@@ -1329,8 +1343,8 @@ export function startServer(services: HostServices) {
         return;
       }
       case "app.apply":
-        return void apps
-          .applyFromView(message.documentId, message.op)
+        return void Promise.resolve()
+          .then(() => apps.applyFromView(documentOfView(socket, message), message.op))
           .catch((error) => {
             console.warn(`${message.app}'s view applied an operation that failed: ${messageOf(error)}`);
             hub.send(socket, { type: "error", ...appFailure(error) });
@@ -1341,7 +1355,7 @@ export function startServer(services: HostServices) {
         });
       case "app.run":
         try {
-          return void apps.runFromView(message.documentId, message.task);
+          return void apps.runFromView(documentOfView(socket, message), message.task);
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }
@@ -1354,7 +1368,7 @@ export function startServer(services: HostServices) {
           );
       case "app.stop-task":
         try {
-          return apps.stopTask(message.documentId);
+          return apps.stopTask(documentOfView(socket, message));
         } catch (error) {
           return hub.send(socket, { type: "error", ...appFailure(error) });
         }

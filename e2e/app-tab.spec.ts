@@ -557,4 +557,37 @@ test("the agent opens an app that its changes, your clicks and outside edits all
     await sendAndWait(page, "Start");
     await expect(view(page).locator("#files-heard")).toHaveText(String(filesHeard + 1));
   });
+
+  await test.step("a phone from before each conversation had a document of its own, naming only the workspace and app, sees and changes the document shown last", async () => {
+    await callCanvasTool(host, first, "app_open", { app: "counter", file: "older-phone.json" });
+    const heard = await page.evaluate(
+      () =>
+        new Promise<{ file: string; count: number }[]>((resolve) => {
+          const socket = new WebSocket(`${location.origin.replace(/^http/, "ws")}/ws`);
+          const states: { file: string; count: number }[] = [];
+          let named = { workspaceId: "", app: "" };
+          socket.onmessage = ({ data }) => {
+            const message = JSON.parse(String(data));
+            if (message.type === "snapshot") {
+              const { workspaceId, app } = message.openApps.find((open: { file: string }) => open.file === "older-phone.json");
+              named = { workspaceId, app };
+              socket.send(JSON.stringify({ type: "app.subscribe", ...named }));
+            }
+            if (message.type !== "app.state") return;
+            states.push({ file: message.state.file, count: message.state.document.count });
+            if (states.length === 1) socket.send(JSON.stringify({ type: "app.apply", ...named, op: { op: "add", by: 1 } }));
+            if (message.state.document.count === 1) {
+              socket.send(JSON.stringify({ type: "app.unsubscribe", ...named }));
+              socket.close();
+              resolve([states[0]!, states.at(-1)!]);
+            }
+          };
+        }),
+    );
+    expect(heard).toEqual([
+      { file: "older-phone.json", count: 0 },
+      { file: "older-phone.json", count: 1 },
+    ]);
+    expect(JSON.parse(readFileSync(join(host.projectDir, "older-phone.json"), "utf8"))).toEqual({ count: 1 });
+  });
 });
