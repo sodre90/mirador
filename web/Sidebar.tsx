@@ -22,7 +22,7 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { conversationsIn, isUnderCaller, putAwayIn } from "./navigation.ts";
+import { conversationsIn, isUnderCaller, putAwayIn, showsInSidebar } from "./navigation.ts";
 import { isPending } from "../shared/reminders.ts";
 import { openReminderPicker, removeReminder } from "./reminders.ts";
 import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
@@ -425,7 +425,7 @@ function WorkspaceSection({
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
   const openedDelegations = useOpenedDelegations();
   const delegatedTo = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && conversation.startedBy!.conversationId === caller.id);
-  const shown = conversations.filter((conversation) => !isUnderCaller(conversation, conversations) || openedDelegations.has(conversation.startedBy!.conversationId));
+  const shown = conversations.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
   const conversationList = useRef<HTMLUListElement>(null);
   const conversationDrag = useDragToReorder(
     (conversationId, beforeConversationId) => connection.send({ type: "conversation.move", conversationId, beforeConversationId }),

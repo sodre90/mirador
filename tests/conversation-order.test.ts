@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { CUSTOM_ORDER, customOrderAfterDrag, inConversationOrder, isConversationOrder, landingBeforeInCustomOrder, usualDirection, type ConversationOrder } from "../shared/conversation-order.ts";
 import { UNTITLED, type Conversation } from "../shared/model.ts";
-import { conversationsIn, numberedConversation, turnTimesOf } from "../web/navigation.ts";
+import { conversationsIn, numberedConversation, showsInSidebar, turnTimesOf } from "../web/navigation.ts";
 
 type Listed = Pick<Conversation, "id" | "title" | "titleSetByUser" | "favourite" | "lastMessageAt" | "lastReplyAt" | "position" | "createdAt">;
 
@@ -175,5 +175,23 @@ describe("the sidebar's list", () => {
 
   test("keeps the custom order when none was chosen", () => {
     expect(conversationsIn({ conversations }, "w").map(({ id }) => id)).toEqual(["star", "recent", "caller", "task"]);
+  });
+
+  test("leaves out a dismissed task, unless it waits for you", () => {
+    const dismissed = { conversationId: "caller", plugin: "delegate", reply: null, dismissed: true };
+    const settled = conversation("settled", { startedBy: dismissed });
+    const asking = conversation("asking", { startedBy: dismissed, waitingFor: "question" });
+    const ids = conversationsIn({ conversations: [conversations[0]!, settled, asking] }, "w").map(({ id }) => id);
+    expect(ids).toEqual(["caller", "asking"]);
+  });
+
+  test("shows a task under its caller while the caller's tasks are open, or while it waits for you", () => {
+    const [caller, task] = conversations as [Conversation, Conversation];
+    const listed = [caller, task];
+    expect(showsInSidebar(caller, listed, new Set())).toBe(true);
+    expect(showsInSidebar(task, listed, new Set())).toBe(false);
+    expect(showsInSidebar(task, listed, new Set(["caller"]))).toBe(true);
+    expect(showsInSidebar({ ...task, waitingFor: "finished" }, listed, new Set())).toBe(true);
+    expect(showsInSidebar(task, [task], new Set()), "with its caller not listed, it stands on its own").toBe(true);
   });
 });

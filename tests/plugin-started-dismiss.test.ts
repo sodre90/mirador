@@ -2,6 +2,7 @@ import { afterAll, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { CanvasService } from "../host/canvas/service.ts";
 import { loadConfig } from "../host/config.ts";
 import { ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
@@ -30,7 +31,10 @@ function callerBesideHelper() {
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: "caller" }, createdAt: 1 });
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const notifier = { mute() {}, unmute() {} };
-  const conversations = new ConversationService(store, new Hub(), config, notifier as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+  const notifications = new SystemNotifications(store, new Hub());
+  const conversations = new ConversationService(store, new Hub(), config, notifier as never, {} as never, {} as never, notifications);
+  const canvas = new CanvasService(store, new Hub(), conversations, notifications, []);
+  conversations.withdrawsQuestionsWith((conversationId) => canvas.withdrawWaitingAsks(conversationId));
   const agentProcesses = (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses;
   agentProcesses.set("caller", quickAgent("caller"));
   agentProcesses.set("helper", quickAgent("helper"));
@@ -45,7 +49,8 @@ function callerBesideHelper() {
     return started.id;
   };
   const waitingIds = () => conversations.waiting().conversations.map(({ conversationId }) => conversationId);
-  return { conversations, store, callerId: caller.id, startFinished, waitingIds };
+  const ask = (conversationId: string) => canvas.openAsk(conversationId, { question: "Which volume?", options: [{ label: "A" }, { label: "B" }] });
+  return { conversations, store, callerId: caller.id, startFinished, waitingIds, ask };
 }
 
 test("dismissing a finished delegated task takes its Done mark, so nothing counts it as waiting once the sidebar hides it", async () => {
@@ -71,11 +76,34 @@ test("clearing a caller's finished delegated tasks takes their Done marks", asyn
   expect(store.listUnseenTurnEnds()).toEqual([]);
 });
 
-test("dismissing a conversation no plugin started leaves its mark", () => {
-  const { conversations, callerId, waitingIds } = callerBesideHelper();
+test("dismissing a delegated task takes back the question it still asks, so it no longer waits for you", async () => {
+  const { conversations, store, startFinished, waitingIds, ask } = callerBesideHelper();
+  const taskId = await startFinished("Review the change");
+  const question = ask(taskId);
+
+  conversations.dismissDelegation(taskId);
+
+  expect(waitingIds()).toEqual([]);
+  expect(store.findCanvasItem(question.id)?.status).toBe("cancelled");
+});
+
+test("clearing a caller's finished delegated tasks takes back their questions", async () => {
+  const { conversations, store, callerId, startFinished, waitingIds, ask } = callerBesideHelper();
+  const questions = [ask(await startFinished("Review one")), ask(await startFinished("Review two"))];
+
+  conversations.clearFinishedDelegations(callerId, "board");
+
+  expect(waitingIds()).toEqual([]);
+  expect(questions.map(({ id }) => store.findCanvasItem(id)?.status)).toEqual(["cancelled", "cancelled"]);
+});
+
+test("dismissing a conversation no plugin started leaves its mark and its question", () => {
+  const { conversations, store, callerId, waitingIds, ask } = callerBesideHelper();
   conversations.markUnread(callerId);
+  const question = ask(callerId);
 
   conversations.dismissDelegation(callerId);
 
   expect(waitingIds()).toEqual([callerId]);
+  expect(store.findCanvasItem(question.id)?.status).toBe("waiting");
 });

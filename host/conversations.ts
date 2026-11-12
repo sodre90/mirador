@@ -387,6 +387,7 @@ export class ConversationService {
   private canvasNotesOf: (conversationId: string) => CanvasNote[] = () => [];
   private restoreCanvas: RestoreCanvas = async () => {};
   private askForm: AskForm = async () => ({ action: "decline" });
+  private withdrawQuestions: (conversationId: string) => void = () => {};
   private hearReply: HearReply = () => {};
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
@@ -634,18 +635,23 @@ export class ConversationService {
     this.hearWorktreeRemoval = hearWorktreeRemoval;
   }
 
-  /** The user takes a started conversation off its caller's list of delegated tasks, and with it off the sidebar, so its mark goes too. */
+  /** The user takes a started conversation off its caller's list of delegated tasks, and with it off the sidebar, so its mark and open questions go too. */
   dismissDelegation(conversationId: string) {
-    if (this.store.dismissDelegation(conversationId)) this.forgetUnseenTurnEnd(conversationId);
+    if (this.store.dismissDelegation(conversationId)) this.stopWaitingForUser(conversationId);
     this.republish(conversationId);
   }
 
   /** The user dismisses finished delegated tasks of this caller; with `plugin`, only that plugin's. */
   clearFinishedDelegations(callerId: string, plugin?: string) {
     for (const id of this.store.dismissFinishedDelegations(callerId, plugin)) {
-      this.forgetUnseenTurnEnd(id);
+      this.stopWaitingForUser(id);
       this.republish(id);
     }
+  }
+
+  private stopWaitingForUser(conversationId: string) {
+    this.forgetUnseenTurnEnd(conversationId);
+    this.withdrawQuestions(conversationId);
   }
 
   /**
@@ -2826,6 +2832,11 @@ export class ConversationService {
 
   askFormsWith(askForm: AskForm) {
     this.askForm = askForm;
+  }
+
+  /** The canvas takes back a conversation's open questions, telling any tool call that waits on one. */
+  withdrawsQuestionsWith(withdrawQuestions: (conversationId: string) => void) {
+    this.withdrawQuestions = withdrawQuestions;
   }
 
   private async handleElicitationRequest(request: acp.CreateElicitationRequest, signal: AbortSignal): Promise<acp.CreateElicitationResponse> {

@@ -116,6 +116,7 @@ const canvasAssetsOrigins = [
 ];
 const canvas = new CanvasService(store, hub, conversations, notifications, canvasAssetsOrigins);
 conversations.askFormsWith((conversationId, request, signal) => askFormOnCanvas(canvas, conversationId, request, signal));
+conversations.withdrawsQuestionsWith((conversationId) => canvas.withdrawWaitingAsks(conversationId));
 conversations.restoresCanvasWith((conversationId, source, events) => restoreCanvas(conversationId, source, events, store, canvas, canvasPlugins));
 // The checklist plugin's note about the user's ticks came before the page errors when the checklist was Mirador's own.
 conversations.hearCanvasNotesFrom((conversationId) => [...canvasPlugins.notesForAgent(conversationId), ...canvas.notesForAgent(conversationId)]);

@@ -19,7 +19,7 @@ export const turnTimesOf = (conversations: Conversation[]): HeldTurnTimes =>
 /**
  * A workspace's conversations in the order the sidebar lists them: favourites first, then the order the user chose (by
  * default where they put them, a new one first), with one a plugin's tool started right under the conversation that
- * started it, until the user dismisses its task.
+ * started it, until the user dismisses its task; a dismissed task comes back while it waits for the user.
  */
 export function conversationsIn(state: Pick<NavigationState, "conversations" | "conversationOrder" | "heldTurnTimes">, workspaceId: string): Conversation[] {
   const order = inConversationOrder(state.conversationOrder ?? CUSTOM_ORDER);
@@ -28,7 +28,7 @@ export function conversationsIn(state: Pick<NavigationState, "conversations" | "
     return held ? { ...conversation, ...held } : conversation;
   };
   const inOrder = state.conversations
-    .filter((conversation) => conversation.workspaceId === workspaceId && !conversation.startedBy?.dismissed && !isPutAway(conversation.reminder))
+    .filter((conversation) => conversation.workspaceId === workspaceId && !isDismissedAndSettled(conversation) && !isPutAway(conversation.reminder))
     .sort((a, b) => order(asHeld(a), asHeld(b)));
   const callerOf = (conversation: Conversation) => (isUnderCaller(conversation, inOrder) ? conversation.startedBy!.conversationId : null);
   return inOrder.filter((conversation) => !callerOf(conversation)).flatMap((caller) => [caller, ...inOrder.filter((conversation) => callerOf(conversation) === caller.id)]);
@@ -40,9 +40,15 @@ export const putAwayIn = (state: Pick<NavigationState, "conversations">, workspa
     .filter((conversation) => conversation.workspaceId === workspaceId && isPutAway(conversation.reminder))
     .sort((a, b) => a.reminder!.at - b.reminder!.at);
 
+const isDismissedAndSettled = (conversation: Conversation) => conversation.startedBy?.dismissed === true && !conversation.waitingFor;
+
 /** Whether the sidebar lists the conversation under the one that started it, which it does while that one is listed too. */
 export const isUnderCaller = (conversation: Conversation, listed: Conversation[]) =>
   conversation.startedBy !== undefined && listed.some(({ id }) => id === conversation.startedBy!.conversationId);
+
+/** A conversation under its caller shows while the caller's delegated tasks are open, or while it waits for the user. */
+export const showsInSidebar = (conversation: Conversation, listed: Conversation[], callersOpened: ReadonlySet<string>) =>
+  !isUnderCaller(conversation, listed) || callersOpened.has(conversation.startedBy!.conversationId) || Boolean(conversation.waitingFor);
 
 const newest = (conversations: Conversation[]) => conversations.reduce((newest, each) => (each.createdAt > newest.createdAt ? each : newest));
 
