@@ -97,6 +97,7 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
   const [batch, setBatch] = useState<Batch | null>(null);
   const [listOpen, setListOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  const [sendingBatch, setSendingBatch] = useState(false);
   const [note, setNote] = useFadingNote();
   const enterWhileBusy = useEnterWhileBusy();
   const fullscreen = usePaneFullscreen("canvas");
@@ -175,30 +176,36 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
     setListOpen(false);
     setEditing(null);
   };
+  /** The message is made from the comments as they stand when Send is pressed, so they can't change until it has gone. */
   const sendBatch = async (overall: string, intent: MarkIntent) => {
     if (!batch || batch.comments.length === 0) return;
-    const { text, imageMarks } = batchedMarkPrompt(batch.pageTitle, batch.comments, overall, intent);
-    const count = batch.comments.length;
-    const uploaded = await uploadPictures(batch.conversationId, imageMarks).catch(async (error: unknown) => {
-      setNote({ text: failureText(error), failed: true });
-      return null;
-    });
-    if (uploaded === null) return;
-    const sent = connection.send({
-      type: "conversation.prompt",
-      conversationId: batch.conversationId,
-      text,
-      imageIds: uploaded,
-      afterTurn: enterWhileBusy === "after-turn",
-    });
-    if (!sent) {
-      // Pictures stored for a message the host never took would sit with the conversation forever.
-      discardImages(batch.conversationId, uploaded.map((imageId, number) => ({ number: number + 1, imageId })));
-      setNote({ text: phrases.notConnected, failed: true });
-      return;
+    setSendingBatch(true);
+    try {
+      const { text, imageMarks } = batchedMarkPrompt(batch.pageTitle, batch.comments, overall, intent);
+      const count = batch.comments.length;
+      const uploaded = await uploadPictures(batch.conversationId, imageMarks).catch(async (error: unknown) => {
+        setNote({ text: failureText(error), failed: true });
+        return null;
+      });
+      if (uploaded === null) return;
+      const sent = connection.send({
+        type: "conversation.prompt",
+        conversationId: batch.conversationId,
+        text,
+        imageIds: uploaded,
+        afterTurn: enterWhileBusy === "after-turn",
+      });
+      if (!sent) {
+        // Pictures stored for a message the host never took would sit with the conversation forever.
+        discardImages(batch.conversationId, uploaded.map((imageId, number) => ({ number: number + 1, imageId })));
+        setNote({ text: phrases.notConnected, failed: true });
+        return;
+      }
+      discardAll();
+      setNote({ text: batchPhrases.sent(count, intent) });
+    } finally {
+      setSendingBatch(false);
     }
-    discardAll();
-    setNote({ text: batchPhrases.sent(count, intent) });
   };
 
   const editingComment = batch?.comments.find((comment) => comment.id === editing);
@@ -210,16 +217,24 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
           mark={mark}
           batching={batch !== null}
           batchFull={batch !== null && batch.comments.length >= MAX_BATCH_COMMENTS}
+          batchSending={sendingBatch}
           onSend={send}
           onAdd={addComment}
           onClose={finishMark}
         />
       )}
       {editingComment && (
-        <MarkWordsBox key={editingComment.id} mark={editingComment.mark} words={editingComment.words} onSave={(words) => saveComment(editingComment.id, words)} onClose={() => setEditing(null)} />
+        <MarkWordsBox
+          key={editingComment.id}
+          mark={editingComment.mark}
+          words={editingComment.words}
+          batchSending={sendingBatch}
+          onSave={(words) => saveComment(editingComment.id, words)}
+          onClose={() => setEditing(null)}
+        />
       )}
       {listOpen && batch && (
-        <MarkBatchList batch={batch} onEdit={setEditing} onRemove={removeComment} onDiscard={discardAll} onSend={sendBatch} onClose={() => setListOpen(false)} />
+        <MarkBatchList batch={batch} sending={sendingBatch} onEdit={setEditing} onRemove={removeComment} onDiscard={discardAll} onSend={sendBatch} onClose={() => setListOpen(false)} />
       )}
       {note && (
         <div className={`page-mark-sent ${note.failed ? "failed" : ""}`} role="status">
@@ -236,12 +251,16 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
   return { pointing, point, received, waiting: batch?.comments.length ?? 0, listOpen, toggleList: () => setListOpen((open) => !open), opened };
 }
 
-/** The box for the user's words on a mark: sent on its own, added to the waiting comments, or saved back over a comment being edited. */
+/**
+ * The box for the user's words on a mark: sent on its own, added to the waiting comments, or saved back over a comment
+ * being edited; the last two wait while the waiting comments are being sent.
+ */
 function MarkWordsBox({
   mark,
   words = "",
   batching = false,
   batchFull = false,
+  batchSending = false,
   onSave,
   onSend,
   onAdd,
@@ -251,6 +270,7 @@ function MarkWordsBox({
   words?: string;
   batching?: boolean;
   batchFull?: boolean;
+  batchSending?: boolean;
   onSave?: (words: string) => void;
   onSend?: (words: string, intent: MarkIntent) => Promise<void>;
   onAdd?: (words: string) => void;
@@ -275,8 +295,11 @@ function MarkWordsBox({
   };
   const askAbout = () => act(() => onSend?.(text, "ask"));
   const changePage = () => act(() => onSend?.(text, "change"));
-  const addToList = () => act(() => onAdd?.(text));
-  const saveBack = () => act(() => onSave?.(text.trim()));
+  const unlessBatchSending = (changeBatch: () => Promise<void>) => async () => {
+    if (!batchSending) await changeBatch();
+  };
+  const addToList = unlessBatchSending(() => act(() => onAdd?.(text)));
+  const saveBack = unlessBatchSending(() => act(() => onSave?.(text.trim())));
   const keysDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -291,9 +314,9 @@ function MarkWordsBox({
     }
   };
   const actions: { label: string; onAct: () => Promise<void>; primary: boolean; hint?: string; disabled?: boolean }[] = onSave
-    ? [{ label: batchPhrases.save, onAct: saveBack, primary: true }]
+    ? [{ label: batchPhrases.save, onAct: saveBack, primary: true, disabled: batchSending }]
     : [
-        { label: batchPhrases.add, onAct: addToList, primary: batching, hint: hints.pageMarkAdd, disabled: batchFull },
+        { label: batchPhrases.add, onAct: addToList, primary: batching, hint: hints.pageMarkAdd, disabled: batchFull || batchSending },
         { label: phrases.ask, onAct: askAbout, primary: !batching },
         { label: phrases.change, onAct: changePage, primary: false, hint: hints.pageMarkChange },
       ];
@@ -340,6 +363,7 @@ function MarkWordsBox({
 /** The comments waiting on a page, with the note meant for all of them, to be sent together or thrown away. */
 function MarkBatchList({
   batch,
+  sending,
   onEdit,
   onRemove,
   onDiscard,
@@ -347,6 +371,7 @@ function MarkBatchList({
   onClose,
 }: {
   batch: Batch;
+  sending: boolean;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onDiscard: () => void;
@@ -354,22 +379,14 @@ function MarkBatchList({
   onClose: () => void;
 }) {
   const [overall, setOverall] = useState("");
-  const [busy, setBusy] = useState(false);
   const count = batch.comments.length;
   const full = count >= MAX_BATCH_COMMENTS;
-  const send = (intent: MarkIntent) => async () => {
-    setBusy(true);
-    try {
-      await onSend(overall, intent);
-    } finally {
-      setBusy(false);
-    }
-  };
+  const send = (intent: MarkIntent) => () => onSend(overall, intent);
   return (
     <div className="mark-batch" role="dialog" aria-label={batchPhrases.listLabel(count)}>
       <div className="mark-batch-head">
         <span className="mark-batch-title">{batchPhrases.onPage(batch.pageTitle, count)}</span>
-        <button type="button" className="icon" aria-label={batchPhrases.close} onClick={onClose}>
+        <button type="button" className="icon" aria-label={batchPhrases.close} disabled={sending} onClick={onClose}>
           ×
         </button>
       </div>
@@ -386,10 +403,10 @@ function MarkBatchList({
               <span className="mark-batch-words">{comment.words}</span>
             </span>
             <span className="mark-batch-actions">
-              <button type="button" className="link" onClick={() => onEdit(comment.id)}>
+              <button type="button" className="link" disabled={sending} onClick={() => onEdit(comment.id)}>
                 {batchPhrases.edit}
               </button>
-              <button type="button" className="link" onClick={() => onRemove(comment.id)}>
+              <button type="button" className="link" disabled={sending} onClick={() => onRemove(comment.id)}>
                 {batchPhrases.remove}
               </button>
             </span>
@@ -399,6 +416,7 @@ function MarkBatchList({
       <textarea
         value={overall}
         rows={2}
+        disabled={sending}
         placeholder={batchPhrases.overallPlaceholder}
         onChange={(event) => setOverall(event.target.value)}
         onKeyDown={(event) => {
@@ -406,13 +424,13 @@ function MarkBatchList({
         }}
       />
       <div className="ask-about-actions">
-        <button type="button" className="primary" disabled={busy} onClick={send("ask")}>
+        <button type="button" className="primary" disabled={sending} onClick={send("ask")}>
           {batchPhrases.send(count)}
         </button>
-        <button type="button" disabled={busy} onClick={send("change")} data-hint={hints.pageMarkBatchChange}>
+        <button type="button" disabled={sending} onClick={send("change")} data-hint={hints.pageMarkBatchChange}>
           {batchPhrases.changeAll(count)}
         </button>
-        <button type="button" disabled={busy} onClick={onDiscard}>
+        <button type="button" disabled={sending} onClick={onDiscard}>
           {batchPhrases.discard}
         </button>
       </div>

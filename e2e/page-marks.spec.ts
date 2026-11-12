@@ -95,6 +95,21 @@ async function expectOutlineOn(outline: Locator, element: Locator) {
 const waitingCount = (page: Page, count: number) =>
   expect(batchToggle(page)).toHaveAttribute("aria-label", `${count} ${count === 1 ? "comment" : "comments"} waiting for the agent`);
 
+/** Holds the upload of a message's pictures until released, as a slow connection would. */
+async function holdPictureUploads(page: Page) {
+  const uploads = "**/conversations/*/images";
+  let uploadStarted = () => {};
+  let release = () => {};
+  const started = new Promise<void>((resolve) => (uploadStarted = resolve));
+  const released = new Promise<void>((resolve) => (release = resolve));
+  await page.route(uploads, async (route) => {
+    uploadStarted();
+    await released;
+    await route.continue();
+  });
+  return { started, release: () => release(), stopHolding: () => page.unroute(uploads) };
+}
+
 async function startConversationWithoutModel(page: Page) {
   const previousUrl = page.url();
   await page.getByRole("button", { name: "+ New conversation" }).click();
@@ -292,8 +307,19 @@ test("the user selects text or points at an element on a page the agent showed, 
     await expect(list).toContainText("3 comments on “Workspace layout options”");
     await list.getByRole("textbox").fill("Keep the colour scheme as it is.");
     const messagesBefore = await userMessages(page).count();
+    const upload = await holdPictureUploads(page);
     await list.getByRole("button", { name: "Send 3 comments" }).click();
+    await upload.started;
+    for (const control of [list.getByRole("button", { name: "Edit" }).first(), list.getByRole("button", { name: "Remove" }).first(), list.getByRole("textbox"), list.getByRole("button", { name: "Discard all" })])
+      await expect(control, "the comments being sent can't change until they have gone").toBeDisabled();
+    await pointToggle(page).click();
+    await shown.locator("#save").click();
+    await wordsBox(page).getByRole("textbox").fill("One more");
+    await expect(wordsBox(page).getByRole("button", { name: "Add comment" })).toBeDisabled();
+    await wordsBox(page).getByRole("button", { name: "Cancel" }).click();
+    upload.release();
     await expect(list).toBeHidden();
+    await upload.stopHolding();
     await expect(sentNote(page)).toHaveText("Sent 3 comments to the agent. The answer comes in the chat.");
     await expect(waitingOutlines(shown), "sent comments no longer wait, so their marks go").toHaveCount(0);
 
@@ -328,6 +354,7 @@ test("the user selects text or points at an element on a page the agent showed, 
     expect(recordedPrompts().split("Comments on the canvas page").length - 1).toBe(1);
     await expect.poll(recordedPrompts).toContain("The user's comment: Why is it all green?");
     await expect.poll(recordedPrompts).toContain("Their note on all the comments: Keep the colour scheme as it is.");
+    expect(recordedPrompts()).not.toContain("One more");
 
     await waitForIdle(page);
     await expect(userMessages(page)).toHaveCount(messagesBefore + 1);
