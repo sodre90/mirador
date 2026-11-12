@@ -174,8 +174,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.landingWorktreeEditsClash(problem.branch, pathList(problem.paths, words));
     case "landing-conflicts":
       return words.landingConflicts(problem.branch, pathList(problem.paths, words));
-    case "landing-worktree-mid-operation":
-      return words.landingWorktreeMidOperation(problem.directory);
+    case "landing-mid-operation":
+      return words.landingMidOperation(problem.directory);
     case "save-path-absolute":
       return words.savePathAbsolute(problem.name);
     case "save-path-outside":

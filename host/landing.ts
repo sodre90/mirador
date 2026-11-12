@@ -27,10 +27,17 @@ const sharedPaths = (some: string[], others: string[]) => {
   return some.filter((path) => otherSet.has(path));
 };
 
-/** A rebase, merge or cherry-pick the agent left half done: its HEAD is no finished work to land, and our rebase's abort would throw it away. */
-async function isMidOperation(worktree: string) {
-  const markers = await Promise.all(["rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD"].map((name) => mustGit(worktree, ["rev-parse", "--path-format=absolute", "--git-path", name])));
+/**
+ * A rebase, merge or cherry-pick left half done. In the worktree, its HEAD is no finished work to land, and our rebase's
+ * abort would throw it away; in the project folder, the fast-forward would fail after the worktree was already rebased.
+ */
+async function isMidOperation(folder: string) {
+  const markers = await Promise.all(["rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD"].map((name) => mustGit(folder, ["rev-parse", "--path-format=absolute", "--git-path", name])));
   return markers.some((marker) => existsSync(marker.trim()));
+}
+
+async function refuseHalfDoneOperations(...folders: string[]) {
+  for (const folder of folders) if (await isMidOperation(folder)) throw new HostProblemError({ code: "landing-mid-operation", directory: folder });
 }
 
 /** How the worktree's commits stand against the branch the project folder has checked out. */
@@ -56,9 +63,9 @@ async function rebaseOnto(worktree: string, target: string, branch: string) {
  */
 export async function landOnto(projectFolder: string, worktree: string, { mayRebase }: { mayRebase: boolean }): Promise<Landed> {
   const checkout = await topLevelOf(projectFolder);
+  await refuseHalfDoneOperations(checkout, worktree);
   const branch = await checkedOutBranch(checkout);
   if (branch === null) throw new HostProblemError({ code: "landing-needs-branch", directory: checkout });
-  if (await isMidOperation(worktree)) throw new HostProblemError({ code: "landing-worktree-mid-operation", directory: worktree });
   const [target, head] = await Promise.all([commitOf(checkout, `refs/heads/${branch}`), commitOf(worktree, "HEAD")]);
   const base = (await mustGit(worktree, ["merge-base", target, head])).trim();
   if (base === head) throw new HostProblemError({ code: "nothing-to-land", branch });

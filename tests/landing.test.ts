@@ -182,11 +182,28 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     expect(agentsRebase.exitCode).not.toBe(0);
     const projectHead = headOf(project);
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-worktree-mid-operation", directory: worktree } });
+    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: worktree } });
 
     expect(existsSync(git(worktree, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge"))).toBe(true);
     expect(headOf(project)).toBe(projectHead);
     expect(git(project, "stash", "list")).toBe("");
+  });
+
+  test("a merge someone left half done in the project folder refuses the landing before the worktree is rebased", async () => {
+    const { project, worktree } = projectWithAWorktree();
+    commitIn(worktree, "mine", "mine from the conversation", "Change mine");
+    mainMovesOn(project, "sub/inside", "changed on main");
+    const side = join(project, "..", "side");
+    git(project, "worktree", "add", "--quiet", "-b", "side", side, "main");
+    commitIn(side, "from-side", "from the side branch", "Add from-side");
+    git(project, "reset", "--quiet", "--", "staged-elsewhere");
+    git(project, "merge", "--no-ff", "--no-commit", "--quiet", "side");
+    const before = { project: headOf(project), worktree: headOf(worktree) };
+
+    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: project } });
+
+    expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
+    expect(existsSync(git(project, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD"))).toBe(true);
   });
 
   test("a workspace that is a folder inside its repository lands the whole commit", async () => {

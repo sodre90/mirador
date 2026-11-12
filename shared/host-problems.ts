@@ -90,7 +90,7 @@ export type HostProblem =
   | { code: "landing-rebase-while-working"; branch: string }
   | { code: "landing-worktree-edits-clash"; branch: string; paths: string[] }
   | { code: "landing-conflicts"; branch: string; paths: string[] }
-  | { code: "landing-worktree-mid-operation"; directory: string }
+  | { code: "landing-mid-operation"; directory: string }
   | { code: "save-path-absolute"; name: string }
   | { code: "save-path-outside"; name: string }
   | { code: "save-path-is-folder"; name: string }
