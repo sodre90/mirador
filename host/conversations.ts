@@ -16,7 +16,6 @@ import {
   type AskItem,
   type AskMode,
   type BusyWith,
-  type CanvasItem,
   type ContextUsage,
   type Conversation,
   type ConversationEvent,
@@ -63,6 +62,7 @@ import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { pendingAsk, pendingPermission } from "./pending-requests.ts";
+import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
 import { mentionSuggestions } from "./mentions.ts";
@@ -416,8 +416,8 @@ export class ConversationService {
     this.contextUsage = new Map(store.listContextUsages());
     this.unseenTurnEnds = new Map(store.listUnseenTurnEnds());
     this.unseenTurnEnds.forEach((_, conversationId) => this.keepLastWords(conversationId));
-    const waitingAsksOldestLast = store.listCanvasItemsWithStatus("waiting").filter((item) => item.kind === "ask").sort((a, b) => b.createdAt - a.createdAt);
-    this.asksWaitedOn = new Map(waitingAsksOldestLast.map((item) => [item.conversationId, pendingAsk(item)]));
+    const waitingAsksNewestLast = store.listCanvasItemsWithStatus("waiting").filter((item) => item.kind === "ask").sort((a, b) => a.createdAt - b.createdAt);
+    this.asksWaitedOn = new Map(waitingAsksNewestLast.map((item) => [item.conversationId, pendingAsk(item)]));
     this.jobWaits = new JobWaits(store, {
       changed: (conversationId) => this.republish(conversationId),
       ended: (conversationId, wait, end) => this.jobWaitEnded(conversationId, wait, end),
@@ -1753,7 +1753,7 @@ export class ConversationService {
 
   /** The canvas reports each question it opens, has answered or withdraws. */
   questionsChanged(conversationId: string) {
-    const waiting = this.store.listCanvasItems(conversationId).find((item): item is AskItem => item.kind === "ask" && item.status === "waiting");
+    const waiting = newestWaitingAsk(this.store.listCanvasItems(conversationId));
     if (waiting) this.asksWaitedOn.set(conversationId, pendingAsk(waiting));
     else this.asksWaitedOn.delete(conversationId);
     if (this.store.hasConversation(conversationId)) this.publish(this.get(conversationId));
@@ -2161,7 +2161,7 @@ export class ConversationService {
   }
 
   private waitingAskAt(conversationId: string) {
-    return newestWaitingAskAt(this.store.listCanvasItems(conversationId));
+    return newestWaitingAsk(this.store.listCanvasItems(conversationId))?.createdAt ?? null;
   }
 
   /**
@@ -3270,15 +3270,6 @@ interface TurnRequest {
  */
 export function turnWaitedOnAnswer({ askMode, askedAt, turnBeganAt }: { askMode: AskMode; askedAt: number | null; turnBeganAt: number }) {
   return askMode === "wait" && askedAt !== null && askedAt >= turnBeganAt;
-}
-
-/**
- * When the newest question the canvas still holds an answer for went out, or null when none does. The newest, as one an
- * earlier turn left open would otherwise hide the question the latest turn asked.
- */
-export function newestWaitingAskAt(items: CanvasItem[]): number | null {
-  const waiting = items.filter((item) => item.kind === "ask" && item.status === "waiting").map((item) => item.createdAt);
-  return waiting.length > 0 ? Math.max(...waiting) : null;
 }
 
 /** opencode 2 marks what a subagent does, reported through its conversation's session, with the subagent's own session. */

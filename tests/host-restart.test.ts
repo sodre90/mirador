@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
-import { ConversationService, agentFinishedItsTurn, lastTurnRequest, newestWaitingAskAt, openTurnTheAgentWorkedOn, turnWaitedOnAnswer, unfinishedTurnRequest } from "../host/conversations.ts";
+import { ConversationService, agentFinishedItsTurn, lastTurnRequest, openTurnTheAgentWorkedOn, turnWaitedOnAnswer, unfinishedTurnRequest } from "../host/conversations.ts";
+import { newestWaitingAsk } from "../shared/ask.ts";
 import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { HostRestart, hostCommandLine, relaunchOf, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "../host/restart.ts";
@@ -230,20 +231,21 @@ describe("questions still waiting when a new host starts", () => {
       });
     conversation("blocked-turn", "wait");
     conversation("next-message-turn", "next-message");
-    const waitingAsk = (id: string, conversationId: string) => ({
+    const waitingAsk = (id: string, conversationId: string, question = "Which fix?", createdAt = 1) => ({
       id,
       conversationId,
       kind: "ask" as const,
-      title: "Which fix?",
-      question: "Which fix?",
+      title: question,
+      question,
       options: [{ label: "Restart" }, { label: "Patch" }],
       status: "waiting" as const,
-      createdAt: 1,
+      createdAt,
     });
     store.saveCanvasItem(waitingAsk("ask-on-waiting-turn", "blocked-turn"));
     store.saveCanvasItem(waitingAsk("ask-for-next-message", "next-message-turn"));
+    store.saveCanvasItem(waitingAsk("later-ask-for-next-message", "next-message-turn", "Which test?", 2));
     const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, "data") });
-    return { store, conversations: new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub())) };
+    return { store, waitingAsk, conversations: new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub())) };
   }
 
   test("the question a blocked tool call waited on is withdrawn, as the host that was waiting on it is gone", () => {
@@ -260,6 +262,17 @@ describe("questions still waiting when a new host starts", () => {
     expect(store.findCanvasItem("ask-for-next-message")?.status).toBe("waiting");
     expect(conversations.get("next-message-turn").waitingFor).toBe("question");
     expect(conversations.get("next-message-turn").pendingRequest).not.toBeNull();
+    void conversations.shutdown();
+  });
+
+  test("of several open questions, the one asked last is the one the conversation waits on, then and as more come", () => {
+    const { store, waitingAsk, conversations } = hostWithWaitingAsks();
+    conversations.resumeAfterRestart([]);
+    expect(conversations.get("next-message-turn").pendingRequest).toMatchObject({ kind: "ask", itemId: "later-ask-for-next-message", question: "Which test?" });
+
+    store.saveCanvasItem(waitingAsk("newest-ask", "next-message-turn", "Which branch?", 3));
+    conversations.questionsChanged("next-message-turn");
+    expect(conversations.get("next-message-turn").pendingRequest).toMatchObject({ itemId: "newest-ask", question: "Which branch?" });
     void conversations.shutdown();
   });
 
@@ -287,19 +300,19 @@ describe("turnWaitedOnAnswer", () => {
   });
 });
 
-describe("newestWaitingAskAt", () => {
+describe("newestWaitingAsk", () => {
   const question = (createdAt: number, status: "waiting" | "answered" = "waiting"): CanvasItem => ({ id: `ask-${createdAt}`, conversationId: "c1", kind: "ask", title: "Which?", status, createdAt });
   const page: CanvasItem = { id: "page", conversationId: "c1", kind: "show", title: "Page", status: "shown", createdAt: 2_000 };
 
   test("is the question the latest turn asked, not one an earlier turn left open", () => {
-    const askedAt = newestWaitingAskAt([question(900), question(1_500), page]);
-    expect(askedAt).toBe(1_500);
-    expect(turnWaitedOnAnswer({ askMode: "wait", askedAt, turnBeganAt: 1_000 })).toBe(true);
+    const newest = newestWaitingAsk([question(900), question(1_500), page]);
+    expect(newest?.id).toBe("ask-1500");
+    expect(turnWaitedOnAnswer({ askMode: "wait", askedAt: newest?.createdAt ?? null, turnBeganAt: 1_000 })).toBe(true);
   });
 
-  test("is an earlier turn's question when only that one waits, and null when none does", () => {
-    expect(newestWaitingAskAt([question(900), question(1_500, "answered")])).toBe(900);
-    expect(newestWaitingAskAt([question(1_500, "answered"), page])).toBeNull();
+  test("is an earlier turn's question when only that one waits, and none when none does", () => {
+    expect(newestWaitingAsk([question(900), question(1_500, "answered")])?.id).toBe("ask-900");
+    expect(newestWaitingAsk([question(1_500, "answered"), page])).toBeUndefined();
   });
 });
 

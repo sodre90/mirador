@@ -1,4 +1,5 @@
-import type { AskItem, CanvasItem, StoredEvent } from "../shared/model.ts";
+import { newestWaitingAsk } from "../shared/ask.ts";
+import type { CanvasItem, StoredEvent } from "../shared/model.ts";
 import { SpokenConversation, type ConversationView, type ReadingOutcome } from "../shared/spoken-conversation.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
 import { connection } from "./connection.ts";
@@ -67,14 +68,13 @@ export function lendMicrophone(conversationId: string, microphone: ConversationM
   };
 }
 
-const waitingAsk = (canvas: CanvasItem[]) => canvas.find((item): item is AskItem => item.kind === "ask" && item.status === "waiting") ?? null;
 
 /** Keeps a spoken conversation going on with what the conversation shows; nothing happens while none goes on. */
 export function followSpokenConversation(conversationId: string, shown: { events: StoredEvent[]; timeline: TimelineBlock[]; canvas: CanvasItem[]; awaitingApproval: boolean }, readingAs: string | null) {
   const conversation = conversations.get(conversationId);
   if (!conversation) return;
   conversation.readingAs = readingAs ?? "";
-  const view: ConversationView = { events: shown.events, timeline: shown.timeline, ask: waitingAsk(shown.canvas), awaitingApproval: shown.awaitingApproval };
+  const view: ConversationView = { events: shown.events, timeline: shown.timeline, ask: newestWaitingAsk(shown.canvas) ?? null, awaitingApproval: shown.awaitingApproval };
   conversation.spoken.follow(view);
 }
 
