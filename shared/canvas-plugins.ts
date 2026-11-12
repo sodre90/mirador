@@ -72,6 +72,8 @@ export interface CanvasPluginContext<Data = unknown> {
    * the default; for a setting whose choices are the profiles, that profile's name. Null for none, or for a profile since deleted.
    */
   profileSetting(id: string): string | null;
+  /** Mirador's profiles, for the plugin to offer a choice of them, as a form it shows might. Plugin API 13 brought it. */
+  profiles(): PluginProfile[];
 }
 
 export interface CanvasPluginStorage {
@@ -94,6 +96,11 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
    * exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
+  /**
+   * As a tool's `startConversation`, for what the user does in the item's view, such as a form that starts the work. The
+   * plugin's `replied` hears when that conversation ends its work. Plugin API 13 brought it.
+   */
+  startConversation(start: ConversationStart): Promise<StartedConversation>;
 }
 
 export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<Data> {
@@ -109,29 +116,32 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
    * plugin's `replied` hears when it ends its work. Throws, naming the profiles there are, when none has that name, and
    * when a plugin's tool started this conversation, which keeps to one level of them.
    */
-  startConversation(start: {
-    profile: string;
-    prompt: string;
-    /**
-     * The conversation's title, its first line cut to 60 characters, kept as one the user typed is: neither the first
-     * message nor the agent renames it, while the user still can. Without one, or with a blank one, the first line of
-     * `prompt` titles it, and the agent may rename it later. Plugin API 8 brought it.
-     */
-    title?: string;
-    /**
-     * "own": it works in a new git worktree of its own, on a new branch from what the workspace has checked out, rather
-     * than where this conversation works; its first message waits until the worktree is made, one that can't be made
-     * ends its work as failed, and one stopped meanwhile ends as stopped without starting. Throws when the workspace's
-     * folder isn't in a git repository with a commit. Plugin API 12 brought it.
-     */
-    worktree?: "own";
-  } & ConversationChoices): Promise<StartedConversation>;
+  startConversation(start: ConversationStart): Promise<StartedConversation>;
   /**
    * Stops the turn of a conversation this plugin's tool started from this conversation, as the user's Stop would; its
    * `replied` then hears it end as "stopped". Resolves doing nothing for one whose turn already ended or that no longer
    * exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
+}
+
+/** A conversation a plugin's tool or action starts from the conversation it runs for. */
+export interface ConversationStart extends ConversationChoices {
+  profile: string;
+  prompt: string;
+  /**
+   * The conversation's title, its first line cut to 60 characters, kept as one the user typed is: neither the first
+   * message nor the agent renames it, while the user still can. Without one, or with a blank one, the first line of
+   * `prompt` titles it, and the agent may rename it later. Plugin API 8 brought it.
+   */
+  title?: string;
+  /**
+   * "own": it works in a new git worktree of its own, on a new branch from what the workspace has checked out, rather
+   * than where this conversation works; its first message waits until the worktree is made, one that can't be made
+   * ends its work as failed, and one stopped meanwhile ends as stopped without starting. Throws when the workspace's
+   * folder isn't in a git repository with a commit. Plugin API 12 brought it.
+   */
+  worktree?: "own";
 }
 
 /**

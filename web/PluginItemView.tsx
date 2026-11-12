@@ -1,5 +1,5 @@
 import { useOpensIn } from "./opens-in.ts";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useContext, useEffect, useMemo, useRef, useState } from "react";
 import { pluginItemOf } from "../shared/canvas-plugins.ts";
 import {
   pluginItemMessage,
@@ -18,6 +18,7 @@ import { t } from "./i18n/index.ts";
 import { useEnterWhileBusy } from "./busy-sending.ts";
 import { useExternalImagesBlocked } from "./external-images.ts";
 import { useFontScale } from "./font-scale.ts";
+import { KnownConversations, startedFrom } from "./known-conversations.ts";
 import { showFramedHint } from "./Hint.tsx";
 import { useShownTheme } from "./theme.ts";
 import { useTypingAids } from "./typing-aids.ts";
@@ -109,8 +110,13 @@ export function PluginItemView({
   const fullscreen = fitsContent ? undefined : paneFullscreen;
   const shownTheme = useShownTheme();
   const [fontScale] = useFontScale();
+  const conversations = useContext(KnownConversations);
+  const opensConversations = conversations !== null;
   const viewUrl = viewPath && `${assetsOrigin}${viewPath}`;
-  const page = useMemo(() => viewUrl && pluginItemPage(viewUrl, item.id, { inTab: fitsContent, opensFiles: true }), [viewUrl, item.id, fitsContent]);
+  const page = useMemo(
+    () => viewUrl && pluginItemPage(viewUrl, item.id, { inTab: fitsContent, opensFiles: true, opensConversations }),
+    [viewUrl, item.id, fitsContent, opensConversations],
+  );
   const context: PluginItemContext = {
     seenAgentEditAt: seenWhenShown,
     imagesFromOtherSites,
@@ -138,6 +144,13 @@ export function PluginItemView({
     }
   };
 
+  const openStarted = (conversationId: string) => {
+    if (!conversations || !startedFrom(conversations, conversationId, { callerId: item.conversationId, plugin: item.plugin })) {
+      throw new Error(`Conversation ${conversationId} wasn't started by the ${item.plugin} plugin from this conversation, so its view can't open it.`);
+    }
+    location.hash = `#/c/${conversationId}`;
+  };
+
   const received = (message: CanvasFrameMessage) => {
     if (message.kind === "item-ready") {
       postTheme();
@@ -147,6 +160,7 @@ export function PluginItemView({
     if (message.kind === "item-prompt" && typeof message.requestId === "string") {
       void answer(message.requestId, () => promptFrom(item.conversationId, String(message.text), enterWhileBusy === "after-turn"));
     }
+    if (message.kind === "item-open-conversation" && typeof message.requestId === "string") void answer(message.requestId, () => openStarted(String(message.conversationId)));
     if (message.kind === "item-fullscreen") fullscreen?.setFullscreen(message.on === true);
     if (message.kind === "item-hint" && typeof message.text === "string" && frame.current) {
       const anchor = onPage(frame.current, message.anchor);

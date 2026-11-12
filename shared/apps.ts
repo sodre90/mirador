@@ -11,9 +11,11 @@ import type { HostProblem } from "./host-problems.ts";
  * the models of the profile another of its settings chose; API 10 lets a canvas plugin stop a conversation its tool
  * started; API 11 brings a canvas plugin's background work, lists the profiles to its workspace tab, and lets a plugin
  * that says so in plugin.json start conversations of its own in a workspace; API 12 lets a canvas plugin's tool start
- * a conversation in a git worktree of its own, and tells a plugin the worktree a conversation it started works in.
+ * a conversation in a git worktree of its own, and tells a plugin the worktree a conversation it started works in; API
+ * 13 lets a canvas plugin's actions start conversations as its tools do, lists the profiles to its tools and actions,
+ * and lets its item's view open a conversation the plugin started from the item's conversation.
  */
-export const APP_PLUGIN_API = 12;
+export const APP_PLUGIN_API = 13;
 
 /** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
 export const STARTS_CONVERSATIONS_PLUGIN_API = 11;

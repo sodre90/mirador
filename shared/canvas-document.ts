@@ -69,6 +69,8 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-open-file"; path: unknown }
   /** The view asks for the canvas to fill the workspace, or to sit beside the chat again. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-fullscreen"; on: unknown }
+  /** A conversation the item's plugin started from the item's conversation, to show; answered as "item-send" is. */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-open-conversation"; requestId: string; conversationId: unknown }
   /** A message the user wrote in the view for the agent, sent as the composer sends; answered as "item-send" is. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-prompt"; requestId: string; text: unknown }
   /** What the user marked on a page that takes marks, a PageMark as the page posted it, for the panel to ask the agent about. */
@@ -389,6 +391,11 @@ export interface PluginViewBridge<Data = unknown, State = unknown> {
   setFullscreen(on: boolean): void;
   /** Only where files open: Mirador's canvas has it, the phone doesn't. */
   openFile?(path: string): void;
+  /**
+   * On the canvas, where conversations open: shows a conversation the plugin's tool or action started from the item's
+   * conversation; rejects for any other. Mirador's canvas has it, the phone doesn't. Plugin API 13 brought it.
+   */
+  openConversation?(conversationId: string): Promise<void>;
 }
 
 /** The plugin's reply to an action the view sent. */
@@ -401,16 +408,22 @@ export function pluginItemReplyFailedMessage(requestId: string, message: string)
   return { source: CANVAS_MESSAGE_SOURCE, kind: "item-reply-failed", requestId, message };
 }
 
+/** What the place a plugin's view draws in can do beyond the bridge every place has. */
+interface BridgeAbilities {
+  opensFiles?: boolean;
+  opensConversations?: boolean;
+}
+
 /**
  * `window.mirador` for a plugin's canvas view. `onItem` hands the listener the item the view draws and its context, at
  * once when they are known and again on every change, so the view may start listening whenever its code is ready. `send`
  * hands an action to the plugin's host code and resolves to its reply, or rejects with the reason there is none; `prompt`
  * sends the agent a message as the composer would, `setFullscreen` asks for the canvas to fill the workspace or not, and,
  * where files open, `openFile` opens one as a file link in the chat does, a path relative to the conversation's workspace
- * or absolute.
+ * or absolute; where conversations open, `openConversation` shows one the item's plugin started from its conversation.
  * Mirador's look arrives as CSS variables on the page's root, and `data-hint` shows as Mirador's own hints.
  */
-function pluginItemBridge(frameId: string, opensFiles: boolean, place: PluginViewPlace) {
+function pluginItemBridge(frameId: string, { opensFiles = false, opensConversations = false }: BridgeAbilities, place: PluginViewPlace) {
   return `(() => {
   const source = ${JSON.stringify(CANVAS_MESSAGE_SOURCE)};
   const itemId = ${JSON.stringify(frameId)};
@@ -515,6 +528,13 @@ function pluginItemBridge(frameId: string, opensFiles: boolean, place: PluginVie
     },`
         : ""
     }
+    ${
+      opensConversations && place === "canvas"
+        ? `openConversation(conversationId) {
+      return request({ kind: "item-open-conversation", conversationId: String(conversationId) }).then(() => undefined);
+    },`
+        : ""
+    }
   });
   post({ kind: "item-ready" });
 })();`;
@@ -524,18 +544,18 @@ function pluginItemBridge(frameId: string, opensFiles: boolean, place: PluginVie
 const IN_TAB_PAGE_STYLE = "<style>html{padding:3px}body{margin:0}</style>";
 
 /** The page of a plugin item's view: the bridge first, then the plugin's canvas view, which the canvas assets serve. */
-export function pluginItemPage(viewUrl: string, frameId: string, { inTab = false, opensFiles = false } = {}) {
-  return [`<script>${pluginItemBridge(frameId, opensFiles, "canvas")}</script>`, ...(inTab ? [IN_TAB_PAGE_STYLE] : []), `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+export function pluginItemPage(viewUrl: string, frameId: string, { inTab = false, ...abilities }: { inTab?: boolean } & BridgeAbilities = {}) {
+  return [`<script>${pluginItemBridge(frameId, abilities, "canvas")}</script>`, ...(inTab ? [IN_TAB_PAGE_STYLE] : []), `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
 }
 
 /** The page of a plugin's workspace tab: its canvas view, with the bridge for a tab, which has no item and opens no files. */
 export function workspaceTabPage(viewUrl: string, frameId: string) {
-  return [`<script>${pluginItemBridge(frameId, false, "tab")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+  return [`<script>${pluginItemBridge(frameId, {}, "tab")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
 }
 
 /** The page of a plugin's own window: its canvas view, with the bridge for a window, which has no item and opens no files. */
 export function pluginWindowPage(viewUrl: string, frameId: string) {
-  return [`<script>${pluginItemBridge(frameId, false, "window")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+  return [`<script>${pluginItemBridge(frameId, {}, "window")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
 }
 
 /** The page of an app's view: the bridge first, then the view's code, which the canvas assets serve. */

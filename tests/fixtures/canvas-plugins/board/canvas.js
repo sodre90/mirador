@@ -24,7 +24,8 @@ page.innerHTML = `<h1 id="title"></h1><p id="text"></p><p id="type"></p><p id="u
 <p id="fullscreen"></p><button id="toggle-fullscreen">Toggle full screen</button>
 <p id="typing"></p><p id="found"></p>
 <textarea id="question" aria-label="Question"></textarea><button id="ask">Ask the agent</button><p id="asked"></p>
-<button id="open-file">Open src/app.ts</button>`;
+<button id="open-file">Open src/app.ts</button>
+<input id="conversation" aria-label="Conversation to open"><button id="open-conversation">Open the conversation</button><p id="opened"></p>`;
 document.body.append(page);
 const show = (id, text) => (document.getElementById(id).textContent = text);
 const textOf = (item) => {
@@ -52,6 +53,10 @@ addEventListener("keydown", (event) => {
   show("found", `Found ${++found} times`);
 });
 document.getElementById("open-file").addEventListener("click", () => window.mirador.openFile("src/app.ts"));
+document.getElementById("open-conversation").addEventListener("click", () => {
+  if (!window.mirador.openConversation) return show("opened", "No conversations open here");
+  window.mirador.openConversation(document.getElementById("conversation").value).then(() => show("opened", "Opened"), (error) => show("opened", error.message));
+});
 document.getElementById("toggle-fullscreen").addEventListener("click", () => window.mirador.setFullscreen(!fullscreen));
 document.getElementById("ask").addEventListener("click", () =>
   window.mirador.prompt(document.getElementById("question").value).then(() => show("asked", "Asked"), (error) => show("asked", error.message)),

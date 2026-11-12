@@ -10,7 +10,7 @@ import type { PluginCanvasItem } from "../shared/model.ts";
 import { Store } from "../host/store.ts";
 import type { PluginCatalog } from "../host/plugin-catalog.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
-import type { CanvasToolContext } from "../shared/canvas-plugins.ts";
+import type { CanvasActionContext, CanvasToolContext } from "../shared/canvas-plugins.ts";
 import board from "./fixtures/canvas-plugins/board/host.ts";
 
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
@@ -250,6 +250,31 @@ describe("CanvasPlugins", () => {
 
     expect(await callTool("stop_handed_over", { conversationId: "c2" })).toEqual({ text: "Stopped.", isError: false });
     expect(stopped).toEqual([{ callerId: "c1", plugin: "board", conversationId: "c2" }]);
+  });
+
+  test("the user's action starts a conversation as a tool does, in a worktree of its own when it asks, and lists the profiles to offer", async () => {
+    const starter = {
+      ...board,
+      async action(_item: unknown, action: unknown, context: CanvasActionContext) {
+        const { profile } = action as { profile: string };
+        return { profiles: context.profiles(), started: await context.startConversation({ profile, prompt: "Fix it", title: "Racer 1", worktree: "own" }) };
+      },
+    };
+    const store = storeWithConversation();
+    store.saveProfile({ id: "local", name: "Local", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+    const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, store, { board: starter });
+    const asked: unknown[] = [];
+    plugins.startsConversationsWith(async (callerId, plugin, profile, prompt, title, _choices, worktree) => {
+      asked.push({ callerId, plugin, profile, prompt, title, worktree });
+      return { id: "c2", profile, worktree: { folder: "/worktrees/p/1a2b3c4d", branch: "mirador/1a2b3c4d" } };
+    });
+    await callTool("show_card", { title: "Race", text: "Start one" });
+
+    expect(await plugins.act(items()[0]!.id, { profile: "Local" })).toEqual({
+      profiles: [{ name: "Local", agent: "opencode" }],
+      started: { id: "c2", profile: "Local", worktree: { folder: "/worktrees/p/1a2b3c4d", branch: "mirador/1a2b3c4d" } },
+    });
+    expect(asked).toEqual([{ callerId: "c1", plugin: "board", profile: "Local", prompt: "Fix it", title: "Racer 1", worktree: "own" }]);
   });
 
   test("what a conversation's profile set for a plugin reaches its tools and adds to its guidance, by the chosen profile's name as it is now", async () => {

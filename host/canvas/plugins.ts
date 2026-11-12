@@ -10,6 +10,7 @@ import {
   type PluginActivity,
   type PluginActivityEvent,
   type PluginBackgroundContext,
+  type PluginProfile,
   type PluginWindowContext,
   type ConversationChoices,
   type WorkspaceTabContext,
@@ -328,7 +329,7 @@ export class CanvasPlugins {
       changed: () => this.workspaceTabChanged(plugin, workspaceId),
       profiles: () => {
         if (plugin.host.workspaceTab) this.tabsListingProfiles.add(plugin);
-        return this.store.listProfiles().map(({ name, harness }) => ({ name, agent: harness }));
+        return this.pluginProfiles();
       },
       startConversation: async (start) => {
         if (plugin.manifest.startsConversations !== true) {
@@ -499,9 +500,13 @@ export class CanvasPlugins {
       caller,
       publish: ({ type, title, data }) => pluginItemOf(this.publish(plugin, conversationId, type, title, data)),
       prompt: this.promptOfItsOwn(plugin, conversationId),
-      startConversation: async ({ profile, prompt, title, model, effort, worktree }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title, { model, effort }, worktree),
+      startConversation: this.startsConversationsFrom(plugin, conversationId),
       stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
     };
+  }
+
+  private startsConversationsFrom(plugin: CanvasPlugin, conversationId: string): CanvasActionContext["startConversation"] {
+    return async ({ profile, prompt, title, model, effort, worktree }) => this.startBeside(conversationId, plugin.manifest.name, profile, prompt, title, { model, effort }, worktree);
   }
 
   /** A message the plugin sends on its own, which the conversation shows as the plugin's; one from its view, for the user, stays the user's. */
@@ -518,6 +523,7 @@ export class CanvasPlugins {
         launchEditor(this.store.editorSetting(), file, line);
       },
       stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
+      startConversation: this.startsConversationsFrom(plugin, conversationId),
     };
   }
 
@@ -528,7 +534,12 @@ export class CanvasPlugins {
       change: (itemId, change) => pluginItemOf(this.change(plugin, conversationId, itemId, change, byAgent)),
       storage: this.storageOf(plugin),
       profileSetting: (id) => this.settingFor(plugin, conversationId, id),
+      profiles: () => this.pluginProfiles(),
     };
+  }
+
+  private pluginProfiles(): PluginProfile[] {
+    return this.store.listProfiles().map(({ name, harness }) => ({ name, agent: harness }));
   }
 
   private storageOf(plugin: CanvasPlugin): CanvasPluginStorage {

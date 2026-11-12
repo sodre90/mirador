@@ -14,6 +14,7 @@ import { useClosesAsDialog } from "./desktop-close.ts";
 import { JoinMachine } from "./Devices.tsx";
 import { JoinRequestPrompts } from "./JoinRequests.tsx";
 import { KeptCanvases } from "./KeptCanvases.tsx";
+import { KnownConversations } from "./known-conversations.ts";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
 import { WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
 import { tellTheRailThePlace } from "./machine-place.ts";
@@ -538,20 +539,22 @@ export function App() {
   const showTerminals = terminalVisible && conversation !== null && workspace !== undefined;
   const keptCanvases = (
     <OpensIn.Provider value={state.editor.opensIn}>
-      <KeptCanvases
-        kept={inFixedOrder(state.kept)}
-        shownId={showCanvas ? conversation!.id : null}
-        workspaceOf={(conversationId) => state.conversations.find(({ id }) => id === conversationId)?.workspaceId}
-        workingCopyOf={(conversationId) => {
-          const each = state.conversations.find(({ id }) => id === conversationId);
-          return each && workingCopyIdOf(each);
-        }}
-        apps={apps}
-        assetsOrigin={state.canvasAssetsOrigin}
-        homeDir={state.homeDir}
-        canvasViews={state.canvasViews}
-        onHide={hideCanvas}
-      />
+      <KnownConversations.Provider value={state.conversations}>
+        <KeptCanvases
+          kept={inFixedOrder(state.kept)}
+          shownId={showCanvas ? conversation!.id : null}
+          workspaceOf={(conversationId) => state.conversations.find(({ id }) => id === conversationId)?.workspaceId}
+          workingCopyOf={(conversationId) => {
+            const each = state.conversations.find(({ id }) => id === conversationId);
+            return each && workingCopyIdOf(each);
+          }}
+          apps={apps}
+          assetsOrigin={state.canvasAssetsOrigin}
+          homeDir={state.homeDir}
+          canvasViews={state.canvasViews}
+          onHide={hideCanvas}
+        />
+      </KnownConversations.Provider>
     </OpensIn.Provider>
   );
   const overlay = state.overlay;
