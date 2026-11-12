@@ -98,6 +98,24 @@ describe.skipIf(process.platform === "win32")("scripts/land.sh", () => {
     expect(statusOf(checkout)).toBe(ANOTHER_SESSIONS_EDITS);
   });
 
+  test("runs no commit hooks, from a worktree as from the main checkout", () => {
+    const { root, checkout, worktree } = withAWorktree();
+    const hooks = join(root, "hooks");
+    mkdirSync(hooks);
+    writeFileSync(join(hooks, "prepare-commit-msg"), '#!/bin/sh\necho "Added by a hook" >> "$1"\n');
+    chmodSync(join(hooks, "prepare-commit-msg"), 0o755);
+    git(checkout, "config", "core.hooksPath", hooks);
+    const lastMessageOnMain = () => git(checkout, "log", "-1", "--format=%B", "main");
+
+    write(worktree, "mine", "mine from the worktree");
+    expect(land(worktree, "-m", "Mine changes in a worktree", "--", "mine").exitCode).toBe(0);
+    expect(lastMessageOnMain()).toBe("Mine changes in a worktree");
+
+    write(checkout, "mine", "mine from the main checkout");
+    expect(land(checkout, "-m", "Mine changes in the main checkout", "--", "mine").exitCode).toBe(0);
+    expect(lastMessageOnMain()).toBe("Mine changes in the main checkout");
+  });
+
   test("a commit that changes a file the other session is editing in the main checkout does not land", () => {
     const { checkout, worktree, start } = withAWorktree();
     write(worktree, "theirs-unstaged", "the worktree's take");

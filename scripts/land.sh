@@ -74,7 +74,7 @@ if [ "$here" = "$main_checkout" ]; then
 else
   if [ -n "$message" ]; then
     git add --all -- "$@"
-    git commit --quiet -m "$message" -- "$@"
+    git -c core.hooksPath=/dev/null commit --quiet -m "$message" -- "$@"
   fi
   fast_forward_the_main_checkout
 fi
