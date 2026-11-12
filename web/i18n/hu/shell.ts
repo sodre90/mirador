@@ -94,8 +94,10 @@ export const shell: Messages["shell"] = {
     startOne: { folder: "Egy indítása most a projektmappában", worktree: "Egy indítása most worktree-ben" },
     inWorktree: (branch) => `Saját worktree-ben dolgozik, a(z) ${branch} ágon`,
     deleteTitle: "Törlöd a beszélgetést és a worktree-jét?",
-    deleteLoses: (count) => `A worktree-jében ${count} nem commitolt fájl van, ez is törlődik vele.`,
-    deleteKeeps: (branch) => `Az ott készült commitok megmaradnak a(z) ${branch} ágon.`,
+    deleteLoses: (count, worktrees) =>
+      worktrees === 1 ? `A worktree-jében ${count} nem commitolt fájl van, ez is törlődik vele.` : `A worktree-jeiben ${count} nem commitolt fájl van, ezek is törlődnek vele.`,
+    deleteKeeps: (branches) =>
+      branches.length === 1 ? `Az ott készült commitok megmaradnak a(z) ${branches[0]} ágon.` : `Az ott készült commitok megmaradnak a(z) ${branches.join(", ")} ágakon.`,
     deleteBoth: "Mindkettő törlése",
   },
   workspaceDelete: {

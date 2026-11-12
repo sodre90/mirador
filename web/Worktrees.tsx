@@ -119,7 +119,7 @@ export function WorktreeDeletePrompt({ worktreeToDelete, dispatch }: { worktreeT
     <section className="file-to-open worktree-to-delete" role="alertdialog" aria-label={words.deleteTitle} onKeyDown={(event) => event.key === "Escape" && cancel()}>
       <h2>{words.deleteTitle}</h2>
       <p>
-        {words.deleteLoses(worktreeToDelete.uncommittedFiles)} {words.deleteKeeps(worktreeToDelete.branch)}
+        {words.deleteLoses(worktreeToDelete.uncommittedFiles, worktreeToDelete.branches.length)} {words.deleteKeeps(worktreeToDelete.branches)}
       </p>
       <div className="actions">
         <button type="button" className="danger" onClick={deleteBoth}>

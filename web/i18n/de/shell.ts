@@ -96,9 +96,14 @@ export const shell: Messages["shell"] = {
     startOne: { folder: "Jetzt eine im Projektordner starten", worktree: "Jetzt eine in einem Worktree starten" },
     inWorktree: (branch) => `Arbeitet in einem eigenen Worktree, auf dem Branch ${branch}`,
     deleteTitle: "Unterhaltung und ihren Worktree löschen?",
-    deleteLoses: (count) =>
-      plural(count, "Ihr Worktree enthält 1 nicht committete Datei, die mit gelöscht wird.", `Ihr Worktree enthält ${count} nicht committete Dateien, die mit gelöscht werden.`),
-    deleteKeeps: (branch) => `Dort gemachte Commits bleiben erhalten, auf dem Branch ${branch}.`,
+    deleteLoses: (count, worktrees) =>
+      plural(
+        worktrees,
+        plural(count, "Ihr Worktree enthält 1 nicht committete Datei, die mit gelöscht wird.", `Ihr Worktree enthält ${count} nicht committete Dateien, die mit gelöscht werden.`),
+        plural(count, "Ihre Worktrees enthalten 1 nicht committete Datei, die mit gelöscht wird.", `Ihre Worktrees enthalten ${count} nicht committete Dateien, die mit gelöscht werden.`),
+      ),
+    deleteKeeps: (branches) =>
+      branches.length === 1 ? `Dort gemachte Commits bleiben erhalten, auf dem Branch ${branches[0]}.` : `Dort gemachte Commits bleiben erhalten, auf den Branches ${branches.join(", ")}.`,
     deleteBoth: "Beides löschen",
   },
   workspaceDelete: {

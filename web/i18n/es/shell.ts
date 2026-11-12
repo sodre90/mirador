@@ -96,9 +96,14 @@ export const shell: Messages["shell"] = {
     startOne: { folder: "Empezar una ahora en la carpeta del proyecto", worktree: "Empezar una ahora en un worktree" },
     inWorktree: (branch) => `Trabaja en un worktree propio, en la rama ${branch}`,
     deleteTitle: "¿Eliminar la conversación y su worktree?",
-    deleteLoses: (count) =>
-      plural(count, "Su worktree tiene 1 archivo sin commit, que se elimina con él.", `Su worktree tiene ${count} archivos sin commit, que se eliminan con él.`),
-    deleteKeeps: (branch) => `Los commits hechos allí se conservan, en la rama ${branch}.`,
+    deleteLoses: (count, worktrees) =>
+      plural(
+        worktrees,
+        plural(count, "Su worktree tiene 1 archivo sin commit, que se elimina con él.", `Su worktree tiene ${count} archivos sin commit, que se eliminan con él.`),
+        plural(count, "Sus worktrees tienen 1 archivo sin commit, que se elimina con ellos.", `Sus worktrees tienen ${count} archivos sin commit, que se eliminan con ellos.`),
+      ),
+    deleteKeeps: (branches) =>
+      branches.length === 1 ? `Los commits hechos allí se conservan, en la rama ${branches[0]}.` : `Los commits hechos allí se conservan, en las ramas ${branches.join(", ")}.`,
     deleteBoth: "Eliminar ambos",
   },
   workspaceDelete: {

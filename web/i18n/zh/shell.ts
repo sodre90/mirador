@@ -94,8 +94,9 @@ export const shell: Messages["shell"] = {
     startOne: { folder: "现在在项目文件夹中开始一个", worktree: "现在在工作树中开始一个" },
     inWorktree: (branch) => `在自己的工作树中工作，位于分支 ${branch}`,
     deleteTitle: "删除此对话及其工作树？",
-    deleteLoses: (count) => `它的工作树中有 ${count} 个未提交的文件，将一并删除。`,
-    deleteKeeps: (branch) => `在那里所做的提交会保留在分支 ${branch} 上。`,
+    deleteLoses: (count, worktrees) =>
+      worktrees === 1 ? `它的工作树中有 ${count} 个未提交的文件，将一并删除。` : `它的各工作树中有 ${count} 个未提交的文件，将一并删除。`,
+    deleteKeeps: (branches) => `在那里所做的提交会保留在分支 ${branches.join("、")} 上。`,
     deleteBoth: "全部删除",
   },
   workspaceDelete: {

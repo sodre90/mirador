@@ -113,7 +113,7 @@ export interface AppState {
   /** A file outside the workspace that the agent did not change, which a link of a conversation leads to and opens once the owner agrees. */
   fileToOpen: { conversationId: string; file: string } | null;
   /** A conversation the user asked to delete, whose worktree holds uncommitted files that would go with it. */
-  worktreeToDelete: { conversationId: string; uncommittedFiles: number; branch: string } | null;
+  worktreeToDelete: { conversationId: string; uncommittedFiles: number; branches: string[] } | null;
   /** A workspace the user asked to remove, whose conversations' worktrees hold uncommitted files that would go with it. */
   workspaceToDelete: { workspaceId: string; uncommittedFiles: number } | null;
   /** The host process run this page last heard from; another one means the host restarted, maybe with new code. */
@@ -420,7 +420,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "files.ask-to-open":
       return { ...state, fileToOpen: { conversationId: message.conversationId, file: message.file } };
     case "conversation.delete-asks":
-      return { ...state, worktreeToDelete: { conversationId: message.conversationId, uncommittedFiles: message.uncommittedFiles, branch: message.branch } };
+      return { ...state, worktreeToDelete: { conversationId: message.conversationId, uncommittedFiles: message.uncommittedFiles, branches: message.branches } };
     case "workspace.delete-asks":
       return { ...state, workspaceToDelete: { workspaceId: message.workspaceId, uncommittedFiles: message.uncommittedFiles } };
     case "fs.completions":

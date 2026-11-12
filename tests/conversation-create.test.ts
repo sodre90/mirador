@@ -98,6 +98,28 @@ test("a conversation loses no uncommitted files while a fork works in its worktr
   expect(await conversations.uncommittedFilesLostWith(own.id)).toBe(0);
 });
 
+test("a conversation with no worktree of its own still loses a delegated task's uncommitted files in the task's own worktree", async () => {
+  const { store, conversations } = hostWithAWorkspaceOnClaude();
+  (conversations as any).worktrees = { isMade: async () => true, uncommittedFiles: async ({ id }: { id: string }) => (id === "task" ? 3 : 0) };
+  const caller = conversations.create("w1");
+  const task = conversations.create("w1", undefined, undefined, undefined, {}, worktreeAt("task"));
+  store.recordStartedBy(task.id, { conversationId: caller.id, plugin: "race" });
+
+  expect(await conversations.uncommittedFilesLostWith(caller.id)).toBe(3);
+  expect((await conversations.worktreesLostWith(caller.id)).map(({ worktree }) => worktree.branch)).toEqual(["mirador/task"]);
+});
+
+test("a delegated task's own worktree stays while a fork works in it too", async () => {
+  const { store, conversations } = hostWithAWorkspaceOnClaude();
+  (conversations as any).worktrees = { isMade: async () => true, uncommittedFiles: async () => 3 };
+  const caller = conversations.create("w1");
+  const task = conversations.create("w1", undefined, undefined, undefined, {}, worktreeAt("task"));
+  store.recordStartedBy(task.id, { conversationId: caller.id, plugin: "race" });
+  conversations.create("w1", undefined, undefined, undefined, {}, worktreeAt("task"));
+
+  expect(await conversations.uncommittedFilesLostWith(caller.id)).toBe(0);
+});
+
 function hostWithAWorktreeConversation(uncommittedFiles: number) {
   const store = storeWithConversation();
   const worktree = worktreeAt("wt1");

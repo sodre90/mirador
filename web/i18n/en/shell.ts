@@ -98,9 +98,14 @@ export const shell = {
     startOne: { folder: "Start one in the project folder now", worktree: "Start one in a worktree now" },
     inWorktree: (branch: string) => `Works in a worktree of its own, on the branch ${branch}`,
     deleteTitle: "Delete the conversation and its worktree?",
-    deleteLoses: (count: number) =>
-      plural(count, "Its worktree holds 1 uncommitted file, which is deleted with it.", `Its worktree holds ${count} uncommitted files, which are deleted with it.`),
-    deleteKeeps: (branch: string) => `Commits made there stay, on the branch ${branch}.`,
+    deleteLoses: (count: number, worktrees: number) =>
+      plural(
+        worktrees,
+        plural(count, "Its worktree holds 1 uncommitted file, which is deleted with it.", `Its worktree holds ${count} uncommitted files, which are deleted with it.`),
+        plural(count, "Its worktrees hold 1 uncommitted file, which is deleted with them.", `Its worktrees hold ${count} uncommitted files, which are deleted with them.`),
+      ),
+    deleteKeeps: (branches: string[]) =>
+      branches.length === 1 ? `Commits made there stay, on the branch ${branches[0]}.` : `Commits made there stay, on the branches ${branches.join(", ")}.`,
     deleteBoth: "Delete both",
   },
   workspaceDelete: {

@@ -846,11 +846,12 @@ export function startServer(services: HostServices) {
     store.conversationsStartedBy(conversationId).forEach((started) => deleteConversation(started, worktree));
   }
 
-  /** Deleting a conversation deletes its worktree, so one that holds uncommitted files asks first. */
+  /** Deleting a conversation deletes its worktree and its delegated tasks', so any that hold uncommitted files asks first. */
   async function deleteConversationOrAsk(socket: BrowserSocket, conversationId: string, discardsUncommitted: boolean) {
-    const uncommittedFiles = discardsUncommitted ? 0 : await conversations.uncommittedFilesLostWith(conversationId);
+    const lost = discardsUncommitted ? [] : await conversations.worktreesLostWith(conversationId);
+    const uncommittedFiles = lost.reduce((sum, { uncommittedFiles }) => sum + uncommittedFiles, 0);
     if (uncommittedFiles === 0) return deleteConversation(conversationId);
-    hub.send(socket, { type: "conversation.delete-asks", conversationId, uncommittedFiles, branch: conversations.get(conversationId).worktree!.branch });
+    hub.send(socket, { type: "conversation.delete-asks", conversationId, uncommittedFiles, branches: lost.map(({ worktree }) => worktree.branch) });
   }
 
   function deleteWorkspace(workspaceId: string, { keepsUncommittedWork = false } = {}) {

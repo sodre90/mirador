@@ -833,16 +833,36 @@ export class ConversationService {
       .forEach((conversation) => this.publish(conversation));
   }
 
+  /** The conversation and the tasks its plugin tools started, which deleting it closes with it. */
+  private closingWith(conversationId: string): Set<string> {
+    const closing = new Set<string>();
+    const close = (id: string) => {
+      if (closing.has(id)) return;
+      closing.add(id);
+      this.store.conversationsStartedBy(id).forEach(close);
+    };
+    close(conversationId);
+    return closing;
+  }
+
   /**
-   * The files only the conversation's worktree holds, which deleting the conversation deletes with it: none while
-   * another conversation works there too, except the tasks that close with it.
+   * The worktrees deleting the conversation removes — its own and its delegated tasks' — each with the uncommitted
+   * files it holds: none while another conversation works there too.
    */
+  async worktreesLostWith(conversationId: string): Promise<{ worktree: ConversationWorktree; uncommittedFiles: number }[]> {
+    const closing = this.closingWith(conversationId);
+    const worktrees = new Map<string, ConversationWorktree>();
+    for (const id of closing) {
+      const { worktree } = this.get(id);
+      if (worktree) worktrees.set(worktree.id, worktree);
+    }
+    const lost = [...worktrees.values()].filter((worktree) => this.store.conversationsInWorktree(worktree.id).every((id) => closing.has(id)));
+    return Promise.all(lost.map(async (worktree) => ({ worktree, uncommittedFiles: await this.worktrees.uncommittedFiles(worktree) })));
+  }
+
+  /** The uncommitted files deleting the conversation removes with its worktrees and its delegated tasks'. */
   async uncommittedFilesLostWith(conversationId: string) {
-    const { worktree } = this.get(conversationId);
-    if (!worktree) return 0;
-    const closing = new Set([conversationId, ...this.store.conversationsStartedBy(conversationId)]);
-    if (this.store.conversationsInWorktree(worktree.id).some((id) => !closing.has(id))) return 0;
-    return this.worktrees.uncommittedFiles(worktree);
+    return (await this.worktreesLostWith(conversationId)).reduce((sum, { uncommittedFiles }) => sum + uncommittedFiles, 0);
   }
 
   /**
