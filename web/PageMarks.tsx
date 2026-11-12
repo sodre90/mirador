@@ -248,7 +248,10 @@ export function usePageMarks(page: ShowItem | undefined, frame: RefObject<HTMLIF
       )}
     </>
   );
-  return { pointing, point, received, waiting: batch?.comments.length ?? 0, listOpen, toggleList: () => setListOpen((open) => !open), opened };
+  const toggleList = () => {
+    if (!sendingBatch) setListOpen((open) => !open);
+  };
+  return { pointing, point, received, waiting: batch?.comments.length ?? 0, listOpen, toggleList, opened };
 }
 
 /**

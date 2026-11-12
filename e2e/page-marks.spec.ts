@@ -320,6 +320,8 @@ test("the user selects text or points at an element on a page the agent showed, 
     await upload.started;
     for (const control of [list.getByRole("button", { name: "Edit" }).first(), list.getByRole("button", { name: "Remove" }).first(), list.getByRole("textbox"), list.getByRole("button", { name: "Discard all" })])
       await expect(control, "the comments being sent can't change until they have gone").toBeDisabled();
+    await batchToggle(page).click();
+    await expect(list, "the list stays open, with its note, until the comments have gone").toBeVisible();
     await pointToggle(page).click();
     await shown.locator("#save").click();
     await wordsBox(page).getByRole("textbox").fill("One more");
