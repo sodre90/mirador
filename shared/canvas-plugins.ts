@@ -91,9 +91,9 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
    */
   openInEditor(file: string, line: number): void;
   /**
-   * Stops the turn of a conversation this plugin's tool started from this conversation, as the user's Stop would; its
-   * `replied` then hears it end as "stopped". Resolves doing nothing for one whose turn already ended or that no longer
-   * exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
+   * Stops the turn of a conversation this plugin's tool or action started from this conversation, as the user's Stop
+   * would; its `replied` then hears it end as "stopped", and no job it left running wakes it any more. Resolves doing
+   * nothing for one whose work already ended or that no longer exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
   /**
@@ -118,9 +118,9 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
    */
   startConversation(start: ConversationStart): Promise<StartedConversation>;
   /**
-   * Stops the turn of a conversation this plugin's tool started from this conversation, as the user's Stop would; its
-   * `replied` then hears it end as "stopped". Resolves doing nothing for one whose turn already ended or that no longer
-   * exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
+   * Stops the turn of a conversation this plugin's tool or action started from this conversation, as the user's Stop
+   * would; its `replied` then hears it end as "stopped", and no job it left running wakes it any more. Resolves doing
+   * nothing for one whose work already ended or that no longer exists. Throws for a conversation this plugin didn't start from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
 }
@@ -339,9 +339,10 @@ export interface CanvasHost<Data = unknown> {
   /** What the agent should hear of with the user's next message, such as what the user did in an item. */
   note?(context: CanvasPluginContext<Data>): CanvasPluginNote | null;
   /**
-   * Once, when a conversation one of the plugin's tools started ends the turn its first message began, or the turn a
-   * restart of Mirador resumed it in; the context is the conversation that started it. A turn cut short by a crash
-   * reports as failed at the next start. With this hook and `tellsCaller` in plugin.json, Mirador doesn't notify the user
+   * Once, when a conversation the plugin's tool or action started ends its work: the turn its first message began ends,
+   * or, when that turn left a job running that will wake its agent, the turn the wake-up began; or the turn a restart of
+   * Mirador resumed it in. The context is the conversation that started it. A turn cut short by a crash reports as failed
+   * at the next start, and one stopped while it waits for its job as stopped. With this hook and `tellsCaller` in plugin.json, Mirador doesn't notify the user
    * that turn ended: the plugin tells the conversation that started it (with `prompt`), whose own turn end does. Later
    * turns notify as usual.
    */

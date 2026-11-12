@@ -599,10 +599,10 @@ export class ConversationService {
   }
 
   /**
-   * For a plugin's tool: stops the turn of a conversation it started from the caller's, as the user's Stop does, so the
-   * plugin's `replied` hears it end as "stopped", and no job it left running wakes it any more; one still waiting for its
-   * worktree ends so once that is made, without starting. One that no longer exists, or whose work already ended, is let
-   * be; one this plugin's tool didn't start from that conversation throws.
+   * For a plugin's tool or action: stops the turn of a conversation it started from the caller's, as the user's Stop does,
+   * so the plugin's `replied` hears it end as "stopped", and no job it left running wakes it any more; one still waiting
+   * for its worktree ends so once that is made, without starting. One that no longer exists, or whose work already ended,
+   * is let be; one this plugin didn't start from that conversation throws.
    */
   async stopStarted(callerId: string, plugin: string, conversationId: string): Promise<void> {
     const conversation = this.store.findConversation(conversationId);
@@ -635,7 +635,7 @@ export class ConversationService {
     return this.jobWaits.in(conversationId).some(({ resume }) => resume);
   }
 
-  /** The plugin whose tool started a conversation hears how its work ended; `tellsItsCaller` says whether it passes that on. */
+  /** The plugin whose tool or action started a conversation hears how its work ended; `tellsItsCaller` says whether it passes that on. */
   hearRepliesWith(hearReply: HearReply, tellsItsCaller: (plugin: string) => boolean) {
     this.hearReply = hearReply;
     this.pluginTellsItsCaller = tellsItsCaller;
@@ -671,7 +671,7 @@ export class ConversationService {
   }
 
   /**
-   * Once, when the work of a conversation a plugin's tool started ends. The reply is kept before the plugin hears it, so
+   * Once, when the work of a conversation a plugin's tool or action started ends. The reply is kept before the plugin hears it, so
    * a crash in between can't tell it twice; a caller deleted since hears nothing. What it ran on is read as it ended.
    * A turn that ends waiting for a job that will wake the agent isn't that end: the turn after the wake-up is.
    */
@@ -3141,9 +3141,9 @@ export class ConversationService {
   }
 
   /**
-   * A plugin's tool started this conversation for a caller that is still here, and the plugin, which tells its caller, is
-   * yet to hear how its work ended: it hears of this turn and tells that caller, whose own turn end notifies the user. It
-   * hears only once, so the turns after notify as any conversation's do, as do those whose caller is gone or whose plugin
+   * A plugin's tool or action started this conversation for a caller that is still here, and the plugin, which tells its
+   * caller, is yet to hear how its work ended: it hears of this turn and tells that caller, whose own turn end notifies the
+   * user. It hears only once, so the turns after notify as any conversation's do, as do those whose caller is gone or whose plugin
    * won't tell (uninstalled, with no `replied`, or no `tellsCaller` in its plugin.json). Its permissions and questions ask
    * of the user all the same, through other paths.
    */
