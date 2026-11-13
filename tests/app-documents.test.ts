@@ -350,6 +350,31 @@ describe("AppDocuments", () => {
     apps.stop();
   });
 
+  test("work left on a document that closed doesn't reach the document the same file opens as again", async () => {
+    const { apps, fileText } = await setUp();
+    const first = await apps.open("c1", "counter", "counter.json");
+    const internals = apps as unknown as { documents: Map<string, unknown>; applyTo(opened: unknown, operation: unknown, author: AppAuthor): Promise<unknown> };
+    const closed = internals.documents.get(first.documentId);
+    apps.forgetConversation("c1");
+    const again = await apps.open("c1", "counter", "counter.json");
+    expect(again.documentId).toBe(first.documentId);
+    await apps.apply("c1", undefined, { op: "add", by: 5 }, { kind: "you" });
+    await expect(internals.applyTo(closed, { op: "add", by: 1 }, { kind: "you" })).rejects.toThrow("Counter closed on counter.json.");
+    expect(JSON.parse(fileText())).toEqual({ count: 5 });
+    apps.stop();
+  });
+
+  test("refuses a file that is a link to nothing, rather than trying to make it for good", async () => {
+    const { apps, workspacePath } = await setUp();
+    symlinkSync(join(workspacePath, "gone.json"), join(workspacePath, "counter.json"));
+    const opening = apps.open("c1", "counter", "counter.json");
+    const settled = await Promise.race([opening.then(() => "opened", () => "refused"), Bun.sleep(2000).then(() => "still trying")]);
+    expect(settled).toBe("refused");
+    await expect(opening).rejects.toThrow("counter.json can't be made: it is a link to a file that doesn't exist.");
+    expect(readdirSync(workspacePath).sort()).toEqual(["counter.json"]);
+    apps.stop();
+  });
+
   test("opens a file through a link that stays in the workspace, and makes a new one in folders not made yet", async () => {
     const { apps, workspacePath } = await setUp();
     mkdirSync(join(workspacePath, "plans"));

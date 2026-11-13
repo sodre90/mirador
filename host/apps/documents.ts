@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { constants, copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, watch, type FSWatcher } from "node:fs";
+import { constants, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, watch, type FSWatcher } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import {
   type AppAuthor,
@@ -148,6 +148,8 @@ function realPathOfExistingPart(path: string): string {
 function realPathOrItsFuture(path: string): string {
   return realPathOrNull(path) ?? join(realPathOrItsFuture(dirname(path)), basename(path));
 }
+
+const isLinkToNothing = (path: string) => lstatSync(path, { throwIfNoEntry: false })?.isSymbolicLink() === true && !existsSync(path);
 
 const foldedName = (name: string) => name.normalize("NFC").toLowerCase();
 
@@ -552,7 +554,7 @@ export class AppDocuments {
       this.oneOpenLessOf(filed.key);
     }
     if (!this.store.findConversation(conversationId)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`No conversation ${conversationId} holds an app open.`));
-    if (!this.documents.has(opened.id)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`${documentWords(opened)} closed while it was being opened; open it again with app_open.`));
+    if (!this.isStillOpen(opened)) throw this.goneBeforeItWasHeld(opened, new AppProblem(`${documentWords(opened)} closed while it was being opened; open it again with app_open.`));
     const refusal = refuseLeaving === undefined ? null : this.refusalToLeave(conversationId, appName, opened, refuseLeaving);
     if (refusal !== null) throw this.goneBeforeItWasHeld(opened, refusal);
     return this.openAppOf(this.noteOpenedIn(conversationId, opened, opening));
@@ -647,7 +649,10 @@ export class AppDocuments {
    */
   private madeElsewhere(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, filed: Filed, openedFile: string | undefined) {
     const existing = filedAs(workspace, plugin, filed.path);
-    if (existing.key === filed.key) return this.readDocument(plugin, workspace, ownerId, target, filed, openedFile);
+    if (existing.key === filed.key) {
+      if (isLinkToNothing(filed.path)) throw new AppProblem(`${target.file} can't be made: it is a link to a file that doesn't exist.`);
+      return this.readDocument(plugin, workspace, ownerId, target, filed, openedFile);
+    }
     const named = { path: existing.path, file: toPosix(join(dirname(target.file), basename(existing.path))) };
     return this.documentOpening(plugin, workspace, ownerId, named, existing, undefined);
   }
@@ -656,7 +661,7 @@ export class AppDocuments {
   private refreshUnlessRead(opened: AppDocument): Promise<AppDocument> {
     if (!opened.problem || opened.running) return Promise.resolve(opened);
     return this.queued(opened, async () => {
-      if (!this.documents.has(opened.id) || !existsSync(opened.path)) return opened;
+      if (!this.isStillOpen(opened) || !existsSync(opened.path)) return opened;
       const text = readFileSync(opened.path, "utf8");
       const parsed = this.parses(opened.plugin, text);
       if (parsed === null) return opened;
@@ -743,7 +748,7 @@ export class AppDocuments {
 
   private applyTo(opened: AppDocument, operation: unknown, author: AppAuthor): Promise<AppChange> {
     return this.queued(opened, async () => {
-      if (!this.documents.has(opened.id)) throw new AppProblem(`${opened.plugin.manifest.title} closed on ${opened.file}.`);
+      if (!this.isStillOpen(opened)) throw new AppProblem(`${opened.plugin.manifest.title} closed on ${opened.file}.`);
       if (opened.problem) throw new AppProblem(`${opened.file} can't be read: ${opened.problem}. Fix the file, or open it again with app_open.`);
       const { host, manifest } = opened.plugin;
       const applied = this.guarded(() => host.apply(opened.document, operation, author));
@@ -846,9 +851,14 @@ export class AppDocuments {
     this.publishWhileOpen(opened);
   }
 
+  /** The same file opened again after this one closed is another document under the same id. */
+  private isStillOpen(opened: AppDocument) {
+    return this.documents.get(opened.id) === opened;
+  }
+
   /** A document no conversation holds open has nothing more to show the pages. */
   private publishWhileOpen(opened: AppDocument) {
-    if (this.documents.has(opened.id)) this.publisher.stateChanged(this.stateOf(opened));
+    if (this.isStillOpen(opened)) this.publisher.stateChanged(this.stateOf(opened));
   }
 
   private stateOf(opened: AppDocument) {
@@ -982,7 +992,7 @@ export class AppDocuments {
 
   private readOutsideEdit(opened: AppDocument) {
     return this.queued(opened, async () => {
-      if (!this.documents.has(opened.id) || !existsSync(opened.path)) return;
+      if (!this.isStillOpen(opened) || !existsSync(opened.path)) return;
       const text = readFileSync(opened.path, "utf8");
       const hash = hashOf(text);
       if (hash === opened.knownHash) return;
