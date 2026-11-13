@@ -1,4 +1,4 @@
-import type { Conversation, Machine, MachineStatus, WaitingFor } from "../shared/model.ts";
+import type { Conversation, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
 import { TOKEN_COOKIE, type ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
@@ -70,6 +70,11 @@ interface WatchedMachine {
 const waitingOf = (conversations: Conversation[]) =>
   new Map(conversations.flatMap(({ id, waitingFor }) => (waitingFor ? [[id, waitingFor] as const] : [])));
 
+const waitingList = ({ waitingIn }: WatchedMachine) => [...waitingIn.values()].sort();
+
+const sameStatus = (one: MachineStatus, other: MachineStatus) =>
+  one.reachable === other.reachable && one.waiting.join() === other.waiting.join() && JSON.stringify(one.joinedThere) === JSON.stringify(other.joinedThere);
+
 /**
  * Keeps up with each joined machine while this host runs: whether it answers, which of its conversations wait for
  * you, and its notifications, which it passes on as this host's own. It listens as a page for the conversations and
@@ -80,6 +85,8 @@ export class MachineWatch {
 
   constructor(
     private readonly store: Store,
+    /** Where this host's own pages are served, so a machine that has joined this one doesn't offer it back. */
+    private readonly ownOrigins: readonly string[],
     private readonly statusChanged: (status: MachineStatus) => void,
     private readonly notify: (notification: SystemNotification) => void,
     private readonly signedOut: (machineId: string) => void,
@@ -94,7 +101,7 @@ export class MachineWatch {
     this.stop(machineId);
     const machine = this.store.findMachine(machineId);
     if (!machine?.joined) return;
-    const watched: WatchedMachine = { sockets: [], status: { machineId, reachable: false, waiting: [] }, waitingIn: new Map() };
+    const watched: WatchedMachine = { sockets: [], status: { machineId, reachable: false, waiting: [], joinedThere: [] }, waitingIn: new Map() };
     const signIn = () => {
       const token = this.store.machineDeviceToken(machineId);
       return token ? { headers: { Origin: machine.origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
@@ -132,23 +139,26 @@ export class MachineWatch {
     switch (message.type) {
       case "snapshot":
         watched.waitingIn = waitingOf(message.conversations);
-        break;
+        return this.update(watched, { waiting: waitingList(watched), joinedThere: this.joinedAmong(message.machines) });
+      case "machines.changed":
+        return this.update(watched, { joinedThere: this.joinedAmong(message.machines) });
       case "conversation.upserted":
         watched.waitingIn.delete(message.conversation.id);
         if (message.conversation.waitingFor) watched.waitingIn.set(message.conversation.id, message.conversation.waitingFor);
-        break;
+        return this.update(watched, { waiting: waitingList(watched) });
       case "conversation.deleted":
         watched.waitingIn.delete(message.conversationId);
-        break;
-      default:
-        return;
+        return this.update(watched, { waiting: waitingList(watched) });
     }
-    this.update(watched, { waiting: [...watched.waitingIn.values()].sort() });
+  }
+
+  private joinedAmong(machines: Machine[]): MachineSeen[] {
+    return machines.filter(({ joined, origin }) => joined && !this.ownOrigins.includes(origin)).map(({ name, origin }) => ({ name, origin }));
   }
 
   private update(watched: WatchedMachine, change: Partial<MachineStatus>) {
     const next = { ...watched.status, ...change };
-    if (next.reachable === watched.status.reachable && next.waiting.join() === watched.status.waiting.join()) return;
+    if (sameStatus(next, watched.status)) return;
     watched.status = next;
     this.statusChanged(next);
   }

@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { authorityFingerprintIn, inviteIn, inviteLink, joinCodeIn, machineAddress, tunnelIn } from "../shared/machines.ts";
+import { authorityFingerprintIn, inviteIn, inviteLink, joinCodeIn, machineAddress, machinesToJoin, tunnelIn } from "../shared/machines.ts";
+import type { Machine, MachineSeen } from "../shared/model.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 
 test("a machine is added by its name on the network, its address or an invite link from it", () => {
@@ -71,4 +72,23 @@ test("takes the invite code and certificate authority's fingerprint out of a pas
   expect(inviteIn("https://home-server.example.ts.net/#/join/ABCD-EFGH-JKLM")).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null });
   expect(inviteIn(`https://home-server.local:4602/#/join/ABCD-EFGH-JKLM/${fingerprint}`)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint });
   expect(inviteIn("  ABCD-EFGH-JKLM \n")).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null });
+});
+
+test("the machines this computer's machines have joined are offered once each, through the first that lists them, unless added here", () => {
+  const machine = (id: string, origin: string): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null });
+  const seen = (name: string, origin: string): MachineSeen => ({ name, origin });
+  const laptop = machine("laptop", "https://laptop.example.ts.net:4700");
+  const server = machine("server", "https://server.example.ts.net");
+  const statuses = [
+    { machineId: "server", reachable: true, waiting: [], joinedThere: [seen("Pi", "https://pi.example.ts.net"), seen("Laptop", laptop.origin)] },
+    { machineId: "laptop", reachable: false, waiting: [], joinedThere: [seen("Home server", server.origin), seen("Raspberry", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net")] },
+  ];
+  expect(machinesToJoin([laptop, server], statuses)).toEqual([
+    { name: "Raspberry", origin: "https://pi.example.ts.net", throughMachineId: "laptop" },
+    { name: "NAS", origin: "https://nas.example.ts.net", throughMachineId: "laptop" },
+  ]);
+  expect(machinesToJoin([server], statuses)).toEqual([
+    { name: "Pi", origin: "https://pi.example.ts.net", throughMachineId: "server" },
+    { name: "Laptop", origin: laptop.origin, throughMachineId: "server" },
+  ]);
 });

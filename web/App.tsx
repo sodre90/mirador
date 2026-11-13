@@ -2,6 +2,7 @@ import { OpensIn } from "./opens-in.ts";
 import { useMouseSteps } from "./mouse-steps.ts";
 import { EMPTY_TRAIL, stepped, visited } from "./visit-trail.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { machinesToJoin } from "../shared/machines.ts";
 import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { sidebarItems } from "../shared/sidebar-order.ts";
@@ -627,9 +628,11 @@ export function App() {
         <MachineRail
           machines={state.machines}
           statuses={state.machineStatuses}
+          toJoin={machinesToJoin(state.machines, state.machineStatuses)}
           waitingHere={waitingHere}
           shownId={shownMachine?.id ?? null}
           onShow={machines.show}
+          onAdd={machines.addAndShow}
           onManage={() => dispatch({ type: "open-overlay", overlay: { kind: "machines" } })}
         />
       )}

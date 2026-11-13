@@ -53,11 +53,21 @@ export interface Machine {
   color: Pastel | null;
 }
 
-/** What this host last heard from a joined machine: whether it answers, and what each conversation waiting for you there waits for. */
+/**
+ * What this host last heard from a joined machine: whether it answers, what each conversation waiting for you there
+ * waits for, and the machines it has joined in turn, which this computer can join too.
+ */
 export interface MachineStatus {
   machineId: string;
   reachable: boolean;
   waiting: WaitingFor[];
+  joinedThere: MachineSeen[];
+}
+
+/** A machine another machine has joined, known here by the name and address it has there. */
+export interface MachineSeen {
+  name: string;
+  origin: string;
 }
 
 /** A device that asked to join this machine, waiting for someone to approve it by typing the number it shows. */

@@ -246,6 +246,7 @@ export const shell: Messages["shell"] = {
     manage: "Rechner…",
     notJoinedYet: "noch nicht beigetreten",
     notAnswering: "antwortet nicht",
+    joinedBy: (machine) => `${machine} ist ihm beigetreten`,
     waitingForYou: (count) => plural(count, "1 wartet auf dich", `${count} warten auf dich`),
     about:
       "Andere Computer, auf denen Mirador läuft, etwa ein Server, dessen Agenten weiterarbeiten, während dieser Computer schläft. Jeder erscheint links in der Rechnerleiste als eigenes Mirador. Füge einen Einladungslink des Rechners ein, um ihm sofort beizutreten; du bekommst einen in seinen Einstellungen → Geräte, oder führe",

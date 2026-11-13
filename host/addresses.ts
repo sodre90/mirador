@@ -1,7 +1,15 @@
 import type { FoundAddress } from "../shared/model.ts";
+import type { HostConfig } from "./config.ts";
 
 /** Both of this machine's servers answer here, so an address can be checked before it is believed. */
 export const HERE_PATH = "/mirador-here";
+
+/** Where this host's own pages are served: on this computer, at its public address, and at each name its certificate covers on the network. */
+export function ownPageOrigins({ appOrigin, publicOrigin, reachability }: Pick<HostConfig, "appOrigin" | "publicOrigin" | "reachability">, certificate: { names: string[] } | null) {
+  const { network } = reachability;
+  const networkOrigins = network && certificate ? certificate.names.map((name) => `https://${name}:${network.port}`) : [];
+  return [appOrigin, publicOrigin, ...networkOrigins].filter((origin) => origin !== null);
+}
 
 const PROBE_TIMEOUT_MS = 4000;
 const REMEMBERED = 3;

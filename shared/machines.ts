@@ -1,3 +1,4 @@
+import type { Machine, MachineSeen, MachineStatus } from "./model.ts";
 import { decodedInviteTunnel, encodedInviteTunnel, type InviteTunnel } from "./tunnel.ts";
 
 /** How long a name Settings give a machine can be, so it fits a device's lists. */
@@ -39,4 +40,20 @@ export function machineAddress(text: string): { origin: string; joinCode: string
   } catch {
     return null;
   }
+}
+
+/** A machine one of this computer's machines has joined, which this computer can join too. */
+export interface MachineToJoin extends MachineSeen {
+  /** The first of this computer's machines, in their order, that has joined it. */
+  throughMachineId: string;
+}
+
+/** The machines this computer's machines have joined, once each, leaving out those it has added itself. */
+export function machinesToJoin(machines: Machine[], statuses: MachineStatus[]): MachineToJoin[] {
+  const added = new Set(machines.map(({ origin }) => origin));
+  const seen = machines.flatMap(({ id }) =>
+    (statuses.find(({ machineId }) => machineId === id)?.joinedThere ?? []).map((machine) => ({ ...machine, throughMachineId: id })),
+  );
+  const isFirstListing = (machine: MachineToJoin, index: number) => seen.findIndex(({ origin }) => origin === machine.origin) === index;
+  return seen.filter((machine, index) => !added.has(machine.origin) && isFirstListing(machine, index));
 }

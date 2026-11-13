@@ -239,6 +239,7 @@ export const shell = {
     manage: "Machines…",
     notJoinedYet: "not joined yet",
     notAnswering: "not answering",
+    joinedBy: (machine: string) => `${machine} has joined it`,
     waitingForYou: (count: number) => `${count} waiting for you`,
     about:
       "Other computers running Mirador, such as a server whose agents keep working while this one sleeps. Each shows in the rail on the left, as its own Mirador. Paste an invite link from the machine to join it right away; get one in its Settings → Devices, or run",

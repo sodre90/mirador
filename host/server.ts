@@ -51,7 +51,7 @@ import { sidebarIdsAfterMove } from "../shared/sidebar-order.ts";
 import { withChunksCoalesced } from "../shared/timeline.ts";
 import { authorityFingerprint as fingerprintOf, type ServingCertificate } from "./certificates.ts";
 import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
-import { HERE_PATH, addressesThatAnswer, addressesUsed, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
+import { HERE_PATH, addressesThatAnswer, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
 import { servePortOnTailnet, tailnetName, tailscaleCommand } from "./tailscale.ts";
 import { errorMessage, type ConversationService } from "./conversations.ts";
 import { deviceName, type DeviceService } from "./devices.ts";
@@ -224,7 +224,7 @@ export function startServer(services: HostServices) {
    */
   const tunnelEnds = new WeakMap<Request, TunnelEnd>();
   const hasAllowedHost = (request: Request) => tunnelEnds.has(request) || allowedHosts.has(request.headers.get("host") ?? "");
-  const pageOrigins = [config.appOrigin, config.publicOrigin, ...networkHosts.map((host) => `https://${host}`)].filter((origin) => origin !== null);
+  const pageOrigins = ownPageOrigins(config, certificate);
   const isOwnOrigin = (origin: string, host: string | null) => origin === `http://${host}` || origin === `https://${host}`;
   /** Through the tunnel, a page is served from whatever address the device's proxy listens on, so its origin matches its Host. */
   const isPageOrigin = (request: Request) => {

@@ -55,6 +55,8 @@ afterEach(() => {
   cleanUp = [];
 });
 
+const THIS_HOST = "https://this-laptop.example.ts.net:4700";
+
 function watching(origin: string, joined = true) {
   const store = new Store(":memory:");
   store.insertMachine({ id: "m1", name: "Home server", origin, createdAt: 1 });
@@ -64,6 +66,7 @@ function watching(origin: string, joined = true) {
   const signedOut: string[] = [];
   const watch = new MachineWatch(
     store,
+    [THIS_HOST],
     (status) => statuses.push(status),
     (notification) => notifications.push(notification),
     (machineId) => {
@@ -83,9 +86,9 @@ describe("MachineWatch", () => {
     const { watch } = watching(machine.origin);
     await eventually(() => expect(machine.sockets).toHaveLength(2));
     expect(machine.signIns.toSorted()).toEqual([`/notifications ${machine.origin} mirador_token=device-token`, `/ws ${machine.origin} mirador_token=device-token`]);
-    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [] }]);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [] }]);
 
-    machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question"), conversation("b", null)] });
+    machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question"), conversation("b", null)], machines: [] });
     await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
     machine.send("/ws", { type: "conversation.upserted", conversation: conversation("b", "finished") } as ServerMessage);
     await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["finished", "question"]));
@@ -102,13 +105,40 @@ describe("MachineWatch", () => {
     try {
       machine.sockets.filter(({ data }) => data.path === "/ws").forEach((socket) => socket.send("not json"));
       machine.send("/ws", { type: "snapshot" });
-      machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")] });
+      machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")], machines: [] });
       await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
       expect(logged).toHaveBeenCalledTimes(2);
       expect(logged).toHaveBeenCalledWith(expect.stringContaining(`skipped a message from ${machine.origin.replace(/^http/, "ws")}/ws`), expect.any(Error));
     } finally {
       logged.mockRestore();
     }
+  });
+
+  test("lists the machines the machine has joined in turn, but none it only added, nor this host", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, statuses } = watching(machine.origin);
+    await eventually(() => expect(machine.sockets).toHaveLength(2));
+    const there = (name: string, origin: string, joined: boolean) => ({ id: name, name, origin, createdAt: 1, relayPort: 4620, joined, color: null });
+    const buildBox = there("Build box", "https://build-box.example.ts.net", true);
+
+    machine.send("/ws", {
+      type: "snapshot",
+      conversations: [],
+      machines: [buildBox, there("Old NAS", "https://old-nas.example.ts.net", false), there("This laptop", THIS_HOST, true)],
+    });
+    await eventually(() => expect(watch.statuses()[0]!.joinedThere).toEqual([{ name: "Build box", origin: "https://build-box.example.ts.net" }]));
+
+    const changesBefore = statuses.length;
+    machine.send("/ws", { type: "machines.changed", machines: [buildBox, there("Old NAS", "https://old-nas.example.ts.net", false)] });
+    machine.send("/ws", { type: "machines.changed", machines: [buildBox, there("Pi", "https://pi.example.ts.net", true)] });
+    await eventually(() =>
+      expect(watch.statuses()[0]!.joinedThere).toEqual([
+        { name: "Build box", origin: "https://build-box.example.ts.net" },
+        { name: "Pi", origin: "https://pi.example.ts.net" },
+      ]),
+    );
+    expect(statuses.length).toBe(changesBefore + 1);
   });
 
   test("passes the machine's notifications on as this host's, saying which machine they come from", async () => {

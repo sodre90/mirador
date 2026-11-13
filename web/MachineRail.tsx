@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { markInitials } from "../shared/marks.ts";
 import { spacedNumber } from "../shared/join-requests.ts";
-import { inviteIn } from "../shared/machines.ts";
-import type { Machine, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
+import { inviteIn, type MachineToJoin } from "../shared/machines.ts";
+import type { Machine, MachineSeen, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
@@ -15,8 +15,11 @@ import { mostUrgentTone } from "./waiting.ts";
 
 const machineFromHash = () => location.hash.match(/^#\/m\/([\w-]+)$/)?.[1] ?? null;
 
-/** This host shows other machines at ports of this computer, which a page opened from elsewhere cannot reach. */
-export const showsMachinesHere = () => ["127.0.0.1", "localhost"].includes(location.hostname);
+/**
+ * This host shows other machines at ports of this computer, which a page opened from elsewhere cannot reach. Neither can
+ * a page shown in another Mirador's rail: its ports are this host's, but the computer it runs on is the other one's.
+ */
+export const showsMachinesHere = () => ["127.0.0.1", "localhost"].includes(location.hostname) && window.self === window.top;
 
 const words = t.shell.machines;
 
@@ -69,7 +72,22 @@ export function useShownMachine(machines: Machine[], machinesLoaded: boolean) {
     setOpening({ machineId, conversationId });
     show(machineId);
   }, []);
-  return { shownId, shown, visited, opening, show, openIn, rememberPlace, placeOf };
+  const addAndShow = useAddedMachineShown(machines, show);
+  return { shownId, shown, visited, opening, show, openIn, addAndShow, rememberPlace, placeOf };
+}
+
+/** Adds a machine and shows it once the host lists it, where it offers to join; clicks before then add it only once. */
+function useAddedMachineShown(machines: Machine[], show: (machineId: string) => void) {
+  const addingOrigin = useRef<string | null>(null);
+  const added = addingOrigin.current === null ? undefined : machines.find(({ origin }) => origin === addingOrigin.current);
+  useEffect(() => {
+    if (!added) return;
+    addingOrigin.current = null;
+    show(added.id);
+  }, [added?.id]);
+  return useCallback(({ name, origin }: MachineSeen) => {
+    if (addingOrigin.current !== origin && connection.send({ type: "machine.add", name, address: origin })) addingOrigin.current = origin;
+  }, []);
 }
 
 function WaitingBadge({ waiting }: { waiting: WaitingFor[] }) {
@@ -88,19 +106,27 @@ const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
     .filter(Boolean)
     .join(" · ");
 
+const toJoinHint = (machine: MachineToJoin, machines: Machine[]) =>
+  [machine.name, machine.origin, words.joinedBy(machines.find(({ id }) => id === machine.throughMachineId)!.name), words.notJoinedYet].join(" · ");
+
 export function MachineRail({
   machines,
   statuses,
+  toJoin,
   waitingHere,
   shownId,
   onShow,
+  onAdd,
   onManage,
 }: {
   machines: Machine[];
   statuses: MachineStatus[];
+  /** Machines this computer's machines have joined, which it can add and join with a click. */
+  toJoin: MachineToJoin[];
   waitingHere: WaitingFor[];
   shownId: string | null;
   onShow: (machineId: string | null) => void;
+  onAdd: (machine: MachineToJoin) => void;
   onManage: () => void;
 }) {
   const thisComputerHint = [hints.thisComputer, waitingHere.length > 0 && words.waitingForYou(waitingHere.length)].filter(Boolean).join(" · ");
@@ -136,6 +162,18 @@ export function MachineRail({
           </button>
         );
       })}
+      {toJoin.map((machine) => (
+        <button
+          key={machine.origin}
+          type="button"
+          className="rail-machine away"
+          aria-label={machine.name}
+          data-hint={toJoinHint(machine, machines)}
+          onClick={() => onAdd(machine)}
+        >
+          {markInitials(machine.name)}
+        </button>
+      ))}
       <button type="button" className="rail-manage" aria-label={words.manage} data-hint={hints.manageMachines} onClick={onManage}>
         +
       </button>

@@ -228,6 +228,7 @@ export const shell: Messages["shell"] = {
     manage: "Gépek…",
     notJoinedYet: "még nem csatlakozott",
     notAnswering: "nem válaszol",
+    joinedBy: (machine) => `${machine} csatlakozott hozzá`,
     waitingForYou: (count) => `${count} rád vár`,
     about:
       "Más számítógépek, amelyeken Mirador fut, például egy szerver, amelynek az ágensei akkor is dolgoznak, amikor ez a gép alszik. Mindegyik a bal oldali sávon jelenik meg, saját Miradorként. Illessz be egy meghívólinket a gépről, hogy azonnal csatlakozz hozzá; ilyet a Beállítások → Készülékek oldalán kapsz, vagy futtasd ott ezt:",

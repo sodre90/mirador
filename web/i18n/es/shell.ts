@@ -246,6 +246,7 @@ export const shell: Messages["shell"] = {
     manage: "Máquinas…",
     notJoinedYet: "aún sin unirse",
     notAnswering: "no responde",
+    joinedBy: (machine) => `${machine} se unió a ella`,
     waitingForYou: (count) => `${count} esperándote`,
     about:
       "Otros equipos que ejecutan Mirador, como un servidor cuyos agentes siguen trabajando mientras este equipo duerme. Cada uno aparece en la barra de máquinas de la izquierda, como su propio Mirador. Pega un enlace de invitación de la máquina para unirte al instante; consíguelo en su Configuración → Dispositivos, o ejecuta",

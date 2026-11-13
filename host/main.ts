@@ -22,6 +22,7 @@ import { DeviceService } from "./devices.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { MachineRelays } from "./machine-relays.ts";
 import { MachineWatch } from "./machine-watch.ts";
+import { ownPageOrigins } from "./addresses.ts";
 import { ConversationSearch } from "./search.ts";
 import { signedInWith } from "./sign-in.ts";
 import { SignInCodes, signInLink } from "./sign-in-codes.ts";
@@ -181,6 +182,7 @@ const search = new ConversationSearch(store);
 const signedIn = signedInWith(config.browserToken, devices);
 const watch = new MachineWatch(
   store,
+  ownPageOrigins(config, certificate),
   (status) => hub.broadcast({ type: "machine.status", status }),
   (notification) => hub.notifyThisComputer(notification),
   machineSignedOut,
