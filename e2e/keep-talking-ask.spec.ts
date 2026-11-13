@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fakeMicrophone } from "./fake-microphone.ts";
-import { addWorkspace, callCanvasTool, createProfile, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, createProfile, dictateInto, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import { toneWav } from "./wav.ts";
 
@@ -80,8 +80,7 @@ test("with Keep talking, a question the agent asks is read aloud, recommended op
   const composer = page.locator(".composer:visible");
   const dictate = composer.getByRole("button", { name: "Dictate" });
   const asked = page.locator(".timeline:visible .message.user");
-  await dictate.click();
-  await expect(composer.locator("textarea")).toHaveValue(said()[0]!, { timeout: 30_000 });
+  await dictateInto(composer, said()[0]!, () => heard);
   await composer.locator("textarea").press("Enter");
   await expect(asked).toHaveCount(1);
   const conversationId = new URL(page.url()).hash.replace(/^#\/c\//, "");

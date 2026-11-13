@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { loadavg } from "node:os";
 import { expect, test, type Frame, type FrameLocator, type Locator, type Page } from "@playwright/test";
 import type { TestHost } from "./test-host.ts";
 
@@ -157,6 +158,33 @@ export async function useOwnVoiceServer(
   if (voice) await section.getByLabel("Voice", { exact: true }).fill(voice);
   await section.getByRole("button", { name: "Save" }).click();
   await expect(section.getByRole("status")).toHaveText("Saved.");
+}
+
+/**
+ * Clicks Dictate and waits until the box holds what the voice server heard. When it doesn't, the error says where
+ * dictation stopped, how many recordings reached the voice server and how busy the machine was: the release gate keeps
+ * only the error's text in its bead, and this failure has come and gone with the machine rather than the code.
+ */
+export async function dictateInto(composer: Locator, expected: string, transcriptions: () => number) {
+  const before = transcriptions();
+  const dictate = composer.getByRole("button", { name: "Dictate" });
+  await dictate.click();
+  try {
+    await expect(composer.locator("textarea")).toHaveValue(expected, { timeout: 30_000 });
+  } catch (error) {
+    throw new Error(`${await whyDictationStopped(composer.page(), dictate, transcriptions() - before)}\n${(error as Error).message}`);
+  }
+}
+
+async function whyDictationStopped(page: Page, dictate: Locator, transcriptions: number) {
+  const phase = (await dictate.getAttribute("class", { timeout: 1_000 }).catch(() => null))?.match(/\bdictate-(\w+)/)?.[1] ?? "unknown";
+  const status = await page.locator(".dictation-status:visible").first().textContent({ timeout: 1_000 }).catch(() => null);
+  const [lastMinute, lastFiveMinutes] = loadavg();
+  return [
+    `Dictation never filled in the box: it is ${phase}, its status ${status === null ? "shows nothing" : `says "${status}"`},`,
+    `and the voice server got ${transcriptions} transcription request${transcriptions === 1 ? "" : "s"} since the click.`,
+    `The machine's load: ${lastMinute!.toFixed(1)} over the last minute and ${lastFiveMinutes!.toFixed(1)} over five.`,
+  ].join(" ");
 }
 
 /** One of the pictures in a choice of Settings, e.g. Light under Theme. */

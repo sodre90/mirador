@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fakeMicrophone } from "./fake-microphone.ts";
-import { addWorkspace, createProfile, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
+import { addWorkspace, createProfile, dictateInto, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import { toneWav } from "./wav.ts";
 
@@ -74,8 +74,7 @@ test("with Keep talking, rounds that hear only noise don't start its two minutes
   const dictate = composer.getByRole("button", { name: "Dictate" });
 
   await test.step("after the reply has been read, a round that hears only noise listens on", async () => {
-    await dictate.click();
-    await expect(composer.locator("textarea")).toHaveValue(DICTATED, { timeout: 30_000 });
+    await dictateInto(composer, DICTATED, () => heard);
     await composer.locator("textarea").press("Enter");
     await expect.poll(() => heard, { timeout: 30_000 }).toBe(3);
   });

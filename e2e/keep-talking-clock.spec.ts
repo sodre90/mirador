@@ -4,7 +4,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fakeMicrophone } from "./fake-microphone.ts";
-import { addWorkspace, createProfile, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
+import { addWorkspace, createProfile, dictateInto, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import { toneWav } from "./wav.ts";
 
@@ -101,8 +101,7 @@ test("with Keep talking, a clock ticks while the agent works on what was dictate
 
   const composer = page.locator(".composer:visible");
   const dictate = async (text: string) => {
-    await composer.getByRole("button", { name: "Dictate" }).click();
-    await expect(composer.locator("textarea")).toHaveValue(text, { timeout: 30_000 });
+    await dictateInto(composer, text, () => heard);
     await composer.locator("textarea").press("Enter");
   };
 

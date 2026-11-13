@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { fakeMicrophone } from "./fake-microphone.ts";
-import { addWorkspace, createProfile, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
+import { addWorkspace, createProfile, dictateInto, openSettings, signIn, useOwnVoiceServer, voiceSection } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import { toneWav } from "./wav.ts";
 
@@ -102,8 +102,7 @@ test("with Keep talking, the microphone opens again once a dictated message's re
   const dictate = composer.getByRole("button", { name: "Dictate" });
 
   await test.step("the first dictated message is checked and sent by hand, as Send right away is off", async () => {
-    await dictate.click();
-    await expect(composer.locator("textarea")).toHaveValue(SAID[0]!, { timeout: 30_000 });
+    await dictateInto(composer, SAID[0]!, () => heard);
     await composer.locator("textarea").press("Enter");
     await expect(answers.last()).toHaveText("First answer.", { timeout: 30_000 });
   });
@@ -130,8 +129,7 @@ test("with Keep talking, the microphone opens again once a dictated message's re
   });
 
   await test.step("Esc ends a conversation started again: nothing more is sent", async () => {
-    await dictate.click();
-    await expect(composer.locator("textarea")).toHaveValue(SAID[6]!, { timeout: 30_000 });
+    await dictateInto(composer, SAID[6]!, () => heard);
     await composer.locator("textarea").press("Enter");
     await expect(dictate, "listens again after the reply").toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
     await page.keyboard.press("Escape");
