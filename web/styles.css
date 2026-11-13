@@ -187,6 +187,23 @@ option:disabled {
   color: var(--muted);
 }
 
+/*
+ * Windows draws its own text cursor by inverting the screen under it, which comes out white, unseen on a light field,
+ * e.g. with HDR on. So on Windows the page draws a dark one with a light edge, which shows on any background.
+ */
+:where(:root[data-text-cursor="drawn"])
+  :where(
+    textarea:not(:disabled),
+    input:not(:disabled):is(:not([type]), [type="text"], [type="search"], [type="url"], [type="email"], [type="password"], [type="number"], [type="tel"]),
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"]
+  ) {
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='17' height='25'%3E%3Cpath d='M5.5 2.5h6M8.5 2.5v20M5.5 22.5h6' fill='none' stroke='white' stroke-width='3'/%3E%3Cpath d='M5.5 2.5h6M8.5 2.5v20M5.5 22.5h6' fill='none' stroke='black'/%3E%3C/svg%3E")
+      8 12,
+    text;
+}
+
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
