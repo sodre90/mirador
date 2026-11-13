@@ -32,6 +32,7 @@ import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, isChoiceSetting, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
 import { validStatuslineChips } from "./statusline-chips.ts";
+import { categoryChoices } from "../../shared/config-options.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
 import type { Store } from "../store.ts";
@@ -640,7 +641,12 @@ export class CanvasPlugins {
   }
 
   private pluginProfiles(): PluginProfile[] {
-    return this.store.listProfiles().map(({ name, harness }) => ({ name, agent: harness }));
+    return this.store.listProfiles().map(({ id, name, harness, model, effort }) => ({ name, agent: harness, model: model ? this.namedModel(id, model) : null, effort }));
+  }
+
+  private namedModel(profileId: string, model: string): { id: string; name: string } {
+    const offered = categoryChoices(this.store.latestConfigOptionsOf(profileId), "model").find(({ value }) => value === model);
+    return { id: model, name: offered?.name ?? model };
   }
 
   private storageOf(plugin: CanvasPlugin): CanvasPluginStorage {

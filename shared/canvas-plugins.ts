@@ -285,6 +285,14 @@ export interface PluginProfile {
   name: string;
   /** The agent it runs, as Mirador names it, e.g. "claude" or "codex". */
   agent: string;
+  /**
+   * The model its conversations start on, as the profile sets it: the id Mirador passes to its agent, e.g. "opus", and
+   * the name the agent gave it in the profile's latest conversation, e.g. "Opus 5.5", else the id. Null when the profile
+   * leaves the model to its agent. Plugin API 15 brought it.
+   */
+  model: { id: string; name: string } | null;
+  /** The effort its conversations start on, as the profile sets it, e.g. "high"; null when it leaves it to its agent. Plugin API 15 brought it. */
+  effort: string | null;
 }
 
 /** A conversation a plugin starts of its own in a workspace: on the profile of that name, working on `prompt` at once. */

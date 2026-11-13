@@ -329,10 +329,44 @@ describe("CanvasPlugins", () => {
     await callTool("show_card", { title: "Race", text: "Start one" });
 
     expect(await plugins.act(items()[0]!.id, { profile: "Local" })).toEqual({
-      profiles: [{ name: "Local", agent: "opencode" }],
+      profiles: [{ name: "Local", agent: "opencode", model: null, effort: null }],
       started: { id: "c2", profile: "Local", worktree: { folder: "/worktrees/p/1a2b3c4d", branch: "mirador/1a2b3c4d" } },
     });
     expect(asked).toEqual([{ callerId: "c1", plugin: "board", profile: "Local", prompt: "Fix it", title: "Racer 1", worktree: "own" }]);
+  });
+
+  test("lists each profile with the model it sets, named as its agent named it in the profile's latest conversation, and its effort", async () => {
+    const lister = { ...board, action: (_item: unknown, _action: unknown, context: CanvasActionContext) => context.profiles() };
+    const store = storeWithConversation();
+    const profile = (id: string, name: string, model: string | null, effort: string | null) =>
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model, mode: null, effort, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+    profile("work", "Work", "opus", "xhigh");
+    profile("own", "Own", null, null);
+    profile("new", "New", "custom-model", null);
+    const modelOption = (current: string, opusName: string) => ({
+      id: "model",
+      name: "Model",
+      category: "model",
+      type: "select" as const,
+      currentValue: current,
+      options: [
+        { value: "opus", name: opusName },
+        { value: "haiku", name: "claude-haiku" },
+      ],
+    });
+    const { position: _, ...c1 } = store.findConversation("c1")!;
+    store.insertConversation({ ...c1, id: "older", profileId: "work", configOptions: [modelOption("opus", "Opus 5.5")], updatedAt: 5 });
+    store.insertConversation({ ...c1, id: "switched", profileId: "work", configOptions: [modelOption("haiku", "claude-opus[1m] (opus)")], updatedAt: 9 });
+    store.insertConversation({ ...c1, id: "unstarted", profileId: "work", configOptions: [], updatedAt: 12 });
+    store.insertConversation({ ...c1, id: "own-1", profileId: "own", configOptions: [modelOption("haiku", "Opus 5.5")], updatedAt: 9 });
+    const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, store, { board: lister });
+    await callTool("show_card", { title: "Race", text: "Pick profiles" });
+
+    expect(await plugins.act(items()[0]!.id, {})).toEqual([
+      { name: "New", agent: "claude", model: { id: "custom-model", name: "custom-model" }, effort: null },
+      { name: "Own", agent: "claude", model: null, effort: null },
+      { name: "Work", agent: "claude", model: { id: "opus", name: "claude-opus[1m] (opus)" }, effort: "xhigh" },
+    ]);
   });
 
   test("a plugin's action messages a conversation it started", async () => {

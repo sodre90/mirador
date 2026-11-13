@@ -92,8 +92,8 @@ describe("a plugin's workspace context", () => {
     const withBackground = await starterHost({ starter: { ...starter, background: (context) => void (handed = context) } });
     withBackground.plugins.startBackgroundWork();
     expect(handed!.inWorkspace("w1").profiles()).toEqual([
-      { name: "Claude", agent: "claude" },
-      { name: "Night runs", agent: "codex" },
+      { name: "Claude", agent: "claude", model: null, effort: null },
+      { name: "Night runs", agent: "codex", model: null, effort: null },
     ]);
   });
 

@@ -699,6 +699,14 @@ export class Store {
     return this.db.query("SELECT 1 FROM conversations WHERE id = ?").get(id) !== null;
   }
 
+  /** The options the agent offered in the profile's most recently active conversation that has any; none before one ran. */
+  latestConfigOptionsOf(profileId: string): Conversation["configOptions"] {
+    const row = this.db
+      .query("SELECT config_options FROM conversations WHERE profile_id = ? AND config_options != '[]' ORDER BY updated_at DESC, rowid DESC LIMIT 1")
+      .get(profileId) as Pick<ConversationRow, "config_options"> | null;
+    return row ? JSON.parse(row.config_options) : [];
+  }
+
   findConversation(id: string): Conversation | undefined {
     const row = this.db.query("SELECT * FROM conversations WHERE id = ?").get(id) as ConversationRow | null;
     return row ? toConversation(row) : undefined;
