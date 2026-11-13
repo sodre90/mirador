@@ -5431,6 +5431,11 @@ button.shell-more:hover {
   color: var(--faint);
 }
 
+/* The group's own border sets it apart, and a separator would draw inside it. */
+.statusline-chips > .plugin-chips::before {
+  content: none;
+}
+
 .plugin-chips {
   display: inline-flex;
   align-items: center;

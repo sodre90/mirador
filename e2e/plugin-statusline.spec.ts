@@ -89,6 +89,7 @@ test("a plugin's profile settings are typed, toggled and checked under its title
     await expect(meterChips.getByText("⏱")).toHaveAttribute("data-hint", "Meter at https://meter.test");
     await expect(meterChips.getByText("Total basic")).toHaveClass(/level-warn/);
     await expect(meterChips.getByText("Total basic")).toHaveClass(/stale/);
+    expect(await meterChips.evaluate((group) => getComputedStyle(group, "::before").content)).toBe("none");
     await expect(statusline.getByText("$3.50")).toHaveCount(0);
   });
 
