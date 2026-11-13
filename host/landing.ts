@@ -28,11 +28,11 @@ const sharedPaths = (some: string[], others: string[]) => {
 };
 
 /**
- * A rebase, merge or cherry-pick left half done. In the worktree, its HEAD is no finished work to land, and our rebase's
+ * A rebase, merge, cherry-pick or revert left half done. In the worktree, its HEAD is no finished work to land, and our rebase's
  * abort would throw it away; in the project folder, the fast-forward would fail after the worktree was already rebased.
  */
 async function isMidOperation(folder: string) {
-  const markers = await Promise.all(["rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD"].map((name) => mustGit(folder, ["rev-parse", "--path-format=absolute", "--git-path", name])));
+  const markers = await Promise.all(["rebase-merge", "rebase-apply", "MERGE_HEAD", "CHERRY_PICK_HEAD", "REVERT_HEAD"].map((name) => mustGit(folder, ["rev-parse", "--path-format=absolute", "--git-path", name])));
   return markers.some((marker) => existsSync(marker.trim()));
 }
 
@@ -79,7 +79,7 @@ export async function landOnto(projectFolder: string, worktree: string, { mayReb
     await rebaseOnto(worktree, target, branch);
   }
   const landing = await commitOf(worktree, "HEAD");
-  await mustGit(checkout, ["merge", "--ff-only", "--quiet", landing]);
+  await mustGit(checkout, ["merge", "--ff-only", "--no-overwrite-ignore", "--quiet", landing]);
   const subjects = (await mustGit(checkout, ["log", "--format=%s", "--reverse", `${target}..${landing}`])).split("\n").filter(Boolean);
   const revision = (await mustGit(checkout, ["rev-parse", "--short", landing])).trim();
   return { branch, revision, subjects, rebased };

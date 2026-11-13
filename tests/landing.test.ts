@@ -206,6 +206,49 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     expect(existsSync(git(project, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD"))).toBe(true);
   });
 
+  test("a revert someone left half done in the project folder refuses the landing before the worktree is rebased", async () => {
+    const { project, worktree } = projectWithAWorktree();
+    commitIn(worktree, "mine", "mine from the conversation", "Change mine");
+    mainMovesOn(project, "sub/inside", "changed on main");
+    git(project, "reset", "--quiet", "--", "staged-elsewhere");
+    git(project, "revert", "--no-commit", "HEAD");
+    const before = { project: headOf(project), worktree: headOf(worktree) };
+
+    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: project } });
+
+    expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
+  });
+
+  test("a commit bringing a file the project folder ignores and has of its own is refused, and that file stays as it was", async () => {
+    const { project, worktree } = projectWithAWorktree();
+    commitIn(project, ".gitignore", ".env\nnode_modules/", "Ignore .env and node_modules");
+    git(worktree, "merge", "--ff-only", "--quiet", "main");
+    write(project, ".env", "the owner's secrets");
+    write(worktree, ".env", "the conversation's");
+    git(worktree, "add", "--force", ".env");
+    git(worktree, "commit", "--quiet", "-m", "Add .env");
+    const projectHead = headOf(project);
+
+    await expect(landOnto(project, worktree, { mayRebase: false })).rejects.toMatchObject({ problem: { code: "git-failed" } });
+
+    expect(read(project, ".env")).toBe("the owner's secrets");
+    expect(headOf(project)).toBe(projectHead);
+  });
+
+  test("lands beside ignored files the commits don't bring, such as installed packages", async () => {
+    const { project, worktree } = projectWithAWorktree();
+    commitIn(project, ".gitignore", "node_modules/", "Ignore node_modules");
+    git(worktree, "merge", "--ff-only", "--quiet", "main");
+    mkdirSync(join(project, "node_modules"));
+    write(project, "node_modules/package", "installed");
+    commitIn(worktree, "mine", "mine from the conversation", "Change mine");
+
+    await landOnto(project, worktree, { mayRebase: false });
+
+    expect(read(project, "mine")).toBe("mine from the conversation");
+    expect(read(project, "node_modules/package")).toBe("installed");
+  });
+
   test("a workspace that is a folder inside its repository lands the whole commit", async () => {
     const { project, worktree } = projectWithAWorktree();
     commitIn(worktree, "mine", "mine from the conversation", "Change mine");
