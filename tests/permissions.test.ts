@@ -21,6 +21,12 @@ describe("canvas tools the host allows without asking", () => {
     expect(canvasToolAskedFor(call("Run", { rawInput: { server: "canvas", tool: "update_checklist" }, _meta: { is_mcp_tool_call: true } }), [])).toBe("update_checklist");
   });
 
+  test("Antigravity's request, titled Run and naming the tool apart, names it", () => {
+    const antigravityCall = (name: string) => call(`Run ${name}`, { kind: "other", name } as Partial<ToolCallUpdate>);
+    expect(canvasToolAskedFor(antigravityCall("mcp_canvas_show"), [])).toBe("show");
+    expect(canvasToolAskedFor(antigravityCall("mcp_github_list_issues"), [])).toBeNull();
+  });
+
   test("Copilot's bare title is read through the report it sent before the request", () => {
     expect(canvasToolAskedFor(call("ping"), [])).toBeNull();
     expect(canvasToolAskedFor(call("ping"), [call("canvas-ping", { kind: "other" })])).toBe("ping");
