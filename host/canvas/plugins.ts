@@ -14,6 +14,7 @@ import {
   type PluginWindowContext,
   type ConversationChoices,
   type ConversationStart,
+  type ConversationUsage,
   type WorkspaceTabContext,
   type ConversationReply,
   type PluginItemType,
@@ -68,6 +69,8 @@ export type StopStarted = (callerId: string, plugin: string, conversationId: str
 /** `pluginTitle` names whose the message shows as. */
 export type PromptStarted = (callerId: string, plugin: string, pluginTitle: string, conversationId: string, text: string) => Promise<void>;
 
+export type ReadUsage = (callerId: string, plugin: string, conversationId: string) => ConversationUsage;
+
 /** `pluginTitle` names whose its first message shows as. */
 export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start: WorkspaceConversationStart) => Promise<StartedConversation>;
 
@@ -90,6 +93,10 @@ export class CanvasPlugins {
 
   private promptStarted: PromptStarted = async () => {
     throw new Error("Mirador can't send messages yet.");
+  };
+
+  private readUsage: ReadUsage = () => {
+    throw new Error("Mirador can't read usage yet.");
   };
 
   private startInWorkspace: StartInWorkspace = async () => {
@@ -117,6 +124,10 @@ export class CanvasPlugins {
 
   promptsStartedWith(prompt: PromptStarted) {
     this.promptStarted = prompt;
+  }
+
+  readsUsageWith(read: ReadUsage) {
+    this.readUsage = read;
   }
 
   startsWorkspaceConversationsWith(start: StartInWorkspace) {
@@ -557,6 +568,7 @@ export class CanvasPlugins {
       storage: this.storageOf(plugin),
       profileSetting: (id) => this.settingFor(plugin, conversationId, id),
       profiles: () => this.pluginProfiles(),
+      usageOf: (startedId) => this.readUsage(conversationId, plugin.manifest.name, startedId),
     };
   }
 

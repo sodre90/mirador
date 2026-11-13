@@ -76,6 +76,11 @@ export interface CanvasPluginContext<Data = unknown> {
   profileSetting(id: string): string | null;
   /** Mirador's profiles, for the plugin to offer a choice of them, as a form it shows might. Plugin API 13 brought it. */
   profiles(): PluginProfile[];
+  /**
+   * The tokens and cost of a conversation this plugin's tool or action started from this conversation, so far. Throws
+   * for a conversation this plugin didn't start from this one. Plugin API 14 brought it.
+   */
+  usageOf(conversationId: string): ConversationUsage;
 }
 
 export interface CanvasPluginStorage {
@@ -199,6 +204,18 @@ export interface ConversationReply {
   text: string | null;
   ended: "finished" | "stopped" | "failed";
   ranOn?: RanOn;
+}
+
+/** The tokens a conversation's turns took, summed, and its cost where its agent reports one. */
+export interface ConversationUsage {
+  inputTokens: number;
+  outputTokens: number;
+  cachedReadTokens: number;
+  cachedWriteTokens: number;
+  /** What the agent last reported the whole conversation cost, such as Claude Code does; null when it reports none. */
+  cost: { amount: number; currency: string } | null;
+  /** The turns that reported tokens. */
+  turns: number;
 }
 
 /**

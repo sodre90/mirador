@@ -43,8 +43,8 @@ interface OpenedSession {
 
 /**
  * A caller in a workspace whose plugin starts conversations on the Helper profile, whose agent notes where each session
- * opens and whether the project's files were there by then, and ends each turn at once; or, with `turnsWaitForAStop`,
- * once the turn is stopped.
+ * opens and whether the project's files were there by then, and ends each turn at once reporting the same tokens; or,
+ * with `turnsWaitForAStop`, once the turn is stopped.
  */
 async function callerInWorkspace({ inRepository, turnsWaitForAStop = false }: { inRepository: boolean; turnsWaitForAStop?: boolean }) {
   const project = join(scratch, "project");
@@ -68,7 +68,7 @@ async function callerInWorkspace({ inRepository, turnsWaitForAStop = false }: { 
     },
     prompt: async (sessionId: string) => {
       prompted.push(sessionId);
-      if (!turnsWaitForAStop) return { stopReason: "end_turn" };
+      if (!turnsWaitForAStop) return { stopReason: "end_turn", usage: { inputTokens: 100, outputTokens: 20, cachedReadTokens: 5 } };
       return new Promise((resolve) => stops.set(sessionId, () => resolve({ stopReason: "cancelled" })));
     },
     cancel: async (sessionId: string) => stops.get(sessionId)?.(),
@@ -99,6 +99,10 @@ async function until(condition: () => boolean, timeoutMs = 5000) {
     await Bun.sleep(20);
   }
 }
+
+/** What the agent sends the host about a session as a turn runs. */
+const sendUpdate = (conversations: ConversationService, sessionId: string, update: unknown) =>
+  (conversations as unknown as { handleSessionUpdate(notification: unknown): void }).handleSessionUpdate({ sessionId, update });
 
 test("a plugin's tool starts conversations in worktrees of their own, each on a new branch, working once its worktree is made", async () => {
   const { conversations, project, callerId, opened, replies, replied } = await callerInWorkspace({ inRepository: true });
@@ -233,4 +237,37 @@ test("a conversation another plugin, or another conversation, started can't be m
   await expect(conversations.promptStarted(otherCaller.id, "race", "Race", started.id, "Try again")).rejects.toThrow("wasn't started by the race plugin from this conversation, so it can't be messaged from here");
   await expect(conversations.promptStarted(callerId, "race", "Race", "no-such-conversation", "Try again")).rejects.toThrow("There is no conversation no-such-conversation.");
   expect(prompted).toHaveLength(1);
+});
+
+test("a plugin reads the tokens of a conversation it started, summed over its turns", async () => {
+  const { conversations, store, callerId, replied } = await callerInWorkspace({ inRepository: true });
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+
+  await conversations.promptStarted(callerId, "race", "Race", started.id, "Try again");
+  await until(() => store.listEvents(started.id).filter(({ event }) => event.type === "turn-end").length === 2);
+
+  expect(conversations.usageOf(callerId, "race", started.id)).toEqual({ inputTokens: 200, outputTokens: 40, cachedReadTokens: 10, cachedWriteTokens: 0, cost: null, turns: 2 });
+});
+
+test("the cost is what the agent last reported for the conversation", async () => {
+  const { conversations, callerId, prompted, replied } = await callerInWorkspace({ inRepository: true });
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+
+  sendUpdate(conversations, prompted[0]!, { sessionUpdate: "usage_update", used: 1, size: 2, cost: { amount: 0.1, currency: "USD" } });
+  sendUpdate(conversations, prompted[0]!, { sessionUpdate: "usage_update", used: 1, size: 2, cost: { amount: 0.42, currency: "USD" } });
+
+  expect(conversations.usageOf(callerId, "race", started.id).cost).toEqual({ amount: 0.42, currency: "USD" });
+});
+
+test("another plugin can't read a conversation's usage", async () => {
+  const { conversations, callerId, replied } = await callerInWorkspace({ inRepository: true });
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+  const otherCaller = conversations.create("w1");
+
+  expect(() => conversations.usageOf(callerId, "other", started.id)).toThrow("wasn't started by the other plugin from this conversation, so its usage can't be read from here");
+  expect(() => conversations.usageOf(otherCaller.id, "race", started.id)).toThrow("wasn't started by the race plugin from this conversation, so its usage can't be read from here");
+  expect(() => conversations.usageOf(callerId, "race", "no-such-conversation")).toThrow("There is no conversation no-such-conversation.");
 });

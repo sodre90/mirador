@@ -14,8 +14,8 @@ import type { HostProblem } from "./host-problems.ts";
  * a conversation in a git worktree of its own, and tells a plugin the worktree a conversation it started works in; API
  * 13 lets a canvas plugin's actions start conversations as its tools do, lists the profiles to its tools and actions,
  * and lets its item's view open a conversation the plugin started from the item's conversation; API 14 lets a canvas
- * plugin start a conversation's worktree from a given commit, tells it the workspace a conversation works in, and lets
- * its actions message a conversation it started.
+ * plugin start a conversation's worktree from a given commit, tells it the workspace a conversation works in, lets
+ * its actions message a conversation it started, and tells it the tokens and cost of a conversation it started.
  */
 export const APP_PLUGIN_API = 14;
 

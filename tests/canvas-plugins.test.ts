@@ -352,6 +352,38 @@ describe("CanvasPlugins", () => {
     expect(messaged).toEqual([{ callerId: "c1", plugin: "board", pluginTitle: "Board", conversationId: "c2", text: "Try again" }]);
   });
 
+  test("a plugin reads the usage of a conversation it started", async () => {
+    const reader = {
+      ...board,
+      tools: {
+        ...board.tools,
+        read_usage: {
+          description: "Read the tokens and cost of a conversation this tool started.",
+          input: { type: "object", properties: { conversationId: { type: "string" } }, required: ["conversationId"] },
+          run: (input: unknown, context: CanvasToolContext) => JSON.stringify(context.usageOf((input as { conversationId: string }).conversationId)),
+        },
+      },
+      async action(_item: unknown, _action: unknown, context: CanvasActionContext) {
+        return context.usageOf("c2");
+      },
+    };
+    const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, undefined, { board: reader });
+    const asked: unknown[] = [];
+    const usage = { inputTokens: 200, outputTokens: 40, cachedReadTokens: 10, cachedWriteTokens: 0, cost: { amount: 0.42, currency: "USD" }, turns: 2 };
+    plugins.readsUsageWith((callerId, plugin, conversationId) => {
+      asked.push({ callerId, plugin, conversationId });
+      return usage;
+    });
+    await callTool("show_card", { title: "Race", text: "What did it take?" });
+
+    expect(JSON.parse((await callTool("read_usage", { conversationId: "c2" })).text)).toEqual(usage);
+    expect(await plugins.act(items()[0]!.id, {})).toEqual(usage);
+    expect(asked).toEqual([
+      { callerId: "c1", plugin: "board", conversationId: "c2" },
+      { callerId: "c1", plugin: "board", conversationId: "c2" },
+    ]);
+  });
+
   test("what a conversation's profile set for a plugin reaches its tools and adds to its guidance, by the chosen profile's name as it is now", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>

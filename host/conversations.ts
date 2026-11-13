@@ -57,7 +57,7 @@ import { agentAnsweredIn, lastWordsOf, replyOf } from "../shared/last-words.ts";
 import { isRealModel } from "../shared/claude-models.ts";
 import { cutWithEllipsis, firstGraphemes } from "../shared/text-cut.ts";
 import { isInformational } from "../shared/timeline.ts";
-import type { ConversationChoices, ConversationReply, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
+import type { ConversationChoices, ConversationReply, ConversationUsage, RanOn, StartedConversation, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
@@ -636,6 +636,28 @@ export class ConversationService {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be messaged from here.`);
     }
     await this.send(conversationId, text, [], { afterTurn: true, fromPlugin: pluginTitle });
+  }
+
+  /**
+   * For a plugin's tool or action: the tokens and cost of a conversation it started from the caller's, so far. One that
+   * no longer exists, or that this plugin didn't start from that conversation, throws.
+   */
+  usageOf(callerId: string, plugin: string, conversationId: string): ConversationUsage {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) throw new Error(`There is no conversation ${conversationId}.`);
+    if (!this.startedFromCallerBy(conversation.startedBy, callerId, plugin)) {
+      throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so its usage can't be read from here.`);
+    }
+    const tokens = this.store.listEventsFrom(conversationId, 0).flatMap(({ event }) => (event.type === "turn-end" && event.usage ? [event.usage] : []));
+    const sum = (key: keyof TurnUsage) => tokens.reduce((total, usage) => total + usage[key], 0);
+    return {
+      inputTokens: sum("inputTokens"),
+      outputTokens: sum("outputTokens"),
+      cachedReadTokens: sum("cachedReadTokens"),
+      cachedWriteTokens: sum("cachedWriteTokens"),
+      cost: this.contextUsage.get(conversationId)?.cost ?? null,
+      turns: tokens.length,
+    };
   }
 
   /** Whether this plugin's tool or action started the conversation from the caller's. */
