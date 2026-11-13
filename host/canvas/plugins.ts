@@ -72,6 +72,8 @@ export type StartBeside = (callerId: string, plugin: string, profileName: string
 
 export type StopStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
 
+export type DeleteStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
+
 /** `pluginTitle` names whose the message shows as. */
 export type PromptStarted = (callerId: string, plugin: string, pluginTitle: string, conversationId: string, text: string) => Promise<void>;
 
@@ -95,6 +97,10 @@ export class CanvasPlugins {
 
   private stopStarted: StopStarted = async () => {
     throw new Error("Mirador can't stop conversations yet.");
+  };
+
+  private deleteStarted: DeleteStarted = async () => {
+    throw new Error("Mirador can't delete conversations yet.");
   };
 
   private promptStarted: PromptStarted = async () => {
@@ -126,6 +132,10 @@ export class CanvasPlugins {
 
   stopsConversationsWith(stop: StopStarted) {
     this.stopStarted = stop;
+  }
+
+  deletesConversationsWith(deleteStarted: DeleteStarted) {
+    this.deleteStarted = deleteStarted;
   }
 
   promptsStartedWith(prompt: PromptStarted) {
@@ -512,6 +522,9 @@ export class CanvasPlugins {
       stopConversation: async () => {
         throw new Error("Mirador doesn't stop conversations while it rebuilds a canvas.");
       },
+      deleteStarted: async () => {
+        throw new Error("Mirador doesn't delete conversations while it rebuilds a canvas.");
+      },
     };
     const tool = plugin.host.tools[toolName]!;
     try {
@@ -593,6 +606,7 @@ export class CanvasPlugins {
       prompt: this.promptOfItsOwn(plugin, conversationId),
       startConversation: this.startsConversationsFrom(plugin, conversationId),
       stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
+      deleteStarted: (startedConversationId) => this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId),
     };
   }
 
@@ -614,6 +628,7 @@ export class CanvasPlugins {
         launchEditor(this.store.editorSetting(), file, line);
       },
       stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
+      deleteStarted: (startedConversationId) => this.deleteStarted(conversationId, plugin.manifest.name, startedConversationId),
       startConversation: this.startsConversationsFrom(plugin, conversationId),
       promptStarted: (startedId, text) => this.promptStarted(conversationId, plugin.manifest.name, plugin.manifest.title, startedId, text),
     };

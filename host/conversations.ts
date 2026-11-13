@@ -625,6 +625,21 @@ export class ConversationService {
   }
 
   /**
+   * For a plugin's tool or action: deletes a conversation it started from the caller's, as the user's delete does, its
+   * worktree going once no other conversation works there, uncommitted work and all, with its branch even when that
+   * holds commits the workspace's branch lacks. One that no longer exists is let be; one this plugin didn't start from
+   * that conversation throws.
+   */
+  async deleteStarted(callerId: string, plugin: string, conversationId: string): Promise<void> {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) return;
+    if (!this.startedFromCallerBy(conversation.startedBy, callerId, plugin)) {
+      throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be deleted from here.`);
+    }
+    this.delete(conversationId, { keepsUnmergedBranch: false });
+  }
+
+  /**
    * For a plugin's tool or action: sends a conversation it started from the caller's a message, shown as the plugin's,
    * which starts its next turn or waits for the turn it is in to end. One that no longer exists, or that this plugin
    * didn't start from that conversation, throws.
@@ -968,8 +983,12 @@ export class ConversationService {
     return counts.reduce((sum, count) => sum + count, 0);
   }
 
-  /** Its worktree goes once no other conversation works there; with `keepsUncommittedWork`, only one that holds none. */
-  delete(conversationId: string, { keepsUncommittedWork = false } = {}) {
+  /**
+   * Its worktree goes once no other conversation works there; with `keepsUncommittedWork`, only one that holds none.
+   * Its branch goes too unless it holds commits the workspace's branch lacks, which git keeps; `keepsUnmergedBranch`
+   * false deletes it even then.
+   */
+  delete(conversationId: string, { keepsUncommittedWork = false, keepsUnmergedBranch = true } = {}) {
     const conversation = this.get(conversationId);
     this.deliverOwedReply(conversationId, "stopped");
     if (conversation.acpSessionId) {
@@ -1005,12 +1024,12 @@ export class ConversationService {
     this.announceWaiting();
     if (wasRunning) this.announceRunningTurnsCount();
     if (workspace && conversation.worktree && this.store.conversationsInWorktree(conversation.worktree.id).length === 0)
-      this.removeWorktree(workspace, conversation.worktree, keepsUncommittedWork).catch((error: unknown) => console.error(`could not remove the worktree ${conversation.worktree?.root}:`, error));
+      this.removeWorktree(workspace, conversation.worktree, keepsUncommittedWork, keepsUnmergedBranch).catch((error: unknown) => console.error(`could not remove the worktree ${conversation.worktree?.root}:`, error));
   }
 
-  private async removeWorktree(workspace: Workspace, worktree: ConversationWorktree, keepsUncommittedWork: boolean) {
+  private async removeWorktree(workspace: Workspace, worktree: ConversationWorktree, keepsUncommittedWork: boolean, keepsUnmergedBranch: boolean) {
     if (keepsUncommittedWork && (await this.worktrees.uncommittedFiles(worktree)) > 0) return;
-    await this.worktrees.remove(workspace, worktree);
+    await this.worktrees.remove(workspace, worktree, { keepsUnmergedBranch });
     await this.checkpoints.forget(workingCopyOf(workspace, { worktree }), workspace);
     this.store.forgetFolder(worktree.id);
     this.hearWorktreeRemoval(worktree.id);

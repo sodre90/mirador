@@ -105,6 +105,14 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
    */
   stopConversation(conversationId: string): Promise<void>;
   /**
+   * Deletes a conversation this plugin's tool or action started from this conversation, as the user's delete does:
+   * its turn stops, and its worktree goes once no other conversation works there, uncommitted work and all, with its
+   * branch even when that holds commits the workspace's branch lacks; keep what you need of the work first. Resolves
+   * doing nothing for one already gone. Throws for a conversation this plugin didn't start from this one. Plugin API 16
+   * brought it.
+   */
+  deleteStarted(conversationId: string): Promise<void>;
+  /**
    * As a tool's `startConversation`, for what the user does in the item's view, such as a form that starts the work. The
    * plugin's `replied` hears when that conversation ends its work. Plugin API 13 brought it.
    */
@@ -139,6 +147,14 @@ export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<D
    * from this one. Plugin API 10 brought it.
    */
   stopConversation(conversationId: string): Promise<void>;
+  /**
+   * Deletes a conversation this plugin's tool or action started from this conversation, as the user's delete does:
+   * its turn stops, and its worktree goes once no other conversation works there, uncommitted work and all, with its
+   * branch even when that holds commits the workspace's branch lacks; keep what you need of the work first. Resolves
+   * doing nothing for one already gone. Throws for a conversation this plugin didn't start from this one. Plugin API 16
+   * brought it.
+   */
+  deleteStarted(conversationId: string): Promise<void>;
 }
 
 /** A conversation a plugin's tool or action starts from the conversation it runs for. */

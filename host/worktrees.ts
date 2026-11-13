@@ -111,15 +111,18 @@ export class Worktrees {
     return this.queue(workspace.path, () => landOnto(workspace.path, worktree.root, options));
   }
 
-  /** With its uncommitted files. Its branch goes too unless it has commits the workspace's branch lacks, which git keeps. */
-  remove(workspace: Workspace, worktree: ConversationWorktree): Promise<void> {
+  /**
+   * With its uncommitted files. Its branch goes too unless it has commits the workspace's branch lacks, which git
+   * keeps; `keepsUnmergedBranch` false deletes it even then.
+   */
+  remove(workspace: Workspace, worktree: ConversationWorktree, { keepsUnmergedBranch = true }: { keepsUnmergedBranch?: boolean } = {}): Promise<void> {
     return this.queue(workspace.path, async () => {
       const removed = await git(workspace.path, ["worktree", "remove", "--force", worktree.root]);
       if (removed.exitCode !== 0) {
         await rm(worktree.root, { recursive: true, force: true });
         await git(workspace.path, ["worktree", "prune"]);
       }
-      await git(workspace.path, ["branch", "--delete", worktree.branch]);
+      await git(workspace.path, ["branch", "--delete", ...(keepsUnmergedBranch ? [] : ["--force"]), worktree.branch]);
     });
   }
 }

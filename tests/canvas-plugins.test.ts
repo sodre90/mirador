@@ -310,6 +310,23 @@ describe("CanvasPlugins", () => {
     expect(stopped).toEqual([{ callerId: "c1", plugin: "board", conversationId: "c2" }]);
   });
 
+  test("an action's deleteStarted deletes the conversation it names as its caller and plugin", async () => {
+    const deleter = {
+      ...board,
+      async action(_item: unknown, _action: unknown, context: CanvasActionContext) {
+        await context.deleteStarted("c2");
+        return "Deleted.";
+      },
+    };
+    const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, undefined, { board: deleter });
+    const deleted: unknown[] = [];
+    plugins.deletesConversationsWith(async (callerId, plugin, conversationId) => void deleted.push({ callerId, plugin, conversationId }));
+    await callTool("show_card", { title: "Race", text: "Clean up" });
+
+    expect(await plugins.act(items()[0]!.id, {})).toBe("Deleted.");
+    expect(deleted).toEqual([{ callerId: "c1", plugin: "board", conversationId: "c2" }]);
+  });
+
   test("the user's action starts a conversation as a tool does, in a worktree of its own when it asks, and lists the profiles to offer", async () => {
     const starter = {
       ...board,
