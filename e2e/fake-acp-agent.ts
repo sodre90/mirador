@@ -14,7 +14,11 @@ import { isSideChatBrief } from "../shared/side-chats.ts";
  * and a JSON array of `{"kind": toolKind, "title": text}` does the same for tools of any kind.
  * `WRITE ` and a JSON array of steps changes files as it goes: `{"edit": path, "content": text}` writes the file with
  * an edit tool call and its diff, `{"shell": path, "content": text}` writes it from a shell command, `{"read": path}`
- * reads it with a tool call that names it, and `{"waitFor": path}` holds the turn until that file exists. `SAY `
+ * reads it with a tool call that names it, and `{"waitFor": path}` holds the turn until that file exists. Its paths
+ * and texts fill in `{{folder}}` with the folder the session was started in, as `FOLDER` says, and `{{env:NAME}}`
+ * with the agent process's environment variable NAME, or nothing when it isn't set; no other command fills them in.
+ * `{"usage": "<used> <size> [costUsd]"}` reports that usage as `USAGE ` does, and ends the turn with those tokens as
+ * the turn's own, so a run's totals show them, and `{"pause": "<ms>"}` takes that long before the next step. `SAY `
  * followed by text answers with that text, as markdown, `TITLE ` followed by text titles the session so, as agents
  * rename a conversation from its work, and answers,
  * `USAGE ` followed by the tokens used, the window's size and, if given, a cost in US dollars reports that usage,
@@ -259,13 +263,27 @@ async function askFromSubagent(client: acp.AgentContext, sessionId: string, titl
   return askPermissions(client, sessionId, [{ toolCallId: "subagent-0-step", title, kind: "execute", status: "pending" }]);
 }
 
-type WriteStep = { edit: string; content: string } | { shell: string; content: string } | { read: string } | { waitFor: string };
+type WriteStep = { edit: string; content: string } | { shell: string; content: string } | { read: string } | { waitFor: string } | { usage: string } | { pause: string };
 
 let nextToolCall = 0;
 
 async function writeFiles(client: acp.AgentContext, sessionId: string, steps: WriteStep[]) {
   const update = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId, update });
-  for (const step of steps) {
+  const folder = sessionFolders.get(sessionId) ?? "";
+  const expand = (text: string) => text.replaceAll("{{folder}}", folder).replaceAll(/\{\{env:(\w+)\}\}/g, (_, name: string) => process.env[name] ?? "");
+  const filledIn = steps.map((step) => Object.fromEntries(Object.entries(step).map(([field, value]) => [field, expand(value)])) as WriteStep);
+  let usage: acp.Usage | undefined;
+  for (const step of filledIn) {
+    if ("usage" in step) {
+      const [used = 0, size = 0, costUsd] = step.usage.split(" ").map(Number);
+      await reportUsage(client, sessionId, used, size, costUsd);
+      usage = { totalTokens: used, inputTokens: used, outputTokens: 0 };
+      continue;
+    }
+    if ("pause" in step) {
+      await Bun.sleep(Number(step.pause));
+      continue;
+    }
     if ("waitFor" in step) {
       while (!existsSync(step.waitFor)) await Bun.sleep(50);
       continue;
@@ -283,7 +301,7 @@ async function writeFiles(client: acp.AgentContext, sessionId: string, steps: Wr
     if ("edit" in step) await update({ sessionUpdate: "tool_call_update", toolCallId, locations: [{ path }], content: [{ type: "diff", path, oldText, newText: step.content }] });
     await update({ sessionUpdate: "tool_call_update", toolCallId, status: "completed" });
   }
-  return { stopReason: "end_turn" as const };
+  return { stopReason: "end_turn" as const, ...(usage && { usage }) };
 }
 
 /** The agent's own plan, as Claude Code sends its to-do list: each entry "done" or not, the first one not done in progress. */
