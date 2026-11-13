@@ -2400,7 +2400,8 @@ export class ConversationService {
     this.muteNotifier(conversation, created.sessionId);
     this.bindSession(conversationId, created.sessionId, created.configOptions);
     await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
-    await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
+    if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
+    else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
     runtime.startChoices = undefined;
     return created.sessionId;
   }
