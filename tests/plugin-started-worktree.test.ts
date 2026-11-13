@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,6 +28,12 @@ async function repositoryWithACommit(project: string) {
   writeFileSync(join(project, "kept.txt"), "one\n");
   await git(project, ["add", "-A"]);
   await git(project, ["commit", "-qm", "base"]);
+}
+
+async function secondCommit(project: string) {
+  writeFileSync(join(project, "kept.txt"), "two\n");
+  await git(project, ["add", "-A"]);
+  await git(project, ["commit", "-qm", "second"]);
 }
 
 interface OpenedSession {
@@ -104,6 +110,43 @@ test("a plugin's tool starts conversations in worktrees of their own, each on a 
   expect(await branchesOf(project)).toEqual(expect.arrayContaining([first.worktree!.branch, second.worktree!.branch]));
   expect(replies.map(({ started }) => started)).toEqual(expect.arrayContaining([first, second]));
   expect(replies.every(({ reply }) => reply.ended === "finished")).toBe(true);
+});
+
+test("a conversation started in a worktree from a given commit works on a new branch at that commit", async () => {
+  const { conversations, project, callerId, replied } = await callerInWorkspace({ inRepository: true });
+  const firstCommit = (await git(project, ["rev-parse", "HEAD"])).stdout;
+  await secondCommit(project);
+
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug", undefined, undefined, firstCommit);
+
+  await replied(1);
+  expect(readFileSync(join(started.worktree!.folder, "kept.txt"), "utf8")).toBe("one\n");
+  expect((await git(project, ["rev-parse", started.worktree!.branch])).stdout).toBe(firstCommit);
+  expect(started.worktree!.branch).toMatch(/^mirador\/[0-9a-f]{8}$/);
+});
+
+test("a worktree starts from a branch the repository has, named rather than a hash", async () => {
+  const { conversations, project, callerId, replied } = await callerInWorkspace({ inRepository: true });
+  const firstCommit = (await git(project, ["rev-parse", "HEAD"])).stdout;
+  await git(project, ["branch", "start/p1"]);
+  await secondCommit(project);
+
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug", undefined, undefined, "start/p1");
+
+  await replied(1);
+  expect(readFileSync(join(started.worktree!.folder, "kept.txt"), "utf8")).toBe("one\n");
+  expect((await git(project, ["rev-parse", started.worktree!.branch])).stdout).toBe(firstCommit);
+  expect(started.worktree!.branch).toMatch(/^mirador\/[0-9a-f]{8}$/);
+});
+
+test("a commit the repository doesn't have is refused, naming it, and starts nothing", async () => {
+  const { conversations, store, project, callerId } = await callerInWorkspace({ inRepository: true });
+  const branches = await branchesOf(project);
+
+  await expect(conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug", undefined, undefined, "nope")).rejects.toThrow("The workspace's repository has no commit nope.");
+
+  expect(await branchesOf(project)).toEqual(branches);
+  expect(store.listConversations().map(({ id }) => id)).toEqual([callerId]);
 });
 
 test("a conversation started beside its caller tells no worktree when the caller works in none", async () => {

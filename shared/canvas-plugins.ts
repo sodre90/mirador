@@ -61,6 +61,8 @@ export const pluginItemOf = (item: PluginCanvasItem): PluginItem => ({
 /** The conversation a plugin's code runs for, and its items in the canvas there. */
 export interface CanvasPluginContext<Data = unknown> {
   conversationId: string;
+  /** The workspace the conversation works in: its id, name and project folder (not a worktree's). Plugin API 14 brought it. */
+  workspace: PluginWorkspace;
   /** The plugin's items in the conversation, oldest first. */
   items(): PluginItem<Data>[];
   /** Changes one of them in place. Made while a tool runs for the agent, it is the agent's change, and the tab's toggle flashes for it. */
@@ -141,9 +143,12 @@ export interface ConversationStart extends ConversationChoices {
    * "own": it works in a new git worktree of its own, on a new branch from what the workspace has checked out, rather
    * than where this conversation works; its first message waits until the worktree is made, one that can't be made
    * ends its work as failed, and one stopped meanwhile ends as stopped without starting. Throws when the workspace's
-   * folder isn't in a git repository with a commit. Plugin API 12 brought it.
+   * folder isn't in a git repository with a commit. Plugin API 12 brought it. `{ from }` works as "own", but the new
+   * branch starts at that commit of the workspace's repository (a commit hash, branch or tag) rather than at what the
+   * workspace has checked out. It throws, naming the commit, when the repository has no such commit. Plugin API 14
+   * brought it.
    */
-  worktree?: "own";
+  worktree?: "own" | { from: string };
 }
 
 /**

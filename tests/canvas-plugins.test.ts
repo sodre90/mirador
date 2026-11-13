@@ -239,6 +239,54 @@ describe("CanvasPlugins", () => {
     expect(asked).toEqual(["own", undefined]);
   });
 
+  test("a tool starts a conversation in a worktree from a commit it names, passing the choice on as it is", async () => {
+    const racer = {
+      ...board,
+      tools: {
+        ...board.tools,
+        start_racer: {
+          description: "Start a conversation in a worktree from a commit.",
+          input: { type: "object", properties: { from: { type: "string" } }, required: ["from"] },
+          async run(input: unknown, context: CanvasToolContext) {
+            const started = await context.startConversation({ profile: "Local", prompt: "Fix it", worktree: { from: (input as { from: string }).from } });
+            return JSON.stringify(started);
+          },
+        },
+      },
+    };
+    const { plugins, callTool } = await canvasPluginHost(FIXTURES, undefined, { board: racer });
+    const asked: unknown[] = [];
+    plugins.startsConversationsWith(async (_callerId, _plugin, profile, _prompt, _title, _choices, worktree) => {
+      asked.push(worktree);
+      return { id: "c2", profile, worktree: { folder: "/worktrees/p/1a2b3c4d", branch: "mirador/1a2b3c4d" } };
+    });
+
+    expect(JSON.parse((await callTool("start_racer", { from: "start/p1" })).text)).toEqual({ id: "c2", profile: "Local", worktree: { folder: "/worktrees/p/1a2b3c4d", branch: "mirador/1a2b3c4d" } });
+    expect(asked).toEqual([{ from: "start/p1" }]);
+  });
+
+  test("a plugin's tool and action contexts tell it the conversation's workspace", async () => {
+    const teller = {
+      ...board,
+      tools: {
+        ...board.tools,
+        tell_workspace: {
+          description: "Tell the workspace the conversation works in.",
+          input: { type: "object" },
+          run: (_input: unknown, context: CanvasToolContext) => JSON.stringify(context.workspace),
+        },
+      },
+      async action(_item: unknown, _action: unknown, context: CanvasActionContext) {
+        return context.workspace;
+      },
+    };
+    const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, undefined, { board: teller });
+    await callTool("show_card", { title: "Hello", text: "First" });
+
+    expect(JSON.parse((await callTool("tell_workspace", {})).text)).toEqual({ id: "w1", name: "p", folder: "/tmp/p" });
+    expect(await plugins.act(items()[0]!.id, {})).toEqual({ id: "w1", name: "p", folder: "/tmp/p" });
+  });
+
   test("a tool's stopConversation stops the conversation it names as its caller and plugin", async () => {
     const stopper = {
       ...board,

@@ -13,9 +13,10 @@ import type { HostProblem } from "./host-problems.ts";
  * that says so in plugin.json start conversations of its own in a workspace; API 12 lets a canvas plugin's tool start
  * a conversation in a git worktree of its own, and tells a plugin the worktree a conversation it started works in; API
  * 13 lets a canvas plugin's actions start conversations as its tools do, lists the profiles to its tools and actions,
- * and lets its item's view open a conversation the plugin started from the item's conversation.
+ * and lets its item's view open a conversation the plugin started from the item's conversation; API 14 lets a canvas
+ * plugin start a conversation's worktree from a given commit, and tells it the workspace a conversation works in.
  */
-export const APP_PLUGIN_API = 13;
+export const APP_PLUGIN_API = 14;
 
 /** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
 export const STARTS_CONVERSATIONS_PLUGIN_API = 11;

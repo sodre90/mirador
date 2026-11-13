@@ -34,13 +34,27 @@ export class Worktrees {
     return current;
   }
 
-  /** A worktree for a conversation of the workspace, not made yet: making it takes a while, and the conversation shows meanwhile. */
-  async plan(workspace: Workspace): Promise<ConversationWorktree> {
+  /**
+   * A worktree for a conversation of the workspace, not made yet: making it takes a while, and the conversation shows
+   * meanwhile. With `from`, its branch is made at that commit of the repository rather than at what it has checked out.
+   */
+  async plan(workspace: Workspace, { from }: { from?: string } = {}): Promise<ConversationWorktree> {
     const placeInRepository = await this.mustHold(workspace);
     const id = crypto.randomUUID();
     const shortId = id.slice(0, SHORT_ID_LENGTH);
     const root = join(this.dataDir, "worktrees", folderNameOf(workspace), shortId);
-    return { id, root, folder: resolve(root, placeInRepository), branch: `mirador/${shortId}` };
+    const branch = `mirador/${shortId}`;
+    if (from !== undefined) await this.branchAtCommit(workspace, branch, from);
+    return { id, root, folder: resolve(root, placeInRepository), branch };
+  }
+
+  /** The branch at the commit `from` names, a hash, branch or tag; a repository without it throws, naming it. */
+  private branchAtCommit(workspace: Workspace, branch: string, from: string) {
+    return this.queue(workspace.path, async () => {
+      const commit = await git(workspace.path, ["rev-parse", "--verify", "--quiet", `${from}^{commit}`]);
+      if (commit.exitCode !== 0) throw new Error(`The workspace's repository has no commit ${from}.`);
+      await mustGit(workspace.path, ["branch", branch, commit.stdout.trim()]);
+    });
   }
 
   /** git makes a worktree only of a repository with a commit to check out. Answers where the workspace's folder is inside its repository. */

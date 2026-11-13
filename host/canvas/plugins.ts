@@ -13,6 +13,7 @@ import {
   type PluginProfile,
   type PluginWindowContext,
   type ConversationChoices,
+  type ConversationStart,
   type WorkspaceTabContext,
   type ConversationReply,
   type PluginItemType,
@@ -59,8 +60,8 @@ const WINDOW_STATE_SETTLES_MS = 100;
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
 
-/** `worktree`: "own" starts it in a git worktree of its own, rather than where the caller works. */
-export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, worktree?: "own") => StartedConversation | Promise<StartedConversation>;
+/** `worktree`: "own" starts it in a git worktree of its own, rather than where the caller works; `{ from }` starts its branch at the commit it names. */
+export type StartBeside = (callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, worktree?: ConversationStart["worktree"]) => StartedConversation | Promise<StartedConversation>;
 
 export type StopStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
 
@@ -528,8 +529,17 @@ export class CanvasPlugins {
   }
 
   private context(plugin: CanvasPlugin, conversationId: string, { byAgent }: { byAgent: boolean }): CanvasPluginContext {
+    const workspaceOf = () => {
+      const conversation = this.store.findConversation(conversationId);
+      const workspace = conversation ? this.store.findWorkspace(conversation.workspaceId) : undefined;
+      if (!workspace) throw new Error(`Conversation ${conversationId} has no workspace any more.`);
+      return { id: workspace.id, name: workspace.name, folder: workspace.path };
+    };
     return {
       conversationId,
+      get workspace() {
+        return workspaceOf();
+      },
       items: () => this.itemsOf(plugin, conversationId).map(pluginItemOf),
       change: (itemId, change) => pluginItemOf(this.change(plugin, conversationId, itemId, change, byAgent)),
       storage: this.storageOf(plugin),

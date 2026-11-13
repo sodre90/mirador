@@ -543,14 +543,14 @@ export class ConversationService {
   }
 
   /**
-   * Like `startBeside`, in a new git worktree of its own, on a new branch from what the workspace has checked out. Its
-   * first message waits until the worktree is made; one that can't be made ends its work as failed, and one its plugin
-   * stopped meanwhile as stopped.
+   * Like `startBeside`, in a new git worktree of its own, on a new branch from what the workspace has checked out, or
+   * from the commit `from` names when given. Its first message waits until the worktree is made; one that can't be
+   * made ends its work as failed, and one its plugin stopped meanwhile as stopped.
    */
-  async startInOwnWorktree(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices): Promise<StartedConversation> {
+  async startInOwnWorktree(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, from?: string): Promise<StartedConversation> {
     const caller = this.callerThatMayStart(callerId);
     const profile = this.profileNamed(profileName);
-    const worktree = await this.worktrees.plan(this.existingWorkspace(caller.workspaceId));
+    const worktree = await this.worktrees.plan(this.existingWorkspace(caller.workspaceId), { from });
     const conversation = this.createFor(caller, plugin, profile, title, choices, worktree);
     this.ensureSession(conversation.id)
       .then(
