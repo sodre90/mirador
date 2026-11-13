@@ -152,6 +152,12 @@ const REPLY_OPENING_GRAPHEMES = 300;
 type PermissionResolver = (optionId: string | null) => void;
 
 /** The plugin whose tool started a conversation hears how its work ended, in the conversation that started it. */
+/** `keepsUncommittedWork` keeps a worktree that holds uncommitted files; `keepsUnmergedBranch` false deletes its branch even with commits the workspace's branch lacks. */
+export interface DeleteOptions {
+  keepsUncommittedWork?: boolean;
+  keepsUnmergedBranch?: boolean;
+}
+
 export type HearReply = (started: StartedConversation, startedBy: StartedBy, reply: ConversationReply) => void | Promise<void>;
 
 interface NotesForAgent {
@@ -397,6 +403,7 @@ export class ConversationService {
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
+  private deleteWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
   private readonly turnsCutShortByCrash: Set<string>;
 
@@ -640,7 +647,7 @@ export class ConversationService {
     if (!this.startedFromCallerBy(conversation.startedBy, callerId, plugin)) {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be deleted from here.`);
     }
-    this.delete(conversationId, { keepsUnmergedBranch: false });
+    this.deleteWithAllItHolds(conversationId, { keepsUnmergedBranch: false });
   }
 
   /**
@@ -706,6 +713,11 @@ export class ConversationService {
   /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
   hearActivityWith(hearActivity: (conversationId: string, activity: PluginActivity) => void) {
     this.hearActivity = hearActivity;
+  }
+
+  /** The host's own delete, which also closes the conversation's terminals, documents, questions and side chats, for a plugin's delete to go through. */
+  deletesWithAllItHoldsBy(deleteWithAllItHolds: (conversationId: string, options: DeleteOptions) => void) {
+    this.deleteWithAllItHolds = deleteWithAllItHolds;
   }
 
   /** What keeps documents in a worktree hears that its folder is gone, so nothing is left open or stored for it. */
@@ -1058,7 +1070,7 @@ export class ConversationService {
    * Its branch goes too unless it holds commits the workspace's branch lacks, which git keeps; `keepsUnmergedBranch`
    * false deletes it even then.
    */
-  delete(conversationId: string, { keepsUncommittedWork = false, keepsUnmergedBranch = true } = {}) {
+  delete(conversationId: string, { keepsUncommittedWork = false, keepsUnmergedBranch = true }: DeleteOptions = {}) {
     const conversation = this.get(conversationId);
     this.deliverOwedReply(conversationId, "stopped");
     if (conversation.acpSessionId) {

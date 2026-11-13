@@ -172,3 +172,22 @@ test("a conversation another plugin started, or the same plugin from another con
   expect(existsSync(started.worktree!.folder)).toBe(true);
   expect(await branchesOf(project)).toContain(started.worktree!.branch);
 });
+
+test("a plugin's delete goes through the host's own, which also closes the conversation's terminals, documents and side chats, with the branch going too", async () => {
+  const { conversations, store, callerId, replied } = await callerInRepository();
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+  const deleted: [string, unknown][] = [];
+  conversations.deletesWithAllItHoldsBy((conversationId, options) => {
+    deleted.push([conversationId, options]);
+    conversations.delete(conversationId, options);
+  });
+
+  await expect(conversations.deleteStarted(callerId, "other", started.id)).rejects.toThrow();
+  expect(deleted).toEqual([]);
+
+  await conversations.deleteStarted(callerId, "race", started.id);
+  expect(deleted).toEqual([[started.id, { keepsUnmergedBranch: false }]]);
+  await until(() => !existsSync(started.worktree!.folder));
+  expect(store.hasConversation(started.id)).toBe(false);
+});

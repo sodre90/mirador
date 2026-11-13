@@ -54,7 +54,7 @@ import { authorityFingerprint as fingerprintOf, type ServingCertificate } from "
 import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
 import { HERE_PATH, addressesThatAnswer, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
 import { servePortOnTailnet, tailnetName, tailscaleCommand } from "./tailscale.ts";
-import { errorMessage, type ConversationService } from "./conversations.ts";
+import { errorMessage, type ConversationService, type DeleteOptions } from "./conversations.ts";
 import { deviceName, type DeviceService } from "./devices.ts";
 import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
@@ -214,6 +214,7 @@ export function startServer(services: HostServices) {
     pushes,
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
+  conversations.deletesWithAllItHoldsBy(deleteConversation);
   const { network } = config.reachability;
   const localHosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
   const publicHost = config.publicOrigin ? [new URL(config.publicOrigin).host] : [];
@@ -865,7 +866,7 @@ export function startServer(services: HostServices) {
   }
 
   /** Deleting a conversation closes the tasks its plugin tools started and its side chats with it, which share its worktree. */
-  function deleteConversation(conversationId: string, worktree: { keepsUncommittedWork?: boolean } = {}) {
+  function deleteConversation(conversationId: string, worktree: DeleteOptions = {}) {
     if (!store.hasConversation(conversationId)) return;
     canvas.withdrawWaitingAsks(conversationId);
     terminals.closeConversation(conversationId);
