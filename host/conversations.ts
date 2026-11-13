@@ -2164,12 +2164,12 @@ export class ConversationService {
    */
   resumeAfterRestart(stoppedTurns: string[]) {
     this.withdrawAsksOrphanedByRestart(stoppedTurns);
+    this.jobWaits.startAll();
     this.store.listConversations().forEach(({ id, acpSessionId }) => {
       if (stoppedTurns.includes(id)) return void this.resumeStoppedTurn(id, acpSessionId).catch(() => {});
       this.deliverOwedReply(id, this.turnsCutShortByCrash.has(id) ? "failed" : undefined);
       if (!this.resumeUsageLimitWait(id)) this.sendNextQueuedMessage(id);
     });
-    this.jobWaits.startAll();
     this.announceWaiting();
   }
 

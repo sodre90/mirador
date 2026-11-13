@@ -93,6 +93,8 @@ function helperLeavingAJob({ resume, staysInItsTurn = false }: { resume: boolean
   const caller = conversations.create("w1");
   helperId = conversations.startBeside(caller.id, "board", "Helper", "Fix the bug, then run the whole suite").id;
   return {
+    store,
+    config,
     conversations,
     callerId: caller.id,
     helperId,
@@ -104,6 +106,41 @@ function helperLeavingAJob({ resume, staysInItsTurn = false }: { resume: boolean
     endTheJob: () => void (jobRuns = false),
     stopWatchingJobs: () => internals.jobWaits.stopAll(),
   };
+}
+
+/**
+ * The next host on the same database, as after a restart, with the helper's agent ending every turn at once; the job it
+ * waits on runs until `endTheJob`, and `replies` collects what the plugin hears.
+ */
+function restartedHost(store: Store, config: ReturnType<typeof loadConfig>) {
+  const notifier = { mute() {}, unmute() {} };
+  const conversations = new ConversationService(store, new Hub(), config, notifier as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+  let jobRuns = true;
+  let turns = 0;
+  const internals = conversations as unknown as ConversationInternals;
+  internals.jobWaits = new JobWaits(
+    store,
+    { changed: (conversationId) => internals.republish(conversationId), ended: (conversationId, wait, end) => internals.jobWaitEnded(conversationId, wait, end) },
+    async () => (jobRuns ? "running" : "ended"),
+    () => 5,
+  );
+  const helper = {
+    ...quietAgent,
+    prompt: async () => {
+      turns += 1;
+      return { stopReason: "end_turn" };
+    },
+  };
+  const agentProcesses = (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses;
+  agentProcesses.set("caller", quietAgent);
+  agentProcesses.set("helper", helper);
+  const replies: ConversationReply[] = [];
+  const replied = Promise.withResolvers<void>();
+  conversations.hearRepliesWith((_started, _startedBy, reply) => {
+    replies.push(reply);
+    replied.resolve();
+  }, () => true);
+  return { conversations, replies, replied: replied.promise, turns: () => turns, endTheJob: () => void (jobRuns = false), stopWatchingJobs: () => internals.jobWaits.stopAll() };
 }
 
 const heardWithin = (replied: Promise<void>, ms = 60) => Promise.race([replied.then(() => true), Bun.sleep(ms).then(() => false)]);
@@ -119,6 +156,24 @@ test("a helper whose turn ends waiting for a job that wakes it is heard of once 
   expect(turns(), "the job woke it for a second turn").toBe(2);
   expect(replies).toEqual([{ text: null, ended: "finished" }]);
   stopWatchingJobs();
+});
+
+test("a helper resting until its job wakes it is still not heard of after a host restart, only once the turn after the wake-up ends", async () => {
+  const { store, config, helperId, replies, firstTurnEnded, stopWatchingJobs } = helperLeavingAJob({ resume: true });
+  await firstTurnEnded;
+  stopWatchingJobs();
+
+  const next = restartedHost(store, config);
+  next.conversations.resumeAfterRestart([]);
+  expect(await heardWithin(next.replied), "the restart is not the end of its work").toBe(false);
+  expect(store.findConversation(helperId)?.startedBy?.reply).toBeNull();
+
+  next.endTheJob();
+  await next.replied;
+  expect(next.turns(), "the job woke it for a second turn").toBe(1);
+  expect(next.replies).toEqual([{ text: null, ended: "finished" }]);
+  expect(replies).toEqual([]);
+  next.stopWatchingJobs();
 });
 
 test("a job that only tells the user when it ends doesn't hold the reply back", async () => {
