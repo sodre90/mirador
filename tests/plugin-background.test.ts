@@ -20,7 +20,7 @@ const scratch = mkdtempSync(join(tmpdir(), "plugin-background-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const profile = (id: string, name: string, harness: Profile["harness"]) =>
-  ({ id, name, harness, environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 }) as Profile;
+  ({ id, name, harness, environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 }) as Profile;
 
 function storeWithProfiles() {
   const store = storeWithConversation();

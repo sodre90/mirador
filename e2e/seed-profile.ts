@@ -20,6 +20,7 @@ if (store.listProfiles().length === 0) {
     bypassPermissions: false,
     askMode: "wait",
     color: null,
+    pluginsOff: [],
     createdAt: Date.now(),
   });
 }

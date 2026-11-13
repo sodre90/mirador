@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { profileSettingWhoseModelsItLists, settingValue, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
+import { profileSettingWhoseModelsItLists, settingValue, type ConversationPlugin, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
 import { categoryChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { itemRooms, type ItemRoom } from "../shared/canvas-plugins.ts";
@@ -17,6 +17,7 @@ function receive(pluginSettings: PluginSettings[]) {
 
 let pluginToolTitles: Record<string, string> = {};
 let pluginTitles: Record<string, string> = {};
+let pluginsOfConversations: ConversationPlugin[] = [];
 
 /** Each plugin's tools with the plugin's title, as the host last said; plugins change only with a restart, which sends a new snapshot. */
 export const toolTitlesOfPlugins = () => pluginToolTitles;
@@ -24,10 +25,19 @@ export const toolTitlesOfPlugins = () => pluginToolTitles;
 /** Each loaded plugin's title, by name, as the host last said. */
 export const titlesOfPlugins = () => pluginTitles;
 
+/** The plugins a profile can turn off for its conversations, as the host last said; plugins change only with a restart. */
+export const conversationPlugins = () => pluginsOfConversations;
+
+const NONE_OFF: string[] = [];
+
+/** What the profile turned off; a conversation without one gets every plugin. */
+export const pluginsOffFor = (profiles: Profile[], profileId: string | null) => profiles.find(({ id }) => id === profileId)?.pluginsOff ?? NONE_OFF;
+
 connection.onMessage((message) => {
   if (message.type === "snapshot") {
     pluginToolTitles = message.pluginToolTitles ?? {};
     pluginTitles = message.pluginTitles ?? {};
+    pluginsOfConversations = message.conversationPlugins;
     receive(message.pluginSettings ?? []);
   }
   if (message.type === "plugins.settings") receive(message.pluginSettings);
@@ -39,6 +49,9 @@ const subscribe = (listener: () => void) => {
 };
 
 export const usePluginSettings = () => useSyncExternalStore(subscribe, () => current);
+
+/** The plugins' settings as the host last said, outside a component. */
+export const pluginSettingsNow = () => current;
 
 interface SettingChoice {
   value: string;

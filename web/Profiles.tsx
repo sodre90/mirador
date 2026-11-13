@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
-import { isTextSetting, modelSettingsOf, profileSettingValue, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginTextProfileSetting } from "../shared/apps.ts";
 import { categoryChoices, flatSelectOptions, knownChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
@@ -11,7 +10,10 @@ import { connection } from "./connection.ts";
 import { hostErrorText } from "./host-error.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { titlesOfPlugins, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
+import { pluginSettingsNow } from "./plugin-settings.ts";
+import { pluginSettingsDiffer, type ProfilePluginSettings } from "./plugin-rows.ts";
+import { ProfilePluginsTab, usePluginsTabHasRows } from "./ProfilePluginsTab.tsx";
+import { UnsavedMark } from "./UnsavedMark.tsx";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
@@ -167,167 +169,6 @@ function useAgentChoices(profile: Profile | undefined) {
   return fetched;
 }
 
-type ProfilePluginSettings = Record<string, Record<string, string>>;
-
-/** The plugin's check of the settings the form holds, answered for the form as it was when asked. */
-function usePluginProfileCheck(plugin: string) {
-  const [asking, setAsking] = useState<{ requestId: string; formKey: string } | null>(null);
-  const [outcome, setOutcome] = useState<{ formKey: string; answer: string | null; problem: string | null } | null>(null);
-  useEffect(
-    () =>
-      connection.onMessage((message) => {
-        if (message.type !== "plugin.profile-checked" || message.requestId !== asking?.requestId) return;
-        setOutcome({ formKey: asking.formKey, answer: message.answer, problem: message.problem });
-        setAsking(null);
-      }),
-    [asking],
-  );
-  useEffect(
-    () =>
-      connection.onStatus((status) => {
-        if (status !== "open") setAsking(null);
-      }),
-    [],
-  );
-  const check = (profile: ProfileDraft, formKey: string) => {
-    const requestId = crypto.randomUUID();
-    setOutcome(null);
-    if (connection.send({ type: "plugin.check-profile", requestId, plugin, profile })) setAsking({ requestId, formKey });
-  };
-  return { check, checking: asking !== null, outcome };
-}
-
-function PluginProfileCheck({ plugin, draft }: { plugin: string; draft: () => ProfileDraft }) {
-  const { check, checking, outcome } = usePluginProfileCheck(plugin);
-  const formKeyOf = (profile: ProfileDraft) => JSON.stringify([profile.environment, profile.pluginSettings?.[plugin] ?? {}]);
-  const shownOutcome = outcome?.formKey === formKeyOf(draft()) ? outcome : null;
-  return (
-    <div className="plugin-profile-check">
-      <button type="button" disabled={checking} onClick={() => check(draft(), formKeyOf(draft()))}>
-        {checking ? words.checkingProfile : words.checkProfile}
-      </button>
-      {shownOutcome && (
-        <span className={shownOutcome.problem === null ? "saved" : "problem"} role={shownOutcome.problem === null ? "status" : "alert"}>
-          {shownOutcome.problem ?? shownOutcome.answer}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/** What installed plugins let each profile set, under each plugin's title: the profile the delegate plugin hands tasks to, say, or a gateway's address. */
-function PluginProfileFields({
-  profileId,
-  profiles,
-  chosen,
-  onChoose,
-  draft,
-}: {
-  profileId: string | undefined;
-  profiles: Profile[];
-  chosen: ProfilePluginSettings;
-  onChoose: (plugin: string, settingId: string, value: string) => void;
-  draft: () => ProfileDraft;
-}) {
-  const titles = titlesOfPlugins();
-  return usePluginSettings()
-    .filter(({ profileSettings = [] }) => profileSettings.length > 0)
-    .map(({ plugin, profileSettings = [], checksProfile }) => {
-      const valueOf = (setting: PluginProfileSetting) => profileSettingValue(chosen, plugin, setting);
-      const toggledOn = (toggleId: string) => profileSettings.some((each) => each.id === toggleId && valueOf(each) === "on");
-      const shownSettings = profileSettings.filter(({ shownWhen }) => shownWhen === undefined || toggledOn(shownWhen));
-      const togglesOn = profileSettings.every(({ shownWhen }) => shownWhen === undefined || toggledOn(shownWhen));
-      return (
-        <fieldset key={plugin} className="plugin-profile-settings">
-          <legend>{titles[plugin] ?? plugin}</legend>
-          {shownSettings.map((setting) => (
-            <PluginProfileField
-              key={setting.id}
-              setting={setting}
-              settingsOfPlugin={profileSettings}
-              profileId={profileId}
-              profiles={profiles}
-              valueOf={valueOf}
-              onChoose={(value) => {
-                onChoose(plugin, setting.id, value);
-                modelSettingsOf(profileSettings, setting.id).forEach((modelSetting) => onChoose(plugin, modelSetting.id, modelSetting.default));
-              }}
-            />
-          ))}
-          {checksProfile && togglesOn && <PluginProfileCheck plugin={plugin} draft={draft} />}
-        </fieldset>
-      );
-    });
-}
-
-interface PluginProfileFieldProps {
-  setting: PluginProfileSetting;
-  settingsOfPlugin: PluginProfileSetting[];
-  profileId: string | undefined;
-  profiles: Profile[];
-  valueOf: (setting: PluginProfileSetting) => string;
-  onChoose: (value: string) => void;
-}
-
-function PluginProfileField(props: PluginProfileFieldProps) {
-  const { setting, valueOf, onChoose } = props;
-  if (isTextSetting(setting)) return <PluginTextField setting={setting} value={valueOf(setting)} onChoose={onChoose} />;
-  if (setting.kind === "toggle") {
-    return (
-      <label className="checkbox" data-hint={setting.hint}>
-        <input type="checkbox" aria-label={words.pluginSetting(setting.label)} checked={valueOf(setting) === "on"} onChange={(event) => onChoose(event.target.checked ? "on" : "off")} />
-        <span>{setting.label}</span>
-      </label>
-    );
-  }
-  return <PluginChoiceField {...props} setting={setting} />;
-}
-
-function PluginTextField({ setting, value, onChoose }: { setting: PluginTextProfileSetting; value: string; onChoose: (value: string) => void }) {
-  const [revealed, setRevealed] = useState(false);
-  const hidden = setting.kind === "secret" && !revealed;
-  return (
-    <div className="plugin-text-setting">
-      <label data-hint={[setting.hint, hints.pluginTextSetting].filter(Boolean).join("\n\n")}>
-        <span>{setting.label}</span>
-        <input
-          type={hidden ? "password" : "text"}
-          aria-label={words.pluginSetting(setting.label)}
-          value={value}
-          placeholder={setting.fallsBackTo ? words.fallsBackTo(setting.fallsBackTo) : setting.placeholder}
-          autoComplete="off"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-          onChange={(event) => onChoose(event.target.value)}
-        />
-      </label>
-      {setting.kind === "secret" && (
-        <button type="button" className="link" aria-pressed={revealed} aria-label={revealed ? words.hideSecretOf(setting.label) : words.showSecretOf(setting.label)} onClick={() => setRevealed(!revealed)}>
-          {revealed ? words.hideSecret : words.showSecret}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function PluginChoiceField({ setting, settingsOfPlugin, profileId, profiles, valueOf, onChoose }: PluginProfileFieldProps & { setting: PluginChoiceProfileSetting }) {
-  const value = valueOf(setting);
-  const choices = useChoicesOf(setting, settingsOfPlugin, profiles, profileId, valueOf, value);
-  return (
-    <label data-hint={setting.hint}>
-      <span>{setting.label}</span>
-      <select aria-label={words.pluginSetting(setting.label)} value={value} onChange={(event) => onChoose(event.target.value)}>
-        {choices.map((choice) => (
-          <option key={choice.value} value={choice.value}>
-            {choice.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 interface ProfileForm {
   name: string;
   harness: HarnessId;
@@ -341,6 +182,7 @@ interface ProfileForm {
   idleCompaction: boolean;
   color: Pastel | null;
   pluginSettings: ProfilePluginSettings;
+  pluginsOff: string[];
 }
 
 const savedForm = (profile: Profile): ProfileForm => ({
@@ -356,6 +198,7 @@ const savedForm = (profile: Profile): ProfileForm => ({
   idleCompaction: profile.idleCompaction ?? true,
   color: profile.color,
   pluginSettings: profile.pluginSettings ?? {},
+  pluginsOff: profile.pluginsOff,
 });
 
 const blankForm = (harness: HarnessId, name: string): ProfileForm => ({
@@ -371,6 +214,7 @@ const blankForm = (harness: HarnessId, name: string): ProfileForm => ({
   idleCompaction: true,
   color: null,
   pluginSettings: {},
+  pluginsOff: [],
 });
 
 type FormField = keyof ProfileForm;
@@ -381,16 +225,15 @@ type EditorTab = (typeof editorTabs)[number];
 const fieldsOfTab: Record<EditorTab, FormField[]> = {
   launch: ["name", "harness", "color", "environment", "prelaunch"],
   defaults: ["model", "mode", "effort", "bypassPermissions", "askMode", "idleCompaction"],
-  plugins: ["pluginSettings"],
+  plugins: ["pluginSettings", "pluginsOff"],
 };
 
 const allFields = editorTabs.flatMap((tab) => fieldsOfTab[tab]);
 
-const differsIn = (form: ProfileForm, other: ProfileForm, fields: FormField[]) => fields.some((field) => JSON.stringify(form[field]) !== JSON.stringify(other[field]));
+const fieldDiffers = (form: ProfileForm, other: ProfileForm, field: FormField) =>
+  field === "pluginSettings" ? pluginSettingsDiffer(form.pluginSettings, other.pluginSettings, pluginSettingsNow()) : JSON.stringify(form[field]) !== JSON.stringify(other[field]);
 
-function UnsavedMark() {
-  return <span className="unsaved-mark" role="img" aria-label={words.unsaved} data-hint={hints.unsavedProfileEdits} />;
-}
+const differsIn = (form: ProfileForm, other: ProfileForm, fields: FormField[]) => fields.some((field) => fieldDiffers(form, other, field));
 
 type ChangeForm = (change: (form: ProfileForm) => ProfileForm) => void;
 
@@ -423,7 +266,7 @@ function ProfileEditor({
   onMoreOptions?: () => void;
   onSaved: (profileId: string) => void;
 }) {
-  const { name, harness, environment, prelaunch, model, mode, effort, bypassPermissions, askMode, idleCompaction, color, pluginSettings } = form;
+  const { name, harness, environment, prelaunch, model, mode, effort, bypassPermissions, askMode, idleCompaction, color, pluginSettings, pluginsOff } = form;
   const set = (fields: Partial<ProfileForm>) => onChange((current) => ({ ...current, ...fields }));
   const choosePluginSetting = (plugin: string, settingId: string, value: string) =>
     onChange((current) => ({ ...current, pluginSettings: { ...current.pluginSettings, [plugin]: { ...current.pluginSettings[plugin], [settingId]: value } } }));
@@ -438,8 +281,8 @@ function ProfileEditor({
   const { test, testing, answer } = useProfileTest();
   const testResult = answer?.launch === launchKey ? answer.result : null;
   const { errors } = useMemo(() => parseEnvironment(environment), [environment]);
-  const pluginsHaveProfileSettings = usePluginSettings().some(({ profileSettings = [] }) => profileSettings.length > 0);
-  const shownTabs = editorTabs.filter((each) => each !== "plugins" || pluginsHaveProfileSettings);
+  const pluginsTabHasRows = usePluginsTabHasRows();
+  const shownTabs = editorTabs.filter((each) => each !== "plugins" || pluginsTabHasRows);
   const openTab = shownTabs.includes(tab) ? tab : "launch";
   const unchanged = profile && !differsIn(form, saved, allFields);
   const restartsAgent = profile && differsIn(form, saved, ["environment", "prelaunch"]);
@@ -465,6 +308,7 @@ function ProfileEditor({
     ...(harness === "claude" && !idleCompaction && { idleCompaction: false }),
     color,
     pluginSettings,
+    pluginsOff,
   });
 
   const nameField = (
@@ -695,9 +539,17 @@ function ProfileEditor({
             </label>
           )}
         </div>
-        {pluginsHaveProfileSettings && (
+        {pluginsTabHasRows && (
           <div {...panelOf("plugins")}>
-            <PluginProfileFields profileId={profile?.id} profiles={profiles} chosen={pluginSettings} onChoose={choosePluginSetting} draft={draft} />
+            <ProfilePluginsTab
+              profileId={profile?.id}
+              profiles={profiles}
+              form={form}
+              saved={saved}
+              onChooseSetting={choosePluginSetting}
+              onPluginsOff={(chosen) => set({ pluginsOff: chosen })}
+              draft={draft}
+            />
           </div>
         )}
       </div>

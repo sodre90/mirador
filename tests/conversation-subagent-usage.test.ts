@@ -23,7 +23,7 @@ function serviceWithConversationOn(harness: HarnessId) {
   writeFileSync(join(subagents, "agent-a1.jsonl"), JSON.stringify({ type: "assistant", message: { id: "msg_1", model: "claude-haiku-5-5", usage: { output_tokens: 10 } } }) + "\n");
 
   const store = new Store(":memory:");
-  store.saveProfile({ id: "p1", name: "p", harness, environment: `CLAUDE_CONFIG_DIR=${claudeConfigDir}`, prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "p1", name: "p", harness, environment: `CLAUDE_CONFIG_DIR=${claudeConfigDir}`, prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: "/tmp/p", defaultLaunch: { harness, profileId: "p1" }, createdAt: 1 });
   store.insertConversation({
     id: "c1",

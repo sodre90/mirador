@@ -51,7 +51,7 @@ async function callerInWorkspace({ inRepository, turnsWaitForAStop = false }: { 
   await mkdir(project);
   if (inRepository) await repositoryWithACommit(project);
   const store = new Store(":memory:");
-  store.saveProfile({ id: "helper", name: "Helper", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "helper", name: "Helper", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: "helper" }, createdAt: 1 });
   const dataDir = join(scratch, "data");
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: dataDir }), {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));

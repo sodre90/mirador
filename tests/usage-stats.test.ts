@@ -92,6 +92,7 @@ const profile = (id: string, name: string, harness: HarnessId): Profile => ({
   bypassPermissions: false,
   askMode: "wait",
   color: null,
+  pluginsOff: [],
   createdAt: 1,
 });
 

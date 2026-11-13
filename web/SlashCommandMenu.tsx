@@ -46,11 +46,11 @@ const inPageLanguage = (command: SlashCommand) => ({ ...command, description: t.
 
 const miradorCommands = [clearSlashCommand, reloadSlashCommand, loginSlashCommand, laterSlashCommand, remindSlashCommand, sideChatSlashCommand].map(inPageLanguage);
 
-/** The commands Mirador runs itself, so they stand even where the agent does not list them. */
-const miradorCommandsFor = (harness: HarnessId) => [
+/** The commands Mirador runs itself, so they stand even where the agent does not list them; the plugins' but those the profile turned off. */
+const miradorCommandsFor = (harness: HarnessId, pluginsOff: string[]) => [
   ...miradorCommands,
   ...(harness === "claude" ? panelSlashCommands.map(inPageLanguage) : []),
-  ...pluginCommands(),
+  ...pluginCommands(pluginsOff),
 ];
 
 const withMiradorCommands = (commands: SlashCommand[], own: SlashCommand[]) => [
@@ -66,11 +66,13 @@ export function useSlashCommandMenu({
   conversationId,
   harness,
   profileId,
+  pluginsOff,
   events,
   text,
   setText,
   run,
 }: AgentOfConversation & {
+  pluginsOff: string[];
   events: StoredEvent[];
   text: string;
   setText: (text: string) => void;
@@ -79,8 +81,8 @@ export function useSlashCommandMenu({
   const query = slashQuery(text);
   const commands = useSlashCommands({ conversationId, harness, profileId }, events, query !== null);
   const matches = useMemo(
-    () => (query === null ? [] : matchingCommands(withMiradorCommands(commands, miradorCommandsFor(harness)), query)),
-    [commands, harness, query],
+    () => (query === null ? [] : matchingCommands(withMiradorCommands(commands, miradorCommandsFor(harness, pluginsOff)), query)),
+    [commands, harness, pluginsOff, query],
   );
   const [dismissedAt, setDismissedAt] = useState<string | null>(null);
   const { pickedIndex, move } = usePickedSuggestion(matches.length, query);

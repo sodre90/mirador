@@ -10,6 +10,10 @@ import type { PluginCanvasItem } from "../shared/model.ts";
 import { Store } from "../host/store.ts";
 import type { PluginCatalog } from "../host/plugin-catalog.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
+import type { McpHttpHandler } from "@modelcontextprotocol/server";
+import { CanvasMcpEndpoints } from "../host/canvas/mcp.ts";
+import type { CanvasService } from "../host/canvas/service.ts";
+import type { ConversationService } from "../host/conversations.ts";
 import type { CanvasActionContext, CanvasToolContext } from "../shared/canvas-plugins.ts";
 import board from "./fixtures/canvas-plugins/board/host.ts";
 
@@ -336,7 +340,7 @@ describe("CanvasPlugins", () => {
       },
     };
     const store = storeWithConversation();
-    store.saveProfile({ id: "local", name: "Local", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+    store.saveProfile({ id: "local", name: "Local", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
     const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, store, { board: starter });
     const asked: unknown[] = [];
     plugins.startsConversationsWith(async (callerId, plugin, profile, prompt, title, _choices, worktree) => {
@@ -356,7 +360,7 @@ describe("CanvasPlugins", () => {
     const lister = { ...board, action: (_item: unknown, _action: unknown, context: CanvasActionContext) => context.profiles() };
     const store = storeWithConversation();
     const profile = (id: string, name: string, model: string | null, effort: string | null) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model, mode: null, effort, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model, mode: null, effort, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
     profile("work", "Work", "opus", "xhigh");
     profile("own", "Own", null, null);
     profile("new", "New", "custom-model", null);
@@ -438,7 +442,7 @@ describe("CanvasPlugins", () => {
   test("what a conversation's profile set for a plugin reaches its tools and adds to its guidance, by the chosen profile's name as it is now", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), pluginsOff: [], createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("main", "Personal", { board: { "hand-over-to": "local" } });
     store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
@@ -460,7 +464,7 @@ describe("CanvasPlugins", () => {
   test("a model the profile set for the profile it hands over to reaches the tool, a conversation's own wins, and one that chose another profile leaves the profile's model behind", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), pluginsOff: [], createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("big", "Qwen 122b");
     profile("main", "Personal", { board: { "hand-over-to": "local", "hand-over-model": "opus" } });
@@ -492,7 +496,7 @@ describe("CanvasPlugins", () => {
   test("what the user chose in a conversation's top bar wins over its profile, and the agent hears of each change once", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
-      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), createdAt: 1 });
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), pluginsOff: [], createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("big", "Qwen 122b");
     profile("main", "Personal", { board: { "hand-over-to": "local" } });
@@ -541,11 +545,81 @@ describe("CanvasPlugins", () => {
 
   test("a conversation a plugin's tool started gets no guidance from its profile, so it isn't told to hand over in turn", async () => {
     const store = storeWithConversation();
-    store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginSettings: { board: { "hand-over-to": "main" } }, createdAt: 1 });
+    store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginSettings: { board: { "hand-over-to": "main" } }, pluginsOff: [], createdAt: 1 });
     store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
     store.recordStartedBy("c1", { conversationId: "c0", plugin: "board" });
     const { plugins } = await canvasPluginHost(FIXTURES, store);
     expect(plugins.guidanceFor("c1").instructions.join("\n")).not.toContain("hand_over");
+  });
+
+  test("a profile that turns a plugin off gives its conversations none of its tools, guidance, statusline, activity or commands, and turning it on gives them back", async () => {
+    const store = storeWithConversation();
+    const personal = (pluginsOff: string[]) =>
+      store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff, createdAt: 1 });
+    personal(["board"]);
+    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
+    const heard: string[] = [];
+    const statusline = () => [{ text: "3 cards" }];
+    const activity = (event: { kind: string }) => void heard.push(event.kind);
+    const { plugins, mcpRequest } = await canvasPluginHost(FIXTURES, store, { board: { ...board, statusline, activity } });
+    const listedTools = async () => (await mcpRequest("tools/list", {})).tools.map(({ name }: { name: string }) => name);
+    const activityHeard = async () => {
+      plugins.activity("c1", { kind: "turn-started" });
+      await Promise.resolve();
+      return heard.splice(0);
+    };
+
+    expect(await listedTools()).toContain("show");
+    expect(await listedTools()).not.toContain("show_card");
+    expect(plugins.guidanceFor("c1").toolNames).toEqual([]);
+    expect(plugins.guidanceFor("c1").instructions.join("\n")).not.toContain("show_card");
+    expect(await mcpRequest("tools/call", { name: "show_card", arguments: { title: "Hi", text: "there" } }), "no such tool, so no result").toBeUndefined();
+    expect(plugins.statuslineChips("c1")).toEqual([]);
+    expect(await activityHeard()).toEqual([]);
+    await expect(plugins.runCommand("c1", "board:pin_card")).rejects.toThrow("Board is off for the profile Personal. Turn it on in Profiles › Plugins.");
+
+    personal([]);
+    expect(await listedTools()).toContain("show_card");
+    expect(plugins.guidanceFor("c1").toolNames).toContain("show_card");
+    expect(plugins.statuslineChips("c1")).toMatchObject([{ plugin: "board", chips: [{ text: "3 cards" }] }]);
+    expect(await activityHeard()).toEqual(["turn-started"]);
+    expect(await plugins.runCommand("c1", "board:pin_card")).toBeString();
+  });
+
+  test("a conversation a plugin's tool started gets no tools of a plugin its own profile turned off either", async () => {
+    const store = storeWithConversation();
+    store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: ["board"], createdAt: 1 });
+    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main", startedBy: { conversationId: "c0", plugin: "board", reply: null, dismissed: false } });
+    const { plugins } = await canvasPluginHost(FIXTURES, store);
+    expect(plugins.guidanceFor("c1").toolNames).toEqual([]);
+  });
+
+  test("the plugins a profile can turn off are those that give a conversation something of their own, with their titles and tools", async () => {
+    const { plugins } = await setUp();
+    expect(plugins.conversationPlugins()).toEqual([
+      { plugin: "board", title: "Board", tools: ["show_card", "change_card", "show_report", "change_verdict", "track_steps", "pin_card", "finish_step", "hand_over"] },
+    ]);
+  });
+
+  test("a save that turns a profile's plugin on or off has that profile's conversations list their tools again, and no other's", async () => {
+    const store = storeWithConversation();
+    const profile = (id: string) =>
+      store.saveProfile({ id, name: id, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
+    profile("main");
+    profile("other");
+    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
+    store.insertConversation({ ...store.findConversation("c1")!, id: "c2", profileId: "other" });
+    const { plugins } = await setUp();
+    const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", null, plugins, null, store);
+    const listed: string[] = [];
+    for (const conversationId of ["c1", "c2"]) {
+      await endpoints.handle(conversationId, new Request(`http://127.0.0.1/mcp/${conversationId}`, { method: "GET" }));
+      const { handlers } = endpoints as unknown as { handlers: Map<string, McpHttpHandler> };
+      handlers.get(conversationId)!.bus.subscribe((event) => void listed.push(`${conversationId} ${event.kind}`));
+    }
+
+    endpoints.toolsChangedForProfile("main");
+    expect(listed).toEqual(["c1 tools_list_changed"]);
   });
 
   test("a plugin tells its caller when it is installed, has a replied of its own and says so in its plugin.json", async () => {
@@ -590,9 +664,9 @@ describe("CanvasPlugins", () => {
   test("the tools a plugin made commands are the slash menu's /<plugin>:<tool>, with their own descriptions", async () => {
     const { plugins } = await setUp();
     expect(plugins.commands()).toEqual([
-      { name: "board:show_card", description: "Show a card", hint: "title=… text=…" },
-      { name: "board:pin_card", description: "Pin a card that says who pinned it", hint: "[text=…]" },
-      { name: "board:finish_step", description: "Tick off the next step", hint: null },
+      { name: "board:show_card", description: "Show a card", hint: "title=… text=…", plugin: "board" },
+      { name: "board:pin_card", description: "Pin a card that says who pinned it", hint: "[text=…]", plugin: "board" },
+      { name: "board:finish_step", description: "Tick off the next step", hint: null, plugin: "board" },
     ]);
   });
 

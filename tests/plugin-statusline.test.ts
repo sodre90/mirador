@@ -25,6 +25,7 @@ const profile = (pluginSettings: Record<string, string>, environment = "METER_UR
   askMode: "wait",
   color: null,
   pluginSettings: { meter: pluginSettings },
+  pluginsOff: [],
   createdAt: 1,
 });
 

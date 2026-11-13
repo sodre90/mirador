@@ -9,7 +9,7 @@ import { choiceGroups } from "./choices.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
+import { pluginsOffFor, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { SearchableSelect } from "./SearchableSelect.tsx";
 
@@ -118,11 +118,12 @@ function YoloSwitch({ conversation }: { conversation: Conversation }) {
 
 const FOLLOWS_PROFILE = "\u0000profile";
 
-/** Each plugin's profile settings with choices, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none. */
+/** Each plugin's profile settings with choices, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none, nor one whose profile turned the plugin off. */
 function PluginSettingMenus({ conversation, profiles }: { conversation: Conversation; profiles: Profile[] }) {
-  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings = [] }) =>
-    profileSettings.filter(isChoiceSetting).map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })),
-  );
+  const turnedOff = pluginsOffFor(profiles, conversation.profileId);
+  const withProfileSettings = usePluginSettings()
+    .filter(({ plugin }) => !turnedOff.includes(plugin))
+    .flatMap(({ plugin, profileSettings = [] }) => profileSettings.filter(isChoiceSetting).map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })));
   if (conversation.startedBy) return null;
   return withProfileSettings.map(({ plugin, setting, settingsOfPlugin }) => (
     <PluginSettingMenu key={`${plugin}/${setting.id}`} conversation={conversation} profiles={profiles} plugin={plugin} setting={setting} settingsOfPlugin={settingsOfPlugin} />

@@ -370,6 +370,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginCommandNeedsNewerApi(problem.brought, problem.named);
     case "plugin-command-unknown":
       return words.pluginCommandUnknown(problem.command);
+    case "plugin-off-for-profile":
+      return words.pluginOffForProfile(problem.plugin, problem.profile);
     case "command-arguments-syntax":
       return words.commandArgumentsSyntax(problem.near);
     case "command-argument-unknown":

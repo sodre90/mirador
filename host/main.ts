@@ -158,6 +158,7 @@ const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: 
 const networkAssetsServer = network && certificate && serveCanvasAssets(network.canvasPort, { certificate, knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
 const profiles = new ProfileService(store, hub, conversations, pluginSettings.secretSettings());
 profiles.whenProfilesChange(() => canvasPlugins.profilesChanged());
+profiles.whenPluginsOffChange((profileId) => mcp.toolsChangedForProfile(profileId));
 const statusline = new StatuslineService(store, conversations, canvasPlugins, config.runsUserStatusLine);
 const terminals = new TerminalService(hub, store);
 const restart = new HostRestart(hub, conversations, config.dataDir, stopServices, relaunchHow && (() => relaunch(relaunchHow)));

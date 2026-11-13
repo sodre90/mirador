@@ -18,7 +18,7 @@ export async function dragOnto(page: Page, item: Locator, target: Locator, edge:
 export const startDesktopNotifier = (origin: string, token: string, builtFromCode?: string) =>
   spawn("bun", ["e2e/desktop-notifier.ts", origin, token, ...(builtFromCode === undefined ? [] : [builtFromCode])], { stdio: ["pipe", "pipe", "inherit"] });
 
-export async function callCanvasTool(host: TestHost, conversationId: string, name: string, args: Record<string, unknown>) {
+async function canvasRequest(host: TestHost, conversationId: string, method: string, params: Record<string, unknown>) {
   const response = await fetch(`${host.origin}/mcp/${conversationId}`, {
     method: "POST",
     headers: {
@@ -27,15 +27,25 @@ export async function callCanvasTool(host: TestHost, conversationId: string, nam
       Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": "2025-11-25",
     },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
   });
   const body = await response.text();
   const payload = body
     .split("\n")
     .find((line) => line.startsWith("data: "))
     ?.slice("data: ".length);
-  const message = JSON.parse(payload ?? body);
+  return JSON.parse(payload ?? body);
+}
+
+export async function callCanvasTool(host: TestHost, conversationId: string, name: string, args: Record<string, unknown>) {
+  const message = await canvasRequest(host, conversationId, "tools/call", { name, arguments: args });
   return message.result.content[0].text as string;
+}
+
+/** The tools the canvas server lists for the conversation's agent, by name. */
+export async function canvasToolNames(host: TestHost, conversationId: string) {
+  const message = await canvasRequest(host, conversationId, "tools/list", {});
+  return (message.result.tools as { name: string }[]).map(({ name }) => name);
 }
 
 /**
@@ -235,6 +245,15 @@ export async function openProfiles(page: Page) {
 /** The profile editor's fields sit on tabs: Launch (name, colour, environment, pre-launch command), Defaults (model, mode, effort, questions, YOLO) and Plugins. */
 export async function openProfileTab(profileEditor: Locator, tab: "Launch" | "Defaults" | "Plugins") {
   await profileEditor.getByRole("tab", { name: tab }).click();
+}
+
+/** A plugin's row on the profile editor's Plugins tab, opened to show its settings and tools. */
+export async function openPluginRow(profileEditor: Locator, title: string) {
+  const row = profileEditor.getByRole("group", { name: title, exact: true });
+  const disclose = row.getByRole("button", { expanded: false });
+  if (await disclose.isVisible()) await disclose.click();
+  await expect(row.getByRole("button", { expanded: true })).toBeVisible();
+  return row;
 }
 
 export async function createProfile(page: Page, name: string, environment: string, prelaunch = "", agent = "Claude Code") {

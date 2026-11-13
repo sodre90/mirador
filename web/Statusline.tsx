@@ -5,6 +5,7 @@ import type { ContextUsage, Conversation, PlanQuotas, PluginStatuslineChips, Pro
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
+import { pluginsOffFor } from "./plugin-settings.ts";
 import { describedText } from "./host-error.ts";
 import { canOpenItemWindows, openPluginWindow } from "./item-window.ts";
 import { t } from "./i18n/index.ts";
@@ -116,8 +117,8 @@ function useColumns(element: RefObject<HTMLElement | null>, fontFamily: string) 
   return columns;
 }
 
-/** Asks the host again whenever the conversation changes, and now and then for clocks and quotas the command may show. */
-function useStatuslineRender(conversation: Conversation, columns: number | null, runCommand: boolean) {
+/** Asks the host again whenever the conversation or the plugins its profile has on change, and now and then for clocks and quotas the command may show. */
+function useStatuslineRender(conversation: Conversation, pluginsOff: string[], columns: number | null, runCommand: boolean) {
   const [render, setRender] = useState(() => lastRenders.get(conversation.id) ?? null);
   useEffect(() => setRender(lastRenders.get(conversation.id) ?? null), [conversation.id]);
   useEffect(() => {
@@ -139,7 +140,7 @@ function useStatuslineRender(conversation: Conversation, columns: number | null,
       clearInterval(refresh);
       stopListening();
     };
-  }, [conversation, columns, runCommand]);
+  }, [conversation, pluginsOff, columns, runCommand]);
   return render;
 }
 
@@ -275,7 +276,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
   const terminalFont = terminalFontList(fontFamily);
   const content = useRef<HTMLDivElement>(null);
   const columns = useColumns(content, terminalFont);
-  const render = useStatuslineRender(conversation, columns, prefersCommand);
+  const render = useStatuslineRender(conversation, pluginsOffFor(profiles, conversation.profileId), columns, prefersCommand);
   const commandOutput = prefersCommand ? (render?.output ?? null) : null;
   const pluginChips = render?.pluginChips ?? [];
 

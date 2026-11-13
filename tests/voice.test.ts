@@ -84,6 +84,7 @@ const profile = (environment: string): Profile => ({
   bypassPermissions: false,
   askMode: "wait",
   color: null,
+  pluginsOff: [],
   createdAt: 1,
 });
 const voiceWith = (settings: VoiceSettings, profiles: Profile[] = []) => new Voice(() => settings, (id) => profiles.find((each) => each.id === id));

@@ -45,6 +45,7 @@ const draftWith = (environment: string, prelaunch = ""): ProfileDraft => ({
   bypassPermissions: false,
   askMode: "wait",
   color: null,
+  pluginsOff: [],
 });
 
 const failureOf = async (service: ConversationService, draft: ProfileDraft) => {

@@ -173,6 +173,7 @@ const addedColumns = [
   { table: "conversations", column: "last_message_at", definition: "INTEGER" },
   { table: "conversations", column: "last_reply_at", definition: "INTEGER" },
   { table: "workspaces", column: "new_conversations_in", definition: "TEXT NOT NULL DEFAULT 'folder'" },
+  { table: "profiles", column: "plugins_off", definition: "TEXT NOT NULL DEFAULT '[]'" },
   { table: "workspaces", column: "worktree_setup", definition: "TEXT NOT NULL DEFAULT ''" },
   { table: "conversations", column: "worktree", definition: "TEXT" },
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
@@ -218,6 +219,7 @@ type ProfileRow = {
   idle_compaction: number;
   color: string | null;
   plugin_settings: string | null;
+  plugins_off: string;
   created_at: number;
 };
 
@@ -282,6 +284,7 @@ const toProfile = (row: ProfileRow): Profile => ({
   ...(row.idle_compaction === 0 && { idleCompaction: false }),
   color: isPastel(row.color) ? row.color : null,
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
+  pluginsOff: JSON.parse(row.plugins_off) as string[],
   createdAt: row.created_at,
 });
 
@@ -893,10 +896,10 @@ export class Store {
   saveProfile(profile: Profile) {
     this.db
       .query(
-        `INSERT INTO profiles (id, name, harness, environment, prelaunch, model, mode, effort, bypass_permissions, ask_mode, idle_compaction, color, plugin_settings, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO profiles (id, name, harness, environment, prelaunch, model, mode, effort, bypass_permissions, ask_mode, idle_compaction, color, plugin_settings, plugins_off, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, environment = excluded.environment, prelaunch = excluded.prelaunch,
            model = excluded.model, mode = excluded.mode, effort = excluded.effort, bypass_permissions = excluded.bypass_permissions, ask_mode = excluded.ask_mode,
-           idle_compaction = excluded.idle_compaction, color = excluded.color, plugin_settings = excluded.plugin_settings`,
+           idle_compaction = excluded.idle_compaction, color = excluded.color, plugin_settings = excluded.plugin_settings, plugins_off = excluded.plugins_off`,
       )
       .run(
         profile.id,
@@ -912,6 +915,7 @@ export class Store {
         Number(profile.idleCompaction ?? true),
         profile.color,
         profile.pluginSettings ? JSON.stringify(profile.pluginSettings) : null,
+        JSON.stringify(profile.pluginsOff),
         profile.createdAt,
       );
   }

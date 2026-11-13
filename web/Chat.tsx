@@ -18,7 +18,7 @@ import {
   type StoredEvent,
   type UsageLimitWait,
 } from "../shared/model.ts";
-import { titlesOfPlugins, toolTitlesOfPlugins } from "./plugin-settings.ts";
+import { pluginsOffFor, titlesOfPlugins, toolTitlesOfPlugins } from "./plugin-settings.ts";
 import { readableToolTitle as readableToolTitleOf } from "../shared/tool-title.ts";
 import { panelCommandLine, refusedPanelCommand } from "../shared/panel-commands.ts";
 import { adjacentPlaceholder, placeholdersIn, type TextRange } from "../shared/prompt-templates.ts";
@@ -1893,6 +1893,7 @@ function Composer({
     conversationId: conversation.id,
     harness: conversation.harness,
     profileId: conversation.profileId,
+    pluginsOff: pluginsOffFor(profiles, conversation.profileId),
     events,
     text,
     setText,

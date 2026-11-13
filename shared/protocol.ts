@@ -43,12 +43,12 @@ import type { ConversationOrder } from "./conversation-order.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
-import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode } from "./apps.ts";
+import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, ConversationPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode } from "./apps.ts";
 import type { LowDataSubscription } from "./low-data.ts";
 import type { MentionSuggestion } from "./mentions.ts";
 import type { NewerVersion } from "./newer-version.ts";
 import type { PromptHistoryEntry } from "./prompt-history.ts";
-import type { SlashCommand } from "./slash-commands.ts";
+import type { PluginCommand, SlashCommand } from "./slash-commands.ts";
 import type { WaitingSummary } from "./waiting.ts";
 import type { SplitAxis } from "./terminal-layout.ts";
 import type { SystemNotification } from "./system-notifications.ts";
@@ -84,7 +84,7 @@ export const PROFILE_LAUNCH_PARAMETER = "profile-launch";
 /** A desktop app built from a checkout opens /notifications with this query parameter naming the code it was built from. */
 export const DESKTOP_APP_CODE_PARAMETER = "desktop-app-code";
 
-export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "model" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings"> & { id?: string };
+export type ProfileDraft = Pick<Profile, "name" | "harness" | "environment" | "prelaunch" | "model" | "mode" | "effort" | "bypassPermissions" | "askMode" | "idleCompaction" | "color" | "pluginSettings" | "pluginsOff"> & { id?: string };
 
 /** What a profile editor's test found: what the agent offers, or why it could not say. */
 export type ProfileTestResult =
@@ -432,7 +432,9 @@ export type ServerMessage =
       /** Each installed plugin's title by its name in plugin.json; missing from an older host. */
       pluginTitles?: Record<string, string>;
       /** The plugins' tools the user runs from the slash menu, by their command's name; missing from an older host. */
-      pluginCommands?: SlashCommand[];
+      pluginCommands?: PluginCommand[];
+      /** The plugins a profile can turn off for its conversations. */
+      conversationPlugins: ConversationPlugin[];
       /** The plugins that have a window of their own: their titles by name. Missing from a host older than plugin windows. */
       pluginWindows?: Record<string, string>;
       /** The plugins that have a workspace tab: their titles by name. Missing from a host older than plugin API 7. */

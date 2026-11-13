@@ -1,5 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
+const plural = (count: number, one: string, many: string) => (count === 1 ? one : many);
+
 export const profiles: Messages["profiles"] = {
   environment: "Entorno",
   environmentHidden: "Entorno (secretos ocultos)",
@@ -7,7 +9,6 @@ export const profiles: Messages["profiles"] = {
   editEnvironment: "Editar entorno",
   agentsDefault: "Predeterminado del agente",
   pluginSetting: (setting) => `Perfil: ${setting}`,
-  fallsBackTo: (variable) => `Vacío: ${variable} de Inicio`,
   showSecret: "Mostrar",
   hideSecret: "Ocultar",
   showSecretOf: (setting) => `Mostrar ${setting}`,
@@ -77,6 +78,35 @@ export const profiles: Messages["profiles"] = {
   unsavedOnClose: (names) => `Cambios sin guardar en ${names.join(", ")}.`,
   keepEditing: "Seguir editando",
   discardAndClose: "Descartar y cerrar",
+  pluginsTab: {
+    intro:
+      "Los plugins activados dan a las conversaciones de este perfil sus herramientas, su guía y su línea de estado. Al guardar, el cambio llega también a las conversaciones en curso, aunque puede que un agente vea un plugin activado solo en su próxima conversación.",
+    search: "Buscar plugins",
+    onOfAll: (on, all) => `${on} de ${all} activados`,
+    noMatch: (query) => `Ningún plugin coincide con “${query}”.`,
+    use: (plugin) => `Usar en este perfil: ${plugin}`,
+    off: "Desactivado en este perfil",
+    turnOnToUse: (plugin) => `Activa este plugin para usarlo en las conversaciones de este perfil: ${plugin}.`,
+    toolsItGives: "Herramientas que da al agente",
+    toolsItWouldGive: "Herramientas que daría al agente",
+    nothingToSet: "Nada que configurar en este perfil",
+    tools: (count) => plural(count, "1 herramienta", `${count} herramientas`),
+    togglesOn: (on, all) => `${on} de ${all} opciones activadas`,
+    settingIs: (setting, value) => `${setting}: ${value}`,
+    on: "activado",
+    offValue: "desactivado",
+    notSet: "sin definir",
+    fromLaunch: "Del entorno de Inicio",
+    notInLaunch: "No está en Inicio",
+    emptyUsesLaunch: (variable) => `Vacío, así que usa ${variable} del entorno de Inicio.`,
+    readsLaunch: (variable) => `Lee ${variable} del entorno de Inicio.`,
+    launchLacks: (variable) => `El entorno de Inicio de este perfil no define ${variable}; puede que el entorno propio de Mirador sí lo haga.`,
+    launchUnsets: (variable) => `El entorno de Inicio de este perfil elimina ${variable}, así que el plugin no recibe nada.`,
+    useLaunchValue: "Usar valor de Inicio",
+    useLaunchValueOf: (setting) => `Usar el valor de Inicio para ${setting}`,
+    secretKept:
+      "Mirador lo guarda con este perfil en este equipo, igual que el entorno de Inicio. El plugin lo lee, y también los navegadores con sesión iniciada en Mirador; la app del teléfono no lo recibe.",
+  },
   picture: {
     notAnImage: "Elige un archivo de imagen.",
     tooBig: "Elige una imagen de menos de 10 MB.",

@@ -192,6 +192,8 @@ export interface Profile {
   color: Pastel | null;
   /** What it set for plugins' profile settings, by plugin and setting id; a setting it didn't set has its default. */
   pluginSettings?: Record<string, Record<string, string>>;
+  /** The plugins its conversations go without, by name, sorted: no tools, guidance, statusline or commands of theirs. A plugin installed later is on. */
+  pluginsOff: string[];
   createdAt: number;
 }
 

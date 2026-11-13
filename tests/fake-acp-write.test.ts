@@ -35,6 +35,7 @@ const serviceInFolder = () => {
     bypassPermissions: false,
     askMode: "wait",
     color: null,
+    pluginsOff: [],
     createdAt: 1,
   });
   store.insertWorkspace({ id: "w1", name: "project", path: folder, defaultLaunch: { harness: "antigravity", profileId: "p1" }, createdAt: 1 });

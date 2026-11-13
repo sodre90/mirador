@@ -26,11 +26,11 @@ import {
   type ToolCaller,
   type WorkspaceConversationStart,
 } from "../../shared/canvas-plugins.ts";
-import type { SlashCommand } from "../../shared/slash-commands.ts";
+import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
 import type { Conversation, PluginCanvasItem, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
-import { conversationSettingValue, isChoiceSetting, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
+import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
 import { validStatuslineChips } from "./statusline-chips.ts";
 import { categoryChoices } from "../../shared/config-options.ts";
@@ -43,6 +43,9 @@ import type { CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 
 const commandName = (plugin: CanvasPlugin, tool: string) => `${plugin.manifest.name}:${tool}`;
+
+const actsOnConversations = ({ tools, guidance, guidanceFor, note, statusline, activity }: CanvasPlugin["host"]) =>
+  Object.keys(tools).length > 0 || [guidance, guidanceFor, note, statusline, activity].some((part) => part !== undefined);
 
 /** With tool search on, Claude Code hides MCP tools until the agent searches for them; a plugin's tools are offered as the canvas's own are. */
 const loadedUpFront = { "anthropic/alwaysLoad": true };
@@ -197,19 +200,38 @@ export class CanvasPlugins {
 
   /** As it is when asked: a conversation started after the catalog came, or after an install, hears of it so. */
   get guidance(): CanvasPluginGuidance {
+    return this.guidanceOf(this.plugins);
+  }
+
+  private guidanceOf(plugins: CanvasPlugin[]): CanvasPluginGuidance {
     const offered = this.catalog?.notInstalled() ?? [];
     return {
-      toolNames: [...this.plugins.flatMap(({ host }) => Object.keys(host.tools)), ...(offered.length > 0 ? [PLUGIN_INSTALL_TOOL] : [])],
-      instructions: [...this.plugins.flatMap(({ host }) => host.guidance?.instructions ?? []), ...offeredPluginsGuidance(offered)],
-      often: this.plugins.flatMap(({ host }) => host.guidance?.often ?? []),
+      toolNames: [...plugins.flatMap(({ host }) => Object.keys(host.tools)), ...(offered.length > 0 ? [PLUGIN_INSTALL_TOOL] : [])],
+      instructions: [...plugins.flatMap(({ host }) => host.guidance?.instructions ?? []), ...offeredPluginsGuidance(offered)],
+      often: plugins.flatMap(({ host }) => host.guidance?.often ?? []),
     };
   }
 
-  /** The guidance, with what each plugin adds for the conversation's profile, which a conversation a plugin's tool started doesn't get. */
+  /** The plugins a conversation gets: all but those its profile turned off. */
+  private pluginsOf(conversationId: string): CanvasPlugin[] {
+    const conversation = this.store.findConversation(conversationId);
+    const turnedOff = (conversation?.profileId && this.store.findProfile(conversation.profileId)?.pluginsOff) || [];
+    return this.plugins.filter(({ manifest }) => !turnedOff.includes(manifest.name));
+  }
+
+  /** The plugins that give a conversation something of their own, by name, with their titles and tools; a profile can turn each off. */
+  conversationPlugins(): ConversationPlugin[] {
+    return this.plugins
+      .filter(({ host }) => actsOnConversations(host))
+      .map(({ manifest, host }) => ({ plugin: manifest.name, title: manifest.title, tools: Object.keys(host.tools) }));
+  }
+
+  /** The guidance of the plugins the conversation's profile has on, with what each adds for that profile, which a conversation a plugin's tool started doesn't get. */
   guidanceFor(conversationId: string): CanvasPluginGuidance {
-    const { guidance } = this;
+    const plugins = this.pluginsOf(conversationId);
+    const guidance = this.guidanceOf(plugins);
     if (this.store.findConversation(conversationId)?.startedBy) return guidance;
-    const added = this.plugins.flatMap((plugin) => {
+    const added = plugins.flatMap((plugin) => {
       try {
         return plugin.host.guidanceFor?.((id) => this.settingFor(plugin, conversationId, id)) ?? [];
       } catch (error) {
@@ -279,7 +301,7 @@ export class CanvasPlugins {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation) return [];
     const profile = conversation.profileId ? (this.store.findProfile(conversation.profileId) ?? null) : null;
-    return this.plugins.flatMap((plugin) => {
+    return this.pluginsOf(conversationId).flatMap((plugin) => {
       if (!plugin.host.statusline) return [];
       const context: StatuslineContext = {
         conversationId,
@@ -309,7 +331,7 @@ export class CanvasPlugins {
    * began, so the agent hears of the change with the next message; a conversation without a session yet will read it then.
    */
   settingChanged(conversationId: string, pluginName: string, id: string) {
-    const plugin = this.plugins.find(({ manifest }) => manifest.name === pluginName);
+    const plugin = this.pluginsOf(conversationId).find(({ manifest }) => manifest.name === pluginName);
     if (!this.store.findConversation(conversationId)?.acpSessionId || !plugin) return;
     this.profileSettingNamed(plugin, id);
     const changed = this.changedSettings.get(conversationId) ?? new Map<string, { plugin: CanvasPlugin; id: string }>();
@@ -342,7 +364,7 @@ export class CanvasPlugins {
 
   /** Hands every plugin that hears activity what happened in a conversation, once the event is done with, so no plugin holds up the agent. */
   activity(conversationId: string, activity: PluginActivity) {
-    const listening = this.plugins.filter(({ host }) => host.activity);
+    const listening = this.pluginsOf(conversationId).filter(({ host }) => host.activity);
     const conversation = listening.length > 0 ? this.store.findConversation(conversationId) : undefined;
     if (!conversation) return;
     const event: PluginActivityEvent = { ...activity, conversationId, conversationTitle: conversation.title, sessionId: conversation.acpSessionId, at: Date.now() };
@@ -493,10 +515,10 @@ export class CanvasPlugins {
   }
 
   /** The tools the user may run from the slash menu, as /<plugin>:<tool>. */
-  commands(): SlashCommand[] {
+  commands(): PluginCommand[] {
     return this.plugins.flatMap((plugin) =>
       Object.entries(plugin.host.tools).flatMap(([tool, { command, input }]) =>
-        command ? [{ name: commandName(plugin, tool), description: command.description, hint: argumentsHint(input) }] : [],
+        command ? [{ name: commandName(plugin, tool), description: command.description, hint: argumentsHint(input), plugin: plugin.manifest.name }] : [],
       ),
     );
   }
@@ -506,8 +528,13 @@ export class CanvasPlugins {
    * as an agent's call is; resolves to what the tool says, and throws what went wrong.
    */
   async runCommand(conversationId: string, name: string, writtenArguments = ""): Promise<string> {
-    if (!this.store.findConversation(conversationId)) throw new HostProblemError({ code: "no-such-conversation", id: conversationId });
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) throw new HostProblemError({ code: "no-such-conversation", id: conversationId });
     const { plugin, tool } = this.commandTool(name);
+    if (!this.pluginsOf(conversationId).includes(plugin)) {
+      const profile = conversation.profileId ? this.store.findProfile(conversation.profileId) : undefined;
+      throw new HostProblemError({ code: "plugin-off-for-profile", plugin: plugin.manifest.title, profile: profile?.name ?? "" });
+    }
     const parsed = await fromJsonSchema(tool.input)["~standard"].validate(commandInput(writtenArguments, tool.input));
     if (parsed.issues) throw new Error(parsed.issues.map(({ message }) => message).join("; "));
     return String(await tool.run(parsed.value, this.toolContext(plugin, conversationId, "user")));
@@ -558,8 +585,9 @@ export class CanvasPlugins {
   }
 
   /** Puts every plugin's tools on a conversation's canvas server; what a tool throws reaches the agent as a tool error. */
-  registerTools(server: McpServer, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
-    for (const plugin of this.plugins) {
+  /** The tools of the plugins the conversation's profile has on; the conversations on one opencode process share its profile, so the calling one's are the same. */
+  registerTools(server: McpServer, conversationId: string, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
+    for (const plugin of this.pluginsOf(conversationId)) {
       for (const [name, tool] of Object.entries(plugin.host.tools)) {
         const loading = tool.onDemand ? {} : { _meta: loadedUpFront };
         server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading, ...reviewFree }, async (input, ctx) => {
@@ -607,7 +635,7 @@ export class CanvasPlugins {
 
   /** What the plugins, and the user's changes to their settings, have for the agent to hear of with the next message; a plugin whose note fails is left out. */
   notesForAgent(conversationId: string): CanvasNote[] {
-    const fromPlugins = this.plugins.flatMap((plugin) => {
+    const fromPlugins = this.pluginsOf(conversationId).flatMap((plugin) => {
       try {
         const note = plugin.host.note?.(this.context(plugin, conversationId, { byAgent: false }));
         return note ? [note] : [];

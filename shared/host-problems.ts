@@ -188,6 +188,7 @@ export type HostProblem =
   | { code: "canvas-need-command-shape"; tool: string }
   | { code: "plugin-command-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-command-unknown"; command: string }
+  | { code: "plugin-off-for-profile"; plugin: string; profile: string }
   | { code: "command-arguments-syntax"; near: string }
   | { code: "command-argument-unknown"; argument: string; known: string[] }
   | { code: "command-arguments-missing"; missing: string[] }

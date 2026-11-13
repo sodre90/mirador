@@ -1794,6 +1794,7 @@ export function startServer(services: HostServices) {
       pluginToolTitles: canvasPlugins.toolTitles(),
       pluginTitles: canvasPlugins.pluginTitles(),
       pluginCommands: canvasPlugins.commands(),
+      conversationPlugins: canvasPlugins.conversationPlugins(),
       pluginWindows: canvasPlugins.windowTitles(),
       workspaceTabs: canvasPlugins.workspaceTabTitles(),
       pluginSettings: pluginSettings.all(),

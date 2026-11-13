@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import type { InstalledApp } from "../shared/apps.ts";
 import { appOpenCommandName, fileToOpen, pluginSlashCommands } from "../shared/plugin-commands.ts";
-import { commandNamedIn, type SlashCommand } from "../shared/slash-commands.ts";
+import { commandNamedIn, type PluginCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 
-let toolCommands: SlashCommand[] = [];
+let toolCommands: PluginCommand[] = [];
 let installedApps: InstalledApp[] = [];
 
 connection.onMessage((message) => {
@@ -17,8 +17,16 @@ connection.onMessage((message) => {
   if (message.type === "plugins.views") installedApps = message.installedApps;
 });
 
-/** What the user runs from the slash menu without the agent, as the host last said; plugins change only with a restart, which sends a new snapshot. */
-export const pluginCommands = () => pluginSlashCommands(installedApps, toolCommands, t.chat.pluginCommand);
+/**
+ * What the user runs from the slash menu without the agent, as the host last said, but those of plugins `pluginsOff`
+ * names; plugins change only with a restart, which sends a new snapshot.
+ */
+export const pluginCommands = (pluginsOff: string[] = []) =>
+  pluginSlashCommands(
+    installedApps,
+    toolCommands.filter(({ plugin }) => !pluginsOff.includes(plugin)),
+    t.chat.pluginCommand,
+  );
 
 /** The commands followed by a path, for the path menu to suggest one without an @. */
 export const pathCommands = () => installedApps.map(appOpenCommandName);

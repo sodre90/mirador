@@ -8,6 +8,11 @@ export interface SlashCommand {
   hint: string | null;
 }
 
+/** A plugin's tool the user runs from the slash menu, under the plugin's name. */
+export interface PluginCommand extends SlashCommand {
+  plugin: string;
+}
+
 /** What is typed after the `/` while the message is only a command name being written; null otherwise. */
 export function slashQuery(text: string): string | null {
   return /^\/(\S*)$/.exec(text)?.[1] ?? null;

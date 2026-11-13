@@ -36,6 +36,7 @@ export const problems = {
     "profile-gone": "That profile no longer exists.",
     "pick-workspace-profile": "Pick the profile the workspace's conversations start on.",
     "profile-needs-name": "A profile needs a name.",
+    "profile-plugins-off-invalid": "The plugins a profile turns off must be a list of plugin names.",
     "last-profile": "Mirador needs a profile to start conversations with: create another before deleting this one.",
     "only-own-pages-set-up-voice": "Only Mirador's own pages set up voice on this Mac.",
     "voice-model-in-use": "The voice settings use this model. Choose another one and save before removing it.",
@@ -325,6 +326,7 @@ export const problems = {
   commandArgumentUnknown: (argument: string, known: string[]) => `The command takes ${known.join(", ")}, not ${argument}.`,
   commandArgumentsMissing: (missing: string[]) => `The command needs ${missing.join(" ")}.`,
   pluginCommandNeedsNewerApi: (brought: number, named: number) => `a canvas tool is a slash command, which plugin API ${brought} brought; plugin.json names API ${named}`,
+  pluginOffForProfile: (plugin: string, profile: string) => `${plugin} is off for the profile ${profile}. Turn it on in Profiles › Plugins.`,
   pluginCommandUnknown: (command: string) => `No plugin has a command /${command}. Restart Mirador if a plugin was just installed or updated.`,
   agentGone: (agent: string, gone: string) => `The ${agent} agent process ${gone}.`,
   gone: {

@@ -22,7 +22,7 @@ function callerBesideAgentThatRenames() {
   const store = new Store(":memory:");
   const project = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(project);
-  store.saveProfile({ id: "helper", name: "Helper", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "helper", name: "Helper", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: "helper" }, createdAt: 1 });
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const conversations = new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));

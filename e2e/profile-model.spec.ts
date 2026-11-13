@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, conversationSettings, createProfile, openProfileTab, openProfiles, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
+import type { ProfileDraft } from "../shared/protocol.ts";
 
 const host = new TestHost({ fakePrograms: true });
 const agentLogFile = join(host.root, "agent-log");
@@ -39,7 +40,7 @@ async function saveProfileWithModel(page: Page, name: string, environment: strin
         socket.onopen = () => socket.send(JSON.stringify({ type: "profile.save", requestId: "save-model", profile }));
         socket.onmessage = ({ data }) => JSON.parse(String(data)).type === "profile.saved" && resolve(socket.close());
       }),
-    { name, harness: "opencode", environment, prelaunch: "", model, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null },
+    { name, harness: "opencode", environment, prelaunch: "", model, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [] } satisfies ProfileDraft,
   );
 }
 

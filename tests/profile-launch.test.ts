@@ -3,7 +3,7 @@ import type { ConversationService } from "../host/conversations.ts";
 import { Hub, socketData, type BrowserSocket } from "../host/hub.ts";
 import { ProfileService } from "../host/profiles.ts";
 import { Store } from "../host/store.ts";
-import type { ServerMessage } from "../shared/protocol.ts";
+import type { ProfileDraft, ServerMessage } from "../shared/protocol.ts";
 
 test("a profile's environment and prelaunch command go only to pages that edit profiles, not to the phone app, which gets its colour", () => {
   const hub = new Hub();
@@ -17,7 +17,7 @@ test("a profile's environment and prelaunch command go only to pages that edit p
   const phone = socketThatReadsProfileLaunch(false);
 
   const launch = { environment: "ANTHROPIC_API_KEY=sk-secret", prelaunch: "source ~/.work-keys" };
-  new ProfileService(new Store(":memory:"), hub, {} as ConversationService, {}).save({ name: "Work", harness: "claude", ...launch, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: "rose" });
+  new ProfileService(new Store(":memory:"), hub, {} as ConversationService, {}).save({ name: "Work", harness: "claude", ...launch, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: "rose", pluginsOff: [] });
 
   expect(page).toMatchObject([{ type: "profile.upserted", profile: { name: "Work", ...launch, color: "rose" } }]);
   expect(phone).toMatchObject([{ type: "profile.upserted", profile: { name: "Work", environment: "", prelaunch: "", color: "rose" } }]);
@@ -45,6 +45,7 @@ test("a page that doesn't edit profiles gets them without their plugins' secrets
     askMode: "wait",
     color: null,
     pluginSettings,
+    pluginsOff: [],
   });
 
   expect(page).toMatchObject([{ type: "profile.upserted", profile: { pluginSettings } }]);
@@ -55,10 +56,26 @@ test("a page that doesn't edit profiles gets them without their plugins' secrets
 test("a profile takes one of the workspace colours, and changing it alone leaves its agent running", () => {
   const restarted: string[] = [];
   const profiles = new ProfileService(new Store(":memory:"), new Hub(), { restartProfile: (profileId: string) => restarted.push(profileId) } as unknown as ConversationService, {});
-  const draft = { name: "Work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null } as const;
+  const draft = { name: "Work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [] as string[] } as const;
   const saved = profiles.save(draft);
 
   expect(profiles.save({ ...draft, id: saved.id, color: "teal" }).color).toBe("teal");
   expect(restarted).toEqual([]);
   expect(() => profiles.save({ ...draft, color: "plaid" as never })).toThrow("Unknown colour plaid.");
+});
+
+test("a save that turns a plugin on or off tells that profile's conversations, keeping each name once and sorted; one that doesn't, and a new profile, tell none", () => {
+  const store = new Store(":memory:");
+  const profiles = new ProfileService(store, new Hub(), { restartProfile: () => {} } as unknown as ConversationService, {});
+  const told: string[] = [];
+  profiles.whenPluginsOffChange((profileId) => told.push(profileId));
+  const draft: ProfileDraft = { name: "Work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: ["race"] };
+  const { id } = profiles.save(draft);
+  profiles.save({ ...draft, id, name: "Work 2" });
+  expect(told).toEqual([]);
+
+  profiles.save({ ...draft, id, pluginsOff: ["review", "race", "review"] });
+  expect(told).toEqual([id]);
+  expect(store.findProfile(id)!.pluginsOff).toEqual(["race", "review"]);
+  expect(() => profiles.save({ ...draft, pluginsOff: "race" as never })).toThrow("The plugins a profile turns off must be a list of plugin names.");
 });

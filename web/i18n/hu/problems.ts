@@ -38,6 +38,7 @@ export const problems: Messages["problems"] = {
     "profile-gone": "Ez a profil már nem létezik.",
     "pick-workspace-profile": "Válaszd ki, melyik profillal induljanak a munkaterület beszélgetései.",
     "profile-needs-name": "A profilnak kell egy név.",
+    "profile-plugins-off-invalid": "A profilban kikapcsolt bővítmények bővítménynevek listája kell legyen.",
     "last-profile": "A Miradornak kell egy profil, amellyel beszélgetéseket indíthat: hozz létre egy másikat, mielőtt ezt törlöd.",
     "only-own-pages-set-up-voice": "Ezen a Macen csak a Mirador saját oldalai állíthatják be a hangot.",
     "voice-model-in-use": "A hangbeállítások ezt a modellt használják. Válassz másikat, és mentsd el, mielőtt eltávolítod.",
@@ -327,6 +328,7 @@ export const problems: Messages["problems"] = {
   commandArgumentsMissing: (missing) => `A parancshoz kell: ${missing.join(" ")}.`,
   pluginCommandNeedsNewerApi: (brought, named) =>
     `egy vászoneszköz perjeles parancs, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
+  pluginOffForProfile: (plugin, profile) => `A(z) ${plugin} ki van kapcsolva a(z) ${profile} profilban. A Profilok › Bővítmények alatt kapcsolhatod be.`,
   pluginCommandUnknown: (command) => `Egyik bővítménynek sincs /${command} parancsa. Ha most telepítettél vagy frissítettél bővítményt, indítsd újra a Miradort.`,
   agentGone: (agent, gone) => `Az ágens folyamata (${agent}) ${gone}.`,
   gone: {

@@ -38,6 +38,7 @@ export const problems: Messages["problems"] = {
     "profile-gone": "该配置已不存在。",
     "pick-workspace-profile": "请选择该工作区中对话启动时使用的配置。",
     "profile-needs-name": "配置需要一个名称。",
+    "profile-plugins-off-invalid": "配置关闭的插件必须是插件名称列表。",
     "last-profile": "Mirador 需要一个配置来启动对话：请先新建另一个配置，再删除这个。",
     "only-own-pages-set-up-voice": "只有 Mirador 自己的页面才能在这台 Mac 上设置语音。",
     "voice-model-in-use": "语音设置正在使用此模型。请先选择另一个模型并保存，再移除它。",
@@ -304,6 +305,7 @@ export const problems: Messages["problems"] = {
   commandArgumentUnknown: (argument, known) => `该命令接受 ${known.join("、")}，不接受 ${argument}。`,
   commandArgumentsMissing: (missing) => `该命令需要 ${missing.join(" ")}。`,
   pluginCommandNeedsNewerApi: (brought, named) => `有画布工具是斜杠命令，这是插件 API ${brought} 引入的；plugin.json 写的是 API ${named}`,
+  pluginOffForProfile: (plugin, profile) => `${plugin} 在配置 ${profile} 中已关闭。请在 配置 › 插件 中打开它。`,
   pluginCommandUnknown: (command) => `没有插件提供 /${command} 命令。如果刚安装或更新了插件，请重启 Mirador。`,
   agentGone: (agent, gone) => `${agent} Agent 进程${gone}。`,
   gone: {

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE } from "../shared/protocol.ts";
+import { PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ProfileDraft } from "../shared/protocol.ts";
 import { addWorkspace, callCanvasTool, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -120,7 +120,7 @@ test("a profile's environment and prelaunch command reach a joined device only w
         socket.onopen = () => socket.send(JSON.stringify({ type: "profile.save", requestId: "save-work", profile }));
         socket.onmessage = ({ data }) => JSON.parse(String(data)).type === "profile.saved" && resolve(socket.close());
       }),
-    { name: "Work", harness: "claude", ...launch, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null },
+    { name: "Work", harness: "claude", ...launch, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [] } satisfies ProfileDraft,
   );
 
   const code = /Invite code: (\S+)/.exec(host.mirador("invite"))![1]!;

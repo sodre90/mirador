@@ -144,7 +144,7 @@ function callerBesideHelper({ helper, harness = "opencode", environment = "", pr
   const store = new Store(":memory:");
   const project = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(project);
-  const profile = { prelaunch: "", model: null, mode: null, bypassPermissions: false, askMode: "wait" as const, color: null, createdAt: 1 };
+  const profile = { prelaunch: "", model: null, mode: null, bypassPermissions: false, askMode: "wait" as const, color: null, pluginsOff: [], createdAt: 1 };
   store.saveProfile({ ...profile, id: "caller", name: "Caller", harness: "opencode", environment: "", effort: null });
   store.saveProfile({ ...profile, id: "helper", name: "Helper", harness, environment, effort: profileEffort });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: "caller" }, createdAt: 1 });

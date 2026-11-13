@@ -25,6 +25,7 @@ function hostWithAConversation() {
     bypassPermissions: false,
     askMode: "wait",
     color: null,
+    pluginsOff: [],
     createdAt: 1,
   });
   const project = join(scratch, `project-${crypto.randomUUID()}`);

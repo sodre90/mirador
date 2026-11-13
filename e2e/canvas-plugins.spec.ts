@@ -1,7 +1,7 @@
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseInSettings, createProfile, openProfiles, primaryModifier, reloadFromRestartedHost, sendMessage, signIn, conversationSettings, openProfileTab } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseInSettings, createProfile, openPluginRow, openProfiles, primaryModifier, reloadFromRestartedHost, sendMessage, signIn, conversationSettings, openProfileTab } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import type { DesktopMenuMessage } from "../shared/desktop-menu.ts";
 
@@ -411,7 +411,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     const dialog = await openProfiles(page);
     await dialog.locator(".profile-list li", { hasText: profileName }).click();
     await openProfileTab(dialog, "Plugins");
-    const handOverTo = dialog.getByLabel("Profile Hand over to");
+    const handOverTo = (await openPluginRow(dialog, "Board")).getByLabel("Profile Hand over to");
     await expect(handOverTo).toHaveValue("");
     await expect(handOverTo.locator("option").first()).toHaveText("None");
     await expect(handOverTo.locator("option", { hasText: "Local" })).toHaveCount(1);
@@ -423,7 +423,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     const reopened = await openProfiles(page);
     await reopened.locator(".profile-list li", { hasText: profileName }).click();
     await openProfileTab(reopened, "Plugins");
-    await expect(reopened.getByLabel("Profile Hand over to").locator("option:checked")).toHaveText("Local");
+    await expect((await openPluginRow(reopened, "Board")).getByLabel("Profile Hand over to").locator("option:checked")).toHaveText("Local");
     await reopened.getByRole("button", { name: "Close" }).click();
 
     expect(await callCanvasTool(host, conversationId, "hand_over", { task: "SAY Handed over by default." })).toMatch(/^Handed over to [0-9a-f-]+\.$/);

@@ -66,7 +66,7 @@ function hostOnProfile({ model = null, effort = null }: { model?: string | null;
   const store = new Store(":memory:");
   const project = join(scratch, `project-${crypto.randomUUID()}`);
   mkdirSync(project);
-  store.saveProfile({ id: "p1", name: "p", harness: "opencode", environment: "", prelaunch: "", model, mode: null, effort, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "p1", name: "p", harness: "opencode", environment: "", prelaunch: "", model, mode: null, effort, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 1 });
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const { agent, heard } = agentStartingOn("default", "medium");

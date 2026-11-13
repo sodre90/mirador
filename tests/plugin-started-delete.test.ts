@@ -58,7 +58,7 @@ async function callerInRepository({ deletesWhatItHears = false }: { deletesWhatI
   await mkdir(project);
   await repositoryWithACommit(project);
   const store = new Store(":memory:");
-  store.saveProfile({ id: "helper", name: "Helper", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "helper", name: "Helper", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "opencode", profileId: "helper" }, createdAt: 1 });
   const notifier = { mute() {}, unmute() {} };
   const files = { deleteConversation: () => {} };

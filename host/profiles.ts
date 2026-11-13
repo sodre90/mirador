@@ -68,6 +68,7 @@ export function moveProfilelessOntoProfiles(store: Store, installed: HarnessId[]
         bypassPermissions: false,
         askMode: "wait",
         color: null,
+        pluginsOff: [],
         createdAt: Date.now(),
       }),
     );
@@ -81,8 +82,15 @@ export const profileFor = (socket: BrowserSocket, profile: Profile, secrets: Sec
   return shownSettings ? { ...withoutLaunch, pluginSettings: shownSettings } : withoutLaunch;
 };
 
+/** The plugins a draft turns off, each once and sorted, so an unchanged choice compares equal. */
+function pluginNames(pluginsOff: unknown): string[] {
+  if (!Array.isArray(pluginsOff) || !pluginsOff.every((name) => typeof name === "string")) throw new HostProblemError({ code: "profile-plugins-off-invalid" });
+  return [...new Set(pluginsOff)].sort();
+}
+
 export class ProfileService {
   private profilesChanged = () => {};
+  private pluginsOffChanged = (_profileId: string) => {};
 
   constructor(
     private readonly store: Store,
@@ -94,6 +102,11 @@ export class ProfileService {
   /** What else follows the profiles, such as plugin tabs that list them, hears each save and delete. */
   whenProfilesChange(listener: () => void) {
     this.profilesChanged = listener;
+  }
+
+  /** The profile's conversations hear that the plugins they get changed, once a save turns one on or off. */
+  whenPluginsOffChange(listener: (profileId: string) => void) {
+    this.pluginsOffChanged = listener;
   }
 
   save(draft: ProfileDraft): Profile {
@@ -120,11 +133,13 @@ export class ProfileService {
       ...(draft.idleCompaction === false && { idleCompaction: false }),
       color: draft.color,
       ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
+      pluginsOff: pluginNames(draft.pluginsOff),
       createdAt: existing?.createdAt ?? Date.now(),
     };
     this.store.saveProfile(profile);
     const launchChanged = existing && (existing.environment !== profile.environment || existing.prelaunch !== profile.prelaunch);
     if (launchChanged) this.conversations.restartProfile(profile.id);
+    if (existing && existing.pluginsOff.join("\n") !== profile.pluginsOff.join("\n")) this.pluginsOffChanged(profile.id);
     this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile, this.secrets) }));
     if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
     this.profilesChanged();

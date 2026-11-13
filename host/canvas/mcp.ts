@@ -266,7 +266,7 @@ function buildCanvasServer(
   );
 
   if (hasApps(apps)) registerAppTools(server, apps, conversations, callingConversation);
-  canvasPlugins?.registerTools(server, callingConversation, reviewFree);
+  canvasPlugins?.registerTools(server, conversationId, callingConversation, reviewFree);
   if (catalog && catalog.notInstalled().length > 0) registerPluginInstallTool(server, catalog, canvas, callingConversation);
   if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {}, reviewFree);
   if (store?.findConversation(conversationId)?.worktree) registerLandTool(server, conversations, callingConversation, loadedUpFront);
@@ -294,6 +294,13 @@ export class CanvasMcpEndpoints {
 
   forget(conversationId: string) {
     this.handlers.delete(conversationId);
+  }
+
+  /** The profile's conversations list their tools again, once a save turned one of its plugins on or off; Claude Code does at once. */
+  toolsChangedForProfile(profileId: string) {
+    for (const [conversationId, handler] of this.handlers) {
+      if (this.store?.findConversation(conversationId)?.profileId === profileId) handler.notify.toolsChanged();
+    }
   }
 
   private handlerFor(conversationId: string) {

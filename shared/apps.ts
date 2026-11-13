@@ -522,7 +522,7 @@ export interface ModelsOfProfileSetting {
 interface ProfileSettingBasics {
   id: string;
   label: string;
-  /** A sentence on what it does, its tooltip in the Profiles dialog. */
+  /** A sentence on what it does, shown under the setting in the Profiles dialog. */
   hint?: string;
   /** The id of one of the plugin's toggles: the Profiles dialog shows this setting only while that toggle is on. Plugin API 14 brought it. */
   shownWhen?: string;
@@ -548,7 +548,7 @@ export interface PluginChoiceProfileSetting extends ProfileSettingBasics {
  */
 export interface PluginTextProfileSetting extends ProfileSettingBasics {
   kind: "text" | "secret";
-  /** What the empty field shows; one that falls back to a variable says so instead. */
+  /** What the empty field shows; one whose `fallsBackTo` the Launch environment sets shows that value, masked for a secret. */
   placeholder?: string;
   /** A variable of the profile's environment the setting reads while it is empty, e.g. ANTHROPIC_BASE_URL. */
   fallsBackTo?: string;
@@ -583,10 +583,14 @@ export function withoutSecrets(pluginSettings: Record<string, Record<string, str
 
 const ENVIRONMENT_REFERENCE = /^\$([A-Za-z_][A-Za-z0-9_]*)$/;
 
+/** The variable of the environment a typed setting's value reads: the one $NAME names, or while empty what `fallsBackTo` names; none for text typed out. */
+export const variableReadBy = ({ fallsBackTo }: PluginTextProfileSetting, value: string): string | undefined =>
+  value.trim().match(ENVIRONMENT_REFERENCE)?.[1] ?? (value.trim() === "" ? fallsBackTo : undefined);
+
 /** A typed setting's value as its plugin reads it: $NAME reads that variable of the environment, and empty what `fallsBackTo` names. */
-export function readTextSetting({ fallsBackTo }: PluginTextProfileSetting, value: string, environment: Record<string, string>) {
-  const referenced = value.trim().match(ENVIRONMENT_REFERENCE)?.[1] ?? (value.trim() === "" ? fallsBackTo : undefined);
-  return referenced === undefined ? value.trim() : (environment[referenced] ?? "");
+export function readTextSetting(setting: PluginTextProfileSetting, value: string, environment: Record<string, string>) {
+  const variable = variableReadBy(setting, value);
+  return variable === undefined ? value.trim() : (environment[variable] ?? "");
 }
 
 /** The id of the setting whose profile's models are this setting's choices; null for a setting with other choices. */
@@ -606,6 +610,14 @@ export interface PluginSettings {
   profileSettings?: PluginProfileSetting[];
   /** Its host code checks a profile's settings, from the Profiles dialog's Test connection button. */
   checksProfile?: true;
+}
+
+/** A plugin that gives a conversation something of its own (tools, guidance, notes, a statusline, or hearing its activity), which a profile can turn off. */
+export interface ConversationPlugin {
+  plugin: string;
+  title: string;
+  /** Its tools' names on the canvas server. */
+  tools: string[];
 }
 
 const defaultOf = (setting: PluginProfileSetting) => setting.default ?? "";

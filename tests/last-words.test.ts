@@ -47,7 +47,7 @@ describe("the agent's last words in a turn", () => {
 /** A host started on a conversation whose turns ended while no one watched, the latest one unseen. */
 function hostAfterTurnsEndedUnseen(...turns: ConversationEvent[][]) {
   const store = new Store(":memory:");
-  store.saveProfile({ id: "p1", name: "p", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, createdAt: 1 });
+  store.saveProfile({ id: "p1", name: "p", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: join(scratch, "project"), defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 1 });
   store.insertConversation({
     id: "c1",

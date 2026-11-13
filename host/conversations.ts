@@ -1358,6 +1358,7 @@ export class ConversationService {
       ...(draft.idleCompaction === false && { idleCompaction: false }),
       color: draft.color,
       ...(draft.pluginSettings && { pluginSettings: draft.pluginSettings }),
+      pluginsOff: draft.pluginsOff,
       createdAt: Date.now(),
     };
     const probe = await this.probeProfile(profile, `test-${crypto.randomUUID()}`, PROFILE_TEST_TIMEOUT_MS);

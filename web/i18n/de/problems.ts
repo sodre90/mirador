@@ -38,6 +38,7 @@ export const problems: Messages["problems"] = {
     "profile-gone": "Dieses Profil existiert nicht mehr.",
     "pick-workspace-profile": "Wähle das Profil, mit dem die Unterhaltungen des Arbeitsbereichs starten.",
     "profile-needs-name": "Ein Profil braucht einen Namen.",
+    "profile-plugins-off-invalid": "Die Plugins, die ein Profil ausschaltet, müssen eine Liste von Plugin-Namen sein.",
     "last-profile": "Mirador braucht ein Profil, um Unterhaltungen zu starten: Lege ein weiteres an, bevor du dieses löschst.",
     "only-own-pages-set-up-voice": "Nur Miradors eigene Seiten richten die Sprachfunktionen auf diesem Mac ein.",
     "voice-model-in-use": "Die Stimmeinstellungen verwenden dieses Modell. Wähle ein anderes und speichere, bevor du es entfernst.",
@@ -332,6 +333,7 @@ export const problems: Messages["problems"] = {
   commandArgumentsMissing: (missing) => `Der Befehl braucht ${missing.join(" ")}.`,
   pluginCommandNeedsNewerApi: (brought, named) =>
     `ein Canvas-Tool ist ein Slash-Befehl, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
+  pluginOffForProfile: (plugin, profile) => `${plugin} ist im Profil ${profile} ausgeschaltet. Schalte es unter Profile › Plugins ein.`,
   pluginCommandUnknown: (command) => `Kein Plugin hat den Befehl /${command}. Starte Mirador neu, falls gerade ein Plugin installiert oder aktualisiert wurde.`,
   agentGone: (agent, gone) => `Der Prozess des Agenten ${agent} ${gone}.`,
   gone: {
