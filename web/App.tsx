@@ -2,7 +2,7 @@ import { OpensIn } from "./opens-in.ts";
 import { useMouseSteps } from "./mouse-steps.ts";
 import { EMPTY_TRAIL, stepped, visited } from "./visit-trail.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
-import { machinesToJoin } from "../shared/machines.ts";
+import { isHidden, machinesSeen } from "../shared/machines.ts";
 import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { sidebarItems } from "../shared/sidebar-order.ts";
@@ -357,6 +357,7 @@ export function App() {
   }, []);
   const showMachine = (machine: Machine) => (showsMachinesHere() ? machines.show(machine.id) : openMachine(machine.origin));
   const railShown = showsMachinesHere() && state.machines.length > 0;
+  const seenMachines = machinesSeen(state.machines, state.machineStatuses);
   const shownMachine = railShown ? machines.shown : null;
   const waitingHere = state.conversations.flatMap(({ waitingFor }) => (waitingFor ? [waitingFor] : []));
   const status = useConnectionStatus();
@@ -628,7 +629,7 @@ export function App() {
         <MachineRail
           machines={state.machines}
           statuses={state.machineStatuses}
-          toJoin={machinesToJoin(state.machines, state.machineStatuses)}
+          toJoin={seenMachines.filter((machine) => !isHidden(machine, state.hiddenMachines))}
           waitingHere={waitingHere}
           shownId={shownMachine?.id ?? null}
           onShow={machines.show}
@@ -734,6 +735,7 @@ export function App() {
       {overlay?.kind === "machines" && (
         <MachinesDialog
           machines={state.machines}
+          hidden={seenMachines.filter((machine) => isHidden(machine, state.hiddenMachines))}
           onOpen={(machine) => {
             closeOverlay();
             showMachine(machine);

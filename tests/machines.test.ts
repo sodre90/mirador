@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { authorityFingerprintIn, inviteIn, inviteLink, joinCodeIn, machineAddress, machinesToJoin, tunnelIn } from "../shared/machines.ts";
+import { authorityFingerprintIn, inviteIn, inviteLink, isHidden, joinCodeIn, machineAddress, machinesSeen, tunnelIn } from "../shared/machines.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 
@@ -74,21 +74,44 @@ test("takes the invite code and certificate authority's fingerprint out of a pas
   expect(inviteIn("  ABCD-EFGH-JKLM \n")).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null });
 });
 
+const machine = (id: string, origin: string, hostId: string | null = null): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId });
+const seen = (name: string, origin: string, hostId: string | null = null): MachineSeen => ({ name, origin, hostId });
+
 test("the machines this computer's machines have joined are offered once each, through the first that lists them, unless added here", () => {
-  const machine = (id: string, origin: string): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null });
-  const seen = (name: string, origin: string): MachineSeen => ({ name, origin });
   const laptop = machine("laptop", "https://laptop.example.ts.net:4700");
   const server = machine("server", "https://server.example.ts.net");
   const statuses = [
     { machineId: "server", reachable: true, waiting: [], joinedThere: [seen("Pi", "https://pi.example.ts.net"), seen("Laptop", laptop.origin)] },
     { machineId: "laptop", reachable: false, waiting: [], joinedThere: [seen("Home server", server.origin), seen("Raspberry", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net")] },
   ];
-  expect(machinesToJoin([laptop, server], statuses)).toEqual([
-    { name: "Raspberry", origin: "https://pi.example.ts.net", throughMachineId: "laptop" },
-    { name: "NAS", origin: "https://nas.example.ts.net", throughMachineId: "laptop" },
+  expect(machinesSeen([laptop, server], statuses)).toEqual([
+    { name: "Raspberry", origin: "https://pi.example.ts.net", hostId: null, throughMachineId: "laptop" },
+    { name: "NAS", origin: "https://nas.example.ts.net", hostId: null, throughMachineId: "laptop" },
   ]);
-  expect(machinesToJoin([server], statuses)).toEqual([
-    { name: "Pi", origin: "https://pi.example.ts.net", throughMachineId: "server" },
-    { name: "Laptop", origin: laptop.origin, throughMachineId: "server" },
+  expect(machinesSeen([server], statuses)).toEqual([
+    { name: "Pi", origin: "https://pi.example.ts.net", hostId: null, throughMachineId: "server" },
+    { name: "Laptop", origin: laptop.origin, hostId: null, throughMachineId: "server" },
   ]);
+});
+
+test("a machine known at two addresses is one machine once its id is known, both when added here and when offered twice", () => {
+  const laptop = machine("laptop", "https://laptop.example.ts.net:4700");
+  const server = machine("server", "https://server.example.ts.net", "server-id");
+  const statuses = [
+    {
+      machineId: "laptop",
+      reachable: true,
+      waiting: [],
+      joinedThere: [seen("Home server", "https://192.168.1.20:4700", "server-id"), seen("NAS", "https://nas.example.ts.net", "nas-id"), seen("NAS on the LAN", "https://192.168.1.30:4700", "nas-id")],
+    },
+  ];
+  expect(machinesSeen([laptop, server], statuses)).toEqual([{ name: "NAS", origin: "https://nas.example.ts.net", hostId: "nas-id", throughMachineId: "laptop" }]);
+});
+
+test("a hidden machine is the one at its address, or with its id at another", () => {
+  const hidden = [seen("Pi", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net", "nas-id")];
+  expect(isHidden(seen("Raspberry", "https://pi.example.ts.net", "pi-id"), hidden)).toBe(true);
+  expect(isHidden(seen("NAS on the LAN", "https://192.168.1.30:4700", "nas-id"), hidden)).toBe(true);
+  expect(isHidden(seen("Build box", "https://build.example.ts.net"), hidden)).toBe(false);
+  expect(isHidden(seen("Unknown", "https://other.example.ts.net", null), [seen("Other", "https://another.example.ts.net", null)])).toBe(false);
 });

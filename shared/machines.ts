@@ -48,12 +48,17 @@ export interface MachineToJoin extends MachineSeen {
   throughMachineId: string;
 }
 
+/** The same Mirador: at the same address, or with the same id at another. */
+export const sameMachine = (one: Pick<MachineSeen, "origin" | "hostId">, other: Pick<MachineSeen, "origin" | "hostId">) =>
+  one.origin === other.origin || (one.hostId !== null && one.hostId === other.hostId);
+
 /** The machines this computer's machines have joined, once each, leaving out those it has added itself. */
-export function machinesToJoin(machines: Machine[], statuses: MachineStatus[]): MachineToJoin[] {
-  const added = new Set(machines.map(({ origin }) => origin));
+export function machinesSeen(machines: Machine[], statuses: MachineStatus[]): MachineToJoin[] {
   const seen = machines.flatMap(({ id }) =>
     (statuses.find(({ machineId }) => machineId === id)?.joinedThere ?? []).map((machine) => ({ ...machine, throughMachineId: id })),
   );
-  const isFirstListing = (machine: MachineToJoin, index: number) => seen.findIndex(({ origin }) => origin === machine.origin) === index;
-  return seen.filter((machine, index) => !added.has(machine.origin) && isFirstListing(machine, index));
+  const isFirstListing = (machine: MachineToJoin, index: number) => seen.findIndex((other) => sameMachine(machine, other)) === index;
+  return seen.filter((machine, index) => !machines.some((added) => sameMachine(machine, added)) && isFirstListing(machine, index));
 }
+
+export const isHidden = (machine: MachineSeen, hidden: MachineSeen[]) => hidden.some((one) => sameMachine(machine, one));

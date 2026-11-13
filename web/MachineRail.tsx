@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { markInitials } from "../shared/marks.ts";
 import { spacedNumber } from "../shared/join-requests.ts";
 import { inviteIn, type MachineToJoin } from "../shared/machines.ts";
 import type { Machine, MachineSeen, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
+import { ContextMenu } from "./ContextMenu.tsx";
 import { hints } from "./hints.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
@@ -109,6 +110,26 @@ const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
 const toJoinHint = (machine: MachineToJoin, machines: Machine[]) =>
   [machine.name, machine.origin, words.joinedBy(machines.find(({ id }) => id === machine.throughMachineId)!.name), words.notJoinedYet].join(" · ");
 
+/** What the host keeps of a machine shown elsewhere, without where this computer saw it. */
+export const seenPart = ({ name, origin, hostId }: MachineSeen): MachineSeen => ({ name, origin, hostId });
+
+function MachineToJoinButton({ machine, hint, onAdd }: { machine: MachineToJoin; hint: string; onAdd: (machine: MachineToJoin) => void }) {
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const openMenu = (event: MouseEvent) => {
+    event.preventDefault();
+    setMenuAt({ x: event.clientX, y: event.clientY });
+  };
+  const hide = () => connection.send({ type: "machine.hide", machine: seenPart(machine) });
+  return (
+    <>
+      <button type="button" className="rail-machine away" aria-label={machine.name} data-hint={hint} onClick={() => onAdd(machine)} onContextMenu={openMenu}>
+        {markInitials(machine.name)}
+      </button>
+      {menuAt && <ContextMenu name={machine.name} at={menuAt} entries={[{ label: words.hideFromRail, onChoose: hide }]} onClose={() => setMenuAt(null)} />}
+    </>
+  );
+}
+
 export function MachineRail({
   machines,
   statuses,
@@ -163,16 +184,7 @@ export function MachineRail({
         );
       })}
       {toJoin.map((machine) => (
-        <button
-          key={machine.origin}
-          type="button"
-          className="rail-machine away"
-          aria-label={machine.name}
-          data-hint={toJoinHint(machine, machines)}
-          onClick={() => onAdd(machine)}
-        >
-          {markInitials(machine.name)}
-        </button>
+        <MachineToJoinButton key={machine.origin} machine={machine} hint={toJoinHint(machine, machines)} onAdd={onAdd} />
       ))}
       <button type="button" className="rail-manage" aria-label={words.manage} data-hint={hints.manageMachines} onClick={onManage}>
         +

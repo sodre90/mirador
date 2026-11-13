@@ -225,6 +225,11 @@ export const shell: Messages["shell"] = {
     notJoinedYet: "尚未加入",
     notAnswering: "没有响应",
     joinedBy: (machine) => `${machine} 已加入它`,
+    hideFromRail: "从机器栏隐藏",
+    hidden: "已从机器栏隐藏",
+    hiddenAbout: "你的机器已加入、但被你移除或隐藏的机器。在你重新显示或添加它们之前，它们不会出现在机器栏里。",
+    showInRail: "在机器栏显示",
+    showInRailLabel: (machine) => `在机器栏显示 ${machine}`,
     waitingForYou: (count) => `${count} 个等你处理`,
     about:
       "其他运行 Mirador 的电脑，例如一台在你这台休眠时 Agent 仍能继续工作的服务器。每台都会作为一个独立的 Mirador 显示在左侧的机器栏里。粘贴那台机器的邀请链接即可立即加入；可在它的 设置 → 设备 中获取，或在那台机器上运行",

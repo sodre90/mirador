@@ -182,8 +182,9 @@ const search = new ConversationSearch(store);
 const signedIn = signedInWith(config.browserToken, devices);
 const watch = new MachineWatch(
   store,
-  ownPageOrigins(config, certificate),
+  { id: store.hostId(), origins: ownPageOrigins(config, certificate) },
   (status) => hub.broadcast({ type: "machine.status", status }),
+  () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() }),
   (notification) => hub.notifyThisComputer(notification),
   machineSignedOut,
 );

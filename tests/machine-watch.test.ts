@@ -55,7 +55,7 @@ afterEach(() => {
   cleanUp = [];
 });
 
-const THIS_HOST = "https://this-laptop.example.ts.net:4700";
+const THIS_HOST = { id: "this-laptop-id", origins: ["https://this-laptop.example.ts.net:4700"] };
 
 function watching(origin: string, joined = true) {
   const store = new Store(":memory:");
@@ -64,10 +64,12 @@ function watching(origin: string, joined = true) {
   const statuses: MachineStatus[] = [];
   const notifications: SystemNotification[] = [];
   const signedOut: string[] = [];
+  const machineChanges: string[] = [];
   const watch = new MachineWatch(
     store,
-    [THIS_HOST],
+    THIS_HOST,
     (status) => statuses.push(status),
+    () => machineChanges.push(store.listMachines().map(({ hostId }) => hostId).join()),
     (notification) => notifications.push(notification),
     (machineId) => {
       signedOut.push(machineId);
@@ -76,7 +78,7 @@ function watching(origin: string, joined = true) {
   );
   cleanUp.push(() => watch.stopAll());
   watch.startAll();
-  return { watch, store, statuses, notifications, signedOut };
+  return { watch, store, statuses, notifications, signedOut, machineChanges };
 }
 
 describe("MachineWatch", () => {
@@ -88,7 +90,7 @@ describe("MachineWatch", () => {
     expect(machine.signIns.toSorted()).toEqual([`/notifications ${machine.origin} mirador_token=device-token`, `/ws ${machine.origin} mirador_token=device-token`]);
     expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [] }]);
 
-    machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question"), conversation("b", null)], machines: [] });
+    machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question"), conversation("b", null)], machines: [], hostId: "home-server-id" });
     await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
     machine.send("/ws", { type: "conversation.upserted", conversation: conversation("b", "finished") } as ServerMessage);
     await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["finished", "question"]));
@@ -105,7 +107,7 @@ describe("MachineWatch", () => {
     try {
       machine.sockets.filter(({ data }) => data.path === "/ws").forEach((socket) => socket.send("not json"));
       machine.send("/ws", { type: "snapshot" });
-      machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")], machines: [] });
+      machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")], machines: [], hostId: "home-server-id" });
       await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
       expect(logged).toHaveBeenCalledTimes(2);
       expect(logged).toHaveBeenCalledWith(expect.stringContaining(`skipped a message from ${machine.origin.replace(/^http/, "ws")}/ws`), expect.any(Error));
@@ -114,31 +116,46 @@ describe("MachineWatch", () => {
     }
   });
 
-  test("lists the machines the machine has joined in turn, but none it only added, nor this host", async () => {
+  test("lists the machines the machine has joined and reached in turn, but none it only added or never reached, nor this host at any address", async () => {
     const machine = fakeMachine();
     cleanUp.push(() => machine.server.stop(true));
     const { watch, statuses } = watching(machine.origin);
     await eventually(() => expect(machine.sockets).toHaveLength(2));
-    const there = (name: string, origin: string, joined: boolean) => ({ id: name, name, origin, createdAt: 1, relayPort: 4620, joined, color: null });
-    const buildBox = there("Build box", "https://build-box.example.ts.net", true);
+    const there = (name: string, origin: string, joined: boolean, hostId: string | null = null) => ({ id: name, name, origin, createdAt: 1, relayPort: 4620, joined, color: null, hostId });
+    const buildBox = there("Build box", "https://build-box.example.ts.net", true, "build-box-id");
+    const seenBuildBox = { name: "Build box", origin: "https://build-box.example.ts.net", hostId: "build-box-id" };
 
     machine.send("/ws", {
       type: "snapshot",
       conversations: [],
-      machines: [buildBox, there("Old NAS", "https://old-nas.example.ts.net", false), there("This laptop", THIS_HOST, true)],
+      machines: [
+        buildBox,
+        there("Old NAS", "https://old-nas.example.ts.net", false, "old-nas-id"),
+        there("Never reached", "https://unreached.example.ts.net", true),
+        there("This laptop", THIS_HOST.origins[0]!, true, "this-laptop-at-its-address"),
+        there("This laptop by its IP", "https://100.64.0.7:4700", true, THIS_HOST.id),
+      ],
+      hostId: "home-server-id",
     });
-    await eventually(() => expect(watch.statuses()[0]!.joinedThere).toEqual([{ name: "Build box", origin: "https://build-box.example.ts.net" }]));
+    await eventually(() => expect(watch.statuses()[0]!.joinedThere).toEqual([seenBuildBox]));
 
     const changesBefore = statuses.length;
     machine.send("/ws", { type: "machines.changed", machines: [buildBox, there("Old NAS", "https://old-nas.example.ts.net", false)] });
-    machine.send("/ws", { type: "machines.changed", machines: [buildBox, there("Pi", "https://pi.example.ts.net", true)] });
-    await eventually(() =>
-      expect(watch.statuses()[0]!.joinedThere).toEqual([
-        { name: "Build box", origin: "https://build-box.example.ts.net" },
-        { name: "Pi", origin: "https://pi.example.ts.net" },
-      ]),
-    );
+    machine.send("/ws", { type: "machines.changed", machines: [buildBox, there("Pi", "https://pi.example.ts.net", true, "pi-id")] });
+    await eventually(() => expect(watch.statuses()[0]!.joinedThere).toEqual([seenBuildBox, { name: "Pi", origin: "https://pi.example.ts.net", hostId: "pi-id" }]));
     expect(statuses.length).toBe(changesBefore + 1);
+  });
+
+  test("keeps the id the machine goes by, and says the machines changed only when it is new", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { store, machineChanges } = watching(machine.origin);
+    await eventually(() => expect(machine.sockets).toHaveLength(2));
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], hostId: "home-server-id" });
+    await eventually(() => expect(store.findMachine("m1")?.hostId).toBe("home-server-id"));
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], hostId: "home-server-id" });
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], hostId: "reinstalled-id" });
+    await eventually(() => expect(machineChanges).toEqual(["home-server-id", "reinstalled-id"]));
   });
 
   test("passes the machine's notifications on as this host's, saying which machine they come from", async () => {

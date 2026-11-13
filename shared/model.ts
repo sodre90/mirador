@@ -51,6 +51,8 @@ export interface Machine {
   joined: boolean;
   /** To tell the machine apart in the rail. */
   color: Pastel | null;
+  /** The id the machine's own Mirador goes by, once this host has reached it. */
+  hostId: string | null;
 }
 
 /**
@@ -64,10 +66,11 @@ export interface MachineStatus {
   joinedThere: MachineSeen[];
 }
 
-/** A machine another machine has joined, known here by the name and address it has there. */
+/** A machine another machine has joined, known here by the name, address and id it has there. */
 export interface MachineSeen {
   name: string;
   origin: string;
+  hostId: string | null;
 }
 
 /** A device that asked to join this machine, waiting for someone to approve it by typing the number it shows. */

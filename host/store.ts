@@ -12,6 +12,7 @@ import type {
   DelegatedReply,
   Device,
   Machine,
+  MachineSeen,
   ConversationEvent,
   HarnessId,
   JobWait,
@@ -94,6 +95,7 @@ const schema = `
     id TEXT PRIMARY KEY, secret_hash TEXT NOT NULL, name TEXT NOT NULL, from_address TEXT NOT NULL, tailscale_user TEXT,
     authority_fingerprint TEXT, commitment TEXT NOT NULL, machine_nonce TEXT NOT NULL, requester_nonce TEXT, answer TEXT, expires_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS machines (id TEXT PRIMARY KEY, name TEXT NOT NULL, origin TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS hidden_machines (origin TEXT PRIMARY KEY, name TEXT NOT NULL, host_id TEXT);
   CREATE TABLE IF NOT EXISTS job_waits (
     id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
     job TEXT NOT NULL, ssh_host TEXT, message TEXT NOT NULL, resume INTEGER NOT NULL, since INTEGER NOT NULL);
@@ -137,6 +139,7 @@ const addedColumns = [
   { table: "machines", column: "device_token", definition: "TEXT" },
   { table: "machines", column: "authority", definition: "TEXT" },
   { table: "machines", column: "color", definition: "TEXT" },
+  { table: "machines", column: "host_id", definition: "TEXT" },
   { table: "conversations", column: "profile_id", definition: "TEXT" },
   { table: "workspaces", column: "default_harness", definition: "TEXT NOT NULL DEFAULT 'claude'" },
   { table: "profiles", column: "harness", definition: "TEXT NOT NULL DEFAULT 'claude'" },
@@ -280,15 +283,15 @@ const toProfile = (row: ProfileRow): Profile => ({
   createdAt: row.created_at,
 });
 
-type MachineRow = { id: string; name: string; origin: string; created_at: number; relay_port: number | null; joined: number; color: string | null };
+type MachineRow = { id: string; name: string; origin: string; created_at: number; relay_port: number | null; joined: number; color: string | null; host_id: string | null };
 
-const MACHINE_COLUMNS = "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color FROM machines";
+const MACHINE_COLUMNS = "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id FROM machines";
 
 type JobWaitRow = { id: string; conversation_id: string; job: string; ssh_host: string | null; message: string; resume: number; since: number };
 
 const toMachine = (row: unknown): Machine => {
-  const { id, name, origin, created_at, relay_port, joined, color } = row as MachineRow;
-  return { id, name, origin, createdAt: created_at, relayPort: relay_port, joined: joined === 1, color: isPastel(color) ? color : null };
+  const { id, name, origin, created_at, relay_port, joined, color, host_id } = row as MachineRow;
+  return { id, name, origin, createdAt: created_at, relayPort: relay_port, joined: joined === 1, color: isPastel(color) ? color : null, hostId: host_id };
 };
 
 const startedByOf = (row: ConversationRow) =>
@@ -1008,6 +1011,15 @@ export class Store {
     return this.machineNameSetting() ?? computerName();
   }
 
+  /** Made at the first start, so the machines that join this one know it whatever address they reach it at. */
+  hostId(): string {
+    const made = this.setting("host_id");
+    if (made) return made;
+    const id = crypto.randomUUID();
+    this.setSetting("host_id", id);
+    return id;
+  }
+
   pushRelaySetting(): PushRelaySetting {
     return { address: this.setting("push_relay_address"), tokenSet: this.setting("push_relay_token") !== null };
   }
@@ -1188,6 +1200,25 @@ export class Store {
 
   deleteMachine(id: string) {
     this.db.query("DELETE FROM machines WHERE id = ?").run(id);
+  }
+
+  setMachineHostId(id: string, hostId: string) {
+    this.db.query("UPDATE machines SET host_id = ? WHERE id = ?").run(hostId, id);
+  }
+
+  /** Machines kept out of the rail, though one of this computer's machines has joined them. */
+  hiddenMachines(): MachineSeen[] {
+    const rows = this.db.query("SELECT name, origin, host_id FROM hidden_machines ORDER BY name COLLATE NOCASE").all() as { name: string; origin: string; host_id: string | null }[];
+    return rows.map(({ name, origin, host_id }) => ({ name, origin, hostId: host_id }));
+  }
+
+  hideMachine({ name, origin, hostId }: MachineSeen) {
+    this.db.query("INSERT OR REPLACE INTO hidden_machines (origin, name, host_id) VALUES (?, ?, ?)").run(origin, name, hostId);
+  }
+
+  /** By its address, or by its id, which reaches it under another address too. */
+  showMachineAgain({ origin, hostId }: Pick<MachineSeen, "origin" | "hostId">) {
+    this.db.query("DELETE FROM hidden_machines WHERE origin = ? OR (host_id IS NOT NULL AND host_id = ?)").run(origin, hostId);
   }
 
   addJobWait(conversationId: string, { id, job, sshHost, message, resume, since }: JobWait) {

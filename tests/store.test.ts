@@ -425,6 +425,42 @@ describe("Store", () => {
     expect(store.listMachines()[0]?.color).toBeNull();
   });
 
+  test("keeps the id a machine's Mirador goes by, once this host has heard it", () => {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "m1", name: "Home server", origin: "https://home-server.example", createdAt: 1 });
+    expect(store.findMachine("m1")?.hostId).toBeNull();
+    store.setMachineHostId("m1", "home-server-id");
+    expect(store.listMachines()[0]?.hostId).toBe("home-server-id");
+  });
+
+  test("keeps machines out of the rail until shown again by their address, or by their id at another address", () => {
+    const store = new Store(":memory:");
+    store.hideMachine({ name: "Pi", origin: "https://pi.example", hostId: null });
+    store.hideMachine({ name: "NAS", origin: "https://nas.example", hostId: "nas-id" });
+    store.hideMachine({ name: "Pi again", origin: "https://pi.example", hostId: "pi-id" });
+    expect(store.hiddenMachines()).toEqual([
+      { name: "NAS", origin: "https://nas.example", hostId: "nas-id" },
+      { name: "Pi again", origin: "https://pi.example", hostId: "pi-id" },
+    ]);
+    store.showMachineAgain({ origin: "https://nas.other-address.example", hostId: "nas-id" });
+    store.showMachineAgain({ origin: "https://elsewhere.example", hostId: null });
+    expect(store.hiddenMachines()).toEqual([{ name: "Pi again", origin: "https://pi.example", hostId: "pi-id" }]);
+    store.showMachineAgain({ origin: "https://pi.example", hostId: null });
+    expect(store.hiddenMachines()).toEqual([]);
+  });
+
+  test("goes by an id of its own, made once and kept", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const store = new Store(path);
+    const id = store.hostId();
+    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(store.hostId()).toBe(id);
+    store.close();
+    const reopened = new Store(path);
+    expect(reopened.hostId()).toBe(id);
+    reopened.close();
+  });
+
   test("keeps job waits until they end, and drops them with their conversation", () => {
     const { store, conversation } = seededStore();
     store.insertConversation({ ...conversation, id: "c2" });

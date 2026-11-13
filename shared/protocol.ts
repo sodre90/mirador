@@ -20,6 +20,7 @@ import type {
   JoinRequest,
   ListedDevice,
   Machine,
+  MachineSeen,
   MachineStatus,
   Launch,
   Profile,
@@ -360,6 +361,9 @@ export type ClientMessage =
   | { type: "machine.add"; name: string; address: string }
   | { type: "machine.remove"; machineId: string }
   | { type: "machine.set-color"; machineId: string; color: Pastel | null }
+  /** Keeps a machine one of this computer's machines has joined out of the rail; machine.show-again brings it back. */
+  | { type: "machine.hide"; machine: MachineSeen }
+  | { type: "machine.show-again"; machine: MachineSeen }
   | { type: "machine.join"; requestId: string; machineId: string; code: string; authorityFingerprint: string | null }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
   | { type: "search"; requestId: string; query: string };
@@ -392,6 +396,9 @@ export type ServerMessage =
       agentsCanvasAssetsOrigin: string;
       machines: Machine[];
       machineStatuses: MachineStatus[];
+      hiddenMachines: MachineSeen[];
+      /** The id this Mirador goes by on the machines that join it. */
+      hostId: string;
       homeDir: string;
       /** Fresh for each start of the host process. */
       hostRunId: string;
@@ -612,6 +619,7 @@ export type ServerMessage =
   /** The addresses that answered as this Mirador, and whether this machine has Tailscale to put its ports on the tailnet. */
   | { type: "address.found"; requestId: string; addresses: FoundAddress[]; tailscale: "absent" | "present"; problem: string | null; problemAbout?: HostProblem }
   | { type: "machines.changed"; machines: Machine[] }
+  | { type: "machines.hidden"; machines: MachineSeen[] }
   | { type: "machine.status"; status: MachineStatus }
   /** The machine has the request; it waits there until someone types the number this host shows. */
   | { type: "machine.join-asked"; requestId: string; number: string }

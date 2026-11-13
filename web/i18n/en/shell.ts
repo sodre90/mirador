@@ -240,6 +240,11 @@ export const shell = {
     notJoinedYet: "not joined yet",
     notAnswering: "not answering",
     joinedBy: (machine: string) => `${machine} has joined it`,
+    hideFromRail: "Hide from the rail",
+    hidden: "Hidden from the rail",
+    hiddenAbout: "Machines your machines have joined, which you removed or hid. They stay out of the rail until you show them again or add them.",
+    showInRail: "Show in the rail",
+    showInRailLabel: (machine: string) => `Show ${machine} in the rail`,
     waitingForYou: (count: number) => `${count} waiting for you`,
     about:
       "Other computers running Mirador, such as a server whose agents keep working while this one sleeps. Each shows in the rail on the left, as its own Mirador. Paste an invite link from the machine to join it right away; get one in its Settings → Devices, or run",

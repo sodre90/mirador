@@ -21,6 +21,7 @@ import {
   type ReachabilitySettings,
   type StoredEvent,
   type Workspace,
+  type MachineSeen,
   type Pastel,
   workingCopyIdOf,
 } from "../shared/model.ts";
@@ -472,6 +473,7 @@ export function startServer(services: HostServices) {
   }
 
   const broadcastMachines = () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
+  const broadcastHiddenMachines = () => hub.broadcast({ type: "machines.hidden", machines: store.hiddenMachines() });
 
   /** With an invite link, this host joins the machine right away; otherwise its place in the window asks for a code. */
   async function addMachine(name: string, address: string) {
@@ -482,8 +484,10 @@ export function startServer(services: HostServices) {
     if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const id = crypto.randomUUID();
     store.insertMachine({ id, name: name.trim() || new URL(origin).hostname, origin, createdAt: Date.now() });
+    store.showMachineAgain({ origin, hostId: null });
     relays.start(store.findMachine(id)!);
     broadcastMachines();
+    broadcastHiddenMachines();
     if (joinCode) await relays.join(id, joinCode, authorityFingerprint);
   }
 
@@ -493,11 +497,26 @@ export function startServer(services: HostServices) {
     broadcastMachines();
   }
 
+  /** It stays out of the rail too, where it would come back while another machine has joined it. */
   function removeMachine(machineId: string) {
+    const machine = store.findMachine(machineId);
+    if (!machine) return;
     relays.stop(machineId);
     watch.stop(machineId);
     store.deleteMachine(machineId);
+    store.hideMachine({ name: machine.name, origin: machine.origin, hostId: machine.hostId });
     broadcastMachines();
+    broadcastHiddenMachines();
+  }
+
+  function hideMachine({ name, origin, hostId }: MachineSeen) {
+    store.hideMachine({ name, origin, hostId });
+    broadcastHiddenMachines();
+  }
+
+  function showMachineAgain({ origin, hostId }: MachineSeen) {
+    store.showMachineAgain({ origin, hostId });
+    broadcastHiddenMachines();
   }
 
   /** Agents and the scripts they start call with the host's token and, unlike a browser's POST, no Origin header. */
@@ -1653,6 +1672,10 @@ export function startServer(services: HostServices) {
         return removeMachine(message.machineId);
       case "machine.set-color":
         return colorMachine(message.machineId, message.color);
+      case "machine.hide":
+        return hideMachine(message.machine);
+      case "machine.show-again":
+        return showMachineAgain(message.machine);
       case "join-request.approve": {
         const problem = await joinRequests.approve(message.joinRequestId, message.number).then(
           (approved) => (approved ? null : described({ code: "join-number-wrong" })),
@@ -1747,6 +1770,8 @@ export function startServer(services: HostServices) {
       agentsCanvasAssetsOrigin: config.canvasAssetsOrigin,
       machines: store.listMachines(),
       machineStatuses: watch.statuses(),
+      hiddenMachines: store.hiddenMachines(),
+      hostId: store.hostId(),
       homeDir: homedir(),
       hostRunId,
       hostCodeChanged: restart.codeChanged,

@@ -8235,6 +8235,24 @@ body.reordering * {
   font-size: calc(12px * var(--font-scale));
 }
 
+.hidden-machines h3 {
+  margin: 0 0 4px;
+  font-size: calc(13px * var(--font-scale));
+}
+
+.hidden-machines .hint {
+  margin: 0;
+}
+
+.hidden-machines .machine-list li {
+  border-style: dashed;
+}
+
+.machine-seen-through {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .app.with-rail {
   --machine-rail-width: 52px;
   display: grid;

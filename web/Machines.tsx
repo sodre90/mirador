@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { machineAddress } from "../shared/machines.ts";
+import { machineAddress, type MachineToJoin } from "../shared/machines.ts";
 import { markInitials } from "../shared/marks.ts";
 import type { Machine, Pastel } from "../shared/model.ts";
 import { ColorSwatches } from "./ColorSwatches.tsx";
@@ -7,7 +7,7 @@ import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { colorAttributes } from "./MachineRail.tsx";
+import { colorAttributes, seenPart } from "./MachineRail.tsx";
 
 /** Where this host cannot show the machine (a page opened from another device), a tab of its own, used again next time. */
 export function openMachine(origin: string, conversationId: string | null = null) {
@@ -92,7 +92,45 @@ function MachineRow({ machine, onOpen }: { machine: Machine; onOpen: (machine: M
   );
 }
 
-export function MachinesDialog({ machines, onOpen, onClose }: { machines: Machine[]; onOpen: (machine: Machine) => void; onClose: () => void }) {
+/** Machines this computer's machines have joined, kept out of the rail, each with a way back into it. */
+function HiddenMachines({ hidden, machines }: { hidden: MachineToJoin[]; machines: Machine[] }) {
+  if (hidden.length === 0) return null;
+  const throughName = (machine: MachineToJoin) => machines.find(({ id }) => id === machine.throughMachineId)!.name;
+  return (
+    <section className="hidden-machines" aria-label={words.hidden}>
+      <h3>{words.hidden}</h3>
+      <p className="hint">{words.hiddenAbout}</p>
+      <ul className="machine-list">
+        {hidden.map((machine) => (
+          <li key={machine.origin}>
+            <span className="machine-name">{machine.name}</span>
+            <span className="machine-origin">{machine.origin}</span>
+            <span className="machine-seen-through">{words.joinedBy(throughName(machine))}</span>
+            <button
+              type="button"
+              aria-label={words.showInRailLabel(machine.name)}
+              onClick={() => connection.send({ type: "machine.show-again", machine: seenPart(machine) })}
+            >
+              {words.showInRail}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+export function MachinesDialog({
+  machines,
+  hidden,
+  onOpen,
+  onClose,
+}: {
+  machines: Machine[];
+  hidden: MachineToJoin[];
+  onOpen: (machine: Machine) => void;
+  onClose: () => void;
+}) {
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
     window.addEventListener("keydown", closeOnEscape);
@@ -118,6 +156,7 @@ export function MachinesDialog({ machines, onOpen, onClose }: { machines: Machin
           ))}
           {machines.length === 0 && <li className="machine-none">{words.noneYet}</li>}
         </ul>
+        <HiddenMachines hidden={hidden} machines={machines} />
         <AddMachine machines={machines} />
       </div>
     </div>

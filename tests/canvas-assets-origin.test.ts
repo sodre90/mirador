@@ -25,6 +25,8 @@ function connectedAt(canvasAssetsOrigin: string): AppState {
     installedAgents: ["claude"],
     machines: [],
     machineStatuses: [],
+    hiddenMachines: [],
+    hostId: "this-host",
     homeDir: "/home/me",
     hostRunId: "run",
     hostCodeChanged: false,

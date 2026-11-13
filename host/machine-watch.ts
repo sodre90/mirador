@@ -61,6 +61,12 @@ class MachineSocket {
   }
 }
 
+/** The id this host goes by, and the addresses its own pages are served at. */
+export interface ThisHost {
+  id: string;
+  origins: readonly string[];
+}
+
 interface WatchedMachine {
   sockets: MachineSocket[];
   status: MachineStatus;
@@ -85,9 +91,11 @@ export class MachineWatch {
 
   constructor(
     private readonly store: Store,
-    /** Where this host's own pages are served, so a machine that has joined this one doesn't offer it back. */
-    private readonly ownOrigins: readonly string[],
+    /** So a machine that has joined this one doesn't offer it back, whatever address it knows it by. */
+    private readonly thisHost: ThisHost,
     private readonly statusChanged: (status: MachineStatus) => void,
+    /** A machine said which id it goes by, which this host keeps with it. */
+    private readonly machinesChanged: () => void,
     private readonly notify: (notification: SystemNotification) => void,
     private readonly signedOut: (machineId: string) => void,
   ) {}
@@ -138,6 +146,7 @@ export class MachineWatch {
   private follow(watched: WatchedMachine, message: ServerMessage) {
     switch (message.type) {
       case "snapshot":
+        this.learnHostId(watched.status.machineId, message.hostId);
         watched.waitingIn = waitingOf(message.conversations);
         return this.update(watched, { waiting: waitingList(watched), joinedThere: this.joinedAmong(message.machines) });
       case "machines.changed":
@@ -152,8 +161,16 @@ export class MachineWatch {
     }
   }
 
+  private learnHostId(machineId: string, hostId: string) {
+    if (this.store.findMachine(machineId)?.hostId === hostId) return;
+    this.store.setMachineHostId(machineId, hostId);
+    this.machinesChanged();
+  }
+
+  /** Only those it has reached since, which told it their id, so neither this host nor one known at two addresses slips through. */
   private joinedAmong(machines: Machine[]): MachineSeen[] {
-    return machines.filter(({ joined, origin }) => joined && !this.ownOrigins.includes(origin)).map(({ name, origin }) => ({ name, origin }));
+    const isThisHost = ({ origin, hostId }: Machine) => this.thisHost.origins.includes(origin) || hostId === this.thisHost.id;
+    return machines.filter((machine) => machine.joined && machine.hostId !== null && !isThisHost(machine)).map(({ name, origin, hostId }) => ({ name, origin, hostId }));
   }
 
   private update(watched: WatchedMachine, change: Partial<MachineStatus>) {

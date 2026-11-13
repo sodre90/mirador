@@ -1,5 +1,5 @@
 import type { EditorState } from "../shared/editors.ts";
-import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
+import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineSeen, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
 import { DEFAULT_MORNING_MINUTES, type ReminderMode } from "../shared/reminders.ts";
 import type { ReminderUndo } from "./reminders.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
@@ -96,6 +96,8 @@ export interface AppState {
   agentsCanvasAssetsOrigin: string;
   machines: Machine[];
   machineStatuses: MachineStatus[];
+  /** Machines kept out of the rail, though one of this computer's machines has joined them. */
+  hiddenMachines: MachineSeen[];
   /** Devices asking to join this host, for this page to approve. */
   joinRequests: JoinRequest[];
   /** The devices that joined this host, who is connected now, and how other devices reach it. */
@@ -182,6 +184,7 @@ export const initialState: AppState = {
   agentsCanvasAssetsOrigin: "",
   machines: [],
   machineStatuses: [],
+  hiddenMachines: [],
   joinRequests: [],
   devices: null,
   homeDir: "",
@@ -299,6 +302,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         agentsCanvasAssetsOrigin: message.agentsCanvasAssetsOrigin,
         machines: message.machines,
         machineStatuses: message.machineStatuses,
+        hiddenMachines: message.hiddenMachines,
         homeDir: message.homeDir,
         hostRunId: message.hostRunId,
         hostCodeChanged: message.hostCodeChanged,
@@ -497,6 +501,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, devices: message };
     case "machines.changed":
       return { ...state, machines: message.machines };
+    case "machines.hidden":
+      return { ...state, hiddenMachines: message.machines };
     case "machine.status":
       return { ...state, machineStatuses: [...state.machineStatuses.filter(({ machineId }) => machineId !== message.status.machineId), message.status] };
     case "host.code-changed":

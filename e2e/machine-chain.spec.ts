@@ -88,7 +88,9 @@ test("a machine the laptop has joined shows in the desk's own rail, to join from
   await addAndJoin(page, "Laptop", await inviteLinkFrom(laptopPage));
   const rail = page.getByRole("navigation", { name: "Machines" });
   const laptopFrame = page.frameLocator('iframe[title="Laptop"]');
-  const homeServer = rail.getByRole("button", { name: "Home server" });
+  const homeServer = rail.getByRole("button", { name: "Home server", exact: true });
+  const machines = page.getByRole("dialog", { name: "Machines" });
+  const hiddenMachines = machines.getByRole("region", { name: "Hidden from the rail" });
 
   await test.step("the laptop's own page shows in the desk's frame without a rail, as the desk's rail lists the machines", async () => {
     await rail.getByRole("button", { name: "Laptop" }).click();
@@ -100,6 +102,18 @@ test("a machine the laptop has joined shows in the desk's own rail, to join from
     await expect(rail.getByRole("button")).toHaveText(["⌂", "LA", "HS", "+"]);
     await expect(homeServer).toHaveClass(/\baway\b/);
     await expect(homeServer).toHaveAttribute("data-hint", `Home server · ${serverOrigin()} · Laptop has joined it · not joined yet`);
+  });
+
+  await test.step("a right-click hides it from the rail, and Machines… shows it there again", async () => {
+    await homeServer.click({ button: "right" });
+    await page.getByRole("menu", { name: "Home server" }).getByRole("menuitem", { name: "Hide from the rail" }).click();
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "LA", "+"]);
+    await rail.getByRole("button", { name: "Machines…" }).click();
+    await expect(hiddenMachines.locator("li")).toHaveText(new RegExp(`^Home server\\s*${serverOrigin()}\\s*Laptop has joined it\\s*Show in the rail$`));
+    await hiddenMachines.getByRole("button", { name: "Show Home server in the rail" }).click();
+    await expect(hiddenMachines).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "LA", "HS", "+"]);
   });
 
   await test.step("clicking it, even twice, adds it to the desk's machines once and offers to join it", async () => {
@@ -117,6 +131,28 @@ test("a machine the laptop has joined shows in the desk's own rail, to join from
     await expect(rail.getByRole("button")).toHaveText(["⌂", "HS", "LA", "+"]);
     await expect(homeServer).not.toHaveClass(/\baway\b/);
     await expect(homeServer).toHaveAttribute("data-hint", `Home server · ${serverOrigin()}`);
+  });
+
+  await test.step("removed from the desk's machines, it stays out of the rail, though the laptop still has it", async () => {
+    await rail.getByRole("button", { name: "Machines…" }).click();
+    await machines.getByRole("button", { name: "Remove Home server" }).click();
+    await machines.getByRole("button", { name: "Confirm: Remove Home server" }).click();
+    await expect(hiddenMachines.locator("li")).toHaveText(new RegExp(`^Home server\\s*${serverOrigin()}`));
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "LA", "+"]);
+  });
+
+  await test.step("added again at another of its addresses, it is the same machine, by the id its Mirador goes by", async () => {
+    await hiddenMachines.getByRole("button", { name: "Show Home server in the rail" }).click();
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "LA", "HS", "+"]);
+    await machines.getByLabel("Name").fill("Home server on the LAN");
+    await machines.getByLabel("Address or invite link").fill(server.origin);
+    await machines.getByRole("button", { name: "Add", exact: true }).click();
+    await machines.locator(".machine-list li", { hasText: "Home server on the LAN" }).getByRole("button", { name: "Open", exact: true }).click();
+    const joinPanel = page.getByRole("region", { name: "Join Home server on the LAN" });
+    await joinPanel.getByLabel("Invite code or link").fill(await inviteLinkFrom(serverPage));
+    await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(workspaceCard(page.frameLocator('iframe[title="Home server on the LAN"]'), serverOnly)).toBeVisible();
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "HS", "LA", "+"]);
   });
   await Promise.all([serverPage.close(), laptopPage.close()]);
 });
