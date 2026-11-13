@@ -69,7 +69,10 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-open-file"; path: unknown }
   /** The view asks for the canvas to fill the workspace, or to sit beside the chat again. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-fullscreen"; on: unknown }
-  /** A conversation the item's plugin started from the item's conversation, to show; answered as "item-send" is. */
+  /**
+   * A conversation to show: from an item's view, one the item's plugin started from the item's conversation; from a
+   * plugin's workspace tab, one of the tab's workspace. Answered as "item-send" is.
+   */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-open-conversation"; requestId: string; conversationId: unknown }
   /** A message the user wrote in the view for the agent, sent as the composer sends; answered as "item-send" is. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "item-prompt"; requestId: string; text: unknown }
@@ -392,8 +395,9 @@ export interface PluginViewBridge<Data = unknown, State = unknown> {
   /** Only where files open: Mirador's canvas has it, the phone doesn't. */
   openFile?(path: string): void;
   /**
-   * On the canvas, where conversations open: shows a conversation the plugin's tool or action started from the item's
-   * conversation; rejects for any other. Mirador's canvas has it, the phone doesn't. Plugin API 13 brought it.
+   * Where conversations open: on the canvas, shows a conversation the plugin's tool or action started from the item's
+   * conversation, and in the plugin's tab, a conversation of the tab's workspace; rejects for any other. Mirador's canvas
+   * and tab have it, the phone doesn't. Plugin API 13 brought it to the canvas, and 17 to the tab.
    */
   openConversation?(conversationId: string): Promise<void>;
 }
@@ -420,7 +424,8 @@ interface BridgeAbilities {
  * hands an action to the plugin's host code and resolves to its reply, or rejects with the reason there is none; `prompt`
  * sends the agent a message as the composer would, `setFullscreen` asks for the canvas to fill the workspace or not, and,
  * where files open, `openFile` opens one as a file link in the chat does, a path relative to the conversation's workspace
- * or absolute; where conversations open, `openConversation` shows one the item's plugin started from its conversation.
+ * or absolute; where conversations open, `openConversation` shows one the item's plugin started from its conversation,
+ * or, in a workspace tab, one of the tab's workspace.
  * Mirador's look arrives as CSS variables on the page's root, and `data-hint` shows as Mirador's own hints.
  */
 function pluginItemBridge(frameId: string, { opensFiles = false, opensConversations = false }: BridgeAbilities, place: PluginViewPlace) {
@@ -529,7 +534,7 @@ function pluginItemBridge(frameId: string, { opensFiles = false, opensConversati
         : ""
     }
     ${
-      opensConversations && place === "canvas"
+      opensConversations
         ? `openConversation(conversationId) {
       return request({ kind: "item-open-conversation", conversationId: String(conversationId) }).then(() => undefined);
     },`
@@ -549,8 +554,8 @@ export function pluginItemPage(viewUrl: string, frameId: string, { inTab = false
 }
 
 /** The page of a plugin's workspace tab: its canvas view, with the bridge for a tab, which has no item and opens no files. */
-export function workspaceTabPage(viewUrl: string, frameId: string) {
-  return [`<script>${pluginItemBridge(frameId, {}, "tab")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
+export function workspaceTabPage(viewUrl: string, frameId: string, { opensConversations = false }: Pick<BridgeAbilities, "opensConversations"> = {}) {
+  return [`<script>${pluginItemBridge(frameId, { opensConversations }, "tab")}</script>`, `<script type="module" src="${escapeAttribute(viewUrl)}"></script>`].join("\n");
 }
 
 /** The page of a plugin's own window: its canvas view, with the bridge for a window, which has no item and opens no files. */

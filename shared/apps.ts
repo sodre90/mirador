@@ -19,9 +19,10 @@ import type { HostProblem } from "./host-problems.ts";
  * brings profile settings the user types or toggles, secrets among them, a canvas plugin's chips in the statusline, its
  * check of a profile's settings, the session an activity event happened in, and lets its window and background work
  * read the profiles' settings; API 15 tells a plugin the model and effort each profile sets; API 16 lets a plugin
- * delete a conversation it started, with its worktree and branch.
+ * delete a conversation it started, with its worktree and branch; API 17 lets a canvas plugin's workspace tab open a
+ * conversation of its workspace.
  */
-export const APP_PLUGIN_API = 16;
+export const APP_PLUGIN_API = 17;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,

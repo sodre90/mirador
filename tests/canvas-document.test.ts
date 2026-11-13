@@ -20,6 +20,7 @@ import {
   HIDDEN_ERROR_SCRIPT,
   TEXT_CONTRAST_SCRIPT,
   pluginItemPage,
+  pluginWindowPage,
   workspaceTabPage,
 } from "../shared/canvas-document.ts";
 
@@ -496,5 +497,10 @@ test("a plugin's view can open files only where its page says files open, as Mir
 test("a plugin's item view can open conversations only where its page says they open, as Mirador's canvas does and an item's own window or the phone doesn't", () => {
   expect(pluginItemPage("https://assets/view.js", "item-1", { opensConversations: true })).toContain('kind: "item-open-conversation"');
   expect(pluginItemPage("https://assets/view.js", "item-1", { opensFiles: true })).not.toContain("openConversation");
+  expect(pluginWindowPage("https://assets/view.js", "window-1")).not.toContain("openConversation");
+});
+
+test("a plugin's workspace tab can open conversations only where its page says they open, as Mirador's tab does and the phone's doesn't", () => {
+  expect(workspaceTabPage("https://assets/view.js", "tab-1", { opensConversations: true })).toContain('kind: "item-open-conversation"');
   expect(workspaceTabPage("https://assets/view.js", "tab-1")).not.toContain("openConversation");
 });

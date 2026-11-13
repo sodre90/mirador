@@ -24,6 +24,7 @@ test.afterAll(async () => {
 
 const tabView = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-frame.workspace-tab iframe");
 const tabToggle = (page: Page) => page.locator(".canvas-panel:visible .workspace-tab-toggle", { hasText: "Tally" });
+const shownConversation = (page: Page) => new URL(page.url()).hash.slice("#/c/".length);
 
 async function startConversation(page: Page) {
   await addWorkspace(page, host.projectDir);
@@ -38,6 +39,7 @@ async function startConversation(page: Page) {
 test("a plugin's workspace tab shows its state, takes the user's actions, and hands work to the agent", async ({ page }) => {
   await signIn(page, host);
   await startConversation(page);
+  const firstConversation = shownConversation(page);
 
   await test.step("the tab opens from the canvas bar, drawn by the plugin's view for this workspace", async () => {
     await tabToggle(page).click();
@@ -91,5 +93,16 @@ test("a plugin's workspace tab shows its state, takes the user's actions, and ha
   await test.step("the new conversation's canvas has the same tab, with the workspace's state", async () => {
     await tabToggle(page).click();
     await expect(tabView(page).locator("#count")).toHaveText("Counted 1 here, 1 everywhere");
+  });
+
+  await test.step("the tab opens a conversation of its workspace, and refuses one that isn't", async () => {
+    await tabView(page).getByLabel("Conversation").fill("not-a-conversation");
+    await tabView(page).getByRole("button", { name: "Open the conversation" }).click();
+    await expect(tabView(page).locator("#handed")).toHaveText("Conversation not-a-conversation isn't one of this workspace's, so the tab can't open it.");
+    const tabsConversation = shownConversation(page);
+    await tabView(page).getByLabel("Conversation").fill(firstConversation);
+    await tabView(page).getByRole("button", { name: "Open the conversation" }).click();
+    await expect(page).toHaveURL(new RegExp(`#/c/${firstConversation}$`));
+    expect(firstConversation).not.toBe(tabsConversation);
   });
 });

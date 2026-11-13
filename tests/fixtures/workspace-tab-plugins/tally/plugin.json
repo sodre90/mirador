@@ -2,6 +2,6 @@
   "name": "tally",
   "title": "Tally",
   "version": "1.0.0",
-  "api": 7,
+  "api": 17,
   "canvas": { "host": "host.ts", "view": "view.js" }
 }

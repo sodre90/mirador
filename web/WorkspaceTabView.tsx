@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useContext, useEffect, useMemo, useRef } from "react";
 import {
   pluginItemReplyFailedMessage,
   pluginItemReplyMessage,
@@ -12,6 +12,7 @@ import { CanvasFrame } from "./Canvas.tsx";
 import { connection } from "./connection.ts";
 import { useFontScale } from "./font-scale.ts";
 import { showFramedHint } from "./Hint.tsx";
+import { KnownConversations } from "./known-conversations.ts";
 import { onPage, themeVariables } from "./PluginItemView.tsx";
 import { addToComposerFromTab, startConversationFromTab } from "./tab-handoffs.ts";
 import { useShownTheme } from "./theme.ts";
@@ -58,8 +59,10 @@ export function WorkspaceTabView({
   const shownTheme = useShownTheme();
   const [fontScale] = useFontScale();
   const enterWhileBusy = useEnterWhileBusy();
+  const conversations = useContext(KnownConversations);
+  const opensConversations = conversations !== null;
   const frameId = `tab-${tab.plugin}`;
-  const page = useMemo(() => workspaceTabPage(viewUrl, frameId), [viewUrl, frameId]);
+  const page = useMemo(() => workspaceTabPage(viewUrl, frameId, { opensConversations }), [viewUrl, frameId, opensConversations]);
   const post = (message: unknown) => frame.current?.contentWindow?.postMessage(message, "*");
   const postState = () => post(pluginWindowStateMessage(latest.current));
   const postTheme = () => {
@@ -78,6 +81,12 @@ export function WorkspaceTabView({
       answerTo?.postMessage(pluginItemReplyFailedMessage(requestId, error instanceof Error ? error.message : String(error)), "*");
     }
   };
+  const openInWorkspace = (openedId: string) => {
+    if (!conversations?.some(({ id, workspaceId: inWorkspace }) => id === openedId && inWorkspace === workspaceId)) {
+      throw new Error(`Conversation ${openedId} isn't one of this workspace's, so the tab can't open it.`);
+    }
+    location.hash = `#/c/${openedId}`;
+  };
   const received = (message: CanvasFrameMessage) => {
     if (message.kind === "item-ready") {
       postTheme();
@@ -89,6 +98,7 @@ export function WorkspaceTabView({
     if (message.kind === "item-prompt") void answer(requestId, () => promptFromTab(conversationId, String(message.text), enterWhileBusy === "after-turn"));
     if (message.kind === "tab-start-conversation") void answer(requestId, () => startConversationFromTab(workspaceId, String(message.text)));
     if (message.kind === "tab-add-to-composer") void answer(requestId, () => addToComposerFromTab(conversationId, String(message.text)));
+    if (message.kind === "item-open-conversation") void answer(requestId, () => openInWorkspace(String(message.conversationId)));
   };
   const handleUnanswered = (message: CanvasFrameMessage) => {
     if (message.kind === "item-hint" && typeof message.text === "string" && frame.current) {
