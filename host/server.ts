@@ -864,7 +864,7 @@ export function startServer(services: HostServices) {
     return upgraded ? undefined : new Response("upgrade failed", { status: 400 });
   }
 
-  /** Deleting a conversation closes the tasks its plugin tools started with it, which work for it and share its worktree. */
+  /** Deleting a conversation closes the tasks its plugin tools started and its side chats with it, which share its worktree. */
   function deleteConversation(conversationId: string, worktree: { keepsUncommittedWork?: boolean } = {}) {
     if (!store.hasConversation(conversationId)) return;
     canvas.withdrawWaitingAsks(conversationId);
@@ -872,7 +872,7 @@ export function startServer(services: HostServices) {
     apps.forgetConversation(conversationId);
     conversations.delete(conversationId, worktree);
     mcp.forget(conversationId);
-    store.conversationsStartedBy(conversationId).forEach((started) => deleteConversation(started, worktree));
+    [...store.conversationsStartedBy(conversationId), ...store.sideChatsOf(conversationId)].forEach((closing) => deleteConversation(closing, worktree));
   }
 
   /** Deleting a conversation deletes its worktree and its delegated tasks', so any that hold uncommitted files asks first. */
@@ -1233,6 +1233,10 @@ export function startServer(services: HostServices) {
         return;
       case "conversation.check-fork":
         return reply({ type: "conversation.fork-checked", requestId: message.requestId, forkable: conversations.canFork(message.conversationId) });
+      case "conversation.side-chat.start":
+        return reply({ type: "conversation.side-chat.started", requestId: message.requestId, sideChatId: conversations.startSideChat(message.conversationId, message.text).id });
+      case "conversation.side-chat.promote":
+        return conversations.promoteSideChat(message.conversationId);
       case "conversation.delete":
         return deleteConversationOrAsk(socket, message.conversationId, message.discardsUncommitted ?? false);
       case "conversation.move":
@@ -1577,10 +1581,12 @@ export function startServer(services: HostServices) {
         return reply({ type: "pong" });
       case "page.error":
         return console.log(`page error: ${message.message.slice(0, PAGE_ERROR_LOG_LIMIT)}\n${message.stack.slice(0, PAGE_ERROR_LOG_LIMIT)}`);
-      case "presence":
-        socket.data.presence = { conversationId: message.conversationId, attentive: message.attentive };
-        if (message.attentive && message.conversationId) conversations.markSeen(message.conversationId);
+      case "presence": {
+        const { conversationId, attentive, sideChatId = null } = message;
+        socket.data.presence = { conversationId, attentive, sideChatId };
+        if (attentive) [conversationId, sideChatId].forEach((seen) => seen && conversations.markSeen(seen));
         return;
+      }
       case "terminal.clear":
         return terminals.clear(message.terminalId);
       case "host.restart":

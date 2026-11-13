@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { dirname } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk/unstable";
+import { isSideChatBrief } from "../shared/side-chats.ts";
 
 /**
  * An agent that takes every prompt and never finishes it, ignoring `session/cancel`, the way a model request against a
@@ -52,6 +53,7 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
  * steered into a `REPLY STEERED ` or `ENDS UNREAD ` turn joins it, any other is refused as needing a prompt of its own.
  * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
+ * A side chat's brief, sent before its first question, is written to the prompts file but leaves the commands alone.
  */
 const promptsFile = process.env.FAKE_ACP_PROMPTS;
 const availableCommands: acp.AvailableCommand[] | null = process.env.FAKE_ACP_COMMANDS ? JSON.parse(process.env.FAKE_ACP_COMMANDS) : null;
@@ -488,7 +490,7 @@ acp
     return { sessionId };
   })
   .onRequest(acp.methods.agent.session.load, async (ctx) => {
-    if (forkedSessions.has(ctx.params.sessionId)) return {};
+    if (forkedSessions.has(ctx.params.sessionId)) return offersModes ? { configOptions: offeredOptions(ctx.params.sessionId) } : {};
     if (ctx.params.sessionId !== history?.sessionId) throw acp.RequestError.internalError(undefined, "No such session");
     for (const update of history.updates) await ctx.client.notify(acp.methods.client.session.update, { sessionId: history.sessionId, update });
     return {};
@@ -512,42 +514,44 @@ acp
     }),
   )
   .onRequest(acp.methods.agent.session.prompt, (ctx) => {
-    const text = ctx.params.prompt.map((block) => (block.type === "text" ? block.text : "")).join("");
-    appendFileSync(promptsFile!, `${text}\n`);
-    if (startsWith(ctx.params.prompt, "EDIT ")) return askToEdit(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("EDIT ".length)));
-    if (startsWith(ctx.params.prompt, "RUN TOOLS ")) return runTools(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("RUN TOOLS ".length)));
-    if (startsWith(ctx.params.prompt, "TOOLS ")) return askToUseTools(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("TOOLS ".length)));
-    if (startsWith(ctx.params.prompt, "WRITE ")) return writeFiles(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("WRITE ".length)));
-    if (startsWith(ctx.params.prompt, "SUBAGENT ASKS ")) return askFromSubagent(ctx.client, ctx.params.sessionId, text.slice("SUBAGENT ASKS ".length));
-    if (startsWith(ctx.params.prompt, "USAGE ")) {
+    const textOf = (blocks: acp.ContentBlock[]) => blocks.map((block) => (block.type === "text" ? block.text : "")).join("");
+    const prompt = ctx.params.prompt.filter((block) => !(block.type === "text" && isSideChatBrief(block.text)));
+    const text = textOf(prompt);
+    appendFileSync(promptsFile!, `${textOf(ctx.params.prompt)}\n`);
+    if (startsWith(prompt, "EDIT ")) return askToEdit(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("EDIT ".length)));
+    if (startsWith(prompt, "RUN TOOLS ")) return runTools(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("RUN TOOLS ".length)));
+    if (startsWith(prompt, "TOOLS ")) return askToUseTools(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("TOOLS ".length)));
+    if (startsWith(prompt, "WRITE ")) return writeFiles(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("WRITE ".length)));
+    if (startsWith(prompt, "SUBAGENT ASKS ")) return askFromSubagent(ctx.client, ctx.params.sessionId, text.slice("SUBAGENT ASKS ".length));
+    if (startsWith(prompt, "USAGE ")) {
       const [used = 0, size = 0, costUsd] = text.slice("USAGE ".length).split(" ").map(Number);
       return reportUsage(ctx.client, ctx.params.sessionId, used, size, costUsd);
     }
-    if (startsWith(ctx.params.prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
-    if (startsWith(ctx.params.prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
-    if (startsWith(ctx.params.prompt, "CHOICES")) return sayChoices(ctx.client, ctx.params.sessionId);
-    if (startsWith(ctx.params.prompt, "FOLDER")) return sayText(ctx.client, ctx.params.sessionId, `Working in ${sessionFolders.get(ctx.params.sessionId)}`);
-    if (startsWith(ctx.params.prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
-    if (startsWith(ctx.params.prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
-    if (startsWith(ctx.params.prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);
-    if (startsWith(ctx.params.prompt, "ASYNC TASK STUCK")) return startAsyncTask(ctx.client, ctx.params.sessionId, false, true);
-    if (startsWith(ctx.params.prompt, "ASYNC TASK")) return startAsyncTask(ctx.client, ctx.params.sessionId, false);
-    if (startsWith(ctx.params.prompt, "FAIL ")) throw acp.RequestError.internalError(undefined, text.slice("FAIL ".length));
-    if (startsWith(ctx.params.prompt, "PLAN ")) return makePlan(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("PLAN ".length)));
-    if (startsWith(ctx.params.prompt, "STREAM PARAGRAPHS ")) return streamParagraphs(ctx.client, ctx.params.sessionId, Number(text.slice("STREAM PARAGRAPHS ".length)));
-    if (startsWith(ctx.params.prompt, "STREAM ")) return streamWords(ctx.client, ctx.params.sessionId, Number(text.slice("STREAM ".length)));
-    if (startsWith(ctx.params.prompt, "FINISHED ON STOP ")) return finishedOnStop(ctx.client, ctx.params.sessionId, text.slice("FINISHED ON STOP ".length));
-    if (startsWith(ctx.params.prompt, "STOPPED REPLY ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED REPLY ".length), true);
-    if (startsWith(ctx.params.prompt, "STOPPED BEFORE ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED BEFORE ".length), false);
-    if (startsWith(ctx.params.prompt, "STOPPED BESIDE SUBAGENT ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED BESIDE SUBAGENT ".length), false, true);
-    if (startsWith(ctx.params.prompt, "STOPPED QUIET ")) return stoppedQuietly(ctx.params.sessionId);
-    if (startsWith(ctx.params.prompt, "REPLY TOOL REPLY ")) return replyAroundATool(ctx.client, ctx.params.sessionId, text.slice("REPLY TOOL REPLY ".length));
-    if (startsWith(ctx.params.prompt, "TOOL UNTIL ")) return toolUntil(ctx.client, ctx.params.sessionId, text.slice("TOOL UNTIL ".length));
-    if (startsWith(ctx.params.prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
-    if (startsWith(ctx.params.prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
-    if (startsWith(ctx.params.prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
-    if (startsWith(ctx.params.prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
-    return startsWith(ctx.params.prompt, "WEDGE") || startsWith(ctx.params.prompt, "CRASH") ? new Promise(() => {}) : { stopReason: "end_turn" as const };
+    if (startsWith(prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
+    if (startsWith(prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
+    if (startsWith(prompt, "CHOICES")) return sayChoices(ctx.client, ctx.params.sessionId);
+    if (startsWith(prompt, "FOLDER")) return sayText(ctx.client, ctx.params.sessionId, `Working in ${sessionFolders.get(ctx.params.sessionId)}`);
+    if (startsWith(prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
+    if (startsWith(prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
+    if (startsWith(prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);
+    if (startsWith(prompt, "ASYNC TASK STUCK")) return startAsyncTask(ctx.client, ctx.params.sessionId, false, true);
+    if (startsWith(prompt, "ASYNC TASK")) return startAsyncTask(ctx.client, ctx.params.sessionId, false);
+    if (startsWith(prompt, "FAIL ")) throw acp.RequestError.internalError(undefined, text.slice("FAIL ".length));
+    if (startsWith(prompt, "PLAN ")) return makePlan(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("PLAN ".length)));
+    if (startsWith(prompt, "STREAM PARAGRAPHS ")) return streamParagraphs(ctx.client, ctx.params.sessionId, Number(text.slice("STREAM PARAGRAPHS ".length)));
+    if (startsWith(prompt, "STREAM ")) return streamWords(ctx.client, ctx.params.sessionId, Number(text.slice("STREAM ".length)));
+    if (startsWith(prompt, "FINISHED ON STOP ")) return finishedOnStop(ctx.client, ctx.params.sessionId, text.slice("FINISHED ON STOP ".length));
+    if (startsWith(prompt, "STOPPED REPLY ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED REPLY ".length), true);
+    if (startsWith(prompt, "STOPPED BEFORE ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED BEFORE ".length), false);
+    if (startsWith(prompt, "STOPPED BESIDE SUBAGENT ")) return stoppedReply(ctx.client, ctx.params.sessionId, text.slice("STOPPED BESIDE SUBAGENT ".length), false, true);
+    if (startsWith(prompt, "STOPPED QUIET ")) return stoppedQuietly(ctx.params.sessionId);
+    if (startsWith(prompt, "REPLY TOOL REPLY ")) return replyAroundATool(ctx.client, ctx.params.sessionId, text.slice("REPLY TOOL REPLY ".length));
+    if (startsWith(prompt, "TOOL UNTIL ")) return toolUntil(ctx.client, ctx.params.sessionId, text.slice("TOOL UNTIL ".length));
+    if (startsWith(prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
+    if (startsWith(prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
+    if (startsWith(prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
+    if (startsWith(prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
+    return startsWith(prompt, "WEDGE") || startsWith(prompt, "CRASH") ? new Promise(() => {}) : { stopReason: "end_turn" as const };
   })
   .onNotification(acp.methods.agent.session.cancel, (ctx) => {
     stopWaiters.get(ctx.params.sessionId)?.();

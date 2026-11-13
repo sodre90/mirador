@@ -16,6 +16,7 @@ export type ShortcutCommand =
   | { type: "search" }
   | { type: "mark-unread" }
   | { type: "remind" }
+  | { type: "side-chat" }
   | { type: "focus"; pane: "chat" | "canvas" | "terminals" }
   | { type: "bigger-font" }
   | { type: "smaller-font" }
@@ -72,6 +73,7 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
     const digit = press.code.match(/^Digit([1-9])$/)?.[1];
     if (digit && !press.shiftKey) return { type: "numbered-conversation", number: Number(digit) };
     if (press.code === "KeyT") return press.shiftKey ? { type: "new-workspace" } : { type: "new-conversation" };
+    if (press.code === "KeyB" && !press.shiftKey && typing !== "terminal") return { type: "side-chat" };
   }
   if (press.key === "?" && !press.metaKey && !press.ctrlKey && !press.altKey && typing === "not-typing") return { type: "help" };
   if (primary && !press.altKey) {
@@ -127,6 +129,7 @@ export function shortcutKeys(mac = isMac) {
     restartHost: `${primary}${shift}R`,
     markUnread: `${primary}${shift}U`,
     remind: `${primary}${shift}L`,
+    sideChat: `${option}B`,
     templates: `${primary}J`,
     bold: `${primary}B`,
     italic: `${primary}I`,
@@ -168,6 +171,7 @@ export function shortcutHelp(mac = isMac): { keys: string; action: string }[] {
     { keys: keys.search, action: actions.search },
     { keys: keys.markUnread, action: actions.markUnread },
     { keys: keys.remind, action: t.reminders.shortcut },
+    { keys: keys.sideChat, action: actions.sideChat },
     { keys: keys.find, action: actions.find },
     { keys: keys.find, action: actions.findInReview },
     { keys: keys.find, action: actions.findInCanvas },

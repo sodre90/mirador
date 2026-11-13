@@ -177,6 +177,10 @@ export type ClientMessage =
   | { type: "conversation.fork"; conversationId: string; throughTurnSeq?: number }
   /** Whether the conversation can be forked yet, for a page that does not hold its history. */
   | { type: "conversation.check-fork"; requestId: string; conversationId: string }
+  /** A side chat about the conversation, read-only where its agent allows, asking `text` at once; the host answers `conversation.side-chat.started`. */
+  | { type: "conversation.side-chat.start"; requestId: string; conversationId: string; text: string }
+  /** Makes the side chat a conversation of its own, in the mode of the conversation it was beside, else its profile's. */
+  | { type: "conversation.side-chat.promote"; conversationId: string }
   /** Without `discardsUncommitted`, a conversation whose worktree holds uncommitted files stays, and the host answers `conversation.delete-asks`. */
   | { type: "conversation.delete"; conversationId: string; discardsUncommitted?: boolean }
   | { type: "conversation.rename"; conversationId: string; title: string }
@@ -314,7 +318,13 @@ export type ClientMessage =
   | { type: "terminal.close-tab"; tabId: string; unlessBusy?: boolean }
   | { type: "terminal.clear"; terminalId: string }
   /** What this page shows, and whether you are looking at it: the host notifies only about conversations nobody is looking at. */
-  | { type: "presence"; conversationId: string | null; attentive: boolean }
+  | {
+      type: "presence";
+      conversationId: string | null;
+      attentive: boolean;
+      /** The side chat the page shows beside the conversation, which you see as much as the conversation itself. */
+      sideChatId?: string;
+    }
   /** Asks the host to answer with pong, so a device can tell a socket that went quiet from one that died on the way. */
   | { type: "ping" }
   /** An error the page threw, so that one which blanks the page leaves its stack in the host log. */
@@ -544,6 +554,7 @@ export type ServerMessage =
   | { type: "sessions.failed"; requestId: string; message: string; problem?: HostProblem }
   | { type: "slash-commands.listed"; requestId: string; commands: SlashCommand[] }
   | { type: "conversation.fork-checked"; requestId: string; forkable: boolean }
+  | { type: "conversation.side-chat.started"; requestId: string; sideChatId: string }
   | { type: "prompt-history.listed"; requestId: string; prompts: string[]; ownEarlier?: PromptHistoryEntry[] }
   | { type: "mentions.suggested"; requestId: string; suggestions: MentionSuggestion[] }
   | { type: "changes.listed"; requestId: string; list: ChangeList }

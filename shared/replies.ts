@@ -25,3 +25,6 @@ export const replyEnds = (timeline: TimelineBlock[]) => new Set(turnsWithText(ti
 
 /** The whole reply of the turn ending at that text block, as one Markdown document. */
 export const replyEndingAt = (timeline: TimelineBlock[], key: string) => turnsWithText(timeline).find((turn) => turn.lastKey === key)?.texts.join("\n\n") ?? "";
+
+/** The whole reply of the latest turn the agent wrote in, as one Markdown document; empty before it wrote any. */
+export const latestReply = (timeline: TimelineBlock[]) => turnsWithText(timeline).at(-1)?.texts.join("\n\n") ?? "";

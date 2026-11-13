@@ -40,6 +40,7 @@ export const shell: Messages["shell"] = {
     markRead: "Megjelölés olvasottként",
     markUnread: "Megjelölés olvasatlanként",
     delegated: (count) => `${count} átadott`,
+    sideChats: (count) => `${count} mellékszál`,
     delegatedWorking: (count) => ` · ${count} dolgozik`,
     setUpProfile: "Profil beállítása",
     agent: "Ágens",
@@ -191,6 +192,7 @@ export const shell: Messages["shell"] = {
       newWorkspace: "Munkaterület (projektkönyvtár) hozzáadása",
       toggleSidebar: "Az oldalsáv megjelenítése / elrejtése",
       toggleCanvas: "A vászon megjelenítése / elrejtése",
+      sideChat: "Kérdezés a nyitott beszélgetésről egy mellékszálban",
       toggleTerminal: "A terminál megjelenítése / elrejtése",
       search: "Keresés minden munkaterület minden beszélgetésében",
       markUnread:

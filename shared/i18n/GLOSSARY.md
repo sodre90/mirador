@@ -18,6 +18,7 @@ These terms stay the same everywhere:
 | project folder | projektmappa | carpeta del proyecto | 项目文件夹 | Projektordner |
 | conversation | beszélgetés | conversación | 对话 | Unterhaltung |
 | favourite (conversation) | kedvenc | favorita | 收藏 | Favorit |
+| side chat (a question about a conversation, beside it) | mellékszál | chat lateral | 旁聊 | Nebenchat |
 | session | munkamenet | sesión | 会话 | Sitzung |
 | profile | profil | perfil | 配置 | Profil |
 | turn | kör | turno | 轮次 | Runde |

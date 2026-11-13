@@ -1,6 +1,7 @@
 import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
 import { CUSTOM_ORDER, inConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
+import { isSideChat } from "../shared/side-chats.ts";
 
 export interface NavigationState {
   workspaces: Workspace[];
@@ -18,8 +19,9 @@ export const turnTimesOf = (conversations: Conversation[]): HeldTurnTimes =>
 
 /**
  * A workspace's conversations in the order the sidebar lists them: favourites first, then the order the user chose (by
- * default where they put them, a new one first), with one a plugin's tool started right under the conversation that
- * started it, until the user dismisses its task; a dismissed task comes back while it waits for the user.
+ * default where they put them, a new one first), with one a plugin's tool started, and a side chat, right under the
+ * conversation it belongs to; a delegated task until the user dismisses it, and a dismissed one again while it waits
+ * for the user.
  */
 export function conversationsIn(state: Pick<NavigationState, "conversations" | "conversationOrder" | "heldTurnTimes">, workspaceId: string): Conversation[] {
   const order = inConversationOrder(state.conversationOrder ?? CUSTOM_ORDER);
@@ -30,7 +32,7 @@ export function conversationsIn(state: Pick<NavigationState, "conversations" | "
   const inOrder = state.conversations
     .filter((conversation) => conversation.workspaceId === workspaceId && !isDismissedAndSettled(conversation) && !isPutAway(conversation.reminder))
     .sort((a, b) => order(asHeld(a), asHeld(b)));
-  const callerOf = (conversation: Conversation) => (isUnderCaller(conversation, inOrder) ? conversation.startedBy!.conversationId : null);
+  const callerOf = (conversation: Conversation) => (isUnderCaller(conversation, inOrder) ? callerIdOf(conversation) : null);
   return inOrder.filter((conversation) => !callerOf(conversation)).flatMap((caller) => [caller, ...inOrder.filter((conversation) => callerOf(conversation) === caller.id)]);
 }
 
@@ -42,17 +44,25 @@ export const putAwayIn = (state: Pick<NavigationState, "conversations">, workspa
 
 const isDismissedAndSettled = (conversation: Conversation) => conversation.startedBy?.dismissed === true && !conversation.waitingFor;
 
-/** Whether the sidebar lists the conversation under the one that started it, which it does while that one is listed too. */
-export const isUnderCaller = (conversation: Conversation, listed: Conversation[]) =>
-  conversation.startedBy !== undefined && listed.some(({ id }) => id === conversation.startedBy!.conversationId);
+/** The conversation that started this one through a plugin's tool, or that this side chat is beside. */
+export const callerIdOf = (conversation: Pick<Conversation, "startedBy" | "sideChatOf">) => conversation.startedBy?.conversationId ?? conversation.sideChatOf;
 
-/** A conversation under its caller shows while the caller's delegated tasks are open, or while it waits for the user. */
+/** Whether the sidebar lists the conversation under its caller, which it does while that one is listed too. */
+export const isUnderCaller = (conversation: Conversation, listed: Conversation[]) => {
+  const callerId = callerIdOf(conversation);
+  return callerId !== undefined && listed.some(({ id }) => id === callerId);
+};
+
+/** A conversation under its caller shows while the caller's row is unfolded, or while it waits for the user. */
 export const showsInSidebar = (conversation: Conversation, listed: Conversation[], callersOpened: ReadonlySet<string>) =>
-  !isUnderCaller(conversation, listed) || callersOpened.has(conversation.startedBy!.conversationId) || Boolean(conversation.waitingFor);
+  !isUnderCaller(conversation, listed) || callersOpened.has(callerIdOf(conversation)!) || Boolean(conversation.waitingFor);
 
 const newest = (conversations: Conversation[]) => conversations.reduce((newest, each) => (each.createdAt > newest.createdAt ? each : newest));
 
-const sidebarOrder = (state: NavigationState) => state.workspaces.flatMap(({ id }) => conversationsIn(state, id));
+/** The conversations to step through and number: a side chat opens beside its conversation, so it has no place of its own. */
+const steppedThrough = (state: NavigationState, workspaceId: string) => conversationsIn(state, workspaceId).filter((conversation) => !isSideChat(conversation));
+
+const sidebarOrder = (state: NavigationState) => state.workspaces.flatMap(({ id }) => steppedThrough(state, id));
 
 const wrapped = <T>(items: T[], index: number) => items[(index + items.length) % items.length];
 
@@ -72,15 +82,15 @@ export function adjacentConversation(state: NavigationState, step: 1 | -1): stri
 
 /** The newest conversation of the next workspace that has any. */
 export function adjacentWorkspaceConversation(state: NavigationState, step: 1 | -1): string | null {
-  const withConversations = state.workspaces.filter(({ id }) => conversationsIn(state, id).length > 0);
+  const withConversations = state.workspaces.filter(({ id }) => steppedThrough(state, id).length > 0);
   if (withConversations.length === 0) return null;
   const current = currentWorkspace(state);
   const index = withConversations.findIndex(({ id }) => id === current?.id);
   const target = index === -1 ? withConversations[0]! : wrapped(withConversations, index + step)!;
-  return newest(conversationsIn(state, target.id)).id;
+  return newest(steppedThrough(state, target.id)).id;
 }
 
 export function numberedConversation(state: NavigationState, number: number): string | null {
   const workspace = currentWorkspace(state);
-  return workspace ? (conversationsIn(state, workspace.id)[number - 1]?.id ?? null) : null;
+  return workspace ? (steppedThrough(state, workspace.id)[number - 1]?.id ?? null) : null;
 }

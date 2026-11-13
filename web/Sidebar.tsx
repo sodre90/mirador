@@ -22,7 +22,7 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { conversationsIn, isUnderCaller, putAwayIn, showsInSidebar } from "./navigation.ts";
+import { callerIdOf, conversationsIn, isUnderCaller, putAwayIn, showsInSidebar } from "./navigation.ts";
 import { isPending } from "../shared/reminders.ts";
 import { openReminderPicker, removeReminder } from "./reminders.ts";
 import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
@@ -283,20 +283,31 @@ function useHostSaysForkable(conversationId: string) {
 }
 
 const rowClasses = (conversation: Conversation, listed: Conversation[], selectedConversationId: string | null) =>
-  [conversation.id === selectedConversationId && "selected", conversation.waitingFor && "waiting", isUnderCaller(conversation, listed) && "under-caller"].filter(Boolean);
+  [
+    conversation.id === selectedConversationId && "selected",
+    conversation.waitingFor && "waiting",
+    isUnderCaller(conversation, listed) && "under-caller",
+    conversation.sideChatOf && "side-chat-row",
+  ].filter(Boolean);
 
 const isWorking = ({ status }: Conversation) => status === "starting" || status === "running";
 
-/** In a caller's row: how many conversations its plugin tools started, how many still work, and whether they show below it. */
-function DelegatedToggle({ callerId, delegated, open }: { callerId: string; delegated: Conversation[]; open: boolean }) {
-  if (delegated.length === 0) return null;
-  const working = delegated.filter(isWorking).length;
+const countsUnder = (under: Conversation[]) => {
+  const sideChats = under.filter(({ sideChatOf }) => sideChatOf).length;
+  const delegated = under.length - sideChats;
+  return [delegated > 0 && words.delegated(delegated), sideChats > 0 && words.sideChats(sideChats)].filter(Boolean).join(", ");
+};
+
+/** In a caller's row: how many conversations its plugin tools started and side chats it has, how many still work, and whether they show below it. */
+function DelegatedToggle({ callerId, under, open }: { callerId: string; under: Conversation[]; open: boolean }) {
+  if (under.length === 0) return null;
+  const working = under.filter(isWorking).length;
   return (
     <button
       type="button"
       className="link delegated-toggle"
       aria-expanded={open}
-      aria-label={words.delegated(delegated.length)}
+      aria-label={countsUnder(under)}
       data-hint={hints.delegatedFold}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -304,7 +315,7 @@ function DelegatedToggle({ callerId, delegated, open }: { callerId: string; dele
         setDelegationsOpen(callerId, !open);
       }}
     >
-      {open ? "▾" : "▸"} {delegated.length}
+      {open ? "▾" : "▸"} {under.length}
       {working > 0 && <span className="delegated-toggle-working">{words.delegatedWorking(working)}</span>}
     </button>
   );
@@ -424,7 +435,8 @@ function WorkspaceSection({
   const deleteWorkspace = () => connection.send({ type: "workspace.delete", workspaceId: workspace.id });
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
   const openedDelegations = useOpenedDelegations();
-  const delegatedTo = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && conversation.startedBy!.conversationId === caller.id);
+  const listedUnder = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && callerIdOf(conversation) === caller.id);
+  const delegatedTo = (caller: Conversation) => listedUnder(caller).filter(({ startedBy }) => startedBy);
   const shown = conversations.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
   const conversationList = useRef<HTMLUListElement>(null);
   const conversationDrag = useDragToReorder(
@@ -498,7 +510,7 @@ function WorkspaceSection({
               {statusDot(conversation, delegatedTo(conversation))}
               <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
               {conversation.worktree && <WorktreeMark branch={conversation.worktree.branch} />}
-              <DelegatedToggle callerId={conversation.id} delegated={delegatedTo(conversation)} open={openedDelegations.has(conversation.id)} />
+              <DelegatedToggle callerId={conversation.id} under={listedUnder(conversation)} open={openedDelegations.has(conversation.id)} />
               {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
               <ReminderChip conversation={conversation} dispatch={dispatch} />
               <FavouriteStar conversation={conversation} />
@@ -682,7 +694,8 @@ function sidebarRows(sidebar: HTMLElement): SidebarRow[] {
 function useUnfoldAroundOpenConversation(state: AppState) {
   useEffect(() => {
     const selected = state.conversations.find(({ id }) => id === state.selectedConversationId);
-    if (selected?.startedBy) setDelegationsOpen(selected.startedBy.conversationId, true);
+    const callerId = selected && callerIdOf(selected);
+    if (callerId) setDelegationsOpen(callerId, true);
     const workspaceId = selected?.workspaceId;
     if (workspaceId) setWorkspaceFolded(workspaceId, false);
     const groupId = state.workspaces.find(({ id }) => id === workspaceId)?.groupId;

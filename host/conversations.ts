@@ -75,6 +75,7 @@ import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommand
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
 import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.ts";
 import { forkPointThrough, forkTitle, shownSessionTitle, withoutForkMarks } from "../shared/forks.ts";
+import { askedOutsideQuotes, conversationAsText, sideChatBrief, sideChatModeOf } from "../shared/side-chats.ts";
 import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
@@ -295,6 +296,8 @@ interface Runtime {
   pendingPermissions: Map<string, PendingPermission>;
   /** A session Continue found held by Codex's daemon: the next message tries to continue it again, once the user has freed it, so its history replays ahead of that message. */
   heldCodexSession?: string;
+  /** What a side chat's agent hears ahead of its first question, until that question goes out. */
+  sideChatBrief?: string;
   /** The latest permission request still reading the files it would edit; the next one shows after it. */
   permissionArriving?: Promise<unknown>;
   queuedMessages: QueuedMessage[];
@@ -564,6 +567,7 @@ export class ConversationService {
   private callerThatMayStart(callerId: string) {
     const caller = this.get(callerId);
     if (caller.startedBy) throw new Error("A plugin's tool started this conversation, so it can't start another; do the task here.");
+    if (caller.sideChatOf) throw new Error("This is a side chat, which only answers questions, so it can't start another conversation.");
     return caller;
   }
 
@@ -866,7 +870,72 @@ export class ConversationService {
     return this.get(conversationId).acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId));
   }
 
-  private insertConversation(workspaceId: string, launch: Launch, title: string, titleSetByUser = false, worktree?: ConversationWorktree): Conversation {
+  /**
+   * A side chat about the conversation, asking `text` at once, while the conversation goes on undisturbed. It works
+   * where the conversation does, on the same profile, in its agent's read-only mode, and whatever its agent asks
+   * permission for is turned down. Asked from a side chat, it is about the conversation that one is beside.
+   */
+  startSideChat(conversationId: string, text: string): Conversation {
+    const asked = this.get(conversationId);
+    const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
+    const { workspaceId, harness, profileId, worktree } = parent;
+    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, titleFrom(askedOutsideQuotes(text)) || UNTITLED, true, worktree, parent.id);
+    this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
+    this.send(sideChat.id, text).catch(() => {});
+    return sideChat;
+  }
+
+  /**
+   * A copy of the conversation's agent session where the agent can make one, which keeps its cached context; else a new
+   * session, whose agent hears the conversation as text with the first question. Either goes on the conversation's model
+   * and effort.
+   */
+  private async openSideChatSession(sideChatId: string, parentId: string): Promise<string> {
+    const sideChat = this.get(sideChatId);
+    const parent = this.store.findConversation(parentId);
+    const harness = this.harnessFor(sideChat);
+    const runtime = this.runtime(sideChatId);
+    runtime.harness = harness;
+    const capabilities = (await harness.start()).agentCapabilities;
+    const sessionRequest = await this.sessionRequest(sideChatId);
+    const copied = parent?.acpSessionId && capabilities?.sessionCapabilities?.fork && capabilities.loadSession && this.canFork(parentId) ? parent.acpSessionId : null;
+    const { sessionId, configOptions } = copied ? await this.sideChatCopyOf(harness, copied, sessionRequest) : await harness.newSession(sessionRequest);
+    this.closeSessionIfConversationDeleted(sideChatId, harness, sessionId);
+    this.muteNotifier(sideChat, sessionId);
+    this.bindSession(sideChatId, sessionId, configOptions);
+    const modelAndEffort = (parent?.configOptions ?? []).filter(({ category }) => category === "model" || category === "thought_level");
+    await this.restoreConfigChoices(sideChatId, sessionId, modelAndEffort);
+    await this.keepSideChatReadOnly(sideChatId, sessionId);
+    runtime.sideChatBrief = sideChatBrief(copied ? null : conversationAsText(this.store.listEvents(parentId)));
+    return sessionId;
+  }
+
+  /** The agent's copy of the session, opened without replaying the history the side chat doesn't show. */
+  private async sideChatCopyOf(harness: HarnessProcess, sessionId: string, sessionRequest: Awaited<ReturnType<ConversationService["sessionRequest"]>>) {
+    const { sessionId: copyId } = await harness.forkSession({ sessionId, cwd: sessionRequest.cwd });
+    const { configOptions } = await this.loadWithoutReplay(harness, copyId, sessionRequest, []);
+    return { sessionId: copyId, configOptions };
+  }
+
+  private async keepSideChatReadOnly(sideChatId: string, sessionId: string) {
+    const mode = sideChatModeOf(this.get(sideChatId).harness);
+    const modeOption = this.get(sideChatId).configOptions.find(({ category }) => category === "mode");
+    if (mode && modeOption && offersValue(modeOption, mode)) await this.trySetConfigOption(sideChatId, sessionId, modeOption.id, mode);
+  }
+
+  /** The side chat goes on as a conversation of its own, in the mode the conversation it was beside is in, else its profile's. */
+  async promoteSideChat(sideChatId: string) {
+    const { sideChatOf, profileId } = this.get(sideChatId);
+    if (!sideChatOf) return;
+    this.store.endSideChat(sideChatId);
+    this.save(this.get(sideChatId));
+    const parentMode = this.store.findConversation(sideChatOf)?.configOptions.find(({ category }) => category === "mode")?.currentValue;
+    const mode = parentMode ?? (profileId === null ? undefined : this.store.findProfile(profileId)?.mode);
+    const modeOption = this.get(sideChatId).configOptions.find(({ category }) => category === "mode");
+    if (mode !== undefined && mode !== null && modeOption) await this.setConfigOption(sideChatId, modeOption.id, mode);
+  }
+
+  private insertConversation(workspaceId: string, launch: Launch, title: string, titleSetByUser = false, worktree?: ConversationWorktree, sideChatOf?: string): Conversation {
     this.existingWorkspace(workspaceId);
     const profile = profileToLaunch(this.store, launch);
     const now = Date.now();
@@ -879,7 +948,7 @@ export class ConversationService {
       titleSetByUser,
       acpSessionId: null,
       askMode: profile.askMode,
-      bypassPermissions: profile.bypassPermissions,
+      bypassPermissions: sideChatOf === undefined && profile.bypassPermissions,
       status: "idle",
       statusDetail: null,
       openInTerminal: null,
@@ -894,6 +963,7 @@ export class ConversationService {
       activity: null,
       configOptions: [],
       ...(worktree && { worktree }),
+      ...(sideChatOf && { sideChatOf }),
       createdAt: now,
       updatedAt: now,
     });
@@ -916,13 +986,13 @@ export class ConversationService {
       .forEach((conversation) => this.publish(conversation));
   }
 
-  /** The conversation and the tasks its plugin tools started, which deleting it closes with it. */
+  /** The conversation, the tasks its plugin tools started and its side chats, which deleting it closes with it. */
   private closingWith(conversationId: string): Set<string> {
     const closing = new Set<string>();
     const close = (id: string) => {
       if (closing.has(id)) return;
       closing.add(id);
-      this.store.conversationsStartedBy(id).forEach(close);
+      [...this.store.conversationsStartedBy(id), ...this.store.sideChatsOf(id)].forEach(close);
     };
     close(conversationId);
     return closing;
@@ -1358,7 +1428,7 @@ export class ConversationService {
       const sessionId = await this.ensureSession(conversationId);
       sessionOpened = true;
       this.setStatus(conversationId, "running");
-      const prompt = await this.promptContent(conversationId, withNotes(notes, text), imageIds);
+      const prompt = [...this.takeSideChatBrief(runtime), ...(await this.promptContent(conversationId, withNotes(notes, text), imageIds))];
       const harness = this.harnessFor(this.get(conversationId));
       turn.promptSent = { text, sentAt: Date.now() };
       const answered = harness.prompt(sessionId, prompt);
@@ -2948,6 +3018,12 @@ export class ConversationService {
     this.restoreCanvas = restoreCanvas;
   }
 
+  private takeSideChatBrief(runtime: Runtime): acp.ContentBlock[] {
+    const brief = runtime.sideChatBrief;
+    runtime.sideChatBrief = undefined;
+    return brief ? [{ type: "text", text: brief }] : [];
+  }
+
   private async promptContent(conversationId: string, text: string, imageIds: string[]): Promise<acp.ContentBlock[]> {
     const images = await Promise.all(imageIds.map((imageId) => this.images.contentBlock(conversationId, imageId)));
     return [{ type: "text", text }, ...images];
@@ -2967,6 +3043,7 @@ export class ConversationService {
     if (allowOptionId && isPreAllowedCanvasTool(canvasToolAskedFor(request.toolCall, reports), this.canvasPlugins(conversationId).toolNames)) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
+    if (this.get(conversationId).sideChatOf) return turnedDown(request.options);
     const runtime = this.runtime(conversationId);
     const toolCall = withReportedToolCall(request.toolCall, reports);
     const editsRead = this.editsAskedFor(conversationId, toolCall);
@@ -3502,6 +3579,12 @@ export const queuedBeforeSessionChange = (queue: QueuedMessage[]) => {
   const changeAt = queue.findIndex(({ text }) => replacesSession(text));
   return changeAt === -1 ? queue : queue.slice(0, changeAt);
 };
+
+/** A side chat's agent is told no once, so it can still ask for something else. */
+function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionResponse {
+  const rejecting = options.find(({ kind }) => kind === "reject_once") ?? options.find(({ kind }) => kind === "reject_always");
+  return rejecting ? { outcome: { outcome: "selected", optionId: rejecting.optionId } } : { outcome: { outcome: "cancelled" } };
+}
 
 /** Allowing once leaves no trace behind; Claude Code saves an "always" answer into the project's settings. */
 export function optionThatAllows(options: acp.PermissionOption[]): string | null {

@@ -175,6 +175,7 @@ const addedColumns = [
   { table: "workspaces", column: "new_conversations_in", definition: "TEXT NOT NULL DEFAULT 'folder'" },
   { table: "workspaces", column: "worktree_setup", definition: "TEXT NOT NULL DEFAULT ''" },
   { table: "conversations", column: "worktree", definition: "TEXT" },
+  { table: "conversations", column: "side_chat_of", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -238,6 +239,7 @@ type ConversationRow = {
   started_by_plugin: string | null;
   delegated_reply: string | null;
   delegation_dismissed: number;
+  side_chat_of: string | null;
   plugin_settings: string | null;
   reminder: string | null;
   favourite: number;
@@ -332,6 +334,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   position: row.position,
   ...(row.worktree && { worktree: JSON.parse(row.worktree) as ConversationWorktree }),
   ...startedByOf(row),
+  ...(row.side_chat_of && { sideChatOf: row.side_chat_of }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
   ...(row.favourite === 1 && { favourite: true }),
@@ -722,8 +725,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -738,6 +741,7 @@ export class Store {
         JSON.stringify(conversation.configOptions),
         position,
         conversation.worktree ? JSON.stringify(conversation.worktree) : null,
+        conversation.sideChatOf ?? null,
         conversation.createdAt,
         conversation.updatedAt,
       );
@@ -754,6 +758,17 @@ export class Store {
   conversationsStartedBy(callerId: string): string[] {
     const rows = this.db.query("SELECT id FROM conversations WHERE started_by = ?").all(callerId) as { id: string }[];
     return rows.map(({ id }) => id);
+  }
+
+  /** The side chats asking about the conversation, which close with it. */
+  sideChatsOf(conversationId: string): string[] {
+    const rows = this.db.query("SELECT id FROM conversations WHERE side_chat_of = ?").all(conversationId) as { id: string }[];
+    return rows.map(({ id }) => id);
+  }
+
+  /** The side chat becomes a conversation of its own. */
+  endSideChat(conversationId: string) {
+    this.db.query("UPDATE conversations SET side_chat_of = NULL WHERE id = ?").run(conversationId);
   }
 
   /** The conversation a plugin's tool started works for the caller, which is owed word of how its work ends. */

@@ -10,6 +10,8 @@ import { countWaiting } from "../shared/waiting.ts";
 import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
+import { ConversationWithSide, NewSideChat, SelectionActions, SideChatColumn, timelineSelection } from "./SideChat.tsx";
+import { askInSideChat, closeSideChat, forgetSideChatsOfDeleted, selectingBeside, toggleSideChat, useSideChatsShown, type SideChatShown } from "./side-chats.ts";
 import { connection, type ConnectionStatus } from "./connection.ts";
 import { useClosesAsDialog } from "./desktop-close.ts";
 import { JoinMachine } from "./Devices.tsx";
@@ -350,10 +352,12 @@ function useKeptConversationsSubscribed(status: ConnectionStatus, kept: OpenConv
 export function App() {
   const [state, dispatchToState] = useReducer(reducer, conversationFromHash(), initialStateFor);
   const machines = useShownMachine(state.machines, state.hostRunId !== null);
+  const conversationsNow = useRef(state.conversations);
+  conversationsNow.current = state.conversations;
   /** Whatever selects a conversation here, from the palette to a notification, brings this computer's own view back. */
   const dispatch = useCallback((action: AppAction) => {
     if (action.type === "select") machines.show(null);
-    dispatchToState(action);
+    dispatchToState(selectingBeside(action, conversationsNow.current));
   }, []);
   const showMachine = (machine: Machine) => (showsMachinesHere() ? machines.show(machine.id) : openMachine(machine.origin));
   const railShown = showsMachinesHere() && state.machines.length > 0;
@@ -473,6 +477,8 @@ export function App() {
       }
       case "remind":
         return state.selectedConversationId && openReminderPicker(state.selectedConversationId, dispatch);
+      case "side-chat":
+        return state.selectedConversationId && toggleSideChat(state.selectedConversationId, timelineSelection()?.text);
       case "focus": {
         const { pane } = command;
         if (pane === "terminals") return askTerminals({ type: "focus" });
@@ -496,7 +502,18 @@ export function App() {
     return unsubscribe;
   }, []);
 
-  useKeptConversationsSubscribed(status, state.kept);
+  const sideChatsShown = useSideChatsShown();
+  const sideChatsBesideKept = state.kept
+    .flatMap(({ conversationId }) => {
+      const side = sideChatsShown[conversationId];
+      return side && "sideChatId" in side ? [side.sideChatId] : [];
+    })
+    .join(" ");
+  useEffect(() => dispatch({ type: "keep-side-chats", conversationIds: sideChatsBesideKept ? sideChatsBesideKept.split(" ") : [] }), [sideChatsBesideKept]);
+  useEffect(() => {
+    if (state.hostRunId !== null) forgetSideChatsOfDeleted(state.conversations);
+  }, [state.hostRunId, conversationIds]);
+  useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats]);
 
   const openConversation = useCallback(
     (conversationId: string, machineId?: string) => {
@@ -507,7 +524,13 @@ export function App() {
     },
     [state.machines],
   );
-  useSystemNotifications(shownMachine ? null : state.selectedConversationId, status === "open", openConversation);
+  const sideChatShownBesideSelected = state.selectedConversationId ? sideChatsShown[state.selectedConversationId] : undefined;
+  useSystemNotifications(
+    shownMachine ? null : state.selectedConversationId,
+    !shownMachine && sideChatShownBesideSelected && "sideChatId" in sideChatShownBesideSelected ? sideChatShownBesideSelected.sideChatId : null,
+    status === "open",
+    openConversation,
+  );
   useTabTitle(countWaiting(state.conversations));
 
   useEffect(() => {
@@ -532,7 +555,7 @@ export function App() {
     const hash = machines.shownId ? `#/m/${machines.shownId}` : state.selectedConversationId ? `#/c/${state.selectedConversationId}` : "";
     if (location.hash !== hash) history.replaceState(null, "", hash || location.pathname);
     tellTheRailThePlace(hash);
-  }, [state.selectedConversationId, machines.shownId]);
+  }, [state.selectedConversationId, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
 
@@ -568,6 +591,46 @@ export function App() {
     canvas: { visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) },
     terminal: { visible: terminalInView, toggle: toggleTerminal, disabled: !(conversation && workspace) },
   };
+  /** Shown on its own, in the main pane, as the conversation it now is; the host stops listing it as a side chat. */
+  const openSideChatAsConversation = (sideChat: Conversation) => {
+    connection.send({ type: "conversation.side-chat.promote", conversationId: sideChat.id });
+    closeSideChat(sideChat.sideChatOf!);
+    dispatchToState({ type: "select", conversationId: sideChat.id });
+  };
+  const besideConversation = (parent: Conversation, side: SideChatShown | undefined) => {
+    if (!side) return null;
+    if ("draft" in side) {
+      return (
+        <SideChatColumn parent={parent}>
+          <NewSideChat parent={parent} quotes={side.quotes} />
+        </SideChatColumn>
+      );
+    }
+    const sideChat = state.conversations.find(({ id }) => id === side.sideChatId);
+    if (!sideChat) return null;
+    const opened = state.sideChats.find(({ conversationId }) => conversationId === sideChat.id) ?? { conversationId: sideChat.id, loaded: false, events: [], hasEarlier: false, canvas: [] };
+    return (
+      <SideChatColumn parent={parent}>
+        <ChatPanel
+          key={sideChat.id}
+          conversation={sideChat}
+          delegatedTasks={[]}
+          profiles={state.profiles}
+          promptTemplates={state.promptTemplates}
+          voiceSettings={state.voiceSettings}
+          voiceEngine={state.voiceEngine}
+          userPicture={state.avatar}
+          onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
+          open={opened}
+          canvasVisible={false}
+          onFork={() => {}}
+          reminderMorning={state.reminderMorning}
+          dispatch={dispatch}
+          side={{ parent, onOpenAsConversation: () => openSideChatAsConversation(sideChat) }}
+        />
+      </SideChatColumn>
+    );
+  };
   const conversationPane = (
     <main className="chat-column">
       <LayoutToggleState.Provider value={layoutToggles}>
@@ -581,25 +644,30 @@ export function App() {
             keptConversation && (
               <Activity key={kept.conversationId} mode={kept === open ? "visible" : "hidden"}>
                 <RedrawnOnlyWhenShown shown={kept === open}>
-                  <AskToRevert.Provider
-                    value={({ turn, rewind }) => dispatch({ type: "open-overlay", overlay: { kind: "revert", conversationId: kept.conversationId, turn, rewind } })}
-                  >
-                    <ChatPanel
-                      conversation={keptConversation}
-                      delegatedTasks={state.conversations.filter(({ startedBy }) => startedBy?.conversationId === keptConversation.id && !startedBy.dismissed)}
-                      profiles={state.profiles}
-                      promptTemplates={state.promptTemplates}
-                      voiceSettings={state.voiceSettings}
-                      voiceEngine={state.voiceEngine}
-                      userPicture={state.avatar}
-                      onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
-                      open={kept}
-                      canvasVisible={canvasInView}
-                      onFork={(throughTurnSeq) => forkConversation(keptConversation, dispatch, throughTurnSeq)}
-                      reminderMorning={state.reminderMorning}
-                      dispatch={dispatch}
-                    />
-                  </AskToRevert.Provider>
+                  <ConversationWithSide
+                    side={besideConversation(keptConversation, sideChatsShown[keptConversation.id])}
+                    main={
+                      <AskToRevert.Provider
+                        value={({ turn, rewind }) => dispatch({ type: "open-overlay", overlay: { kind: "revert", conversationId: kept.conversationId, turn, rewind } })}
+                      >
+                        <ChatPanel
+                          conversation={keptConversation}
+                          delegatedTasks={state.conversations.filter(({ startedBy }) => startedBy?.conversationId === keptConversation.id && !startedBy.dismissed)}
+                          profiles={state.profiles}
+                          promptTemplates={state.promptTemplates}
+                          voiceSettings={state.voiceSettings}
+                          voiceEngine={state.voiceEngine}
+                          userPicture={state.avatar}
+                          onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
+                          open={kept}
+                          canvasVisible={canvasInView}
+                          onFork={(throughTurnSeq) => forkConversation(keptConversation, dispatch, throughTurnSeq)}
+                          reminderMorning={state.reminderMorning}
+                          dispatch={dispatch}
+                        />
+                      </AskToRevert.Provider>
+                    }
+                  />
                 </RedrawnOnlyWhenShown>
               </Activity>
             )
@@ -680,6 +748,7 @@ export function App() {
         />
       )}
       <HintLayer />
+      {conversation && open && <SelectionActions conversationId={conversation.id} onAsk={(text) => askInSideChat(conversation.id, text)} />}
       <JoinRequestPrompts joinRequests={state.joinRequests} />
       <FileToOpenPrompt fileToOpen={state.fileToOpen} dispatch={dispatch} />
       <WorktreeDeletePrompt worktreeToDelete={state.worktreeToDelete} dispatch={dispatch} />

@@ -12,7 +12,10 @@ import { lowDataEvent, pageEvent } from "./low-data.ts";
 export interface Presence {
   conversationId: string | null;
   attentive: boolean;
+  sideChatId: string | null;
 }
+
+const showsIn = (presence: Presence, conversationId: string) => presence.conversationId === conversationId || presence.sideChatId === conversationId;
 
 /** A page is the app open in a browser tab or the desktop window; a notifier is the desktop app, listening for system notifications only. */
 export interface SocketData {
@@ -77,7 +80,7 @@ export const socketData = (
   pluginTabSubscriptions: new Set<string>(),
   lowDataSubscriptions: new Set<string>(),
   terminalConversationId: null,
-  presence: { conversationId: null, attentive: false },
+  presence: { conversationId: null, attentive: false, sideChatId: null },
 });
 
 export type BrowserSocket = ServerWebSocket<SocketData>;
@@ -123,11 +126,11 @@ export class Hub {
 
   /** Pages keep recently opened conversations subscribed, hidden; this is whether one is showing it. */
   isShown(conversationId: string) {
-    return [...this.sockets].some(({ data: { presence } }) => presence.conversationId === conversationId);
+    return [...this.sockets].some(({ data: { presence } }) => showsIn(presence, conversationId));
   }
 
   isWatched(conversationId: string) {
-    return [...this.sockets].some(({ data: { presence } }) => presence.attentive && presence.conversationId === conversationId);
+    return [...this.sockets].some(({ data: { presence } }) => presence.attentive && showsIn(presence, conversationId));
   }
 
   /**

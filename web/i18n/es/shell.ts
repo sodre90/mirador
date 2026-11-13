@@ -42,6 +42,7 @@ export const shell: Messages["shell"] = {
     markRead: "Marcar como leída",
     markUnread: "Marcar como no leída",
     delegated: (count) => `${count} ${plural(count, "delegado", "delegados")}`,
+    sideChats: (count) => `${count} ${plural(count, "chat lateral", "chats laterales")}`,
     delegatedWorking: (count) => ` · ${count} trabajando`,
     setUpProfile: "Configurar un perfil",
     agent: "Agente",
@@ -205,6 +206,7 @@ export const shell: Messages["shell"] = {
       newWorkspace: "Agregar un espacio de trabajo (un directorio de proyecto)",
       toggleSidebar: "Mostrar / ocultar la barra lateral",
       toggleCanvas: "Mostrar / ocultar el lienzo",
+      sideChat: "Preguntar sobre la conversación abierta en un chat lateral",
       toggleTerminal: "Mostrar / ocultar la terminal",
       search: "Buscar en todas las conversaciones de todos los espacios de trabajo",
       markUnread:

@@ -119,9 +119,9 @@ describe("delivery", () => {
     const hub = new Hub();
     const page = connect(hub, "page");
     expect(hub.isWatched("c1")).toBe(false);
-    page.socket.data.presence = { conversationId: "c1", attentive: false };
+    page.socket.data.presence = { conversationId: "c1", attentive: false, sideChatId: null };
     expect(hub.isWatched("c1")).toBe(false);
-    page.socket.data.presence = { conversationId: "c1", attentive: true };
+    page.socket.data.presence = { conversationId: "c1", attentive: true, sideChatId: null };
     expect(hub.isWatched("c1")).toBe(true);
     expect(hub.isWatched("c2")).toBe(false);
   });

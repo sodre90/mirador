@@ -77,6 +77,9 @@ import { Statusline } from "./Statusline.tsx";
 import type { AppAction, OpenConversation } from "./state.ts";
 import { isPending, reminderCommandIn, reminderFromCommand } from "../shared/reminders.ts";
 import { openReminderPicker, reminderTimeText, setReminder } from "./reminders.ts";
+import { sideChatQuestionIn } from "../shared/side-chats.ts";
+import { SendToMainChat, SideChatHeader } from "./SideChat.tsx";
+import { askInSideChat, sideChatParentOf, startSideChat, toggleSideChat, useSideChatsShown } from "./side-chats.ts";
 import { ReminderBanner } from "./ReminderViews.tsx";
 import { useSubagentUsage } from "./subagent-usage.ts";
 import {
@@ -122,7 +125,7 @@ const isBusy = (conversation: Conversation) => conversation.status === "running"
 /** How long a graceful stop is given before the button offers to kill the wedged agent process. */
 const STOP_FORCE_GRACE_MS = 3000;
 
-function HeaderIcon({ shape }: { shape: "find" | "fork" | "clock" }) {
+function HeaderIcon({ shape }: { shape: "find" | "fork" | "clock" | "chat" }) {
   const paths = {
     find: <path d="M7 2.5a4.5 4.5 0 1 1 0 9a4.5 4.5 0 0 1 0-9ZM10.3 10.3L13.5 13.5" />,
     fork: (
@@ -134,6 +137,7 @@ function HeaderIcon({ shape }: { shape: "find" | "fork" | "clock" }) {
       </>
     ),
     clock: <path d="M8 2.25a5.75 5.75 0 1 1 0 11.5a5.75 5.75 0 0 1 0-11.5ZM8 5v3.25l2.25 1.5" />,
+    chat: <path d="M3.25 3h9.5c.7 0 1.25.55 1.25 1.25v5.5c0 .7-.55 1.25-1.25 1.25H7.5L4.5 13.5V11H3.25C2.55 11 2 10.45 2 9.75v-5.5C2 3.55 2.55 3 3.25 3Z" />,
   };
   return (
     <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -150,6 +154,8 @@ function ChatHeader({
   onFind,
   onFork,
   onRemind,
+  onSideChat,
+  sideChatShown,
   forkable,
   begun,
 }: {
@@ -160,6 +166,9 @@ function ChatHeader({
   onFind: () => void;
   onFork: () => void;
   onRemind: () => void;
+  /** Null for a side chat shown on its own, which has no column beside it. */
+  onSideChat: (() => void) | null;
+  sideChatShown: boolean;
   forkable: boolean;
   begun: boolean;
 }) {
@@ -198,6 +207,19 @@ function ChatHeader({
             <button type="button" className="icon header-icon find-trigger" aria-label={words.header.find} data-hint={hints.find} data-shortcut={shortcutKeys().find} onClick={onFind}>
               <HeaderIcon shape="find" />
             </button>
+            {onSideChat && (
+              <button
+                type="button"
+                className={`icon header-icon side-chat-toggle ${sideChatShown ? "set" : ""}`}
+                aria-label={t.sideChat.headerButton}
+                aria-pressed={sideChatShown}
+                data-hint={hints.sideChatToggle}
+                data-shortcut={shortcutKeys().sideChat}
+                onClick={onSideChat}
+              >
+                <HeaderIcon shape="chat" />
+              </button>
+            )}
             <button type="button" className="icon header-icon fork-conversation" aria-label={words.header.fork} data-hint={hints.fork} disabled={!forkable} onClick={() => onFork()}>
               <HeaderIcon shape="fork" />
             </button>
@@ -1771,6 +1793,12 @@ function Composer({
       setText("");
       return;
     }
+    const sideChatQuestion = sideChatQuestionIn(message);
+    if (sideChatQuestion !== null) {
+      askBeside(conversation, sideChatQuestion);
+      setText("");
+      return;
+    }
     const reminderCommand = reminderCommandIn(message);
     if (reminderCommand) {
       const reminder = reminderFromCommand(reminderCommand, new Date(), reminderMorning);
@@ -2050,6 +2078,13 @@ function Composer({
   );
 }
 
+/** `/btw`: a side chat beside the conversation, or beside the one this side chat is about; asked straight away when there is a question. */
+function askBeside(conversation: Conversation, question: string) {
+  const parentId = sideChatParentOf(conversation);
+  if (question.trim()) startSideChat(parentId, question);
+  else askInSideChat(parentId);
+}
+
 /** Words a plugin's workspace tab adds to this conversation's composer, after what the user already wrote, with the caret after them. */
 function useWordsFromTabs(conversationId: string, setText: Dispatch<SetStateAction<string>>, textarea: RefObject<HTMLTextAreaElement | null>) {
   useEffect(
@@ -2082,6 +2117,7 @@ export function ChatPanel({
   onFork,
   reminderMorning,
   dispatch,
+  side,
 }: {
   conversation: Conversation;
   /** The conversations this one's plugin tools started that the user hasn't dismissed. */
@@ -2098,8 +2134,11 @@ export function ChatPanel({
   onFork: (throughTurnSeq?: number) => void;
   reminderMorning: number;
   dispatch: Dispatch<AppAction>;
+  /** For a side chat in the column beside its conversation. */
+  side?: { parent: Conversation; onOpenAsConversation: () => void };
 }) {
   const timeline = useTimeline(open.events);
+  const sideChatShown = conversation.id in useSideChatsShown();
   const readingAs = replyReadingOf(voiceSettings);
   useEffect(() => readWhenSpokenTurnEnds(conversation.id, open.events, timeline, readingAs), [timeline]);
   useEffect(
@@ -2175,20 +2214,26 @@ export function ChatPanel({
               <UserPicture.Provider value={userPicture}>
                 <ReadsRepliesAloud.Provider value={readingAs}>
                   <TimelineNow.Provider value={timelineNow}>
-                    <ChatHeader
-                      conversation={conversation}
-                      profiles={profiles}
-                      runningSubagents={runningSubagents.length}
-                      onShowRunningSubagent={showRunningSubagent}
-                      onFind={find.open}
-                      onFork={onFork}
-                      onRemind={() => openReminderPicker(conversation.id, dispatch)}
-                      forkable={canFork(conversation, open)}
-                      begun={begun}
-                    />
+                    {side ? (
+                      <SideChatHeader sideChat={conversation} parent={side.parent} onOpenAsConversation={side.onOpenAsConversation} />
+                    ) : (
+                      <ChatHeader
+                        conversation={conversation}
+                        profiles={profiles}
+                        runningSubagents={runningSubagents.length}
+                        onShowRunningSubagent={showRunningSubagent}
+                        onFind={find.open}
+                        onFork={onFork}
+                        onRemind={() => openReminderPicker(conversation.id, dispatch)}
+                        onSideChat={conversation.sideChatOf ? null : () => toggleSideChat(conversation.id)}
+                        sideChatShown={sideChatShown}
+                        forkable={canFork(conversation, open)}
+                        begun={begun}
+                      />
+                    )}
                     {find.query !== null && <FindBar find={find} />}
                     <MatchesFind.Provider value={find.matches}>
-                      <ForkThroughTurn.Provider value={canFork(conversation, open) ? onFork : null}>
+                      <ForkThroughTurn.Provider value={!side && canFork(conversation, open) ? onFork : null}>
                         <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
                           {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
                           {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
@@ -2208,6 +2253,7 @@ export function ChatPanel({
                             />
                           ))}
                           {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
+                          {side && <SendToMainChat parent={side.parent} timeline={timeline} busy={busy} />}
                         </div>
                       </ForkThroughTurn.Provider>
                     </MatchesFind.Provider>
@@ -2218,7 +2264,7 @@ export function ChatPanel({
                         {words.timeline.openInTerminal(words.terminalActivity[conversation.openInTerminal])}
                       </div>
                     )}
-                    <ReminderBanner conversation={conversation} dispatch={dispatch} />
+                    {!side && <ReminderBanner conversation={conversation} dispatch={dispatch} />}
                     <Composer
                       conversation={conversation}
                       reminderMorning={reminderMorning}
@@ -2233,7 +2279,7 @@ export function ChatPanel({
                       voiceEngine={voiceEngine}
                       onManageTemplates={onManageTemplates}
                     />
-                    <Statusline conversation={conversation} profiles={profiles} />
+                    {!side && <Statusline conversation={conversation} profiles={profiles} />}
                   </TimelineNow.Provider>
                 </ReadsRepliesAloud.Provider>
               </UserPicture.Provider>

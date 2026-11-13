@@ -5,6 +5,7 @@ import { clearSlashCommand, latestSlashCommands, matchingCommands, reloadSlashCo
 import { connection } from "./connection.ts";
 import { loginSlashCommand } from "./login-request.ts";
 import { laterSlashCommand, remindSlashCommand } from "./reminders.ts";
+import { sideChatSlashCommand } from "./side-chats.ts";
 import { pluginCommands } from "./plugin-commands.tsx";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { t } from "./i18n/index.ts";
@@ -43,7 +44,7 @@ function useSlashCommands({ conversationId, harness, profileId }: AgentOfConvers
 
 const inPageLanguage = (command: SlashCommand) => ({ ...command, description: t.chat.slashCommandDescriptions[command.name] ?? command.description });
 
-const miradorCommands = [clearSlashCommand, reloadSlashCommand, loginSlashCommand, laterSlashCommand, remindSlashCommand].map(inPageLanguage);
+const miradorCommands = [clearSlashCommand, reloadSlashCommand, loginSlashCommand, laterSlashCommand, remindSlashCommand, sideChatSlashCommand].map(inPageLanguage);
 
 /** The commands Mirador runs itself, so they stand even where the agent does not list them. */
 const miradorCommandsFor = (harness: HarnessId) => [

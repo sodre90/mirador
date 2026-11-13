@@ -576,6 +576,8 @@ export interface Conversation {
   worktree?: ConversationWorktree;
   /** Only on a conversation a plugin's tool started, such as a delegated task. */
   startedBy?: StartedBy;
+  /** Only on a side chat: the conversation it asks about, beside which it shows and under which the sidebar lists it. */
+  sideChatOf?: string;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */
   pluginSettings?: Record<string, Record<string, string>>;
   /** When the user wants to come back to it, put away or kept in the list until then. */

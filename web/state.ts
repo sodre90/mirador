@@ -108,6 +108,8 @@ export interface AppState {
   conversationsPicked: number;
   /** The conversations opened last, the selected one first: they stay subscribed and drawn, so switching back is instant. */
   kept: OpenConversation[];
+  /** The side chats shown beside a conversation, subscribed as the kept conversations are. */
+  sideChats: OpenConversation[];
   awaitingConversationIn: string | null;
   overlay: Overlay | null;
   notices: { id: number; text: string }[];
@@ -146,6 +148,7 @@ export type AppAction =
   | { type: "select"; conversationId: string | null }
   | { type: "hold-turn-times"; held: boolean }
   | { type: "leave-conversation"; conversationId: string }
+  | { type: "keep-side-chats"; conversationIds: string[] }
   | { type: "awaiting-conversation"; workspaceId: string }
   | { type: "open-overlay"; overlay: Overlay }
   | { type: "close-overlay" }
@@ -191,6 +194,7 @@ export const initialState: AppState = {
   selectedConversationId: null,
   conversationsPicked: 0,
   kept: [],
+  sideChats: [],
   awaitingConversationIn: null,
   overlay: null,
   hostRunId: null,
@@ -246,15 +250,27 @@ function conversationToReturnTo(state: AppState, leaving: string) {
 
 function select(state: AppState, conversationId: string | null): AppState {
   if (conversationId === null) return { ...state, selectedConversationId: null };
-  const opened = state.kept.find((open) => open.conversationId === conversationId) ?? { conversationId, loaded: false, events: [], hasEarlier: false, canvas: [] };
+  const opened = state.kept.find((open) => open.conversationId === conversationId) ?? state.sideChats.find((open) => open.conversationId === conversationId) ?? notLoaded(conversationId);
   const others = state.kept.filter((open) => open !== opened);
   return { ...state, selectedConversationId: conversationId, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
 }
 
+const notLoaded = (conversationId: string): OpenConversation => ({ conversationId, loaded: false, events: [], hasEarlier: false, canvas: [] });
+
 function withOpen(state: AppState, conversationId: string, change: (open: OpenConversation) => OpenConversation) {
-  return state.kept.some((open) => open.conversationId === conversationId)
-    ? { ...state, kept: state.kept.map((open) => (open.conversationId === conversationId ? change(open) : open)) }
-    : state;
+  const changed = (opened: OpenConversation[]) =>
+    opened.some((open) => open.conversationId === conversationId) ? opened.map((open) => (open.conversationId === conversationId ? change(open) : open)) : opened;
+  const kept = changed(state.kept);
+  const sideChats = changed(state.sideChats);
+  return kept === state.kept && sideChats === state.sideChats ? state : { ...state, kept, sideChats };
+}
+
+/** Keeps the history of these side chats, and lets go of the rest; a conversation already kept brings the history it has. */
+function keepingSideChats(state: AppState, conversationIds: string[]): AppState {
+  if (conversationIds.join(" ") === state.sideChats.map(({ conversationId }) => conversationId).join(" ")) return state;
+  const alreadyOpen = (conversationId: string) =>
+    state.sideChats.find((open) => open.conversationId === conversationId) ?? state.kept.find((open) => open.conversationId === conversationId);
+  return { ...state, sideChats: conversationIds.map((conversationId) => alreadyOpen(conversationId) ?? notLoaded(conversationId)) };
 }
 
 /**
@@ -317,6 +333,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         pluginWindows: message.pluginWindows ?? {},
         workspaceTabs: message.workspaceTabs ?? {},
         kept: state.kept.filter(({ conversationId }) => exists(conversationId)),
+        sideChats: state.sideChats.filter(({ conversationId }) => exists(conversationId)),
       };
       return exists(state.selectedConversationId) ? next : select(next, null);
     }
@@ -356,6 +373,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         ...state,
         conversations: state.conversations.filter(({ id }) => id !== message.conversationId),
         kept: state.kept.filter(({ conversationId }) => conversationId !== message.conversationId),
+        sideChats: state.sideChats.filter(({ conversationId }) => conversationId !== message.conversationId),
       };
       return state.selectedConversationId === message.conversationId ? select(next, null) : next;
     }
@@ -449,6 +467,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "changes.failed":
     case "slash-commands.listed":
     case "conversation.fork-checked":
+    case "conversation.side-chat.started":
     case "prompt-history.listed":
     case "mentions.suggested":
     case "tool-output.got":
@@ -528,6 +547,8 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...(action.conversationId === state.selectedConversationId ? state : select(state, action.conversationId)), conversationsPicked: state.conversationsPicked + 1 };
     case "leave-conversation":
       return action.conversationId === state.selectedConversationId ? select(state, conversationToReturnTo(state, action.conversationId)) : state;
+    case "keep-side-chats":
+      return keepingSideChats(state, action.conversationIds);
     case "awaiting-conversation":
       return { ...state, awaitingConversationIn: action.workspaceId };
     case "open-overlay":

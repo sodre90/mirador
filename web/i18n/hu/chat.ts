@@ -292,6 +292,7 @@ export const chat: Messages["chat"] = {
     login: "Az ágens újbóli bejelentkeztetése egy terminállapon",
     later: "Félreteszi ezt a beszélgetést egy időpontig: /later tomorrow 9, utána egy jegyzet, ha kell",
     remind: "Emlékeztet erre a beszélgetésre egy időpontban, a listában hagyva: /remind 3h",
+    btw: "Kérdezz erről a beszélgetésről egy mellékszálban, megszakítás nélkül: /btw kérdés",
     plugin: "Bővítmények telepítése, engedélyezése és letiltása egy terminállapon",
     hooks: "A parancsok, amelyeket a Claude Code az ágens körül futtat: megnézheted és módosíthatod egy terminállapon",
     permissions: "Mit tehet az ágens kérdezés nélkül: megnézheted és módosíthatod egy terminállapon",
