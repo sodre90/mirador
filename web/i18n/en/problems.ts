@@ -289,6 +289,7 @@ export const problems = {
   engineSpeakingServerStartTimedOut: (seconds: number) => `The server speaking replies on this Mac didn't start within ${seconds} seconds.`,
   engineHasNoSuchModel: (model: string) => `Mirador has no model ${model} for this Mac.`,
   engineFilesListFailed: (host: string, status: number, repo: string) => `${host} answered ${status} when asked for the files of ${repo}.`,
+  engineFileOutsideModelFolder: (repo: string, path: string) => `${repo} lists ${path}, which leads outside the model's folder, so setting up stopped.`,
   engineNeedsSpace: (needed: string, free: string) => `Setting up needs ${needed} free, and this Mac has ${free}.`,
   engineDownloadAnswered: (host: string, status: number, url: string) => `${host} answered ${status} for ${url}.`,
   engineCommandFailed: (command: string, lastError: string, exitCode: number) => `${command} failed: ${lastError || `exit code ${exitCode}`}`,

@@ -162,6 +162,7 @@ export type HostProblem =
   | { code: "engine-speaking-server-start-timed-out"; seconds: number }
   | { code: "engine-has-no-such-model"; model: string }
   | { code: "engine-files-list-failed"; host: string; status: number; repo: string }
+  | { code: "engine-file-outside-model-folder"; repo: string; path: string }
   | { code: "engine-needs-space"; needed: string; free: string }
   | { code: "engine-download-answered"; host: string; status: number; url: string }
   | { code: "engine-command-failed"; command: string; lastError: string; exitCode: number }

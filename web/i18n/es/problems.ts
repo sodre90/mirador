@@ -290,6 +290,7 @@ export const problems: Messages["problems"] = {
   engineSpeakingServerStartTimedOut: (seconds) => `El servidor que lee las respuestas en este Mac no arrancó en ${seconds} segundos.`,
   engineHasNoSuchModel: (model) => `Mirador no tiene ningún modelo ${model} para este Mac.`,
   engineFilesListFailed: (host, status, repo) => `${host} respondió ${status} al pedirle los archivos de ${repo}.`,
+  engineFileOutsideModelFolder: (repo, path) => `La lista de archivos de ${repo} incluye ${path}, que lleva fuera de la carpeta del modelo, así que la configuración se detuvo.`,
   engineNeedsSpace: (needed, free) => `La configuración necesita ${needed} libres, y este Mac tiene ${free}.`,
   engineDownloadAnswered: (host, status, url) => `${host} respondió ${status} para ${url}.`,
   engineCommandFailed: (command, lastError, exitCode) => `${command} falló: ${lastError || `código de salida ${exitCode}`}`,

@@ -17,6 +17,8 @@ const gitBlobSha1 = (content: Buffer) => createHash("sha1").update(`blob ${conte
 
 let slowly = false;
 let corrupted = false;
+let listsAFileOutsideItsFolder = false;
+const escapingFile = { path: "../escaped.bin", content: Buffer.from("escaped"), lfs: false };
 let downloaded: string[] = [];
 
 /** Answers as Hugging Face does for any model: its files at a revision, and each file, sent slowly when a step asks for time to look. */
@@ -24,7 +26,8 @@ const huggingFace = createServer(async (request, response) => {
   const path = decodeURIComponent(request.url ?? "");
   if (/^\/api\/models\/[^/]+\/[^/]+\/tree\/[0-9a-f]+\?recursive=true$/.test(path)) {
     response.setHeader("content-type", "application/json");
-    response.end(JSON.stringify(files.map(({ path, content, lfs }) => ({ type: "file", path, size: content.length, oid: gitBlobSha1(content), ...(lfs && { lfs: { oid: sha256(content) } }) }))));
+    const listed = listsAFileOutsideItsFolder ? [...files, escapingFile] : files;
+    response.end(JSON.stringify(listed.map(({ path, content, lfs }) => ({ type: "file", path, size: content.length, oid: gitBlobSha1(content), ...(lfs && { lfs: { oid: sha256(content) } }) }))));
     return;
   }
   const asked = path.match(/\/resolve\/[0-9a-f]+\/(.+)$/)?.[1];
@@ -191,6 +194,19 @@ test("Settings → Voice set up voice on this Mac: the download shows its progre
     await expect(thisMac.getByRole("alert")).toContainText("came in different from what was expected");
     await expect(thisMac.getByRole("button", { name: "Try again" })).toBeVisible();
     corrupted = false;
+    await thisMac.getByRole("button", { name: "Try again" }).click();
+    await expect(models).toContainText("in all, with the speech engine.");
+  });
+
+  await test.step("a model whose file list leads outside its folder downloads nothing, and setup says so", async () => {
+    await models.getByRole("button", { name: "Remove voice from this Mac" }).click();
+    await models.getByRole("button", { name: "Confirm: Remove voice from this Mac" }).click();
+    listsAFileOutsideItsFolder = true;
+    downloaded = [];
+    await setUpButton.click();
+    await expect(thisMac.getByRole("alert")).toContainText("lists ../escaped.bin, which leads outside the model's folder, so setting up stopped.");
+    expect(downloaded).toEqual([]);
+    listsAFileOutsideItsFolder = false;
     await thisMac.getByRole("button", { name: "Try again" }).click();
     await expect(models).toContainText("in all, with the speech engine.");
   });

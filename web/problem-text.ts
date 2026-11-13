@@ -318,6 +318,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.engineHasNoSuchModel(problem.model);
     case "engine-files-list-failed":
       return words.engineFilesListFailed(problem.host, problem.status, problem.repo);
+    case "engine-file-outside-model-folder":
+      return words.engineFileOutsideModelFolder(problem.repo, problem.path);
     case "engine-needs-space":
       return words.engineNeedsSpace(problem.needed, problem.free);
     case "engine-download-answered":

@@ -290,6 +290,7 @@ export const problems: Messages["problems"] = {
   engineSpeakingServerStartTimedOut: (seconds) => `A válaszokat felolvasó szerver ezen a Macen ${seconds} másodpercen belül nem indult el.`,
   engineHasNoSuchModel: (model) => `A Miradornak nincs ${model} modellje ehhez a Machez.`,
   engineFilesListFailed: (host, status, repo) => `${status} kóddal válaszolt a fájllista kérésére (${repo}): ${host}.`,
+  engineFileOutsideModelFolder: (repo, path) => `Ez a fájl a modell mappáján kívülre vezet, ezért a beállítás leállt: ${path} (${repo})`,
   engineNeedsSpace: (needed, free) => `A beállításhoz ${needed} szabad hely kell, ezen a Macen pedig ${free} van.`,
   engineDownloadAnswered: (host, status, url) => `${status} kóddal válaszolt (${url}): ${host}.`,
   engineCommandFailed: (command, lastError, exitCode) => `Nem sikerült (${command}): ${lastError || `${exitCode} kilépési kód`}`,

@@ -1,6 +1,6 @@
 import { afterAll, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { VoiceEngineSetup } from "../shared/voice-engine.ts";
@@ -23,6 +23,7 @@ const repos: Record<string, RepoFile[]> = {
   "mlx-community/Kokoro": [file("config.json", "{}"), file("voices/am_fenrir.safetensors", Buffer.alloc(2_000, 3), true), file("samples/hello.wav", "RIFF")],
   "mlx-community/gemma": [file("config.json", '{"model_type":"gemma4"}'), file("model.safetensors", Buffer.alloc(50_000, 9), true)],
   "mlx-community/gemma-small": [file("config.json", '{"model_type":"gemma4"}'), file("model.safetensors", Buffer.alloc(20_000, 5), true)],
+  "mlx-community/evil": [file("config.json", "{}"), file("../escaped.bin", "escaped")],
 };
 
 const sha256 = (content: Buffer) => createHash("sha256").update(content).digest("hex");
@@ -253,6 +254,19 @@ describe.if(hasPosixTools)("setting up voice on this Mac", () => {
     installer.setUp([WHISPER]);
     expect(await settled(installer)).toMatchObject({ state: "failed" });
     expect(existsSync(join(root, "uv-calls.log"))).toBe(false);
+  });
+
+  test("a listed file that would land outside the model's folder stops setup before anything is downloaded", async () => {
+    const installer = installerWith({ sources: sources({ models: [model("evil", "voiceModel", "Evil", "mlx-community/evil")] }) });
+    installer.setUp(["evil"]);
+    expect(await settled(installer)).toEqual({
+      state: "failed",
+      problem: "mlx-community/evil lists ../escaped.bin, which leads outside the model's folder, so setting up stopped.",
+      problemAbout: { code: "engine-file-outside-model-folder", repo: "mlx-community/evil", path: "../escaped.bin" },
+    });
+    expect(requests.filter(({ path }) => path.includes("/resolve/"))).toEqual([]);
+    expect(existsSync(join(voiceDir, "models", "escaped.bin"))).toBe(false);
+    expect(readdirSync(voiceDir)).toEqual([]);
   });
 
   test("a failing install shows what uv said", async () => {

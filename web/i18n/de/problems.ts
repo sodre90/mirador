@@ -294,6 +294,7 @@ export const problems: Messages["problems"] = {
     `Der Server, der auf diesem Mac Antworten vorliest, ist nicht innerhalb von ${seconds} Sekunden gestartet.`,
   engineHasNoSuchModel: (model) => `Mirador hat kein Modell ${model} für diesen Mac.`,
   engineFilesListFailed: (host, status, repo) => `${host} antwortete mit ${status} auf die Frage nach den Dateien von ${repo}.`,
+  engineFileOutsideModelFolder: (repo, path) => `${repo} listet eine Datei außerhalb des Modellordners: ${path}. Das Einrichten wurde gestoppt.`,
   engineNeedsSpace: (needed, free) => `Das Einrichten braucht ${needed} freien Speicherplatz, und dieser Mac hat ${free}.`,
   engineDownloadAnswered: (host, status, url) => `${host} antwortete mit ${status} für ${url}.`,
   engineCommandFailed: (command, lastError, exitCode) => `${command} ist fehlgeschlagen: ${lastError || `Exit-Code ${exitCode}`}`,

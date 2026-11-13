@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, readFile, rm, statfs, writeFile } from "node:fs/promises";
 import { homedir, platform, arch, release, tmpdir, totalmem } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 import { gigabytes, type VoiceEngineSetup, type VoiceEngineStatus, type VoiceEngineStep } from "../../../shared/voice-engine.ts";
 import { ENGINE_PACKAGES_BYTES, FIRST_MODELS, type ChoosableModel, type EngineModel } from "../../../shared/voice-engine-models.ts";
 import { isUnusedModelFile, modelFolderName, type EngineSources } from "./catalog.ts";
@@ -75,6 +75,8 @@ function addingFailed(models: string[], error: unknown, cause: string) {
 const lastLine = (text: string) => text.trim().split("\n").at(-1) ?? "";
 
 const namesOf = (models: EngineModel[]) => models.map(({ name }) => name);
+
+const escapes = (relativePath: string) => relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath);
 
 /** Downloads and installs Mirador's own speech engine into the data folder, and takes it away again. */
 export class VoiceEngineInstaller {
@@ -225,11 +227,15 @@ export class VoiceEngineInstaller {
     const response = await fetch(`${modelsUrl}/api/models/${repo}/tree/${revision}?recursive=true`, { signal });
     if (!response.ok) throw new HostProblemError({ code: "engine-files-list-failed", host: new URL(modelsUrl).host, status: response.status, repo });
     const entries = (await response.json()) as TreeEntry[];
-    return entries
-      .filter(({ type, path }) => type === "file" && !isUnusedModelFile(path))
+    const folder = this.folderOf(model);
+    const files = entries.filter(({ type }) => type === "file");
+    const escaping = files.find(({ path }) => escapes(relative(folder, join(folder, path))));
+    if (escaping) throw new HostProblemError({ code: "engine-file-outside-model-folder", repo, path: escaping.path });
+    return files
+      .filter(({ path }) => !isUnusedModelFile(path))
       .map(({ path, size, oid, lfs }) => ({
         url: `${modelsUrl}/${repo}/resolve/${revision}/${path.split("/").map(encodeURIComponent).join("/")}`,
-        destination: join(this.folderOf(model), path),
+        destination: join(folder, path),
         size,
         checksum: lfs ? { sha256: lfs.oid } : { gitBlobSha1: oid },
       }));

@@ -273,6 +273,7 @@ export const problems: Messages["problems"] = {
   engineSpeakingServerStartTimedOut: (seconds) => `这台 Mac 上朗读回复的服务器在 ${seconds} 秒内没有启动。`,
   engineHasNoSuchModel: (model) => `Mirador 没有适用于这台 Mac 的模型 ${model}。`,
   engineFilesListFailed: (host, status, repo) => `向 ${host} 请求 ${repo} 的文件时，它返回了 ${status}。`,
+  engineFileOutsideModelFolder: (repo, path) => `${repo} 列出的 ${path} 指向模型文件夹之外，因此设置停止了。`,
   engineNeedsSpace: (needed, free) => `设置需要 ${needed} 可用空间，而这台 Mac 只有 ${free}。`,
   engineDownloadAnswered: (host, status, url) => `${host} 对 ${url} 返回了 ${status}。`,
   engineCommandFailed: (command, lastError, exitCode) => `${command} 失败：${lastError || `退出码 ${exitCode}`}`,
