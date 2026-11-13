@@ -46,6 +46,7 @@ export const hints = {
     "The profile (environment variables and pre-launch command) the agent runs with.\n\nEach profile runs its own agent process. Switching closes this session on the current process and resumes it on the new one, so the agent keeps the whole conversation. The model goes back to the new profile's default.\n\nSwitching while the agent works stops its turn, moves the session, and asks the agent to continue where it left off; messages you queued go out after that.\n\nProfiles of another agent can be picked only before the first message: that agent starts a fresh session. Once the conversation has begun, start a new conversation to use them.",
   questions:
     "What happens when the agent asks you something on the canvas.\n\nAgent waits: the agent's ask call stays open until you press Submit, and your answer comes back as its result, mid-turn.\n\nNext message: the ask call returns at once, the agent ends its turn, and your answer is sent later as your next message. Good for questions you want to think about.",
+  pluginTextSetting: "Write $NAME to use a variable of this profile's environment, e.g. $LLM_GATEWAY_KEY.",
   conversationPluginSetting: "For this conversation only. Profile's follows what its profile sets in Profiles; switching profile goes back to it.",
   configOption:
     "The agent offers this setting for the session. Changing it sends the new value to the agent (ACP session/set_config_option), which applies it to this conversation.",

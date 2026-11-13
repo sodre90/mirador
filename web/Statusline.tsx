@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { chosenModel, withMultiplier } from "../shared/config-options.ts";
-import type { ContextUsage, Conversation, PlanQuotas, Profile, QuotaWindow, StatuslineRender } from "../shared/model.ts";
+import type { StatuslineChip } from "../shared/canvas-plugins.ts";
+import type { ContextUsage, Conversation, PlanQuotas, PluginStatuslineChips, Profile, QuotaWindow, StatuslineRender } from "../shared/model.ts";
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { describedText } from "./host-error.ts";
+import { canOpenItemWindows, openPluginWindow } from "./item-window.ts";
 import { t } from "./i18n/index.ts";
 import { readableOn } from "./readable-color.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
@@ -181,16 +183,51 @@ function TerminalText({ text, fontFamily }: { text: string; fontFamily: string }
   );
 }
 
+/** A chip that opens the plugin's window first hands the window what to show, as an action of its own. */
+function openFromChip(plugin: string, opens: NonNullable<StatuslineChip["opensWindow"]>) {
+  if (opens !== true) connection.send({ type: "plugin-window.action", requestId: crypto.randomUUID(), plugin, action: opens.action });
+  openPluginWindow(plugin);
+}
+
+function PluginChip({ plugin, chip, opensWindow }: { plugin: string; chip: StatuslineChip; opensWindow: boolean }) {
+  const className = ["plugin-chip", chip.level && `level-${chip.level}`, chip.stale && "stale"].filter(Boolean).join(" ");
+  const opens = opensWindow && canOpenItemWindows() ? chip.opensWindow : undefined;
+  return opens ? (
+    <button type="button" className={className} data-hint={chip.hint} onClick={() => openFromChip(plugin, opens)}>
+      {chip.text}
+    </button>
+  ) : (
+    <span className={className} data-hint={chip.hint}>
+      {chip.text}
+    </span>
+  );
+}
+
+/** Each plugin's chips, drawn together. */
+function PluginChips({ groups }: { groups: PluginStatuslineChips[] }) {
+  return groups.map(({ plugin, title, chips, hasWindow }) => (
+    <span key={plugin} className="plugin-chips" role="group" aria-label={title}>
+      {chips.map((chip, index) => (
+        <PluginChip key={index} plugin={plugin} chip={chip} opensWindow={hasWindow} />
+      ))}
+    </span>
+  ));
+}
+
+const showsCost = (groups: PluginStatuslineChips[]) => groups.some(({ chips }) => chips.some(({ cost }) => cost));
+
 function BuiltInStatusline({
   conversation,
   profiles,
   gitBranch,
   quotas,
+  pluginChips,
 }: {
   conversation: Conversation;
   profiles: Profile[];
   gitBranch: string | null;
   quotas: PlanQuotas | null;
+  pluginChips: PluginStatuslineChips[];
 }) {
   const model = chosenModel(conversation.configOptions);
   const profile = profiles.find(({ id }) => id === conversation.profileId);
@@ -211,7 +248,8 @@ function BuiltInStatusline({
       {knownWindows(quotas).map(({ name, window }) => (
         <QuotaMeter key={name} name={name} window={window} />
       ))}
-      {usage?.cost && (
+      <PluginChips groups={pluginChips} />
+      {usage?.cost && !showsCost(pluginChips) && (
         <span className="chip" data-hint={hints.cost}>
           {formatCost(usage.cost)}
         </span>
@@ -239,6 +277,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
   const columns = useColumns(content, terminalFont);
   const render = useStatuslineRender(conversation, columns, prefersCommand);
   const commandOutput = prefersCommand ? (render?.output ?? null) : null;
+  const pluginChips = render?.pluginChips ?? [];
 
   return (
     <section className="statusline" aria-label={words.label}>
@@ -246,9 +285,14 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
         {commandOutput !== null ? (
           <TerminalText text={commandOutput} fontFamily={terminalFont} />
         ) : (
-          <BuiltInStatusline conversation={conversation} profiles={profiles} gitBranch={render?.gitBranch ?? null} quotas={render?.quotas ?? null} />
+          <BuiltInStatusline conversation={conversation} profiles={profiles} gitBranch={render?.gitBranch ?? null} quotas={render?.quotas ?? null} pluginChips={pluginChips} />
         )}
       </div>
+      {commandOutput !== null && pluginChips.length > 0 && (
+        <div className="statusline-plugins">
+          <PluginChips groups={pluginChips} />
+        </div>
+      )}
       {prefersCommand && render?.error && (
         <span className="statusline-error" role="img" aria-label={words.commandFailed} data-hint={describedText(render.error, render.errorAbout)}>
           ⚠

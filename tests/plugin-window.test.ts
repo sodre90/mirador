@@ -67,7 +67,7 @@ describe("a plugin's window and activity", () => {
     plugins.activity("c1", { kind: "turn-started" });
     expect(heard).toEqual([]);
     await nextTick();
-    expect(heard).toEqual([{ kind: "turn-started", conversationId: "c1", conversationTitle: "t", at: expect.any(Number) }]);
+    expect(heard).toEqual([{ kind: "turn-started", conversationId: "c1", conversationTitle: "t", sessionId: null, at: expect.any(Number) }]);
     expect(settingSeen).toBeNull();
     plugins.activity("no-such-conversation", { kind: "turn-started" });
     await nextTick();

@@ -129,6 +129,8 @@ export const problems: Messages["problems"] = {
     "canvas-need-window-shape": "window csak { state, action } alakban, ahol a state függvény, és az action is az, ha van",
     "canvas-need-workspace-tab-shape": "workspaceTab csak { shows, state, action } alakban, ahol a state függvény, és a shows meg az action is az, ha van",
     "canvas-need-background-function": "background csak függvényként",
+    "canvas-need-statusline-function": "statusline csak függvényként",
+    "canvas-need-check-profile-function": "checkProfile csak függvényként",
     "landing-needs-worktree": "Csak a saját worktree-jében futó beszélgetésnek vannak commitjai, amelyeket a projektmappa ágába lehet beolvasztani.",
   },
   couldNotResume: (cause) => `Az ágens előző munkamenetét nem sikerült folytatni (${cause}), ezért új indul.`,
@@ -171,6 +173,7 @@ export const problems: Messages["problems"] = {
   unknownWorkspace: (id) => `Ismeretlen munkaterület: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `Ennek a bővítménynek (${plugin}) nincs ilyen beállítása: ${setting}.`,
   notASettingChoice: (value, setting) => `Ez nem választható itt (${setting}): ${value}.`,
+  pluginSettingNotPerConversation: (setting) => `${setting} a profilban állítható, nem egy-egy beszélgetésre.`,
   appNotInstalled: (app) => `Nincs telepítve ilyen nevű alkalmazás: ${app}.`,
   appStorageKeepsText: (app) => `Ennek az alkalmazásnak (${app}) a tárolója szöveget tárol: a kulcsnak és az értéknek is szövegnek kell lennie.`,
   appStorageFull: (app, characters, key) => `Ez az alkalmazás (${app}) munkaterületenként ${characters} karaktert tárolhat; ez már nem fér el: ${key}.`,
@@ -306,6 +309,10 @@ export const problems: Messages["problems"] = {
     `a vászon host moduljának van ablaka, vagy figyeli a tevékenységet, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   workspaceTabNeedsNewerApi: (brought, named) => `a vászon host moduljának van munkaterület-lapja, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   pluginBackgroundNeedsNewerApi: (brought, named) => `a vászon host modulja a háttérben is dolgozik, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
+  pluginTypedSettingsNeedNewerApi: (brought, named) =>
+    `a plugin.json-ban vannak beírandó vagy kapcsolható profilbeállítások, amelyek a bővítmény-API ${brought}. változatával jelentek meg; a megadott API: ${named}`,
+  pluginStatuslineNeedsNewerApi: (brought, named) =>
+    `a vászon host modulja elemeket rajzol az állapotsorba vagy profilt ellenőriz, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} ikonnal (icon), ${placements.join(" vagy ")} elhelyezéssel (placement), a count, outcome és listed pedig csak függvényként`,

@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
-import { modelSettingsOf, profileSettingValue, type PluginProfileSetting } from "../shared/apps.ts";
+import { isTextSetting, modelSettingsOf, profileSettingValue, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginTextProfileSetting } from "../shared/apps.ts";
 import { categoryChoices, flatSelectOptions, knownChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
@@ -11,7 +11,7 @@ import { connection } from "./connection.ts";
 import { hostErrorText } from "./host-error.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
+import { titlesOfPlugins, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
@@ -169,50 +169,149 @@ function useAgentChoices(profile: Profile | undefined) {
 
 type ProfilePluginSettings = Record<string, Record<string, string>>;
 
-/** What installed plugins let each profile set, such as the profile the delegate plugin hands tasks to. */
+/** The plugin's check of the settings the form holds, answered for the form as it was when asked. */
+function usePluginProfileCheck(plugin: string) {
+  const [asking, setAsking] = useState<{ requestId: string; formKey: string } | null>(null);
+  const [outcome, setOutcome] = useState<{ formKey: string; answer: string | null; problem: string | null } | null>(null);
+  useEffect(
+    () =>
+      connection.onMessage((message) => {
+        if (message.type !== "plugin.profile-checked" || message.requestId !== asking?.requestId) return;
+        setOutcome({ formKey: asking.formKey, answer: message.answer, problem: message.problem });
+        setAsking(null);
+      }),
+    [asking],
+  );
+  useEffect(
+    () =>
+      connection.onStatus((status) => {
+        if (status !== "open") setAsking(null);
+      }),
+    [],
+  );
+  const check = (profile: ProfileDraft, formKey: string) => {
+    const requestId = crypto.randomUUID();
+    setOutcome(null);
+    if (connection.send({ type: "plugin.check-profile", requestId, plugin, profile })) setAsking({ requestId, formKey });
+  };
+  return { check, checking: asking !== null, outcome };
+}
+
+function PluginProfileCheck({ plugin, draft }: { plugin: string; draft: () => ProfileDraft }) {
+  const { check, checking, outcome } = usePluginProfileCheck(plugin);
+  const formKeyOf = (profile: ProfileDraft) => JSON.stringify([profile.environment, profile.pluginSettings?.[plugin] ?? {}]);
+  const shownOutcome = outcome?.formKey === formKeyOf(draft()) ? outcome : null;
+  return (
+    <div className="plugin-profile-check">
+      <button type="button" disabled={checking} onClick={() => check(draft(), formKeyOf(draft()))}>
+        {checking ? words.checkingProfile : words.checkProfile}
+      </button>
+      {shownOutcome && (
+        <span className={shownOutcome.problem === null ? "saved" : "problem"} role={shownOutcome.problem === null ? "status" : "alert"}>
+          {shownOutcome.problem ?? shownOutcome.answer}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** What installed plugins let each profile set, under each plugin's title: the profile the delegate plugin hands tasks to, say, or a gateway's address. */
 function PluginProfileFields({
   profileId,
   profiles,
   chosen,
   onChoose,
+  draft,
 }: {
   profileId: string | undefined;
   profiles: Profile[];
   chosen: ProfilePluginSettings;
   onChoose: (plugin: string, settingId: string, value: string) => void;
+  draft: () => ProfileDraft;
 }) {
-  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings = [] }) => profileSettings.map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })));
-  return withProfileSettings.map(({ plugin, setting, settingsOfPlugin }) => (
-    <PluginProfileField
-      key={`${plugin}/${setting.id}`}
-      setting={setting}
-      settingsOfPlugin={settingsOfPlugin}
-      profileId={profileId}
-      profiles={profiles}
-      valueOf={(each) => profileSettingValue(chosen, plugin, each)}
-      onChoose={(value) => {
-        onChoose(plugin, setting.id, value);
-        modelSettingsOf(settingsOfPlugin, setting.id).forEach((modelSetting) => onChoose(plugin, modelSetting.id, modelSetting.default));
-      }}
-    />
-  ));
+  const titles = titlesOfPlugins();
+  return usePluginSettings()
+    .filter(({ profileSettings = [] }) => profileSettings.length > 0)
+    .map(({ plugin, profileSettings = [], checksProfile }) => {
+      const valueOf = (setting: PluginProfileSetting) => profileSettingValue(chosen, plugin, setting);
+      const toggledOn = (toggleId: string) => profileSettings.some((each) => each.id === toggleId && valueOf(each) === "on");
+      const shownSettings = profileSettings.filter(({ shownWhen }) => shownWhen === undefined || toggledOn(shownWhen));
+      const togglesOn = profileSettings.every(({ shownWhen }) => shownWhen === undefined || toggledOn(shownWhen));
+      return (
+        <fieldset key={plugin} className="plugin-profile-settings">
+          <legend>{titles[plugin] ?? plugin}</legend>
+          {shownSettings.map((setting) => (
+            <PluginProfileField
+              key={setting.id}
+              setting={setting}
+              settingsOfPlugin={profileSettings}
+              profileId={profileId}
+              profiles={profiles}
+              valueOf={valueOf}
+              onChoose={(value) => {
+                onChoose(plugin, setting.id, value);
+                modelSettingsOf(profileSettings, setting.id).forEach((modelSetting) => onChoose(plugin, modelSetting.id, modelSetting.default));
+              }}
+            />
+          ))}
+          {checksProfile && togglesOn && <PluginProfileCheck plugin={plugin} draft={draft} />}
+        </fieldset>
+      );
+    });
 }
 
-function PluginProfileField({
-  setting,
-  settingsOfPlugin,
-  profileId,
-  profiles,
-  valueOf,
-  onChoose,
-}: {
+interface PluginProfileFieldProps {
   setting: PluginProfileSetting;
   settingsOfPlugin: PluginProfileSetting[];
   profileId: string | undefined;
   profiles: Profile[];
   valueOf: (setting: PluginProfileSetting) => string;
   onChoose: (value: string) => void;
-}) {
+}
+
+function PluginProfileField(props: PluginProfileFieldProps) {
+  const { setting, valueOf, onChoose } = props;
+  if (isTextSetting(setting)) return <PluginTextField setting={setting} value={valueOf(setting)} onChoose={onChoose} />;
+  if (setting.kind === "toggle") {
+    return (
+      <label className="checkbox" data-hint={setting.hint}>
+        <input type="checkbox" aria-label={words.pluginSetting(setting.label)} checked={valueOf(setting) === "on"} onChange={(event) => onChoose(event.target.checked ? "on" : "off")} />
+        <span>{setting.label}</span>
+      </label>
+    );
+  }
+  return <PluginChoiceField {...props} setting={setting} />;
+}
+
+function PluginTextField({ setting, value, onChoose }: { setting: PluginTextProfileSetting; value: string; onChoose: (value: string) => void }) {
+  const [revealed, setRevealed] = useState(false);
+  const hidden = setting.kind === "secret" && !revealed;
+  return (
+    <div className="plugin-text-setting">
+      <label data-hint={[setting.hint, hints.pluginTextSetting].filter(Boolean).join("\n\n")}>
+        <span>{setting.label}</span>
+        <input
+          type={hidden ? "password" : "text"}
+          aria-label={words.pluginSetting(setting.label)}
+          value={value}
+          placeholder={setting.fallsBackTo ? words.fallsBackTo(setting.fallsBackTo) : setting.placeholder}
+          autoComplete="off"
+          autoCapitalize="off"
+          autoCorrect="off"
+          spellCheck={false}
+          onChange={(event) => onChoose(event.target.value)}
+        />
+      </label>
+      {setting.kind === "secret" && (
+        <button type="button" className="link" aria-pressed={revealed} aria-label={revealed ? words.hideSecretOf(setting.label) : words.showSecretOf(setting.label)} onClick={() => setRevealed(!revealed)}>
+          {revealed ? words.hideSecret : words.showSecret}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function PluginChoiceField({ setting, settingsOfPlugin, profileId, profiles, valueOf, onChoose }: PluginProfileFieldProps & { setting: PluginChoiceProfileSetting }) {
   const value = valueOf(setting);
   const choices = useChoicesOf(setting, settingsOfPlugin, profiles, profileId, valueOf, value);
   return (
@@ -598,7 +697,7 @@ function ProfileEditor({
         </div>
         {pluginsHaveProfileSettings && (
           <div {...panelOf("plugins")}>
-            <PluginProfileFields profileId={profile?.id} profiles={profiles} chosen={pluginSettings} onChoose={choosePluginSetting} />
+            <PluginProfileFields profileId={profile?.id} profiles={profiles} chosen={pluginSettings} onChoose={choosePluginSetting} draft={draft} />
           </div>
         )}
       </div>

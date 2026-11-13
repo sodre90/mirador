@@ -6,7 +6,7 @@ import type {
   ToolCallUpdate,
   ToolKind,
 } from "@agentclientprotocol/sdk/unstable";
-import type { ConversationReply, PluginItemPlacement } from "./canvas-plugins.ts";
+import type { ConversationReply, PluginItemPlacement, StatuslineChip } from "./canvas-plugins.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { Reminder } from "./reminders.ts";
 import type { EditDiff } from "./review.ts";
@@ -382,6 +382,17 @@ export interface StatuslineRender {
   errorAbout?: HostProblem;
   /** The plan's usage limits as the agent last reported them for the conversation's profile; null until it has. */
   quotas: PlanQuotas | null;
+  /** What the plugins show in the statusline, by plugin, in the order they loaded. */
+  pluginChips: PluginStatuslineChips[];
+}
+
+/** A plugin's figures for a conversation's statusline, drawn together. */
+export interface PluginStatuslineChips {
+  plugin: string;
+  title: string;
+  chips: StatuslineChip[];
+  /** The plugin has a window of its own, for a chip to open. */
+  hasWindow: boolean;
 }
 
 /**

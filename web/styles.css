@@ -1699,6 +1699,51 @@ button.icon.workspace-fold {
   grid-template-columns: repeat(9, 24px);
 }
 
+.plugin-profile-settings {
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.plugin-profile-settings legend {
+  padding: 0;
+  font-weight: 600;
+  color: var(--muted);
+  font-size: calc(11.5px * var(--font-scale));
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.plugin-text-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 8px;
+}
+
+.plugin-text-setting input {
+  font-family: var(--mono);
+  font-weight: normal;
+}
+
+.plugin-text-setting > button {
+  margin-bottom: 6px;
+}
+
+.plugin-profile-check {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  margin-top: 10px;
+}
+
+.plugin-profile-check .problem {
+  color: var(--danger);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .profile-editor label.checkbox {
   flex-direction: row;
   align-items: center;
@@ -5367,6 +5412,57 @@ button.shell-more:hover {
   content: "·";
   margin-right: 8px;
   color: var(--faint);
+}
+
+.plugin-chips {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.plugin-chip {
+  padding: 0 7px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.plugin-chip + .plugin-chip {
+  border-left: 1px solid var(--border);
+}
+
+button.plugin-chip {
+  cursor: pointer;
+}
+
+button.plugin-chip:hover,
+button.plugin-chip:focus-visible {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.plugin-chip.level-warn {
+  color: var(--warn);
+}
+
+.plugin-chip.level-danger {
+  color: var(--danger);
+}
+
+.plugin-chip.stale {
+  opacity: 0.55;
+}
+
+.statusline-plugins {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .statusline-terminal {

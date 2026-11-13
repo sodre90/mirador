@@ -1,0 +1,14 @@
+{
+  "name": "meter",
+  "title": "Meter",
+  "version": "1.0.0",
+  "api": 14,
+  "canvas": { "host": "host.ts", "view": "canvas.js" },
+  "profileSettings": [
+    { "id": "metered", "label": "Uses the meter", "kind": "toggle", "default": "off" },
+    { "id": "url", "label": "Meter URL", "kind": "text", "placeholder": "https://meter.example", "fallsBackTo": "METER_URL", "shownWhen": "metered" },
+    { "id": "key", "label": "Meter key", "kind": "secret", "fallsBackTo": "METER_KEY", "shownWhen": "metered" },
+    { "id": "show-total", "label": "Total on the statusline", "kind": "toggle", "default": "on", "shownWhen": "metered" },
+    { "id": "tier", "label": "Meter tier", "choices": [{ "value": "basic", "label": "Basic" }, { "value": "pro", "label": "Pro" }], "default": "basic" }
+  ]
+}

@@ -112,6 +112,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginHasNoSetting(problem.plugin, problem.setting);
     case "not-a-setting-choice":
       return words.notASettingChoice(problem.value, problem.setting);
+    case "plugin-setting-not-per-conversation":
+      return words.pluginSettingNotPerConversation(problem.setting);
     case "app-not-installed":
       return words.appNotInstalled(problem.app);
     case "app-storage-keeps-text":
@@ -348,6 +350,10 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.workspaceTabNeedsNewerApi(problem.brought, problem.named);
     case "plugin-background-needs-newer-api":
       return words.pluginBackgroundNeedsNewerApi(problem.brought, problem.named);
+    case "plugin-typed-settings-need-newer-api":
+      return words.pluginTypedSettingsNeedNewerApi(problem.brought, problem.named);
+    case "plugin-statusline-needs-newer-api":
+      return words.pluginStatuslineNeedsNewerApi(problem.brought, problem.named);
     case "canvas-host-module-needs":
       return words.canvasHostModuleNeeds(problem.needs.map((need) => problemText(need, words)));
     case "canvas-need-item-shape":

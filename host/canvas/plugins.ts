@@ -12,6 +12,9 @@ import {
   type PluginBackgroundContext,
   type PluginProfile,
   type PluginWindowContext,
+  type ProfilesSettings,
+  type StatuslineChip,
+  type StatuslineContext,
   type ConversationChoices,
   type ConversationStart,
   type ConversationUsage,
@@ -24,9 +27,11 @@ import {
 } from "../../shared/canvas-plugins.ts";
 import type { SlashCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import type { PluginCanvasItem, StartedBy } from "../../shared/model.ts";
-import type { ServerMessage } from "../../shared/protocol.ts";
-import { conversationSettingValue, modelSettingsOf } from "../../shared/apps.ts";
+import type { PluginCanvasItem, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
+import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
+import { conversationSettingValue, isChoiceSetting, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
+import { profileEnvironment } from "../acp/harnesses.ts";
+import { validStatuslineChips } from "./statusline-chips.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
 import type { Store } from "../store.ts";
@@ -151,6 +156,7 @@ export class CanvasPlugins {
       workspaces: () => this.store.listWorkspaces().map(({ id, name, path }) => ({ id, name, folder: path })),
       inWorkspace: (workspaceId) => this.workspaceTabContext(plugin, workspaceId),
       storage: this.storageOf(plugin),
+      ...this.profilesSettings(plugin),
     };
   }
 
@@ -196,14 +202,75 @@ export class CanvasPlugins {
     return setting;
   }
 
-  /** What the conversation chose in its top bar, else what its profile set, else the default; a profile by its name as it is now. */
+  /** What the conversation chose in its top bar, else what its profile set, else the default, as the plugin reads it. */
   private settingFor(plugin: CanvasPlugin, conversationId: string, id: string): string | null {
     const setting = this.profileSettingNamed(plugin, id);
     const conversation = this.store.findConversation(conversationId);
     const profile = conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined;
-    const value = conversationSettingValue(conversation, profile, plugin.manifest.name, setting);
-    if (setting.choices !== "profiles") return value || null;
-    return (value && this.store.findProfile(value)?.name) || null;
+    return this.readSetting(setting, conversationSettingValue(conversation, profile, plugin.manifest.name, setting), profile ?? null);
+  }
+
+  /** A profile by its name as it is now, and typed text with the variables of the profile's environment it names read. */
+  private readSetting(setting: PluginProfileSetting, value: string, profile: Profile | null): string | null {
+    if (isTextSetting(setting)) return readTextSetting(setting, value, environmentOf(profile)) || null;
+    if (isChoiceSetting(setting) && setting.choices === "profiles") return (value && this.store.findProfile(value)?.name) || null;
+    return value || null;
+  }
+
+  private profilesSettings(plugin: CanvasPlugin): ProfilesSettings {
+    return {
+      profiles: () => this.pluginProfiles(),
+      settingOfProfile: (profileName, id) => {
+        const setting = this.profileSettingNamed(plugin, id);
+        const profile = this.store.listProfiles().find(({ name }) => name === profileName);
+        if (!profile) throw new Error(`No profile is named ${profileName}; there are ${this.pluginProfiles().map(({ name }) => name).join(", ")}.`);
+        return this.readSetting(setting, profileSettingValue(profile.pluginSettings, plugin.manifest.name, setting), profile);
+      },
+    };
+  }
+
+  /** The plugin's check of what the Profiles dialog holds for it, saved or not; resolves to its answer, and throws its problem. */
+  async checkProfile(name: string, draft: ProfileDraft): Promise<string> {
+    const plugin = this.plugins.find(({ manifest }) => manifest.name === name);
+    if (!plugin?.host.checkProfile) throw new Error(plugin ? `${plugin.manifest.title} checks no profile settings.` : `No plugin named ${name} is installed.`);
+    const profile: Profile = { ...draft, id: draft.id ?? "", createdAt: 0 };
+    const setting = (id: string) => {
+      const declared = this.profileSettingNamed(plugin, id);
+      return this.readSetting(declared, profileSettingValue(draft.pluginSettings, name, declared), profile);
+    };
+    return String(await plugin.host.checkProfile(setting));
+  }
+
+  /** The plugins that check a profile's settings, by name. */
+  checkingProfiles(): Set<string> {
+    return new Set(this.plugins.filter(({ host }) => host.checkProfile).map(({ manifest }) => manifest.name));
+  }
+
+  /** What each plugin shows in the conversation's statusline; a plugin whose hook fails or shows nothing is left out. */
+  statuslineChips(conversationId: string): PluginStatuslineChips[] {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) return [];
+    const profile = conversation.profileId ? (this.store.findProfile(conversation.profileId) ?? null) : null;
+    return this.plugins.flatMap((plugin) => {
+      if (!plugin.host.statusline) return [];
+      const context: StatuslineContext = {
+        conversationId,
+        conversationTitle: conversation.title,
+        sessionId: conversation.acpSessionId,
+        agent: conversation.harness,
+        profile: profile?.name ?? null,
+        createdAt: conversation.createdAt,
+        profileSetting: (id) => this.settingFor(plugin, conversationId, id),
+        storage: this.storageOf(plugin),
+      };
+      try {
+        const chips: StatuslineChip[] = validStatuslineChips(plugin.host.statusline(context));
+        return chips.length > 0 ? [{ plugin: plugin.manifest.name, title: plugin.manifest.title, chips, hasWindow: plugin.host.window !== undefined }] : [];
+      } catch (error) {
+        console.error(`the statusline of the ${plugin.manifest.name} plugin failed for conversation ${conversationId}:`, error);
+        return [];
+      }
+    });
   }
 
   /** By conversation, the plugins' settings the user changed in its top bar since the agent last heard, worded when it hears. */
@@ -250,7 +317,7 @@ export class CanvasPlugins {
     const listening = this.plugins.filter(({ host }) => host.activity);
     const conversation = listening.length > 0 ? this.store.findConversation(conversationId) : undefined;
     if (!conversation) return;
-    const event: PluginActivityEvent = { ...activity, conversationId, conversationTitle: conversation.title, at: Date.now() };
+    const event: PluginActivityEvent = { ...activity, conversationId, conversationTitle: conversation.title, sessionId: conversation.acpSessionId, at: Date.now() };
     queueMicrotask(() => listening.forEach((plugin) => this.tellActivity(plugin, event)));
   }
 
@@ -294,7 +361,7 @@ export class CanvasPlugins {
   private readonly windowsSettling = new Set<string>();
 
   private windowContext(plugin: CanvasPlugin): PluginWindowContext {
-    return { storage: this.storageOf(plugin), windowChanged: () => this.windowChanged(plugin.manifest.name) };
+    return { storage: this.storageOf(plugin), windowChanged: () => this.windowChanged(plugin.manifest.name), ...this.profilesSettings(plugin) };
   }
 
   private windowChanged(name: string) {
@@ -649,5 +716,14 @@ export class CanvasPlugins {
     this.store.saveCanvasItem(item);
     this.hub.publishToConversation(item.conversationId, { type: "canvas.upserted", item });
     return item;
+  }
+}
+
+/** A profile whose environment does not parse reads no variables; its conversations say why elsewhere. */
+function environmentOf(profile: Profile | null): Record<string, string> {
+  try {
+    return profileEnvironment(profile);
+  } catch {
+    return {};
   }
 }

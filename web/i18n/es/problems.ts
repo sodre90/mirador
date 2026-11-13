@@ -129,6 +129,8 @@ export const problems: Messages["problems"] = {
     "canvas-need-window-shape": "window solo como { state, action }, con state como función y action también, si lo hay",
     "canvas-need-workspace-tab-shape": "workspaceTab solo como { shows, state, action }, con state como función y shows y action también, si los hay",
     "canvas-need-background-function": "background solo como función",
+    "canvas-need-statusline-function": "statusline solo como función",
+    "canvas-need-check-profile-function": "checkProfile solo como función",
     "landing-needs-worktree": "Solo una conversación en su propio worktree tiene commits para fusionar en la rama de la carpeta del proyecto.",
   },
   couldNotResume: (cause) => `No se pudo reanudar la sesión anterior del agente (${cause}); se empieza una nueva.`,
@@ -171,6 +173,7 @@ export const problems: Messages["problems"] = {
   unknownWorkspace: (id) => `Espacio de trabajo desconocido: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} no tiene el ajuste ${setting}.`,
   notASettingChoice: (value, setting) => `${value} no es una de las opciones de ${setting}.`,
+  pluginSettingNotPerConversation: (setting) => `${setting} se ajusta en el perfil, no para una conversación.`,
   appNotInstalled: (app) => `No hay ninguna aplicación instalada llamada ${app}.`,
   appStorageKeepsText: (app) => `El almacenamiento de ${app} guarda texto: su clave y su valor deben ser cadenas.`,
   appStorageFull: (app, characters, key) => `${app} puede guardar ${characters} caracteres en un espacio de trabajo; ${key} no cabe.`,
@@ -306,6 +309,10 @@ export const problems: Messages["problems"] = {
     `el módulo del host del lienzo tiene una ventana o escucha la actividad, que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   workspaceTabNeedsNewerApi: (brought, named) => `el módulo del host del lienzo tiene una pestaña del espacio de trabajo, que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   pluginBackgroundNeedsNewerApi: (brought, named) => `el módulo del host del lienzo trabaja en segundo plano, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
+  pluginTypedSettingsNeedNewerApi: (brought, named) =>
+    `plugin.json tiene ajustes de perfil para escribir o activar, que llegaron con la API de plugins ${brought}; indica la API ${named}`,
+  pluginStatuslineNeedsNewerApi: (brought, named) =>
+    `el módulo del host del lienzo dibuja datos en la línea de estado o comprueba perfiles, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   canvasHostModuleNeeds: (needs) => `el módulo del host del lienzo necesita ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} con un icon, un placement de ${placements.join(" o ")}, y count, outcome y listed solo como funciones`,

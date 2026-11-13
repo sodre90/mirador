@@ -58,6 +58,7 @@ export type HostProblem =
   | { code: "unknown-workspace"; id: string }
   | { code: "plugin-has-no-setting"; plugin: string; setting: string }
   | { code: "not-a-setting-choice"; value: string; setting: string }
+  | { code: "plugin-setting-not-per-conversation"; setting: string }
   | { code: "app-not-installed"; app: string }
   | { code: "app-storage-keeps-text"; app: string }
   | { code: "app-storage-full"; app: string; characters: number; key: string }
@@ -177,6 +178,8 @@ export type HostProblem =
   | { code: "plugin-window-needs-newer-api"; brought: number; named: number }
   | { code: "workspace-tab-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-background-needs-newer-api"; brought: number; named: number }
+  | { code: "plugin-typed-settings-need-newer-api"; brought: number; named: number }
+  | { code: "plugin-statusline-needs-newer-api"; brought: number; named: number }
   | { code: "canvas-host-module-needs"; needs: HostProblem[] }
   | { code: "canvas-need-item-shape"; item: string; placements: string[] }
   | { code: "canvas-need-item-opens-with-room"; item: string; rooms: string[] }

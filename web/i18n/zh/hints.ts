@@ -47,6 +47,7 @@ export const hints: Messages["hints"] = {
     "Agent 运行时使用的配置（环境变量和启动前命令）。\n\n每个配置运行各自的 Agent 进程。切换时会在当前进程上关闭这个会话，并在新进程上恢复，因此 Agent 会保留整个对话。模型会回到新配置的默认值。\n\n在 Agent 工作时切换，会中止它的当前轮次、迁移会话，并请 Agent 从中断处继续；你排队的消息随后发出。\n\n其他 Agent 的配置只能在发出第一条消息之前选择：该 Agent 会开启一个全新的会话。对话开始后，请新建对话来使用它们。",
   questions:
     "Agent 在画布上向你提问时会怎样。\n\nAgent 等待：Agent 的 ask 调用保持打开，直到你点击提交，你的回答会作为结果在轮次中途返回。\n\n下一条消息：ask 调用立即返回，Agent 结束它的轮次，你的回答稍后作为你的下一条消息发出。适合需要你好好想想的问题。",
+  pluginTextSetting: "写 $NAME 即可使用此配置环境中的变量，例如 $LLM_GATEWAY_KEY。",
   conversationPluginSetting: "仅对这个对话生效。“配置的默认值”沿用其配置在“配置”中的设置；切换配置会回到它。",
   configOption:
     "Agent 为这个会话提供的设置。更改它会把新值发送给 Agent（ACP session/set_config_option），由 Agent 应用到这个对话。",

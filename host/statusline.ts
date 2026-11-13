@@ -2,7 +2,8 @@ import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chosenModel } from "../shared/config-options.ts";
-import { harnessLabels, type Conversation, type PlanQuotas, type QuotaWindow, type StatuslineRender } from "../shared/model.ts";
+import { harnessLabels, type Conversation, type ContextUsage, type PlanQuotas, type PluginStatuslineChips, type QuotaWindow, type StatuslineRender } from "../shared/model.ts";
+import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { profileEnvironment } from "./acp/harnesses.ts";
 import type { ConversationService } from "./conversations.ts";
 import type { Store } from "./store.ts";
@@ -49,9 +50,18 @@ const rateLimits = ({ fiveHour, sevenDay }: PlanQuotas) => ({
   ...(sevenDay && { seven_day: rateLimitWindow(sevenDay) }),
 });
 
-/** The JSON Claude Code feeds its statusline command, as far as the app knows the same facts. */
-export function statuslineInput(conversation: Conversation, directory: string, transcriptPath: string | null, quotas: PlanQuotas | null, now: number) {
+type Cost = NonNullable<ContextUsage["cost"]>;
+
+/** The cost a plugin's chip shows for the conversation, which takes the place of what the agent reported. */
+export const costOfPluginChips = (pluginChips: PluginStatuslineChips[]): Cost | null => pluginChips.flatMap(({ chips }) => chips).find(({ cost }) => cost)?.cost ?? null;
+
+/**
+ * The JSON Claude Code feeds its statusline command, as far as the app knows the same facts; `pluginCost`, a plugin's
+ * figure for the conversation's cost, is given in place of the agent's own.
+ */
+export function statuslineInput(conversation: Conversation, directory: string, transcriptPath: string | null, quotas: PlanQuotas | null, now: number, pluginCost: Cost | null = null) {
   const usage = conversation.contextUsage;
+  const cost = pluginCost ?? usage?.cost;
   const usedPercentage = usage && usage.size > 0 ? Math.round((usage.used / usage.size) * 100) : null;
   const model = chosenModel(conversation.configOptions);
   return {
@@ -64,7 +74,7 @@ export function statuslineInput(conversation: Conversation, directory: string, t
     version: "mirador",
     output_style: { name: "default" },
     cost: {
-      total_cost_usd: usage?.cost?.currency === "USD" ? usage.cost.amount : 0,
+      total_cost_usd: cost?.currency === "USD" ? cost.amount : 0,
       total_duration_ms: now - conversation.createdAt,
       total_api_duration_ms: 0,
       total_lines_added: 0,
@@ -153,6 +163,7 @@ export class StatuslineService {
   constructor(
     private readonly store: Store,
     private readonly conversations: ConversationService,
+    private readonly plugins: CanvasPlugins,
     /** Test hosts share the user's home directory, so they must not run the user's own statusline. */
     private readonly runsUserCommands: boolean,
   ) {}
@@ -164,6 +175,7 @@ export class StatuslineService {
     const directory = workingCopyOf(workspace, conversation).path;
     const now = Date.now();
     const quotas = this.conversations.planQuotasOf(conversationId, now);
+    const pluginChips = this.plugins.statuslineChips(conversationId);
     const environment = this.environmentOf(conversation);
     const configDir = environment && claudeConfigDir(environment);
     const runsClaudeCode = conversation.harness === "claude";
@@ -171,17 +183,17 @@ export class StatuslineService {
       currentGitBranch(directory),
       configDir && this.runsUserCommands && runsClaudeCode ? statusLineCommandIn(configDir) : null,
     ]);
-    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas };
+    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips };
     const transcriptPath = conversation.acpSessionId ? claudeTranscriptPath(configDir, directory, conversation.acpSessionId) : null;
     const result = await runStatusLineCommand(command, {
-      input: statuslineInput(conversation, directory, transcriptPath, quotas, now),
+      input: statuslineInput(conversation, directory, transcriptPath, quotas, now, costOfPluginChips(pluginChips)),
       directory,
       environment,
       columns: clampColumns(columns),
     });
     return "output" in result
-      ? { gitBranch, command, output: result.output, error: null, quotas }
-      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas };
+      ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips }
+      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips };
   }
 
   /** A profile whose environment does not parse cannot run anything; its conversation says why elsewhere. */

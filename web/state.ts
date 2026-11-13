@@ -428,6 +428,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "profile.saved":
     case "profile.choices.got":
     case "profile.tested":
+    case "plugin.profile-checked":
     case "sessions.listed":
     case "sessions.searched":
     case "sessions.failed":

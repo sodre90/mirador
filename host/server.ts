@@ -1121,6 +1121,11 @@ export function startServer(services: HostServices) {
           (result) => reply({ type: "profile.tested", requestId: message.requestId, result }),
           (error) => reply({ type: "profile.tested", requestId: message.requestId, result: { ok: false, ...failure(error) } }),
         );
+      case "plugin.check-profile":
+        return void canvasPlugins.checkProfile(message.plugin, message.profile).then(
+          (answer) => reply({ type: "plugin.profile-checked", requestId: message.requestId, answer, problem: null }),
+          (error) => reply({ type: "plugin.profile-checked", requestId: message.requestId, answer: null, problem: messageOf(error) }),
+        );
       case "prompt-template.save":
         return savePromptTemplate(message.template);
       case "prompt-template.delete":
@@ -1326,6 +1331,7 @@ export function startServer(services: HostServices) {
       case "conversation.set-ask-mode":
         return conversations.setAskMode(message.conversationId, message.askMode);
       case "conversation.set-plugin-setting":
+        pluginSettings.assertChosenPerConversation(message.plugin, message.setting);
         conversations.setPluginSetting(message.conversationId, message.plugin, message.setting, message.value);
         canvasPlugins.settingChanged(message.conversationId, message.plugin, message.setting);
         for (const modelSetting of canvasPlugins.modelSettingsOf(message.plugin, message.setting)) {
@@ -1721,7 +1727,7 @@ export function startServer(services: HostServices) {
       workspaces: store.listWorkspaces(),
       workspaceGroups: store.listWorkspaceGroups(),
       conversations: conversations.list(),
-      profiles: store.listProfiles().map((profile) => profileFor(socket, profile)),
+      profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),
       keepAwake: store.keepAwake(),

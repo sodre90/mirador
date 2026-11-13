@@ -116,6 +116,8 @@ export type ClientMessage =
   | { type: "profile.choices.get"; requestId: string; profileId: string }
   /** Starts the agent the draft describes, which need not be saved, and asks what it offers. */
   | { type: "profile.test"; requestId: string; profile: ProfileDraft }
+  /** A plugin's check of what the Profiles dialog holds for it, saved or not; answered with "plugin.profile-checked". */
+  | { type: "plugin.check-profile"; requestId: string; plugin: string; profile: ProfileDraft }
   /** Creates the template, or changes the one with this id. */
   | { type: "prompt-template.save"; template: Pick<PromptTemplate, "id" | "name" | "text"> }
   | { type: "prompt-template.delete"; templateId: string }
@@ -447,6 +449,8 @@ export type ServerMessage =
   /** What the profile's agent said it offers; null when it was not there to answer. */
   | { type: "profile.choices.got"; requestId: string; profileId: string; configOptions: SessionConfigOption[] | null }
   | { type: "profile.tested"; requestId: string; result: ProfileTestResult }
+  /** The plugin's answer, or the problem it found. */
+  | { type: "plugin.profile-checked"; requestId: string; answer: string | null; problem: string | null }
   | { type: "prompt-template.upserted"; template: PromptTemplate }
   | { type: "prompt-template.deleted"; templateId: string }
   | { type: "settings.canvas-use"; canvasUse: CanvasUse }

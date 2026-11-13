@@ -16,7 +16,7 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
  * reads it with a tool call that names it, and `{"waitFor": path}` holds the turn until that file exists. `SAY `
  * followed by text answers with that text, as markdown, `TITLE ` followed by text titles the session so, as agents
  * rename a conversation from its work, and answers,
- * `USAGE ` followed by the tokens used and the window's size reports that context usage,
+ * `USAGE ` followed by the tokens used, the window's size and, if given, a cost in US dollars reports that usage,
  * and `FAIL ` followed by text fails the turn with that text as its error. `SUBAGENT ASKS ` followed by a title starts a
  * subagent whose step asks permission, and ends the turn with what the user answered.
  * `NOTICE` sends the notices claude-agent-acp sends for hook output, a stopped task and a model fallback: a `notice`
@@ -296,8 +296,9 @@ async function makePlan(client: acp.AgentContext, sessionId: string, steps: { co
   return { stopReason: "end_turn" as const };
 }
 
-async function reportUsage(client: acp.AgentContext, sessionId: string, used: number, size: number) {
-  await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "usage_update", used, size } });
+async function reportUsage(client: acp.AgentContext, sessionId: string, used: number, size: number, costUsd?: number) {
+  const cost = costUsd === undefined ? {} : { cost: { amount: costUsd, currency: "USD" } };
+  await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "usage_update", used, size, ...cost } });
   return { stopReason: "end_turn" as const };
 }
 
@@ -519,8 +520,8 @@ acp
     if (startsWith(ctx.params.prompt, "WRITE ")) return writeFiles(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("WRITE ".length)));
     if (startsWith(ctx.params.prompt, "SUBAGENT ASKS ")) return askFromSubagent(ctx.client, ctx.params.sessionId, text.slice("SUBAGENT ASKS ".length));
     if (startsWith(ctx.params.prompt, "USAGE ")) {
-      const [used = 0, size = 0] = text.slice("USAGE ".length).split(" ").map(Number);
-      return reportUsage(ctx.client, ctx.params.sessionId, used, size);
+      const [used = 0, size = 0, costUsd] = text.slice("USAGE ".length).split(" ").map(Number);
+      return reportUsage(ctx.client, ctx.params.sessionId, used, size, costUsd);
     }
     if (startsWith(ctx.params.prompt, "SAY ")) return sayText(ctx.client, ctx.params.sessionId, text.slice("SAY ".length));
     if (startsWith(ctx.params.prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));

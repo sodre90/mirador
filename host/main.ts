@@ -90,7 +90,11 @@ const loadedPluginNames = new Set([...loadedPlugins.canvases, ...loadedPlugins.a
 const catalog = new PluginCatalog(store, config.pluginCatalogUrl, (name) => loadedPluginNames.has(name) || existsSync(join(pluginsFolder, name)));
 void catalog.refresh();
 canvasPlugins.offersFrom(catalog);
-const pluginSettings = new PluginSettingsStore(store, [...loadedPlugins.canvases, ...loadedPlugins.apps].map(({ manifest }) => manifest));
+const pluginSettings = new PluginSettingsStore(
+  store,
+  [...loadedPlugins.canvases, ...loadedPlugins.apps].map(({ manifest }) => manifest),
+  canvasPlugins.checkingProfiles(),
+);
 const conversations = new ConversationService(store, hub, config, notifierMute, images, droppedFiles, notifications, (conversationId) => canvasPlugins.guidanceFor(conversationId));
 canvasPlugins.sendsPromptsWith((conversationId, text, { afterTurn, fromPlugin }) => conversations.send(conversationId, text, [], { afterTurn, fromPlugin }));
 canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt, title, choices, worktree) =>
@@ -149,9 +153,9 @@ const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugi
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
 const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
 const networkAssetsServer = network && certificate && serveCanvasAssets(network.canvasPort, { certificate, knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
-const profiles = new ProfileService(store, hub, conversations);
+const profiles = new ProfileService(store, hub, conversations, pluginSettings.secretSettings());
 profiles.whenProfilesChange(() => canvasPlugins.profilesChanged());
-const statusline = new StatuslineService(store, conversations, config.runsUserStatusLine);
+const statusline = new StatuslineService(store, conversations, canvasPlugins, config.runsUserStatusLine);
 const terminals = new TerminalService(hub, store);
 const restart = new HostRestart(hub, conversations, config.dataDir, stopServices, relaunchHow && (() => relaunch(relaunchHow)));
 const desktopApp = new DesktopAppCheck(

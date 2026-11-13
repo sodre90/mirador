@@ -19,18 +19,18 @@ const manifests: PluginManifest[] = [
 
 test("lists only plugins with settings, each at its default until the user chooses, and keeps the choice across restarts", () => {
   const store = new Store(":memory:");
-  const settings = new PluginSettingsStore(store, manifests);
+  const settings = new PluginSettingsStore(store, manifests, new Set());
   expect(settings.all()).toEqual([{ plugin: "review", settings: [openReviews], chosen: {} }]);
   expect(settingValue(settings.all()[0], "open-reviews")).toBe("fullscreen");
 
   settings.choose("review", "open-reviews", "beside");
-  const afterRestart = new PluginSettingsStore(store, manifests).all()[0];
+  const afterRestart = new PluginSettingsStore(store, manifests, new Set()).all()[0];
   expect(afterRestart!.chosen).toEqual({ "open-reviews": "beside" });
   expect(settingValue(afterRestart, "open-reviews")).toBe("beside");
 });
 
 test("refuses a value that is not one of the setting's choices, and a setting the plugin doesn't have", () => {
-  const settings = new PluginSettingsStore(new Store(":memory:"), manifests);
+  const settings = new PluginSettingsStore(new Store(":memory:"), manifests, new Set());
   expect(() => settings.choose("review", "open-reviews", "elsewhere")).toThrow("elsewhere is not one of the choices of Open reviews.");
   expect(() => settings.choose("review", "open-tours", "beside")).toThrow("review has no setting open-tours.");
   expect(() => settings.choose("tally", "open-reviews", "beside")).toThrow("tally has no setting open-reviews.");

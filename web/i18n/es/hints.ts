@@ -50,6 +50,7 @@ export const hints: Messages["hints"] = {
     "El perfil (variables de entorno y comando previo al inicio) con el que se ejecuta el agente.\n\nCada perfil ejecuta su propio proceso de agente. Cambiar cierra esta sesión en el proceso actual y la reanuda en el nuevo, así que el agente conserva toda la conversación. El modelo vuelve al predeterminado del nuevo perfil.\n\nSi cambias mientras el agente trabaja, se detiene su turno, se mueve la sesión y se le pide al agente que continúe donde se quedó; los mensajes que pusiste en cola salen después.\n\nLos perfiles de otro agente solo se pueden elegir antes del primer mensaje: ese agente inicia una sesión nueva. Una vez empezada la conversación, inicia una conversación nueva para usarlos.",
   questions:
     "Qué pasa cuando el agente te pregunta algo en el lienzo.\n\nEl agente espera: la llamada ask del agente queda abierta hasta que pulses Enviar, y tu respuesta vuelve como su resultado, en mitad del turno.\n\nMi respuesta se envía como el siguiente mensaje: la llamada ask termina de inmediato, el agente acaba su turno y tu respuesta se envía después como tu siguiente mensaje. Útil para preguntas en las que quieres pensar.",
+  pluginTextSetting: "Escribe $NOMBRE para usar una variable del entorno de este perfil, p. ej. $LLM_GATEWAY_KEY.",
   conversationPluginSetting:
     "Solo para esta conversación. El del perfil sigue lo que su perfil define en Perfiles; al cambiar de perfil, vuelve a él.",
   configOption:

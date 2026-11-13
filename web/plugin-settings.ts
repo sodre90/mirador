@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { profileSettingWhoseModelsItLists, settingValue, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
+import { profileSettingWhoseModelsItLists, settingValue, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
 import { categoryChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { itemRooms, type ItemRoom } from "../shared/canvas-plugins.ts";
@@ -68,7 +68,7 @@ function useModelsOfProfile(profileId: string | null): SettingChoice[] {
  * setting, and `chosen` even while that profile's agent hasn't listed it.
  */
 export function useChoicesOf(
-  setting: PluginProfileSetting,
+  setting: PluginChoiceProfileSetting,
   settingsOfPlugin: PluginProfileSetting[],
   profiles: Profile[],
   ownId: string | null | undefined,

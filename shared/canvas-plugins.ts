@@ -231,14 +231,31 @@ export type PluginActivity =
 
 export type PluginActivityKind = PluginActivity["kind"];
 
-export type PluginActivityEvent = PluginActivity & { conversationId: string; conversationTitle: string; at: number };
+export type PluginActivityEvent = PluginActivity & {
+  conversationId: string;
+  conversationTitle: string;
+  /**
+   * The agent's id of the conversation's session as the event happened, as `StatuslineContext.sessionId` has it, so a
+   * plugin can keep each session a conversation had; null before its first session started. Plugin API 14 brought it.
+   */
+  sessionId: string | null;
+  at: number;
+};
 
-/** What a plugin's own window and its activity hook reach: its storage, and its window's state. */
-export interface PluginWindowContext {
+/** What a plugin's own window and its activity hook reach: its storage, its window's state, and the profiles' settings. */
+export interface PluginWindowContext extends ProfilesSettings {
   /** What the plugin keeps across conversations and restarts; values are JSON. */
   storage: CanvasPluginStorage;
   /** Mirador asks `window.state` again soon after, and hands what it returns to the plugin's open windows. */
   windowChanged(): void;
+}
+
+/** The profiles, and what each set for the plugin, for work that belongs to no conversation. Plugin API 14 brought them. */
+export interface ProfilesSettings {
+  /** Mirador's profiles, by name. */
+  profiles(): PluginProfile[];
+  /** One of the plugin's profile settings as the profile of that name has it, read as `profileSetting` reads it; throws for a profile that isn't there. */
+  settingOfProfile(profile: string, id: string): string | null;
 }
 
 export interface PluginActivityContext extends PluginWindowContext {
@@ -300,7 +317,7 @@ export interface WorkspaceTabContext {
 }
 
 /** What a plugin's background work reaches: the workspaces, each as its tab would. Plugin API 11 brought it. */
-export interface PluginBackgroundContext {
+export interface PluginBackgroundContext extends ProfilesSettings {
   /** The workspaces open in Mirador now. */
   workspaces(): PluginWorkspace[];
   /** A workspace's context, as its tab gets it; throws for one that isn't open. */
@@ -320,6 +337,49 @@ export interface WorkspaceTab<State = unknown> {
   state(context: WorkspaceTabContext): State | Promise<State>;
   action?(action: unknown, context: WorkspaceTabContext): unknown;
 }
+
+/** The conversation whose statusline a plugin's chips are for. Plugin API 14 brought it. */
+export interface StatuslineContext {
+  conversationId: string;
+  conversationTitle: string;
+  /**
+   * The agent's own id of the conversation's session, such as Claude Code's session_id, which it also sends its model
+   * provider; null until a session started. Going back to an earlier message, clearing the context or moving to another
+   * profile gives the conversation a new one.
+   */
+  sessionId: string | null;
+  /** The agent it runs, as Mirador names it, e.g. "claude" or "pi". */
+  agent: string;
+  /** Its profile's name; null for none. */
+  profile: string | null;
+  /** When the conversation began, in epoch milliseconds. */
+  createdAt: number;
+  /** What the conversation has for one of the plugin's profile settings, as a tool's `profileSetting` reads it. */
+  profileSetting(id: string): string | null;
+  storage: CanvasPluginStorage;
+}
+
+/** One figure a plugin shows in a conversation's statusline. Plugin API 14 brought it. */
+export interface StatuslineChip {
+  text: string;
+  /** Its tooltip: what it counts, and as of when. */
+  hint?: string;
+  /** Close to a limit: drawn in the statusline's colour for a warning, or for danger. */
+  level?: StatuslineChipLevel;
+  /** An old figure, e.g. while its source can't be reached: drawn faded. */
+  stale?: boolean;
+  /**
+   * The conversation's cost, which this chip shows: the statusline then leaves out the cost the agent reported, and the
+   * user's statusline command gets this one, in US dollars, as `cost.total_cost_usd`.
+   */
+  cost?: { amount: number; currency: string };
+  /** A click opens the plugin's window, first handing its window's `action` the `action` given, e.g. to show what the chip counts. */
+  opensWindow?: true | { action: unknown };
+}
+
+export type StatuslineChipLevel = "warn" | "danger";
+
+export const statuslineChipLevels: StatuslineChipLevel[] = ["warn", "danger"];
 
 /** A tool the agent calls on the canvas server, next to show, ask and the rest, or the user runs from the slash menu. */
 export interface CanvasTool<Data = unknown> {
@@ -383,6 +443,18 @@ export interface CanvasHost<Data = unknown> {
    * a plugin's tool started gets none.
    */
   guidanceFor?(profileSetting: (id: string) => string | null): { instructions?: string; often?: string } | null;
+  /**
+   * The plugin's figures for a conversation's statusline, drawn together in the order given; none for an empty list.
+   * Mirador asks whenever a page shows the statusline: on every change to the conversation, and every 30 seconds. So it
+   * answers at once from what the plugin already knows, and fetches on timers of its own. Plugin API 14 brought it.
+   */
+  statusline?(context: StatuslineContext): StatuslineChip[];
+  /**
+   * Checks what a profile set for the plugin, e.g. that a server answers at the URL and with the key given: the Profiles
+   * dialog's Test connection button, before the profile is saved. `setting` reads the settings as `profileSetting` does.
+   * Resolves to a line on what it found; what it throws shows as the problem. Plugin API 14 brought it.
+   */
+  checkProfile?(setting: (id: string) => string | null): string | Promise<string>;
   /** Every conversation's activity, as it happens. It runs after the event, never holding up the agent. */
   activity?(event: PluginActivityEvent, context: PluginActivityContext): void | Promise<void>;
   /** A window of the plugin's own, which the user opens from the palette. */

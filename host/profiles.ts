@@ -5,6 +5,7 @@ import type { ConversationService } from "./conversations.ts";
 import type { BrowserSocket, Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
+import { withoutSecrets, type SecretSettings } from "../shared/apps.ts";
 
 /** Every conversation runs on a profile, and a profile only on the agent it was made for; the picker sends both, and the host checks they agree. */
 export function profileToLaunch(store: Store, launch: Launch): Profile {
@@ -72,9 +73,13 @@ export function moveProfilelessOntoProfiles(store: Store, installed: HarnessId[]
     );
 }
 
-/** A profile as a socket gets it: without what it launches its agent with, unless the socket's page edits profiles. */
-export const profileFor = (socket: BrowserSocket, profile: Profile): Profile =>
-  socket.data.readsProfileLaunch ? profile : { ...profile, environment: "", prelaunch: "" };
+/** A profile as a socket gets it: without what it launches its agent with, nor its plugins' secrets, unless the socket's page edits profiles. */
+export const profileFor = (socket: BrowserSocket, profile: Profile, secrets: SecretSettings): Profile => {
+  if (socket.data.readsProfileLaunch) return profile;
+  const { pluginSettings, ...withoutLaunch } = { ...profile, environment: "", prelaunch: "" };
+  const shownSettings = withoutSecrets(pluginSettings, secrets);
+  return shownSettings ? { ...withoutLaunch, pluginSettings: shownSettings } : withoutLaunch;
+};
 
 export class ProfileService {
   private profilesChanged = () => {};
@@ -83,6 +88,7 @@ export class ProfileService {
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly conversations: ConversationService,
+    private readonly secrets: SecretSettings,
   ) {}
 
   /** What else follows the profiles, such as plugin tabs that list them, hears each save and delete. */
@@ -119,7 +125,7 @@ export class ProfileService {
     this.store.saveProfile(profile);
     const launchChanged = existing && (existing.environment !== profile.environment || existing.prelaunch !== profile.prelaunch);
     if (launchChanged) this.conversations.restartProfile(profile.id);
-    this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile) }));
+    this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile, this.secrets) }));
     if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
     this.profilesChanged();
     return profile;

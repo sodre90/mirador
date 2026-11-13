@@ -129,6 +129,8 @@ export const problems: Messages["problems"] = {
     "canvas-need-window-shape": "window nur als { state, action }, mit state als Funktion und action, falls vorhanden, ebenfalls",
     "canvas-need-workspace-tab-shape": "workspaceTab nur als { shows, state, action }, mit state als Funktion und shows und action, falls vorhanden, ebenfalls",
     "canvas-need-background-function": "background nur als Funktion",
+    "canvas-need-statusline-function": "statusline nur als Funktion",
+    "canvas-need-check-profile-function": "checkProfile nur als Funktion",
     "landing-needs-worktree": "Nur eine Unterhaltung in ihrem eigenen Worktree hat Commits, die in den Branch des Projektordners gemergt werden können.",
   },
   couldNotResume: (cause) => `Die vorherige Sitzung des Agenten ließ sich nicht fortsetzen (${cause}); eine neue wird gestartet.`,
@@ -172,6 +174,7 @@ export const problems: Messages["problems"] = {
   unknownWorkspace: (id) => `Unbekannter Arbeitsbereich: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} hat keine Einstellung ${setting}.`,
   notASettingChoice: (value, setting) => `${value} gehört nicht zu den Auswahlmöglichkeiten von ${setting}.`,
+  pluginSettingNotPerConversation: (setting) => `${setting} wird im Profil eingestellt, nicht für eine einzelne Unterhaltung.`,
   appNotInstalled: (app) => `Es ist keine App namens ${app} installiert.`,
   appStorageKeepsText: (app) => `Der Speicher von ${app} bewahrt Text auf: Schlüssel und Wert müssen Strings sein.`,
   appStorageFull: (app, characters, key) => `${app} kann ${characters} Zeichen in einem Arbeitsbereich aufbewahren; ${key} passt nicht hinein.`,
@@ -311,6 +314,10 @@ export const problems: Messages["problems"] = {
     `das Canvas-Host-Modul hat ein Fenster oder hört auf Aktivität, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
   workspaceTabNeedsNewerApi: (brought, named) => `das Canvas-Host-Modul hat einen Tab für Arbeitsbereiche, den Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
   pluginBackgroundNeedsNewerApi: (brought, named) => `das Canvas-Host-Modul arbeitet im Hintergrund, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
+  pluginTypedSettingsNeedNewerApi: (brought, named) =>
+    `plugin.json hat Profileinstellungen zum Eintippen oder Umschalten, die Plugin-API ${brought} eingeführt hat; sie nennt API ${named}`,
+  pluginStatuslineNeedsNewerApi: (brought, named) =>
+    `das Canvas-Host-Modul zeigt Werte in der Statuszeile oder prüft Profile, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
   canvasHostModuleNeeds: (needs) => `das Canvas-Host-Modul braucht ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} mit einem icon, einem placement von ${placements.join(" oder ")} und count, outcome und listed nur als Funktionen`,

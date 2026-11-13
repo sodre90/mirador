@@ -1,6 +1,6 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { useRef, useState, type CSSProperties, type RefObject } from "react";
-import { conversationSettingValue, profileSettingWhoseModelsItLists, settingValueFollowingProfile, type PluginProfileSetting } from "../shared/apps.ts";
+import { conversationSettingValue, isChoiceSetting, profileSettingWhoseModelsItLists, settingValueFollowingProfile, type PluginChoiceProfileSetting, type PluginProfileSetting } from "../shared/apps.ts";
 import { chosenModel, flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";
 import { harnessLabels, type AskMode, type Conversation, type Profile } from "../shared/model.ts";
 import { agentBesideProfile } from "../shared/profile-label.ts";
@@ -118,9 +118,11 @@ function YoloSwitch({ conversation }: { conversation: Conversation }) {
 
 const FOLLOWS_PROFILE = "\u0000profile";
 
-/** Each plugin's profile settings, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none. */
+/** Each plugin's profile settings with choices, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none. */
 function PluginSettingMenus({ conversation, profiles }: { conversation: Conversation; profiles: Profile[] }) {
-  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings = [] }) => profileSettings.map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })));
+  const withProfileSettings = usePluginSettings().flatMap(({ plugin, profileSettings = [] }) =>
+    profileSettings.filter(isChoiceSetting).map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })),
+  );
   if (conversation.startedBy) return null;
   return withProfileSettings.map(({ plugin, setting, settingsOfPlugin }) => (
     <PluginSettingMenu key={`${plugin}/${setting.id}`} conversation={conversation} profiles={profiles} plugin={plugin} setting={setting} settingsOfPlugin={settingsOfPlugin} />
@@ -137,7 +139,7 @@ function PluginSettingMenu({
   conversation: Conversation;
   profiles: Profile[];
   plugin: string;
-  setting: PluginProfileSetting;
+  setting: PluginChoiceProfileSetting;
   settingsOfPlugin: PluginProfileSetting[];
 }) {
   const profile = profiles.find(({ id }) => id === conversation.profileId);

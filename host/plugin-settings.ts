@@ -1,4 +1,4 @@
-import type { PluginManifest, PluginSettings } from "../shared/apps.ts";
+import { isChoiceSetting, type PluginManifest, type PluginSettings, type SecretSettings } from "../shared/apps.ts";
 import type { Store } from "./store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 
@@ -7,6 +7,8 @@ export class PluginSettingsStore {
   constructor(
     private readonly store: Store,
     private readonly manifests: PluginManifest[],
+    /** The plugins whose host code checks a profile's settings, by name. */
+    private readonly checkingProfiles: Set<string>,
   ) {}
 
   all(): PluginSettings[] {
@@ -16,7 +18,27 @@ export class PluginSettingsStore {
       settings: settings ?? [],
       chosen: chosen[name] ?? {},
       ...(profileSettings && profileSettings.length > 0 && { profileSettings }),
+      ...(this.checkingProfiles.has(name) && { checksProfile: true as const }),
     }));
+  }
+
+  /** Each plugin's secret profile settings, which only the pages that edit profiles see. */
+  secretSettings(): SecretSettings {
+    return Object.fromEntries(
+      this.withSettings().flatMap(({ name, profileSettings = [] }) => {
+        const secrets = profileSettings.filter(({ kind }) => kind === "secret").map(({ id }) => id);
+        return secrets.length > 0 ? [[name, secrets]] : [];
+      }),
+    );
+  }
+
+  /** Only a profile setting with choices can be chosen for one conversation; throws for any other. */
+  assertChosenPerConversation(plugin: string, settingId: string) {
+    const setting = this.withSettings()
+      .find(({ name }) => name === plugin)
+      ?.profileSettings?.find(({ id }) => id === settingId);
+    if (!setting) throw new HostProblemError({ code: "plugin-has-no-setting", plugin, setting: settingId });
+    if (!isChoiceSetting(setting)) throw new HostProblemError({ code: "plugin-setting-not-per-conversation", setting: setting.label });
   }
 
   /** Keeps one of the setting's own choices; throws for anything else. */

@@ -50,6 +50,7 @@ export const hints: Messages["hints"] = {
     "Das Profil (Umgebungsvariablen und Befehl vor dem Start), mit dem der Agent läuft.\n\nJedes Profil führt seinen eigenen Agent-Prozess aus. Ein Wechsel schließt diese Sitzung auf dem aktuellen Prozess und setzt sie auf dem neuen fort, sodass der Agent die ganze Unterhaltung behält. Das Modell geht auf den Standard des neuen Profils zurück.\n\nEin Wechsel, während der Agent arbeitet, stoppt seine Runde, verschiebt die Sitzung und bittet den Agenten, dort weiterzumachen, wo er aufgehört hat; Nachrichten in der Warteschlange gehen danach raus.\n\nProfile eines anderen Agenten lassen sich nur vor der ersten Nachricht wählen: Dieser Agent startet eine neue Sitzung. Hat die Unterhaltung schon begonnen, starte eine neue Unterhaltung, um sie zu nutzen.",
   questions:
     "Was passiert, wenn der Agent dich etwas auf dem Canvas fragt.\n\nAgent wartet: Der ask-Aufruf des Agenten bleibt offen, bis du auf Absenden drückst, und deine Antwort kommt mitten in der Runde als sein Ergebnis zurück.\n\nNächste Nachricht: Der ask-Aufruf kehrt sofort zurück, der Agent beendet seine Runde, und deine Antwort wird später als deine nächste Nachricht gesendet. Gut für Fragen, über die du nachdenken willst.",
+  pluginTextSetting: "Schreib $NAME, um eine Variable aus der Umgebung dieses Profils zu nutzen, z. B. $LLM_GATEWAY_KEY.",
   conversationPluginSetting:
     "Nur für diese Unterhaltung. „Vom Profil“ folgt dem, was sein Profil unter Profile einstellt; ein Profilwechsel kehrt dazu zurück.",
   configOption:
