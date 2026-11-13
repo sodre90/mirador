@@ -90,7 +90,7 @@ function pluginNames(pluginsOff: unknown): string[] {
 
 export class ProfileService {
   private profilesChanged = () => {};
-  private pluginsOffChanged = (_profileId: string) => {};
+  private savedOver = (_previous: Profile, _saved: Profile) => {};
 
   constructor(
     private readonly store: Store,
@@ -104,9 +104,9 @@ export class ProfileService {
     this.profilesChanged = listener;
   }
 
-  /** The profile's conversations hear that the plugins they get changed, once a save turns one on or off. */
-  whenPluginsOffChange(listener: (profileId: string) => void) {
-    this.pluginsOffChanged = listener;
+  /** Hears each save over a profile that was there, with the profile as it was and as saved. */
+  whenSavedOver(listener: (previous: Profile, saved: Profile) => void) {
+    this.savedOver = listener;
   }
 
   save(draft: ProfileDraft): Profile {
@@ -139,7 +139,7 @@ export class ProfileService {
     this.store.saveProfile(profile);
     const launchChanged = existing && (existing.environment !== profile.environment || existing.prelaunch !== profile.prelaunch);
     if (launchChanged) this.conversations.restartProfile(profile.id);
-    if (existing && existing.pluginsOff.join("\n") !== profile.pluginsOff.join("\n")) this.pluginsOffChanged(profile.id);
+    if (existing) this.savedOver(existing, profile);
     this.hub.sendEach((socket) => ({ type: "profile.upserted", profile: profileFor(socket, profile, this.secrets) }));
     if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
     this.profilesChanged();

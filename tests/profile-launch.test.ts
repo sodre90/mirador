@@ -64,18 +64,17 @@ test("a profile takes one of the workspace colours, and changing it alone leaves
   expect(() => profiles.save({ ...draft, color: "plaid" as never })).toThrow("Unknown colour plaid.");
 });
 
-test("a save that turns a plugin on or off tells that profile's conversations, keeping each name once and sorted; one that doesn't, and a new profile, tell none", () => {
+test("a save over a profile tells what it was and what it is now, keeping each plugin turned off once and sorted; a new profile tells none", () => {
   const store = new Store(":memory:");
   const profiles = new ProfileService(store, new Hub(), { restartProfile: () => {} } as unknown as ConversationService, {});
   const told: string[] = [];
-  profiles.whenPluginsOffChange((profileId) => told.push(profileId));
+  profiles.whenSavedOver((previous, saved) => told.push(`${previous.pluginsOff.join(",")} -> ${saved.pluginsOff.join(",")}`));
   const draft: ProfileDraft = { name: "Work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: ["race"] };
   const { id } = profiles.save(draft);
-  profiles.save({ ...draft, id, name: "Work 2" });
   expect(told).toEqual([]);
 
   profiles.save({ ...draft, id, pluginsOff: ["review", "race", "review"] });
-  expect(told).toEqual([id]);
+  expect(told).toEqual(["race -> race,review"]);
   expect(store.findProfile(id)!.pluginsOff).toEqual(["race", "review"]);
   expect(() => profiles.save({ ...draft, pluginsOff: "race" as never })).toThrow("The plugins a profile turns off must be a list of plugin names.");
 });

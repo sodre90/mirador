@@ -1,6 +1,6 @@
 import { cpSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, conversationSettings, createProfile, openPluginRow, openProfiles, openProfileTab, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -19,6 +19,7 @@ test.afterAll(async () => {
 });
 
 const windowView = (page: Page) => page.frameLocator(".item-window .canvas-frame.plugin iframe");
+const meterSwitch = (editor: Locator) => editor.getByRole("group", { name: "Meter", exact: true }).getByRole("switch", { name: "Use Meter in this profile" });
 
 test("a plugin's profile settings are typed, toggled and checked under its title, and its chips in the statusline take the place of the agent's cost and open its window", async ({ page }) => {
   await signIn(page, host);
@@ -27,12 +28,14 @@ test("a plugin's profile settings are typed, toggled and checked under its title
   await openProfileTab(editor, "Plugins");
   const meter = await openPluginRow(editor, "Meter");
 
-  await test.step("only the toggle and the settings that don't wait for it show until it is on", async () => {
-    await expect(meter.getByLabel("Profile Uses the meter")).not.toBeChecked();
-    await expect(meter.getByLabel("Profile Meter tier")).toBeVisible();
-    await expect(meter.getByLabel("Profile Meter URL")).toHaveCount(0);
+  await test.step("the toggle plugin.json makes the plugin's switch is the row's own: off, the row holds no settings; on, they show without it", async () => {
+    await expect(meterSwitch(editor)).not.toBeChecked();
+    await expect(meter.getByText("Turn on Meter to use it in this profile's conversations.")).toBeVisible();
+    await expect(meter.getByLabel("Profile Meter tier")).toHaveCount(0);
     await expect(meter.getByRole("button", { name: "Test connection" })).toHaveCount(0);
-    await meter.getByLabel("Profile Uses the meter").check();
+    await meterSwitch(editor).check();
+    await expect(meter.getByLabel("Profile Uses the meter")).toHaveCount(0);
+    await expect(meter.getByLabel("Profile Meter tier")).toBeVisible();
     await expect(meter.getByLabel("Profile Meter URL")).toHaveAttribute("placeholder", "https://meter.test");
     await expect(meter.getByText("Empty, so it uses METER_URL from the Launch environment.")).toBeVisible();
     await expect(meter.getByLabel("Profile Total on the statusline")).toBeChecked();
@@ -108,7 +111,7 @@ test("a plugin's profile settings are typed, toggled and checked under its title
     const profiles = await openProfiles(page);
     await profiles.locator(".profile-list li", { hasText: PROFILE }).click();
     await openProfileTab(profiles, "Plugins");
-    await (await openPluginRow(profiles, "Meter")).getByLabel("Profile Uses the meter").uncheck();
+    await meterSwitch(profiles).uncheck();
     await profiles.getByRole("button", { name: "Save" }).click();
     await expect(profiles.locator(".saved")).toHaveText("Saved");
     await profiles.getByRole("button", { name: "Close" }).click();

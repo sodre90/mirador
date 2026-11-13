@@ -9,7 +9,7 @@ import { choiceGroups } from "./choices.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
-import { pluginsOffFor, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
+import { useChoicesOf, usePluginSettings, usePluginsOff } from "./plugin-settings.ts";
 import { ProfileDot } from "./ProfileDot.tsx";
 import { SearchableSelect } from "./SearchableSelect.tsx";
 
@@ -118,9 +118,9 @@ function YoloSwitch({ conversation }: { conversation: Conversation }) {
 
 const FOLLOWS_PROFILE = "\u0000profile";
 
-/** Each plugin's profile settings with choices, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none, nor one whose profile turned the plugin off. */
+/** Each plugin's profile settings with choices, chosen for this conversation over what its profile sets; a conversation a plugin's tool started has none, nor one whose profile goes without the plugin. */
 function PluginSettingMenus({ conversation, profiles }: { conversation: Conversation; profiles: Profile[] }) {
-  const turnedOff = pluginsOffFor(profiles, conversation.profileId);
+  const turnedOff = usePluginsOff(profiles, conversation.profileId);
   const withProfileSettings = usePluginSettings()
     .filter(({ plugin }) => !turnedOff.includes(plugin))
     .flatMap(({ plugin, profileSettings = [] }) => profileSettings.filter(isChoiceSetting).map((setting) => ({ plugin, setting, settingsOfPlugin: profileSettings })));

@@ -6,7 +6,7 @@ import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { conversationPlugins, titlesOfPlugins, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
-import { groupedToggles, isOn, launchVariableOf, matchesSearch, pluginRows, rowDiffers, shownSettings, summaryOf, turned, type LaunchVariable, type PluginRow, type ProfilePlugins } from "./plugin-rows.ts";
+import { groupedToggles, isOn, launchVariableOf, matchesSearch, pluginRows, rowDiffers, shownSettings, showsEverySetting, summaryOf, turned, type LaunchVariable, type PluginRow, type ProfilePlugins } from "./plugin-rows.ts";
 import { UnsavedMark } from "./UnsavedMark.tsx";
 
 const words = t.profiles;
@@ -201,7 +201,7 @@ function PluginRowView({ row, open, onToggleOpen, form, saved, profileId, profil
   const summaryId = useId();
   const unsavedId = useId();
   const bodyId = useId();
-  const on = isOn(row, form.pluginsOff);
+  const on = isOn(row, form);
   const unsaved = rowDiffers(row, form, saved);
   const valueOf = (setting: PluginProfileSetting) => profileSettingValue(form.pluginSettings, row.plugin, setting);
   const shown = shownSettings(row.settings, valueOf);
@@ -267,7 +267,7 @@ function PluginRowView({ row, open, onToggleOpen, form, saved, profileId, profil
                 fields
               );
             })}
-            {row.checksProfile && shown.length === row.settings.length && <PluginProfileCheck plugin={row.plugin} draft={draft} />}
+            {row.checksProfile && showsEverySetting(row.settings, valueOf) && <PluginProfileCheck plugin={row.plugin} draft={draft} />}
             {row.tools.length > 0 && <ToolList heading={tabWords.toolsItGives} tools={row.tools} />}
           </>
         ) : (
@@ -310,10 +310,11 @@ export function ProfilePluginsTab({
   const [open, setOpen] = useState<string[]>([]);
   const shownRows = rows.filter((row) => matchesSearch(row, query));
   const switchable = rows.filter(({ switchable }) => switchable);
-  const onCount = switchable.filter((row) => isOn(row, form.pluginsOff)).length;
+  const onCount = switchable.filter((row) => isOn(row, form)).length;
   const toggleOpen = (plugin: string) => setOpen((current) => (current.includes(plugin) ? current.filter((name) => name !== plugin) : [...current, plugin]));
-  const turn = (plugin: string, on: boolean) => {
-    onPluginsOff(turned(form.pluginsOff, plugin, on));
+  const turn = ({ plugin, pluginSwitch }: PluginRow, on: boolean) => {
+    if (on || pluginSwitch === null) onPluginsOff(turned(form.pluginsOff, plugin, on));
+    if (pluginSwitch) onChooseSetting(plugin, pluginSwitch.id, on ? "on" : "off");
     if (on) setOpen((current) => (current.includes(plugin) ? current : [...current, plugin]));
   };
   const clearOnEscape = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -341,7 +342,7 @@ export function ProfilePluginsTab({
             profileId={profileId}
             profiles={profiles}
             onChooseSetting={onChooseSetting}
-            onTurn={(on) => turn(row.plugin, on)}
+            onTurn={(on) => turn(row, on)}
             draft={draft}
           />
         ))}

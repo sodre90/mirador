@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, watch } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
-import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_COMMAND_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, STARTS_CONVERSATIONS_PLUGIN_API, STATUSLINE_PLUGIN_API, WORKSPACE_TAB_API, isPluginManifest, usesTypedProfileSettings, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
+import { APP_PLUGIN_API, CANVAS_PLUGIN_API, PLUGIN_COMMAND_API, PLUGIN_SWITCH_API, PLUGIN_WINDOW_API, PROFILE_SETTINGS_PLUGIN_API, STARTS_CONVERSATIONS_PLUGIN_API, STATUSLINE_PLUGIN_API, WORKSPACE_TAB_API, isPluginManifest, switchOf, usesTypedProfileSettings, type AppHost, type AppTask, type InstalledApp, type PluginManifest, type PluginSetting } from "../../shared/apps.ts";
 import { itemRooms, pluginItemPlacements, type CanvasHost } from "../../shared/canvas-plugins.ts";
 import { BUILT_IN_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { HostProblemError, type HostProblem } from "../../shared/host-problems.ts";
@@ -119,6 +119,9 @@ export async function readManifest(folder: string): Promise<PluginManifest> {
   }
   if (usesTypedProfileSettings(manifest.profileSettings) && manifest.api < STATUSLINE_PLUGIN_API) {
     throw new HostProblemError({ code: "plugin-typed-settings-need-newer-api", brought: STATUSLINE_PLUGIN_API, named: manifest.api });
+  }
+  if (switchOf(manifest.profileSettings) && manifest.api < PLUGIN_SWITCH_API) {
+    throw new HostProblemError({ code: "plugin-switch-needs-newer-api", brought: PLUGIN_SWITCH_API, named: manifest.api });
   }
   return manifest;
 }

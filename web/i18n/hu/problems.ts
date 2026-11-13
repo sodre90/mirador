@@ -312,6 +312,8 @@ export const problems: Messages["problems"] = {
   pluginBackgroundNeedsNewerApi: (brought, named) => `a vászon host modulja a háttérben is dolgozik, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   pluginTypedSettingsNeedNewerApi: (brought, named) =>
     `a plugin.json-ban vannak beírandó vagy kapcsolható profilbeállítások, amelyek a bővítmény-API ${brought}. változatával jelentek meg; a megadott API: ${named}`,
+  pluginSwitchNeedsNewerApi: (brought, named) =>
+    `a plugin.json egy kapcsolót tesz meg a bővítmény profilonkénti kapcsolójának, ami a bővítmény-API ${brought}. változatával jelent meg; a megadott API: ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `a vászon host modulja elemeket rajzol az állapotsorba vagy profilt ellenőriz, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,

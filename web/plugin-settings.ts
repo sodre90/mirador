@@ -1,5 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from "react";
-import { profileSettingWhoseModelsItLists, settingValue, type ConversationPlugin, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { pluginsOffFor, profileSettingWhoseModelsItLists, settingValue, type ConversationPlugin, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
 import { categoryChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { itemRooms, type ItemRoom } from "../shared/canvas-plugins.ts";
@@ -28,11 +28,6 @@ export const titlesOfPlugins = () => pluginTitles;
 /** The plugins a profile can turn off for its conversations, as the host last said; plugins change only with a restart. */
 export const conversationPlugins = () => pluginsOfConversations;
 
-const NONE_OFF: string[] = [];
-
-/** What the profile turned off; a conversation without one gets every plugin. */
-export const pluginsOffFor = (profiles: Profile[], profileId: string | null) => profiles.find(({ id }) => id === profileId)?.pluginsOff ?? NONE_OFF;
-
 connection.onMessage((message) => {
   if (message.type === "snapshot") {
     pluginToolTitles = message.pluginToolTitles ?? {};
@@ -49,6 +44,15 @@ const subscribe = (listener: () => void) => {
 };
 
 export const usePluginSettings = () => useSyncExternalStore(subscribe, () => current);
+
+/** The plugins the profile's conversations go without, the same list until that changes: those it turned off, and those whose switch reads off for it. */
+export function usePluginsOff(profiles: Profile[], profileId: string | null) {
+  const turnedOff = pluginsOffFor(
+    profiles.find(({ id }) => id === profileId),
+    usePluginSettings(),
+  ).join("\n");
+  return useMemo(() => (turnedOff === "" ? [] : turnedOff.split("\n")), [turnedOff]);
+}
 
 /** The plugins' settings as the host last said, outside a component. */
 export const pluginSettingsNow = () => current;

@@ -55,9 +55,9 @@ test("each plugin is a row of the Plugins tab: closed, it sums up what it holds;
 
   await test.step("the rows stand closed by title, each saying what it holds, and the tally counts those on", async () => {
     await expect(editor.locator(".plugin-row .plugin-name")).toHaveText(["Board", "Meter"]);
-    await expect(editor.getByText("2 of 2 on")).toBeVisible();
+    await expect(editor.getByText("1 of 2 on"), "a plugin whose switch is its own toggle starts as that toggle does").toBeVisible();
     await expect(summaryOf(editor, "Board")).toHaveText("Hand over to: None · Hand over model: Agent's default");
-    await expect(summaryOf(editor, "Meter")).toHaveText("Meter tier: Basic · Uses the meter: off");
+    await expect(summaryOf(editor, "Meter")).toHaveText("Off for this profile");
     await expect(editor.getByLabel("Profile Meter tier")).toBeHidden();
   });
 
@@ -85,13 +85,15 @@ test("each plugin is a row of the Plugins tab: closed, it sums up what it holds;
   });
 
   const meter = await openPluginRow(editor, "Meter");
-  await test.step("a toggle says what it does beside it, and the settings that wait for it show once it is on", async () => {
-    await meter.getByLabel("Profile Uses the meter").check();
+  await test.step("the row's switch is the toggle plugin.json makes the plugin's switch: on, the settings that wait for it show, without it", async () => {
+    await pluginSwitch(editor, "Meter").check();
+    await expect(editor.getByText("2 of 2 on")).toBeVisible();
     await expect(unsavedMarkOf(editor, "Meter")).toBeVisible();
-    await expect(summaryOf(editor, "Meter")).toHaveText("Meter URL: https://meter.test · Meter tier: Basic · 2 of 2 options on");
-    await meter.getByLabel("Profile Uses the meter").uncheck();
-    await expect(unsavedMarkOf(editor, "Meter"), "a toggle back where it was is nothing to save").toHaveCount(0);
-    await meter.getByLabel("Profile Uses the meter").check();
+    await expect(meter.getByLabel("Profile Uses the meter")).toHaveCount(0);
+    await expect(summaryOf(editor, "Meter")).toHaveText("Meter URL: https://meter.test · Meter tier: Basic · Total on the statusline: on");
+    await pluginSwitch(editor, "Meter").uncheck();
+    await expect(unsavedMarkOf(editor, "Meter"), "a switch back where it was is nothing to save").toHaveCount(0);
+    await pluginSwitch(editor, "Meter").check();
   });
 
   await test.step("an empty setting says it reads the Launch environment's variable, or that Launch doesn't give it", async () => {
@@ -108,7 +110,7 @@ test("each plugin is a row of the Plugins tab: closed, it sums up what it holds;
     const url = meter.getByLabel("Profile Meter URL");
     await url.fill("https://typed.test");
     await expect(meter.getByText("From Launch environment")).toHaveCount(0);
-    await expect(summaryOf(editor, "Meter")).toHaveText("Meter URL: https://typed.test · Meter tier: Basic · 2 of 2 options on");
+    await expect(summaryOf(editor, "Meter")).toHaveText("Meter URL: https://typed.test · Meter tier: Basic · Total on the statusline: on");
     await meter.getByRole("button", { name: "Use the Launch value for Meter URL" }).click();
     await expect(url).toHaveValue("");
     await expect(meter.getByText("From Launch environment")).toBeVisible();

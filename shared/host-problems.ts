@@ -179,6 +179,7 @@ export type HostProblem =
   | { code: "workspace-tab-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-background-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-typed-settings-need-newer-api"; brought: number; named: number }
+  | { code: "plugin-switch-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-statusline-needs-newer-api"; brought: number; named: number }
   | { code: "canvas-host-module-needs"; needs: HostProblem[] }
   | { code: "canvas-need-item-shape"; item: string; placements: string[] }

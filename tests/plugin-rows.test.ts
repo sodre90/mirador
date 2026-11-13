@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ConversationPlugin, PluginProfileSetting, PluginSettings } from "../shared/apps.ts";
 import type { Profile } from "../shared/model.ts";
-import { groupedToggles, launchVariableOf, matchesSearch, pluginRows, pluginSettingsDiffer, rowDiffers, summaryOf, turned, type PluginRow } from "../web/plugin-rows.ts";
+import { groupedToggles, isOn, launchVariableOf, matchesSearch, pluginRows, pluginSettingsDiffer, rowDiffers, shownSettings, showsEverySetting, summaryOf, turned, type PluginRow } from "../web/plugin-rows.ts";
 
 const gatewayUrl: PluginProfileSetting = { id: "url", kind: "text", label: "Gateway URL", fallsBackTo: "GATEWAY_URL" };
 const gatewayKey: PluginProfileSetting = { id: "key", kind: "secret", label: "Access key", fallsBackTo: "GATEWAY_KEY" };
@@ -18,8 +18,20 @@ const period: PluginProfileSetting = {
   shownWhen: "spend",
 };
 
-const meter: PluginRow = { plugin: "meter", title: "Meter", tools: ["meter_read"], switchable: true, settings: [gatewayUrl, gatewayKey, showSpend, showBudget, period], checksProfile: true };
-const board: PluginRow = { plugin: "board", title: "Board", tools: ["board_post", "board_read"], switchable: true, settings: [], checksProfile: false };
+const meter: PluginRow = {
+  plugin: "meter",
+  title: "Meter",
+  tools: ["meter_read"],
+  switchable: true,
+  settings: [gatewayUrl, gatewayKey, showSpend, showBudget, period],
+  pluginSwitch: null,
+  checksProfile: true,
+};
+const board: PluginRow = { plugin: "board", title: "Board", tools: ["board_post", "board_read"], switchable: true, settings: [], pluginSwitch: null, checksProfile: false };
+
+const usesGateway: PluginProfileSetting = { id: "gateway", kind: "toggle", label: "Uses a gateway", default: "off", switchesPlugin: true };
+const gatewayUrlOfSwitch: PluginProfileSetting = { ...gatewayUrl, shownWhen: "gateway" };
+const spend: PluginRow = { plugin: "spend", title: "Spend", tools: [], switchable: true, settings: [usesGateway, gatewayUrlOfSwitch, showSpend], pluginSwitch: usesGateway, checksProfile: true };
 
 const profile = (changes: Partial<{ pluginSettings: Record<string, Record<string, string>>; pluginsOff: string[]; environment: string }> = {}) => ({
   pluginSettings: {},
@@ -49,6 +61,11 @@ describe("the Plugins tab's rows", () => {
     ]);
   });
 
+  test("a plugin whose toggle is its switch has a switch even without tools, set by that toggle", () => {
+    const [row] = pluginRows([], [{ plugin: "spend", settings: [], chosen: {}, profileSettings: spend.settings }], { spend: "Spend" });
+    expect(row).toMatchObject({ switchable: true, pluginSwitch: usesGateway });
+  });
+
   test("turning a plugin off names it once, sorted, and turning it on takes it out", () => {
     expect(turned(["meter"], "board", false)).toEqual(["board", "meter"]);
     expect(turned(["board", "meter"], "board", false)).toEqual(["board", "meter"]);
@@ -65,6 +82,28 @@ describe("the Plugins tab's rows", () => {
     expect(matchesSearch(meter, "ACCESS")).toBe(true);
     expect(matchesSearch(meter, "meter_r")).toBe(true);
     expect(matchesSearch(meter, "board")).toBe(false);
+  });
+});
+
+describe("a plugin's own switch", () => {
+  test("reads the toggle, so a switch left at its default off is off, and the profile turning the plugin off wins", () => {
+    expect(isOn(spend, profile())).toBe(false);
+    expect(isOn(spend, profile({ pluginSettings: { spend: { gateway: "on" } } }))).toBe(true);
+    expect(isOn(spend, profile({ pluginSettings: { spend: { gateway: "on" } }, pluginsOff: ["spend"] }))).toBe(false);
+    expect(summaryOf(spend, profile(), noProfiles)).toBe("Off for this profile");
+  });
+
+  test("stays out of the row's settings and its summary, while the settings it shows come with it", () => {
+    const valueOf = (setting: PluginProfileSetting) => (setting.id === "gateway" ? "on" : (setting.default ?? ""));
+    expect(shownSettings(spend.settings, valueOf).map(({ id }) => id)).toEqual(["url", "spend"]);
+    expect(showsEverySetting(spend.settings, valueOf)).toBe(true);
+    expect(summaryOf(spend, profile({ pluginSettings: { spend: { gateway: "on", url: "https://typed.test" } } }), noProfiles)).toBe("Gateway URL: https://typed.test · Show spend: off");
+  });
+
+  test("a switch set back to its default is nothing to save", () => {
+    const saved = { pluginSettings: {}, pluginsOff: [] as string[] };
+    expect(rowDiffers(spend, { ...saved, pluginSettings: { spend: { gateway: "on" } } }, saved)).toBe(true);
+    expect(rowDiffers(spend, { ...saved, pluginSettings: { spend: { gateway: "off" } } }, saved)).toBe(false);
   });
 });
 

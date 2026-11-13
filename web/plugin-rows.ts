@@ -1,12 +1,15 @@
 import {
   isTextSetting,
+  pluginsOffFor,
   profileSettingValue,
+  switchOf,
   variableReadBy,
   type ConversationPlugin,
   type PluginChoiceProfileSetting,
   type PluginProfileSetting,
   type PluginSettings,
   type PluginTextProfileSetting,
+  type PluginToggleProfileSetting,
 } from "../shared/apps.ts";
 import type { Profile } from "../shared/model.ts";
 import { parseEnvironment } from "../shared/profile-environment.ts";
@@ -29,6 +32,8 @@ export interface PluginRow {
   tools: string[];
   switchable: boolean;
   settings: PluginProfileSetting[];
+  /** The toggle the row's switch sets, when the plugin makes one its switch; else the switch turns the plugin off for the profile. */
+  pluginSwitch: PluginToggleProfileSetting | null;
   checksProfile: boolean;
 }
 
@@ -40,26 +45,35 @@ export function pluginRows(conversationPlugins: ConversationPlugin[], pluginSett
     .map((plugin) => {
       const acting = conversationPlugins.find((each) => each.plugin === plugin);
       const configured = withProfileSettings.find((each) => each.plugin === plugin);
+      const pluginSwitch = switchOf(configured?.profileSettings) ?? null;
       return {
         plugin,
         title: acting?.title ?? titles[plugin] ?? plugin,
         tools: acting?.tools ?? [],
-        switchable: acting !== undefined,
+        switchable: acting !== undefined || pluginSwitch !== null,
         settings: configured?.profileSettings ?? [],
+        pluginSwitch,
         checksProfile: configured?.checksProfile === true,
       };
     })
     .sort((one, other) => one.title.localeCompare(other.title));
 }
 
-export const isOn = (row: PluginRow, pluginsOff: string[]) => !row.switchable || !pluginsOff.includes(row.plugin);
+export const isOn = (row: PluginRow, profile: ProfilePlugins) =>
+  !row.switchable || !pluginsOffFor(profile, [{ plugin: row.plugin, profileSettings: row.settings }]).includes(row.plugin);
 
 /** The profile's plugins with this one turned on or off, each named once and sorted, as the host keeps them. */
 export const turned = (pluginsOff: string[], plugin: string, on: boolean) => (on ? pluginsOff.filter((name) => name !== plugin) : [...new Set([...pluginsOff, plugin])].sort());
 
-/** The settings shown: those that hang off no toggle, and those whose toggle is on. */
+const isSwitch = (setting: PluginProfileSetting) => setting.kind === "toggle" && setting.switchesPlugin === true;
+
+/** The settings shown under the row: those that hang off no toggle, and those whose toggle is on; never the plugin's switch, which is the row's. */
 export const shownSettings = (settings: PluginProfileSetting[], valueOf: (setting: PluginProfileSetting) => string) =>
-  settings.filter(({ shownWhen }) => shownWhen === undefined || settings.some((each) => each.id === shownWhen && valueOf(each) === "on"));
+  settings.filter(({ shownWhen }) => shownWhen === undefined || settings.some((each) => each.id === shownWhen && valueOf(each) === "on")).filter((setting) => !isSwitch(setting));
+
+/** Whether every setting but the plugin's switch is shown, no toggle hiding any. */
+export const showsEverySetting = (settings: PluginProfileSetting[], valueOf: (setting: PluginProfileSetting) => string) =>
+  shownSettings(settings, valueOf).length === settings.filter((setting) => !isSwitch(setting)).length;
 
 /** The settings in the order shown, toggles next to each other gathered into one group, every other setting a group of its own. */
 export const groupedToggles = (settings: PluginProfileSetting[]) =>
@@ -97,7 +111,7 @@ export function choiceLabelOf(setting: PluginChoiceProfileSetting, value: string
 
 /** A row's one line while closed: off, else what its shown settings hold (a secret never), else how many tools it gives. */
 export function summaryOf(row: PluginRow, profile: ProfilePlugins & { environment: string }, profiles: Profile[]) {
-  if (!isOn(row, profile.pluginsOff)) return words.off;
+  if (!isOn(row, profile)) return words.off;
   const valueOf = (setting: PluginProfileSetting) => profileSettingValue(profile.pluginSettings, row.plugin, setting);
   const shown = shownSettings(row.settings, valueOf);
   const valued = shown.flatMap((setting) => {
@@ -117,7 +131,7 @@ export function summaryOf(row: PluginRow, profile: ProfilePlugins & { environmen
 
 /** Whether a plugin's row holds what isn't saved: turned on or off, or a setting that reads otherwise, a default written out reading as the default. */
 export const rowDiffers = (row: PluginRow, profile: ProfilePlugins, saved: ProfilePlugins) =>
-  isOn(row, profile.pluginsOff) !== isOn(row, saved.pluginsOff) ||
+  isOn(row, profile) !== isOn(row, saved) ||
   row.settings.some((setting) => profileSettingValue(profile.pluginSettings, row.plugin, setting) !== profileSettingValue(saved.pluginSettings, row.plugin, setting));
 
 /** Whether two profiles' plugin settings read otherwise for any plugin; a setting set to its default reads as one not set. */

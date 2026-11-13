@@ -312,6 +312,8 @@ export const problems: Messages["problems"] = {
   pluginBackgroundNeedsNewerApi: (brought, named) => `el módulo del host del lienzo trabaja en segundo plano, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   pluginTypedSettingsNeedNewerApi: (brought, named) =>
     `plugin.json tiene ajustes de perfil para escribir o activar, que llegaron con la API de plugins ${brought}; indica la API ${named}`,
+  pluginSwitchNeedsNewerApi: (brought, named) =>
+    `plugin.json hace de un ajuste activable el interruptor del plugin para un perfil, que llegó con la API de plugins ${brought}; indica la API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `el módulo del host del lienzo dibuja datos en la línea de estado o comprueba perfiles, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   canvasHostModuleNeeds: (needs) => `el módulo del host del lienzo necesita ${needs.join("; ")}`,

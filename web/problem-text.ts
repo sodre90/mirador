@@ -352,6 +352,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginBackgroundNeedsNewerApi(problem.brought, problem.named);
     case "plugin-typed-settings-need-newer-api":
       return words.pluginTypedSettingsNeedNewerApi(problem.brought, problem.named);
+    case "plugin-switch-needs-newer-api":
+      return words.pluginSwitchNeedsNewerApi(problem.brought, problem.named);
     case "plugin-statusline-needs-newer-api":
       return words.pluginStatuslineNeedsNewerApi(problem.brought, problem.named);
     case "canvas-host-module-needs":

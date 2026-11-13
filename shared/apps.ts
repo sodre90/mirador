@@ -21,15 +21,18 @@ import type { HostProblem } from "./host-problems.ts";
  * read the profiles' settings; API 15 tells a plugin the model and effort each profile sets; API 16 lets a plugin
  * delete a conversation it started, with its worktree and branch; API 17 lets a canvas plugin's workspace tab open a
  * conversation of its workspace; API 18 lets its workspace tab and background work ask a profile's agent for the models
- * and efforts it offers.
+ * and efforts it offers; API 19 lets one of a plugin's toggles be its switch for a profile.
  */
-export const APP_PLUGIN_API = 18;
+export const APP_PLUGIN_API = 19;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,
  * check a profile's settings and read them from its window and background work.
  */
 export const STATUSLINE_PLUGIN_API = 14;
+
+/** The first plugin API whose toggle may be the plugin's switch for a profile. */
+export const PLUGIN_SWITCH_API = 19;
 
 /** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
 export const STARTS_CONVERSATIONS_PLUGIN_API = 11;
@@ -559,6 +562,12 @@ export interface PluginTextProfileSetting extends ProfileSettingBasics {
 export interface PluginToggleProfileSetting extends ProfileSettingBasics {
   kind: "toggle";
   default: ToggleValue;
+  /**
+   * The plugin's switch for a profile: the Profiles dialog shows it as the plugin's own switch, and while it is off the
+   * profile's conversations get nothing of the plugin, as when the profile turns the plugin off. At most one toggle of a
+   * plugin, shown by no other toggle. Plugin API 19 brought it.
+   */
+  switchesPlugin?: true;
 }
 
 export type ToggleValue = "on" | "off";
@@ -626,6 +635,22 @@ const defaultOf = (setting: PluginProfileSetting) => setting.default ?? "";
 export const profileSettingValue = (profilePluginSettings: Record<string, Record<string, string>> | undefined, plugin: string, setting: PluginProfileSetting) =>
   profilePluginSettings?.[plugin]?.[setting.id] ?? defaultOf(setting);
 
+/** The toggle that is the plugin's switch for a profile, if it has one. */
+export const switchOf = (settings: PluginProfileSetting[] = []) =>
+  settings.find((setting): setting is PluginToggleProfileSetting => setting.kind === "toggle" && setting.switchesPlugin === true);
+
+/**
+ * The plugins a profile's conversations go without, each once and sorted: those it turned off, and those whose switch
+ * reads off for it. Without a profile, each switch reads its default.
+ */
+export function pluginsOffFor(profile: { pluginsOff: string[]; pluginSettings?: Record<string, Record<string, string>> } | undefined, plugins: { plugin: string; profileSettings?: PluginProfileSetting[] }[]) {
+  const switchedOff = plugins.filter(({ plugin, profileSettings }) => {
+    const pluginSwitch = switchOf(profileSettings);
+    return pluginSwitch !== undefined && profileSettingValue(profile?.pluginSettings, plugin, pluginSwitch) !== "on";
+  });
+  return [...new Set([...(profile?.pluginsOff ?? []), ...switchedOff.map(({ plugin }) => plugin)])].sort();
+}
+
 type WithPluginSettings = { pluginSettings?: Record<string, Record<string, string>> } | undefined;
 
 /**
@@ -678,6 +703,8 @@ function isPluginProfileSetting(value: unknown): value is PluginProfileSetting {
   const setting = value as Partial<Record<keyof PluginTextProfileSetting | keyof PluginChoiceProfileSetting, unknown>>;
   const { kind, choices, default: fallback, shownWhen } = setting;
   if (shownWhen !== undefined && !isText(shownWhen)) return false;
+  const { switchesPlugin } = value as Partial<PluginToggleProfileSetting>;
+  if (switchesPlugin !== undefined && (kind !== "toggle" || switchesPlugin !== true || shownWhen !== undefined)) return false;
   if (kind === "text" || kind === "secret") {
     const { placeholder, fallsBackTo } = setting;
     return (
@@ -731,7 +758,8 @@ export function isPluginManifest(value: unknown): value is PluginManifest {
         profileSettings.every(isPluginProfileSetting) &&
         haveDistinctIds(profileSettings) &&
         modelSettingsNameProfileSettings(profileSettings) &&
-        shownWhenNamesToggles(profileSettings))) &&
+        shownWhenNamesToggles(profileSettings) &&
+        profileSettings.filter((setting) => setting.kind === "toggle" && setting.switchesPlugin === true).length <= 1)) &&
     (tellsCaller === undefined || typeof tellsCaller === "boolean") &&
     (startsConversations === undefined || typeof startsConversations === "boolean")
   );

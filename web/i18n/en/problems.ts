@@ -311,6 +311,7 @@ export const problems = {
   pluginBackgroundNeedsNewerApi: (brought: number, named: number) => `the canvas host module works in the background, which plugin API ${brought} brought; plugin.json names API ${named}`,
   pluginTypedSettingsNeedNewerApi: (brought: number, named: number) =>
     `plugin.json has profile settings to type or toggle, which plugin API ${brought} brought; it names API ${named}`,
+  pluginSwitchNeedsNewerApi: (brought: number, named: number) => `plugin.json makes a toggle the plugin's switch for a profile, which plugin API ${brought} brought; it names API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought: number, named: number) =>
     `the canvas host module draws statusline chips or checks profiles, which plugin API ${brought} brought; plugin.json names API ${named}`,
   canvasHostModuleNeeds: (needs: string[]) => `the canvas host module needs ${needs.join("; ")}`,

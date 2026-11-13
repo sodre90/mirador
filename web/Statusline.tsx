@@ -5,7 +5,7 @@ import type { ContextUsage, Conversation, PlanQuotas, PluginStatuslineChips, Pro
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
-import { pluginsOffFor } from "./plugin-settings.ts";
+import { usePluginsOff } from "./plugin-settings.ts";
 import { describedText } from "./host-error.ts";
 import { canOpenItemWindows, openPluginWindow } from "./item-window.ts";
 import { t } from "./i18n/index.ts";
@@ -276,7 +276,8 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
   const terminalFont = terminalFontList(fontFamily);
   const content = useRef<HTMLDivElement>(null);
   const columns = useColumns(content, terminalFont);
-  const render = useStatuslineRender(conversation, pluginsOffFor(profiles, conversation.profileId), columns, prefersCommand);
+  const pluginsOff = usePluginsOff(profiles, conversation.profileId);
+  const render = useStatuslineRender(conversation, pluginsOff, columns, prefersCommand);
   const commandOutput = prefersCommand ? (render?.output ?? null) : null;
   const pluginChips = render?.pluginChips ?? [];
 

@@ -30,7 +30,7 @@ import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
 import type { Conversation, PluginCanvasItem, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
-import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
+import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
 import { validStatuslineChips } from "./statusline-chips.ts";
 import { categoryChoices } from "../../shared/config-options.ts";
@@ -212,10 +212,18 @@ export class CanvasPlugins {
     };
   }
 
-  /** The plugins a conversation gets: all but those its profile turned off. */
+  /** The plugins the profile's conversations go without: those it turned off, and those whose switch reads off for it. */
+  pluginsOffFor(profile: Profile | undefined): string[] {
+    return pluginsOffFor(
+      profile,
+      this.plugins.map(({ manifest }) => ({ plugin: manifest.name, profileSettings: manifest.profileSettings })),
+    );
+  }
+
+  /** The plugins a conversation gets: all but those its profile goes without. */
   private pluginsOf(conversationId: string): CanvasPlugin[] {
     const conversation = this.store.findConversation(conversationId);
-    const turnedOff = (conversation?.profileId && this.store.findProfile(conversation.profileId)?.pluginsOff) || [];
+    const turnedOff = this.pluginsOffFor(conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined);
     return this.plugins.filter(({ manifest }) => !turnedOff.includes(manifest.name));
   }
 

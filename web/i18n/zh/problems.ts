@@ -293,6 +293,7 @@ export const problems: Messages["problems"] = {
   workspaceTabNeedsNewerApi: (brought, named) => `画布 host 模块有工作区标签页，这是插件 API ${brought} 引入的；plugin.json 写的是 API ${named}`,
   pluginBackgroundNeedsNewerApi: (brought, named) => `画布 host 模块在后台工作，这是插件 API ${brought} 引入的；plugin.json 写的是 API ${named}`,
   pluginTypedSettingsNeedNewerApi: (brought, named) => `plugin.json 有需要输入或开关的配置设置，这是插件 API ${brought} 引入的；它写的是 API ${named}`,
+  pluginSwitchNeedsNewerApi: (brought, named) => `plugin.json 把一个开关设为插件在配置中的总开关，这是插件 API ${brought} 引入的；它写的是 API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) => `画布 host 模块在状态栏中显示内容或检查配置，这是插件 API ${brought} 引入的；plugin.json 写的是 API ${named}`,
   canvasHostModuleNeeds: (needs) => `画布 host 模块需要：${needs.join("；")}`,
   canvasNeedItemShape: (item, placements) => `items.${item} 需要 icon、为 ${placements.join(" 或 ")} 的 placement，且 count、outcome 和 listed 只能是函数`,

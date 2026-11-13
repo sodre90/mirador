@@ -74,14 +74,13 @@ describe("a plugin's statusline chips", () => {
       tools: {},
       statusline: () => [{ text: "" }, { text: "Fine", level: "loud", cost: { amount: "1", currency: "USD" }, extra: true } as never, { text: "Opens", opensWindow: true }],
     };
-    const { plugins } = await canvasPluginHost(FIXTURES, storeWithConversation(), { meter: sloppy });
+    const { plugins } = await canvasPluginHost(FIXTURES, (await meteredConversation({ metered: "on" })).store, { meter: sloppy });
     expect(plugins.statuslineChips("c1")[0]!.chips).toEqual([{ text: "Fine" }, { text: "Opens", opensWindow: true }]);
   });
 
   test("activity names the session it happened in, so a plugin can keep every session the conversation had", async () => {
     const heard: PluginActivityEvent[] = [];
-    const store = storeWithConversation();
-    store.updateConversation({ ...store.findConversation("c1")!, acpSessionId: "session-1" });
+    const { store } = await meteredConversation({ metered: "on" });
     const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: { items: {}, tools: {}, activity: (event) => void heard.push(event) } });
     plugins.activity("c1", { kind: "turn-ended", ended: "finished" });
     store.updateConversation({ ...store.findConversation("c1")!, acpSessionId: "session-2" });
@@ -95,6 +94,34 @@ describe("a plugin's statusline chips", () => {
     const conversation = { ...store.findConversation("c1")!, contextUsage: { used: 10, size: 100, cost: { amount: 3.5, currency: "USD" } } };
     expect(statuslineInput(conversation, "/work", null, null, 0).cost.total_cost_usd).toBe(3.5);
     expect(statuslineInput(conversation, "/work", null, null, 0, costOfPluginChips(plugins.statuslineChips("c1"))).cost.total_cost_usd).toBe(1.25);
+  });
+});
+
+describe("a plugin's own switch", () => {
+  const alwaysCharting: CanvasHost = {
+    items: {},
+    tools: {},
+    guidance: { instructions: "Read the meter before spending." },
+    statusline: () => [{ text: "Meter" }],
+  };
+
+  test("left off, or at its default off, the profile's conversations get nothing of the plugin, whatever its hooks would give", async () => {
+    const leftOff: Record<string, string>[] = [{}, { metered: "off" }];
+    for (const settings of leftOff) {
+      const { store } = await meteredConversation(settings);
+      const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: alwaysCharting });
+      expect(plugins.statuslineChips("c1")).toEqual([]);
+      expect(plugins.guidanceFor("c1").instructions).not.toContain("Read the meter before spending.");
+      expect(plugins.pluginsOffFor(store.findProfile("p1"))).toEqual(["meter"]);
+    }
+  });
+
+  test("on, they get it, unless the profile turned the plugin off itself", async () => {
+    const { store } = await meteredConversation({ metered: "on" });
+    const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: alwaysCharting });
+    expect(plugins.statuslineChips("c1")[0]!.chips).toEqual([{ text: "Meter" }]);
+    expect(plugins.guidanceFor("c1").instructions).toContain("Read the meter before spending.");
+    expect(plugins.pluginsOffFor({ ...store.findProfile("p1")!, pluginsOff: ["meter"] })).toEqual(["meter"]);
   });
 });
 
@@ -165,6 +192,19 @@ describe("loading a plugin with typed settings or statusline chips", () => {
     const changed = (id: string, change: Record<string, unknown>) =>
       meterCopy((manifest) => ({ ...manifest, profileSettings: settingsOf(manifest).map((setting) => (setting.id === id ? { ...setting, ...change } : setting)) }));
     for (const folder of [changed("url", { shownWhen: "tier" }), changed("url", { default: "https://x" }), changed("metered", { default: "yes" }), changed("key", { fallsBackTo: "not a name" })]) {
+      expect((await messagesOf(folder))[0]).toContain("each of its settings, if any, an id of its own");
+    }
+  });
+
+  test("refuses a switch in a plugin.json for an API before it, on anything but a toggle, twice, or shown by another toggle", async () => {
+    expect(await messagesOf(meterCopy((manifest) => ({ ...manifest, api: 18 })))).toEqual(["plugin.json makes a toggle the plugin's switch for a profile, which plugin API 19 brought; it names API 18"]);
+    const withSettings = (change: (settings: Record<string, unknown>[]) => Record<string, unknown>[]) => meterCopy((manifest) => ({ ...manifest, profileSettings: change(settingsOf(manifest)) }));
+    for (const folder of [
+      withSettings((settings) => settings.map((setting) => (setting.id === "tier" ? { ...setting, switchesPlugin: true } : setting))),
+      withSettings((settings) => settings.map((setting) => (setting.id === "show-total" ? { ...setting, switchesPlugin: true, shownWhen: undefined } : setting))),
+      withSettings((settings) => settings.map((setting) => (setting.id === "show-total" ? { ...setting, switchesPlugin: true } : { ...setting, switchesPlugin: undefined }))),
+      withSettings((settings) => settings.map((setting) => (setting.id === "metered" ? { ...setting, switchesPlugin: "yes" } : setting))),
+    ]) {
       expect((await messagesOf(folder))[0]).toContain("each of its settings, if any, an id of its own");
     }
   });
