@@ -12,6 +12,7 @@ import {
   type PluginBackgroundContext,
   type PluginProfile,
   type PluginWindowContext,
+  type ProfileChoices,
   type ProfilesSettings,
   type StatuslineChip,
   type StatuslineContext,
@@ -27,7 +28,7 @@ import {
 } from "../../shared/canvas-plugins.ts";
 import type { SlashCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import type { PluginCanvasItem, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
+import type { Conversation, PluginCanvasItem, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, isChoiceSetting, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
@@ -82,6 +83,14 @@ export type ReadUsage = (callerId: string, plugin: string, conversationId: strin
 /** `pluginTitle` names whose its first message shows as. */
 export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start: WorkspaceConversationStart) => Promise<StartedConversation>;
 
+/** What the agent of the profile of that name offers, null when it didn't answer; rejects when no profile has the name. */
+export type AskProfileChoices = (profileName: string) => Promise<Conversation["configOptions"] | null>;
+
+const namedChoices = (options: Conversation["configOptions"], category: "model" | "thought_level") =>
+  categoryChoices(options, category).map(({ value, name }) => ({ id: value, name }));
+
+const offeredChoices = (options: Conversation["configOptions"]): ProfileChoices => ({ models: namedChoices(options, "model"), efforts: namedChoices(options, "thought_level") });
+
 /**
  * The canvas plugins Mirador loaded when it started: their tools on every conversation's canvas server, the items those
  * tools publish, the user's actions in the items' views, and what the agent hears of with the user's next message.
@@ -113,6 +122,10 @@ export class CanvasPlugins {
 
   private startInWorkspace: StartInWorkspace = async () => {
     throw new Error("Mirador can't start conversations yet.");
+  };
+
+  private askProfileChoices: AskProfileChoices = async () => {
+    throw new Error("Mirador can't ask agents what they offer yet.");
   };
 
   constructor(
@@ -148,6 +161,10 @@ export class CanvasPlugins {
 
   startsWorkspaceConversationsWith(start: StartInWorkspace) {
     this.startInWorkspace = start;
+  }
+
+  asksProfileChoicesWith(ask: AskProfileChoices) {
+    this.askProfileChoices = ask;
   }
 
   /** Once, as Mirador starts: each plugin's background work, whose failure is the plugin's alone. */
@@ -437,6 +454,10 @@ export class CanvasPlugins {
           throw new Error(`${plugin.manifest.title} can't start conversations of its own: its plugin.json doesn't set startsConversations.`);
         }
         return this.startInWorkspace(workspaceId, plugin.manifest.title, start);
+      },
+      profileChoices: async (profileName) => {
+        const options = await this.askProfileChoices(profileName);
+        return options && offeredChoices(options);
       },
     };
   }

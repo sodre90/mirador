@@ -338,6 +338,22 @@ export interface WorkspaceTabContext {
    * when none has that name. Plugin API 11 brought it.
    */
   startConversation(start: WorkspaceConversationStart): Promise<StartedConversation>;
+  /**
+   * What a conversation that starts on the profile of that name can choose, as its agent says, for `startConversation`'s
+   * `model` and `effort`. Mirador asks the agent as the Profiles dialog does, starting it for a few seconds unless it
+   * answered in the last 15 minutes. Resolves to null when the agent couldn't start, didn't answer within 30 seconds, or
+   * answered without listing any choices, and rejects, naming the profiles there are, when none has that name. Plugin
+   * API 18 brought it.
+   */
+  profileChoices(profileName: string): Promise<ProfileChoices | null>;
+}
+
+/** What a profile's agent offers a conversation, each by the id `startConversation` takes and the name the agent gives it. */
+export interface ProfileChoices {
+  /** None from an agent that offers no choice of model. */
+  models: { id: string; name: string }[];
+  /** The efforts of the model the agent starts on, which isn't always the profile's; none for a model that has no effort. */
+  efforts: { id: string; name: string }[];
 }
 
 /** What a plugin's background work reaches: the workspaces, each as its tab would. Plugin API 11 brought it. */

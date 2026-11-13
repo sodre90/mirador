@@ -1325,6 +1325,11 @@ export class ConversationService {
     return probe;
   }
 
+  /** As `profileChoices`, for a plugin that names the profile; rejects, naming the profiles there are, when none has that name. */
+  async profileChoicesNamed(profileName: string): Promise<acp.SessionConfigOption[] | null> {
+    return this.profileChoices(this.profileNamed(profileName).id);
+  }
+
   /** Starts the profile's agent as a conversation would, asks a new session what it offers, and stops it again. */
   private async askProfileChoices(profileId: string): Promise<acp.SessionConfigOption[] | null> {
     const profile = this.store.findProfile(profileId);

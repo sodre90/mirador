@@ -10,6 +10,7 @@ import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import type { CanvasHost, PluginBackgroundContext, WorkspaceConversationStart } from "../shared/canvas-plugins.ts";
 import type { Profile } from "../shared/model.ts";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import starter from "./fixtures/background-plugins/starter/host.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
 
@@ -105,6 +106,53 @@ describe("a plugin's workspace context", () => {
     expect(toPluginTabs).toEqual([expect.objectContaining({ type: "plugin-tab.state", plugin: "starter", workspaceId: "w1", state: { profiles: ["Claude", "Night runs"] } })]);
   });
 
+  test("asks a profile's agent for its models and the efforts of the model it starts on, grouped models listed one by one", async () => {
+    let handed: PluginBackgroundContext | undefined;
+    const { plugins } = await starterHost({ starter: { ...starter, background: (context) => void (handed = context) } });
+    const asked: string[] = [];
+    plugins.asksProfileChoicesWith(async (profileName): Promise<SessionConfigOption[]> => {
+      asked.push(profileName);
+      return [
+        { id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "default", options: [{ value: "default", name: "Default" }] },
+        {
+          id: "model",
+          name: "Model",
+          category: "model",
+          type: "select",
+          currentValue: "default",
+          options: [
+            { group: "large", name: "Large", options: [{ value: "default", name: "Default (recommended)" }, { value: "opus", name: "Opus" }] },
+            { group: "small", name: "Small", options: [{ value: "haiku", name: "Haiku" }] },
+          ],
+        },
+        { id: "effort", name: "Effort", category: "thought_level", type: "select", currentValue: "low", options: [{ value: "low", name: "Low" }, { value: "high", name: "High" }] },
+      ];
+    });
+    plugins.startBackgroundWork();
+    expect(await handed!.inWorkspace("w1").profileChoices("Claude")).toEqual({
+      models: [
+        { id: "default", name: "Default (recommended)" },
+        { id: "opus", name: "Opus" },
+        { id: "haiku", name: "Haiku" },
+      ],
+      efforts: [
+        { id: "low", name: "Low" },
+        { id: "high", name: "High" },
+      ],
+    });
+    expect(asked).toEqual(["Claude"]);
+  });
+
+  test("passes on an agent that didn't answer as null, and one that offers no choice of model or effort as none", async () => {
+    let handed: PluginBackgroundContext | undefined;
+    const { plugins } = await starterHost({ starter: { ...starter, background: (context) => void (handed = context) } });
+    plugins.startBackgroundWork();
+    plugins.asksProfileChoicesWith(async () => null);
+    expect(await handed!.inWorkspace("w1").profileChoices("Claude")).toBeNull();
+    plugins.asksProfileChoicesWith(async () => [{ id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "default", options: [{ value: "default", name: "Default" }] }]);
+    expect(await handed!.inWorkspace("w1").profileChoices("Night runs")).toEqual({ models: [], efforts: [] });
+  });
+
   test("a tab that never read the profiles isn't asked again when they change", async () => {
     const { plugins, toPluginTabs } = await starterHost({ starter: { ...starter, workspaceTab: { state: () => ({}) } } });
     await Promise.all(plugins.workspaceTabStateMessages("w1"));
@@ -197,6 +245,14 @@ describe("a conversation a plugin starts in a workspace", () => {
     expect(await prompted).toContain("Check last night's e2e results");
     const [message] = store.listEventsFrom(started.id, 0).filter(({ event }) => event.type === "user-message");
     expect(message!.event).toMatchObject({ type: "user-message", text: "Check last night's e2e results", fromPlugin: "Routines" });
+  });
+
+  test("tells a plugin what the agent of the profile it names offers, whatever the name's case", async () => {
+    const { conversations } = serviceWithHelper();
+    const offered: SessionConfigOption[] = [{ id: "effort", name: "Effort", category: "thought_level", type: "select", currentValue: "low", options: [{ value: "low", name: "Low" }] }];
+    (conversations as unknown as { profileChoicesCache: Map<string, { at: number; options: SessionConfigOption[] }> }).profileChoicesCache.set("helper", { at: Date.now(), options: offered });
+    expect(await conversations.profileChoicesNamed("HELPER")).toEqual(offered);
+    await expect(conversations.profileChoicesNamed("Nightly")).rejects.toThrow("There is no profile named Nightly; the profiles are Helper.");
   });
 
   test("names the profiles there are when none has the name given, and refuses a workspace that isn't open", async () => {
