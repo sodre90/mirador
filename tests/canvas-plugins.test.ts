@@ -335,6 +335,23 @@ describe("CanvasPlugins", () => {
     expect(asked).toEqual([{ callerId: "c1", plugin: "board", profile: "Local", prompt: "Fix it", title: "Racer 1", worktree: "own" }]);
   });
 
+  test("a plugin's action messages a conversation it started", async () => {
+    const messager = {
+      ...board,
+      async action(_item: unknown, _action: unknown, context: CanvasActionContext) {
+        await context.promptStarted("c2", "Try again");
+        return "Sent.";
+      },
+    };
+    const { plugins, callTool, items } = await canvasPluginHost(FIXTURES, undefined, { board: messager });
+    const messaged: unknown[] = [];
+    plugins.promptsStartedWith(async (callerId, plugin, pluginTitle, conversationId, text) => void messaged.push({ callerId, plugin, pluginTitle, conversationId, text }));
+    await callTool("show_card", { title: "Race", text: "Give it a second try" });
+
+    expect(await plugins.act(items()[0]!.id, {})).toBe("Sent.");
+    expect(messaged).toEqual([{ callerId: "c1", plugin: "board", pluginTitle: "Board", conversationId: "c2", text: "Try again" }]);
+  });
+
   test("what a conversation's profile set for a plugin reaches its tools and adds to its guidance, by the chosen profile's name as it is now", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>

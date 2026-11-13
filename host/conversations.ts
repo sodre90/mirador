@@ -610,7 +610,7 @@ export class ConversationService {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation) return;
     const startedBy = conversation.startedBy;
-    if (startedBy?.conversationId !== callerId || startedBy.plugin !== plugin) {
+    if (!this.startedFromCallerBy(startedBy, callerId, plugin)) {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be stopped here.`);
     }
     const runtime = this.runtime(conversationId);
@@ -622,6 +622,25 @@ export class ConversationService {
       this.deliverOwedReply(conversationId, "stopped");
       this.stopJobsWakingIt(conversationId);
     } else if (!startedBy.reply) runtime.stoppedBeforeItsFirstTurn = true;
+  }
+
+  /**
+   * For a plugin's tool or action: sends a conversation it started from the caller's a message, shown as the plugin's,
+   * which starts its next turn or waits for the turn it is in to end. One that no longer exists, or that this plugin
+   * didn't start from that conversation, throws.
+   */
+  async promptStarted(callerId: string, plugin: string, pluginTitle: string, conversationId: string, text: string): Promise<void> {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) throw new Error(`There is no conversation ${conversationId}.`);
+    if (!this.startedFromCallerBy(conversation.startedBy, callerId, plugin)) {
+      throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be messaged from here.`);
+    }
+    await this.send(conversationId, text, [], { afterTurn: true, fromPlugin: pluginTitle });
+  }
+
+  /** Whether this plugin's tool or action started the conversation from the caller's. */
+  private startedFromCallerBy(startedBy: StartedBy | undefined, callerId: string, plugin: string): startedBy is StartedBy {
+    return startedBy?.conversationId === callerId && startedBy.plugin === plugin;
   }
 
   /** Mirador stops waiting for the jobs that would wake its agent, as the user stopping each wait does. */

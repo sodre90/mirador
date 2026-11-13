@@ -65,6 +65,9 @@ export type StartBeside = (callerId: string, plugin: string, profileName: string
 
 export type StopStarted = (callerId: string, plugin: string, conversationId: string) => Promise<void>;
 
+/** `pluginTitle` names whose the message shows as. */
+export type PromptStarted = (callerId: string, plugin: string, pluginTitle: string, conversationId: string, text: string) => Promise<void>;
+
 /** `pluginTitle` names whose its first message shows as. */
 export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start: WorkspaceConversationStart) => Promise<StartedConversation>;
 
@@ -83,6 +86,10 @@ export class CanvasPlugins {
 
   private stopStarted: StopStarted = async () => {
     throw new Error("Mirador can't stop conversations yet.");
+  };
+
+  private promptStarted: PromptStarted = async () => {
+    throw new Error("Mirador can't send messages yet.");
   };
 
   private startInWorkspace: StartInWorkspace = async () => {
@@ -106,6 +113,10 @@ export class CanvasPlugins {
 
   stopsConversationsWith(stop: StopStarted) {
     this.stopStarted = stop;
+  }
+
+  promptsStartedWith(prompt: PromptStarted) {
+    this.promptStarted = prompt;
   }
 
   startsWorkspaceConversationsWith(start: StartInWorkspace) {
@@ -525,6 +536,7 @@ export class CanvasPlugins {
       },
       stopConversation: (startedConversationId) => this.stopStarted(conversationId, plugin.manifest.name, startedConversationId),
       startConversation: this.startsConversationsFrom(plugin, conversationId),
+      promptStarted: (startedId, text) => this.promptStarted(conversationId, plugin.manifest.name, plugin.manifest.title, startedId, text),
     };
   }
 

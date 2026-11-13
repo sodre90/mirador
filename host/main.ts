@@ -99,6 +99,7 @@ canvasPlugins.startsConversationsWith((callerId, plugin, profileName, prompt, ti
     : conversations.startInOwnWorktree(callerId, plugin, profileName, prompt, title, choices, worktree === "own" ? undefined : worktree.from),
 );
 canvasPlugins.stopsConversationsWith((callerId, plugin, conversationId) => conversations.stopStarted(callerId, plugin, conversationId));
+canvasPlugins.promptsStartedWith((callerId, plugin, pluginTitle, conversationId, text) => conversations.promptStarted(callerId, plugin, pluginTitle, conversationId, text));
 canvasPlugins.startsWorkspaceConversationsWith((workspaceId, pluginTitle, start) => conversations.startForPlugin(workspaceId, pluginTitle, start));
 conversations.hearRepliesWith(
   (started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply),

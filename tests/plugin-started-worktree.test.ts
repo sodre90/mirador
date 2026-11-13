@@ -92,6 +92,14 @@ async function callerInWorkspace({ inRepository, turnsWaitForAStop = false }: { 
 
 const branchesOf = async (project: string) => (await git(project, ["branch", "--format=%(refname:short)"])).stdout.split("\n");
 
+async function until(condition: () => boolean, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error("timed out waiting");
+    await Bun.sleep(20);
+  }
+}
+
 test("a plugin's tool starts conversations in worktrees of their own, each on a new branch, working once its worktree is made", async () => {
   const { conversations, project, callerId, opened, replies, replied } = await callerInWorkspace({ inRepository: true });
 
@@ -201,5 +209,28 @@ test("a conversation stopped just as its first turn begins, its worktree made, e
 
   await replied(1);
   expect(replies).toEqual([{ started, reply: { text: null, ended: "stopped" } }]);
+  expect(prompted).toHaveLength(1);
+});
+
+test("a plugin messages a conversation it started, which takes it as its next turn", async () => {
+  const { conversations, store, callerId, prompted, replied } = await callerInWorkspace({ inRepository: true });
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+
+  await conversations.promptStarted(callerId, "race", "Race", started.id, "Try again");
+
+  await until(() => prompted.length === 2);
+  expect(store.listEvents(started.id).map(({ event }) => event)).toContainEqual({ type: "user-message", text: "Try again", fromPlugin: "Race" });
+});
+
+test("a conversation another plugin, or another conversation, started can't be messaged", async () => {
+  const { conversations, callerId, prompted, replied } = await callerInWorkspace({ inRepository: true });
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+  const otherCaller = conversations.create("w1");
+
+  await expect(conversations.promptStarted(callerId, "other", "Other", started.id, "Try again")).rejects.toThrow("wasn't started by the other plugin from this conversation, so it can't be messaged from here");
+  await expect(conversations.promptStarted(otherCaller.id, "race", "Race", started.id, "Try again")).rejects.toThrow("wasn't started by the race plugin from this conversation, so it can't be messaged from here");
+  await expect(conversations.promptStarted(callerId, "race", "Race", "no-such-conversation", "Try again")).rejects.toThrow("There is no conversation no-such-conversation.");
   expect(prompted).toHaveLength(1);
 });

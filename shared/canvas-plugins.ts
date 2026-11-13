@@ -104,6 +104,13 @@ export interface CanvasActionContext<Data = unknown> extends CanvasPluginContext
    * plugin's `replied` hears when that conversation ends its work. Plugin API 13 brought it.
    */
   startConversation(start: ConversationStart): Promise<StartedConversation>;
+  /**
+   * Sends a conversation this plugin's tool or action started from this conversation a message, shown as the plugin's:
+   * it starts that conversation's next turn, or waits for the turn it is in to end. `replied` heard its work end
+   * already, so the plugin hears this turn end through `activity`, as "turn-ended". Throws for a conversation this
+   * plugin didn't start from this one. Plugin API 14 brought it.
+   */
+  promptStarted(conversationId: string, text: string): Promise<void>;
 }
 
 export interface CanvasToolContext<Data = unknown> extends CanvasPluginContext<Data> {
