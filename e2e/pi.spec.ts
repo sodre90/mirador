@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, pasteImage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
-import { ScriptedModel, forgetPiAcpSessionsUnder, piProgram, scriptedPiEnvironment } from "./scripted-model.ts";
+import { ScriptedModel, forgetPiAcpSessionsUnder, piProgram, piSessionIdsUnder, scriptedPiEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -102,6 +102,9 @@ test("a pi conversation replies, runs commands and uses the canvas tools", async
   expect(model.systemPromptInContext()).toContain(CANVAS_RENDERING_RULES);
   expect(model.systemPromptInContext()).toContain(OWN_APPENDED_INSTRUCTIONS);
   expect(model.toolDescription("when_done")).toContain("Have Mirador wait for a job you leave running");
+  const piSessions = piSessionIdsUnder(host.root);
+  expect(piSessions).toHaveLength(1);
+  expect(model.headerValues("x-pi-session-id")).toEqual(piSessions);
 
   await sendMessage(page, "RUN printenv PI_ACP_SESSION || echo no-canvas-servers-in-env");
   await waitForTurnToEnd(page);

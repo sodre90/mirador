@@ -731,15 +731,15 @@ index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..82bc2e891f12458a0f04e2ad11802386
      const piSession = findPiSession(params.sessionId);
 diff --git a/node_modules/pi-acp/dist/session-extension.js b/dist/session-extension.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..c76d03076ab58b9f6692943a0b16fde40a07ea35
+index 0000000000000000000000000000000000000000..03c86e9ef2ece8cdf5de8e7b461e929198c63bfd
 --- /dev/null
 +++ b/dist/session-extension.js
-@@ -0,0 +1,67 @@
+@@ -0,0 +1,78 @@
 +/**
 + * Loaded into each pi that pi-acp starts for a session with MCP servers or added system prompt text. It hands the
 + * servers the ACP client sent in session/new, session/load or session/resume to pi's built-in MCP support, with their
-+ * tools declared to the model directly, adds the client's `_meta.systemPrompt.append` to pi's system prompt, and marks
-+ * the user messages steered into a run.
++ * tools declared to the model directly, adds the client's `_meta.systemPrompt.append` to pi's system prompt, marks the
++ * user messages steered into a run, and names the session in each model request.
 + */
 +const SESSION_VARIABLE = "PI_ACP_SESSION";
 +const SESSION_KEY = Symbol.for("pi-acp.session");
@@ -785,6 +785,16 @@ index 0000000000000000000000000000000000000000..c76d03076ab58b9f6692943a0b16fde4
 +  });
 +}
 +
++/**
++ * Sends the session's id with each model request, as Claude Code sends x-claude-code-session-id, so an LLM gateway such
++ * as LiteLLM files a conversation's requests under one session rather than each under one of its own.
++ */
++function nameSessionInModelRequests(pi) {
++  pi.on("before_provider_headers", (event, ctx) => {
++    event.headers["x-pi-session-id"] = ctx.sessionManager.getSessionId();
++  });
++}
++
 +/** pi.registerMcpServer came in pi 0.99.0, and before_agent_start's systemPromptOptions with it. */
 +const OLDEST_PI = "0.99.0";
 +
@@ -801,4 +811,5 @@ index 0000000000000000000000000000000000000000..c76d03076ab58b9f6692943a0b16fde4
 +    });
 +  }
 +  markSteeredMessages(pi);
++  nameSessionInModelRequests(pi);
 +}

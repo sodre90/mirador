@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer, type ServerResponse, type Server } from "node:http";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { createServer, type IncomingHttpHeaders, type ServerResponse, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
@@ -98,6 +98,7 @@ const finish = (finishReason: string) => ({
  */
 export class ScriptedModel {
   readonly requests: ChatRequest[] = [];
+  private readonly requestHeaders: IncomingHttpHeaders[] = [];
   private readonly responsesRequests: ResponsesRequest[] = [];
   /** While set, every request for a reply gets this error response instead, as from a provider that is down. */
   failure: { status: number; body: object } | null = null;
@@ -117,6 +118,7 @@ export class ScriptedModel {
         if (viaResponses) this.responsesRequests.push(parsed as ResponsesRequest);
         const body = viaResponses ? asChatRequest(parsed as ResponsesRequest) : (parsed as ChatRequest);
         this.requests.push(body);
+        this.requestHeaders.push(request.headers);
         const answer = () => this.reply(body, response, viaResponses);
         if (this.heldReplies && (body.tools ?? []).length > 0) return void this.heldReplies.push(answer);
         answer();
@@ -143,6 +145,11 @@ export class ScriptedModel {
     const held = this.heldReplies ?? [];
     this.heldReplies = null;
     held.forEach((answer) => answer());
+  }
+
+  /** Each value the agent sent in a request header, once, such as the session id an LLM gateway files requests under. */
+  headerValues(name: string) {
+    return [...new Set(this.requestHeaders.flatMap((headers) => headers[name] ?? []))];
   }
 
   /** Every text the agent sent the model, to check what context a conversation carries. */
@@ -336,6 +343,13 @@ export function scriptedPiEnvironment(model: ScriptedModel, root: string, defaul
 export function piProgram() {
   const candidates = (process.env.PATH ?? "").split(delimiter).map((directory) => join(directory, process.platform === "win32" ? "pi.cmd" : "pi"));
   return candidates.find((candidate) => existsSync(candidate)) ?? null;
+}
+
+/** The ids of the sessions the pi of `scriptedPiEnvironment(model, root)` saved, from their files' `<timestamp>_<id>.jsonl` names. */
+export function piSessionIdsUnder(root: string) {
+  const sessions = join(root, "pi-agent", "sessions");
+  if (!existsSync(sessions)) return [];
+  return readdirSync(sessions, { recursive: true, encoding: "utf8" }).flatMap((file) => file.match(/_([^_/\\]+)\.jsonl$/)?.[1] ?? []);
 }
 
 /** pi-acp keeps a map of every session it starts in the user's ~/.pi; the ones a test started under `root` come out of it again. */
