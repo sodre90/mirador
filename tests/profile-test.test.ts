@@ -86,4 +86,13 @@ describe("a profile editor's silent probe", () => {
     const service = serviceWith([{ ...draftWith(`AGY_PATH=${fakeAgy()}`, "exit 2"), id: "p1" }]);
     expect(await service.profileChoices("p1")).toBeNull();
   });
+
+  test("logs apart, so a test of the profile it runs beside still says what the pre-launch command printed", async () => {
+    const draft = { ...draftWith(`AGY_PATH=${fakeAgy()}`, "echo gateway down >&2; exit 3"), id: "p1" };
+    const service = serviceWith([draft]);
+    const [choices, error] = await Promise.all([service.profileChoices("p1"), failureOf(service, draft)]);
+    expect(choices).toBeNull();
+    expect(error.problem).toMatchObject({ code: "prelaunch-failed", mixedIn: null });
+    expect(englishProblem(error.problem)).toContain("gateway down");
+  });
 });

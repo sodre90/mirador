@@ -1342,11 +1342,15 @@ export class ConversationService {
     return this.profileChoices(this.profileNamed(profileName).id);
   }
 
-  /** Starts the profile's agent as a conversation would, asks a new session what it offers, and stops it again. */
+  /**
+   * Starts the profile's agent as a conversation would, asks a new session what it offers, and stops it again. It logs
+   * apart: nobody reads what its pre-launch command wrote, and a test or conversation starting meanwhile would find
+   * their own output mixed with it.
+   */
   private async askProfileChoices(profileId: string): Promise<acp.SessionConfigOption[] | null> {
     const profile = this.store.findProfile(profileId);
     if (!profile) return null;
-    const probe = await this.probeProfile(profile, profileId, PROFILE_PROBE_TIMEOUT_MS);
+    const probe = await this.probeProfile(profile, profileId, PROFILE_PROBE_TIMEOUT_MS, { logApart: true });
     return "error" in probe ? null : probe.configOptions;
   }
 
@@ -1386,13 +1390,14 @@ export class ConversationService {
     profile: Profile,
     key: string,
     timeoutMs: number,
+    { logApart = false }: { logApart?: boolean } = {},
   ): Promise<{ configOptions: acp.SessionConfigOption[] | null; tookMs: number } | { error: unknown }> {
     const startedAt = Date.now();
     let harness: HarnessProcess | null = null;
     try {
       const spec = harnessSpec(profile, this.store.claudeProgramSetting());
       harness = new HarnessProcess(
-        { ...spec, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH) } },
+        { ...spec, logName: logApart ? `${spec.logName}.check` : spec.logName, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH) } },
         {
           onSessionUpdate: () => {},
           onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" as const } }),
