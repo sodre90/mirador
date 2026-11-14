@@ -4,7 +4,7 @@ import { Database } from "bun:sqlite";
  * Run with bun: prints, as JSON, every update the host stored for Claude Code's Agent tool calls, with what tells a
  * subagent launched in the background (its input, and the tool's response) and a start of what the call answered.
  */
-type AcpEvent = { type: string; update?: { sessionUpdate?: string; toolCallId?: string; status?: string; rawInput?: unknown; rawOutput?: unknown; content?: unknown; _meta?: { claudeCode?: { toolName?: string; toolResponse?: unknown } } } };
+type AcpEvent = { type: string; update?: { sessionUpdate?: string; toolCallId?: string; status?: string; rawInput?: unknown; rawOutput?: unknown; content?: unknown; _meta?: { claudeCode?: { toolName?: string; toolResponse?: unknown; subagentTaskStatus?: unknown } } } };
 
 const [databasePath] = process.argv.slice(2);
 const db = new Database(databasePath!, { readonly: true });
@@ -22,6 +22,7 @@ const updates = stored
     status: update.status,
     rawInput: update.rawInput,
     toolResponse: startOf(update._meta?.claudeCode?.toolResponse),
+    taskStatus: update._meta?.claudeCode?.subagentTaskStatus,
     rawOutput: startOf(update.rawOutput),
     content: startOf(update.content),
   }));

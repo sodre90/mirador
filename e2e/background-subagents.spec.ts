@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, type Locator, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, eventsInOrderOn, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo, startInManualMode } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
@@ -30,10 +30,10 @@ test.afterAll(async () => {
   api.stop();
 });
 
-/** A card that never says so carries the Agent call's updates as the host stored them: whether Claude Code launched it in the background. */
-async function expectInTheBackground(card: Locator) {
+/** A failure carries the Agent call's updates as the host stored them: whether Claude Code launched it in the background, and what it said of its subagent since. */
+async function tellingTheStoredAgentUpdates(steps: () => Promise<void>) {
   try {
-    await expect(card.locator(".subagent-facts")).toContainText("in the background", { timeout: 60_000 });
+    await steps();
   } catch (error) {
     const stored = execFileSync("bun", [join(import.meta.dirname, "agent-tool-updates.ts"), join(host.dataDir, "state.sqlite")], { encoding: "utf8" });
     throw new Error(`${(error as Error).message}\nThe Agent call's updates as the host stored them: ${stored}`);
@@ -55,34 +55,36 @@ test("while only a background subagent works, a message joins the turn and the a
   const command = card.locator(".subagent-work .shell", { hasText: "sleep 15" });
   const badge = page.locator(".chat-header .badge");
   const chip = page.locator(".chat-header .subagents-running");
-  await sendMessage(page, `SUBAGENT RUN ${SUBAGENT_COMMAND}`);
-  await expectInTheBackground(card);
-  await expect(command).toHaveClass(/tool-in_progress/, { timeout: 60_000 });
-  await expect(chip).toHaveText("◐ 1 subagent running");
+  await tellingTheStoredAgentUpdates(async () => {
+    await sendMessage(page, `SUBAGENT RUN ${SUBAGENT_COMMAND}`);
+    await expect(card.locator(".subagent-facts")).toContainText("in the background", { timeout: 60_000 });
+    await expect(command).toHaveClass(/tool-in_progress/, { timeout: 60_000 });
+    await expect(chip).toHaveText("◐ 1 subagent running");
 
-  await test.step("a message joins the turn while the subagent's command runs, and the command runs on", async () => {
-    const composer = page.locator(".composer textarea");
-    await composer.fill(STEERED);
-    await composer.press("Enter");
-    await expect(page.locator(".timeline .message.agent", { hasText: `Answered: ${STEERED}` })).toBeVisible({ timeout: 10_000 });
-    await expect(command, "the agent answered while the subagent's command still ran").toHaveClass(/tool-in_progress/);
-    await expect(page.locator(".queue")).toHaveCount(0);
-    await expect(badge, "claude-agent-acp holds the turn open for the subagent").toHaveText("running");
-    await expect(command).toHaveClass(/tool-completed/, { timeout: 60_000 });
-    await expect(command, "the command ran to its end, not moved to the background by the message").toContainText("slept");
-  });
+    await test.step("a message joins the turn while the subagent's command runs, and the command runs on", async () => {
+      const composer = page.locator(".composer textarea");
+      await composer.fill(STEERED);
+      await composer.press("Enter");
+      await expect(page.locator(".timeline .message.agent", { hasText: `Answered: ${STEERED}` })).toBeVisible({ timeout: 10_000 });
+      await expect(command, "the agent answered while the subagent's command still ran").toHaveClass(/tool-in_progress/);
+      await expect(page.locator(".queue")).toHaveCount(0);
+      await expect(badge, "claude-agent-acp holds the turn open for the subagent").toHaveText("running");
+      await expect(command).toHaveClass(/tool-completed/, { timeout: 60_000 });
+      await expect(command, "the command ran to its end, not moved to the background by the message").toContainText("slept");
+    });
 
-  await test.step("the subagent is done once it ends, while the turn still runs", async () => {
-    await expect.poll(() => api.endedCommandsWaiting, { timeout: 30_000 }).toBe(1);
+    await test.step("the subagent is done once it ends, while the turn still runs", async () => {
+      await expect.poll(() => api.endedCommandsWaiting, { timeout: 30_000 }).toBe(1);
+      await expect(card).toHaveClass(/subagent-done/);
+      await expect(chip).toHaveCount(0);
+      await expect(badge).toHaveText("running");
+    });
+
+    api.answerEndedCommands();
+    await waitForTurnToEnd(page);
     await expect(card).toHaveClass(/subagent-done/);
-    await expect(chip).toHaveCount(0);
-    await expect(badge).toHaveText("running");
+    expect(eventsInOrder).toEqual([`SUBAGENT RUN ${SUBAGENT_COMMAND}`, STEERED, "turn-end"]);
   });
-
-  api.answerEndedCommands();
-  await waitForTurnToEnd(page);
-  await expect(card).toHaveClass(/subagent-done/);
-  expect(eventsInOrder).toEqual([`SUBAGENT RUN ${SUBAGENT_COMMAND}`, STEERED, "turn-end"]);
 });
 
 test("a message joins the turn also while a background subagent waits for permission, its request shows above the message box once scrolled away, and the subagent goes on once it gets it", async ({ page }) => {

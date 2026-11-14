@@ -5,7 +5,7 @@ import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";
 import { pageEvent } from "../host/low-data.ts";
 import { canTryAgain } from "../shared/try-again.ts";
-import { approvalsWaiting, authorOf, buildTimeline, latestPlan, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
+import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
 
 function stored(events: ConversationEvent[]): StoredEvent[] {
   return events.map((event, index) => ({ seq: index + 1, at: (index + 1) * 1000, event }));
@@ -345,6 +345,13 @@ describe("subagents", () => {
     expect(states([launch("s1", {}), finish("s1", "failed")])).toEqual(["failed"]);
     expect(states([launch("s1", {})], false)).toEqual(["stopped"]);
     expect(states([{ type: "turn-end", stopReason: "end_turn" }, launch("s2", {})])).toEqual(["running"]);
+  });
+
+  test("one that asked to run in the background runs there though its call completes without the response that says so, as on Windows", () => {
+    const asked = acp({ sessionUpdate: "tool_call_update", toolCallId: "b1", rawInput: { description: "Watch the build", run_in_background: true } });
+    const [subagent] = subagentsIn(buildTimeline(stored([launch("b1", {}), asked, finish("b1")])));
+    expect(runsInBackground(subagent!)).toBe(true);
+    expect(subagentState(subagent!, true)).toBe("running");
   });
 
   test("one in the background ends when claude-agent-acp says its task ended, though its turn still runs, and works again once resumed", () => {

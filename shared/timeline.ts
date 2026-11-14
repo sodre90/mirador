@@ -47,7 +47,7 @@ export interface ToolBlock extends Origin {
   leftUnfinished?: true;
   /** Set on the Agent (or Task) tool call that started a subagent. */
   subagent?: Subagent;
-  /** Claude Code answered the call at once and left its subagent working on, as it does for subagents by default. */
+  /** Claude Code answered the call at once and left its subagent working on, as it does for subagents by default, or the call asked for that. */
   launchedInBackground?: true;
 }
 
@@ -78,6 +78,16 @@ export const subagentInput = (block: ToolBlock) => {
 };
 
 export const runsInBackground = (block: ToolBlock) => block.launchedInBackground === true;
+
+/**
+ * The call asked to run in the background: opencode's task tool says so as `background`, Claude Code's Agent tool as
+ * `run_in_background`, which counts though Claude Code on Windows at times completes the call without the response
+ * that says it launched there.
+ */
+const askedForBackground = (rawInput: unknown) => {
+  const input = (rawInput ?? {}) as { background?: unknown; run_in_background?: unknown };
+  return input.background === true || input.run_in_background === true;
+};
 
 /**
  * A subagent works until its tool call completes; one started in the background, whose call completes at once, works
@@ -646,7 +656,7 @@ class TimelineBuilder {
     const { toolName, launchedInBackground, subagentTaskStatus } = claudeCodeMeta(update);
     const title = ownTitle(update);
     const name = toolName ?? toolNameIn(update, title);
-    const background = launchedInBackground || (update.rawInput as { background?: unknown } | undefined)?.background === true;
+    const background = launchedInBackground || askedForBackground(update.rawInput);
     const terminal = terminalMeta(update);
     if (existing) {
       if (name) this.name(existing, name, origin.at);
