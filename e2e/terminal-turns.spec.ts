@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { expect, type Locator, test } from "@playwright/test";
@@ -29,11 +29,12 @@ test.afterAll(async () => {
   api.stop();
 });
 
+/** The conversation's session, not the one the host's look at the new profile opened in the temporary folder. */
 function sessionIdTheAppRegistered(): string | undefined {
   if (!existsSync(sessionRegistry)) return undefined;
   return readdirSync(sessionRegistry)
     .map((name) => JSON.parse(readFileSync(join(sessionRegistry, name), "utf8")))
-    .find(({ entrypoint }) => entrypoint === "sdk-ts")?.sessionId;
+    .find(({ entrypoint, cwd }) => entrypoint === "sdk-ts" && realpathSync.native(cwd) === host.projectDirInTerminal)?.sessionId;
 }
 
 /** What Claude Code writes for a session in a terminal; this test process stands in for the running terminal. */
