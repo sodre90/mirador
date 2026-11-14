@@ -1,4 +1,4 @@
-import { cpSync } from "node:fs";
+import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, canvasToolNames, createProfile, openPluginRow, openProfiles, openProfileTab, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
@@ -8,12 +8,25 @@ test.describe.configure({ mode: "serial" });
 
 const host = new TestHost({ fakePrograms: true });
 const PROFILE = "switched";
+const PIN_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#c33"/></svg>';
+
+/** A plugin that is only on or off for a profile: it hears the conversations' activity, gives no tools and has no settings, and names its icon and what it does. */
+function installPin() {
+  const folder = join(host.dataDir, "plugins", "pin");
+  mkdirSync(folder, { recursive: true });
+  const manifest = { name: "pin", title: "Pin", version: "1.0.0", api: 20, icon: "icon.svg", tagline: "Pins a note above the chat.", canvas: { host: "host.ts", view: "canvas.js" } };
+  writeFileSync(join(folder, "plugin.json"), JSON.stringify(manifest));
+  writeFileSync(join(folder, "icon.svg"), PIN_ICON);
+  writeFileSync(join(folder, "canvas.js"), "");
+  writeFileSync(join(folder, "host.ts"), "export default { items: {}, tools: {}, activity() {} };\n");
+}
 
 test.beforeAll(async () => {
   // Board gives the agent tools and the user slash commands; Meter types and toggles its settings and shows chips in the statusline.
   const fixtures = join(import.meta.dirname, "..", "tests", "fixtures");
   cpSync(join(fixtures, "canvas-plugins", "board"), join(host.dataDir, "plugins", "board"), { recursive: true });
   cpSync(join(fixtures, "statusline-plugins", "meter"), join(host.dataDir, "plugins", "meter"), { recursive: true });
+  installPin();
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: join(host.root, "prompts") });
   await host.start();
 });
@@ -22,6 +35,7 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
+const titlesIn = (editor: Locator, group: string) => editor.getByRole("group", { name: group, exact: true }).locator(".plugin-row-title");
 const pluginSwitch = (editor: Locator, title: string) => editor.getByRole("group", { name: title, exact: true }).getByRole("switch", { name: `Use ${title} in this profile` });
 const summaryOf = (editor: Locator, title: string) => editor.getByRole("group", { name: title, exact: true }).locator(".plugin-summary");
 const unsavedMarkOf = (editor: Locator, title: string) => editor.getByRole("group", { name: title, exact: true }).getByRole("img", { name: "Unsaved changes" });
@@ -47,33 +61,53 @@ async function expectSlashMenuOffers(page: Page, command: string, offered: boole
   await composer.fill("");
 }
 
-test("each plugin is a row of the Plugins tab: closed, it sums up what it holds; open, it shows its settings from plugin.json, where they read the Launch environment, and the tools it gives", async ({ page }) => {
+test("each plugin is a row of the Plugins tab: closed, it sums up what it holds or lacks; open, it shows its settings from plugin.json, where they read the Launch environment, and the tools it gives", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const editor = await createProfile(page, PROFILE, "METER_URL=https://meter.test\n-u METER_KEY", "", "opencode");
   await openProfileTab(editor, "Plugins");
 
-  await test.step("the rows stand closed by title, each saying what it holds, and the tally counts those on", async () => {
-    await expect(editor.locator(".plugin-row .plugin-name")).toHaveText(["Board", "Meter"]);
-    await expect(editor.getByText("1 of 2 on"), "a plugin whose switch is its own toggle starts as that toggle does").toBeVisible();
+  await test.step("the rows stand closed by title, those with settings first, each saying what it holds, and the tally counts those on", async () => {
+    await expect(titlesIn(editor, "With settings for this profile")).toHaveText(["Board", "Meter"]);
+    await expect(titlesIn(editor, "On or off only")).toHaveText(["Pin"]);
+    await expect(editor.getByText("2 of 3 on"), "a plugin whose switch is its own toggle starts as that toggle does").toBeVisible();
     await expect(summaryOf(editor, "Board")).toHaveText("Hand over to: None · Hand over model: Agent's default");
     await expect(summaryOf(editor, "Meter")).toHaveText("Off for this profile");
     await expect(editor.getByLabel("Profile Meter tier")).toBeHidden();
   });
 
+  await test.step("each row shows its plugin's icon, else its first letter, and greys it while off", async () => {
+    const pin = editor.getByRole("group", { name: "Pin", exact: true });
+    await expect(pin.locator("img.plugin-icon")).toHaveAttribute("src", `data:image/svg+xml;charset=utf-8,${encodeURIComponent(PIN_ICON)}`);
+    await expect(editor.getByRole("group", { name: "Board", exact: true }).locator(".plugin-monogram")).toHaveText("B");
+    await expect(editor.getByRole("group", { name: "Meter", exact: true }).locator(".plugin-monogram")).toHaveCSS("filter", "grayscale(1)");
+  });
+
+  await test.step("a plugin with nothing to set and no tools says what it does and has nothing to open; its switch reads that line", async () => {
+    const pin = editor.getByRole("group", { name: "Pin", exact: true });
+    await expect(summaryOf(editor, "Pin")).toHaveText("Pins a note above the chat.");
+    await expect(pin.getByRole("button")).toHaveCount(0);
+    await expect(pluginSwitch(editor, "Pin")).toHaveAccessibleDescription("Pins a note above the chat.");
+  });
+
   await test.step("search keeps the rows whose title, settings or tools match, and Escape clears it without closing the dialog", async () => {
     const search = editor.getByRole("searchbox", { name: "Search plugins" });
     await search.fill("show_card");
-    await expect(editor.locator(".plugin-row .plugin-name")).toHaveText(["Board"]);
+    await expect(editor.locator(".plugin-row-title")).toHaveText(["Board"]);
     await search.fill("meter url");
-    await expect(editor.locator(".plugin-row .plugin-name")).toHaveText(["Meter"]);
+    await expect(editor.locator(".plugin-row-title")).toHaveText(["Meter"]);
     await search.fill("nothing like it");
     await expect(editor.locator(".plugin-row")).toHaveCount(0);
     await expect(editor.getByText("No plugin matches “nothing like it”.")).toBeVisible();
+    await editor.getByRole("button", { name: "Clear search" }).click();
+    await expect(search).toHaveValue("");
+    await expect(search).toBeFocused();
+    await expect(editor.locator(".plugin-row")).toHaveCount(3);
+    await search.fill("nothing like it");
     await search.press("Escape");
     await expect(search).toHaveValue("");
     await expect(editor).toBeVisible();
-    await expect(editor.locator(".plugin-row")).toHaveCount(2);
+    await expect(editor.locator(".plugin-row")).toHaveCount(3);
   });
 
   await test.step("an open row is named by its plugin, says what it holds, and shows the tools the plugin gives the agent", async () => {
@@ -87,10 +121,10 @@ test("each plugin is a row of the Plugins tab: closed, it sums up what it holds;
   const meter = await openPluginRow(editor, "Meter");
   await test.step("the row's switch is the toggle plugin.json makes the plugin's switch: on, the settings that wait for it show, without it", async () => {
     await pluginSwitch(editor, "Meter").check();
-    await expect(editor.getByText("2 of 2 on")).toBeVisible();
+    await expect(editor.getByText("3 of 3 on")).toBeVisible();
     await expect(unsavedMarkOf(editor, "Meter")).toBeVisible();
     await expect(meter.getByLabel("Profile Uses the meter")).toHaveCount(0);
-    await expect(summaryOf(editor, "Meter")).toHaveText("Meter URL: https://meter.test · Meter tier: Basic · Total on the statusline: on");
+    await expect(summaryOf(editor, "Meter"), "the key it needs, unset by Launch, is missing").toHaveText("Fill in Meter key");
     await pluginSwitch(editor, "Meter").uncheck();
     await expect(unsavedMarkOf(editor, "Meter"), "a switch back where it was is nothing to save").toHaveCount(0);
     await pluginSwitch(editor, "Meter").check();
@@ -104,6 +138,22 @@ test("each plugin is a row of the Plugins tab: closed, it sums up what it holds;
     await expect(meter.getByText("Not in Launch")).toBeVisible();
     await expect(meter.getByText("This profile's Launch environment unsets METER_KEY, so the plugin gets nothing.")).toBeVisible();
     await expect(meter.getByText(/Mirador keeps it with this profile on this computer/)).toBeVisible();
+  });
+
+  await test.step("a plugin that needs a setting says so, the tally opens it at the field to fill in, and it can't test its connection until then", async () => {
+    await expect(meter.getByText("Needs setup", { exact: true })).toBeVisible();
+    await expect(meter.getByText("Required", { exact: true })).toHaveCount(2);
+    await expect(meter.getByRole("button", { name: "Test connection" })).toBeDisabled();
+    await expect(meter.getByRole("button", { name: "Test connection" })).toHaveAccessibleDescription("Fill in Meter key first.");
+    await meter.getByRole("button", { name: "Meter", exact: true }).click();
+    await expect(meter.getByLabel("Profile Meter key")).toBeHidden();
+    await editor.getByRole("button", { name: "1 needs setup" }).click();
+    await expect(meter.getByLabel("Profile Meter key")).toBeFocused();
+    await meter.getByLabel("Profile Meter key").fill("k1");
+    await expect(meter.getByText("Needs setup", { exact: true })).toHaveCount(0);
+    await expect(editor.getByRole("button", { name: "1 needs setup" })).toHaveCount(0);
+    await expect(meter.getByRole("button", { name: "Test connection" })).toBeEnabled();
+    await expect(summaryOf(editor, "Meter")).toHaveText("Meter URL: https://meter.test · Meter tier: Basic · Total on the statusline: on");
   });
 
   await test.step("text typed over the Launch value goes back to it with Use Launch value", async () => {
@@ -147,7 +197,7 @@ test("a plugin turned off for a profile gives its conversations none of its tool
     await pluginSwitch(profiles, "Meter").uncheck();
     await expect(summaryOf(profiles, "Board")).toHaveText("Off for this profile");
     await expect(unsavedMarkOf(profiles, "Board")).toBeVisible();
-    await expect(profiles.getByText("0 of 2 on")).toBeVisible();
+    await expect(profiles.getByText("1 of 3 on")).toBeVisible();
     const board = await openPluginRow(profiles, "Board");
     await expect(board.getByText("Turn on Board to use it in this profile's conversations.")).toBeVisible();
     await expect(board.getByText("Tools it would give the agent")).toBeVisible();
@@ -172,7 +222,7 @@ test("a plugin turned off for a profile gives its conversations none of its tool
     await pluginSwitch(profiles, "Board").check();
     await expect(profiles.getByLabel("Profile Hand over to"), "a plugin turned on opens to its settings").toBeVisible();
     await pluginSwitch(profiles, "Meter").check();
-    await expect(profiles.getByText("2 of 2 on")).toBeVisible();
+    await expect(profiles.getByText("3 of 3 on")).toBeVisible();
     await saveAndClose(profiles);
     await expect(meterChips.locator(".plugin-chip")).toHaveText(["⏱", "Total basic", "Session $1.25"]);
     await expect.poll(() => canvasToolNames(host, conversationId)).toContain("show_card");

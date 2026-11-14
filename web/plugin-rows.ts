@@ -6,6 +6,7 @@ import {
   variableReadBy,
   type ConversationPlugin,
   type PluginChoiceProfileSetting,
+  type PluginLook,
   type PluginProfileSetting,
   type PluginSettings,
   type PluginTextProfileSetting,
@@ -13,7 +14,7 @@ import {
 } from "../shared/apps.ts";
 import type { Profile } from "../shared/model.ts";
 import { parseEnvironment } from "../shared/profile-environment.ts";
-import { t } from "./i18n/index.ts";
+import { formatList, t } from "./i18n/index.ts";
 
 const words = t.profiles.pluginsTab;
 
@@ -29,6 +30,10 @@ export interface ProfilePlugins {
 export interface PluginRow {
   plugin: string;
   title: string;
+  /** The plugin's icon as an svg document, or null for none. */
+  icon: string | null;
+  /** What the plugin does, in a line, or null for none. */
+  tagline: string | null;
   tools: string[];
   switchable: boolean;
   settings: PluginProfileSetting[];
@@ -38,7 +43,7 @@ export interface PluginRow {
 }
 
 /** Every plugin a profile can turn off or set something for, by title. */
-export function pluginRows(conversationPlugins: ConversationPlugin[], pluginSettings: PluginSettings[], titles: Record<string, string>): PluginRow[] {
+export function pluginRows(conversationPlugins: ConversationPlugin[], pluginSettings: PluginSettings[], titles: Record<string, string>, looks: Record<string, PluginLook>): PluginRow[] {
   const withProfileSettings = pluginSettings.filter(({ profileSettings = [] }) => profileSettings.length > 0);
   const names = [...new Set([...conversationPlugins.map(({ plugin }) => plugin), ...withProfileSettings.map(({ plugin }) => plugin)])];
   return names
@@ -49,6 +54,8 @@ export function pluginRows(conversationPlugins: ConversationPlugin[], pluginSett
       return {
         plugin,
         title: acting?.title ?? titles[plugin] ?? plugin,
+        icon: looks[plugin]?.icon ?? null,
+        tagline: looks[plugin]?.tagline ?? null,
         tools: acting?.tools ?? [],
         switchable: acting !== undefined || pluginSwitch !== null,
         settings: configured?.profileSettings ?? [],
@@ -62,10 +69,13 @@ export function pluginRows(conversationPlugins: ConversationPlugin[], pluginSett
 export const isOn = (row: PluginRow, profile: ProfilePlugins) =>
   !row.switchable || !pluginsOffFor(profile, [{ plugin: row.plugin, profileSettings: row.settings }]).includes(row.plugin);
 
-/** The profile's plugins with this one turned on or off, each named once and sorted, as the host keeps them. */
-export const turned = (pluginsOff: string[], plugin: string, on: boolean) => (on ? pluginsOff.filter((name) => name !== plugin) : [...new Set([...pluginsOff, plugin])].sort());
-
 const isSwitch = (setting: PluginProfileSetting) => setting.kind === "toggle" && setting.switchesPlugin === true;
+
+/** Whether the plugin has settings of its own for each profile, besides its switch. */
+export const hasOwnSettings = (row: PluginRow) => row.settings.some((setting) => !isSwitch(setting));
+
+/** Whether the row has anything to show when opened: settings of its own, or tools to list. */
+export const opens = (row: PluginRow) => hasOwnSettings(row) || row.tools.length > 0;
 
 /** The settings shown under the row: those that hang off no toggle, and those whose toggle is on; never the plugin's switch, which is the row's. */
 export const shownSettings = (settings: PluginProfileSetting[], valueOf: (setting: PluginProfileSetting) => string) =>
@@ -102,6 +112,24 @@ export function launchVariableOf(setting: PluginTextProfileSetting, value: strin
   return { name, state: unset.includes(name) ? "unset" : "missing", value: "" };
 }
 
+/** The typed settings the plugin needs that an on row shows empty: typed empty, or reading a variable the Launch environment doesn't set. */
+export function missingSettings(row: PluginRow, profile: ProfilePlugins & { environment: string }): PluginTextProfileSetting[] {
+  if (!isOn(row, profile)) return [];
+  const valueOf = (setting: PluginProfileSetting) => profileSettingValue(profile.pluginSettings, row.plugin, setting);
+  return shownSettings(row.settings, valueOf)
+    .filter(isTextSetting)
+    .filter(({ required }) => required === true)
+    .filter((setting) => readsEmpty(setting, valueOf(setting), profile.environment));
+}
+
+/** Whether a typed setting gives its plugin nothing: its own text empty, or the variable it reads not set by the Launch environment. */
+export function readsEmpty(setting: PluginTextProfileSetting, value: string, environment: string) {
+  const variable = launchVariableOf(setting, value, environment);
+  return (variable ? variable.value : value).trim() === "";
+}
+
+export const needsSetup = (row: PluginRow, profile: ProfilePlugins & { environment: string }) => missingSettings(row, profile).length > 0;
+
 /** A choice as its menu names it, without asking an agent for its models: a model the profile chose shows by its id. */
 export function choiceLabelOf(setting: PluginChoiceProfileSetting, value: string, profiles: Profile[]) {
   if (setting.choices === "profiles") return profiles.find(({ id }) => id === value)?.name ?? t.plugins.none;
@@ -109,9 +137,11 @@ export function choiceLabelOf(setting: PluginChoiceProfileSetting, value: string
   return value || t.profiles.agentsDefault;
 }
 
-/** A row's one line while closed: off, else what its shown settings hold (a secret never), else how many tools it gives. */
+/** A row's one line while closed: off, else what it needs filled in, else what its shown settings hold (a secret never), else what it does or how many tools it gives. */
 export function summaryOf(row: PluginRow, profile: ProfilePlugins & { environment: string }, profiles: Profile[]) {
   if (!isOn(row, profile)) return words.off;
+  const missing = missingSettings(row, profile);
+  if (missing.length > 0) return words.fillIn(formatList(missing.map(({ label }) => label)));
   const valueOf = (setting: PluginProfileSetting) => profileSettingValue(profile.pluginSettings, row.plugin, setting);
   const shown = shownSettings(row.settings, valueOf);
   const valued = shown.flatMap((setting) => {
@@ -126,7 +156,7 @@ export function summaryOf(row: PluginRow, profile: ProfilePlugins & { environmen
     toggles.length === 1 ? [words.settingIs(toggles[0]!.label, togglesOn === 1 ? words.on : words.offValue)] : toggles.length > 1 ? [words.togglesOn(togglesOn, toggles.length)] : [];
   const parts = [...valued, ...toggled];
   if (parts.length > 0) return parts.join(" · ");
-  return row.tools.length > 0 ? words.tools(row.tools.length) : words.nothingToSet;
+  return row.tagline ?? (row.tools.length > 0 ? words.tools(row.tools.length) : words.nothingToSet);
 }
 
 /** Whether a plugin's row holds what isn't saved: turned on or off, or a setting that reads otherwise, a default written out reading as the default. */

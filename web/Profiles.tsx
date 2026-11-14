@@ -547,7 +547,7 @@ function ProfileEditor({
               form={form}
               saved={saved}
               onChooseSetting={choosePluginSetting}
-              onPluginsOff={(chosen) => set({ pluginsOff: chosen })}
+              onPluginsTurned={({ pluginsOff, pluginSettings }) => set({ pluginsOff, pluginSettings })}
               draft={draft}
             />
           </div>

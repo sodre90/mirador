@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
-import { pluginsOffFor, profileSettingWhoseModelsItLists, settingValue, type ConversationPlugin, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
+import { pluginsOffFor, profileSettingWhoseModelsItLists, settingValue, type ConversationPlugin, type PluginChoiceProfileSetting, type PluginLook, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
 import { categoryChoices, nameWithMultiplier } from "../shared/config-options.ts";
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { itemRooms, type ItemRoom } from "../shared/canvas-plugins.ts";
@@ -18,6 +18,7 @@ function receive(pluginSettings: PluginSettings[]) {
 let pluginToolTitles: Record<string, string> = {};
 let pluginTitles: Record<string, string> = {};
 let pluginsOfConversations: ConversationPlugin[] = [];
+let pluginLooks: Record<string, PluginLook> = {};
 
 /** Each plugin's tools with the plugin's title, as the host last said; plugins change only with a restart, which sends a new snapshot. */
 export const toolTitlesOfPlugins = () => pluginToolTitles;
@@ -28,11 +29,15 @@ export const titlesOfPlugins = () => pluginTitles;
 /** The plugins a profile can turn off for its conversations, as the host last said; plugins change only with a restart. */
 export const conversationPlugins = () => pluginsOfConversations;
 
+/** Each loaded plugin's icon and tagline, by name, as the host last said. */
+export const looksOfPlugins = () => pluginLooks;
+
 connection.onMessage((message) => {
   if (message.type === "snapshot") {
     pluginToolTitles = message.pluginToolTitles ?? {};
     pluginTitles = message.pluginTitles ?? {};
     pluginsOfConversations = message.conversationPlugins;
+    pluginLooks = message.pluginLooks;
     receive(message.pluginSettings ?? []);
   }
   if (message.type === "plugins.settings") receive(message.pluginSettings);

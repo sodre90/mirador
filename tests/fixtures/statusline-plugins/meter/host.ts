@@ -19,6 +19,7 @@ const meter: CanvasHost = {
   checkProfile(setting) {
     const url = setting("url");
     if (!url) throw new Error("Give the meter's URL.");
+    if (!URL.canParse(url)) throw new Error("The meter's URL isn't a URL.");
     return `Reached ${url} with a key ending ${setting("key")?.slice(-4) ?? "nowhere"}`;
   },
   window: {

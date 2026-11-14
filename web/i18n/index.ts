@@ -14,3 +14,4 @@ export const t = messages[language];
 export const locale = typeof navigator !== "undefined" && navigator.language && languageOfTag(navigator.language) === language ? navigator.language : languageTags[language];
 
 export const formatNumber = (value: number, options?: Intl.NumberFormatOptions) => value.toLocaleString(locale, options);
+export const formatList = (items: string[]) => new Intl.ListFormat(locale, { type: "conjunction" }).format(items);

@@ -43,7 +43,7 @@ import type { ConversationOrder } from "./conversation-order.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
-import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, ConversationPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode } from "./apps.ts";
+import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, ConversationPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginLook, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode } from "./apps.ts";
 import type { LowDataSubscription } from "./low-data.ts";
 import type { MentionSuggestion } from "./mentions.ts";
 import type { NewerVersion } from "./newer-version.ts";
@@ -435,6 +435,8 @@ export type ServerMessage =
       pluginCommands?: PluginCommand[];
       /** The plugins a profile can turn off for its conversations. */
       conversationPlugins: ConversationPlugin[];
+      /** Each loaded plugin's icon and tagline by its name. */
+      pluginLooks: Record<string, PluginLook>;
       /** The plugins that have a window of their own: their titles by name. Missing from a host older than plugin windows. */
       pluginWindows?: Record<string, string>;
       /** The plugins that have a workspace tab: their titles by name. Missing from a host older than plugin API 7. */

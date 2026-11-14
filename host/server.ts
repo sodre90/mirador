@@ -40,7 +40,7 @@ import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
 import { AppProblem, messageOf } from "./apps/plugins.ts";
-import { appKey, isPluginUpdateMode, type PluginUpdate, type PluginUpdateMode } from "../shared/apps.ts";
+import { appKey, isPluginUpdateMode, type PluginLook, type PluginUpdate, type PluginUpdateMode } from "../shared/apps.ts";
 import type { ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import type { PluginSettingsStore } from "./plugin-settings.ts";
 import { pluginsListed as listedPlugins, type PluginCatalog } from "./plugin-catalog.ts";
@@ -101,6 +101,8 @@ export interface HostServices {
   plugins: InstalledPlugins;
   canvasPlugins: CanvasPlugins;
   pluginSettings: PluginSettingsStore;
+  /** Each loaded plugin's icon and tagline by its name, read once at start as the plugins are. */
+  pluginLooks: Record<string, PluginLook>;
   catalog: PluginCatalog;
   profiles: ProfileService;
   statusline: StatuslineService;
@@ -188,6 +190,7 @@ export function startServer(services: HostServices) {
     plugins,
     canvasPlugins,
     pluginSettings,
+    pluginLooks,
     catalog,
     profiles,
     statusline,
@@ -1794,6 +1797,7 @@ export function startServer(services: HostServices) {
       canvasViews: canvasPlugins.viewPaths(),
       pluginToolTitles: canvasPlugins.toolTitles(),
       pluginTitles: canvasPlugins.pluginTitles(),
+      pluginLooks,
       pluginCommands: canvasPlugins.commands(),
       conversationPlugins: canvasPlugins.conversationPlugins(),
       pluginWindows: canvasPlugins.windowTitles(),

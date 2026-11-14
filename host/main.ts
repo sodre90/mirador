@@ -7,7 +7,7 @@ import { authorityFingerprint, namesToCover, servingCertificate } from "./certif
 import { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import { AppDocuments } from "./apps/documents.ts";
 import { defaultPluginsIn, installDefaultPlugins } from "./apps/default-plugins.ts";
-import { InstalledPlugins } from "./apps/installed-plugins.ts";
+import { InstalledPlugins, pluginLooksOf } from "./apps/installed-plugins.ts";
 import { applyReadyUpdatesAtStart, ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import { loadPlugins, watchViews } from "./apps/plugins.ts";
 import { CanvasPlugins } from "./canvas/plugins.ts";
@@ -91,6 +91,7 @@ const loadedPluginNames = new Set([...loadedPlugins.canvases, ...loadedPlugins.a
 const catalog = new PluginCatalog(store, config.pluginCatalogUrl, (name) => loadedPluginNames.has(name) || existsSync(join(pluginsFolder, name)));
 void catalog.refresh();
 canvasPlugins.offersFrom(catalog);
+const pluginLooks = await pluginLooksOf([...loadedPlugins.canvases, ...loadedPlugins.apps]);
 const pluginSettings = new PluginSettingsStore(
   store,
   [...loadedPlugins.canvases, ...loadedPlugins.apps].map(({ manifest }) => manifest),
@@ -230,7 +231,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

@@ -630,6 +630,12 @@ export interface PluginSettings {
   checksProfile?: true;
 }
 
+/** How a loaded plugin shows outside Plugins…: its plugin.json's icon, when that is a small SVG inside its folder, and its tagline. */
+export interface PluginLook {
+  icon: string | null;
+  tagline: string | null;
+}
+
 /** A plugin that gives a conversation something of its own (tools, guidance, notes, a statusline, or hearing its activity), which a profile can turn off. */
 export interface ConversationPlugin {
   plugin: string;
@@ -658,6 +664,23 @@ export function pluginsOffFor(profile: { pluginsOff: string[]; pluginSettings?: 
     return pluginSwitch !== undefined && profileSettingValue(profile?.pluginSettings, plugin, pluginSwitch) !== "on";
   });
   return [...new Set([...(profile?.pluginsOff ?? []), ...switchedOff.map(({ plugin }) => plugin)])].sort();
+}
+
+/**
+ * A profile's plugins with one turned on or off: on takes it out of the profile's plugins off and sets its switch on;
+ * off sets its switch off when it has one, else adds it to the plugins off. Each plugin named once and sorted, as the
+ * host keeps them.
+ */
+export function withPluginTurned<Plugins extends { pluginsOff: string[]; pluginSettings?: Record<string, Record<string, string>> }>(
+  profile: Plugins,
+  plugin: string,
+  pluginSwitch: PluginToggleProfileSetting | undefined,
+  on: boolean,
+): Plugins {
+  const pluginsOff = on ? profile.pluginsOff.filter((name) => name !== plugin) : pluginSwitch ? profile.pluginsOff : [...new Set([...profile.pluginsOff, plugin])].sort();
+  if (!pluginSwitch) return { ...profile, pluginsOff };
+  const switched = { ...profile.pluginSettings?.[plugin], [pluginSwitch.id]: on ? "on" : "off" };
+  return { ...profile, pluginsOff, pluginSettings: { ...profile.pluginSettings, [plugin]: switched } };
 }
 
 type WithPluginSettings = { pluginSettings?: Record<string, Record<string, string>> } | undefined;

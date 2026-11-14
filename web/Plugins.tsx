@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   offerRuns,
   offerSource,
@@ -21,6 +21,7 @@ import { hints } from "./hints.ts";
 import { describedText, replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { choosePluginSetting, usePluginSettings } from "./plugin-settings.ts";
+import { PluginIcon } from "./PluginIcon.tsx";
 
 const words = t.plugins;
 
@@ -296,24 +297,6 @@ const galleryOf = (listed: PluginsListed): { installed: GalleryPlugin[]; discove
 
 const toInstall = (official: CatalogPlugin[], installed: PluginInfo[]) => official.filter((plugin) => !installed.some(({ name }) => name === plugin.name));
 
-const MONOGRAM_HUES = [262, 145, 220, 355, 30, 190, 300, 95];
-
-const hueOf = (key: string) => MONOGRAM_HUES[[...key].reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0) % MONOGRAM_HUES.length]!;
-
-const svgDataUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-
-/** The plugin's own icon, drawn as an image so its SVG runs no script; its monogram while it has none or the icon fails. */
-function PluginIcon({ plugin }: { plugin: GalleryPlugin }) {
-  const icon = plugin.installed?.icon ?? plugin.official?.icon;
-  const [failed, setFailed] = useState(false);
-  if (icon && !failed) return <img className="plugin-icon" src={svgDataUrl(icon)} alt="" onError={() => setFailed(true)} />;
-  return (
-    <span className="plugin-monogram" aria-hidden style={{ "--monogram-hue": hueOf(plugin.key) } as CSSProperties}>
-      {plugin.title.trim().charAt(0).toUpperCase()}
-    </span>
-  );
-}
-
 /** The catalog's pictures load through the host, since the page may block images from other sites. */
 const throughTheHost = (url: string) => `/plugin-screenshot?url=${encodeURIComponent(url)}`;
 
@@ -426,7 +409,7 @@ function PluginTile({ plugin, news, updating, onOpen }: { plugin: GalleryPlugin;
   return (
     <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
       <span className="plugin-tile-top">
-        <PluginIcon plugin={plugin} />
+        <PluginIcon name={plugin.key} title={plugin.title} icon={plugin.installed?.icon ?? plugin.official?.icon} />
         <button type="button" className="plugin-title" onClick={(event) => (event.stopPropagation(), onOpen(null))}>
           {plugin.title}
         </button>
@@ -586,7 +569,7 @@ function PluginDetail({ plugin, news, updateMode, start, onBack }: { plugin: Gal
         {words.allPlugins}
       </button>
       <header className="plugin-detail-head">
-        <PluginIcon plugin={plugin} />
+        <PluginIcon name={plugin.key} title={plugin.title} icon={plugin.installed?.icon ?? plugin.official?.icon} />
         <span className="plugin-detail-name">
           <h3>{plugin.title}</h3>
           <PluginBadges plugin={plugin} news={news} />

@@ -1,12 +1,31 @@
-import { useEffect, useId, useState, type KeyboardEvent } from "react";
-import { isTextSetting, modelSettingsOf, profileSettingValue, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginTextProfileSetting } from "../shared/apps.ts";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { isTextSetting, modelSettingsOf, profileSettingValue, withPluginTurned, type PluginChoiceProfileSetting, type PluginProfileSetting, type PluginTextProfileSetting } from "../shared/apps.ts";
 import type { Profile } from "../shared/model.ts";
 import type { ProfileDraft } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
-import { t } from "./i18n/index.ts";
-import { conversationPlugins, titlesOfPlugins, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
-import { groupedToggles, isOn, launchVariableOf, matchesSearch, pluginRows, rowDiffers, shownSettings, showsEverySetting, summaryOf, turned, type LaunchVariable, type PluginRow, type ProfilePlugins } from "./plugin-rows.ts";
+import { formatList, t } from "./i18n/index.ts";
+import { conversationPlugins, looksOfPlugins, titlesOfPlugins, useChoicesOf, usePluginSettings } from "./plugin-settings.ts";
+import {
+  groupedToggles,
+  hasOwnSettings,
+  isOn,
+  launchVariableOf,
+  matchesSearch,
+  missingSettings,
+  needsSetup,
+  opens,
+  pluginRows,
+  readsEmpty,
+  rowDiffers,
+  shownSettings,
+  showsEverySetting,
+  summaryOf,
+  type LaunchVariable,
+  type PluginRow,
+  type ProfilePlugins,
+} from "./plugin-rows.ts";
+import { PluginIcon } from "./PluginIcon.tsx";
 import { UnsavedMark } from "./UnsavedMark.tsx";
 
 const words = t.profiles;
@@ -43,15 +62,24 @@ function usePluginProfileCheck(plugin: string) {
   return { check, checking: asking !== null, outcome };
 }
 
-function PluginProfileCheck({ plugin, draft }: { plugin: string; draft: () => ProfileDraft }) {
+function PluginProfileCheck({ plugin, missing, draft }: { plugin: string; missing: PluginTextProfileSetting[]; draft: () => ProfileDraft }) {
   const { check, checking, outcome } = usePluginProfileCheck(plugin);
+  const reasonId = useId();
   const formKeyOf = (profile: ProfileDraft) => JSON.stringify([profile.environment, profile.pluginSettings?.[plugin] ?? {}]);
   const shownOutcome = outcome?.formKey === formKeyOf(draft()) ? outcome : null;
+  const waitsForSettings = missing.length > 0;
   return (
     <div className="plugin-profile-check">
-      <button type="button" disabled={checking} onClick={() => check(draft(), formKeyOf(draft()))}>
-        {checking ? words.checkingProfile : words.checkProfile}
-      </button>
+      <div className="plugin-check-row">
+        <button type="button" disabled={checking || waitsForSettings} aria-describedby={waitsForSettings ? reasonId : undefined} onClick={() => check(draft(), formKeyOf(draft()))}>
+          {checking ? words.checkingProfile : words.checkProfile}
+        </button>
+        {waitsForSettings && (
+          <span className="plugin-hint" id={reasonId}>
+            {tabWords.fillInFirst(formatList(missing.map(({ label }) => label)))}
+          </span>
+        )}
+      </div>
       {shownOutcome && (
         <div className={`plugin-check-result${shownOutcome.problem === null ? "" : " problem"}`} role={shownOutcome.problem === null ? "status" : "alert"}>
           {shownOutcome.problem ?? shownOutcome.answer}
@@ -102,16 +130,20 @@ function PluginTextField({ setting, value, environment, onChoose }: { setting: P
   const variable = launchVariableOf(setting, value, environment);
   const inherited = empty && variable?.state === "set";
   const placeholder = inherited ? (secret ? "••••••••" : variable.value) : setting.placeholder;
+  const required = setting.required === true;
   return (
     <div className="plugin-field">
       <label className="plugin-field-label" htmlFor={inputId}>
         {setting.label}
+        {required && <span className="plugin-required">{tabWords.required}</span>}
       </label>
       <div className="plugin-text-input">
         <input
           id={inputId}
           type={secret && !revealed ? "password" : "text"}
           aria-label={words.pluginSetting(setting.label)}
+          aria-required={required}
+          data-missing={(required && readsEmpty(setting, value, environment)) || undefined}
           value={value}
           placeholder={placeholder}
           autoComplete="off"
@@ -203,90 +235,119 @@ function PluginRowView({ row, open, onToggleOpen, form, saved, profileId, profil
   const bodyId = useId();
   const on = isOn(row, form);
   const unsaved = rowDiffers(row, form, saved);
+  const missing = missingSettings(row, form);
+  const opensInPlace = opens(row);
+  const describedBy = unsaved ? `${summaryId} ${unsavedId}` : summaryId;
   const valueOf = (setting: PluginProfileSetting) => profileSettingValue(form.pluginSettings, row.plugin, setting);
   const shown = shownSettings(row.settings, valueOf);
   const chooseSetting = (setting: PluginProfileSetting) => (value: string) => {
     onChooseSetting(row.plugin, setting.id, value);
     modelSettingsOf(row.settings, setting.id).forEach((modelSetting) => onChooseSetting(row.plugin, modelSetting.id, modelSetting.default));
   };
+  const label = (
+    <>
+      <PluginIcon name={row.plugin} title={row.title} icon={row.icon} />
+      <span className="plugin-text">
+        <span className="plugin-row-name">
+          <span className="plugin-row-title" id={titleId}>
+            {row.title}
+          </span>
+          {missing.length > 0 && <span className="plugin-pill missing">{tabWords.needsSetup}</span>}
+          {unsaved && <UnsavedMark id={unsavedId} />}
+        </span>
+        <span className="plugin-summary" id={summaryId}>
+          {summaryOf(row, form, profiles)}
+        </span>
+      </span>
+    </>
+  );
   return (
     <section className={`plugin-row${on ? " on" : ""}`} role="group" aria-labelledby={titleId}>
       <div className="plugin-row-head">
-        <button
-          type="button"
-          className="plugin-disclose"
-          aria-labelledby={titleId}
-          aria-describedby={unsaved ? `${summaryId} ${unsavedId}` : summaryId}
-          aria-expanded={open}
-          aria-controls={bodyId}
-          onClick={onToggleOpen}
-        >
-          <span className="plugin-mark" aria-hidden="true">
-            {row.title.charAt(0).toLocaleUpperCase()}
-          </span>
-          <span className="plugin-text">
-            <span className="plugin-name">
-              <span id={titleId}>{row.title}</span>
-              {unsaved && <UnsavedMark id={unsavedId} />}
-            </span>
-            <span className="plugin-summary" id={summaryId}>
-              {summaryOf(row, form, profiles)}
-            </span>
-          </span>
-          <Chevron />
-        </button>
+        {opensInPlace ? (
+          <button type="button" className="plugin-disclose" aria-labelledby={titleId} aria-describedby={describedBy} aria-expanded={open} aria-controls={bodyId} onClick={onToggleOpen}>
+            {label}
+            <Chevron />
+          </button>
+        ) : (
+          <div className="plugin-row-label">{label}</div>
+        )}
         {row.switchable && (
           <label className="plugin-switch">
-            <input type="checkbox" role="switch" aria-label={tabWords.use(row.title)} checked={on} onChange={(event) => onTurn(event.target.checked)} />
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label={tabWords.use(row.title)}
+              aria-describedby={opensInPlace ? undefined : describedBy}
+              checked={on}
+              onChange={(event) => onTurn(event.target.checked)}
+            />
             <span className="plugin-switch-track" aria-hidden="true" />
           </label>
         )}
       </div>
-      <div className="plugin-body" id={bodyId} hidden={!open}>
-        {on ? (
-          <>
-            {shown.length === 0 && row.tools.length === 0 && <p className="plugin-hint">{tabWords.nothingToSet}</p>}
-            {groupedToggles(shown).map((group) => {
-              const fields = group.map((setting) => (
-                <PluginProfileField
-                  key={setting.id}
-                  setting={setting}
-                  settingsOfPlugin={row.settings}
-                  profileId={profileId}
-                  profiles={profiles}
-                  environment={form.environment}
-                  valueOf={valueOf}
-                  onChoose={chooseSetting(setting)}
-                />
-              ));
-              return group.length > 1 ? (
-                <div key={group[0]!.id} className="plugin-toggles">
-                  {fields}
-                </div>
-              ) : (
-                fields
-              );
-            })}
-            {row.checksProfile && showsEverySetting(row.settings, valueOf) && <PluginProfileCheck plugin={row.plugin} draft={draft} />}
-            {row.tools.length > 0 && <ToolList heading={tabWords.toolsItGives} tools={row.tools} />}
-          </>
-        ) : (
-          <>
-            <p className="plugin-hint">{tabWords.turnOnToUse(row.title)}</p>
-            {row.tools.length > 0 && <ToolList heading={tabWords.toolsItWouldGive} tools={row.tools} />}
-          </>
-        )}
-      </div>
+      {opensInPlace && (
+        <div className="plugin-body" id={bodyId} hidden={!open}>
+          {on ? (
+            <>
+              {shown.length === 0 && row.tools.length === 0 && <p className="plugin-hint">{tabWords.nothingToSet}</p>}
+              {groupedToggles(shown).map((group) => {
+                const fields = group.map((setting) => (
+                  <PluginProfileField
+                    key={setting.id}
+                    setting={setting}
+                    settingsOfPlugin={row.settings}
+                    profileId={profileId}
+                    profiles={profiles}
+                    environment={form.environment}
+                    valueOf={valueOf}
+                    onChoose={chooseSetting(setting)}
+                  />
+                ));
+                return group.length > 1 ? (
+                  <div key={group[0]!.id} className="plugin-toggles">
+                    {fields}
+                  </div>
+                ) : (
+                  fields
+                );
+              })}
+              {row.checksProfile && showsEverySetting(row.settings, valueOf) && <PluginProfileCheck plugin={row.plugin} missing={missing} draft={draft} />}
+              {row.tools.length > 0 && <ToolList heading={tabWords.toolsItGives} tools={row.tools} />}
+            </>
+          ) : (
+            <>
+              <p className="plugin-hint">{tabWords.turnOnToUse(row.title)}</p>
+              {row.tools.length > 0 && <ToolList heading={tabWords.toolsItWouldGive} tools={row.tools} />}
+            </>
+          )}
+        </div>
+      )}
     </section>
   );
 }
 
+function PluginGroup({ heading, children }: { heading: string; children: ReactNode }) {
+  const headingId = useId();
+  return (
+    <div className="plugin-group" role="group" aria-labelledby={headingId}>
+      <h4 className="plugin-group-head" id={headingId}>
+        {heading}
+      </h4>
+      {children}
+    </div>
+  );
+}
+
+const usePluginRows = () => pluginRows(conversationPlugins(), usePluginSettings(), titlesOfPlugins(), looksOfPlugins());
+
 /** Whether the profile has anything to set on the Plugins tab: a plugin to turn off, or a plugin's setting. */
-export const usePluginsTabHasRows = () => pluginRows(conversationPlugins(), usePluginSettings(), titlesOfPlugins()).length > 0;
+export const usePluginsTabHasRows = () => usePluginRows().length > 0;
 
 /**
- * Every plugin a profile can turn off or set something for, each a row that opens in place: its switch, a line of what
- * it holds, and once open its settings, built from its plugin.json alone, and the tools it gives the agent.
+ * Every plugin a profile can turn off or set something for, those with settings of their own first: each a row with its
+ * icon, its switch and a line of what it holds or lacks, which opens in place to its settings, built from its plugin.json
+ * alone, and the tools it gives the agent.
  */
 export function ProfilePluginsTab({
   profileId,
@@ -294,7 +355,7 @@ export function ProfilePluginsTab({
   form,
   saved,
   onChooseSetting,
-  onPluginsOff,
+  onPluginsTurned,
   draft,
 }: {
   profileId: string | undefined;
@@ -302,20 +363,43 @@ export function ProfilePluginsTab({
   form: ProfileForm;
   saved: ProfilePlugins;
   onChooseSetting: (plugin: string, settingId: string, value: string) => void;
-  onPluginsOff: (pluginsOff: string[]) => void;
+  onPluginsTurned: (plugins: ProfilePlugins) => void;
   draft: () => ProfileDraft;
 }) {
-  const rows = pluginRows(conversationPlugins(), usePluginSettings(), titlesOfPlugins());
+  const rows = usePluginRows();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState<string[]>([]);
+  const [focusingMissing, setFocusingMissing] = useState(false);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusingMissing) return;
+    rowsRef.current?.querySelector<HTMLElement>("[data-missing]")?.focus();
+    setFocusingMissing(false);
+  }, [focusingMissing]);
   const shownRows = rows.filter((row) => matchesSearch(row, query));
+  const groups = [
+    { heading: tabWords.withSettings, rows: shownRows.filter(hasOwnSettings) },
+    { heading: tabWords.onOrOffOnly, rows: shownRows.filter((row) => !hasOwnSettings(row)) },
+  ].filter((group) => group.rows.length > 0);
   const switchable = rows.filter(({ switchable }) => switchable);
   const onCount = switchable.filter((row) => isOn(row, form)).length;
+  const needingSetup = rows.filter((row) => needsSetup(row, form)).map(({ plugin }) => plugin);
+  const openRows = (plugins: string[]) => setOpen((current) => [...new Set([...current, ...plugins])]);
   const toggleOpen = (plugin: string) => setOpen((current) => (current.includes(plugin) ? current.filter((name) => name !== plugin) : [...current, plugin]));
-  const turn = ({ plugin, pluginSwitch }: PluginRow, on: boolean) => {
-    if (on || pluginSwitch === null) onPluginsOff(turned(form.pluginsOff, plugin, on));
-    if (pluginSwitch) onChooseSetting(plugin, pluginSwitch.id, on ? "on" : "off");
-    if (on) setOpen((current) => (current.includes(plugin) ? current : [...current, plugin]));
+  const turn = (row: PluginRow, on: boolean) => {
+    const { pluginsOff, pluginSettings } = withPluginTurned(form, row.plugin, row.pluginSwitch ?? undefined, on);
+    onPluginsTurned({ pluginsOff, pluginSettings });
+    if (on && opens(row)) openRows([row.plugin]);
+  };
+  const showNeedingSetup = () => {
+    setQuery("");
+    openRows(needingSetup);
+    setFocusingMissing(true);
+  };
+  const clearSearch = () => {
+    setQuery("");
+    searchRef.current?.focus();
   };
   const clearOnEscape = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key !== "Escape" || query === "") return;
@@ -326,25 +410,50 @@ export function ProfilePluginsTab({
     <>
       <p className="hint">{tabWords.intro}</p>
       <div className="plugins-toolbar">
-        <input type="search" className="plugins-search" aria-label={tabWords.search} placeholder={tabWords.search} value={query} onChange={(event) => setQuery(event.target.value)} onKeyDown={clearOnEscape} />
+        <input
+          ref={searchRef}
+          type="search"
+          className="plugins-search"
+          aria-label={tabWords.search}
+          placeholder={tabWords.search}
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onKeyDown={clearOnEscape}
+        />
         {switchable.length > 0 && <span className="plugins-tally">{tabWords.onOfAll(onCount, switchable.length)}</span>}
+        {needingSetup.length > 0 && (
+          <button type="button" className="link plugins-needing-setup" onClick={showNeedingSetup}>
+            {tabWords.needSetupCount(needingSetup.length)}
+          </button>
+        )}
       </div>
-      <div className="plugin-rows">
-        {shownRows.length === 0 && <p className="plugin-hint">{tabWords.noMatch(query.trim())}</p>}
-        {shownRows.map((row) => (
-          <PluginRowView
-            key={row.plugin}
-            row={row}
-            open={open.includes(row.plugin)}
-            onToggleOpen={() => toggleOpen(row.plugin)}
-            form={form}
-            saved={saved}
-            profileId={profileId}
-            profiles={profiles}
-            onChooseSetting={onChooseSetting}
-            onTurn={(on) => turn(row, on)}
-            draft={draft}
-          />
+      <div className="plugin-rows" ref={rowsRef}>
+        {shownRows.length === 0 && (
+          <p className="plugin-hint">
+            {tabWords.noMatch(query.trim())}{" "}
+            <button type="button" className="link" onClick={clearSearch}>
+              {tabWords.clearSearch}
+            </button>
+          </p>
+        )}
+        {groups.map((group) => (
+          <PluginGroup key={group.heading} heading={group.heading}>
+            {group.rows.map((row) => (
+              <PluginRowView
+                key={row.plugin}
+                row={row}
+                open={open.includes(row.plugin)}
+                onToggleOpen={() => toggleOpen(row.plugin)}
+                form={form}
+                saved={saved}
+                profileId={profileId}
+                profiles={profiles}
+                onChooseSetting={onChooseSetting}
+                onTurn={(on) => turn(row, on)}
+                draft={draft}
+              />
+            ))}
+          </PluginGroup>
         ))}
       </div>
     </>

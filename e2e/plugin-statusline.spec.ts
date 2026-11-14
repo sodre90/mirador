@@ -51,20 +51,23 @@ test("a plugin's profile settings are typed, toggled and checked under its title
     await expect(key).toHaveAttribute("type", "password");
   });
 
-  await test.step("Test connection asks the plugin about the unsaved form, reading the environment's variables where the fields say so", async () => {
+  await test.step("Test connection asks the plugin about the unsaved form, reading the environment's variables where the fields say so, once the settings it needs read a value", async () => {
     await meter.getByRole("button", { name: "Test connection" }).click();
     await expect(meter.getByRole("status")).toHaveText("Reached https://meter.test with a key ending 1234");
     await meter.getByLabel("Profile Meter URL").fill("https://typed.test");
     await expect(meter.getByRole("status")).toHaveCount(0);
     await meter.getByRole("button", { name: "Test connection" }).click();
     await expect(meter.getByRole("status")).toHaveText("Reached https://typed.test with a key ending 1234");
+    await meter.getByLabel("Profile Meter URL").fill("meter.test");
+    await meter.getByRole("button", { name: "Test connection" }).click();
+    await expect(meter.getByRole("alert")).toHaveText("The meter's URL isn't a URL.");
     await meter.getByLabel("Profile Meter URL").fill("");
     await openProfileTab(editor, "Launch");
     await editor.getByRole("button", { name: "Edit environment" }).click();
     await editor.getByLabel("Environment", { exact: true }).fill("METER_KEY=key-from-env-1234");
     await openProfileTab(editor, "Plugins");
-    await meter.getByRole("button", { name: "Test connection" }).click();
-    await expect(meter.getByRole("alert")).toHaveText("Give the meter's URL.");
+    await expect(meter.getByRole("button", { name: "Test connection" }), "a URL it needs, missing from Launch, waits to be filled in").toBeDisabled();
+    await expect(meter.getByRole("button", { name: "Test connection" })).toHaveAccessibleDescription("Fill in Meter URL first.");
     await openProfileTab(editor, "Launch");
     await editor.getByLabel("Environment", { exact: true }).fill("METER_URL=https://meter.test\nMETER_KEY=key-from-env-1234");
     await editor.getByRole("button", { name: "Save" }).click();

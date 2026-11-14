@@ -1,7 +1,7 @@
 import { existsSync, lstatSync, mkdirSync, readlinkSync, realpathSync, rmSync, statSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
-import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, isTagline, type PluginKind, type PluginManifest, type PluginManifestPicture, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
+import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, isTagline, type PluginKind, type PluginLook, type PluginManifest, type PluginManifestPicture, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
 import { isNewerVersion } from "../../shared/newer-version.ts";
 import { environmentWithoutPrompts } from "../git-environment.ts";
 import { localImage } from "../local-images.ts";
@@ -150,6 +150,12 @@ async function pictureFileIn(folder: string, path: string) {
 }
 
 const pictureUrl = (folder: string, path: string) => `/plugin-picture?folder=${encodeURIComponent(basename(folder))}&path=${encodeURIComponent(path)}`;
+
+/** Each loaded plugin's icon and tagline by its name, for the pages that show plugins outside Plugins…. */
+export async function pluginLooksOf(plugins: { manifest: PluginManifest; folder: string }[]): Promise<Record<string, PluginLook>> {
+  const looks = await Promise.all(plugins.map(async ({ manifest, folder }) => [manifest.name, { icon: await iconIn(folder, manifest.icon), tagline: isTagline(manifest.tagline) ? manifest.tagline : null }] as const));
+  return Object.fromEntries(looks);
+}
 
 /** The SVG at `path` in the plugin's folder; null for anything else, such as a path that leads out of the folder. */
 async function iconIn(folder: string, path: unknown): Promise<string | null> {
