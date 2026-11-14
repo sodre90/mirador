@@ -25,6 +25,7 @@ async function git(directory: string, args: string[]) {
 
 async function repositoryWithACommit(project: string) {
   await git(project, ["-c", "init.defaultBranch=main", "init", "-q"]);
+  await git(project, ["config", "core.autocrlf", "false"]);
   writeFileSync(join(project, "kept.txt"), "one\n");
   await git(project, ["add", "-A"]);
   await git(project, ["commit", "-qm", "base"]);

@@ -1,5 +1,6 @@
 import { afterAll, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -10,7 +11,8 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { fakeProgram } from "./fake-program.ts";
 
-const scratch = realpathSync(mkdtempSync(join(tmpdir(), "fake-acp-write-")));
+/** Spelled as the host spells a workspace's folder to its agent: on Windows, a long name for an 8.3 one such as RUNNER~1. */
+const scratch = await realpath(mkdtempSync(join(tmpdir(), "fake-acp-write-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const fakeAgent = join(import.meta.dirname, "..", "e2e", "fake-acp-agent.ts");
@@ -66,7 +68,7 @@ test("WRITE fills in the session's folder and the agent's environment in its pat
   expect(readFileSync(join(folder, "from-shell.txt"), "utf8")).toBe("42");
   expect(eventsOf(store, conversation.id)).toContainEqual({
     type: "acp",
-    update: { sessionUpdate: "tool_call", toolCallId: expect.any(String), title: `Read ${join(folder, "answer.txt")}`, kind: "read", status: "completed", locations: [{ path: join(folder, "answer.txt") }] },
+    update: { sessionUpdate: "tool_call", toolCallId: expect.any(String), title: `Read ${folder}/answer.txt`, kind: "read", status: "completed", locations: [{ path: `${folder}/answer.txt` }] },
   });
 });
 

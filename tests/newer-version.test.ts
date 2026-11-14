@@ -135,6 +135,7 @@ describe("pulling a checkout's upstream", () => {
     git(base, "init", "--quiet", "--bare", "-b", "main", origin);
     mkdirSync(checkout);
     git(checkout, "init", "--quiet", "-b", "main");
+    git(checkout, "config", "core.autocrlf", "false");
     writeFileSync(join(checkout, "f.txt"), "base\n");
     git(checkout, "add", "--all");
     git(checkout, "commit", "--quiet", "-m", "first");
