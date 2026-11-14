@@ -2,7 +2,7 @@ import { mkdirSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, createProfile, signIn } from "./helpers.ts";
+import { addWorkspace, chooseInWorkspaceMenu, createProfile, signIn } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -62,7 +62,7 @@ test("the Continue dialog finds a session older than its list by a word said in 
   await profiles.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "fake gateway · Claude Code" });
 
-  await page.getByRole("button", { name: "Continue a session…" }).click();
+  await chooseInWorkspaceMenu(page, "Continue a session…");
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   await expect(dialog.locator(".session-list")).toBeVisible({ timeout: 30_000 });
 

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addWorkspace, signIn } from "./helpers.ts";
+import { addWorkspace, chooseInWorkspaceMenu, signIn } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -64,7 +64,7 @@ test("the message box names its keys on one line, and the Send button's hint say
 
 test("help text in the app stays where it is written, unlike the hint bubble", async ({ page }) => {
   await signIn(page, host);
-  await page.getByRole("button", { name: "Continue a session…" }).click();
+  await chooseInWorkspaceMenu(page, "Continue a session…");
   const help = page.locator(".modal.sessions p.hint");
   await expect(help).toBeVisible();
   await expect(help).toHaveCSS("position", "static");

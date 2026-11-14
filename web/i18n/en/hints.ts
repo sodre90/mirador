@@ -157,7 +157,6 @@ export const hints = {
   terminalCloseSplitArmed: "Click again to end this shell and whatever it is running.",
   subagentsRunning:
     "Subagents the agent started that are still at work, also listed above the message box; click to open the first one. One started in the background counts until the turn that started it ends, since nothing tells when it finished before that.",
-  searchAll: "Search every conversation in every workspace. Opening a match shows it in its conversation.",
   find: "Find text anywhere in this conversation: in earlier entries not loaded yet, and in folded cards, which unfold where it is found.",
   fork: "Copy this conversation into a new one on the same profile and leave this one as it is. A turn running here goes on; the copy holds what the agent has saved of it so far. Possible once the agent has worked on a message here.",
   forkThroughTurn: "Copy this conversation, through this turn and its reply, into a new one on the same profile, with what the canvas showed until then, and leave this one as it is. The copy works on the same files, as they are now.",
@@ -174,8 +173,6 @@ export const hints = {
   launch:
     "The profile new conversations in this workspace start on, and with it their agent. Remembered per workspace. Existing conversations keep the profile they run on until you move them.",
   setUpProfile: "Every conversation runs on a profile. Set up your first one in the main pane; with nothing more set, it runs the agent as it is set up on this machine.",
-  continueSession:
-    "Pick up a Claude Code, opencode, pi or Codex session that was started in a terminal in this directory. Continue it in place, or fork its history into a new conversation and leave the original alone.",
   sessionSearch:
     "Find sessions in this directory by what was said in them, however old. The search reads the agent's own records of every session here, so it finds sessions the list does not show.",
   profiles: "Named setups for an agent: environment variables and a pre-launch command, applied to the agent process the profile starts. Every conversation runs on one.",
@@ -199,8 +196,9 @@ export const hints = {
   workspaceColor: "Give this workspace a colour, to tell it apart in the sidebar. Every window shows it.",
   workspaceColorStyle:
     "How a workspace you gave a colour shows it: on its whole card, on its heading only, or as a stripe down its edge over a softer tint. Click a workspace's initials to give it a colour.",
-  newConversation: "Start a conversation in this workspace, on the profile picked next to this button.",
-  worktrees: "Where this workspace's new conversations work: all in the project folder, or each in a git worktree of its own, with a setup command for new worktrees.",
+  newConversation: "Start a conversation in this workspace, on the profile picked in this card.",
+  workspaceMenu:
+    "More for this workspace: continue a session that was started in a terminal, choose whether new conversations work in the project folder or each in a git worktree of its own, or remove the workspace. Removing it takes its conversations and its worktrees under Mirador's data folder, but the project directory stays.",
   addWorkspace: "Add a project directory. Its conversations run with it as the working directory.",
   hideSidebar: "Hide the sidebar, to give the conversation, canvas and terminal the whole width. Remembered in this browser.",
   showSidebar: "Show the sidebar with the workspaces and conversations again.",
@@ -215,8 +213,6 @@ export const hints = {
   renameWorkspaceGroup: "Rename this group.",
   deleteWorkspaceGroup: "Delete this group. Its workspaces stay where it is.",
   deleteWorkspaceGroupArmed: "Click again to delete this group. Its workspaces stay where it is.",
-  removeWorkspace:
-    "Remove this workspace and its conversations from the app. Its worktrees under Mirador's data folder go too, but the project directory stays. A worktree holding uncommitted files asks first.",
   removeWorkspaceArmed:
     "Click again to remove this workspace and its conversations from the app. Its worktrees under Mirador's data folder go too, but the project directory stays. A worktree holding uncommitted files asks first.",
   deleteConversation: "Delete this conversation, its timeline and its canvas history from the app. The agent's own session files stay on disk. A worktree of its own goes too; one that holds uncommitted files asks first.",

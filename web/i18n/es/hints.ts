@@ -175,7 +175,6 @@ export const hints: Messages["hints"] = {
   terminalCloseSplitArmed: "Haz clic de nuevo para terminar este shell y lo que esté ejecutando.",
   subagentsRunning:
     "Subagentes que el agente inició y que siguen trabajando, también enumerados sobre el cuadro de mensaje; haz clic para abrir el primero. Uno iniciado en segundo plano cuenta hasta que termina el turno que lo inició, ya que nada avisa de cuándo acabó antes.",
-  searchAll: "Busca en todas las conversaciones de todos los espacios de trabajo. Abrir una coincidencia la muestra en su conversación.",
   find: "Busca texto en cualquier parte de esta conversación: en entradas anteriores que aún no se han cargado y en tarjetas contraídas, que se expanden donde se encuentra.",
   fork: "Copia esta conversación en una nueva con el mismo perfil y deja esta como está. Un turno en curso aquí sigue; la copia tiene lo que el agente ha guardado de él hasta ahora. Disponible cuando el agente ya ha trabajado en un mensaje aquí.",
   forkThroughTurn: "Copia esta conversación, hasta este turno y su respuesta, en una nueva con el mismo perfil, con lo que el lienzo mostraba hasta entonces, y deja esta como está. La copia trabaja con los mismos archivos, tal como están ahora.",
@@ -193,8 +192,6 @@ export const hints: Messages["hints"] = {
     "El perfil con el que empiezan las conversaciones nuevas de este espacio de trabajo, y con él su agente. Se recuerda por espacio de trabajo. Las conversaciones existentes conservan el perfil con el que se ejecutan hasta que las muevas.",
   setUpProfile:
     "Toda conversación se ejecuta con un perfil. Configura el primero en el panel principal; sin nada más definido, ejecuta el agente tal como está configurado en esta máquina.",
-  continueSession:
-    "Retoma una sesión de Claude Code, opencode, pi o Codex que se inició en una terminal en este directorio. Continúala en su sitio, o haz un fork de su historial en una conversación nueva y deja la original como está.",
   sessionSearch:
     "Busca sesiones de este directorio por lo que se dijo en ellas, por antiguas que sean. La búsqueda lee los registros propios del agente de cada sesión de aquí, así que encuentra sesiones que la lista no muestra.",
   profiles:
@@ -219,8 +216,9 @@ export const hints: Messages["hints"] = {
   workspaceColor: "Dale un color a este espacio de trabajo para distinguirlo en la barra lateral. Todas las ventanas lo muestran.",
   workspaceColorStyle:
     "Cómo muestra su color un espacio de trabajo al que se lo diste: en toda su tarjeta, solo en su encabezado, o como una franja en su borde sobre un tono más suave. Haz clic en las iniciales de un espacio de trabajo para darle un color.",
-  newConversation: "Inicia una conversación en este espacio de trabajo, con el perfil elegido junto a este botón.",
-  worktrees: "Dónde trabajan las conversaciones nuevas de este espacio de trabajo: todas en la carpeta del proyecto, o cada una en su propio worktree de git, con un comando de preparación para los worktrees nuevos.",
+  newConversation: "Inicia una conversación en este espacio de trabajo, con el perfil elegido en esta tarjeta.",
+  workspaceMenu:
+    "Más para este espacio de trabajo: continúa una sesión que se inició en una terminal, elige si las conversaciones nuevas trabajan en la carpeta del proyecto o cada una en su propio worktree de git, o quita el espacio de trabajo. Al quitarlo se van sus conversaciones y sus worktrees en la carpeta de datos de Mirador, pero el directorio del proyecto se conserva.",
   addWorkspace: "Agrega un directorio de proyecto. Sus conversaciones se ejecutan con él como directorio de trabajo.",
   hideSidebar: "Oculta la barra lateral para dar todo el ancho a la conversación, el lienzo y la terminal. Este navegador lo recuerda.",
   showSidebar: "Vuelve a mostrar la barra lateral con los espacios de trabajo y las conversaciones.",
@@ -236,8 +234,6 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "Renombra este grupo.",
   deleteWorkspaceGroup: "Elimina este grupo. Sus espacios de trabajo se quedan donde está.",
   deleteWorkspaceGroupArmed: "Haz clic de nuevo para eliminar este grupo. Sus espacios de trabajo se quedan donde está.",
-  removeWorkspace:
-    "Quita este espacio de trabajo y sus conversaciones de la aplicación. Sus worktrees en la carpeta de datos de Mirador también se eliminan, pero el directorio del proyecto se conserva. Si un worktree tiene archivos sin commitear, se pregunta antes.",
   removeWorkspaceArmed:
     "Haz clic de nuevo para quitar este espacio de trabajo y sus conversaciones de la aplicación. Sus worktrees en la carpeta de datos de Mirador también se eliminan, pero el directorio del proyecto se conserva. Si un worktree tiene archivos sin commitear, se pregunta antes.",
   deleteConversation:

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, checkedOutText, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, checkedOutText, chooseInWorkspaceMenu, createProfile, lastAgentMessage, removeWorkspace as removeWorkspaceCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const home = scratchPath("worktrees-home");
@@ -43,8 +43,20 @@ test.afterAll(async () => {
   rmSync(notARepository, { recursive: true, force: true });
 });
 
-const worktreesButton = (page: Page, directory: string) => workspaceCard(page, directory).getByRole("button", { name: "Where conversations work" });
+const openWorktrees = (page: Page, directory: string) => chooseInWorkspaceMenu(page, "Where conversations work…", workspaceCard(page, directory));
 const worktreesDialog = (page: Page, workspace: string) => page.getByRole("dialog", { name: `Where conversations work in ${workspace}` });
+/** The dialog shows the choice as it was when it opened, so it is opened again until the saved one has arrived. */
+async function expectNewConversationsIn(page: Page, directory: string, place: RegExp) {
+  const dialog = page.getByRole("dialog", { name: /^Where conversations work in / });
+  await expect(async () => {
+    await openWorktrees(page, directory);
+    const chosen = await dialog.getByRole("radio", { name: place }).isChecked();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    expect(chosen).toBe(true);
+  }).toPass();
+}
+
 const selectedRow = (page: Page) => page.locator(".workspace li.selected");
 const deleteQuestion = (page: Page) => page.getByRole("alertdialog", { name: "Delete the conversation and its worktree?" });
 const commitDialog = (page: Page) => page.getByRole("dialog", { name: "Commit changes" });
@@ -80,15 +92,14 @@ test("a workspace set to start conversations in worktrees gives each its own, se
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "worktrees · opencode" });
 
   await test.step("the workspace's new conversations start in worktrees, each set up by a command", async () => {
-    await expect(worktreesButton(page, host.projectDir)).toHaveAttribute("data-place", "folder");
-    await worktreesButton(page, host.projectDir).click();
+    await openWorktrees(page, host.projectDir);
     const dialog = worktreesDialog(page, "project");
     await expect(dialog.getByRole("radio", { name: /The project folder/ })).toBeChecked();
     await dialog.getByRole("radio", { name: /A worktree of their own/ }).check();
     await dialog.getByLabel("Setup command for a new worktree").fill('cp "$MIRADOR_WORKSPACE/.env" .env && echo set up here');
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(worktreesButton(page, host.projectDir)).toHaveAttribute("data-place", "worktree");
+    await expectNewConversationsIn(page, host.projectDir, /A worktree of their own/);
   });
 
   await startNewConversation(page, host.projectDir);
@@ -235,11 +246,11 @@ test("one conversation starts in the other place, a clean worktree goes without 
   await signIn(page, host);
 
   await test.step("the dialog starts one conversation in the project folder, which keeps starting them in worktrees", async () => {
-    await worktreesButton(page, host.projectDir).click();
+    await openWorktrees(page, host.projectDir);
     await worktreesDialog(page, "project").getByRole("button", { name: "Start one in the project folder now" }).click();
     expect(canonicalPath(await agentFolder(page))).toBe(canonicalPath(host.projectDir));
     await expect(selectedRow(page).locator(".worktree-mark")).toHaveCount(0);
-    await expect(worktreesButton(page, host.projectDir)).toHaveAttribute("data-place", "worktree");
+    await expectNewConversationsIn(page, host.projectDir, /A worktree of their own/);
   });
 
   await test.step("a worktree with nothing uncommitted goes with its conversation, branch and all", async () => {
@@ -256,15 +267,15 @@ test("one conversation starts in the other place, a clean worktree goes without 
   await test.step("a folder that is no git repository refuses worktrees, and starts none", async () => {
     await addWorkspaceFromSidebar(page, notARepository);
     const refusal = page.locator(".notices .notice", { hasText: "gets its own worktree only in a git repository with a commit" });
-    await worktreesButton(page, notARepository).click();
+    await openWorktrees(page, notARepository);
     const dialog = page.getByRole("dialog", { name: /^Where conversations work in mirador-e2e-worktrees-plain/ });
     await dialog.getByRole("radio", { name: /A worktree of their own/ }).check();
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect(refusal).toBeVisible();
-    await expect(worktreesButton(page, notARepository)).toHaveAttribute("data-place", "folder");
+    await expectNewConversationsIn(page, notARepository, /The project folder/);
     await refusal.click();
 
-    await worktreesButton(page, notARepository).click();
+    await openWorktrees(page, notARepository);
     await dialog.getByRole("button", { name: "Start one in a worktree now" }).click();
     await expect(refusal).toBeVisible();
     await expect(workspaceCard(page, notARepository).locator("li")).toHaveCount(0);
@@ -278,12 +289,7 @@ test("removing a workspace asks before its worktrees' uncommitted files go, and 
   const branch = gitIn(folder, "branch", "--show-current");
   writeFileSync(join(folder, "scratch.txt"), "not committed\n");
 
-  const removeWorkspace = async (directory: string) => {
-    const card = workspaceCard(page, directory);
-    await card.hover();
-    await card.getByRole("button", { name: "Remove workspace" }).click();
-    await card.getByRole("button", { name: "Confirm: Remove workspace" }).click();
-  };
+  const removeWorkspace = (directory: string) => removeWorkspaceCard(page, workspaceCard(page, directory));
   const question = page.getByRole("alertdialog", { name: "Remove the workspace and its worktrees?" });
 
   await test.step("Cancel keeps the workspace, its worktree and the uncommitted file", async () => {

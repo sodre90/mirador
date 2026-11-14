@@ -166,7 +166,6 @@ export const hints: Messages["hints"] = {
   terminalCloseSplitArmed: "Kattints újra, hogy leállítsd ezt a shellt és mindazt, ami benne fut.",
   subagentsRunning:
     "Az ágens által indított, még dolgozó alágensek, amelyek az üzenetmező fölött is szerepelnek; kattints az első megnyitásához. A háttérben indított alágens addig számít, amíg az őt indító kör véget nem ér, mert addig semmi sem jelzi, hogy befejeződött.",
-  searchAll: "Keresés minden munkaterület minden beszélgetésében. Egy találatot megnyitva a beszélgetésében mutatja.",
   find: "Szöveg keresése bárhol ebben a beszélgetésben: a még be nem töltött korábbi bejegyzésekben és az összecsukott kártyákban is, amelyek ott nyílnak ki, ahol találat van.",
   fork: "Ennek a beszélgetésnek a másolata egy új beszélgetésbe, ugyanazon a profilon; ez a beszélgetés változatlan marad. Az itt futó kör folytatódik, a másolatban az lesz, amit az ágens eddig elmentett belőle. Akkor lehetséges, ha az ágens már dolgozott egy üzeneten itt.",
   forkThroughTurn: "Ezt a beszélgetést e körig, a válaszával együtt, egy új beszélgetésbe másolja ugyanazon a profilon, azzal együtt, amit a vászon addig mutatott; ez a beszélgetés változatlan marad. A másolat ugyanazokon a fájlokon dolgozik, úgy, ahogy most vannak.",
@@ -184,8 +183,6 @@ export const hints: Messages["hints"] = {
     "A profil, amelyen az új beszélgetések ebben a munkaterületen indulnak, és vele az ágensük. Munkaterületenként megjegyzi. A meglévő beszélgetések azon a profilon maradnak, amelyen futnak, amíg át nem teszed őket.",
   setUpProfile:
     "Minden beszélgetés egy profilon fut. Az elsőt a fő panelen állíthatod be; ha semmi mást nem adsz meg, az ágenst úgy futtatja, ahogy ezen a gépen be van állítva.",
-  continueSession:
-    "Egy Claude Code-, opencode-, pi- vagy Codex-munkamenet folytatása, amelyet ebben a könyvtárban egy terminálban indítottak. Folytathatod helyben, vagy az előzményeit leágaztathatod egy új beszélgetésbe, az eredetit érintetlenül hagyva.",
   sessionSearch:
     "Munkamenetek keresése ebben a könyvtárban aszerint, mi hangzott el bennük, bármilyen régiek. A keresés az ágens saját feljegyzéseit olvassa minden itteni munkamenetről, így olyanokat is megtalál, amelyeket a lista nem mutat.",
   profiles:
@@ -210,8 +207,9 @@ export const hints: Messages["hints"] = {
   workspaceColor: "Adj színt ennek a munkaterületnek, hogy megkülönböztesd az oldalsávban. Minden ablak mutatja.",
   workspaceColorStyle:
     "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára, hogy színt adj neki.",
-  newConversation: "Beszélgetés indítása ezen a munkaterületen, a gomb mellett kiválasztott profilon.",
-  worktrees: "Hol dolgoznak ennek a munkaterületnek az új beszélgetései: mind a projektmappában, vagy mindegyik saját git worktree-ben, az új worktree-k beállító parancsával.",
+  newConversation: "Beszélgetés indítása ezen a munkaterületen, a kártyán kiválasztott profilon.",
+  workspaceMenu:
+    "Továbbiak ehhez a munkaterülethez: egy terminálban indított munkamenet folytatása, annak megadása, hogy az új beszélgetések a projektmappában vagy mindegyik saját git worktree-ben dolgozzon, vagy a munkaterület eltávolítása. Az eltávolítás a beszélgetéseit és a Mirador adatmappájában lévő worktree-jeit is törli, de a projektkönyvtár megmarad.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",
   hideSidebar: "Elrejti az oldalsávot, hogy a beszélgetés, a vászon és a terminál kapja a teljes szélességet. Ez a böngésző megjegyzi.",
   showSidebar: "Újra megjeleníti az oldalsávot a munkaterületekkel és a beszélgetésekkel.",
@@ -227,8 +225,6 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "A csoport átnevezése.",
   deleteWorkspaceGroup: "A csoport törlése. A munkaterületei a helyükön maradnak.",
   deleteWorkspaceGroupArmed: "Kattints újra a csoport törléséhez. A munkaterületei a helyükön maradnak.",
-  removeWorkspace:
-    "A munkaterület és a beszélgetései eltávolítása az alkalmazásból. A Mirador adatmappájában lévő worktree-jei is törlődnek, de a projektkönyvtár megmarad. Ha egy worktree-ben nem commitolt fájlok vannak, előbb rákérdez.",
   removeWorkspaceArmed:
     "Kattints újra, hogy eltávolítsd a munkaterületet és a beszélgetéseit az alkalmazásból. A Mirador adatmappájában lévő worktree-jei is törlődnek, de a projektkönyvtár megmarad. Ha egy worktree-ben nem commitolt fájlok vannak, előbb rákérdez.",
   deleteConversation: "A beszélgetés, az idővonala és a vászon-előzményei törlése az alkalmazásból. Az ágens saját munkamenetfájljai a lemezen maradnak. A saját worktree-je is törlődik; ha nem commitolt fájlok vannak benne, előbb rákérdez.",

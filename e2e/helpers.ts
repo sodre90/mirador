@@ -111,6 +111,18 @@ const cssString = (text: string) => `"${text.replaceAll("\\", "\\\\").replaceAll
 export const workspaceCard = (scope: Page | FrameLocator, directory: string) =>
   scope.locator(".workspace", { has: scope.locator(`.workspace-heading[title=${cssString(directory)}]`) });
 
+/** An entry of a workspace card's ⋯ menu: "Continue a session…", "Where conversations work…" or "Remove workspace…". */
+export async function chooseInWorkspaceMenu(page: Page, entry: string, card: Locator = page.locator(".workspace")) {
+  await card.getByRole("button", { name: "Workspace menu" }).click();
+  await page.getByRole("menuitem", { name: entry, exact: true }).click();
+}
+
+/** Remove is asked twice: in the card's menu, and on the button that takes the menu's place in the heading. */
+export async function removeWorkspace(page: Page, card: Locator) {
+  await chooseInWorkspaceMenu(page, "Remove workspace…", card);
+  await card.getByRole("button", { name: "Confirm: Remove workspace" }).click();
+}
+
 /** With the sidebar's button, which shows whether or not there are workspaces already. */
 export async function addWorkspaceFromSidebar(page: Page, directory: string, profile?: string) {
   await page.getByRole("button", { name: "Add workspace" }).click();

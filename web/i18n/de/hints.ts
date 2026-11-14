@@ -175,7 +175,6 @@ export const hints: Messages["hints"] = {
   terminalCloseSplitArmed: "Klicke erneut, um diese Shell zu beenden, samt allem, was darin läuft.",
   subagentsRunning:
     "Subagenten, die der Agent gestartet hat und die noch arbeiten, auch über dem Nachrichtenfeld aufgelistet; klicke, um den ersten zu öffnen. Einer, der im Hintergrund gestartet wurde, zählt, bis die Runde endet, die ihn gestartet hat, weil vorher nichts meldet, wann er fertig war.",
-  searchAll: "Durchsucht jede Unterhaltung in jedem Arbeitsbereich. Ein geöffneter Treffer wird in seiner Unterhaltung gezeigt.",
   find: "Sucht Text überall in dieser Unterhaltung: in früheren Einträgen, die noch nicht geladen sind, und in eingeklappten Karten, die sich dort aufklappen, wo er gefunden wird.",
   fork: "Kopiert diese Unterhaltung in eine neue mit demselben Profil und lässt diese, wie sie ist. Eine Runde, die hier läuft, geht weiter; die Kopie enthält, was der Agent bisher davon gespeichert hat. Möglich, sobald der Agent hier an einer Nachricht gearbeitet hat.",
   forkThroughTurn: "Kopiert diese Unterhaltung bis zu dieser Runde samt Antwort in eine neue mit demselben Profil, mit dem, was der Canvas bis dahin zeigte, und lässt diese, wie sie ist. Die Kopie arbeitet mit denselben Dateien, so wie sie jetzt sind.",
@@ -193,8 +192,6 @@ export const hints: Messages["hints"] = {
     "Das Profil, mit dem neue Unterhaltungen in diesem Arbeitsbereich starten, und damit ihr Agent. Wird pro Arbeitsbereich gespeichert. Bestehende Unterhaltungen behalten ihr Profil, bis du sie verschiebst.",
   setUpProfile:
     "Jede Unterhaltung läuft mit einem Profil. Richte dein erstes im Hauptbereich ein; ohne weitere Einstellungen startet es den Agenten so, wie er auf diesem Rechner eingerichtet ist.",
-  continueSession:
-    "Nimm eine Sitzung von Claude Code, opencode, pi oder Codex auf, die in einem Terminal in diesem Verzeichnis gestartet wurde. Setze sie an Ort und Stelle fort, oder forke ihren Verlauf in eine neue Unterhaltung und lass das Original, wie es ist.",
   sessionSearch:
     "Finde Sitzungen in diesem Verzeichnis nach dem, was darin gesagt wurde, egal wie alt. Die Suche liest die eigenen Aufzeichnungen des Agenten zu jeder Sitzung hier und findet so auch Sitzungen, die die Liste nicht zeigt.",
   profiles:
@@ -219,8 +216,9 @@ export const hints: Messages["hints"] = {
   workspaceColor: "Gib diesem Arbeitsbereich eine Farbe, um ihn in der Seitenleiste zu unterscheiden. Jedes Fenster zeigt sie.",
   workspaceColorStyle:
     "Wie ein Arbeitsbereich, dem du eine Farbe gegeben hast, sie zeigt: auf seiner ganzen Karte, nur an seiner Überschrift oder als Streifen an seinem Rand über einer zarteren Tönung. Klicke auf die Initialen eines Arbeitsbereichs, um ihm eine Farbe zu geben.",
-  newConversation: "Starte eine Unterhaltung in diesem Arbeitsbereich, mit dem Profil, das neben diesem Button gewählt ist.",
-  worktrees: "Wo die neuen Unterhaltungen dieses Arbeitsbereichs arbeiten: alle im Projektordner oder jede in einem eigenen git-Worktree, mit einem Einrichtungsbefehl für neue Worktrees.",
+  newConversation: "Starte eine Unterhaltung in diesem Arbeitsbereich, mit dem Profil, das in dieser Karte gewählt ist.",
+  workspaceMenu:
+    "Mehr für diesen Arbeitsbereich: Setze eine Sitzung fort, die in einem Terminal gestartet wurde, wähle, ob neue Unterhaltungen im Projektordner oder jede in einem eigenen git-Worktree arbeiten, oder entferne den Arbeitsbereich. Beim Entfernen gehen seine Unterhaltungen und seine Worktrees im Datenordner von Mirador mit, das Projektverzeichnis bleibt.",
   addWorkspace: "Füge ein Projektverzeichnis hinzu. Seine Unterhaltungen laufen mit ihm als Arbeitsverzeichnis.",
   hideSidebar: "Blende die Seitenleiste aus, um Unterhaltung, Canvas und Terminal die ganze Breite zu geben. Wird in diesem Browser gespeichert.",
   showSidebar: "Zeige die Seitenleiste mit den Arbeitsbereichen und Unterhaltungen wieder.",
@@ -236,8 +234,6 @@ export const hints: Messages["hints"] = {
   renameWorkspaceGroup: "Benenne diese Gruppe um.",
   deleteWorkspaceGroup: "Lösche diese Gruppe. Ihre Arbeitsbereiche bleiben, wo sie sind.",
   deleteWorkspaceGroupArmed: "Klicke erneut, um diese Gruppe zu löschen. Ihre Arbeitsbereiche bleiben, wo sie sind.",
-  removeWorkspace:
-    "Entferne diesen Arbeitsbereich und seine Unterhaltungen aus der App. Seine Worktrees im Datenordner von Mirador werden ebenfalls entfernt, das Projektverzeichnis bleibt. Enthält ein Worktree nicht committete Dateien, wird vorher gefragt.",
   removeWorkspaceArmed:
     "Klicke erneut, um diesen Arbeitsbereich und seine Unterhaltungen aus der App zu entfernen. Seine Worktrees im Datenordner von Mirador werden ebenfalls entfernt, das Projektverzeichnis bleibt. Enthält ein Worktree nicht committete Dateien, wird vorher gefragt.",
   deleteConversation:

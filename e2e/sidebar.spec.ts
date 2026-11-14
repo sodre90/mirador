@@ -2,7 +2,7 @@ import { mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, createProfile, dragOnto, pickProfileIfAsked, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, chooseInWorkspaceMenu, createProfile, dragOnto, pickProfileIfAsked, removeWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -39,6 +39,64 @@ test("a workspace is a card: its folder under the name, new conversations on top
   await expect(chip).toHaveText("home llama · opencode");
 });
 
+test("a card's heading holds + and the profile chip, and its ⋯ menu holds what is rarely needed", async ({ page }) => {
+  const directory = join(host.root, "tidy-card");
+  mkdirSync(directory, { recursive: true });
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, directory);
+  const card = workspaceCard(page, directory);
+  const heading = card.locator(":scope > header");
+
+  await expect(heading.getByRole("button", { name: "+ New conversation" })).toBeVisible();
+  await expect(heading.locator(".agent-chip")).toBeVisible();
+  await expect(card.locator(":scope > :not(header, ul)")).toHaveCount(0);
+
+  await test.step("choosing the profile in the heading leaves the card unfolded", async () => {
+    await heading.locator(".agent-chip").click();
+    await page.keyboard.press("Escape");
+    await expect(card.getByRole("button", { name: `Fold ${basename(directory)}` })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  await test.step("the menu lists Continue, worktrees and Remove", async () => {
+    const menuButton = heading.getByRole("button", { name: "Workspace menu" });
+    await expect(menuButton).toHaveAttribute("data-hint", /^More for this workspace/);
+    await menuButton.click();
+    await expect(page.getByRole("menu", { name: basename(directory) }).getByRole("menuitem")).toHaveText(["Continue a session…", "Where conversations work…", "Remove workspace…"]);
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
+  await test.step("Remove asks again in the heading, and Esc gives the menu back", async () => {
+    await chooseInWorkspaceMenu(page, "Remove workspace…", card);
+    const confirm = heading.getByRole("button", { name: "Confirm: Remove workspace" });
+    await expect(confirm).toHaveText("Remove?");
+    await expect(confirm).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(confirm).toHaveCount(0);
+    await expect(heading.getByRole("button", { name: "Workspace menu" })).toBeVisible();
+
+    await removeWorkspace(page, card);
+    await expect(card).toHaveCount(0);
+  });
+});
+
+test("the sidebar's footer is one row of named icons", async ({ page }) => {
+  await signIn(page, host);
+  const buttons = page.locator(".sidebar .footer-buttons > button");
+  await expect(buttons).toHaveCount(5);
+  expect(await buttons.evaluateAll((all) => all.map((button) => button.getAttribute("aria-label")))).toEqual(["Settings…", "Plugins…", "Profiles…", "Machines…", "Shortcuts"]);
+  expect(new Set(await buttons.evaluateAll((all) => all.map((button) => button.getBoundingClientRect().top))).size).toBe(1);
+
+  const hint = page.getByRole("tooltip");
+  await page.getByRole("button", { name: "Profiles…" }).hover();
+  await expect(hint).toContainText(/^Profiles…\s*Named setups for an agent/);
+
+  await page.getByRole("button", { name: "Shortcuts" }).hover();
+  await expect(hint.locator("kbd")).toBeVisible();
+  await page.getByRole("button", { name: "Shortcuts" }).click();
+  await expect(page.getByRole("dialog", { name: /shortcuts/i })).toBeVisible();
+});
+
 test("a workspace folds to its heading, by its chevron or its name, stays folded in this browser, and unfolds when one of its conversations opens", async ({ page }) => {
   const foldedDir = join(host.root, "foldable");
   const otherDir = join(host.root, "stays-open");
@@ -56,7 +114,7 @@ test("a workspace folds to its heading, by its chevron or its name, stays folded
   await card.getByRole("button", { name: `Fold ${name}` }).click();
   await expect(card.getByRole("button", { name: `Unfold ${name}` })).toHaveAttribute("aria-expanded", "false");
   await expect(card.locator("li")).toHaveCount(0);
-  await expect(card.getByRole("button", { name: "+ New conversation" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "+ New conversation" })).toBeVisible();
   await expect(card.locator(".workspace-name")).toBeVisible();
 
   await card.locator(".workspace-name").click();
@@ -121,9 +179,7 @@ test("a folded workspace's tooltip offers to unfold it, it moves by its heading 
   await expect(card.getByRole("button", { name: `Unfold ${name}` })).toHaveAttribute("aria-expanded", "false");
 
   expect(await foldedIds()).toContain(workspaceId);
-  await card.hover();
-  await card.getByRole("button", { name: "Remove workspace" }).click();
-  await card.getByRole("button", { name: "Confirm: Remove workspace" }).click();
+  await removeWorkspace(page, card);
   await expect(card).toHaveCount(0);
   await expect.poll(foldedIds).not.toContain(workspaceId);
 });

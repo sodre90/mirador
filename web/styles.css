@@ -919,6 +919,8 @@ body.resizing iframe {
 }
 
 .workspace > header {
+  flex-wrap: wrap;
+  row-gap: 3px;
   padding: 0 2px 6px;
 }
 
@@ -953,10 +955,26 @@ body.resizing iframe {
   font-weight: 600;
 }
 
+.workspace-subline {
+  display: flex;
+  flex: 0 0 100%;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding-left: 8px;
+}
+
 .workspace-folder {
-  margin-top: -1px;
+  flex: 1 1 0;
+  min-width: 0;
   font-size: calc(11px * var(--font-scale));
   color: var(--faint);
+}
+
+.workspace-subline .agent-chip {
+  flex: 0 1 auto;
+  max-width: 70%;
+  padding-block: 1px;
 }
 
 .workspace ul {
@@ -1040,8 +1058,17 @@ body.resizing iframe {
   visibility: visible;
 }
 
-.workspace > header button.icon.workspace-fold {
+.workspace > header button.icon:is(.workspace-fold, .workspace-new, .workspace-more, .armed) {
   visibility: visible;
+}
+
+.workspace > header button.icon:is(.workspace-new, .workspace-more) {
+  flex: none;
+  color: color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+.workspace > header button.icon:is(.workspace-new, .workspace-more):hover {
+  color: var(--text);
 }
 
 .conversation-title {
@@ -1077,43 +1104,10 @@ button.icon.favourite-star.on,
   color: var(--accent);
 }
 
-.workspace-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 6px;
-  padding: 2px 4px 2px 8px;
-}
-
-.workspace ul + .workspace-actions {
-  margin-top: 4px;
-  padding-top: 5px;
-  border-top: 1px solid var(--rail-line);
-}
-
-.workspace-actions button.link {
-  flex: none;
-  white-space: nowrap;
-  font-size: calc(12.5px * var(--font-scale));
-}
-
-.workspace-actions .continue-session {
-  margin-left: auto;
-}
-
 .worktree-icon {
   width: 1em;
   height: 1em;
   vertical-align: -0.125em;
-}
-
-.workspace-actions .worktrees-open {
-  flex: none;
-  color: color-mix(in srgb, var(--text) 45%, transparent);
-}
-
-.workspace-actions .worktrees-open[data-place="worktree"] {
-  color: var(--accent);
 }
 
 .worktree-mark {
@@ -1373,15 +1367,32 @@ button.icon.workspace-fold {
 }
 
 .footer-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  justify-content: space-between;
   gap: 4px;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--rail-line);
 }
 
-.footer-buttons > :last-child:nth-child(odd) {
-  grid-column: 1 / -1;
+.sidebar > footer .footer-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.sidebar > footer .footer-button:hover {
+  background: var(--rail-card);
+  color: var(--text);
+}
+
+.sidebar > footer .footer-button svg {
+  width: calc(16px * var(--font-scale));
+  height: calc(16px * var(--font-scale));
 }
 
 .sidebar > footer button.link {

@@ -10,7 +10,7 @@ import {
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
-import { ContextMenu } from "./ContextMenu.tsx";
+import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
@@ -35,7 +35,7 @@ import { shownTitle } from "./shown-title.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import type { AppAction, AppState, DevicesListed, Overlay } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
-import { WorktreeIcon, WorktreeMark } from "./Worktrees.tsx";
+import { WorktreeMark } from "./Worktrees.tsx";
 import { canMarkUnread, markRead, markUnread } from "./unread.ts";
 import { lastsUntilOpened, waitingByUrgency, waitingLabels, waitingShowsOnDot, waitingTones } from "./waiting.ts";
 import { scrollToNearestWaiting, useWaitingOutOfView, waitingInFoldedGroup, type HiddenWaiting } from "./waiting-edges.ts";
@@ -204,6 +204,61 @@ function statusDot(conversation: Conversation, delegated: Conversation[] = []) {
     return <span className={`dot terminal-${inTerminal}`} data-hint={words.openInTerminal(t.chat.terminalActivity[inTerminal])} />;
   }
   return <span className={`dot status-${conversation.status}`} data-hint={statusDetailOf(conversation) ?? statusHints[conversation.status]} />;
+}
+
+const footerShapes = {
+  settings: (
+    <>
+      <circle cx="8" cy="8" r="4.25" />
+      <circle cx="8" cy="8" r="1.5" />
+      <path d="M8 1.5v2.25M8 12.25v2.25M1.5 8h2.25M12.25 8h2.25M3.4 3.4l1.6 1.6M11 11l1.6 1.6M3.4 12.6l1.6-1.6M11 5l1.6-1.6" />
+    </>
+  ),
+  plugins: <path d="M2.5 8.5h5v5h-5zM8.5 8.5h5v5h-5zM2.5 2.5h5v5h-5zM11.4 1.6l3 3-3 3-3-3z" />,
+  profiles: (
+    <>
+      <circle cx="8" cy="5.25" r="2.5" />
+      <path d="M3 13.5c.6-2.6 2.6-4 5-4s4.4 1.4 5 4" />
+    </>
+  ),
+  machines: (
+    <>
+      <rect x="2" y="2.75" width="12" height="8" rx="1.25" />
+      <path d="M5.75 13.5h4.5M8 10.75v2.75" />
+    </>
+  ),
+  shortcuts: (
+    <>
+      <rect x="1.75" y="4" width="12.5" height="8" rx="1.25" />
+      <path d="M4.5 6.9h.01M7 6.9h.01M9.5 6.9h.01M12 6.9h.01M5 9.5h6" />
+    </>
+  ),
+};
+
+/** A dialog the sidebar's foot opens: drawn as an icon, named to screen readers and at the top of its hint. */
+function FooterButton({
+  shape,
+  name,
+  about,
+  shortcut,
+  onClick,
+  children,
+}: {
+  shape: keyof typeof footerShapes;
+  name: string;
+  about?: string;
+  shortcut?: string;
+  onClick: () => void;
+  children?: ReactNode;
+}) {
+  return (
+    <button type="button" className="icon footer-button" aria-label={name} data-hint={about ? `${name}\n\n${about}` : name} data-shortcut={shortcut} onClick={onClick}>
+      <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
+        {footerShapes[shape]}
+      </svg>
+      {children}
+    </button>
+  );
 }
 
 function WaitingPill({ waitingFor }: { waitingFor: WaitingFor }) {
@@ -431,8 +486,19 @@ function WorkspaceSection({
   const closePicker = useCallback(() => dispatch({ type: "close-overlay" }), [dispatch]);
   const togglePicker = () => dispatch(pickingColor ? { type: "close-overlay" } : { type: "open-overlay", overlay: { kind: "workspace-color", workspaceId: workspace.id } });
   const toggleFolded = () => setWorkspaceFolded(workspace.id, !folded);
-  const toggleFromHeading = (event: ReactMouseEvent<HTMLElement>) => !(event.target as Element).closest("button, input") && toggleFolded();
+  const toggleFromHeading = (event: ReactMouseEvent<HTMLElement>) => !(event.target as Element).closest("button, input, .agent-chip") && toggleFolded();
   const waitingHere = folded ? waitingInFoldedGroup(conversations) : null;
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
+  const openMenuUnder = (button: HTMLElement) => {
+    const { left, bottom } = button.getBoundingClientRect();
+    setMenuAt({ x: left, y: bottom + 2 });
+  };
+  const [askingToRemove, setAskingToRemove] = useState(false);
+  const menuEntries: ContextMenuEntry[] = [
+    { label: words.continueSessionLabel, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } }) },
+    { label: `${t.shell.worktrees.open}…`, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } }) },
+    { label: `${words.removeWorkspace}…`, onChoose: () => setAskingToRemove(true) },
+  ];
   const deleteWorkspace = () => connection.send({ type: "workspace.delete", workspaceId: workspace.id });
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
   const openedDelegations = useOpenedDelegations();
@@ -519,20 +585,51 @@ function WorkspaceSection({
         </button>
         <div className="workspace-heading" title={workspace.path}>
           <div className="workspace-name">{workspace.name}</div>
-          <div className="workspace-folder">{parentFolder(workspace.path, homeDir)}</div>
         </div>
         <WaitingCount conversations={conversations} />
-        <ConfirmButton
-          className="icon"
-          label={words.removeWorkspace}
-          hint={hints.removeWorkspace}
-          armedText={words.removeArmed}
-          armedHint={hints.removeWorkspaceArmed}
-          onConfirm={deleteWorkspace}
-        >
-          ×
-        </ConfirmButton>
+        {askingToRemove ? (
+          <ConfirmButton
+            className="icon workspace-remove"
+            label={words.removeWorkspace}
+            armedText={words.removeArmed}
+            armedHint={hints.removeWorkspaceArmed}
+            armRequest={workspace}
+            onArmedChange={(armed) => !armed && setAskingToRemove(false)}
+            onConfirm={deleteWorkspace}
+          >
+            ×
+          </ConfirmButton>
+        ) : (
+          <>
+            <button
+              type="button"
+              className="icon workspace-new"
+              aria-label={words.newConversationLabel}
+              data-hint={hints.newConversation}
+              data-shortcut={shortcutKeys().newConversation}
+              onClick={() => startConversationIn(workspace, dispatch)}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              className="icon workspace-more"
+              aria-label={words.workspaceMenu}
+              aria-haspopup="menu"
+              aria-expanded={menuAt !== null}
+              data-hint={hints.workspaceMenu}
+              onClick={(event) => openMenuUnder(event.currentTarget)}
+            >
+              ⋯
+            </button>
+          </>
+        )}
+        <div className="workspace-subline">
+          <span className="workspace-folder">{parentFolder(workspace.path, homeDir)}</span>
+          <LaunchPicker workspace={workspace} profiles={profiles} dispatch={dispatch} />
+        </div>
       </header>
+      {menuAt && <ContextMenu name={workspace.name} at={menuAt} entries={menuEntries} onClose={() => setMenuAt(null)} />}
       {pickingColor && <WorkspaceColorPicker workspace={workspace} mark={mark} onClose={closePicker} />}
       {!folded && shown.length > 0 && (
         <ul ref={conversationList}>
@@ -554,37 +651,6 @@ function WorkspaceSection({
             {olderOpen ? "▾" : "▸"} {words.older(olderCount)}
           </button>
           {olderOpen && <ul>{listedNow(older).map((conversation) => conversationRow(conversation))}</ul>}
-        </div>
-      )}
-      {!folded && (
-        <div className="workspace-actions">
-          <button
-            className="link"
-            aria-label={words.newConversationLabel}
-            data-hint={hints.newConversation}
-            data-shortcut={shortcutKeys().newConversation}
-            onClick={() => startConversationIn(workspace, dispatch)}
-          >
-            {words.newConversation}
-          </button>
-          <LaunchPicker workspace={workspace} profiles={profiles} dispatch={dispatch} />
-          <button
-            className="icon worktrees-open"
-            aria-label={t.shell.worktrees.open}
-            data-hint={hints.worktrees}
-            data-place={workspace.newConversationsIn}
-            onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } })}
-          >
-            <WorktreeIcon />
-          </button>
-          <button
-            className="link continue-session"
-            aria-label={words.continueSessionLabel}
-            data-hint={hints.continueSession}
-            onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } })}
-          >
-            {words.continueSession}
-          </button>
         </div>
       )}
     </section>
@@ -883,25 +949,13 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
         <ConnectedDevices listed={state.devices} onOpen={() => openOverlay({ kind: "settings", page: "devices" })} />
         <DesktopMenu />
         <div className="footer-buttons">
-          <button className="link" data-hint={hints.settings} onClick={() => openOverlay({ kind: "settings" })}>
-            {words.settings}
-          </button>
-          <button className="link" data-hint={hints.plugins} onClick={() => openOverlay({ kind: "plugins" })}>
-            {words.plugins}
+          <FooterButton shape="settings" name={words.settings} about={hints.settings} onClick={() => openOverlay({ kind: "settings" })} />
+          <FooterButton shape="plugins" name={words.plugins} about={hints.plugins} onClick={() => openOverlay({ kind: "plugins" })}>
             <UpdatesWaiting count={state.pluginUpdates.length} />
-          </button>
-          <button className="link" data-hint={hints.profiles} onClick={() => openOverlay({ kind: "profiles" })}>
-            {words.profiles}
-          </button>
-          <button className="link" data-hint={hints.machines} onClick={() => openOverlay({ kind: "machines" })}>
-            {words.machines}
-          </button>
-          <button className="link" data-hint={hints.searchAll} data-shortcut={shortcutKeys().search} onClick={() => openOverlay({ kind: "search" })}>
-            {words.search}
-          </button>
-          <button className="link" onClick={() => openOverlay({ kind: "help" })}>
-            {words.shortcuts} <kbd>{shortcutKeys().help}</kbd>
-          </button>
+          </FooterButton>
+          <FooterButton shape="profiles" name={words.profiles} about={hints.profiles} onClick={() => openOverlay({ kind: "profiles" })} />
+          <FooterButton shape="machines" name={words.machines} about={hints.machines} onClick={() => openOverlay({ kind: "machines" })} />
+          <FooterButton shape="shortcuts" name={words.shortcuts} shortcut={shortcutKeys().help} onClick={() => openOverlay({ kind: "help" })} />
         </div>
       </footer>
     </nav>

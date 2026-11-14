@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
-import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, chooseInWorkspaceMenu, conversationSettings, createProfile, eventsInOrderOn, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { ScriptedModel, codexProgram, scriptedCodexEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -206,7 +206,7 @@ function stopCodexDaemons() {
 test("a Codex session started in a terminal can be continued, and while Codex's daemon still holds it Mirador says how to free it", async () => {
   test.skip(process.platform === "win32", "On Windows CI, Codex run in a terminal by the test quits early and the session it leaves continues unreliably (vcs-dpps.10)");
   await runCodexInTerminal(TERMINAL_MARKER);
-  await page.getByRole("button", { name: "Continue a session…" }).click();
+  await chooseInWorkspaceMenu(page, "Continue a session…");
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   const session = dialog.locator(".session-list li", { hasText: TERMINAL_MARKER, has: page.getByRole("button", { name: "Continue" }) });
   await expect(session).toHaveCount(1, { timeout: 30_000 });
