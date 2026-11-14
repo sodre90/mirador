@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
-import { mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MAX_TERMINALS_PER_TAB, type Conversation, type TerminalTab } from "../shared/model.ts";
@@ -8,6 +8,7 @@ import { findPowerShell, programName } from "../host/command-shell.ts";
 import { Hub, type BrowserSocket } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import { readTitle, RESTARTED_NOTE, TerminalService } from "../host/terminals.ts";
+import { removeOnceFree } from "./remove-once-free.ts";
 
 let workspaceDir: string;
 let store: Store;
@@ -133,19 +134,6 @@ const replayed = (received: ServerMessage[], terminalId: string) =>
   received.flatMap((message) => (message.type === "terminal.replayed" && message.terminalId === terminalId ? [message.data] : [])).at(-1) ?? "";
 
 const savedOutputOf = (terminalId: string) => store.listTerminalTabs("c1")[0]?.scrollback.get(terminalId) ?? "";
-
-/** Windows keeps a folder busy for a moment after the last process in it ended, and Bun's rm takes no maxRetries. */
-async function removeOnceFree(folder: string) {
-  const giveUpAt = Date.now() + 5_000;
-  while (true) {
-    try {
-      return await rm(folder, { recursive: true, force: true });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EBUSY" || Date.now() >= giveUpAt) throw error;
-      await Bun.sleep(100);
-    }
-  }
-}
 
 afterEach(async () => {
   await terminals.shutdown();

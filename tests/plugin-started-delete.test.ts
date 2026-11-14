@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync, writeFileSync } from "node:fs";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConversationReply, StartedConversation } from "../shared/canvas-plugins.ts";
@@ -9,13 +9,14 @@ import { ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
+import { removeOnceFree } from "./remove-once-free.ts";
 
 let scratch: string;
 
 beforeEach(async () => {
   scratch = await realpath(await mkdtemp(join(tmpdir(), "plugin-started-delete-")));
 });
-afterEach(() => rm(scratch, { recursive: true, force: true }));
+afterEach(() => removeOnceFree(scratch));
 
 async function git(directory: string, args: string[]) {
   const child = Bun.spawn(["git", "-C", directory, "-c", "user.name=t", "-c", "user.email=t@t", ...args], { stdin: "ignore", stdout: "pipe", stderr: "pipe" });
