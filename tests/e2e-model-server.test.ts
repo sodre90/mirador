@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { modelServerEnvironment, NO_MODEL_SERVER, settingsIn } from "../e2e/model-server.ts";
+import { answersWithin, modelServerEnvironment, NO_MODEL_SERVER, settingsIn } from "../e2e/model-server.ts";
 
 const SAVED = "# the owner's model server\nLLM_SERVER_URL=https://models.example:8443\nexport LLM_SERVER_KEY='saved-key'\n";
 
@@ -41,4 +41,30 @@ describe("modelServerEnvironment", () => {
 
 test("settingsIn reads NAME=value lines, quoted or not, and skips comments and blank lines", () => {
   expect(settingsIn('A=1\n\n# B=2\nexport C="three four"\r\nD=\n')).toEqual({ A: "1", C: "three four", D: "" });
+});
+
+describe("answersWithin", () => {
+  /** A server that gives these statuses in turn, and the last one from then on. */
+  const statuses = (...answers: number[]) => {
+    const asked: number[] = [];
+    const status = async () => {
+      const answer = answers[Math.min(asked.length, answers.length - 1)]!;
+      asked.push(answer);
+      return answer;
+    };
+    return { asked, status };
+  };
+
+  test("asks again until the server answers 200", async () => {
+    const server = statuses(0, 502, 200);
+    expect(await answersWithin(server.status, 1_000, 1)).toBe(true);
+    expect(server.asked).toEqual([0, 502, 200]);
+  });
+
+  test("gives up once the time is up", async () => {
+    const server = statuses(0);
+    expect(await answersWithin(server.status, 30, 10)).toBe(false);
+    expect(server.asked.length).toBeGreaterThan(1);
+    expect(server.asked.length).toBeLessThan(5);
+  });
 });

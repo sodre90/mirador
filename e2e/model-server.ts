@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 
 /** Where the owner keeps their model server's address and key on a machine that runs the e2e specs, outside the repository. */
 export const MODEL_SERVER_FILE = join(homedir(), ".config", "mirador", "e2e-model-server.env");
@@ -67,4 +68,14 @@ export async function modelServerStatus(): Promise<number> {
     signal: AbortSignal.timeout(30_000),
   }).catch(() => null);
   return response?.status ?? 0;
+}
+
+/** Whether `status` comes back 200 before `withinMs` is up, asking again every `everyMs`: a model server busy with another's long prompt answers late. */
+export async function answersWithin(status: () => Promise<number>, withinMs: number, everyMs: number): Promise<boolean> {
+  const deadline = Date.now() + withinMs;
+  while ((await status()) !== 200) {
+    if (Date.now() + everyMs > deadline) return false;
+    await sleep(everyMs);
+  }
+  return true;
 }

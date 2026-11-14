@@ -22,6 +22,7 @@ import { LOGIN_KEYCHAIN, newestNotarytool, NOTARY_CREDENTIALS, NOTARY_PROFILE } 
 import { buildMachineBun, definedBunVersion, requireDefinedBun } from "../desktop/scripts/ship-build-bun.ts";
 import type { Platform } from "../desktop/scripts/update-files.ts";
 import { isNewerVersion, RELEASES_REPOSITORY } from "../shared/newer-version.ts";
+import { answersWithin, modelServerStatus } from "../e2e/model-server.ts";
 import { errorsOutsideTests, failedTests, keepBeadsFor, type Beads, type E2eReport } from "./e2e-failure-beads.ts";
 
 const CHECKOUT = join(import.meta.dir, "..");
@@ -335,9 +336,16 @@ function nameTheRelease(release: Release, current: string) {
   run(["git", "push", "-q", "origin", `HEAD:refs/heads/${release.branch}`], release.worktree);
 }
 
-/** Restart specs flake under load, so the gate waits for a mirador-mobile e2e run another session started. */
-function gate(release: Release) {
+const modelServerAnswers = () => answersWithin(modelServerStatus, 3 * 60_000, 5_000);
+
+/**
+ * Restart specs flake under load, so the gate waits for a mirador-mobile e2e run another session started. The specs
+ * that wait for a real reply fail while the owner's model server doesn't answer, so the gate needs it to start, and
+ * files no beads for a run it stopped answering in: they would be its outage, and the run again finds what isn't.
+ */
+async function gate(release: Release) {
   if (Bun.spawnSync(["pgrep", "-f", "mirador-mobile/e2e/run.ts"]).exitCode === 0) throw new Error("A mirador-mobile e2e run is going on; wait for it to end");
+  if (!(await modelServerAnswers())) throw new Error("The e2e model server doesn't answer, so the specs that wait for a real reply would fail; run the gate once it does");
   requireDefinedBun(buildMachineBun(), definedBunVersion(release.worktree));
   run(["bunx", "tsc", "--noEmit", "-p", "."], release.worktree);
   run(["bun", "run", "test"], release.worktree);
@@ -346,6 +354,7 @@ function gate(release: Release) {
   try {
     run(["scripts/e2e.sh"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: results });
   } catch (failed) {
+    if (!(await modelServerAnswers())) throw new Error(`${messageOf(failed)}\nThe e2e model server doesn't answer now, so the failures may be its outage: no beads were filed. Run the gate again once it answers.`);
     try {
       keepBeadsForFailedTests(results, release);
     } catch (error) {
