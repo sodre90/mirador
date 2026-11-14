@@ -132,6 +132,7 @@ export const problems: Messages["problems"] = {
     "canvas-need-background-function": "background nur als Funktion",
     "canvas-need-statusline-function": "statusline nur als Funktion",
     "canvas-need-check-profile-function": "checkProfile nur als Funktion",
+    "canvas-need-context-hint-function": "contextHint nur als Funktion",
     "landing-needs-worktree": "Nur eine Unterhaltung in ihrem eigenen Worktree hat Commits, die in den Branch des Projektordners gemergt werden können.",
   },
   couldNotResume: (cause) => `Die vorherige Sitzung des Agenten ließ sich nicht fortsetzen (${cause}); eine neue wird gestartet.`,
@@ -323,6 +324,8 @@ export const problems: Messages["problems"] = {
   pluginRequiredSettingNeedsNewerApi: (brought, named) => `plugin.json macht eine Profileinstellung zur Pflicht, was Plugin-API ${brought} eingeführt hat; sie nennt API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `das Canvas-Host-Modul zeigt Werte in der Statuszeile oder prüft Profile, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
+  pluginContextHintNeedsNewerApi: (brought, named) =>
+    `das Canvas-Host-Modul gibt Hinweise zum Kontext, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
   canvasHostModuleNeeds: (needs) => `das Canvas-Host-Modul braucht ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} mit einem icon, einem placement von ${placements.join(" oder ")} und count, outcome und listed nur als Funktionen`,

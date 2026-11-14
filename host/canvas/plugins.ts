@@ -28,11 +28,12 @@ import {
 } from "../../shared/canvas-plugins.ts";
 import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import type { Conversation, PluginCanvasItem, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
+import type { Conversation, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
-import { validStatuslineChips } from "./statusline-chips.ts";
+import { validContextHint, validStatuslineChips } from "./statusline-chips.ts";
+import { usageHistoryOf } from "../turn-samples.ts";
 import { categoryChoices } from "../../shared/config-options.ts";
 import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts";
 import type { Hub } from "../hub.ts";
@@ -44,8 +45,8 @@ import { HostProblemError } from "../../shared/host-problems.ts";
 
 const commandName = (plugin: CanvasPlugin, tool: string) => `${plugin.manifest.name}:${tool}`;
 
-const actsOnConversations = ({ tools, guidance, guidanceFor, note, statusline, activity }: CanvasPlugin["host"]) =>
-  Object.keys(tools).length > 0 || [guidance, guidanceFor, note, statusline, activity].some((part) => part !== undefined);
+const actsOnConversations = ({ tools, guidance, guidanceFor, note, statusline, contextHint, activity }: CanvasPlugin["host"]) =>
+  Object.keys(tools).length > 0 || [guidance, guidanceFor, note, statusline, contextHint, activity].some((part) => part !== undefined);
 
 /** With tool search on, Claude Code hides MCP tools until the agent searches for them; a plugin's tools are offered as the canvas's own are. */
 const loadedUpFront = { "anthropic/alwaysLoad": true };
@@ -308,27 +309,47 @@ export class CanvasPlugins {
   statuslineChips(conversationId: string): PluginStatuslineChips[] {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation) return [];
-    const profile = conversation.profileId ? (this.store.findProfile(conversation.profileId) ?? null) : null;
     return this.pluginsOf(conversationId).flatMap((plugin) => {
       if (!plugin.host.statusline) return [];
-      const context: StatuslineContext = {
-        conversationId,
-        conversationTitle: conversation.title,
-        sessionId: conversation.acpSessionId,
-        agent: conversation.harness,
-        profile: profile?.name ?? null,
-        createdAt: conversation.createdAt,
-        profileSetting: (id) => this.settingFor(plugin, conversationId, id),
-        storage: this.storageOf(plugin),
-      };
       try {
-        const chips: StatuslineChip[] = validStatuslineChips(plugin.host.statusline(context));
+        const chips: StatuslineChip[] = validStatuslineChips(plugin.host.statusline(this.statuslineContext(plugin, conversation)));
         return chips.length > 0 ? [{ plugin: plugin.manifest.name, title: plugin.manifest.title, chips, hasWindow: plugin.host.window !== undefined }] : [];
       } catch (error) {
         console.error(`the statusline of the ${plugin.manifest.name} plugin failed for conversation ${conversationId}:`, error);
         return [];
       }
     });
+  }
+
+  /** Each plugin's advice on the conversation's context, as it gave it; a plugin whose hook fails or gives none is left out. */
+  contextHints(conversationId: string): PluginContextHint[] {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) return [];
+    return this.pluginsOf(conversationId).flatMap((plugin) => {
+      if (!plugin.host.contextHint) return [];
+      try {
+        const hint = validContextHint(plugin.host.contextHint(this.statuslineContext(plugin, conversation)));
+        return hint ? [{ plugin: plugin.manifest.name, title: plugin.manifest.title, ...hint }] : [];
+      } catch (error) {
+        console.error(`the context hint of the ${plugin.manifest.name} plugin failed for conversation ${conversation.id}:`, error);
+        return [];
+      }
+    });
+  }
+
+  private statuslineContext(plugin: CanvasPlugin, conversation: Conversation): StatuslineContext {
+    const profile = conversation.profileId ? (this.store.findProfile(conversation.profileId) ?? null) : null;
+    return {
+      conversationId: conversation.id,
+      conversationTitle: conversation.title,
+      sessionId: conversation.acpSessionId,
+      agent: conversation.harness,
+      profile: profile?.name ?? null,
+      createdAt: conversation.createdAt,
+      profileSetting: (id) => this.settingFor(plugin, conversation.id, id),
+      storage: this.storageOf(plugin),
+      usageHistory: usageHistoryOf(this.store, conversation.id),
+    };
   }
 
   /** By conversation, the plugins' settings the user changed in its top bar since the agent last heard, worded when it hears. */
@@ -709,6 +730,7 @@ export class CanvasPlugins {
       profileSetting: (id) => this.settingFor(plugin, conversationId, id),
       profiles: () => this.pluginProfiles(),
       usageOf: (startedId) => this.readUsage(conversationId, plugin.manifest.name, startedId),
+      usageHistory: usageHistoryOf(this.store, conversationId),
     };
   }
 

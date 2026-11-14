@@ -374,6 +374,21 @@ export interface TurnUsage {
   cachedWriteTokens: number;
 }
 
+/** What a turn spent, as Mirador saw it end. */
+export interface TurnSpend {
+  /** The tokens of the turn's own model requests, not its subagents'; a killed turn has none, and an agent may report none. */
+  usage?: TurnUsage;
+  model?: string;
+  /** When the prompt went to the agent; a turn that failed before has none. */
+  startedAt?: number;
+  /** The turn's own tool calls, not its subagents': about one model request each. */
+  toolCalls?: number;
+  /** The context the agent last reported by the turn's end. */
+  context?: { used: number; size: number };
+  /** What the agent last reported the whole conversation cost by the turn's end. */
+  costSoFar?: { amount: number; currency: string };
+}
+
 /** How much of a plan usage limit's window is used, 0 to 100, and when the window starts over, in epoch milliseconds. */
 export interface QuotaWindow {
   usedPercent: number;
@@ -399,6 +414,17 @@ export interface StatuslineRender {
   quotas: PlanQuotas | null;
   /** What the plugins show in the statusline, by plugin, in the order they loaded. */
   pluginChips: PluginStatuslineChips[];
+  /** The plugins' advice on the conversation's context, for its context meter, in the order they loaded. */
+  contextHints: PluginContextHint[];
+}
+
+/** A plugin's advice on a conversation's context. */
+export interface PluginContextHint {
+  plugin: string;
+  title: string;
+  text: string;
+  /** Compact now, offered only where the conversation's agent has /compact. */
+  action?: "compact";
 }
 
 /** A plugin's figures for a conversation's statusline, drawn together. */
@@ -651,8 +677,7 @@ export type ConversationEvent =
   /** `edits`: the files the tool would change, as the host found the change in each, for a request that changes files. */
   | { type: "permission"; permissionId: string; toolCall: ToolCallUpdate; options: PermissionOption[]; edits?: EditDiff[] }
   | { type: "permission-resolved"; permissionId: string; optionId: string | null }
-  /** `usage` and `model`: what the turn took and the model it ran on, when the agent says (opencode and pi may not, and a killed turn has neither). */
-  | { type: "turn-end"; stopReason: StopReason; usage?: TurnUsage; model?: string }
+  | ({ type: "turn-end"; stopReason: StopReason } & TurnSpend)
   /**
    * `agent`: the conversation moved to another agent, which it may do before it has begun.
    * `from`: the profile it left; a profile id without a name is one deleted by then.
@@ -667,9 +692,10 @@ export type ConversationEvent =
    * `authRequired`: the agent refused the prompt until the user signs in again.
    * `continuable`: the error ended a turn after its message went to the agent, so the agent can continue from it.
    * `endsTurn`: the turn failed with it, where other errors come before a turn starts or beside one.
+   * `problem`: what the message says, when the host wrote it, for the page to say in its own language.
+   * The spend: what a turn the error ended took, such as one a usage limit ended as if it had ended by itself.
    */
-  /** `problem`: what the message says, when the host wrote it, for the page to say in its own language. */
-  | {
+  | ({
       type: "error";
       message: string;
       problem?: HostProblem;
@@ -677,10 +703,7 @@ export type ConversationEvent =
       authRequired?: true;
       continuable?: true;
       endsTurn?: true;
-      /** What the turn spent before a usage limit ended it as if it had ended by itself. */
-      usage?: TurnUsage;
-      model?: string;
-    }
+    } & TurnSpend)
   /** The agent's sign-in, started from the conversation in a terminal tab, ended. */
   | { type: "login-ended"; signedIn: boolean }
   | { type: "usage-limit-wait-stopped" }

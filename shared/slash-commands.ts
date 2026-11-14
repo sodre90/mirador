@@ -51,6 +51,9 @@ export const clearSlashCommand: SlashCommand = {
 
 export const isClearCommand = (message: string) => message.trim() === `/${clearSlashCommand.name}`;
 
+/** The agent's own command that sums up its context to free room in it, as Claude Code's /compact does. */
+export const COMPACT_COMMAND = "compact";
+
 /** Mirador's own /reload: the agent starts again on the same conversation and reads its settings anew, such as an MCP server added since it started. */
 export const reloadSlashCommand: SlashCommand = {
   name: "reload",

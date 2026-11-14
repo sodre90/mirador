@@ -1,0 +1,7 @@
+{
+  "name": "advice",
+  "title": "Advice",
+  "version": "1.0.0",
+  "api": 22,
+  "canvas": { "host": "host.ts", "view": "view.js" }
+}

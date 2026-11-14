@@ -1,4 +1,4 @@
-import { statuslineChipLevels, type StatuslineChip } from "../../shared/canvas-plugins.ts";
+import { statuslineChipLevels, type ContextHint, type StatuslineChip } from "../../shared/canvas-plugins.ts";
 
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 
@@ -23,4 +23,12 @@ function chipOf(value: unknown): StatuslineChip | null {
 export function validStatuslineChips(given: unknown): StatuslineChip[] {
   if (!Array.isArray(given)) throw new Error("statusline() must return an array of chips, each with its text.");
   return given.flatMap((each) => chipOf(each) ?? []);
+}
+
+/** What Mirador shows of a plugin's advice on the context: null for none, or for advice without text. */
+export function validContextHint(given: unknown): ContextHint | null {
+  if (given === null || given === undefined) return null;
+  if (!isObject(given) || typeof given.text !== "string") throw new Error("contextHint() must return null or a hint with its text.");
+  if (!given.text.trim()) return null;
+  return { text: given.text, ...(given.action === "compact" && { action: "compact" as const }) };
 }

@@ -14,6 +14,13 @@ export function placedBelowOnItsSide(element: HTMLElement): CSSProperties {
   return left < window.innerWidth / 2 ? { top: bottom + POPOVER_GAP, left } : placedBelow(element);
 }
 
+/** Fixed, for what opens from the bottom of the window: lined up with the element's left edge in the window's left half, else its right edge. */
+export function placedAbove(element: HTMLElement): CSSProperties {
+  const { top, left, right } = element.getBoundingClientRect();
+  const bottom = window.innerHeight - top + POPOVER_GAP;
+  return left < window.innerWidth / 2 ? { bottom, left } : { bottom, right: window.innerWidth - right };
+}
+
 /** Closes what is open on Escape, or on a press anywhere outside the elements. */
 export function useClosing(open: boolean, inside: RefObject<HTMLElement | null> | RefObject<HTMLElement | null>[], close: () => void) {
   useEffect(() => {

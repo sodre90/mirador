@@ -321,6 +321,8 @@ export const shell: Messages["shell"] = {
     contextExplained:
       "El agente lo informa después de cada respuesta (ACP usage_update). Cerca del límite compacta la conversación: un resumen reemplaza los turnos más antiguos.",
     costSoFar: (cost) => `Costo hasta ahora, según el agente: ${cost}.`,
+    contextAdvice: "Consejos sobre el contexto",
+    compactNow: "Compactar ahora",
     credits: (amount) => `${amount} créditos`,
     days: (count) => `${count}d`,
     hours: (count) => `${count}h`,

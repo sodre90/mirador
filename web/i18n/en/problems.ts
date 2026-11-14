@@ -130,6 +130,7 @@ export const problems = {
     "canvas-need-background-function": "background only as a function",
     "canvas-need-statusline-function": "statusline only as a function",
     "canvas-need-check-profile-function": "checkProfile only as a function",
+    "canvas-need-context-hint-function": "contextHint only as a function",
     "landing-needs-worktree": "Only a conversation in its own worktree has commits to merge into the project folder's branch.",
   },
   couldNotResume: (cause: string) => `Could not resume the previous agent session (${cause}); starting a fresh one.`,
@@ -316,6 +317,8 @@ export const problems = {
   pluginRequiredSettingNeedsNewerApi: (brought: number, named: number) => `plugin.json makes a profile setting required, which plugin API ${brought} brought; it names API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought: number, named: number) =>
     `the canvas host module draws statusline chips or checks profiles, which plugin API ${brought} brought; plugin.json names API ${named}`,
+  pluginContextHintNeedsNewerApi: (brought: number, named: number) =>
+    `the canvas host module gives advice on the context, which plugin API ${brought} brought; plugin.json names API ${named}`,
   canvasHostModuleNeeds: (needs: string[]) => `the canvas host module needs ${needs.join("; ")}`,
   canvasNeedItemShape: (item: string, placements: string[]) =>
     `items.${item} with an icon, a placement of ${placements.join(" or ")}, and count, outcome and listed only as functions`,

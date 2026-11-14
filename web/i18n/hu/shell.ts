@@ -303,6 +303,8 @@ export const shell: Messages["shell"] = {
     contextExplained:
       "Az ágens minden válasz után jelenti (ACP usage_update). A határ közelében tömöríti a beszélgetést: a régebbi köröket egy összefoglaló váltja fel.",
     costSoFar: (cost) => `Eddigi költség az ágens szerint: ${cost}.`,
+    contextAdvice: "Tanácsok a kontextusról",
+    compactNow: "Tömörítés most",
     credits: (amount) => `${amount} kredit`,
     days: (count) => `${count}n`,
     hours: (count) => `${count}ó`,

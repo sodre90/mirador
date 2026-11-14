@@ -348,6 +348,7 @@ export const hints: Messages["hints"] = {
     "Egy bővítmény küldte ezt a következő üzenetedként, például a Delegate egy átadott feladat válaszával, így az ágens onnan folytatja.",
   gitBranch: "A munkaterület könyvtárában kicheckoutolt git-ág.",
   model: "A modell, amelyet az ágens használ, a fenti Modell menüben kiválasztva.",
+  compactNow: "Elküldi a /compact parancsot, a futó kör után, ha van ilyen: az ágens egy összefoglalóval váltja fel az eddigi beszélgetést, így minden üzenet kevesebbet olvas újra.",
   cost: "Amennyibe a beszélgetés eddig került, ahogy az ágens jelenti.",
   credits: "A beszélgetés által eddig felhasznált AI-kreditek, ahogy a GitHub Copilot számolja.",
   profileChip: "A profil, amellyel ennek a beszélgetésnek az ágense fut.",

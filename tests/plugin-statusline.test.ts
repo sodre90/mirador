@@ -4,9 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadPlugins } from "../host/apps/plugins.ts";
 import { PluginSettingsStore } from "../host/plugin-settings.ts";
-import { costOfPluginChips, statuslineInput } from "../host/statusline.ts";
+import { costOfPluginChips, offeringCompactWhereItCan, statuslineInput } from "../host/statusline.ts";
 import { readTextSetting, type PluginTextProfileSetting } from "../shared/apps.ts";
-import type { CanvasHost, PluginActivityEvent } from "../shared/canvas-plugins.ts";
+import type { CanvasHost, PluginActivityEvent, StatuslineContext } from "../shared/canvas-plugins.ts";
 import type { Profile } from "../shared/model.ts";
 import { canvasPluginHost, storeWithConversation } from "./canvas-plugin-host.ts";
 
@@ -94,6 +94,55 @@ describe("a plugin's statusline chips", () => {
     const conversation = { ...store.findConversation("c1")!, contextUsage: { used: 10, size: 100, cost: { amount: 3.5, currency: "USD" } } };
     expect(statuslineInput(conversation, "/work", null, null, 0).cost.total_cost_usd).toBe(3.5);
     expect(statuslineInput(conversation, "/work", null, null, 0, costOfPluginChips(plugins.statuslineChips("c1"))).cost.total_cost_usd).toBe(1.25);
+  });
+});
+
+describe("a plugin's advice on the context", () => {
+  const advising = (hint: (context: StatuslineContext) => unknown): CanvasHost => ({ items: {}, tools: {}, contextHint: hint as CanvasHost["contextHint"] });
+
+  test("reads the conversation's turns", async () => {
+    const { store } = await meteredConversation({ metered: "on" });
+    store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn", toolCalls: 4, context: { used: 150_000, size: 200_000 } });
+    const advice = advising(({ usageHistory }) => {
+      const last = usageHistory.turns().at(-1)!;
+      return { text: `${last.toolCalls} tool calls re-read ${last.context!.used} tokens`, action: "compact" };
+    });
+    const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: advice });
+    expect(plugins.contextHints("c1")).toEqual([{ plugin: "meter", title: "Meter", text: "4 tool calls re-read 150000 tokens", action: "compact" }]);
+  });
+
+  test("offers Compact now only where the agent has /compact, asking only when a hint would offer it", () => {
+    const plain = { plugin: "meter", title: "Meter", text: "Re-reads 150k" };
+    const compacting = { ...plain, action: "compact" as const };
+    const asked: string[] = [];
+    const agentCompacts = (answer: boolean) => () => {
+      asked.push(String(answer));
+      return answer;
+    };
+    expect(offeringCompactWhereItCan([plain], agentCompacts(true))).toEqual([plain]);
+    expect(asked).toEqual([]);
+    expect(offeringCompactWhereItCan([compacting], agentCompacts(true))).toEqual([compacting]);
+    expect(offeringCompactWhereItCan([compacting, plain], agentCompacts(false))).toEqual([plain, plain]);
+  });
+
+  test("leaves out a plugin that gives none, fails, or gives no text, and keeps only what Mirador shows", async () => {
+    const { store } = await meteredConversation({ metered: "on" });
+    const hintsOf = async (hint: (context: StatuslineContext) => unknown) => (await canvasPluginHost(FIXTURES, store, { meter: advising(hint) })).plugins.contextHints("c1");
+    expect(await hintsOf(() => null)).toEqual([]);
+    expect(await hintsOf(() => ({ text: " " }))).toEqual([]);
+    expect(await hintsOf(() => "compact soon")).toEqual([]);
+    expect(
+      await hintsOf(() => {
+        throw new Error("no history");
+      }),
+    ).toEqual([]);
+    expect(await hintsOf(() => ({ text: "Fine", action: "clear", extra: true }))).toEqual([{ plugin: "meter", title: "Meter", text: "Fine" }]);
+  });
+
+  test("is none for a profile that turned the plugin off", async () => {
+    const { store } = await meteredConversation({});
+    const { plugins } = await canvasPluginHost(FIXTURES, store, { meter: advising(() => ({ text: "Compact" })) });
+    expect(plugins.contextHints("c1")).toEqual([]);
   });
 });
 
@@ -225,6 +274,17 @@ describe("loading a plugin with typed settings or statusline chips", () => {
   test("refuses a statusline or check that isn't a function", async () => {
     expect(await messagesOf(meterCopy((manifest) => manifest, `export default { items: {}, tools: {}, statusline: [], checkProfile: "yes" };`))).toEqual([
       "the canvas host module needs statusline only as a function; checkProfile only as a function",
+    ]);
+  });
+
+  test("refuses advice on the context in a plugin.json for an API before it, or as anything but a function", async () => {
+    const advising = `export default { items: {}, tools: {}, contextHint: () => null };`;
+    expect(await messagesOf(meterCopy((manifest) => ({ ...manifest, api: 21 }), advising))).toEqual([
+      "the canvas host module gives advice on the context, which plugin API 22 brought; plugin.json names API 21",
+    ]);
+    expect(await messagesOf(meterCopy((manifest) => ({ ...manifest, api: 22 }), advising))).toEqual([]);
+    expect(await messagesOf(meterCopy((manifest) => ({ ...manifest, api: 22 }), `export default { items: {}, tools: {}, contextHint: "compact" };`))).toEqual([
+      "the canvas host module needs contextHint only as a function",
     ]);
   });
 });

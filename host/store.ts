@@ -1475,6 +1475,24 @@ export class Store {
       .map((row: any) => ({ seq: row.seq, at: row.at, event: JSON.parse(row.event) }));
   }
 
+  /**
+   * The events that ended turns at or after `since`, oldest first: turn ends, and errors that ended a turn. Of one
+   * conversation, or of every conversation on a profile, null for those on none.
+   */
+  listTurnEnds(of: { conversationId: string } | { profileId: string | null }, since: number): (StoredEvent & { conversationId: string })[] {
+    const [scope, value] = "conversationId" in of ? ["events.conversation_id = ?", of.conversationId] : ["conversations.profile_id IS ?", of.profileId];
+    return this.db
+      .query(
+        `SELECT events.conversation_id AS conversationId, seq, at, event FROM events INDEXED BY events_by_type
+         JOIN conversations ON conversations.id = events.conversation_id
+         WHERE json_extract(event, '$.type') IN ('turn-end', 'error') AND (json_extract(event, '$.type') = 'turn-end' OR json_extract(event, '$.endsTurn') = 1)
+           AND at >= ? AND ${scope}
+         ORDER BY at, seq`,
+      )
+      .all(since, value)
+      .map((row: any) => ({ conversationId: row.conversationId, seq: row.seq, at: row.at, event: JSON.parse(row.event) }));
+  }
+
   /** The snapshot of the files kept for the turn that began with the message at `turnSeq`. */
   filesKeptFor(conversationId: string, turnSeq: number): string | null {
     const row = this.db

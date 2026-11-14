@@ -183,6 +183,7 @@ export type HostProblem =
   | { code: "plugin-switch-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-required-setting-needs-newer-api"; brought: number; named: number }
   | { code: "plugin-statusline-needs-newer-api"; brought: number; named: number }
+  | { code: "plugin-context-hint-needs-newer-api"; brought: number; named: number }
   | { code: "canvas-host-module-needs"; needs: HostProblem[] }
   | { code: "canvas-need-item-shape"; item: string; placements: string[] }
   | { code: "canvas-need-item-opens-with-room"; item: string; rooms: string[] }

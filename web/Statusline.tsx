@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { chosenModel, withMultiplier } from "../shared/config-options.ts";
 import type { StatuslineChip } from "../shared/canvas-plugins.ts";
-import type { ContextUsage, Conversation, PlanQuotas, PluginStatuslineChips, Profile, QuotaWindow, StatuslineRender } from "../shared/model.ts";
+import type { ContextUsage, Conversation, PlanQuotas, PluginContextHint, PluginStatuslineChips, Profile, QuotaWindow, StatuslineRender } from "../shared/model.ts";
+import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
+import { placedAbove, useClosing } from "./BarMenu.tsx";
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
@@ -41,15 +43,62 @@ const PREFERENCE_KEY = "mirador-statusline";
 /** Shown again at once when the user comes back to a conversation, while a fresh render is made. */
 const lastRenders = new Map<string, StatuslineRender>();
 
-export function ContextMeter({ usage }: { usage: ContextUsage }) {
+/** How full the context is, with the plugins' advice on it in its hint; a hint that offers to compact makes it open that advice with Compact now. */
+export function ContextMeter({ conversationId, usage, advice }: { conversationId: string; usage: ContextUsage; advice: PluginContextHint[] }) {
   const share = usedShare(usage);
-  return (
-    <span className={`usage-meter context-meter level-${contextLevel(share)}`} data-hint={contextHint(usage)} aria-label={words.context(usedPercentLabel(usage))}>
+  const opener = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<CSSProperties | null>(null);
+  useClosing(placement !== null, [opener, popover], () => setPlacement(null));
+  const className = `usage-meter context-meter level-${contextLevel(share)}`;
+  const hint = contextHint(usage, advice.map(({ text }) => text));
+  const label = words.context(usedPercentLabel(usage));
+  const figures = (
+    <>
       <span className="usage-bar" aria-hidden="true">
         <span style={{ width: `${share * 100}%` }} />
       </span>
       {usedPercentLabel(usage)} · {compactTokenCount(usage.used)} / {compactTokenCount(usage.size)}
-    </span>
+    </>
+  );
+  if (!advice.some(({ action }) => action === "compact")) {
+    return (
+      <span className={className} data-hint={hint} aria-label={label}>
+        {figures}
+      </span>
+    );
+  }
+  const compactNow = () => {
+    connection.send({ type: "conversation.prompt", conversationId, text: `/${COMPACT_COMMAND}`, imageIds: [], afterTurn: true });
+    setPlacement(null);
+  };
+  return (
+    <>
+      <button
+        ref={opener}
+        type="button"
+        className={className}
+        data-hint={hint}
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={placement !== null}
+        onClick={() => setPlacement(placement || !opener.current ? null : placedAbove(opener.current))}
+      >
+        {figures}
+      </button>
+      {placement && (
+        <div ref={popover} className="context-advice" role="dialog" aria-label={words.contextAdvice} style={placement}>
+          {advice.map(({ plugin, title, text }) => (
+            <p key={plugin}>
+              <strong>{title}</strong> {text}
+            </p>
+          ))}
+          <button type="button" data-hint={hints.compactNow} onClick={compactNow}>
+            {words.compactNow}
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -223,12 +272,14 @@ function BuiltInStatusline({
   gitBranch,
   quotas,
   pluginChips,
+  contextHints,
 }: {
   conversation: Conversation;
   profiles: Profile[];
   gitBranch: string | null;
   quotas: PlanQuotas | null;
   pluginChips: PluginStatuslineChips[];
+  contextHints: PluginContextHint[];
 }) {
   const model = chosenModel(conversation.configOptions);
   const profile = profiles.find(({ id }) => id === conversation.profileId);
@@ -245,7 +296,7 @@ function BuiltInStatusline({
           {withMultiplier(model.name, model.multiplier)}
         </span>
       )}
-      {usage && usage.size > 0 && <ContextMeter usage={usage} />}
+      {usage && usage.size > 0 && <ContextMeter conversationId={conversation.id} usage={usage} advice={contextHints} />}
       {knownWindows(quotas).map(({ name, window }) => (
         <QuotaMeter key={name} name={name} window={window} />
       ))}
@@ -287,7 +338,14 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
         {commandOutput !== null ? (
           <TerminalText text={commandOutput} fontFamily={terminalFont} />
         ) : (
-          <BuiltInStatusline conversation={conversation} profiles={profiles} gitBranch={render?.gitBranch ?? null} quotas={render?.quotas ?? null} pluginChips={pluginChips} />
+          <BuiltInStatusline
+            conversation={conversation}
+            profiles={profiles}
+            gitBranch={render?.gitBranch ?? null}
+            quotas={render?.quotas ?? null}
+            pluginChips={pluginChips}
+            contextHints={render?.contextHints ?? []}
+          />
         )}
       </div>
       {commandOutput !== null && pluginChips.length > 0 && (

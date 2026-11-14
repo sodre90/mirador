@@ -27,6 +27,12 @@ describe("context usage", () => {
     expect(hint).toContain("$0.0355");
     expect(contextHint({ used: 1, size: 2, cost: null })).not.toContain("Cost");
   });
+
+  test("the plugins' advice comes right after the counts, each a paragraph of its own", () => {
+    const [counts, ...rest] = contextHint({ used: 1, size: 2, cost: null }, ["Compact before the break.", "Each message re-reads 150k."]).split("\n\n");
+    expect(counts).toStartWith("Context window:");
+    expect(rest.slice(0, 2)).toEqual(["Compact before the break.", "Each message re-reads 150k."]);
+  });
 });
 
 describe("AI credits", () => {

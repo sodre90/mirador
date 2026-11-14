@@ -132,6 +132,7 @@ export const problems: Messages["problems"] = {
     "canvas-need-background-function": "background csak függvényként",
     "canvas-need-statusline-function": "statusline csak függvényként",
     "canvas-need-check-profile-function": "checkProfile csak függvényként",
+    "canvas-need-context-hint-function": "contextHint csak függvényként",
     "landing-needs-worktree": "Csak a saját worktree-jében futó beszélgetésnek vannak commitjai, amelyeket a projektmappa ágába lehet beolvasztani.",
   },
   couldNotResume: (cause) => `Az ágens előző munkamenetét nem sikerült folytatni (${cause}), ezért új indul.`,
@@ -318,6 +319,8 @@ export const problems: Messages["problems"] = {
   pluginRequiredSettingNeedsNewerApi: (brought, named) => `a plugin.json kötelezővé tesz egy profilbeállítást, ami a bővítmény-API ${brought}. változatával jelent meg; a megadott API: ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `a vászon host modulja elemeket rajzol az állapotsorba vagy profilt ellenőriz, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
+  pluginContextHintNeedsNewerApi: (brought, named) =>
+    `a vászon host modulja tanácsot ad a kontextusról, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} ikonnal (icon), ${placements.join(" vagy ")} elhelyezéssel (placement), a count, outcome és listed pedig csak függvényként`,

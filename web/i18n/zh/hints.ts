@@ -322,6 +322,7 @@ export const hints: Messages["hints"] = {
   pluginMessage: "某个插件把这条作为你的下一条消息发出，例如 Delegate 带着 Agent 交办的任务的回复，让 Agent 从这里接着继续。",
   gitBranch: "工作区目录中已检出的 git 分支。",
   model: "Agent 使用的模型，由上方的模型菜单选定。",
+  compactNow: "发送 /compact（如有正在进行的轮次，则在其结束后发送）：Agent 用摘要取代目前的对话，这样每条消息重新读取的内容更少。",
   cost: "到目前为止这个对话的花费，按 Agent 报告的数据。",
   credits: "这个对话已用的 AI 积分，按 GitHub Copilot 的计算。",
   profileChip: "这个对话的 Agent 运行时所用的配置。",

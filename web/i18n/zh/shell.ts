@@ -298,6 +298,8 @@ export const shell: Messages["shell"] = {
     contextExplained:
       "Agent 在每次回复后报告这个数值（ACP usage_update）。接近上限时它会压缩对话：较早的轮次会被摘要取代。",
     costSoFar: (cost) => `目前的花费（按 Agent 的报告）：${cost}。`,
+    contextAdvice: "上下文建议",
+    compactNow: "立即压缩",
     credits: (amount) => `${amount} 积分`,
     days: (count) => `${count}天`,
     hours: (count) => `${count}小时`,

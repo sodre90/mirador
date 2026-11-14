@@ -1,4 +1,4 @@
-import type { PluginCanvasItem } from "./model.ts";
+import type { PluginCanvasItem, TurnUsage } from "./model.ts";
 
 /**
  * Where a plugin's item shows: among the canvas's pages, or in the tab beside the canvas that holds the agent's plan,
@@ -81,6 +81,8 @@ export interface CanvasPluginContext<Data = unknown> {
    * for a conversation this plugin didn't start from this one. Plugin API 14 brought it.
    */
   usageOf(conversationId: string): ConversationUsage;
+  /** The conversation's turns, and its profile's, as Mirador recorded them. Plugin API 22 brought it. */
+  usageHistory: UsageHistory;
 }
 
 export interface CanvasPluginStorage {
@@ -232,6 +234,31 @@ export interface ConversationUsage {
   cost: { amount: number; currency: string } | null;
   /** The turns that reported tokens. */
   turns: number;
+}
+
+/** One turn of a conversation, as Mirador recorded it as the turn ended. Plugin API 22 brought it. */
+export interface TurnSample {
+  conversationId: string;
+  /** When the prompt went to the agent; null for a turn that failed before that. */
+  startedAt: number | null;
+  endedAt: number;
+  model: string | null;
+  /** The tokens of the turn's own model requests, not its subagents', as the agent reported them; null when it reported none, as for a turn the user stopped. */
+  tokens: TurnUsage | null;
+  /** The turn's own tool calls, not its subagents': about one model request each. */
+  toolCalls: number | null;
+  /** The context the agent last reported by the turn's end. */
+  context: { used: number; size: number } | null;
+  /** What the agent last reported the whole conversation cost by the turn's end; a turn's own cost is the change since the turn before. */
+  costSoFar: { amount: number; currency: string } | null;
+}
+
+/** A conversation's turns as Mirador recorded them, oldest first, for what a plugin tells of how they spend tokens. Plugin API 22 brought it. */
+export interface UsageHistory {
+  /** The conversation's turns that ended at or after `since`, in epoch milliseconds; all of them without it. */
+  turns(since?: number): TurnSample[];
+  /** The turns that ended at or after `since` in every conversation on the conversation's profile: what its plan's usage limits count. */
+  profileTurns(since: number): TurnSample[];
 }
 
 /**
@@ -397,6 +424,16 @@ export interface StatuslineContext {
   /** What the conversation has for one of the plugin's profile settings, as a tool's `profileSetting` reads it. */
   profileSetting(id: string): string | null;
   storage: CanvasPluginStorage;
+  /** The conversation's turns, and its profile's, as Mirador recorded them. Plugin API 22 brought it. */
+  usageHistory: UsageHistory;
+}
+
+/** Advice on a conversation's context, shown with its context meter. Plugin API 22 brought it. */
+export interface ContextHint {
+  /** A line or two the meter's tooltip and popover show, e.g. what the next message will re-read. */
+  text: string;
+  /** "compact": the meter's popover offers Compact now, which sends the agent's /compact once its turn ends; offered only where the agent has /compact. */
+  action?: "compact";
 }
 
 /** One figure a plugin shows in a conversation's statusline. Plugin API 14 brought it. */
@@ -489,6 +526,12 @@ export interface CanvasHost<Data = unknown> {
    * answers at once from what the plugin already knows, and fetches on timers of its own. Plugin API 14 brought it.
    */
   statusline?(context: StatuslineContext): StatuslineChip[];
+  /**
+   * Advice on the conversation's context for its context meter, or null for none. Mirador asks when it asks for the
+   * statusline, so it answers at once, as `statusline` does. Advice never speaks up by itself: the user finds it on the
+   * meter. Plugin API 22 brought it.
+   */
+  contextHint?(context: StatuslineContext): ContextHint | null;
   /**
    * Checks what a profile set for the plugin, e.g. that a server answers at the URL and with the key given: the Profiles
    * dialog's Test connection button, before the profile is saved. `setting` reads the settings as `profileSetting` does.

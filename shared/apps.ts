@@ -23,9 +23,11 @@ import type { HostProblem } from "./host-problems.ts";
  * conversation of its workspace; API 18 lets its workspace tab and background work ask a profile's agent for the models
  * and efforts it offers; API 19 lets one of a plugin's toggles be its switch for a profile; API 20 lets a typed setting
  * say a profile that has the plugin on needs it; API 21 lets an app's view read the workspace's git refs, a file as it
- * is at one of them and the files that differ from one, and hear when HEAD or the tags move.
+ * is at one of them and the files that differ from one, and hear when HEAD or the tags move; API 22 tells a canvas
+ * plugin a conversation's turns, and its profile's, as Mirador recorded them, and lets it give advice on the
+ * conversation's context for its context meter, with Compact now.
  */
-export const APP_PLUGIN_API = 21;
+export const APP_PLUGIN_API = 22;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,
@@ -38,6 +40,9 @@ export const PLUGIN_SWITCH_API = 19;
 
 /** The first plugin API whose typed profile setting may be required. */
 export const REQUIRED_SETTING_API = 20;
+
+/** The first plugin API whose canvas host may give advice on a conversation's context, and reads its turns. */
+export const CONTEXT_HINT_API = 22;
 
 /** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
 export const STARTS_CONVERSATIONS_PLUGIN_API = 11;

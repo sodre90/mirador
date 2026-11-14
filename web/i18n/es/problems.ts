@@ -132,6 +132,7 @@ export const problems: Messages["problems"] = {
     "canvas-need-background-function": "background solo como función",
     "canvas-need-statusline-function": "statusline solo como función",
     "canvas-need-check-profile-function": "checkProfile solo como función",
+    "canvas-need-context-hint-function": "contextHint solo como función",
     "landing-needs-worktree": "Solo una conversación en su propio worktree tiene commits para fusionar en la rama de la carpeta del proyecto.",
   },
   couldNotResume: (cause) => `No se pudo reanudar la sesión anterior del agente (${cause}); se empieza una nueva.`,
@@ -318,6 +319,8 @@ export const problems: Messages["problems"] = {
   pluginRequiredSettingNeedsNewerApi: (brought, named) => `plugin.json hace obligatorio un ajuste de perfil, que llegó con la API de plugins ${brought}; indica la API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `el módulo del host del lienzo dibuja datos en la línea de estado o comprueba perfiles, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
+  pluginContextHintNeedsNewerApi: (brought, named) =>
+    `el módulo del host del lienzo da consejos sobre el contexto, lo que llegó con la API de plugins ${brought}; plugin.json indica la API ${named}`,
   canvasHostModuleNeeds: (needs) => `el módulo del host del lienzo necesita ${needs.join("; ")}`,
   canvasNeedItemShape: (item, placements) =>
     `items.${item} con un icon, un placement de ${placements.join(" o ")}, y count, outcome y listed solo como funciones`,

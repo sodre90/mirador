@@ -357,6 +357,7 @@ export const hints: Messages["hints"] = {
     "Un plugin envió esto como tu siguiente mensaje, como Delegate con la respuesta de una tarea que el agente delegó, para que el agente retome desde ahí.",
   gitBranch: "La rama de git activa en el directorio del espacio de trabajo.",
   model: "El modelo que usa el agente, tal como se eligió en el menú Modelo de arriba.",
+  compactNow: "Envía /compact, después del turno en curso si lo hay: el agente reemplaza la conversación hasta ahora por un resumen, así cada mensaje vuelve a leer menos.",
   cost: "Lo que ha costado la conversación hasta ahora, según lo informa el agente.",
   credits: "Créditos de IA que ha usado esta conversación, según los cuenta GitHub Copilot.",
   profileChip: "El perfil con el que se ejecuta el agente de esta conversación.",

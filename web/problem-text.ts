@@ -360,6 +360,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginRequiredSettingNeedsNewerApi(problem.brought, problem.named);
     case "plugin-statusline-needs-newer-api":
       return words.pluginStatuslineNeedsNewerApi(problem.brought, problem.named);
+    case "plugin-context-hint-needs-newer-api":
+      return words.pluginContextHintNeedsNewerApi(problem.brought, problem.named);
     case "canvas-host-module-needs":
       return words.canvasHostModuleNeeds(problem.needs.map((need) => problemText(need, words)));
     case "canvas-need-item-shape":

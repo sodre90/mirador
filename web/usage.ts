@@ -27,9 +27,11 @@ export const formatCost = ({ amount, currency }: NonNullable<ContextUsage["cost"
 
 export const formatCredits = (credits: number) => words.credits(formatNumber(credits, { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
 
-export function contextHint(usage: ContextUsage) {
+/** `advice`: what plugins say of the context, after how full it is. */
+export function contextHint(usage: ContextUsage, advice: string[] = []) {
   return [
     words.contextInUse(formatNumber(usage.used), formatNumber(usage.size), usedPercentLabel(usage)),
+    ...advice,
     words.contextExplained,
     ...(usage.cost ? [words.costSoFar(formatCost(usage.cost))] : []),
   ].join("\n\n");

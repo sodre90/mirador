@@ -2,7 +2,8 @@ import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { chosenModel } from "../shared/config-options.ts";
-import { harnessLabels, type Conversation, type ContextUsage, type PlanQuotas, type PluginStatuslineChips, type QuotaWindow, type StatuslineRender } from "../shared/model.ts";
+import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
+import { harnessLabels, type Conversation, type ContextUsage, type PlanQuotas, type PluginContextHint, type PluginStatuslineChips, type QuotaWindow, type StatuslineRender } from "../shared/model.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { profileEnvironment } from "./acp/harnesses.ts";
 import type { ConversationService } from "./conversations.ts";
@@ -159,6 +160,10 @@ const commandError = (problem: HostProblem): CommandResult => ({ error: englishP
 
 const clampColumns = (columns: number) => Math.min(MAX_COLUMNS, Math.max(MIN_COLUMNS, Math.floor(columns) || MIN_COLUMNS));
 
+/** The plugins' advice on the context, offering Compact now only where the agent has /compact, which is asked only when a hint would offer it. */
+export const offeringCompactWhereItCan = (hints: PluginContextHint[], agentCompacts: () => boolean): PluginContextHint[] =>
+  !hints.some(({ action }) => action === "compact") || agentCompacts() ? hints : hints.map(({ action: _, ...hint }) => hint);
+
 export class StatuslineService {
   constructor(
     private readonly store: Store,
@@ -176,6 +181,7 @@ export class StatuslineService {
     const now = Date.now();
     const quotas = this.conversations.planQuotasOf(conversationId, now);
     const pluginChips = this.plugins.statuslineChips(conversationId);
+    const contextHints = offeringCompactWhereItCan(this.plugins.contextHints(conversationId), () => this.conversations.agentHasCommand(conversationId, COMPACT_COMMAND));
     const environment = this.environmentOf(conversation);
     const configDir = environment && claudeConfigDir(environment);
     const runsClaudeCode = conversation.harness === "claude";
@@ -183,7 +189,7 @@ export class StatuslineService {
       currentGitBranch(directory),
       configDir && this.runsUserCommands && runsClaudeCode ? statusLineCommandIn(configDir) : null,
     ]);
-    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips };
+    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints };
     const transcriptPath = conversation.acpSessionId ? claudeTranscriptPath(configDir, directory, conversation.acpSessionId) : null;
     const result = await runStatusLineCommand(command, {
       input: statuslineInput(conversation, directory, transcriptPath, quotas, now, costOfPluginChips(pluginChips)),
@@ -192,8 +198,8 @@ export class StatuslineService {
       columns: clampColumns(columns),
     });
     return "output" in result
-      ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips }
-      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips };
+      ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips, contextHints }
+      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips, contextHints };
   }
 
   /** A profile whose environment does not parse cannot run anything; its conversation says why elsewhere. */

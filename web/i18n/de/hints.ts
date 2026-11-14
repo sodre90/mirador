@@ -359,6 +359,7 @@ export const hints: Messages["hints"] = {
     "Ein Plugin hat das als deine nächste Nachricht gesendet, etwa Delegate mit der Antwort einer Aufgabe, die der Agent abgegeben hat, damit der Agent dort weitermacht.",
   gitBranch: "Der git-Branch, der im Verzeichnis des Arbeitsbereichs ausgecheckt ist.",
   model: "Das Modell, das der Agent nutzt, wie oben im Menü Modell gewählt.",
+  compactNow: "Sendet /compact, nach der laufenden Runde, falls eine läuft: Der Agent ersetzt die bisherige Unterhaltung durch eine Zusammenfassung, sodass jede Nachricht weniger erneut liest.",
   cost: "Was die Unterhaltung bisher gekostet hat, wie der Agent es meldet.",
   credits: "KI-Credits, die diese Unterhaltung bisher verbraucht hat, wie GitHub Copilot sie zählt.",
   profileChip: "Das Profil, mit dem der Agent dieser Unterhaltung läuft.",

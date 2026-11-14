@@ -324,6 +324,7 @@ export const hints = {
   pluginMessage: "A plugin sent this as your next message, such as Delegate with the reply of a task the agent handed off, so the agent picks up from there.",
   gitBranch: "The git branch checked out in the workspace directory.",
   model: "The model the agent uses, as chosen in the Model menu above.",
+  compactNow: "Sends /compact, after the running turn if there is one: the agent replaces the conversation so far with a summary, so each message re-reads less.",
   cost: "What the conversation has cost so far, as the agent reports it.",
   credits: "AI credits this conversation has used, as GitHub Copilot counts them.",
   profileChip: "The profile this conversation's agent runs with.",
