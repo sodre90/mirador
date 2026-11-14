@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspaceFromSidebar, createProfile, openProfileTab, openProfiles, signIn } from "./helpers.ts";
+import { addWorkspaceFromSidebar, createProfile, openProfileTab, openProfiles, sendMessage, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -47,6 +47,20 @@ test("a profile's test says why the agent could not start", async ({ page }) => 
 
   await expect(testResult(editor)).toContainText("The pre-launch command of opencode (broken)");
   await expect(testResult(editor)).toContainText("gateway down");
+});
+
+test("a pre-launch command that fails while the new profile's check runs it too names the log their output is mixed in", async ({ page }) => {
+  await openWithWorkspace(page);
+  const editor = await createProfile(page, "busy gateway", "", "sleep 5; echo gateway down >&2; exit 3", "opencode");
+  await editor.getByRole("button", { name: "Close" }).click();
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "busy gateway · opencode" });
+  await page.getByRole("button", { name: "+ New conversation" }).click();
+  await sendMessage(page, "hello");
+
+  await expect(page.locator(".timeline:visible .error-line")).toContainText(
+    /The pre-launch command of opencode \(busy gateway\) exited with 3; another start ran it at the same time, so their output is mixed in .+\.log/,
+    { timeout: 30_000 },
+  );
 });
 
 test("a test uses the profile as the editor has it, before it is saved", async ({ page }) => {

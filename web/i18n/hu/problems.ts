@@ -347,6 +347,8 @@ export const problems: Messages["problems"] = {
     couldNotStart: (cause) => `nem tudott elindulni: ${cause}`,
   },
   prelaunchFailed: (agent, failure, output) => `Az indítás előtti parancs (${agent}) ${failure}${output ? `: ${output}` : ""}`,
+  prelaunchFailedBesideAnother: (agent, failure, log) =>
+    `Az indítás előtti parancs (${agent}) ${failure}; egy másik indítás is futtatta ugyanekkor, ezért a kimenetük összekeveredett itt: ${log}`,
   profileTestUnanswered: (seconds) => `Az ágens ${seconds} másodpercen belül nem válaszolt a beállításaival, ezért a Mirador leállította.`,
   prelaunch: {
     timedOut: (seconds) => `${seconds} másodperc alatt sem végzett`,

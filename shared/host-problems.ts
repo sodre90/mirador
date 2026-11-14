@@ -196,7 +196,8 @@ export type HostProblem =
   | { code: "command-argument-unknown"; argument: string; known: string[] }
   | { code: "command-arguments-missing"; missing: string[] }
   | { code: "agent-gone"; agent: string; gone: AgentGone }
-  | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string }
+  /** `mixedIn` names the agent log when another start of the profile ran its pre-launch command meanwhile, so the output isn't quoted. */
+  | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string; mixedIn: string | null }
   | { code: "profile-test-unanswered"; seconds: number };
 
 /** Why the agent process went away, in English. */

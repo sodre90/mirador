@@ -58,6 +58,25 @@ function routeAsyncTaskUpdates(stream: acp.Stream): acp.Stream {
 
 const latestStartByHarness = new Map<HarnessId, Promise<unknown>>();
 
+/** One pre-launch command writing into an agent log, which another start of the same profile may write into meanwhile. */
+interface PrelaunchWriting {
+  besideAnother: boolean;
+}
+
+const prelaunchesWritingInto = new Map<string, Set<PrelaunchWriting>>();
+
+function startWritingInto(logPath: string) {
+  const writing: PrelaunchWriting = { besideAnother: false };
+  const others = prelaunchesWritingInto.get(logPath) ?? new Set<PrelaunchWriting>();
+  others.forEach((other) => (other.besideAnother = writing.besideAnother = true));
+  prelaunchesWritingInto.set(logPath, others.add(writing));
+  const stop = () => {
+    others.delete(writing);
+    if (others.size === 0 && prelaunchesWritingInto.get(logPath) === others) prelaunchesWritingInto.delete(logPath);
+  };
+  return { writing, stop };
+}
+
 /** Windows runs a .cmd or .bat, such as the opencode.cmd npm installs, only through cmd.exe, and refuses to spawn it otherwise. */
 const isWindowsBatchFile = (program: string) => process.platform === "win32" && /\.(cmd|bat)$/i.test(program);
 
@@ -375,6 +394,7 @@ export class HarnessProcess {
     const isGitBash = process.platform === "win32" && shell.kind === "posix";
     const log = isGitBash ? "ignore" : openSync(logPath, "a");
     const command = isGitBash ? withOutputAppendedTo(logPath, this.spec.prelaunch) : this.spec.prelaunch;
+    const { writing, stop: stopWriting } = startWritingInto(logPath);
     const failure = await new Promise<PrelaunchFailure | null>((resolve) => {
       const [program, ...args] = commandLine(shell, command);
       const prelaunch = spawn(program!, args, {
@@ -394,13 +414,14 @@ export class HarnessProcess {
         clearTimeout(timeout);
         resolve(code === 0 ? null : { kind: "exited", how: String(code ?? signal) });
       });
-    });
+    }).finally(stopWriting);
     this.prelaunchProcess = undefined;
     if (log !== "ignore") closeSync(log);
     const endedByStop = this.stopReason !== undefined;
     if (failure === null || endedByStop) return;
+    if (writing.besideAnother) throw new HostProblemError({ code: "prelaunch-failed", agent: this.spec.label, failure, output: "", mixedIn: logPath });
     const output = readFileSync(logPath).subarray(logSizeBefore).toString().trim().slice(-PRELAUNCH_OUTPUT_IN_ERRORS);
-    throw new HostProblemError({ code: "prelaunch-failed", agent: this.spec.label, failure, output });
+    throw new HostProblemError({ code: "prelaunch-failed", agent: this.spec.label, failure, output, mixedIn: null });
   }
 
   private logPath() {

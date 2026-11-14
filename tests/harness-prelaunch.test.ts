@@ -26,6 +26,36 @@ describe("HarnessProcess.start", () => {
     expect(readFileSync(log, "utf8")).toStartWith("an earlier start\nstarting\nproxy binary missing\n");
   }, 15_000);
 
+  test.skipIf(process.platform === "win32")("names the log rather than quote it when another start of the profile ran its pre-launch command into it meanwhile", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "mirador-prelaunch-"));
+    const log = join(directory, "shared.log");
+    const startOf = (prelaunch: string) =>
+      new HarnessProcess(
+        {
+          id: "opencode",
+          label: "Shared agent",
+          logName: "shared",
+          command: [process.execPath, "-e", ""],
+          environment: { ...process.env } as Record<string, string>,
+          prelaunch,
+          startsOneAtATime: true,
+        },
+        { onSessionUpdate: () => {}, onPermissionRequest: async () => ({ outcome: { outcome: "cancelled" } }) as never, onElicitationRequest: async () => ({ action: "cancel" }), onExit: () => {} },
+        directory,
+      )
+        .start()
+        .then(
+          () => "started",
+          (error: Error) => error.message,
+        );
+    const mixed = `The pre-launch command of Shared agent exited with 3; another start ran it at the same time, so their output is mixed in ${log}`;
+
+    expect(await Promise.all([startOf("echo from the check; sleep 1; exit 3"), startOf("echo from the conversation; sleep 1; exit 3")])).toEqual([mixed, mixed]);
+    expect(readFileSync(log, "utf8")).toContain("from the check");
+    expect(readFileSync(log, "utf8")).toContain("from the conversation");
+    expect(await startOf("echo alone; exit 3")).toBe("The pre-launch command of Shared agent exited with 3: alone");
+  }, 15_000);
+
   test.skipIf(process.platform === "win32")("gives the login shell the pre-launch command as written, so fish or csh reads its own syntax", async () => {
     const directory = mkdtempSync(join(tmpdir(), "mirador-prelaunch-"));
     const shell = join(directory, "own-syntax-shell");
