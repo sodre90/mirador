@@ -82,12 +82,22 @@ async function releaseCheckedOut(folder: string) {
   return newestOf(((await gitOutput(folder, ["tag", "--points-at", "HEAD", "--list", `${RELEASE_TAG_PREFIX}[0-9]*`])) ?? "").split("\n"));
 }
 
-/** The newest release the repo has tagged; null when it tags none. */
-async function newestRelease(url: string): Promise<string | null> {
+const newestFirst = (one: string, other: string) => (isNewerVersion(one, other) ? -1 : isNewerVersion(other, one) ? 1 : 0);
+
+/** Every release the repo has tagged, newest first. */
+async function releasesOf(url: string): Promise<string[]> {
   const listed = await run(["git", "ls-remote", "--tags", "--refs", "--", url, `${RELEASE_TAG_PREFIX}*`], process.cwd(), environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
   if (!listed.ok) throw new HostProblemError({ code: "git-ls-remote-failed", output: listed.output });
-  return newestOf(listed.output.split("\n").map((line) => line.split("refs/tags/")[1] ?? ""));
+  return listed.output
+    .split("\n")
+    .flatMap((line) => releaseOfTag(line.split("refs/tags/")[1] ?? "") ?? [])
+    .sort(newestFirst);
 }
+
+/** The newest release the repo has tagged; null when it tags none. */
+const newestRelease = async (url: string) => (await releasesOf(url))[0] ?? null;
+
+const NO_NEWS: PluginNews = { release: null, commits: [], needsApi: null };
 
 async function sourceOf(folder: string): Promise<PluginSource> {
   if (lstatSync(folder).isSymbolicLink()) return { kind: "linked", target: resolve(dirname(folder), readlinkSync(folder)) };
@@ -322,7 +332,7 @@ export class InstalledPlugins {
     return this.oneAtATime(async () => {
       const folder = this.clonedPlugin(folderName);
       const followed = await this.followed(folder);
-      const newest = followed.release && ((await newestRelease(followed.remote)) ?? followed.release);
+      const newest = followed.release && ((await this.releaseNews(folder, followed.remote, followed.release)).release ?? followed.release);
       const installed = await readManifest(folder).catch(() => null);
       const { staged, manifest } = await this.cloned(followed.remote, newest ? releaseTag(newest) : followed.branch);
       try {
@@ -427,13 +437,23 @@ export class InstalledPlugins {
     return this.oneAtATime(async () => {
       const folder = this.clonedPlugin(folderName);
       const followed = await this.followed(folder);
-      if (followed.branch === null) {
-        const newest = await newestRelease(followed.remote);
-        if (!newest || !isNewerVersion(newest, followed.release)) return { release: null, commits: [], needsApi: null };
-        return { release: newest, ...(await this.fetchedNews(folder, `refs/tags/${releaseTag(newest)}`)) };
-      }
+      if (followed.branch === null) return this.releaseNews(folder, followed.remote, followed.release);
       return { release: null, ...(await this.fetchedNews(folder, followed.branch)) };
     });
+  }
+
+  /**
+   * The newest release past the installed one whose plugin API this Mirador speaks, with what it brings; when every
+   * newer release needs a newer Mirador, the newest of them, saying which plugin API it needs.
+   */
+  private async releaseNews(folder: string, remote: string, installed: string): Promise<PluginNews> {
+    let newestForNewerApi: PluginNews | null = null;
+    for (const release of (await releasesOf(remote)).filter((release) => isNewerVersion(release, installed))) {
+      const news = { release, ...(await this.fetchedNews(folder, `refs/tags/${releaseTag(release)}`)) };
+      if (news.needsApi === null) return news;
+      newestForNewerApi ??= news;
+    }
+    return newestForNewerApi ?? NO_NEWS;
   }
 
   /** What the ref brings that the checkout doesn't have: its commits, newest first, and the plugin API its plugin.json names when this Mirador's is older. */

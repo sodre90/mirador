@@ -447,6 +447,33 @@ describe("adding, updating and removing plugins", () => {
     expect(await onBranch.updatesFound(null)).toEqual([]);
   });
 
+  test("an update passes over the releases for a newer plugin API and brings the newest release this Mirador speaks", async () => {
+    const repo = builtCounterRepo("supported-release-repo");
+    git(repo, "tag", "v1.0.0");
+    const plugins = pluginsIn("supported-release");
+    const installed = new InstalledPlugins(plugins, []);
+    await installed.add(repo, null);
+    const [listed] = await installed.list();
+
+    commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
+    release(repo, "1.1.0");
+    const supported = { release: "1.1.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.1.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }], needsApi: null };
+    const manifest = join(repo, "plugin.json");
+    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
+    release(repo, "2.0.0");
+    release(repo, "2.1.0");
+
+    expect(await installed.news("counter")).toEqual(supported);
+    expect(await installed.updatesFound(null)).toEqual([{ folder: "counter", title: "Counter", from: listed!.source.kind === "git" ? listed!.source.commit : "", ...supported, ready: false, heldBack: null }]);
+    const offer = await installed.offerUpdate("counter");
+    expect(offer).toMatchObject({ version: "1.1.0", release: "1.1.0" });
+    installed.discard(offer.id);
+    await installed.update("counter");
+    expect((await installed.list())[0]).toMatchObject({ version: "1.1.0", source: { release: "1.1.0" } });
+    expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
+    expect(await installed.news("counter")).toMatchObject({ release: "2.1.0", needsApi: APP_PLUGIN_API + 1 });
+  });
+
   test("refuses a release whose plugin.json gives another version, and a plugin without a version, which doesn't load either", async () => {
     const repo = builtCounterRepo("mistagged-repo");
     release(repo, "1.2.0", "v1.3.0");
