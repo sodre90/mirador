@@ -101,7 +101,7 @@ const host: CanvasHost<BoardData> = {
       run(input, { publish, caller }) {
         const { text = `Pinned by the ${caller}` } = input as { text?: string };
         publish({ type: "card", title: "Pinned", data: { text, presses: 0, heardPresses: 0 } });
-        return caller === "user" ? "Pinned a card for you." : "Pinned.";
+        return caller === "user" ? `Pinned a card for you.\nIt says: ${text}` : "Pinned.";
       },
     },
     finish_step: {

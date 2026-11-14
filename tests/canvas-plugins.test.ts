@@ -683,7 +683,7 @@ describe("CanvasPlugins", () => {
 
   test("the user runs a command's tool as its caller, with the input the agent's call without arguments gets, and the agent hears nothing of it", async () => {
     const { plugins, callTool, items, prompts } = await setUp();
-    expect(await plugins.runCommand("c1", "board:pin_card")).toBe("Pinned a card for you.");
+    expect(await plugins.runCommand("c1", "board:pin_card")).toBe("Pinned a card for you.\nIt says: Pinned by the user");
     expect(await callTool("pin_card", {})).toEqual({ text: "Pinned.", isError: false });
     expect(items().map(({ data }) => (data as { text: string }).text)).toEqual(["Pinned by the user", "Pinned by the agent"]);
     expect(plugins.notesForAgent("c1")).toEqual([]);

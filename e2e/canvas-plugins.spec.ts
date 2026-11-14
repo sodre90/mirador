@@ -185,13 +185,17 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(composer, "a command that takes arguments is written out for them").toHaveValue("/board:pin_card ");
     await composer.press("Enter");
 
-    await expect(page.locator(".plugin-command-reply:visible")).toContainText("Pinned a card for you.");
+    const reply = page.locator(".plugin-command-reply:visible");
+    await expect(reply).toContainText("Pinned a card for you.\nIt says: Pinned by the user");
     await expect(composer).toHaveValue("");
     await expect(canvasTitle(page)).toHaveText("Pinned");
     await expect(pageView(page).locator("#text")).toHaveText("Pinned by the user (pressed 0 times)");
     await expect(userMessages).toHaveCount(messagesBefore);
     expect(agentSaw()).toBe(promptsBefore);
-    await expect(page.locator(".plugin-command-reply:visible"), "the reply shows only for a few seconds").toHaveCount(0, { timeout: 15_000 });
+    await page.waitForTimeout(7_000);
+    await expect(reply, "a reply of several lines stays until dismissed").toHaveCount(1);
+    await reply.getByRole("button", { name: "Dismiss" }).click();
+    await expect(reply).toHaveCount(0);
 
     await composer.fill("/board:finish_step");
     await composer.press("Enter");
@@ -211,6 +215,8 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(pageView(page).locator("#text")).toHaveText("Typed (pressed 0 times)");
     await expect(userMessages).toHaveCount(messagesBefore);
     expect(agentSaw()).toBe(promptsBefore);
+    await expect(reply).toContainText("Shown as ");
+    await expect(reply, "a one-line reply shows only for a few seconds").toHaveCount(0, { timeout: 15_000 });
 
     await composer.fill("/board:finish_step");
     await composer.press("Enter");

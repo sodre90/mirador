@@ -65,14 +65,14 @@ const REPLY_SHOWN_MS = 6000;
 
 /**
  * Runs a message that names a plugin's command or an app's open on the host, never sending it to the agent; `run` says whether the
- * message was one. What the command's tool says shows above the composer for a few seconds, and why it failed until
- * dismissed; either goes when the next message is sent.
+ * message was one. What the command's tool says shows above the composer for a few seconds, or until dismissed when it
+ * runs to several lines, and why it failed until dismissed; either goes when the next message is sent.
  */
 export function usePluginCommands(conversationId: string) {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   useEffect(() => {
-    if (!outcome || !("reply" in outcome)) return;
+    if (!outcome || !("reply" in outcome) || outcome.reply.trim().includes("\n")) return;
     const hide = setTimeout(() => setOutcome(null), REPLY_SHOWN_MS);
     return () => clearTimeout(hide);
   }, [outcome]);
