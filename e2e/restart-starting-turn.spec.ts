@@ -21,10 +21,13 @@ const prompts = () =>
 
 const hostStarts = () => host.log.match(/Mirador is running/g)?.length ?? 0;
 
+/** Writes when it began and ended into the agent's log, beside the fake agent's own lines. */
+const sleepNotingItsSpan = (seconds: number) => `echo "pre-launch began $(date -u +%T)"; sleep ${seconds}; echo "pre-launch ended $(date -u +%T)"`;
+
 /** A new conversation on a new opencode profile whose pre-launch command sleeps that long. */
 async function newConversationStartingSlowly(page: Page, profile: string, seconds: number) {
   await test.step(`a new conversation on "${profile}", whose pre-launch command sleeps ${seconds} s`, async () => {
-    const profiles = await createProfile(page, profile, "", `sleep ${seconds}`, "opencode");
+    const profiles = await createProfile(page, profile, "", sleepNotingItsSpan(seconds), "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
     await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${profile} · opencode` });
     const previousUrl = page.url();

@@ -85,7 +85,7 @@ export interface HarnessSpec {
   environment: Record<string, string>;
   /** Shell command run before the agent starts, e.g. to bring up a local proxy. */
   prelaunch: string;
-  /** Two opencode processes starting at the same moment fail with "database is locked". */
+  /** Two opencode processes starting at the same moment fail with "database is locked"; their pre-launch commands need not wait. */
   startsOneAtATime: boolean;
 }
 
@@ -249,18 +249,18 @@ export class HarnessProcess {
     }
   }
 
-  private launchInTurn() {
-    if (!this.spec.startsOneAtATime) return this.launch();
+  private async launchInTurn() {
+    const ownStart = this.startsSoFar;
+    await this.runPrelaunch();
+    this.endIfStoppedBeforeSpawning(ownStart);
+    if (!this.spec.startsOneAtATime) return this.launch(ownStart);
     const previous = latestStartByHarness.get(this.spec.id) ?? Promise.resolve();
-    const launched = previous.catch(() => {}).then(() => this.launch());
+    const launched = previous.catch(() => {}).then(() => this.launch(ownStart));
     latestStartByHarness.set(this.spec.id, launched);
     return launched;
   }
 
-  private async launch() {
-    const ownStart = this.startsSoFar;
-    this.endIfStoppedBeforeSpawning(ownStart);
-    await this.runPrelaunch();
+  private async launch(ownStart: number) {
     this.endIfStoppedBeforeSpawning(ownStart);
     const [command, ...args] = this.spec.command;
     const child = spawnAgent(command!, args, this.spec.environment);

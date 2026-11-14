@@ -137,18 +137,24 @@ describe.skipIf(process.platform === "win32")("HarnessProcess.stop while the age
     expect(existsSync(spawned)).toBe(false);
   }, 20_000);
 
-  test("a stop while the start waits behind another of its kind that starts one at a time ends it before its pre-launch command runs", async () => {
+  test("a start behind another of its kind that starts one at a time runs its pre-launch command meanwhile, and a stop then ends it before its process spawns", async () => {
     const { prelaunched, spawned } = markers();
-    const { harness: stalled } = harnessRunning(silentAgent, { startsOneAtATime: true, initializeTimeoutMs: 500 });
+    const { harness: stalled } = harnessRunning(silentAgent, { startsOneAtATime: true, initializeTimeoutMs: 2000 });
     const { harness: queued, exits } = harnessRunning(answeringAgent(spawned), { startsOneAtATime: true, prelaunch: `touch '${prelaunched}'` });
-    const stalledStart = expect(stalled.start()).rejects.toThrow("did not answer");
+    let stalledStartEnded = false;
+    const stalledStart = stalled.start().then(
+      () => "answered",
+      (error: Error) => error.message,
+    );
+    void stalledStart.finally(() => (stalledStartEnded = true));
     const queuedStart = queued.start();
+    await until(() => existsSync(prelaunched));
+    expect(stalledStartEnded).toBe(false);
     await expect(queued.stop()).resolves.toEqual({ kind: "stopped" });
     await expect(queuedStart).rejects.toThrow("The Test agent process was stopped.");
     expect(exits).toEqual(["was stopped"]);
-    await stalledStart;
+    expect(await stalledStart).toContain("did not answer");
     await Bun.sleep(300);
-    expect(existsSync(prelaunched)).toBe(false);
     expect(existsSync(spawned)).toBe(false);
   }, 15_000);
 });
