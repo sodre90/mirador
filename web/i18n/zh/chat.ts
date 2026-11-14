@@ -198,7 +198,7 @@ export const chat: Messages["chat"] = {
     busySteer: "把消息加入当前轮次",
     busyAfterTurn: "在当前轮次结束后发送消息",
     notResponding: "Agent 没有响应。强制停止会结束它的进程；该配置下的其他对话不受影响",
-    idle: (agent) => `给 ${agent} 发消息（Enter 发送，Shift+Enter 换行，/ 调出命令，@ 引用路径，! 运行 shell 命令）`,
+    idle: (agent) => `给 ${agent} 发消息 · / 命令 · @ 文件 · ! shell`,
     queue: "排队",
     steer: "并入",
     afterTurn: "轮次后",

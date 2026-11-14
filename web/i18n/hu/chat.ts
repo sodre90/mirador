@@ -198,7 +198,7 @@ export const chat: Messages["chat"] = {
     busySteer: "a köréhez adja az üzenetedet",
     busyAfterTurn: "a köre után küldi el az üzenetedet",
     notResponding: "Az ágens nem válaszol. A Kényszerített leállítás leállítja a folyamatát; a profil többi beszélgetése folytatódik",
-    idle: (agent) => `Üzenet ide: ${agent} (Enter: küldés, Shift+Enter: új sor, /: parancsai, @: útvonal, !: shell-parancs futtatása)`,
+    idle: (agent) => `Üzenet ide: ${agent} · / parancsok · @ fájlok · ! shell`,
     queue: "Sorba állítás",
     steer: "Körhöz adás",
     afterTurn: "Kör után",

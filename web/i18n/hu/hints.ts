@@ -36,6 +36,7 @@ export const hints: Messages["hints"] = {
   copyReplyAsMarkdown: "Markdownként másolja ennek a körnek a válaszát, a futtatott eszközök nélkül.",
   keepTalking:
     "Miután a diktált üzenetedre adott választ felolvasta, a mikrofon újra megnyílik, és amit ezután mondasz, azonnal elküldi. A „stop” vagy „thanks” szó, illetve az Esc befejezi. Ha az ágens közben kérdez, azt felolvassa, hogy hanggal válaszolhass; mondd, hogy „help”, és meghallod, mit mondhatsz.",
+  sendMessage: "Elküldi az üzenetet. A Shift+Enter új sort kezd, a / az ágens parancsait listázza, a @ útvonalat egészít ki, a ! pedig shell-parancsot futtat.",
   sendRightAway: "Azonnal elküldi, amit mondtál, amint szöveggé vált, ahelyett hogy az üzenetmezőben hagyná, hogy előbb ellenőrizhesd.",
   dictate: "Beszélj gépelés helyett. Koppints az indításhoz; megáll, ha szünetet tartasz vagy újra koppintasz; vagy tartsd lenyomva, amíg beszélsz. Amit mondtál, a kurzor helyére kerül.",
   dictateOff: "A diktáláshoz beszédfelismerés kell. A Beállítások → Hang részben kapcsolhatod be.",

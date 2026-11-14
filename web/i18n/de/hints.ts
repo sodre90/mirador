@@ -37,6 +37,7 @@ export const hints: Messages["hints"] = {
   copyReplyAsMarkdown: "Kopiert die Antwort dieser Runde als Markdown, ohne die Werkzeuge, die sie nutzte.",
   keepTalking:
     "Sobald die Antwort auf das, was du diktiert hast, vorgelesen ist, öffnet sich das Mikrofon wieder, und was du als Nächstes sagst, wird sofort gesendet. „stop“ oder „thanks“ zu sagen, oder Esc, beendet es. Eine Frage, die der Agent in der Zwischenzeit stellt, wird vorgelesen, damit du per Stimme antworten kannst; sag „help“, um zu hören, was du sagen kannst.",
+  sendMessage: "Sendet die Nachricht. Shift+Enter beginnt eine neue Zeile, / listet die Befehle des Agenten auf, @ vervollständigt einen Pfad und ! führt einen Shell-Befehl aus.",
   sendRightAway: "Sendet, was du gesagt hast, sobald es Text ist, statt es im Nachrichtenfeld zu lassen, damit du es zuerst prüfst.",
   dictate:
     "Sprechen statt tippen. Tippe darauf, um zu starten; es stoppt, wenn du eine Pause machst oder erneut darauf tippst. Oder halte es gedrückt, während du sprichst. Was du gesagt hast, kommt an die Cursorposition.",

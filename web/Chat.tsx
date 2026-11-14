@@ -2098,7 +2098,7 @@ function Composer({
             </button>
           ) : (
             command === null && (
-              <button className="send" data-shortcut={shortcutKeys().send} onClick={() => send()} disabled={!text.trim() || attaching || stoppedEdit.goingBack}>
+              <button className="send" data-shortcut={shortcutKeys().send} data-hint={hints.sendMessage} onClick={() => send()} disabled={!text.trim() || attaching || stoppedEdit.goingBack}>
                 {words.composer.send}
               </button>
             )

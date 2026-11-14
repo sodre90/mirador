@@ -34,6 +34,7 @@ export const hints = {
   copyReply: "Copies this turn's reply as formatted text, without the tools it ran.",
   copyReplyAsMarkdown: "Copies this turn's reply as Markdown, without the tools it ran.",
   keepTalking: "Once the reply to what you dictated has been read aloud, the microphone opens again and what you say next is sent right away. Saying \"stop\" or \"thanks\", or Esc, ends it. A question the agent asks meanwhile is read aloud for you to answer by voice; say \"help\" to hear what you can say.",
+  sendMessage: "Sends the message. Shift+Enter starts a new line, / lists the agent's commands, @ completes a path, and ! runs a shell command.",
   sendRightAway: "Sends what you said as soon as it is text, instead of leaving it in the message box for you to check first.",
   dictate: "Speak instead of typing. Tap to start, and it stops when you pause or tap again; or hold it while you talk. What you said goes in at the caret.",
   dictateOff: "Dictating needs speech recognition. Settings → Voice can turn it on.",

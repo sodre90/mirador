@@ -205,7 +205,7 @@ export const chat = {
     busySteer: "adds your message to its turn",
     busyAfterTurn: "sends your message after its turn",
     notResponding: "The agent is not responding. Force stop ends its process; other conversations on the profile continue",
-    idle: (agent: string) => `Message ${agent} (Enter to send, Shift+Enter for a new line, / for its commands, @ for a path, ! to run a shell command)`,
+    idle: (agent: string) => `Message ${agent} · / commands · @ files · ! shell`,
     queue: "Queue",
     steer: "Steer",
     afterTurn: "After turn",

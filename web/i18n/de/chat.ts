@@ -203,8 +203,7 @@ export const chat: Messages["chat"] = {
     busySteer: "fügt deine Nachricht seiner Runde hinzu",
     busyAfterTurn: "sendet deine Nachricht nach seiner Runde",
     notResponding: "Der Agent antwortet nicht. „Stoppen erzwingen“ beendet seinen Prozess; andere Unterhaltungen auf dem Profil laufen weiter",
-    idle: (agent) =>
-      `Nachricht an ${agent} (Enter zum Senden, Shift+Enter für eine neue Zeile, / für seine Befehle, @ für einen Pfad, ! für einen Shell-Befehl)`,
+    idle: (agent) => `Nachricht an ${agent} · / Befehle · @ Dateien · ! Shell`,
     queue: "Einreihen",
     steer: "In die Runde",
     afterTurn: "Nach der Runde",

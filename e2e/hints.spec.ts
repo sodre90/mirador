@@ -55,6 +55,13 @@ test("the hint of a button that has a shortcut shows its key", async ({ page }) 
   await expect(hint.locator("kbd")).toHaveText(/^(⌥T|Alt\+T)$/);
 });
 
+test("the message box names its keys on one line, and the Send button's hint says them in full", async ({ page }) => {
+  await signIn(page, host);
+  await page.getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page.locator(".composer:visible textarea")).toHaveAttribute("placeholder", "Message Claude Code · / commands · @ files · ! shell");
+  await expect(page.locator(".composer:visible button.send")).toHaveAttribute("data-hint", /^Sends the message\. Shift\+Enter starts a new line/);
+});
+
 test("help text in the app stays where it is written, unlike the hint bubble", async ({ page }) => {
   await signIn(page, host);
   await page.getByRole("button", { name: "Continue a session…" }).click();

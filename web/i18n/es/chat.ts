@@ -202,7 +202,7 @@ export const chat: Messages["chat"] = {
     busySteer: "agrega tu mensaje a su turno",
     busyAfterTurn: "envía tu mensaje después de su turno",
     notResponding: "El agente no responde. Forzar detención termina su proceso; las demás conversaciones del perfil continúan",
-    idle: (agent) => `Escribe a ${agent} (Enter para enviar, Shift+Enter para una línea nueva, / para sus comandos, @ para una ruta, ! para ejecutar un comando de shell)`,
+    idle: (agent) => `Escribe a ${agent} · / comandos · @ archivos · ! shell`,
     queue: "Poner en cola",
     steer: "Sumar al turno",
     afterTurn: "Tras el turno",

@@ -35,6 +35,7 @@ export const hints: Messages["hints"] = {
   copyReplyAsMarkdown: "以 Markdown 复制本轮次的回复，不含其中运行的工具。",
   keepTalking:
     "对你听写的内容的回复朗读完后，麦克风会再次打开，你接着说的话会立即发送。说“stop”或“thanks”，或按 Esc 即可结束。其间 Agent 提出的问题会朗读给你，你可以用语音回答；说“help”可以听到能说什么。",
+  sendMessage: "发送消息。Shift+Enter 换行，/ 列出 Agent 的命令，@ 补全路径，! 运行 shell 命令。",
   sendRightAway: "你说的话一变成文字就立即发送，而不是先留在消息框里让你检查。",
   dictate: "用说话代替打字。点一下开始，停顿或再点一下即停止；也可以按住不放边说边录。你说的内容会插入光标处。",
   dictateOff: "听写需要语音识别。可以在设置 → 语音中打开。",
