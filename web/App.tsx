@@ -61,7 +61,7 @@ import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
-import { idBelowGroup, landingBefore } from "./workspace-groups.ts";
+import { idBelowGroup, landingBefore } from "../shared/workspace-drop.ts";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
 

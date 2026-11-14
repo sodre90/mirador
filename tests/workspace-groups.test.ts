@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { Workspace, WorkspaceGroup } from "../shared/model.ts";
 import { sidebarItems } from "../shared/sidebar-order.ts";
-import { idBelowGroup, landingBefore, movesWorkspace, workspaceDropAt, type SidebarRow } from "../web/workspace-groups.ts";
+import { idBelowGroup, landingBefore, movesWorkspace, workspaceDropAt, type SidebarRow } from "../shared/workspace-drop.ts";
 
 const workspace = (id: string, groupId: string | null, position: number): Workspace => ({
   id,

@@ -43,7 +43,8 @@ import { parentFolder } from "./workspace-folder.ts";
 import { CONVERSATION_ORDERS, landingBeforeInCustomOrder, usualDirection, type ConversationOrder, type OrderDirection } from "../shared/conversation-order.ts";
 import { markInitials, workspaceMarkColor } from "../shared/marks.ts";
 import { sidebarItems, type SidebarItem } from "../shared/sidebar-order.ts";
-import { forgetFoldsOfDeleted, landingBefore, movesWorkspace, setDelegationsOpen, setGroupFolded, setWorkspaceFolded, useFoldedGroups, useFoldedWorkspaces, useOpenedDelegations, workspaceDropAt, type SidebarRow, type WorkspaceDrop } from "./workspace-groups.ts";
+import { forgetFoldsOfDeleted, setDelegationsOpen, setGroupFolded, setWorkspaceFolded, useFoldedGroups, useFoldedWorkspaces, useOpenedDelegations } from "./workspace-groups.ts";
+import { landingBefore, movesWorkspace, workspaceDropAt, type SidebarRow, type WorkspaceDrop } from "../shared/workspace-drop.ts";
 
 function useDirectoryCompletions(prefix: string) {
   const [completions, setCompletions] = useState({ directories: [] as string[], createsDirectory: false });
