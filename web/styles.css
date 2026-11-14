@@ -1828,7 +1828,8 @@ button.icon.workspace-fold {
   font-weight: 600;
 }
 
-.plugin-row:not(.on) .plugin-row-name {
+.plugin-row:not(.on) .plugin-row-name,
+.plugin-profile:not(.on) .plugin-row-name {
   color: var(--muted);
 }
 
@@ -1858,8 +1859,9 @@ button.icon.workspace-fold {
   transform: rotate(90deg);
 }
 
-.profile-editor label.plugin-switch {
+label.plugin-switch {
   position: relative;
+  display: flex;
   flex: none;
   width: 44px;
   height: 44px;
@@ -8327,6 +8329,29 @@ body.reordering * {
   display: grid;
   gap: 8px;
   justify-items: start;
+}
+
+.plugin-profiles {
+  justify-self: stretch;
+}
+
+.plugin-profiles ul {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plugin-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 4px 0 4px 4px;
+  border-top: 1px solid var(--border);
+}
+
+.plugin-profile:last-child {
+  border-bottom: 1px solid var(--border);
 }
 
 .plugin-detail > * {

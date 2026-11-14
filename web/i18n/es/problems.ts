@@ -173,6 +173,7 @@ export const problems: Messages["problems"] = {
   tabTerminalLimit: (count) => `Una pestaña admite como máximo ${count} terminales.`,
   unknownWorkspace: (id) => `Espacio de trabajo desconocido: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} no tiene el ajuste ${setting}.`,
+  pluginNotTurnable: (plugin) => `${plugin} no es un plugin que un perfil pueda activar o desactivar.`,
   notASettingChoice: (value, setting) => `${value} no es una de las opciones de ${setting}.`,
   pluginSettingNotPerConversation: (setting) => `${setting} se ajusta en el perfil, no para una conversación.`,
   appNotInstalled: (app) => `No hay ninguna aplicación instalada llamada ${app}.`,

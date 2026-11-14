@@ -113,6 +113,8 @@ export type ClientMessage =
   | { type: "workspace-group.delete"; groupId: string }
   | { type: "profile.save"; requestId: string; profile: ProfileDraft }
   | { type: "profile.delete"; profileId: string }
+  /** Turns one plugin on or off for a profile as stored, as its switch in the Profiles dialog would, without that dialog's unsaved edits. */
+  | { type: "profile.turn-plugin"; profileId: string; plugin: string; on: boolean }
   /** Asks what the profile's agent offers now, so a profile editor can list models, modes and efforts without one of its conversations having run. */
   | { type: "profile.choices.get"; requestId: string; profileId: string }
   /** Starts the agent the draft describes, which need not be saved, and asks what it offers. */

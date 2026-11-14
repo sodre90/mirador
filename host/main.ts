@@ -39,7 +39,7 @@ import { installedHarnesses } from "./acp/harnesses.ts";
 import { giveEveryWorkspaceAProfile, moveProfilelessOntoProfiles, ProfileService } from "./profiles.ts";
 import { HostRestart, relaunch, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "./restart.ts";
 import { DesktopAppCheck } from "./desktop-app-check.ts";
-import type { PluginUpdate } from "../shared/apps.ts";
+import { switchOf, type PluginUpdate } from "../shared/apps.ts";
 import { Lookout } from "./lookout.ts";
 import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-version.ts";
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
@@ -157,7 +157,11 @@ const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugi
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
 const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
 const networkAssetsServer = network && certificate && serveCanvasAssets(network.canvasPort, { certificate, knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
-const profiles = new ProfileService(store, hub, conversations, pluginSettings.secretSettings());
+const profiles = new ProfileService(store, hub, conversations, pluginSettings.secretSettings(), (plugin) => {
+  const pluginSwitch = switchOf(pluginSettings.all().find((each) => each.plugin === plugin)?.profileSettings);
+  const givesConversations = canvasPlugins.conversationPlugins().some((each) => each.plugin === plugin);
+  return pluginSwitch || givesConversations ? { pluginSwitch } : undefined;
+});
 profiles.whenProfilesChange(() => canvasPlugins.profilesChanged());
 profiles.whenSavedOver((previous, saved) => {
   if (canvasPlugins.pluginsOffFor(previous).join("\n") !== canvasPlugins.pluginsOffFor(saved).join("\n")) mcp.toolsChangedForProfile(saved.id);

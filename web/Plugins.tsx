@@ -14,6 +14,7 @@ import {
   type PluginUpdate as FoundUpdate,
   type PluginUpdateMode,
 } from "../shared/apps.ts";
+import type { Profile } from "../shared/model.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection, type ConnectionStatus } from "./connection.ts";
@@ -22,6 +23,7 @@ import { describedText, replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { choosePluginSetting, usePluginSettings } from "./plugin-settings.ts";
 import { PluginIcon } from "./PluginIcon.tsx";
+import { PluginProfiles } from "./PluginProfiles.tsx";
 
 const words = t.plugins;
 
@@ -276,6 +278,9 @@ function SettingsOf({ settings }: { settings: SettingsOfPlugin }) {
 }
 
 /** A plugin as the gallery shows it: installed, from the catalog, or both. */
+/** Opens the Profiles dialog at a profile's row for a plugin. */
+type OpenProfile = (profileId: string, plugin: string) => void;
+
 interface GalleryPlugin {
   key: string;
   title: string;
@@ -497,12 +502,16 @@ function InstalledDetail({
   news,
   updateMode,
   startUpdating,
+  profiles,
+  onOpenProfile,
 }: {
   plugin: PluginInfo;
   title: string;
   news: FoundUpdate | undefined;
   updateMode: PluginUpdateMode;
   startUpdating: boolean;
+  profiles: Profile[];
+  onOpenProfile: OpenProfile;
 }) {
   const settings = usePluginSettings().find(({ plugin: name }) => name === plugin.name);
   const [problem, setProblem] = useState<string | null>(null);
@@ -519,6 +528,7 @@ function InstalledDetail({
           <SettingsOf settings={settings} />
         </>
       )}
+      {plugin.name && <PluginProfiles plugin={plugin.name} profiles={profiles} onOpenProfile={onOpenProfile} />}
       {plugin.source.kind === "git" && plugin.source.release !== null && updateMode !== "ask" && (
         <label className="plugin-updates-by-itself" data-hint={hints.pluginUpdatesByItself}>
           <input type="checkbox" checked={plugin.updatesByItself} onChange={(event) => setUpdatesByItself(event.target.checked)} />
@@ -561,7 +571,23 @@ function InstalledDetail({
   );
 }
 
-function PluginDetail({ plugin, news, updateMode, start, onBack }: { plugin: GalleryPlugin; news: FoundUpdate | undefined; updateMode: PluginUpdateMode; start: Start; onBack: () => void }) {
+function PluginDetail({
+  plugin,
+  news,
+  updateMode,
+  start,
+  profiles,
+  onOpenProfile,
+  onBack,
+}: {
+  plugin: GalleryPlugin;
+  news: FoundUpdate | undefined;
+  updateMode: PluginUpdateMode;
+  start: Start;
+  profiles: Profile[];
+  onOpenProfile: OpenProfile;
+  onBack: () => void;
+}) {
   const installing = useInstallOfficial(plugin.installed ? null : plugin.official, start === "install");
   return (
     <section className="plugin-detail" aria-label={plugin.title}>
@@ -579,7 +605,9 @@ function PluginDetail({ plugin, news, updateMode, start, onBack }: { plugin: Gal
       {descriptionOf(plugin) && <p className="plugin-description">{descriptionOf(plugin)}</p>}
       {!plugin.installed && <InstallConsent installing={installing} />}
       {picturesOf(plugin).length > 0 && <Screenshots title={plugin.title} screenshots={picturesOf(plugin)} />}
-      {plugin.installed && <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} updateMode={updateMode} startUpdating={start === "update"} />}
+      {plugin.installed && (
+        <InstalledDetail plugin={plugin.installed} title={plugin.title} news={news} updateMode={updateMode} startUpdating={start === "update"} profiles={profiles} onOpenProfile={onOpenProfile} />
+      )}
     </section>
   );
 }
@@ -791,7 +819,19 @@ function UpdateModeChoice({ mode }: { mode: PluginUpdateMode }) {
 }
 
 /** Plugins, as a gallery of what each does; a tile opens what it gives the agent, its settings and its upkeep. */
-export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pluginUpdates: FoundUpdate[]; pluginUpdateMode: PluginUpdateMode; onClose: () => void }) {
+export function PluginsDialog({
+  pluginUpdates,
+  pluginUpdateMode,
+  profiles,
+  onOpenProfile,
+  onClose,
+}: {
+  pluginUpdates: FoundUpdate[];
+  pluginUpdateMode: PluginUpdateMode;
+  profiles: Profile[];
+  onOpenProfile: OpenProfile;
+  onClose: () => void;
+}) {
   const listed = usePluginsListed();
   const [opened, setOpened] = useState<{ key: string; start: Start } | null>(null);
   useEffect(() => {
@@ -836,7 +876,16 @@ export function PluginsDialog({ pluginUpdates, pluginUpdateMode, onClose }: { pl
             </p>
           )}
           {openedPlugin ? (
-            <PluginDetail key={openedPlugin.key} plugin={openedPlugin} news={newsOf(openedPlugin)} updateMode={pluginUpdateMode} start={opened.start} onBack={() => setOpened(null)} />
+            <PluginDetail
+              key={openedPlugin.key}
+              plugin={openedPlugin}
+              news={newsOf(openedPlugin)}
+              updateMode={pluginUpdateMode}
+              start={opened.start}
+              profiles={profiles}
+              onOpenProfile={onOpenProfile}
+              onBack={() => setOpened(null)}
+            />
           ) : (
             <>
               <p className="hint">{words.intro}</p>

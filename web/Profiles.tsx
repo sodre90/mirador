@@ -248,6 +248,7 @@ function ProfileEditor({
   conversations,
   installedAgents,
   isOnlyProfile = false,
+  openPlugin,
   onMoreOptions,
   onSaved,
 }: {
@@ -262,6 +263,8 @@ function ProfileEditor({
   conversations: Conversation[];
   installedAgents: HarnessId[];
   isOnlyProfile?: boolean;
+  /** The plugin whose row the Plugins tab opens with. */
+  openPlugin?: string;
   /** Given while the editor shows only what a first profile needs. */
   onMoreOptions?: () => void;
   onSaved: (profileId: string) => void;
@@ -548,6 +551,7 @@ function ProfileEditor({
               saved={saved}
               onChooseSetting={choosePluginSetting}
               onPluginsTurned={({ pluginsOff, pluginSettings }) => set({ pluginsOff, pluginSettings })}
+              initiallyOpen={openPlugin}
               draft={draft}
             />
           </div>
@@ -620,15 +624,19 @@ export function ProfilesDialog({
   profiles,
   conversations,
   installedAgents,
+  pluginRow: openedAt,
   onClose,
 }: {
   profiles: Profile[];
   conversations: Conversation[];
   installedAgents: HarnessId[];
+  /** The plugin row to open on the profile's Plugins tab, until another profile is picked. */
+  pluginRow?: { profileId: string; plugin: string };
   onClose: () => void;
 }) {
-  const [selectedId, setSelectedId] = useState(profiles[0]?.id ?? NEW_PROFILE);
-  const [tab, setTab] = useState<EditorTab>("launch");
+  const [pluginRow, setPluginRow] = useState(openedAt);
+  const [selectedId, setSelectedId] = useState(openedAt?.profileId ?? profiles[0]?.id ?? NEW_PROFILE);
+  const [tab, setTab] = useState<EditorTab>(openedAt ? "plugins" : "launch");
   const [drafts, setDrafts] = useState<Record<string, ProfileForm>>({});
   const [askedBeforeClosing, setAskedBeforeClosing] = useState(false);
   const selected = profiles.find(({ id }) => id === selectedId);
@@ -643,6 +651,10 @@ export function ProfilesDialog({
   const editedProfileNames = [...profiles.filter(({ id }) => hasUnsavedEdits(id)).map(({ name }) => name), ...(hasUnsavedEdits(NEW_PROFILE) ? [words.newProfileHeading] : [])];
   const hasEdits = editedProfileNames.length > 0;
 
+  const select = (key: string) => {
+    setSelectedId(key);
+    setPluginRow(undefined);
+  };
   const changeSelectedForm: ChangeForm = (change) => setDrafts((current) => ({ ...current, [selectedKey]: change(current[selectedKey] ?? savedFormOf(selectedKey)) }));
   const forgetDraftOnceSaved = (profileId: string) => {
     setDrafts(({ [selectedKey]: savedDraft, ...others }) => others);
@@ -694,14 +706,14 @@ export function ProfilesDialog({
         <div className="profiles-body">
           <ul className="profile-list">
             {profiles.map((profile) => (
-              <li key={profile.id} className={profile.id === selectedId ? "selected" : ""} onClick={() => setSelectedId(profile.id)}>
+              <li key={profile.id} className={profile.id === selectedId ? "selected" : ""} onClick={() => select(profile.id)}>
                 <ProfileDot profile={profile} />
                 {profile.name}
                 {hasUnsavedEdits(profile.id) && <UnsavedMark />}
                 <span className="profile-agent">{harnessLabels[profile.harness]}</span>
               </li>
             ))}
-            <li className={selectedId === NEW_PROFILE ? "selected" : ""} onClick={() => setSelectedId(NEW_PROFILE)}>
+            <li className={selectedId === NEW_PROFILE ? "selected" : ""} onClick={() => select(NEW_PROFILE)}>
               {words.newProfile}
               {hasUnsavedEdits(NEW_PROFILE) && <UnsavedMark />}
             </li>
@@ -718,6 +730,7 @@ export function ProfilesDialog({
             conversations={conversations}
             installedAgents={installedAgents}
             isOnlyProfile={profiles.length === 1 && selected !== undefined}
+            openPlugin={pluginRow?.profileId === selectedKey ? pluginRow.plugin : undefined}
             onSaved={forgetDraftOnceSaved}
           />
         </div>

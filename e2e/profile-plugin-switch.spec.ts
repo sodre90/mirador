@@ -1,7 +1,20 @@
 import { cpSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, canvasToolNames, createProfile, openPluginRow, openProfiles, openProfileTab, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import {
+  addWorkspace,
+  canvasToolNames,
+  createProfile,
+  openPluginDetail,
+  openPluginRow,
+  openPlugins,
+  openProfiles,
+  openProfileTab,
+  sendMessage,
+  signIn,
+  startConversation,
+  waitForTurnToEnd,
+} from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -227,5 +240,56 @@ test("a plugin turned off for a profile gives its conversations none of its tool
     await expect(meterChips.locator(".plugin-chip")).toHaveText(["⏱", "Total basic", "Session $1.25"]);
     await expect.poll(() => canvasToolNames(host, conversationId)).toContain("show_card");
     await expectSlashMenuOffers(page, "/board:show_card", true);
+  });
+});
+
+test("a plugin's page in Plugins… lists every profile with its switch and what it holds, turns the plugin for one profile at once, and opens that profile at the plugin's row", async ({ page }) => {
+  await signIn(page, host);
+  const plugins = await openPlugins(page);
+  const profileOf = (section: Locator, name: string) => section.getByRole("listitem").filter({ has: page.getByText(name, { exact: true }) });
+
+  await test.step("Meter's page shows which profile has it on and which needs setup", async () => {
+    const meter = (await openPluginDetail(plugins, "Meter")).getByRole("region", { name: "Profiles" });
+    await expect(profileOf(meter, PROFILE).locator(".plugin-summary")).toHaveText("Fill in Meter key");
+    await expect(profileOf(meter, PROFILE).getByText("Needs setup", { exact: true })).toBeVisible();
+    await expect(meter.getByRole("switch", { name: `Use Meter in ${PROFILE}` })).toBeChecked();
+    await expect(profileOf(meter, "Claude Code").locator(".plugin-summary")).toHaveText("Off for this profile");
+    await expect(meter.getByRole("switch", { name: "Use Meter in Claude Code" })).not.toBeChecked();
+    await plugins.getByRole("button", { name: "← All plugins" }).click();
+  });
+
+  await test.step("a plugin with nothing to set has a switch for each profile and no settings to open", async () => {
+    const pin = (await openPluginDetail(plugins, "Pin")).getByRole("region", { name: "Profiles" });
+    await expect(pin.getByRole("switch", { name: `Use Pin in ${PROFILE}` })).toHaveAccessibleDescription("Pins a note above the chat.");
+    await expect(pin.getByRole("button")).toHaveCount(0);
+    await expect(pin.getByText("Each switch turns the plugin on or off for its profile and saves it at once.", { exact: true })).toBeVisible();
+    await plugins.getByRole("button", { name: "← All plugins" }).click();
+  });
+
+  const board = (await openPluginDetail(plugins, "Board")).getByRole("region", { name: "Profiles" });
+  await test.step("turning Board off for one profile saves that profile at once and leaves the others on", async () => {
+    await expect(profileOf(board, PROFILE).locator(".plugin-summary")).toHaveText("Hand over to: None · Hand over model: Agent's default");
+    await board.getByRole("switch", { name: `Use Board in ${PROFILE}` }).uncheck();
+    await expect(board.getByRole("switch", { name: `Use Board in ${PROFILE}` })).not.toBeChecked();
+    await expect(profileOf(board, PROFILE).locator(".plugin-summary")).toHaveText("Off for this profile");
+    await expect(board.getByRole("switch", { name: "Use Board in Claude Code" })).toBeChecked();
+  });
+
+  await test.step("Settings opens the Profiles dialog on that profile's Plugins tab, with the plugin's row open and turned as saved", async () => {
+    await board.getByRole("button", { name: `Plugin settings in ${PROFILE}` }).click();
+    const profiles = page.getByRole("dialog", { name: "Profiles" });
+    await expect(profiles.locator(".profile-list li.selected")).toContainText(PROFILE);
+    await expect(profiles.getByRole("tab", { name: "Plugins" })).toHaveAttribute("aria-selected", "true");
+    const row = profiles.getByRole("group", { name: "Board", exact: true });
+    await expect(row.getByRole("button", { name: "Board", exact: true })).toHaveAttribute("aria-expanded", "true");
+    await expect(row.getByText("Turn on Board to use it in this profile's conversations.")).toBeVisible();
+    await expect(pluginSwitch(profiles, "Board")).not.toBeChecked();
+    await expect(unsavedMarkOf(profiles, "Board")).toHaveCount(0);
+  });
+
+  await test.step("picking another profile opens its Plugins tab with every row closed", async () => {
+    const profiles = page.getByRole("dialog", { name: "Profiles" });
+    await profiles.locator(".profile-list li", { hasText: "Claude Code" }).click();
+    await expect(profiles.getByRole("group", { name: "Board", exact: true }).getByRole("button", { name: "Board", exact: true })).toHaveAttribute("aria-expanded", "false");
   });
 });

@@ -35,7 +35,8 @@ export type Overlay =
   | { kind: "reminder"; conversationId: string; text?: string; mode?: ReminderMode }
   | { kind: "help" }
   | { kind: "search" }
-  | { kind: "profiles" }
+  /** `pluginRow` opens that profile on its Plugins tab, with that plugin's row open. */
+  | { kind: "profiles"; pluginRow?: { profileId: string; plugin: string } }
   | { kind: "machines" }
   | { kind: "plugins" }
   | { kind: "sessions"; workspaceId: string }

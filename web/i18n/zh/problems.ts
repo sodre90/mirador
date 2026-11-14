@@ -169,6 +169,7 @@ export const problems: Messages["problems"] = {
   tabTerminalLimit: (count) => `一个标签页最多容纳 ${count} 个终端。`,
   unknownWorkspace: (id) => `未知工作区：${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} 没有设置项 ${setting}。`,
+  pluginNotTurnable: (plugin) => `${plugin} 不是配置可以开启或关闭的插件。`,
   notASettingChoice: (value, setting) => `${value} 不是 ${setting} 的选项之一。`,
   pluginSettingNotPerConversation: (setting) => `${setting} 在配置中设置，不能只为一个对话设置。`,
   appNotInstalled: (app) => `没有安装名为 ${app} 的应用。`,

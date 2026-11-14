@@ -174,6 +174,7 @@ export const problems: Messages["problems"] = {
   tabTerminalLimit: (count) => `Ein Tab fasst höchstens ${count} Terminals.`,
   unknownWorkspace: (id) => `Unbekannter Arbeitsbereich: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} hat keine Einstellung ${setting}.`,
+  pluginNotTurnable: (plugin) => `${plugin} ist kein Plugin, das ein Profil ein- oder ausschalten kann.`,
   notASettingChoice: (value, setting) => `${value} gehört nicht zu den Auswahlmöglichkeiten von ${setting}.`,
   pluginSettingNotPerConversation: (setting) => `${setting} wird im Profil eingestellt, nicht für eine einzelne Unterhaltung.`,
   appNotInstalled: (app) => `Es ist keine App namens ${app} installiert.`,

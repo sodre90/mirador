@@ -57,6 +57,7 @@ export type HostProblem =
   | { code: "tab-terminal-limit"; count: number }
   | { code: "unknown-workspace"; id: string }
   | { code: "plugin-has-no-setting"; plugin: string; setting: string }
+  | { code: "plugin-not-turnable"; plugin: string }
   | { code: "not-a-setting-choice"; value: string; setting: string }
   | { code: "plugin-setting-not-per-conversation"; setting: string }
   | { code: "app-not-installed"; app: string }

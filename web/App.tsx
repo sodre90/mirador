@@ -799,7 +799,7 @@ export function App() {
         <SearchDialog workspaces={state.workspaces} conversations={state.conversations} onOpen={(conversationId) => select(conversationId)} onClose={closeOverlay} />
       )}
       {overlay?.kind === "profiles" && (
-        <ProfilesDialog profiles={state.profiles} conversations={state.conversations} installedAgents={state.installedAgents} onClose={closeOverlay} />
+        <ProfilesDialog profiles={state.profiles} conversations={state.conversations} installedAgents={state.installedAgents} pluginRow={overlay.pluginRow} onClose={closeOverlay} />
       )}
       {overlay?.kind === "machines" && (
         <MachinesDialog
@@ -812,7 +812,15 @@ export function App() {
           onClose={closeOverlay}
         />
       )}
-      {overlay?.kind === "plugins" && <PluginsDialog pluginUpdates={state.pluginUpdates} pluginUpdateMode={state.pluginUpdateMode} onClose={closeOverlay} />}
+      {overlay?.kind === "plugins" && (
+        <PluginsDialog
+          pluginUpdates={state.pluginUpdates}
+          pluginUpdateMode={state.pluginUpdateMode}
+          profiles={state.profiles}
+          onOpenProfile={(profileId, plugin) => dispatch({ type: "open-overlay", overlay: { kind: "profiles", pluginRow: { profileId, plugin } } })}
+          onClose={closeOverlay}
+        />
+      )}
       {overlay?.kind === "settings" && (
         <SettingsDialog
           page={overlay.page}

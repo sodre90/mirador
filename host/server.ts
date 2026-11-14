@@ -1135,6 +1135,8 @@ export function startServer(services: HostServices) {
         return reply({ type: "profile.saved", requestId: message.requestId, profileId: profiles.save(message.profile).id });
       case "profile.delete":
         return profiles.delete(message.profileId);
+      case "profile.turn-plugin":
+        return void profiles.turnPlugin(message.profileId, message.plugin, message.on);
       case "profile.choices.get":
         return void conversations
           .profileChoices(message.profileId)

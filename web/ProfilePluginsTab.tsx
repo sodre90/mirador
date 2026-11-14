@@ -262,7 +262,7 @@ function PluginRowView({ row, open, onToggleOpen, form, saved, profileId, profil
     </>
   );
   return (
-    <section className={`plugin-row${on ? " on" : ""}`} role="group" aria-labelledby={titleId}>
+    <section className={`plugin-row${on ? " on" : ""}`} role="group" aria-labelledby={titleId} data-plugin={row.plugin}>
       <div className="plugin-row-head">
         {opensInPlace ? (
           <button type="button" className="plugin-disclose" aria-labelledby={titleId} aria-describedby={describedBy} aria-expanded={open} aria-controls={bodyId} onClick={onToggleOpen}>
@@ -339,7 +339,7 @@ function PluginGroup({ heading, children }: { heading: string; children: ReactNo
   );
 }
 
-const usePluginRows = () => pluginRows(conversationPlugins(), usePluginSettings(), titlesOfPlugins(), looksOfPlugins());
+export const usePluginRows = () => pluginRows(conversationPlugins(), usePluginSettings(), titlesOfPlugins(), looksOfPlugins());
 
 /** Whether the profile has anything to set on the Plugins tab: a plugin to turn off, or a plugin's setting. */
 export const usePluginsTabHasRows = () => usePluginRows().length > 0;
@@ -356,6 +356,7 @@ export function ProfilePluginsTab({
   saved,
   onChooseSetting,
   onPluginsTurned,
+  initiallyOpen,
   draft,
 }: {
   profileId: string | undefined;
@@ -364,11 +365,12 @@ export function ProfilePluginsTab({
   saved: ProfilePlugins;
   onChooseSetting: (plugin: string, settingId: string, value: string) => void;
   onPluginsTurned: (plugins: ProfilePlugins) => void;
+  initiallyOpen?: string;
   draft: () => ProfileDraft;
 }) {
   const rows = usePluginRows();
   const [query, setQuery] = useState("");
-  const [open, setOpen] = useState<string[]>([]);
+  const [open, setOpen] = useState<string[]>(initiallyOpen ? [initiallyOpen] : []);
   const [focusingMissing, setFocusingMissing] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const rowsRef = useRef<HTMLDivElement>(null);
@@ -377,6 +379,9 @@ export function ProfilePluginsTab({
     rowsRef.current?.querySelector<HTMLElement>("[data-missing]")?.focus();
     setFocusingMissing(false);
   }, [focusingMissing]);
+  useEffect(() => {
+    if (initiallyOpen) rowsRef.current?.querySelector(`[data-plugin="${CSS.escape(initiallyOpen)}"]`)?.scrollIntoView({ block: "start" });
+  }, [initiallyOpen]);
   const shownRows = rows.filter((row) => matchesSearch(row, query));
   const groups = [
     { heading: tabWords.withSettings, rows: shownRows.filter(hasOwnSettings) },

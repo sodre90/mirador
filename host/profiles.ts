@@ -5,7 +5,7 @@ import type { ConversationService } from "./conversations.ts";
 import type { BrowserSocket, Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
-import { withoutSecrets, type SecretSettings } from "../shared/apps.ts";
+import { withoutSecrets, withPluginTurned, type PluginToggleProfileSetting, type SecretSettings } from "../shared/apps.ts";
 
 /** Every conversation runs on a profile, and a profile only on the agent it was made for; the picker sends both, and the host checks they agree. */
 export function profileToLaunch(store: Store, launch: Launch): Profile {
@@ -82,6 +82,12 @@ export const profileFor = (socket: BrowserSocket, profile: Profile, secrets: Sec
   return shownSettings ? { ...withoutLaunch, pluginSettings: shownSettings } : withoutLaunch;
 };
 
+/**
+ * How a profile turns a plugin: by the toggle its plugin.json makes its switch, or else by naming it among the plugins
+ * off. Undefined for a plugin a profile can't turn, one that neither gives conversations anything nor has a switch.
+ */
+export type PluginTurning = (plugin: string) => { pluginSwitch: PluginToggleProfileSetting | undefined } | undefined;
+
 /** The plugins a draft turns off, each once and sorted, so an unchanged choice compares equal. */
 function pluginNames(pluginsOff: unknown): string[] {
   if (!Array.isArray(pluginsOff) || !pluginsOff.every((name) => typeof name === "string")) throw new HostProblemError({ code: "profile-plugins-off-invalid" });
@@ -97,6 +103,7 @@ export class ProfileService {
     private readonly hub: Hub,
     private readonly conversations: ConversationService,
     private readonly secrets: SecretSettings,
+    private readonly turningOf: PluginTurning,
   ) {}
 
   /** What else follows the profiles, such as plugin tabs that list them, hears each save and delete. */
@@ -144,6 +151,15 @@ export class ProfileService {
     if (!existing) this.broadcastWorkspaces(giveEveryWorkspaceAProfile(this.store));
     this.profilesChanged();
     return profile;
+  }
+
+  /** Turns one plugin on or off for the profile as stored, saved as any edit is, so running conversations gain or lose it. */
+  turnPlugin(profileId: string, plugin: string, on: boolean): Profile {
+    const profile = this.store.findProfile(profileId);
+    if (!profile) throw new HostProblemError({ code: "profile-gone" });
+    const turning = this.turningOf(plugin);
+    if (!turning) throw new HostProblemError({ code: "plugin-not-turnable", plugin });
+    return this.save(withPluginTurned(profile, plugin, turning.pluginSwitch, on));
   }
 
   /** The last profile stays: without one, no conversation could start. Workspaces that used a deleted one move to another. */

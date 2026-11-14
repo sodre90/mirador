@@ -110,6 +110,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.unknownWorkspace(problem.id);
     case "plugin-has-no-setting":
       return words.pluginHasNoSetting(problem.plugin, problem.setting);
+    case "plugin-not-turnable":
+      return words.pluginNotTurnable(problem.plugin);
     case "not-a-setting-choice":
       return words.notASettingChoice(problem.value, problem.setting);
     case "plugin-setting-not-per-conversation":

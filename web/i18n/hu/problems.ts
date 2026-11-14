@@ -173,6 +173,7 @@ export const problems: Messages["problems"] = {
   tabTerminalLimit: (count) => `Egy lapon legfeljebb ${count} terminál lehet.`,
   unknownWorkspace: (id) => `Ismeretlen munkaterület: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `Ennek a bővítménynek (${plugin}) nincs ilyen beállítása: ${setting}.`,
+  pluginNotTurnable: (plugin) => `Ezt a bővítményt (${plugin}) egy profil nem kapcsolhatja be vagy ki.`,
   notASettingChoice: (value, setting) => `Ez nem választható itt (${setting}): ${value}.`,
   pluginSettingNotPerConversation: (setting) => `${setting} a profilban állítható, nem egy-egy beszélgetésre.`,
   appNotInstalled: (app) => `Nincs telepítve ilyen nevű alkalmazás: ${app}.`,

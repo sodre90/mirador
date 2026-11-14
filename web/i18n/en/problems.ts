@@ -171,6 +171,7 @@ export const problems = {
   tabTerminalLimit: (count: number) => `A tab holds at most ${count} terminals.`,
   unknownWorkspace: (id: string) => `Unknown workspace ${id}`,
   pluginHasNoSetting: (plugin: string, setting: string) => `${plugin} has no setting ${setting}.`,
+  pluginNotTurnable: (plugin: string) => `${plugin} isn't a plugin a profile can turn on or off.`,
   notASettingChoice: (value: string, setting: string) => `${value} is not one of the choices of ${setting}.`,
   pluginSettingNotPerConversation: (setting: string) => `${setting} is set in the profile, not for one conversation.`,
   appNotInstalled: (app: string) => `No app named ${app} is installed.`,
