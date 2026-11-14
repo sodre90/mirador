@@ -211,6 +211,7 @@ export const shell: Messages["shell"] = {
       toggleTerminal: "Mostrar / ocultar la terminal",
       search: "Buscar en todas las conversaciones de todos los espacios de trabajo",
       nextWaiting: "La conversación que más te necesita: primero la que pregunta o espera una aprobación, luego la que falló y después la terminada; otra vez para la siguiente",
+      ownMessages: "Tu mensaje anterior / siguiente en esta conversación, incluidos los más antiguos; después del último, la respuesta más reciente (no mientras editas texto)",
       markUnread:
         "Marcar esta conversación como no leída y volver a la que estaba abierta antes (haz clic derecho en una conversación de la barra lateral para marcar cualquiera)",
       find: "Buscar en esta conversación, incluidas las entradas anteriores y las tarjetas contraídas; Aa distingue mayúsculas y minúsculas (Enter: coincidencia anterior, Shift+Enter: siguiente)",

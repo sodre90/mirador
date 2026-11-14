@@ -406,6 +406,7 @@ Hovering almost any control explains what it does behind the scenes, together wi
 | `⌘⇧Y` | The conversation that most needs you: a question or an approval first, then a failed turn, then a finished one; again for the next. The palette has it too |
 | `⌘\` / `` ⌃` `` | Show or hide the canvas / the terminals |
 | `⌘⇧←` `⌘⇧→` `⌘⇧↓` | Focus the message box / the canvas / the terminal |
+| `⌘↑` `⌘↓` | Your previous or next message in the open conversation, earlier ones loading as you reach them; past your last one, the latest reply (not while editing text) |
 | `⌘F` / `⌘⇧F` | Find in the conversation (in a terminal, in its output) / search everywhere |
 | `⌘J` | In the message box, find a prompt template and put it in |
 | `⌘⇧Space` | Dictate: a tap listens until you pause, a hold until you let go |

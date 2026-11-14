@@ -35,6 +35,7 @@ import { launchLabel } from "./launch-label.ts";
 import { useProgramRequest } from "./program-request.ts";
 import { shownTitle } from "./shown-title.ts";
 import { requestOfTerminalPane, type TerminalPaneRequest } from "./terminal-pane-request.ts";
+import { stepThroughOwnMessages } from "./own-messages.ts";
 import { adjacentConversation, adjacentWorkspaceConversation, currentWorkspace, nextWaitingConversation, numberedConversation } from "./navigation.ts";
 import { Palette, ShortcutHelp, type PaletteEntry } from "./Palette.tsx";
 import { DEFAULT_SIDEBAR_WIDTH, inView, sidebarWidthWithinLimits, swapPanes, toggledInView, type PaneId, type PaneLayout } from "./layout.ts";
@@ -477,6 +478,8 @@ export function App() {
         return toggleTerminal();
       case "find":
         return findsInCanvasPage(fromCanvas, canvasPageHasFocus()) ? findInCanvasPage() : findInOpenConversation();
+      case "own-message":
+        return stepThroughOwnMessages(command.step);
       case "next-waiting":
         return select(nextWaitingConversation(state));
       case "mark-unread": {

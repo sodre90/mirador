@@ -46,6 +46,7 @@ import { isRawOutputOnHost } from "../shared/low-data.ts";
 import { FindBar, MatchesFind, useFind } from "./FindBar.tsx";
 import { useDragToReorder } from "./drag-to-reorder.ts";
 import { useEarlierHistory, type EarlierHistory } from "./earlier-history.ts";
+import { useOwnMessageSteps } from "./own-messages.ts";
 import { joinDrafts, useDraft } from "./drafts.ts";
 import { onWordsForComposer } from "./tab-handoffs.ts";
 import { useStoppedMessageEdit } from "./edit-stopped.ts";
@@ -2233,6 +2234,7 @@ export function ChatPanel({
     loadFrom(timeline.indexOf(approval));
     setApprovalToShow(approval.permissionId);
   };
+  useOwnMessageSteps({ timeline, timelineRef: ref, firstLoaded, loadFrom, earlier, rememberPlace, jumpToLatest, takesSteps: !side });
   const find = useFind({ conversationId: conversation.id, historyLoaded: open.loaded, timeline, timelineRef: ref, firstLoaded, loadFrom, earlier, firstHeldSeq: open.events[0]?.seq, rememberPlace });
   const editsInCanvas = useEditsInCanvas();
   const canvasShowsEdits = canvasVisible && editsInCanvas;

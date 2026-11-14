@@ -211,6 +211,7 @@ export const shell = {
       toggleTerminal: "Show / hide the terminal",
       search: "Search every conversation in every workspace",
       nextWaiting: "The conversation that most needs you: one with a question or an approval first, then a failed one, then a finished one; again for the next",
+      ownMessages: "Your previous / next message in this conversation, earlier ones included; past the last one, the latest reply (not while editing text)",
       markUnread: "Mark this conversation unread and go back to the one open before it (right-click a conversation in the sidebar to mark any)",
       find: "Find in this conversation, earlier entries and folded cards included; Aa matches case (Enter: older match, Shift+Enter: newer)",
       findInReview:

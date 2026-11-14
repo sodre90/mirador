@@ -16,6 +16,7 @@ export type ShortcutCommand =
   | { type: "search" }
   | { type: "mark-unread" }
   | { type: "next-waiting" }
+  | { type: "own-message"; step: 1 | -1 }
   | { type: "remind" }
   | { type: "side-chat" }
   | { type: "focus"; pane: "chat" | "canvas" | "terminals" }
@@ -68,6 +69,10 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
     if (press.code === "ArrowLeft") return { type: "focus", pane: "chat" };
     if (press.code === "ArrowRight") return { type: "focus", pane: "canvas" };
     if (press.code === "ArrowDown") return { type: "focus", pane: "terminals" };
+  }
+  if (primary && !press.altKey && !press.shiftKey && typing !== "typing" && typing !== "terminal") {
+    if (press.code === "ArrowUp") return { type: "own-message", step: -1 };
+    if (press.code === "ArrowDown") return { type: "own-message", step: 1 };
   }
   if (optionOnly) {
     const step = press.code === "ArrowDown" ? 1 : press.code === "ArrowUp" ? -1 : null;
@@ -173,6 +178,7 @@ export function shortcutHelp(mac = isMac): { keys: string; action: string }[] {
     { keys: keys.toggleTerminal, action: actions.toggleTerminal },
     { keys: keys.search, action: actions.search },
     { keys: keys.nextWaiting, action: actions.nextWaiting },
+    { keys: `${primary}↑ / ${primary}↓`, action: actions.ownMessages },
     { keys: keys.markUnread, action: actions.markUnread },
     { keys: keys.remind, action: t.reminders.shortcut },
     { keys: keys.sideChat, action: actions.sideChat },

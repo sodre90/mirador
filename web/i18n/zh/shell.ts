@@ -196,6 +196,7 @@ export const shell: Messages["shell"] = {
       toggleTerminal: "显示 / 隐藏终端",
       search: "搜索所有工作区中的每个对话",
       nextWaiting: "最需要你的对话：先是有提问或等待批准的，然后是失败的，再是已完成的；再按一次到下一个",
+      ownMessages: "当前对话中你的上一条 / 下一条消息，包括较早的；过了最后一条就到最新回复（编辑文字时不可用）",
       markUnread: "把当前对话标为未读，并返回之前打开的那个（在侧边栏右键点击对话可标记任意一个）",
       find: "在当前对话中查找，包括较早的条目和已折叠的卡片；Aa 区分大小写（Enter：上一个匹配项，Shift+Enter：下一个）",
       findInReview:

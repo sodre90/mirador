@@ -197,6 +197,7 @@ export const shell: Messages["shell"] = {
       toggleTerminal: "A terminál megjelenítése / elrejtése",
       search: "Keresés minden munkaterület minden beszélgetésében",
       nextWaiting: "A beszélgetés, amelyiknek a leginkább szüksége van rád: előbb amelyik kérdez vagy jóváhagyásra vár, aztán a hibás, aztán a kész; újra megnyomva a következő",
+      ownMessages: "Az előző / következő üzeneted ebben a beszélgetésben, a korábbiakkal együtt; az utolsó után a legfrissebb válasz (szöveg szerkesztése közben nem)",
       markUnread:
         "Ennek a beszélgetésnek a megjelölése olvasatlanként, és vissza az előtte nyitotthoz (bármelyiket megjelölheted, ha jobb gombbal kattintasz rá az oldalsávon)",
       find: "Keresés ebben a beszélgetésben, a korábbi bejegyzésekkel és az összecsukott kártyákkal együtt; az Aa megkülönbözteti a kis- és nagybetűt (Enter: régebbi találat, Shift+Enter: újabb)",

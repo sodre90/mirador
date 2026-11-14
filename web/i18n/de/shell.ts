@@ -211,6 +211,7 @@ export const shell: Messages["shell"] = {
       toggleTerminal: "Terminal ein- / ausblenden",
       search: "Jede Unterhaltung in jedem Arbeitsbereich durchsuchen",
       nextWaiting: "Die Unterhaltung, die dich am dringendsten braucht: zuerst eine mit einer Frage oder Freigabe, dann eine fehlgeschlagene, dann eine fertige; noch einmal für die nächste",
+      ownMessages: "Deine vorherige / nächste Nachricht in dieser Unterhaltung, auch frühere; nach der letzten die neueste Antwort (nicht beim Bearbeiten von Text)",
       markUnread:
         "Diese Unterhaltung als ungelesen markieren und zur vorher offenen zurückgehen (Rechtsklick auf eine Unterhaltung in der Seitenleiste markiert eine beliebige)",
       find: "In dieser Unterhaltung suchen, auch in früheren Einträgen und eingeklappten Karten; Aa beachtet Groß- und Kleinschreibung (Enter: älterer Treffer, Shift+Enter: neuerer)",
