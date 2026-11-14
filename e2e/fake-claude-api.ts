@@ -59,7 +59,7 @@ const LIMITED_SUBAGENT = "LIMITED SUBAGENT ";
 const LIMITED_SUBAGENT_RUNS_FOR_MS = 1500;
 
 /** The background subagent `LIMITED SUBAGENT ` starts: its request is refused a moment after both it and another request have come. */
-type LimitedSubagent = { prompt: string; refuse?: () => void; anotherRequestArrived: boolean; refusing?: ReturnType<typeof setTimeout> };
+type LimitedSubagent = { prompt: string; refuse?: () => void; limitReached: boolean; refusing?: ReturnType<typeof setTimeout> };
 
 const offersBash = ({ tools }: MessagesRequest) => (tools ?? []).some(({ name }) => name === "Bash");
 
@@ -94,8 +94,9 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * set, answers report it as their input usage, so Claude Code compacts its context on the next request; a message equal
  * to `refuseAfterCompaction` is answered with a Bash call so the turn keeps going after the compaction, and every
  * request after it runs into the usage limit. A message starting with `LIMITED SUBAGENT ` starts a subagent in the
- * background that does the rest. The agent ends its turn at once, and the subagent's request waits for a moment before it is
- * refused with the usage limit, the way the limit reached a live turn; every request after it is refused too.
+ * background that does the rest. The agent ends its turn at once, and the subagent's request waits for
+ * `limitTheSubagent`, then a moment more, before it is refused with the usage limit, the way the limit reached a live
+ * turn; every request after it is refused too.
  */
 /** Claude Code counts the tokens of its prompt's parts on its own; a rough count serves, and it is no message to answer. */
 const countTokens = (body: string, response: ServerResponse) =>
@@ -217,10 +218,6 @@ export class FakeClaudeApi {
       subagent.refuse = () => this.refuseLimitedSubagent(typed, response);
       return this.refuseLimitedSubagentSoon(subagent);
     }
-    if (subagent) {
-      subagent.anotherRequestArrived = true;
-      this.refuseLimitedSubagentSoon(subagent);
-    }
     if (this.limited) return this.refuseWithLimit(typed, response);
     if (this.refuseAfterCompaction === typed) {
       this.refuseAfterCompaction = null;
@@ -233,7 +230,7 @@ export class FakeClaudeApi {
     this.answered.push(typed);
     if (offersAgent(body) && typed.startsWith(LIMITED_SUBAGENT)) {
       const prompt = typed.slice(LIMITED_SUBAGENT.length);
-      this.limitedSubagent = { prompt, anotherRequestArrived: false };
+      this.limitedSubagent = { prompt, limitReached: false };
       const agent: Answer = { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose", run_in_background: true } };
       return this.send(body, response, [agent]);
     }
@@ -257,9 +254,20 @@ export class FakeClaudeApi {
     this.send(body, response, this.answerTo(typed, offersBash(body)));
   }
 
-  /** Whichever of the two requests comes first, the subagent's waits for the other, then a moment more, so the agent has ended its turn by then. */
+  /**
+   * The `LIMITED SUBAGENT` subagent runs into the limit: call it once the page shows the agent's answer, as the agent
+   * has ended its own part of the turn then. A loaded Windows runner can take longer than any fixed wait to get there.
+   */
+  limitTheSubagent() {
+    const subagent = this.limitedSubagent;
+    if (!subagent) throw new Error("No LIMITED SUBAGENT subagent is running.");
+    subagent.limitReached = true;
+    this.refuseLimitedSubagentSoon(subagent);
+  }
+
+  /** Whichever comes first, the subagent's request or the limit, waits for the other, then a moment more. */
   private refuseLimitedSubagentSoon(subagent: LimitedSubagent) {
-    if (!subagent.refuse || !subagent.anotherRequestArrived || subagent.refusing) return;
+    if (!subagent.refuse || !subagent.limitReached || subagent.refusing) return;
     subagent.refusing = setTimeout(subagent.refuse, LIMITED_SUBAGENT_RUNS_FOR_MS);
   }
 

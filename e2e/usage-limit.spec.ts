@@ -134,6 +134,8 @@ test("a limit that reaches the agent after its background subagent's own waits f
   await turnOnYolo(page);
 
   await sendMessage(page, "LIMITED SUBAGENT look into the notes");
+  await expect(page.locator(".timeline:visible .message.agent").last()).toHaveText("Answered:", { timeout: 120_000 });
+  api.limitTheSubagent();
   await expect(page.locator(".timeline:visible .usage-limit-line")).toContainText(LIMIT_REACHED, { timeout: 120_000 });
   await expect(page.locator(".timeline:visible .error-line")).toHaveCount(0);
   await expect(notice(page).filter({ visible: true })).toContainText("the agent continues by itself at");
