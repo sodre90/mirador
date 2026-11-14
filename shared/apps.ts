@@ -22,9 +22,10 @@ import type { HostProblem } from "./host-problems.ts";
  * delete a conversation it started, with its worktree and branch; API 17 lets a canvas plugin's workspace tab open a
  * conversation of its workspace; API 18 lets its workspace tab and background work ask a profile's agent for the models
  * and efforts it offers; API 19 lets one of a plugin's toggles be its switch for a profile; API 20 lets a typed setting
- * say a profile that has the plugin on needs it.
+ * say a profile that has the plugin on needs it; API 21 lets an app's view read the workspace's git refs, a file as it
+ * is at one of them and the files that differ from one, and hear when HEAD or the tags move.
  */
-export const APP_PLUGIN_API = 20;
+export const APP_PLUGIN_API = 21;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,
@@ -241,6 +242,8 @@ export interface AppDocumentState {
    * open. A view's onFiles fires when it moves. Missing from hosts before plugin API 6.
    */
   filesChange?: number;
+  /** Counts, per workspace, the times HEAD or its tags may have moved, once a view asked for its refs. A view's onGitChange fires when it moves. Missing from hosts before plugin API 21. */
+  gitChange?: number;
   document: unknown;
   lastChange: AppChange | null;
   /** Why the file's content isn't shown: it stopped parsing after an edit made outside Mirador. */
@@ -490,6 +493,24 @@ export const appOpenUrl = (view: { workspaceId: string; app: string; conversatio
 export interface AppWorkspaceFiles {
   files: string[];
   truncated: boolean;
+}
+
+/** Where an app's view reads the workspace's git refs; GET, answered with AppGitRefs, or null outside a repository. */
+export const appGitRefsUrl = (view: AppViewTarget) => `${appPath(view)}/git/refs?${documentParam(view).slice(1)}`;
+
+/** Where an app's view reads a file of the workspace, named from it, as it is at a git ref; GET, answered with the file, or 404 when it isn't there. */
+export const appGitFileUrl = (view: AppViewTarget, ref: string, path: string) =>
+  `${appPath(view)}/git/file?ref=${encodeURIComponent(ref)}&path=${encodeURIComponent(path)}${documentParam(view)}`;
+
+/** Where an app's view lists the workspace's files that differ from a git ref; GET, answered with a string[]. */
+export const appGitChangedUrl = (view: AppViewTarget, ref: string) => `${appPath(view)}/git/changed?ref=${encodeURIComponent(ref)}${documentParam(view)}`;
+
+/** A repository's HEAD and tags, as an app's view reads them. */
+export interface AppGitRefs {
+  /** The commit HEAD names (its SHA); null in a repository with no commits yet. */
+  head: string | null;
+  /** Newest first. `date` is the tag's date, or its commit's for a lightweight tag, in ISO 8601. */
+  tags: { name: string; commit: string; date: string }[];
 }
 
 /** Where the canvas assets serve streamed files, so the canvas pages' policy lets media and images load from there. */

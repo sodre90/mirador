@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { appendFileSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -589,5 +590,41 @@ test("the agent opens an app that its changes, your clicks and outside edits all
       { file: "older-phone.json", count: 1 },
     ]);
     expect(JSON.parse(readFileSync(join(host.projectDir, "older-phone.json"), "utf8"))).toEqual({ count: 1 });
+  });
+
+  await test.step("the view reads the workspace's git refs, a file as it was at a tag and the files changed since, and hears a commit", async () => {
+    await view(page).getByRole("button", { name: "Read git refs" }).click();
+    await expect(view(page).locator("#git-refs")).toHaveText("not a repository");
+    // Without the developer's own git config, whose signing or hooks would make this step about them.
+    const git = (...args: string[]) =>
+      execFileSync("git", ["-C", host.projectDir, "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], {
+        encoding: "utf8",
+        env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" },
+      }).trim();
+    git("init", "-q");
+    git("add", "-A");
+    git("commit", "-qm", "base");
+    git("tag", "-a", "v1", "-m", "first");
+    await view(page).getByRole("button", { name: "Read git refs" }).click();
+    await expect(view(page).locator("#git-refs")).toHaveText(`HEAD ${git("rev-parse", "--short=7", "HEAD")}; tags: v1`);
+    writeFileSync(join(host.projectDir, "root-note.txt"), "Changed since the tag\n");
+    await view(page).getByLabel("Git ref").fill("v1");
+    await view(page).getByLabel("Path at the ref").fill("root-note.txt");
+    await view(page).getByRole("button", { name: "Read at the ref" }).click();
+    await expect(view(page).locator("#file-at")).toHaveText("Kept at the root");
+    await view(page).getByLabel("Path at the ref").fill("not-yet.txt");
+    await view(page).getByRole("button", { name: "Read at the ref" }).click();
+    await expect(view(page).locator("#file-at")).toHaveText("not there");
+    await view(page).getByLabel("Path at the ref").fill("../outside.txt");
+    await view(page).getByRole("button", { name: "Read at the ref" }).click();
+    await expect(view(page).locator("#file-at")).toHaveText("../outside.txt is outside the workspace.");
+    await view(page).getByRole("button", { name: "Changed since the ref" }).click();
+    await expect(view(page).locator("#changed")).toHaveText("root-note.txt");
+    await view(page).getByLabel("Git ref").fill("--output=x");
+    await view(page).getByRole("button", { name: "Changed since the ref" }).click();
+    await expect(view(page).locator("#changed")).toHaveText("--output=x isn't a git ref a view may name.");
+    const gitHeard = Number(await view(page).locator("#git-heard").textContent());
+    git("commit", "-qam", "note");
+    await expect(view(page).locator("#git-heard")).toHaveText(String(gitHeard + 1));
   });
 });

@@ -154,7 +154,7 @@ describe("AppDocuments", () => {
     });
     expect(JSON.parse(fileText())).toEqual({ count: 0 });
     expect(openAppLists.at(-1)).toHaveLength(1);
-    expect(states.at(-1)).toEqual({ documentId: opened.documentId, workspaceId: "w1", app: "counter", file: "counter.json", filesChange: 1, document: { count: 0 }, lastChange: null, problem: null, task: null });
+    expect(states.at(-1)).toEqual({ documentId: opened.documentId, workspaceId: "w1", app: "counter", file: "counter.json", filesChange: 1, gitChange: 0, document: { count: 0 }, lastChange: null, problem: null, task: null });
     apps.stop();
   });
 
@@ -1236,6 +1236,59 @@ describe("AppDocuments for a view's files", () => {
     apps.filesMayHaveChanged("w1");
     expect(states.at(-1)!.filesChange).toBe(3);
     expect(stateOf(apps).filesChange).toBe(3);
+    apps.stop();
+  });
+
+  test("gives the views of a git workspace its refs, the file at a ref and the files changed since, and tells them when HEAD moves", async () => {
+    const { apps, workspacePath, states } = await setUp();
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "-C", workspacePath, ...args], { env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" } });
+    git("init", "-q", "-b", "main");
+    writeFileSync(join(workspacePath, "a.txt"), "one");
+    git("add", "-A");
+    git("commit", "-q", "-m", "one");
+    await apps.open("c1", "counter", "counter.json");
+    expect(states.at(-1)!.gitChange).toBe(0);
+    const document = documentOf(apps);
+    const refs = await apps.gitRefs(document);
+    expect(refs?.head).toMatch(/^[0-9a-f]{40}$/);
+    expect(new TextDecoder().decode((await apps.gitFileAt(document, "HEAD", "a.txt"))!)).toBe("one");
+    expect(await apps.gitFileAt(document, "HEAD", "counter.json")).toBeNull();
+    expect(await apps.gitChangedSince(document, "HEAD")).toEqual(["counter.json"]);
+    await Bun.sleep(300);
+    git("commit", "-q", "--allow-empty", "-m", "two");
+    await eventually(() => expect(stateOf(apps).gitChange).toBe(1));
+    expect(states.at(-1)!.gitChange).toBe(1);
+    apps.stop();
+  });
+
+  test("gives no refs outside a git repository", async () => {
+    const { apps } = await setUp();
+    await apps.open("c1", "counter", "counter.json");
+    expect(await apps.gitRefs(documentOf(apps))).toBeNull();
+    apps.stop();
+  });
+
+  test("watches a workspace that became a repository after its views first asked for its refs", async () => {
+    const { apps, workspacePath } = await setUp();
+    const git = (...args: string[]) =>
+      Bun.spawnSync(["git", "-c", "user.name=Test", "-c", "user.email=test@example.com", "-c", "commit.gpgsign=false", "-C", workspacePath, ...args], { env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null" } });
+    await apps.open("c1", "counter", "counter.json");
+    const document = documentOf(apps);
+    expect(await apps.gitRefs(document)).toBeNull();
+    git("init", "-q", "-b", "main");
+    git("commit", "-q", "--allow-empty", "-m", "one");
+    expect((await apps.gitRefs(document))?.head).toMatch(/^[0-9a-f]{40}$/);
+    await Bun.sleep(300);
+    git("commit", "-q", "--allow-empty", "-m", "two");
+    await eventually(() => expect(stateOf(apps).gitChange).toBe(1));
+    apps.stop();
+  });
+
+  test("refuses a bad ref with the status the view is told", async () => {
+    const { apps } = await setUp();
+    await apps.open("c1", "counter", "counter.json");
+    await expect(apps.gitFileAt(documentOf(apps), "-x", "a.txt")).rejects.toMatchObject({ status: 400 });
     apps.stop();
   });
 });

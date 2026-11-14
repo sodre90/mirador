@@ -47,6 +47,12 @@ export type CanvasFrameMessage =
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-media-url"; requestId: string; path: unknown }
   /** The view wants the workspace's files; the panel answers with an "app-answer" holding an AppWorkspaceFiles, or an "app-answer-failed". */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-list-files"; requestId: string }
+  /** The view wants the workspace's git refs; the panel answers with an "app-answer" holding an AppGitRefs or null, or an "app-answer-failed". */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-git-refs"; requestId: string }
+  /** A file of the workspace, named from it, as it is at a git ref; the panel answers with an "app-file", an "app-answer" holding null when it isn't there, or an "app-file-failed". */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-git-file"; requestId: string; ref: unknown; path: unknown }
+  /** The workspace's files that differ from a git ref; the panel answers with an "app-answer" holding their paths, or an "app-answer-failed". */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-git-changed"; requestId: string; ref: unknown }
   /** The view opens the app on another file of the workspace; the panel answers with an "app-answer" once it is open, or an "app-answer-failed". */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "app-open"; requestId: string; file: unknown }
   /** One of the app's tasks the user runs from its view; its progress and end come in the app's state. */
@@ -214,7 +220,10 @@ export const APP_ANSWER_MS = 30_000;
  * streams such a file from, which changes when the file does. `listFiles` resolves with the workspace's files, named from
  * it, and `open` opens the app on another existing one, as app_open does, and is refused while a task runs; the new
  * document and its `file` then arrive through `onState`. `onFiles` calls its listener when the workspace's files may
- * have changed: after a task ends, after an agent's turn, and after an open. `run` starts one of the app's tasks and `stopTask` stops it. `storage` is a Storage the host keeps for the app in the workspace,
+ * have changed: after a task ends, after an agent's turn, and after an open. `gitRefs` resolves with the workspace's HEAD
+ * and tags, or null outside a repository; `readFileAt` with a file of the workspace, named from it, as it is at a ref, or
+ * null when it isn't there; `changedSince` with the workspace's files that differ from a ref; and `onGitChange` calls its
+ * listener when HEAD or the tags may have moved, once the view asked for the refs. `run` starts one of the app's tasks and `stopTask` stops it. `storage` is a Storage the host keeps for the app in the workspace,
  * starting as it was when the page loaded; it is the view's localStorage too, in place of the page's own: a sandboxed
  * frame's throws, and a WebView's is the device's rather than the workspace's.
  */
@@ -224,6 +233,7 @@ function appBridge(frameId: string, storage: AppStorageItems) {
   const itemId = ${JSON.stringify(frameId)};
   const listeners = new Set();
   const fileListeners = new Set();
+  const gitListeners = new Set();
   const requests = new Map();
   let latest;
   const stored = new Map(Object.entries(${JSON.stringify(storage).replace(/</g, "\\u003c")}));
@@ -267,9 +277,11 @@ function appBridge(frameId: string, storage: AppStorageItems) {
     if ((event.source !== parent && event.source !== null) || !data || data.source !== source) return;
     if (data.kind === "app-state") {
       const filesChanged = latest?.filesChange !== undefined && data.state?.filesChange !== latest.filesChange;
+      const gitChanged = latest?.gitChange !== undefined && data.state?.gitChange !== latest.gitChange;
       latest = data.state;
       listeners.forEach((listener) => listener(latest));
       if (filesChanged) fileListeners.forEach((listener) => listener());
+      if (gitChanged) gitListeners.forEach((listener) => listener());
     }
     if (data.kind === "app-file") requests.get(data.requestId)?.resolve(new Blob([data.bytes], { type: data.type }));
     if (data.kind === "app-answer") requests.get(data.requestId)?.resolve(data.value);
@@ -311,6 +323,10 @@ function appBridge(frameId: string, storage: AppStorageItems) {
       fileListeners.add(listener);
       return () => fileListeners.delete(listener);
     },
+    onGitChange(listener) {
+      gitListeners.add(listener);
+      return () => gitListeners.delete(listener);
+    },
     apply(op) {
       parent.postMessage({ source, itemId, kind: "app-apply", op }, "*");
     },
@@ -326,6 +342,15 @@ function appBridge(frameId: string, storage: AppStorageItems) {
     },
     listFiles() {
       return ask({ kind: "app-list-files" }, "the request for the workspace's files");
+    },
+    gitRefs() {
+      return ask({ kind: "app-git-refs" }, "the request for the workspace's git refs");
+    },
+    readFileAt(ref, path) {
+      return ask({ kind: "app-git-file", ref, path }, "the request for " + path + " at " + ref);
+    },
+    changedSince(ref) {
+      return ask({ kind: "app-git-changed", ref }, "the request for the files changed since " + ref);
     },
     open(file) {
       return ask({ kind: "app-open", file }, "the request to open " + file).then(() => undefined);

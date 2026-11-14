@@ -259,6 +259,10 @@ interface FrameWindow {
     mediaUrl(path: string): Promise<string>;
     listFiles(): Promise<unknown>;
     onFiles(listener: () => void): () => void;
+    gitRefs(): Promise<unknown>;
+    readFileAt(ref: string, path: string): Promise<Blob | null>;
+    changedSince(ref: string): Promise<unknown>;
+    onGitChange(listener: () => void): () => void;
     open(file: string): Promise<void>;
     prompt(text: string, options?: { images?: Blob[] }): Promise<void>;
     run(task: string): void;
@@ -439,6 +443,74 @@ describe("an app view's window.mirador, for the workspace's files", () => {
     const refused = mirador.open("../out.tex");
     answer(appAnswerFailedMessage(posted.filter(({ kind }) => kind === "app-open").at(-1)!.requestId as string, "../out.tex is outside the workspace."));
     await expect(refused).rejects.toThrow("../out.tex is outside the workspace.");
+  });
+});
+
+describe("an app view's window.mirador, for the workspace's git", () => {
+  const request = (posted: Record<string, unknown>[], kind: string) => posted.find((message) => message.kind === kind)!;
+
+  test("reads the refs, resolving with what it is answered with, null outside a repository", async () => {
+    const { mirador, posted, answer } = runAppBridge();
+    const reading = mirador.gitRefs();
+    const asked = request(posted, "app-git-refs");
+    expect(asked).toEqual({ source: CANVAS_MESSAGE_SOURCE, itemId: "app:w1/counter", kind: "app-git-refs", requestId: expect.any(String) });
+    const refs = { head: "abc", tags: [{ name: "v1", commit: "abc", date: "2026-01-01T00:00:00+00:00" }] };
+    answer(appAnswerMessage(asked.requestId as string, refs));
+    expect(await reading).toEqual(refs);
+    const outside = mirador.gitRefs();
+    answer(appAnswerMessage(posted.filter(({ kind }) => kind === "app-git-refs").at(-1)!.requestId as string, null));
+    expect(await outside).toBeNull();
+  });
+
+  test("reads a file at a ref, resolving with a Blob of its bytes", async () => {
+    const { mirador, posted, answer } = runAppBridge();
+    const reading = mirador.readFileAt("v1", "main.tex");
+    const asked = request(posted, "app-git-file");
+    expect(asked).toEqual({ source: CANVAS_MESSAGE_SOURCE, itemId: "app:w1/counter", kind: "app-git-file", requestId: expect.any(String), ref: "v1", path: "main.tex" });
+    answer(appFileMessage(asked.requestId as string, new TextEncoder().encode("old").buffer as ArrayBuffer, "text/plain"));
+    expect(await (await reading)!.text()).toBe("old");
+  });
+
+  test("reads a file at a ref as null when it isn't there, and rejects with the reason it is refused", async () => {
+    const { mirador, posted, answer } = runAppBridge();
+    const missing = mirador.readFileAt("v1", "new.tex");
+    answer(appAnswerMessage(request(posted, "app-git-file").requestId as string, null));
+    expect(await missing).toBeNull();
+    const refused = mirador.readFileAt("-x", "a.tex");
+    answer(appAnswerFailedMessage(posted.filter(({ kind }) => kind === "app-git-file").at(-1)!.requestId as string, "-x isn't a git ref a view may name."));
+    await expect(refused).rejects.toThrow("-x isn't a git ref a view may name.");
+  });
+
+  test("lists the files changed since a ref", async () => {
+    const { mirador, posted, answer } = runAppBridge();
+    const listing = mirador.changedSince("v1");
+    const asked = request(posted, "app-git-changed");
+    expect(asked).toEqual({ source: CANVAS_MESSAGE_SOURCE, itemId: "app:w1/counter", kind: "app-git-changed", requestId: expect.any(String), ref: "v1" });
+    answer(appAnswerMessage(asked.requestId as string, ["a.tex", "b/c.tex"]));
+    expect(await listing).toEqual(["a.tex", "b/c.tex"]);
+  });
+
+  test("calls onGitChange when the state's git count moves, not for the first state nor for other changes, nor after it is removed", () => {
+    const { mirador, answer } = runAppBridge();
+    let heard = 0;
+    const stop = mirador.onGitChange(() => heard++);
+    answer(appStateMessage({ document: 1, gitChange: 0 }));
+    answer(appStateMessage({ document: 2, gitChange: 0, filesChange: 3 }));
+    expect(heard).toBe(0);
+    answer(appStateMessage({ document: 2, gitChange: 1 }));
+    expect(heard).toBe(1);
+    stop();
+    answer(appStateMessage({ document: 2, gitChange: 2 }));
+    expect(heard).toBe(1);
+  });
+
+  test("doesn't call onGitChange for a host that sends no git count", () => {
+    const { mirador, answer } = runAppBridge();
+    let heard = 0;
+    mirador.onGitChange(() => heard++);
+    answer(appStateMessage({ document: 1 }));
+    answer(appStateMessage({ document: 2, gitChange: 1 }));
+    expect(heard).toBe(0);
   });
 });
 

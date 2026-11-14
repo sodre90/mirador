@@ -5,6 +5,7 @@ import {
   type AppAuthor,
   type AppChange,
   type AppDocumentState,
+  type AppGitRefs,
   type AppMediaGrant,
   type AppTaskContext,
   type AppTaskState,
@@ -19,6 +20,7 @@ import { projectFiles } from "../working-tree.ts";
 import { workingCopyOf } from "../worktrees.ts";
 import { AppMediaGrants } from "./media.ts";
 import { AppProblem, appViewPath, installedApp, messageOf, type AppPlugin } from "./plugins.ts";
+import { watchWorkspaceGit, workspaceChangedSince, workspaceFileAt, workspaceGitRefs } from "./workspace-git.ts";
 
 /** Editors save in several writes; an edit made outside Mirador is read once the file has been quiet this long. */
 const OUTSIDE_EDIT_SETTLE_MS = 150;
@@ -115,12 +117,13 @@ const pointerKeyOf = (conversationId: string, app: string) => `${conversationId}
 
 const publicChange = ({ operation: _, inverse: __, ...change }: LoggedChange): AppChange => change;
 
-const documentStateOf = (opened: AppDocument, filesChange: number): AppDocumentState => ({
+const documentStateOf = (opened: AppDocument, filesChange: number, gitChange: number): AppDocumentState => ({
   documentId: opened.id,
   workspaceId: opened.workspaceId,
   app: opened.plugin.manifest.name,
   file: opened.file,
   filesChange,
+  gitChange,
   document: opened.document,
   lastChange: opened.changes.length > 0 ? publicChange(opened.changes.at(-1)!) : null,
   problem: opened.problem,
@@ -261,6 +264,10 @@ export class AppDocuments {
   private writes = 0;
   /** By workspace: see AppDocumentState.filesChange. */
   private readonly filesChanges = new Map<string, number>();
+  /** By workspace: see AppDocumentState.gitChange. */
+  private readonly gitChanges = new Map<string, number>();
+  /** By workspace: the watch on its git folders, from the first time a view asks for its refs until its last document closes. */
+  private readonly gitWatches = new Map<string, { ready: Promise<boolean>; stop(): void }>();
 
   constructor(
     private readonly store: Store,
@@ -443,6 +450,42 @@ export class AppDocuments {
   /** The files of the workspace an open document is in, for its view to show. */
   async workspaceFiles(documentId: string): Promise<AppWorkspaceFiles> {
     return projectFiles(this.documentOf(documentId).workspacePath);
+  }
+
+  /**
+   * The git refs of the workspace an open document is in, for its view; from then on, its views hear when HEAD or the tags
+   * move. A workspace that isn't a repository yet is watched once a later call finds that it is.
+   */
+  async gitRefs(documentId: string): Promise<AppGitRefs | null> {
+    const opened = this.documentOf(documentId);
+    // Armed before the refs are read, so a commit in between still reaches the views.
+    await this.watchGitOf(opened);
+    return workspaceGitRefs(opened.workspacePath);
+  }
+
+  /** A file of an open document's workspace, named from it, as it is at a git ref; null when it isn't there at that ref. */
+  gitFileAt(documentId: string, ref: unknown, path: unknown): Promise<ArrayBuffer | null> {
+    return workspaceFileAt(this.documentOf(documentId).workspacePath, ref, path, this.maxFileBytes);
+  }
+
+  /** The files of an open document's workspace that differ from a git ref, named from it. */
+  gitChangedSince(documentId: string, ref: unknown): Promise<string[]> {
+    return workspaceChangedSince(this.documentOf(documentId).workspacePath, ref);
+  }
+
+  /** Watches the workspace's git folders, unless they are watched already; one that isn't a repository is tried again next time. */
+  private async watchGitOf(opened: AppDocument) {
+    const { workspaceId, workspacePath } = opened;
+    const known = this.gitWatches.get(workspaceId);
+    if (known) return void (await known.ready);
+    const watch = watchWorkspaceGit(workspacePath, () => {
+      this.gitChanges.set(workspaceId, (this.gitChanges.get(workspaceId) ?? 0) + 1);
+      for (const each of this.documents.values()) if (each.workspaceId === workspaceId) this.publisher.stateChanged(this.stateOf(each));
+    });
+    this.gitWatches.set(workspaceId, watch);
+    if (await watch.ready) return;
+    watch.stop();
+    if (this.gitWatches.get(workspaceId) === watch) this.gitWatches.delete(workspaceId);
   }
 
   /**
@@ -881,7 +924,7 @@ export class AppDocuments {
   }
 
   private stateOf(opened: AppDocument) {
-    return documentStateOf(opened, this.filesChanges.get(opened.workspaceId) ?? 0);
+    return documentStateOf(opened, this.filesChanges.get(opened.workspaceId) ?? 0, this.gitChanges.get(opened.workspaceId) ?? 0);
   }
 
   /** Whether a conversation holds the document, or an open of it is under way that is about to. */
@@ -910,6 +953,10 @@ export class AppDocuments {
     opened.running?.aborts.abort();
     this.media.revoke(documentId);
     this.documents.delete(documentId);
+    if (![...this.documents.values()].some((each) => each.workspaceId === opened.workspaceId)) {
+      this.gitWatches.get(opened.workspaceId)?.stop();
+      this.gitWatches.delete(opened.workspaceId);
+    }
     this.publishOpenApps();
   }
 

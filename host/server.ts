@@ -36,6 +36,7 @@ import { installedHarnesses } from "./acp/harnesses.ts";
 import type { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import type { CanvasService } from "./canvas/service.ts";
 import { AppFileRefused, type AppDocuments } from "./apps/documents.ts";
+import { WorkspaceGitRefused } from "./apps/workspace-git.ts";
 import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
@@ -700,7 +701,7 @@ export function startServer(services: HostServices) {
 
   /** Why an app's view can't have what it asked for, with the status that says so: a plugin's or Mirador's reason is the view's to show. */
   const appRefusal = (error: unknown) =>
-    new Response(errorMessage(error), { status: error instanceof AppFileRefused ? error.status : error instanceof AppProblem ? 400 : 500 });
+    new Response(errorMessage(error), { status: error instanceof AppFileRefused || error instanceof WorkspaceGitRefused ? error.status : error instanceof AppProblem ? 400 : 500 });
 
   /**
    * The document an app's view shows, named in its request: the workspace and app of the address it asks over are what
@@ -752,6 +753,42 @@ export function startServer(services: HostServices) {
     if (refused) return refused;
     try {
       return Response.json(await apps.workspaceFiles(documentAskedFor(request)), { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return appRefusal(error);
+    }
+  }
+
+  /** The git refs of the workspace an open document is in, for its view; null outside a repository. */
+  async function serveAppGitRefs(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/git/refs">) {
+    const refused = refusedPageRequest(request);
+    if (refused) return refused;
+    try {
+      return Response.json(await apps.gitRefs(documentAskedFor(request)), { headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return appRefusal(error);
+    }
+  }
+
+  /** A file of the workspace an open document is in, as it is at a git ref, for its view; 404 when it isn't there at that ref. */
+  async function serveAppGitFile(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/git/file">) {
+    const refused = refusedPageRequest(request);
+    if (refused) return refused;
+    try {
+      const search = new URL(request.url).searchParams;
+      const bytes = await apps.gitFileAt(documentAskedFor(request), search.get("ref"), search.get("path"));
+      if (bytes === null) return new Response(`${search.get("path")} isn't there at ${search.get("ref")}.`, { status: 404, headers: { "X-Mirador-Absent": "1" } });
+      return new Response(bytes, { headers: { "Cache-Control": "no-store", "Content-Type": "application/octet-stream", "X-Content-Type-Options": "nosniff" } });
+    } catch (error) {
+      return appRefusal(error);
+    }
+  }
+
+  /** The files of the workspace an open document is in that differ from a git ref, for its view. */
+  async function listAppGitChanged(request: Bun.BunRequest<"/workspaces/:workspaceId/apps/:app/git/changed">) {
+    const refused = refusedPageRequest(request);
+    if (refused) return refused;
+    try {
+      return Response.json(await apps.gitChangedSince(documentAskedFor(request), new URL(request.url).searchParams.get("ref")), { headers: { "Cache-Control": "no-store" } });
     } catch (error) {
       return appRefusal(error);
     }
@@ -1742,6 +1779,9 @@ export function startServer(services: HostServices) {
     "/workspaces/:workspaceId/apps/:app/media": { POST: grantAppMedia },
     "/workspaces/:workspaceId/apps/:app/files": { GET: listAppFiles },
     "/workspaces/:workspaceId/apps/:app/open": { POST: openAppFromView },
+    "/workspaces/:workspaceId/apps/:app/git/refs": { GET: serveAppGitRefs },
+    "/workspaces/:workspaceId/apps/:app/git/file": { GET: serveAppGitFile },
+    "/workspaces/:workspaceId/apps/:app/git/changed": { GET: listAppGitChanged },
     "/mirador-ca.pem": serveAuthority,
     "/mirador-here": here,
     "/tunnel": { POST: registerTunnel },

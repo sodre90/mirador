@@ -2,12 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   appFilesUrl,
   appFileUrl,
+  appGitChangedUrl,
+  appGitFileUrl,
+  appGitRefsUrl,
   appKey,
   appMediaGrantUrl,
   appOpenUrl,
   appPromptText,
   MAX_APP_PROMPT_IMAGES,
   type AppDocumentState,
+  type AppGitRefs,
   type AppMediaGrant,
   type AppStorageItems,
   type AppWorkspaceFiles,
@@ -118,6 +122,17 @@ async function mediaUrlForView(openApp: OpenApp, path: string, assetsOrigin: str
   return `${assetsOrigin}${grant.path}`;
 }
 
+const gitRefsForView = async (openApp: OpenApp): Promise<AppGitRefs | null> => (await answered(await fetch(appGitRefsUrl(openApp)))).json();
+
+const changedSinceForView = async (openApp: OpenApp, ref: string): Promise<string[]> => (await answered(await fetch(appGitChangedUrl(openApp, ref)))).json();
+
+/** The bytes of a file of the workspace at a git ref, or null when the host says it isn't there at that ref. */
+async function gitFileForView(openApp: OpenApp, ref: string, path: string) {
+  const response = await fetch(appGitFileUrl(openApp, ref, path));
+  if (response.status === 404 && response.headers.has("X-Mirador-Absent")) return null;
+  return { bytes: await (await answered(response)).arrayBuffer(), type: response.headers.get("content-type") ?? "" };
+}
+
 const workspaceFilesForView = async (openApp: OpenApp): Promise<AppWorkspaceFiles> => (await answered(await fetch(appFilesUrl(openApp)))).json();
 
 /** Moves this conversation's document of the app to another file of its workspace, which no other conversation follows. */
@@ -164,6 +179,17 @@ export function AppView({
     }
   };
 
+  const sendFileAt = async (requestId: string, ref: string, path: string) => {
+    const answerTo = frame.current?.contentWindow;
+    try {
+      const file = await gitFileForView(openApp, ref, path);
+      if (file === null) answerTo?.postMessage(appAnswerMessage(requestId, null), "*");
+      else answerTo?.postMessage(appFileMessage(requestId, file.bytes, file.type), "*", [file.bytes]);
+    } catch (error) {
+      answerTo?.postMessage(appFileFailedMessage(requestId, error instanceof Error ? error.message : String(error)), "*");
+    }
+  };
+
   const answer = async (requestId: string, answering: () => Promise<unknown>) => {
     const answerTo = frame.current?.contentWindow;
     try {
@@ -184,6 +210,13 @@ export function AppView({
       void answer(message.requestId, () => mediaUrlForView(openApp, path, assetsOrigin));
     }
     if (message.kind === "app-list-files" && typeof message.requestId === "string") void answer(message.requestId, () => workspaceFilesForView(openApp));
+    if (message.kind === "app-git-refs" && typeof message.requestId === "string") void answer(message.requestId, () => gitRefsForView(openApp));
+    // A ref or path that isn't text goes to the host as text, which refuses it, so the view hears why rather than waiting.
+    if (message.kind === "app-git-file" && typeof message.requestId === "string") void sendFileAt(message.requestId, String(message.ref ?? ""), String(message.path ?? ""));
+    if (message.kind === "app-git-changed" && typeof message.requestId === "string") {
+      const ref = String(message.ref ?? "");
+      void answer(message.requestId, () => changedSinceForView(openApp, ref));
+    }
     if (message.kind === "app-open" && typeof message.requestId === "string") void answer(message.requestId, () => openFromView(openApp, message.file));
     if (message.kind === "app-run" && typeof message.task === "string") connection.send({ type: "app.run", workspaceId, app, documentId, task: message.task });
     if (message.kind === "app-stop-task") connection.send({ type: "app.stop-task", workspaceId, app, documentId });
