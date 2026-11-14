@@ -74,6 +74,7 @@ test("each tile's Update runs on its own, beside another tile's or Update all, a
     await tileUpdate(plugins, "Tally").click();
     await expect(plugins.locator(".plugin-update-all .plugin-output"), "git can't reach Tally's repo").toContainText("Tally:");
     await expectBusy(plugins, "Tally", false, "the failed update is over");
+    await expect(plugins.getByRole("button", { name: /^Update all/ }), "the failed tile update shows its problem, not an Update all of its own").toHaveCount(1);
     renameSync(movedAway, repoOf("tally"));
     await tileUpdate(plugins, "Tally").click();
     const asked = consent(plugins, "Update Tally?");

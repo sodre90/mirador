@@ -762,9 +762,11 @@ function UpdateAll({ updates, startNow = false, onDone, onBusy }: { updates: Fou
           onSettled={settled}
         />
       ) : (
-        <button type="button" data-hint={hints.updateAllPlugins} onClick={offerAll}>
-          {words.updateAllCount(updates.length)}
-        </button>
+        !startNow && (
+          <button type="button" data-hint={hints.updateAllPlugins} onClick={offerAll}>
+            {words.updateAllCount(updates.length)}
+          </button>
+        )
       )}
       {problem && <pre className="plugin-output">{problem}</pre>}
     </div>
