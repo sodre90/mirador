@@ -39,6 +39,7 @@ export const shell: Messages["shell"] = {
     waitingEdgeText: (count) => `${count} vár`,
     markRead: "Megjelölés olvasottként",
     markUnread: "Megjelölés olvasatlanként",
+    older: (count) => `Régebbi (${count})`,
     delegated: (count) => `${count} átadott`,
     sideChats: (count) => `${count} mellékszál`,
     delegatedWorking: (count) => ` · ${count} dolgozik`,

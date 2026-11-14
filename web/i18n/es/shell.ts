@@ -41,6 +41,7 @@ export const shell: Messages["shell"] = {
     waitingEdgeText: (count) => `${count} en espera`,
     markRead: "Marcar como leída",
     markUnread: "Marcar como no leída",
+    older: (count) => `Anteriores (${count})`,
     delegated: (count) => `${count} ${plural(count, "delegado", "delegados")}`,
     sideChats: (count) => `${count} ${plural(count, "chat lateral", "chats laterales")}`,
     delegatedWorking: (count) => ` · ${count} trabajando`,

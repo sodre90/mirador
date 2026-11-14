@@ -205,6 +205,7 @@ export const hints: Messages["hints"] = {
   addWorkspaceGroup: "添加一个分组：可折叠的标题，用来收纳工作区，例如按项目或客户划分。拖动工作区的标题可放入分组，工作区和分组也可以拖成任意顺序。",
   foldWorkspace: "把这个工作区折叠为只剩标题。打开其中的某个对话会将其展开。",
   unfoldWorkspace: "再次显示这个工作区的对话。",
+  olderConversations: "一周内没有人写过消息的对话。收藏的、等你处理的、设了提醒的和仍在工作的对话留在列表里。在其中写消息会把它带回来。",
   workspaceGroupCount: "这个分组中的工作区。",
   waitingInGroup: "这个分组的工作区中等你处理的对话。",
   waitingAbove: "上方已滚出视野的、等你处理的对话。点击显示最近的一个。",

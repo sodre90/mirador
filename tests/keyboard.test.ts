@@ -3,6 +3,7 @@ import type { Conversation, Workspace } from "../shared/model.ts";
 import {
   adjacentConversation,
   adjacentWorkspaceConversation,
+  apartFromOlder,
   conversationsIn,
   currentWorkspace,
   nextWaitingConversation,
@@ -328,6 +329,44 @@ describe("navigation", () => {
     expect(nextWaitingConversation(selecting("a-new"))).toBeNull();
     expect(nextWaitingConversation({ ...onlyOpenOneWaits, selectedConversationId: "a-new" })).toBeNull();
     expect(nextWaitingConversation({ ...onlyOpenOneWaits, selectedConversationId: "a-old" })).toBe("a-new");
+  });
+
+  describe("conversations nobody touched for a week", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = 100 * DAY;
+    const madeDaysAgo = (id: string, days: number, more: Partial<Conversation> = {}) => ({ ...conversation(id, "a", now - days * DAY), ...more });
+    const idsOf = ({ current, older }: ReturnType<typeof apartFromOlder>) => ({ current: current.map(({ id }) => id), older: older.map(({ id }) => id) });
+
+    test("fold under Older, counted from the last message or reply, else from when they were made", () => {
+      const listed = [madeDaysAgo("stale", 30), madeDaysAgo("fresh", 2), madeDaysAgo("written-in", 30, { lastMessageAt: now - DAY }), madeDaysAgo("answered", 30, { lastReplyAt: now - 6 * DAY })];
+      expect(idsOf(apartFromOlder(listed, now))).toEqual({ current: ["fresh", "written-in", "answered"], older: ["stale"] });
+    });
+
+    test("stay in the list while there is something to come back to them for", () => {
+      const listed = [
+        madeDaysAgo("favourite", 30, { favourite: true }),
+        madeDaysAgo("waiting", 30, { waitingFor: "finished" }),
+        madeDaysAgo("working", 30, { status: "running" }),
+        madeDaysAgo("reminded", 30, { reminder: { at: now + DAY, mode: "keep" } }),
+        madeDaysAgo("in-terminal", 30, { openInTerminal: "idle" }),
+        madeDaysAgo("stale", 30),
+      ];
+      expect(idsOf(apartFromOlder(listed, now)).older).toEqual(["stale"]);
+    });
+
+    test("keep the tasks listed under them, and stay in the list while one of those is in use", () => {
+      const under = (id: string, callerId: string, more: Partial<Conversation> = {}) => madeDaysAgo(id, 30, { startedBy: { conversationId: callerId, plugin: "delegate", reply: null, dismissed: false }, ...more });
+      const listed = [madeDaysAgo("resting", 30), under("resting-task", "resting"), madeDaysAgo("delegating", 30), under("busy-task", "delegating", { status: "running" })];
+      expect(idsOf(apartFromOlder(listed, now))).toEqual({ current: ["delegating", "busy-task"], older: ["resting", "resting-task"] });
+    });
+
+    test("are stepped past and not numbered, as the sidebar doesn't list them", () => {
+      const folding: NavigationState = { ...base, now, conversations: [madeDaysAgo("stale", 30), madeDaysAgo("fresh", 1), madeDaysAgo("fresher", 0)] };
+      expect(adjacentConversation({ ...folding, selectedConversationId: "fresh" }, 1)).toBe("fresher");
+      expect(adjacentConversation({ ...folding, selectedConversationId: "fresher" }, 1)).toBe("fresh");
+      expect(numberedConversation({ ...folding, selectedConversationId: "fresh" }, 1)).toBe("fresh");
+      expect(adjacentConversation({ ...folding, now: undefined, selectedConversationId: "fresher" }, 1)).toBe("stale");
+    });
   });
 
   test("has nowhere to go without conversations", () => {

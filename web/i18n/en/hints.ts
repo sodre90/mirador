@@ -206,6 +206,7 @@ export const hints = {
   addWorkspaceGroup: "Add a group: a heading that folds, to gather workspaces under, e.g. per project or client. Drag a workspace by its heading into a group, and workspaces and groups into any order.",
   foldWorkspace: "Fold this workspace to its heading. Opening one of its conversations unfolds it.",
   unfoldWorkspace: "Show this workspace's conversations again.",
+  olderConversations: "Conversations nobody wrote in for a week. Favourites, ones waiting for you, ones with a reminder and ones still at work stay in the list. Writing in one brings it back.",
   workspaceGroupCount: "Workspaces in this group.",
   waitingInGroup: "Conversations in this group's workspaces waiting for you.",
   waitingAbove: "Conversations waiting for you, scrolled out of view above. Click to show the nearest.",

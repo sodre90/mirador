@@ -443,6 +443,7 @@ export function App() {
   });
 
   const select = (conversationId: string | null) => conversationId && dispatch({ type: "select", conversationId });
+  const asTheSidebarListsNow = () => ({ ...state, now: Date.now() });
 
   useShortcuts((command, fromCanvas) => {
     if (fromCanvas && outOfCanvasPagesReach(command)) return;
@@ -458,11 +459,11 @@ export function App() {
       case "search":
         return dispatch({ type: "open-overlay", overlay: { kind: command.type } });
       case "adjacent-conversation":
-        return select(adjacentConversation(state, command.step));
+        return select(adjacentConversation(asTheSidebarListsNow(), command.step));
       case "adjacent-workspace":
-        return select(adjacentWorkspaceConversation(state, command.step));
+        return select(adjacentWorkspaceConversation(asTheSidebarListsNow(), command.step));
       case "numbered-conversation":
-        return select(numberedConversation(state, command.number));
+        return select(numberedConversation(asTheSidebarListsNow(), command.number));
       case "new-conversation": {
         const workspace = currentWorkspace(state);
         return workspace && startConversationIn(workspace, dispatch);

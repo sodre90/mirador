@@ -25,12 +25,15 @@ export function isConversationOrder(value: unknown): value is ConversationOrder 
 type Ordered = Pick<Conversation, "title" | "titleSetByUser" | "favourite" | "lastMessageAt" | "lastReplyAt" | "position" | "createdAt">;
 
 /** A conversation nobody has written in or answered yet counts from when it was made, so a new one is not lost at the far end. */
-const timeOf: Record<Exclude<ConversationOrderBy, "custom" | "title">, (conversation: Ordered) => number> = {
+const timeOf: Record<Exclude<ConversationOrderBy, "custom" | "title">, (conversation: Pick<Ordered, "lastMessageAt" | "lastReplyAt" | "createdAt">) => number> = {
   activity: ({ lastMessageAt, lastReplyAt, createdAt }) => Math.max(lastMessageAt ?? 0, lastReplyAt ?? 0, createdAt),
   message: ({ lastMessageAt, createdAt }) => lastMessageAt ?? createdAt,
   reply: ({ lastReplyAt, createdAt }) => lastReplyAt ?? createdAt,
   created: ({ createdAt }) => createdAt,
 };
+
+/** When somebody last wrote in the conversation or the agent last answered, or when it was made. */
+export const lastActivityOf: (conversation: Pick<Conversation, "lastMessageAt" | "lastReplyAt" | "createdAt">) => number = timeOf.activity;
 
 function ascendingBy(by: Exclude<ConversationOrderBy, "custom">, a: Ordered, b: Ordered) {
   return by === "title" ? a.title.localeCompare(b.title, undefined, { sensitivity: "base", numeric: true }) : timeOf[by](a) - timeOf[by](b);

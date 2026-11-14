@@ -22,7 +22,7 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { callerIdOf, conversationsIn, isUnderCaller, putAwayIn, showsInSidebar } from "./navigation.ts";
+import { apartFromOlder, callerIdOf, conversationsIn, isUnderCaller, putAwayIn, showsInSidebar } from "./navigation.ts";
 import { isPending } from "../shared/reminders.ts";
 import { openReminderPicker, removeReminder } from "./reminders.ts";
 import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
@@ -438,11 +438,50 @@ function WorkspaceSection({
   const openedDelegations = useOpenedDelegations();
   const listedUnder = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && callerIdOf(conversation) === caller.id);
   const delegatedTo = (caller: Conversation) => listedUnder(caller).filter(({ startedBy }) => startedBy);
-  const shown = conversations.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
+  const { current, older } = apartFromOlder(conversations, Date.now());
+  const listedNow = (some: Conversation[]) => some.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
+  const shown = listedNow(current);
+  const olderCount = older.filter((conversation) => !isUnderCaller(conversation, conversations)).length;
+  const olderHoldsSelected = older.some(({ id }) => id === selectedConversationId);
+  const [olderOpen, setOlderOpen] = useState(olderHoldsSelected);
+  useEffect(() => {
+    if (olderHoldsSelected) setOlderOpen(true);
+  }, [olderHoldsSelected]);
   const conversationList = useRef<HTMLUListElement>(null);
   const conversationDrag = useDragToReorder(
     (conversationId, beforeConversationId) => connection.send({ type: "conversation.move", conversationId, beforeConversationId }),
     (conversationId, beforeConversationId) => landingBeforeInCustomOrder(shown, conversationId, beforeConversationId),
+  );
+
+  const conversationRow = (conversation: Conversation, dragClasses: string[] = [], onPointerDown?: (event: PointerEvent<HTMLElement>) => void) => (
+    <li
+      key={conversation.id}
+      data-reorder-id={conversation.id}
+      data-waiting-tone={conversation.waitingFor ? waitingTones[conversation.waitingFor] : undefined}
+      className={[...rowClasses(conversation, conversations, selectedConversationId), ...dragClasses].join(" ")}
+      onPointerDown={onPointerDown}
+      onClick={() => dispatch({ type: "select", conversationId: conversation.id })}
+      onContextMenu={(event) => onConversationMenu(conversation, event)}
+    >
+      <ProfileEdge profile={profileOf(profiles, conversation)} />
+      {statusDot(conversation, delegatedTo(conversation))}
+      <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
+      {conversation.worktree && <WorktreeMark branch={conversation.worktree.branch} />}
+      <DelegatedToggle callerId={conversation.id} under={listedUnder(conversation)} open={openedDelegations.has(conversation.id)} />
+      {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
+      <ReminderChip conversation={conversation} dispatch={dispatch} />
+      <FavouriteStar conversation={conversation} />
+      <ConfirmButton
+        className="icon"
+        label={words.deleteConversation}
+        hint={hints.deleteConversation}
+        armedText={words.deleteArmed}
+        armedHint={hints.deleteConversationArmed}
+        onConfirm={() => deleteConversation(conversation)}
+      >
+        ×
+      </ConfirmButton>
+    </li>
   );
 
   return (
@@ -495,42 +534,27 @@ function WorkspaceSection({
         </ConfirmButton>
       </header>
       {pickingColor && <WorkspaceColorPicker workspace={workspace} mark={mark} onClose={closePicker} />}
-      {!folded && conversations.length > 0 && (
+      {!folded && shown.length > 0 && (
         <ul ref={conversationList}>
-          {shown.map((conversation, index) => (
-            <li
-              key={conversation.id}
-              data-reorder-id={conversation.id}
-              data-waiting-tone={conversation.waitingFor ? waitingTones[conversation.waitingFor] : undefined}
-              className={[...rowClasses(conversation, conversations, selectedConversationId), ...conversationDrag.classesOf(conversation.id, index === shown.length - 1)].join(" ")}
-              onPointerDown={draggable ? (event) => conversationDrag.startDrag(conversation.id, conversationList.current, event) : undefined}
-              onClick={() => dispatch({ type: "select", conversationId: conversation.id })}
-              onContextMenu={(event) => onConversationMenu(conversation, event)}
-            >
-              <ProfileEdge profile={profileOf(profiles, conversation)} />
-              {statusDot(conversation, delegatedTo(conversation))}
-              <ConversationTitle conversation={conversation} startEditingOn="double-click" className="conversation-title" />
-              {conversation.worktree && <WorktreeMark branch={conversation.worktree.branch} />}
-              <DelegatedToggle callerId={conversation.id} under={listedUnder(conversation)} open={openedDelegations.has(conversation.id)} />
-              {conversation.waitingFor && <WaitingPill waitingFor={conversation.waitingFor} />}
-              <ReminderChip conversation={conversation} dispatch={dispatch} />
-              <FavouriteStar conversation={conversation} />
-              <ConfirmButton
-                className="icon"
-                label={words.deleteConversation}
-                hint={hints.deleteConversation}
-                armedText={words.deleteArmed}
-                armedHint={hints.deleteConversationArmed}
-                onConfirm={() => deleteConversation(conversation)}
-              >
-                ×
-              </ConfirmButton>
-            </li>
-          ))}
+          {shown.map((conversation, index) =>
+            conversationRow(
+              conversation,
+              conversationDrag.classesOf(conversation.id, index === shown.length - 1),
+              draggable ? (event) => conversationDrag.startDrag(conversation.id, conversationList.current, event) : undefined,
+            ),
+          )}
         </ul>
       )}
       {!folded && putAway.length > 0 && (
         <LaterGroup workspace={workspace} putAway={putAway} selectedConversationId={selectedConversationId} dispatch={dispatch} onConversationMenu={onConversationMenu} />
+      )}
+      {!folded && olderCount > 0 && (
+        <div className="later-group older-group" aria-label={`${workspace.name} · ${words.older(olderCount)}`}>
+          <button type="button" aria-expanded={olderOpen} data-hint={hints.olderConversations} onClick={() => setOlderOpen(!olderOpen)}>
+            {olderOpen ? "▾" : "▸"} {words.older(olderCount)}
+          </button>
+          {olderOpen && <ul>{listedNow(older).map((conversation) => conversationRow(conversation))}</ul>}
+        </div>
       )}
       {!folded && (
         <div className="workspace-actions">

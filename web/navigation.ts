@@ -1,6 +1,6 @@
 import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
-import { CUSTOM_ORDER, inConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
+import { CUSTOM_ORDER, inConversationOrder, lastActivityOf, type ConversationOrder } from "../shared/conversation-order.ts";
 import { isSideChat } from "../shared/side-chats.ts";
 import { waitingByUrgency } from "../shared/waiting.ts";
 
@@ -11,6 +11,8 @@ export interface NavigationState {
   conversationOrder?: ConversationOrder;
   /** While the pointer is over the list: the times it sorts by, as they were when the pointer got there, so no row moves just as it is clicked. */
   heldTurnTimes?: HeldTurnTimes | null;
+  /** The time by which the sidebar folds conversations away under Older, where the keys don't step; without it, none are folded. */
+  now?: number;
 }
 
 export type HeldTurnTimes = Map<string, Pick<Conversation, "lastMessageAt" | "lastReplyAt">>;
@@ -58,10 +60,35 @@ export const isUnderCaller = (conversation: Conversation, listed: Conversation[]
 export const showsInSidebar = (conversation: Conversation, listed: Conversation[], callersOpened: ReadonlySet<string>) =>
   !isUnderCaller(conversation, listed) || callersOpened.has(callerIdOf(conversation)!) || Boolean(conversation.waitingFor);
 
+export const OLDER_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+
+/** Nobody wrote in it and the agent didn't answer for a week, and nothing about it is there for the user to come back to. */
+const restsUntouched = (conversation: Conversation, now: number) =>
+  now - lastActivityOf(conversation) > OLDER_AFTER_MS &&
+  !conversation.favourite &&
+  !conversation.waitingFor &&
+  conversation.status === "idle" &&
+  !conversation.reminder &&
+  conversation.jobWaits.length === 0 &&
+  !conversation.openInTerminal;
+
+/**
+ * A workspace's listed conversations in two: those the sidebar lists, and those it folds under Older, which rest
+ * untouched. One listed under its caller stays with it, and a caller stays in the list while any under it does.
+ */
+export function apartFromOlder(listed: Conversation[], now: number): { current: Conversation[]; older: Conversation[] } {
+  const familyOf = (conversation: Conversation) => (isUnderCaller(conversation, listed) ? callerIdOf(conversation)! : conversation.id);
+  const inUse = new Set(listed.filter((conversation) => !restsUntouched(conversation, now)).map(familyOf));
+  return { current: listed.filter((conversation) => inUse.has(familyOf(conversation))), older: listed.filter((conversation) => !inUse.has(familyOf(conversation))) };
+}
+
 const newest = (conversations: Conversation[]) => conversations.reduce((newest, each) => (each.createdAt > newest.createdAt ? each : newest));
 
 /** The conversations to step through and number: a side chat opens beside its conversation, so it has no place of its own. */
-const steppedThrough = (state: NavigationState, workspaceId: string) => conversationsIn(state, workspaceId).filter((conversation) => !isSideChat(conversation));
+const steppedThrough = (state: NavigationState, workspaceId: string) => {
+  const listed = conversationsIn(state, workspaceId);
+  return (state.now === undefined ? listed : apartFromOlder(listed, state.now).current).filter((conversation) => !isSideChat(conversation));
+};
 
 const sidebarOrder = (state: NavigationState) => state.workspaces.flatMap(({ id }) => steppedThrough(state, id));
 

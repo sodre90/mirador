@@ -43,6 +43,7 @@ export const shell = {
     waitingEdgeText: (count: number) => `${count} waiting`,
     markRead: "Mark as read",
     markUnread: "Mark as unread",
+    older: (count: number) => `Older (${count})`,
     delegated: (count: number) => `${count} delegated`,
     sideChats: (count: number) => plural(count, "1 side chat", `${count} side chats`),
     delegatedWorking: (count: number) => ` · ${count} working`,

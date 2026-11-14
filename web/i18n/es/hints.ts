@@ -227,6 +227,7 @@ export const hints: Messages["hints"] = {
     "Agrega un grupo: un encabezado que se contrae, para reunir espacios de trabajo, p. ej. por proyecto o cliente. Arrastra un espacio de trabajo por su encabezado a un grupo, y ordena espacios de trabajo y grupos como quieras.",
   foldWorkspace: "Contrae este espacio de trabajo hasta su encabezado. Abrir una de sus conversaciones lo expande.",
   unfoldWorkspace: "Vuelve a mostrar las conversaciones de este espacio de trabajo.",
+  olderConversations: "Conversaciones en las que nadie escribe desde hace una semana. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando se quedan en la lista. Escribir en una la trae de vuelta.",
   workspaceGroupCount: "Espacios de trabajo de este grupo.",
   waitingInGroup: "Conversaciones de los espacios de trabajo de este grupo que te esperan.",
   waitingAbove: "Conversaciones que te esperan, fuera de la vista arriba. Haz clic para mostrar la más cercana.",

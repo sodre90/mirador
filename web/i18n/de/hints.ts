@@ -227,6 +227,7 @@ export const hints: Messages["hints"] = {
     "Füge eine Gruppe hinzu: eine einklappbare Überschrift, unter der du Arbeitsbereiche sammelst, z. B. pro Projekt oder Kunde. Ziehe einen Arbeitsbereich an seiner Überschrift in eine Gruppe und Arbeitsbereiche und Gruppen in jede beliebige Reihenfolge.",
   foldWorkspace: "Klappe diesen Arbeitsbereich bis auf seine Überschrift ein. Öffnest du eine seiner Unterhaltungen, klappt er wieder auf.",
   unfoldWorkspace: "Zeige die Unterhaltungen dieses Arbeitsbereichs wieder.",
+  olderConversations: "Unterhaltungen, in die seit einer Woche niemand geschrieben hat. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben in der Liste. Schreibst du in eine, kommt sie zurück.",
   workspaceGroupCount: "Arbeitsbereiche in dieser Gruppe.",
   waitingInGroup: "Unterhaltungen in den Arbeitsbereichen dieser Gruppe, die auf dich warten.",
   waitingAbove: "Unterhaltungen, die auf dich warten, oben aus dem Blick gescrollt. Klicke, um die nächstgelegene zu zeigen.",
