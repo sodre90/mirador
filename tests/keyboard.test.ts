@@ -5,6 +5,7 @@ import {
   adjacentWorkspaceConversation,
   conversationsIn,
   currentWorkspace,
+  nextWaitingConversation,
   numberedConversation,
   type NavigationState,
 } from "../web/navigation.ts";
@@ -52,6 +53,15 @@ describe("commandFor", () => {
     expect(commandFor(focusCanvas, "empty-field", true)).toEqual({ type: "focus", pane: "canvas" });
     expect(commandFor(focusCanvas, "not-typing", true)).toEqual({ type: "focus", pane: "canvas" });
     expect(commandFor(focusCanvas, "typing", true)).toBeNull();
+  });
+
+  test("Cmd+Shift+Y goes to the next conversation waiting for you, also from a message being written or a terminal", () => {
+    const nextWaiting = { type: "next-waiting" } as const;
+    expect(commandFor(press("KeyY", { metaKey: true, shiftKey: true }), "typing", true)).toEqual(nextWaiting);
+    expect(commandFor(press("KeyY", { metaKey: true, shiftKey: true }), "terminal", true)).toEqual(nextWaiting);
+    expect(commandFor(press("KeyY", { ctrlKey: true, shiftKey: true }), "not-typing", false)).toEqual(nextWaiting);
+    expect(commandFor(press("KeyY", { metaKey: true }), "not-typing", true)).toBeNull();
+    expect(shortcutKeys(true).nextWaiting).toBe("⌘⇧Y");
   });
 
   test("Cmd+Shift+U marks the open conversation unread, except in a Linux terminal, where Ctrl+Shift+U enters a Unicode character", () => {
@@ -301,6 +311,23 @@ describe("navigation", () => {
     const delegated = (id: string, dismissed: boolean) => ({ ...conversation(id, "a", 4, 4), startedBy: startedBy(dismissed) });
     const withDelegated = { ...base, conversations: [...base.conversations, delegated("a-task", false), delegated("a-done", true)] };
     expect(conversationsIn(withDelegated, "a").map(({ id }) => id)).toEqual(["a-old", "a-task", "a-new"]);
+  });
+
+  test("goes to the conversation that most needs the user, then on to the next one waiting, and round again", () => {
+    const waitingFor = (id: string, waits: Conversation["waitingFor"]) => ({ ...base.conversations.find((each) => each.id === id)!, waitingFor: waits });
+    const waiting = { ...base, conversations: [waitingFor("a-old", "finished"), waitingFor("a-new", null), waitingFor("b-only", "question")] };
+    const from = (selectedConversationId: string | null) => nextWaitingConversation({ ...waiting, selectedConversationId });
+    expect(from("a-new")).toBe("b-only");
+    expect(from(null)).toBe("b-only");
+    expect(from("b-only")).toBe("a-old");
+    expect(from("a-old")).toBe("b-only");
+  });
+
+  test("stays where it is when nothing else waits for the user", () => {
+    const onlyOpenOneWaits = { ...base, conversations: base.conversations.map((each) => ({ ...each, waitingFor: each.id === "a-new" ? ("permission" as const) : null })) };
+    expect(nextWaitingConversation(selecting("a-new"))).toBeNull();
+    expect(nextWaitingConversation({ ...onlyOpenOneWaits, selectedConversationId: "a-new" })).toBeNull();
+    expect(nextWaitingConversation({ ...onlyOpenOneWaits, selectedConversationId: "a-old" })).toBe("a-new");
   });
 
   test("has nowhere to go without conversations", () => {

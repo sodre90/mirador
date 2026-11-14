@@ -2,6 +2,7 @@ import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
 import { CUSTOM_ORDER, inConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
 import { isSideChat } from "../shared/side-chats.ts";
+import { waitingByUrgency } from "../shared/waiting.ts";
 
 export interface NavigationState {
   workspaces: Workspace[];
@@ -78,6 +79,14 @@ export function adjacentConversation(state: NavigationState, step: 1 | -1): stri
   const index = ordered.findIndex(({ id }) => id === state.selectedConversationId);
   if (index === -1) return (step === 1 ? ordered[0] : ordered.at(-1))!.id;
   return wrapped(ordered, index + step)!.id;
+}
+
+/** The most urgent conversation waiting for the user; from one that waits itself, the next most urgent, and round to the first again. */
+export function nextWaitingConversation(state: NavigationState): string | null {
+  const waiting = waitingByUrgency(sidebarOrder(state));
+  if (waiting.every(({ id }) => id === state.selectedConversationId)) return null;
+  const index = waiting.findIndex(({ id }) => id === state.selectedConversationId);
+  return wrapped(waiting, index + 1)!.id;
 }
 
 /** The newest conversation of the next workspace that has any. */

@@ -403,6 +403,7 @@ Hovering almost any control explains what it does behind the scenes, together wi
 | `⌥↑` `⌥↓` / `⌥⇧↑` `⌥⇧↓` | Previous or next conversation / workspace |
 | `⌥1`…`⌥9` | The n-th conversation of the current workspace |
 | `⌥T` / `⌥⇧T` | New conversation / add a workspace |
+| `⌘⇧Y` | The conversation that most needs you: a question or an approval first, then a failed turn, then a finished one; again for the next. The palette has it too |
 | `⌘\` / `` ⌃` `` | Show or hide the canvas / the terminals |
 | `⌘⇧←` `⌘⇧→` `⌘⇧↓` | Focus the message box / the canvas / the terminal |
 | `⌘F` / `⌘⇧F` | Find in the conversation (in a terminal, in its output) / search everywhere |

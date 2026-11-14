@@ -153,6 +153,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "聚焦终端",
     renameConversation: "重命名对话…",
     forkConversation: "Fork 对话",
+    nextWaiting: "下一个等你处理的对话",
     openMachine: (machine) => `打开机器 ${machine}`,
     openPluginWindow: (plugin) => `打开 ${plugin} 窗口`,
     searchAll: "搜索所有工作区…",
@@ -194,6 +195,7 @@ export const shell: Messages["shell"] = {
       sideChat: "在旁聊中就打开的对话提问",
       toggleTerminal: "显示 / 隐藏终端",
       search: "搜索所有工作区中的每个对话",
+      nextWaiting: "最需要你的对话：先是有提问或等待批准的，然后是失败的，再是已完成的；再按一次到下一个",
       markUnread: "把当前对话标为未读，并返回之前打开的那个（在侧边栏右键点击对话可标记任意一个）",
       find: "在当前对话中查找，包括较早的条目和已折叠的卡片；Aa 区分大小写（Enter：上一个匹配项，Shift+Enter：下一个）",
       findInReview:

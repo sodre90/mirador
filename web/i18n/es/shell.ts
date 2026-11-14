@@ -168,6 +168,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "Enfocar la terminal",
     renameConversation: "Renombrar conversación…",
     forkConversation: "Hacer fork de la conversación",
+    nextWaiting: "Siguiente conversación que te espera",
     openMachine: (machine) => `Abrir máquina: ${machine}`,
     openPluginWindow: (plugin) => `Abrir la ventana de ${plugin}`,
     searchAll: "Buscar en todos los espacios de trabajo…",
@@ -209,6 +210,7 @@ export const shell: Messages["shell"] = {
       sideChat: "Preguntar sobre la conversación abierta en un chat lateral",
       toggleTerminal: "Mostrar / ocultar la terminal",
       search: "Buscar en todas las conversaciones de todos los espacios de trabajo",
+      nextWaiting: "La conversación que más te necesita: primero la que pregunta o espera una aprobación, luego la que falló y después la terminada; otra vez para la siguiente",
       markUnread:
         "Marcar esta conversación como no leída y volver a la que estaba abierta antes (haz clic derecho en una conversación de la barra lateral para marcar cualquiera)",
       find: "Buscar en esta conversación, incluidas las entradas anteriores y las tarjetas contraídas; Aa distingue mayúsculas y minúsculas (Enter: coincidencia anterior, Shift+Enter: siguiente)",

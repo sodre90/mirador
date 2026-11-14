@@ -35,7 +35,7 @@ import { launchLabel } from "./launch-label.ts";
 import { useProgramRequest } from "./program-request.ts";
 import { shownTitle } from "./shown-title.ts";
 import { requestOfTerminalPane, type TerminalPaneRequest } from "./terminal-pane-request.ts";
-import { adjacentConversation, adjacentWorkspaceConversation, currentWorkspace, numberedConversation } from "./navigation.ts";
+import { adjacentConversation, adjacentWorkspaceConversation, currentWorkspace, nextWaitingConversation, numberedConversation } from "./navigation.ts";
 import { Palette, ShortcutHelp, type PaletteEntry } from "./Palette.tsx";
 import { DEFAULT_SIDEBAR_WIDTH, inView, sidebarWidthWithinLimits, swapPanes, toggledInView, type PaneId, type PaneLayout } from "./layout.ts";
 import { useConversationLayouts, useSidebarHidden, useSidebarWidth } from "./paneLayouts.ts";
@@ -281,9 +281,14 @@ function paletteEntries(
         run: () => dispatch({ type: "select", conversationId: conversation.id }),
       }),
     );
+  const nextWaiting = state.conversations.find(({ id }) => id === nextWaitingConversation(state));
+  const waitingActions: PaletteEntry[] = nextWaiting
+    ? [{ id: "next-waiting", label: words.nextWaiting, detail: shownTitle(nextWaiting), kind: "action", run: () => dispatch({ type: "select", conversationId: nextWaiting.id }) }]
+    : [];
   return [
     ...conversations,
     ...reminderEntries,
+    ...waitingActions,
     ...workspaceActions,
     { id: "toggle-sidebar", label: panes.sidebar.visible ? t.shell.sidebar.hideSidebar : t.shell.sidebar.showSidebar, kind: "action", run: panes.sidebar.toggle },
     ...openConversationActions,
@@ -472,6 +477,8 @@ export function App() {
         return toggleTerminal();
       case "find":
         return findsInCanvasPage(fromCanvas, canvasPageHasFocus()) ? findInCanvasPage() : findInOpenConversation();
+      case "next-waiting":
+        return select(nextWaitingConversation(state));
       case "mark-unread": {
         const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId);
         return conversation && canMarkUnread(conversation) && markUnread(conversation.id, dispatch);

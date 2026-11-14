@@ -168,6 +168,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "Terminal fokussieren",
     renameConversation: "Unterhaltung umbenennen…",
     forkConversation: "Unterhaltung forken",
+    nextWaiting: "Nächste Unterhaltung, die auf dich wartet",
     openMachine: (machine) => `Rechner öffnen: ${machine}`,
     openPluginWindow: (plugin) => `Fenster öffnen: ${plugin}`,
     searchAll: "Alle Arbeitsbereiche durchsuchen…",
@@ -209,6 +210,7 @@ export const shell: Messages["shell"] = {
       sideChat: "Im Nebenchat zur offenen Unterhaltung fragen",
       toggleTerminal: "Terminal ein- / ausblenden",
       search: "Jede Unterhaltung in jedem Arbeitsbereich durchsuchen",
+      nextWaiting: "Die Unterhaltung, die dich am dringendsten braucht: zuerst eine mit einer Frage oder Freigabe, dann eine fehlgeschlagene, dann eine fertige; noch einmal für die nächste",
       markUnread:
         "Diese Unterhaltung als ungelesen markieren und zur vorher offenen zurückgehen (Rechtsklick auf eine Unterhaltung in der Seitenleiste markiert eine beliebige)",
       find: "In dieser Unterhaltung suchen, auch in früheren Einträgen und eingeklappten Karten; Aa beachtet Groß- und Kleinschreibung (Enter: älterer Treffer, Shift+Enter: neuerer)",

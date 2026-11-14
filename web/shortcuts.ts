@@ -15,6 +15,7 @@ export type ShortcutCommand =
   | { type: "find" }
   | { type: "search" }
   | { type: "mark-unread" }
+  | { type: "next-waiting" }
   | { type: "remind" }
   | { type: "side-chat" }
   | { type: "focus"; pane: "chat" | "canvas" | "terminals" }
@@ -61,6 +62,7 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
   if (primary && !press.altKey && !press.shiftKey && press.code === "KeyF" && typing !== "terminal") return { type: "find" };
   if (primary && !press.altKey && press.shiftKey && press.code === "KeyF" && !terminalFinds) return { type: "search" };
   if (primary && !press.altKey && press.shiftKey && press.code === "KeyU" && !terminalEntersUnicode) return { type: "mark-unread" };
+  if (primary && !press.altKey && press.shiftKey && press.code === "KeyY") return { type: "next-waiting" };
   if (primary && !press.altKey && press.shiftKey && press.code === "KeyL" && !(!mac && typing === "terminal")) return { type: "remind" };
   if (primary && !press.altKey && press.shiftKey && typing !== "typing") {
     if (press.code === "ArrowLeft") return { type: "focus", pane: "chat" };
@@ -128,6 +130,7 @@ export function shortcutKeys(mac = isMac) {
     search: `${primary}${shift}F`,
     restartHost: `${primary}${shift}R`,
     markUnread: `${primary}${shift}U`,
+    nextWaiting: `${primary}${shift}Y`,
     remind: `${primary}${shift}L`,
     sideChat: `${option}B`,
     templates: `${primary}J`,
@@ -169,6 +172,7 @@ export function shortcutHelp(mac = isMac): { keys: string; action: string }[] {
     { keys: keys.toggleCanvas, action: actions.toggleCanvas },
     { keys: keys.toggleTerminal, action: actions.toggleTerminal },
     { keys: keys.search, action: actions.search },
+    { keys: keys.nextWaiting, action: actions.nextWaiting },
     { keys: keys.markUnread, action: actions.markUnread },
     { keys: keys.remind, action: t.reminders.shortcut },
     { keys: keys.sideChat, action: actions.sideChat },

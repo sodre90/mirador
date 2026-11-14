@@ -154,6 +154,7 @@ export const shell: Messages["shell"] = {
     focusTerminal: "Fókusz a terminálra",
     renameConversation: "Beszélgetés átnevezése…",
     forkConversation: "Beszélgetés elágaztatása",
+    nextWaiting: "Következő rád váró beszélgetés",
     openMachine: (machine) => `Gép megnyitása: ${machine}`,
     openPluginWindow: (plugin) => `Ablak megnyitása: ${plugin}`,
     searchAll: "Keresés minden munkaterületen…",
@@ -195,6 +196,7 @@ export const shell: Messages["shell"] = {
       sideChat: "Kérdezés a nyitott beszélgetésről egy mellékszálban",
       toggleTerminal: "A terminál megjelenítése / elrejtése",
       search: "Keresés minden munkaterület minden beszélgetésében",
+      nextWaiting: "A beszélgetés, amelyiknek a leginkább szüksége van rád: előbb amelyik kérdez vagy jóváhagyásra vár, aztán a hibás, aztán a kész; újra megnyomva a következő",
       markUnread:
         "Ennek a beszélgetésnek a megjelölése olvasatlanként, és vissza az előtte nyitotthoz (bármelyiket megjelölheted, ha jobb gombbal kattintasz rá az oldalsávon)",
       find: "Keresés ebben a beszélgetésben, a korábbi bejegyzésekkel és az összecsukott kártyákkal együtt; az Aa megkülönbözteti a kis- és nagybetűt (Enter: régebbi találat, Shift+Enter: újabb)",
