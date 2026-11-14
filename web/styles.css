@@ -3794,6 +3794,40 @@ button.edits-waiting {
   color: var(--text);
 }
 
+.jump-to-latest-anchor {
+  position: relative;
+  height: 0;
+}
+
+button.jump-to-latest {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  translate: -50% 0;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--muted);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.14);
+  cursor: pointer;
+}
+
+button.jump-to-latest:hover {
+  color: var(--text);
+}
+
+button.jump-to-latest svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
 .working {
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));

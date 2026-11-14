@@ -131,6 +131,7 @@ export const chat: Messages["chat"] = {
     showEarlier: "Korábbi bejegyzések mutatása",
     loadingEarlier: "Korábbi bejegyzések betöltése…",
     working: "Dolgozik…",
+    jumpToLatest: "Ugrás a legújabbhoz",
     openInTerminal: (activity) =>
       `Ez a munkamenet a Claude Code-ban egy terminálban is nyitva van (ott: ${activity}). Ami ott történik, az itt nem jelenik meg, és egy innen küldött üzenet kettéágaztatja a munkamenet előzményeit: folytasd a terminálban, vagy előbb lépj ki ott.`,
   },

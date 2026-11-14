@@ -131,6 +131,7 @@ export const chat: Messages["chat"] = {
     showEarlier: "显示更早的条目",
     loadingEarlier: "正在加载更早的条目…",
     working: "工作中…",
+    jumpToLatest: "跳到最新",
     openInTerminal: (activity) =>
       `这个会话也在终端的 Claude Code 中打开着（那边${activity}）。那边发生的事不会显示在这里，从这里发消息会让会话历史分成两份：请在终端中继续，或先在那边退出。`,
   },

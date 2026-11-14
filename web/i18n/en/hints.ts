@@ -165,6 +165,7 @@ export const hints = {
   findMatchCase: "Match case: capital and small letters count as different.",
   runningSubagent: "A subagent at work. Click to open its card in the conversation and see what it has done so far.",
   approvalWaiting: "The agent, or one of its subagents, waits for your approval further up the conversation. Click to go to it.",
+  jumpToLatest: "Go to the end of the conversation, and follow what comes in from there.",
   subagentTokens: (read: string, written: string, fresh: string) =>
     `Input tokens: ${read} read from the cache, ${written} written to it, ${fresh} new. Counted from Claude Code's transcript of the subagent.`,
   inTerminal:

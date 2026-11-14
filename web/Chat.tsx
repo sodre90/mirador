@@ -1011,6 +1011,7 @@ function useScrollAnchor() {
   const anchor = useRef<ScrollAnchor | null>(null);
   const size = useRef({ width: 0, height: 0 });
   const held = useRef<ScrollAnchor | "bottom" | null>(null);
+  const [awayFromLatest, setAwayFromLatest] = useState(false);
 
   const resizedSinceLastLook = (timeline: HTMLElement) => timeline.clientWidth !== size.current.width || timeline.clientHeight !== size.current.height;
 
@@ -1057,6 +1058,15 @@ function useScrollAnchor() {
   const rememberPlaceIn = (timeline: HTMLElement) => {
     pinned.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 40;
     anchor.current = pinned.current ? null : anchorAtTop(timeline);
+    setAwayFromLatest(!pinned.current);
+  };
+  const jumpToLatest = () => {
+    const timeline = ref.current;
+    if (!timeline) return;
+    pinned.current = true;
+    anchor.current = null;
+    setAwayFromLatest(false);
+    timeline.scrollTop = timeline.scrollHeight;
   };
   const onScroll = () => {
     const timeline = ref.current;
@@ -1072,7 +1082,19 @@ function useScrollAnchor() {
     if (ref.current) held.current = pinned.current ? "bottom" : entryAtTop(ref.current);
   };
   const isPinned = () => pinned.current;
-  return { ref, onScroll, holdPlace, isPinned, rememberPlace };
+  return { ref, onScroll, holdPlace, isPinned, rememberPlace, awayFromLatest, jumpToLatest };
+}
+
+function JumpToLatest({ onJump }: { onJump: () => void }) {
+  return (
+    <div className="jump-to-latest-anchor">
+      <button type="button" className="jump-to-latest" aria-label={words.timeline.jumpToLatest} data-hint={hints.jumpToLatest} onClick={onJump}>
+        <svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 3v10M3.5 8.5L8 13l4.5-4.5" />
+        </svg>
+      </button>
+    </div>
+  );
 }
 
 const ENTRIES_PER_LOAD = 200;
@@ -2161,7 +2183,7 @@ export function ChatPanel({
   useLayoutEffect(() => {
     timelineNow.current = timeline;
   }, [timeline]);
-  const { ref, onScroll, holdPlace, isPinned, rememberPlace } = useScrollAnchor();
+  const { ref, onScroll, holdPlace, isPinned, rememberPlace, awayFromLatest, jumpToLatest } = useScrollAnchor();
   const earlier = useEarlierHistory(open);
   const { firstLoaded, loadFrom, loadEarlier } = useLoadedEntries(timeline, open.loaded, { holdPlace, isPinned }, earlier);
   const [subagentToShow, setSubagentToShow] = useState<string | null>(null);
@@ -2258,6 +2280,7 @@ export function ChatPanel({
                         </div>
                       </ForkThroughTurn.Provider>
                     </MatchesFind.Provider>
+                    {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
                     {approvalsOutOfView.length > 0 && <ApprovalsWaiting approvals={approvalsOutOfView} timeline={timeline} onShow={showApproval} />}
                     {runningSubagents.length > 0 && <RunningSubagents conversationId={conversation.id} subagents={runningSubagents} onShow={showSubagent} />}
                     {conversation.openInTerminal && (

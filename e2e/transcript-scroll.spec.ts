@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -58,4 +58,33 @@ test("resizing the conversation keeps the reader at the bottom, or on the line t
   await dragDividerBy(page, -500);
   await expect.poll(() => offsetFromTop(page, 6).then((offset) => Math.abs(offset - reading))).toBeLessThan(3);
   expect(await distanceFromBottom(page)).toBeGreaterThan(100);
+});
+
+const jumpToLatest = (page: Page) => page.getByRole("button", { name: "Jump to the latest" });
+
+test("scrolled up, an arrow jumps to the latest entry, and the conversation is followed from there", async ({ page }) => {
+  await signIn(page, host);
+  if (!(await workspaceCard(page, host.projectDir).isVisible())) await addWorkspace(page, host.projectDir);
+  await startConversation(page);
+  for (let number = 1; number <= CARDS; number++) {
+    await runCommand(page, `echo "card-${number}: the quick brown fox jumps over the lazy dog, again and again, until the line has to wrap"`);
+  }
+  await expect(page.locator(".user-command .shell-output")).toHaveCount(CARDS);
+  await expect.poll(() => distanceFromBottom(page)).toBeLessThan(2);
+  await expect(jumpToLatest(page)).toBeHidden();
+
+  await timeline(page).evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(jumpToLatest(page)).toBeVisible();
+  await runCommand(page, `echo "card-${CARDS + 1}: arrives while the reader is further up"`);
+  await expect(card(page, CARDS + 1).locator(".shell-output")).toBeAttached();
+  expect(await timeline(page).evaluate((element) => element.scrollTop)).toBe(0);
+  await expect(jumpToLatest(page)).toBeVisible();
+
+  await jumpToLatest(page).click();
+  await expect.poll(() => distanceFromBottom(page)).toBeLessThan(2);
+  await expect(jumpToLatest(page)).toBeHidden();
+
+  await runCommand(page, `echo "card-${CARDS + 2}: arrives while the reader follows"`);
+  await expect(card(page, CARDS + 2).locator(".shell-output")).toBeVisible();
+  await expect.poll(() => distanceFromBottom(page)).toBeLessThan(2);
 });

@@ -183,6 +183,7 @@ export const hints: Messages["hints"] = {
   findMatchCase: "Groß-/Kleinschreibung beachten: Groß- und Kleinbuchstaben gelten als verschieden.",
   runningSubagent: "Ein Subagent bei der Arbeit. Klicke, um seine Karte in der Unterhaltung zu öffnen und zu sehen, was er bisher getan hat.",
   approvalWaiting: "Der Agent oder einer seiner Subagenten wartet weiter oben in der Unterhaltung auf deine Genehmigung. Klicke, um dorthin zu gehen.",
+  jumpToLatest: "Zum Ende der Unterhaltung gehen und von dort verfolgen, was hereinkommt.",
   subagentTokens: (read, written, fresh) =>
     `Eingabe-Token: ${read} aus dem Cache gelesen, ${written} hineingeschrieben, ${fresh} neu. Gezählt aus dem Transkript des Subagenten von Claude Code.`,
   inTerminal:

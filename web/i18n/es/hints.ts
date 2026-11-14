@@ -183,6 +183,7 @@ export const hints: Messages["hints"] = {
   findMatchCase: "Distinguir mayúsculas y minúsculas: las letras mayúsculas y minúsculas cuentan como distintas.",
   runningSubagent: "Un subagente trabajando. Haz clic para abrir su tarjeta en la conversación y ver lo que ha hecho hasta ahora.",
   approvalWaiting: "El agente, o uno de sus subagentes, espera tu aprobación más arriba en la conversación. Haz clic para ir allí.",
+  jumpToLatest: "Ir al final de la conversación y seguir desde allí lo que llegue.",
   subagentTokens: (read, written, fresh) =>
     `Tokens de entrada: ${read} leídos de la caché, ${written} escritos en ella, ${fresh} nuevos. Contados a partir de la transcripción del subagente de Claude Code.`,
   inTerminal:

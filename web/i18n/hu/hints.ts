@@ -174,6 +174,7 @@ export const hints: Messages["hints"] = {
   findMatchCase: "Kis- és nagybetű megkülönböztetése.",
   runningSubagent: "Egy dolgozó alágens. Kattints, hogy megnyisd a kártyáját a beszélgetésben, és lásd, mit csinált eddig.",
   approvalWaiting: "Az ágens vagy valamelyik alágense feljebb a beszélgetésben a jóváhagyásodra vár. Kattints, hogy odaugorj.",
+  jumpToLatest: "Ugrás a beszélgetés végére; onnan a nézet követi, ami érkezik.",
   subagentTokens: (read, written, fresh) =>
     `Bemeneti tokenek: ${read} a gyorsítótárból olvasva, ${written} oda írva, ${fresh} új. Az alágens Claude Code-átiratából számolva.`,
   inTerminal:

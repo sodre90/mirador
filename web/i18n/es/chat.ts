@@ -133,6 +133,7 @@ export const chat: Messages["chat"] = {
     showEarlier: "Mostrar entradas anteriores",
     loadingEarlier: "Cargando entradas anteriores…",
     working: "Trabajando…",
+    jumpToLatest: "Ir a lo más reciente",
     openInTerminal: (activity) =>
       `Esta sesión también está abierta en Claude Code en una terminal (${activity} allí). Lo que pasa allí no aparece aquí, y un mensaje enviado desde aquí divide el historial de la sesión: continúa en la terminal, o ciérrala allí primero.`,
   },

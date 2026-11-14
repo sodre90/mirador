@@ -164,6 +164,7 @@ export const hints: Messages["hints"] = {
   findMatchCase: "区分大小写：大写和小写字母视为不同。",
   runningSubagent: "正在工作的子 Agent。点击可在对话中打开它的卡片，查看它目前做了什么。",
   approvalWaiting: "Agent 或它的某个子 Agent 在对话更上方等你批准。点击跳转到那里。",
+  jumpToLatest: "跳到对话末尾，并从那里跟随新到的内容。",
   subagentTokens: (read: string, written: string, fresh: string) =>
     `输入 token：${read} 个从缓存读取，${written} 个写入缓存，${fresh} 个为新增。根据 Claude Code 的子 Agent 记录统计。`,
   inTerminal:

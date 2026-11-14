@@ -137,6 +137,7 @@ export const chat = {
     showEarlier: "Show earlier entries",
     loadingEarlier: "Loading earlier entries…",
     working: "Working…",
+    jumpToLatest: "Jump to the latest",
     openInTerminal: (activity: string) =>
       `This session is also open in Claude Code in a terminal (${activity} there). What happens there doesn't show up here, and a message sent from here splits the session's history: continue in the terminal, or quit it there first.`,
   },
