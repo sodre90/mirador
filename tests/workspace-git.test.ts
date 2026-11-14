@@ -28,9 +28,11 @@ function git(folder: string, ...args: string[]) {
   return run.stdout.toString().trim();
 }
 
+/** Its files check out with the line ends they were written with: the host's git reads the Windows runner's system config, which sets core.autocrlf. */
 function repository() {
   const folder = newFolder();
   git(folder, "init", "-q", "-b", "main");
+  git(folder, "config", "core.autocrlf", "false");
   return folder;
 }
 
