@@ -209,6 +209,19 @@ describe("loading a plugin with typed settings or statusline chips", () => {
     }
   });
 
+  test("refuses a required setting in a plugin.json for an API before it, and anything but a typed setting as required", async () => {
+    const withoutSwitch = (manifest: Record<string, unknown>) => settingsOf(manifest).map(({ switchesPlugin: _, ...setting }) => setting);
+    expect(await messagesOf(meterCopy((manifest) => ({ ...manifest, api: 19 })))).toEqual(["plugin.json makes a profile setting required, which plugin API 20 brought; it names API 19"]);
+    expect(await messagesOf(meterCopy((manifest) => ({ ...manifest, api: 18, profileSettings: withoutSwitch(manifest) })))).toEqual([
+      "plugin.json makes a profile setting required, which plugin API 20 brought; it names API 18",
+    ]);
+    const changed = (id: string, change: Record<string, unknown>) =>
+      meterCopy((manifest) => ({ ...manifest, profileSettings: settingsOf(manifest).map((setting) => (setting.id === id ? { ...setting, ...change } : setting)) }));
+    for (const folder of [changed("tier", { required: true }), changed("show-total", { required: true }), changed("url", { required: false }), changed("key", { required: "yes" })]) {
+      expect((await messagesOf(folder))[0]).toContain("each of its settings, if any, an id of its own");
+    }
+  });
+
   test("refuses a statusline or check that isn't a function", async () => {
     expect(await messagesOf(meterCopy((manifest) => manifest, `export default { items: {}, tools: {}, statusline: [], checkProfile: "yes" };`))).toEqual([
       "the canvas host module needs statusline only as a function; checkProfile only as a function",

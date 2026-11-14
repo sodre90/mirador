@@ -319,6 +319,7 @@ export const problems: Messages["problems"] = {
     `plugin.json hat Profileinstellungen zum Eintippen oder Umschalten, die Plugin-API ${brought} eingeführt hat; sie nennt API ${named}`,
   pluginSwitchNeedsNewerApi: (brought, named) =>
     `plugin.json macht eine Umschaltung zum Schalter des Plugins für ein Profil, was Plugin-API ${brought} eingeführt hat; sie nennt API ${named}`,
+  pluginRequiredSettingNeedsNewerApi: (brought, named) => `plugin.json macht eine Profileinstellung zur Pflicht, was Plugin-API ${brought} eingeführt hat; sie nennt API ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `das Canvas-Host-Modul zeigt Werte in der Statuszeile oder prüft Profile, was Plugin-API ${brought} eingeführt hat; plugin.json nennt API ${named}`,
   canvasHostModuleNeeds: (needs) => `das Canvas-Host-Modul braucht ${needs.join("; ")}`,

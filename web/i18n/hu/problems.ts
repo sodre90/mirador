@@ -314,6 +314,7 @@ export const problems: Messages["problems"] = {
     `a plugin.json-ban vannak beírandó vagy kapcsolható profilbeállítások, amelyek a bővítmény-API ${brought}. változatával jelentek meg; a megadott API: ${named}`,
   pluginSwitchNeedsNewerApi: (brought, named) =>
     `a plugin.json egy kapcsolót tesz meg a bővítmény profilonkénti kapcsolójának, ami a bővítmény-API ${brought}. változatával jelent meg; a megadott API: ${named}`,
+  pluginRequiredSettingNeedsNewerApi: (brought, named) => `a plugin.json kötelezővé tesz egy profilbeállítást, ami a bővítmény-API ${brought}. változatával jelent meg; a megadott API: ${named}`,
   pluginStatuslineNeedsNewerApi: (brought, named) =>
     `a vászon host modulja elemeket rajzol az állapotsorba vagy profilt ellenőriz, ami a bővítmény-API ${brought}. változatával jelent meg; a plugin.json-ban megadott API: ${named}`,
   canvasHostModuleNeeds: (needs) => `a vászon host moduljához ez kell: ${needs.join("; ")}`,

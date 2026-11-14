@@ -21,9 +21,10 @@ import type { HostProblem } from "./host-problems.ts";
  * read the profiles' settings; API 15 tells a plugin the model and effort each profile sets; API 16 lets a plugin
  * delete a conversation it started, with its worktree and branch; API 17 lets a canvas plugin's workspace tab open a
  * conversation of its workspace; API 18 lets its workspace tab and background work ask a profile's agent for the models
- * and efforts it offers; API 19 lets one of a plugin's toggles be its switch for a profile.
+ * and efforts it offers; API 19 lets one of a plugin's toggles be its switch for a profile; API 20 lets a typed setting
+ * say a profile that has the plugin on needs it.
  */
-export const APP_PLUGIN_API = 19;
+export const APP_PLUGIN_API = 20;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,
@@ -33,6 +34,9 @@ export const STATUSLINE_PLUGIN_API = 14;
 
 /** The first plugin API whose toggle may be the plugin's switch for a profile. */
 export const PLUGIN_SWITCH_API = 19;
+
+/** The first plugin API whose typed profile setting may be required. */
+export const REQUIRED_SETTING_API = 20;
 
 /** The first plugin API whose canvas host may work in the background, and whose plugin.json may say it starts conversations. */
 export const STARTS_CONVERSATIONS_PLUGIN_API = 11;
@@ -556,6 +560,11 @@ export interface PluginTextProfileSetting extends ProfileSettingBasics {
   /** A variable of the profile's environment the setting reads while it is empty, e.g. ANTHROPIC_BASE_URL. */
   fallsBackTo?: string;
   default?: "";
+  /**
+   * A profile that has the plugin on needs it, while the setting shows: the Profiles dialog says the plugin needs setup
+   * until the field holds a value or its Launch environment sets the variable it reads. Plugin API 20 brought it.
+   */
+  required?: true;
 }
 
 /** On or off for a profile, as "on" and "off". Plugin API 14 brought it. */
@@ -705,6 +714,8 @@ function isPluginProfileSetting(value: unknown): value is PluginProfileSetting {
   if (shownWhen !== undefined && !isText(shownWhen)) return false;
   const { switchesPlugin } = value as Partial<PluginToggleProfileSetting>;
   if (switchesPlugin !== undefined && (kind !== "toggle" || switchesPlugin !== true || shownWhen !== undefined)) return false;
+  const { required } = value as Partial<PluginTextProfileSetting>;
+  if (required !== undefined && ((kind !== "text" && kind !== "secret") || required !== true)) return false;
   if (kind === "text" || kind === "secret") {
     const { placeholder, fallsBackTo } = setting;
     return (
@@ -730,6 +741,9 @@ const modelSettingsNameProfileSettings = (settings: PluginProfileSetting[]) =>
 
 const shownWhenNamesToggles = (settings: PluginProfileSetting[]) =>
   settings.every(({ shownWhen }) => shownWhen === undefined || settings.some(({ id, kind }) => id === shownWhen && kind === "toggle"));
+
+/** Whether one of the plugin's profile settings is required, which plugin API 20 brought. */
+export const hasRequiredSetting = (settings: PluginProfileSetting[] = []) => settings.some((setting) => isTextSetting(setting) && setting.required === true);
 
 /** Whether the plugin's profile settings use what plugin API 14 brought: typed and toggled settings, or settings shown by a toggle. */
 export const usesTypedProfileSettings = (settings: PluginProfileSetting[] = []) => settings.some(({ kind, shownWhen }) => kind !== undefined || shownWhen !== undefined);
