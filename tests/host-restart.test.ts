@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
@@ -545,6 +545,22 @@ async function staleAfterEditing(file: string, expected: string[]) {
 }
 
 describe("SourceWatcher", () => {
+  test("a folder it can't watch shows its edits only after a restart, and the others are still watched", async () => {
+    const sourceDir = mkdtempSync(join(tmpdir(), "mirador-source-"));
+    ["web", "host"].forEach((directory) => mkdirSync(join(sourceDir, directory), { recursive: true }));
+    chmodSync(join(sourceDir, "web"), 0o000);
+    await Bun.sleep(200);
+    const edited: string[] = [];
+    const watcher = new SourceWatcher(sourceDir, { uiEdited: () => edited.push("ui"), hostEdited: () => edited.push("host") });
+    try {
+      expect(() => watcher.start()).not.toThrow();
+      expect(await toldOnceExpected(edited, ["host"], () => writeFileSync(join(sourceDir, "host", "main.ts"), "export {};\n"))).toEqual(["host"]);
+    } finally {
+      watcher.stop();
+      chmodSync(join(sourceDir, "web"), 0o755);
+    }
+  });
+
   test("an edit in web/ makes the UI stale, in host/ or plugins/ the host, and in shared/ both", async () => {
     expect(await staleAfterEditing("web/App.tsx", ["ui"])).toEqual(["ui"]);
     expect(await staleAfterEditing("host/acp/harness.ts", ["host"])).toEqual(["host"]);

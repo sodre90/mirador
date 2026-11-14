@@ -1,4 +1,4 @@
-import { statSync, watch, type FSWatcher } from "node:fs";
+import { statSync, watch, type FSWatcher, type WatchListener } from "node:fs";
 import { join } from "node:path";
 
 type EditListener = "uiEdited" | "hostEdited";
@@ -13,6 +13,16 @@ const isFolder = (path: string) => statSync(path, { throwIfNoEntry: false })?.is
 export const isEdit = (directory: string, name: string | null | undefined) => !name || !isFolder(join(directory, name));
 
 const inodeOf = (path: string) => statSync(path, { throwIfNoEntry: false })?.ino;
+
+/** A folder that can't be watched, as when Linux has no inotify instance left for the user, shows its edits only after a restart rather than stopping the host. */
+function watchOrWarn(path: string, options: { recursive?: boolean }, listener: WatchListener<string>): FSWatcher | undefined {
+  try {
+    return watch(path, options, listener);
+  } catch (error) {
+    console.warn(`Edits to ${path} show only after a restart, as it can't be watched: ${error instanceof Error ? error.message : String(error)}`);
+    return undefined;
+  }
+}
 
 /** A deploy can move a watched folder away and put a new one in its place: Linux keeps watching the old folder, and Windows tells that watch nothing. */
 type FolderWatch = { watcher: FSWatcher; ino: number };
@@ -30,7 +40,7 @@ export class SourceWatcher {
 
   start() {
     Object.keys(listenersByDirectory).forEach((directory) => this.watchFolder(directory));
-    this.sourceWatch = watch(this.sourceDir, (_event, name) => {
+    this.sourceWatch = watchOrWarn(this.sourceDir, {}, (_event, name) => {
       if (name && Object.hasOwn(listenersByDirectory, name)) this.folderMayBeReplaced(name);
     });
   }
@@ -47,10 +57,10 @@ export class SourceWatcher {
     const path = join(this.sourceDir, directory);
     const ino = inodeOf(path);
     if (ino === undefined) return;
-    const watcher = watch(path, { recursive: true }, (_event, name) => {
+    const watcher = watchOrWarn(path, { recursive: true }, (_event, name) => {
       if (isEdit(path, name)) this.edited(directory, name ? join(directory, name) : directory);
     });
-    this.folderWatches.set(directory, { watcher, ino });
+    if (watcher) this.folderWatches.set(directory, { watcher, ino });
   }
 
   private folderMayBeReplaced(directory: string) {
