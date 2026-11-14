@@ -1,13 +1,25 @@
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
+import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
-const host = new TestHost({ fakePrograms: true });
+const host = new TestHost({ fakePrograms: true, runsUserStatusLine: true });
+const api = new FakeClaudeApi();
 const PROFILE = "advised";
 const promptsFile = join(host.root, "prompts");
 const releaseFile = join(host.root, "release");
+
+/** Claude settings of the test's own, whose statusline command prints a line of its own. */
+function claudeSettingsWithStatusline() {
+  const configDir = join(host.root, "claude-config");
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(join(configDir, "settings.json"), JSON.stringify({ statusLine: { type: "command", command: "echo my own statusline" } }));
+  return configDir;
+}
+
+test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   // The advice test plugin reads the conversation's last turn as Mirador recorded it, and past half the context window offers to compact.
@@ -17,11 +29,14 @@ test.beforeAll(async () => {
     FAKE_ACP_COMMANDS: JSON.stringify([{ name: "compact", description: "Sum up the conversation to free context" }]),
   });
   writeFileSync(promptsFile, "");
+  api.limited = false;
+  await api.start();
   await host.start();
 });
 test.afterAll(async () => {
   await host.stop();
   await host.cleanUp();
+  api.stop();
 });
 
 test("a plugin's advice on the context shows on the context meter, whose Compact now sends /compact once the running turn ends", async ({ page }) => {
@@ -63,4 +78,22 @@ test("a plugin's advice on the context shows on the context meter, whose Compact
     await expect(statusline.getByRole("button", { name: /^Context/ })).toHaveCount(0);
     expect(readFileSync(promptsFile, "utf8").split("\n")).toContain("/compact");
   });
+});
+
+test("with the user's own statusline command showing, the context meter shows after it only while a plugin has advice", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const profiles = await createProfile(page, "own statusline", `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${claudeSettingsWithStatusline()}`);
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "own statusline · Claude Code" });
+  await startConversation(page);
+  const statusline = page.getByRole("region", { name: "Statusline" });
+  const meter = statusline.locator(".statusline-plugins .context-meter");
+  await expect(statusline.locator(".statusline-terminal")).toHaveAttribute("aria-label", "my own statusline");
+  await expect(meter, "no turn yet, so no advice").toHaveCount(0);
+
+  await sendMessage(page, "hello");
+  await waitForTurnToEnd(page);
+  await expect(meter).toHaveAttribute("data-hint", /\n\nThe last turn made 0 tool calls and left \d+ tokens in context\. /);
+  await expect(statusline.locator(".statusline-terminal")).toHaveAttribute("aria-label", "my own statusline");
 });

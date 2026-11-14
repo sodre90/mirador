@@ -331,6 +331,9 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
   const render = useStatuslineRender(conversation, pluginsOff, columns, prefersCommand);
   const commandOutput = prefersCommand ? (render?.output ?? null) : null;
   const pluginChips = render?.pluginChips ?? [];
+  const contextHints = render?.contextHints ?? [];
+  const usage = conversation.contextUsage;
+  const advisedUsage = contextHints.length > 0 && usage && usage.size > 0 ? usage : null;
 
   return (
     <section className="statusline" aria-label={words.label}>
@@ -344,12 +347,13 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
             gitBranch={render?.gitBranch ?? null}
             quotas={render?.quotas ?? null}
             pluginChips={pluginChips}
-            contextHints={render?.contextHints ?? []}
+            contextHints={contextHints}
           />
         )}
       </div>
-      {commandOutput !== null && pluginChips.length > 0 && (
+      {commandOutput !== null && (pluginChips.length > 0 || advisedUsage) && (
         <div className="statusline-plugins">
+          {advisedUsage && <ContextMeter conversationId={conversation.id} usage={advisedUsage} advice={contextHints} />}
           <PluginChips groups={pluginChips} />
         </div>
       )}
