@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, eventsInOrderOn, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo, startInManualMode } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
@@ -29,6 +30,16 @@ test.afterAll(async () => {
   api.stop();
 });
 
+/** A card that never says so carries the Agent call's updates as the host stored them: whether Claude Code launched it in the background. */
+async function expectInTheBackground(card: Locator) {
+  try {
+    await expect(card.locator(".subagent-facts")).toContainText("in the background", { timeout: 60_000 });
+  } catch (error) {
+    const stored = execFileSync("bun", [join(import.meta.dirname, "agent-tool-updates.ts"), join(host.dataDir, "state.sqlite")], { encoding: "utf8" });
+    throw new Error(`${(error as Error).message}\nThe Agent call's updates as the host stored them: ${stored}`);
+  }
+}
+
 test("while only a background subagent works, a message joins the turn and the agent answers it, and the subagent shows done once it ends, before its turn does", async ({ page }) => {
   const eventsInOrder = eventsInOrderOn(page);
   await signIn(page, host);
@@ -45,7 +56,7 @@ test("while only a background subagent works, a message joins the turn and the a
   const badge = page.locator(".chat-header .badge");
   const chip = page.locator(".chat-header .subagents-running");
   await sendMessage(page, `SUBAGENT RUN ${SUBAGENT_COMMAND}`);
-  await expect(card.locator(".subagent-facts")).toContainText("in the background", { timeout: 60_000 });
+  await expectInTheBackground(card);
   await expect(command).toHaveClass(/tool-in_progress/, { timeout: 60_000 });
   await expect(chip).toHaveText("◐ 1 subagent running");
 
