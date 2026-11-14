@@ -177,6 +177,8 @@ const addedColumns = [
   { table: "workspaces", column: "worktree_setup", definition: "TEXT NOT NULL DEFAULT ''" },
   { table: "conversations", column: "worktree", definition: "TEXT" },
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
+  { table: "conversations", column: "agent_commands", definition: "TEXT" },
+  { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -1421,6 +1423,10 @@ export class Store {
       this.db.query("UPDATE conversations SET last_message_at = ? WHERE id = ?").run(stored.at, conversationId);
     } else if (event.type === "turn-end" || (event.type === "error" && event.endsTurn)) {
       this.db.query("UPDATE conversations SET last_reply_at = ? WHERE id = ?").run(stored.at, conversationId);
+    } else if (event.type === "acp" && event.update.sessionUpdate === "available_commands_update") {
+      this.db.query("UPDATE conversations SET agent_commands = ?, agent_commands_at = ? WHERE id = ?").run(JSON.stringify(event.update.availableCommands), stored.at, conversationId);
+    } else if (event.type === "profile-changed" && event.agent !== undefined) {
+      this.db.query("UPDATE conversations SET agent_commands = NULL, agent_commands_at = NULL WHERE id = ?").run(conversationId);
     }
     return stored;
   }
@@ -1671,24 +1677,17 @@ export class Store {
    * The commands the agent last listed in this conversation, or else in another with the same agent and profile,
    * this workspace's first: an agent lists them only once a session starts, which is after the first message. A list
    * sent before the conversation moved to another agent belongs to that agent, so it doesn't count, as in the page's
-   * `latestSlashCommands`.
+   * `latestSlashCommands`. Read from the conversations, which keep their agent's latest list as it comes.
    */
   latestAvailableCommands({ id, workspaceId, harness, profileId }: Pick<Conversation, "id" | "workspaceId" | "harness" | "profileId">): AvailableCommand[] {
     const row = this.db
       .query(
-        `WITH last_agent_change AS MATERIALIZED (
-           SELECT conversation_id, MAX(seq) AS seq FROM events
-           WHERE json_extract(event, '$.type') = 'profile-changed' AND json_extract(event, '$.agent') IS NOT NULL
-           GROUP BY conversation_id
-         )
-         SELECT e.event FROM events e JOIN conversations c ON c.id = e.conversation_id
-         LEFT JOIN last_agent_change moved ON moved.conversation_id = e.conversation_id
-         WHERE c.harness = ? AND c.profile_id IS ? AND json_extract(e.event, '$.update.sessionUpdate') = 'available_commands_update'
-           AND e.seq > COALESCE(moved.seq, -1)
-         ORDER BY c.id = ? DESC, c.workspace_id = ? DESC, e.at DESC, e.seq DESC LIMIT 1`,
+        `SELECT agent_commands FROM conversations
+         WHERE harness = ? AND profile_id IS ? AND agent_commands IS NOT NULL
+         ORDER BY id = ? DESC, workspace_id = ? DESC, agent_commands_at DESC LIMIT 1`,
       )
-      .get(harness, profileId, id, workspaceId) as { event: string } | null;
-    return row ? JSON.parse(row.event).update.availableCommands : [];
+      .get(harness, profileId, id, workspaceId) as { agent_commands: string } | null;
+    return row ? JSON.parse(row.agent_commands) : [];
   }
 
   /** The messages and shell commands typed in the workspace's conversations other than this one, newest first. */

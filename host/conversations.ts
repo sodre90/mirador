@@ -381,8 +381,6 @@ export class ConversationService {
   /** A session loaded again replays all of its history; it is held here, so only what the conversation lacks joins it. */
   private readonly replaysBeingRead = new Map<string, acp.SessionNotification[]>();
   private readonly contextUsage: Map<string, ContextUsage>;
-  /** By conversation, the names of the commands its agent last listed: as the list came while Mirador ran, else as first looked up in the store. */
-  private readonly agentCommandNames = new Map<string, Set<string>>();
   private readonly creditReads = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly planQuotas = new PlanQuotasByProfile();
   private readonly unseenTurnEnds: Map<string, UnseenTurnEnd>;
@@ -481,11 +479,8 @@ export class ConversationService {
     return this.store.latestAvailableCommands(this.get(conversationId)).map(toSlashCommand);
   }
 
-  /** Whether the conversation's agent has the command; the store's answer, slow in a long conversation, is looked up once. */
   agentHasCommand(conversationId: string, name: string) {
-    const known = this.agentCommandNames.get(conversationId) ?? new Set(this.store.latestAvailableCommands(this.get(conversationId)).map((command) => command.name));
-    this.agentCommandNames.set(conversationId, known);
-    return known.has(name);
+    return this.store.latestAvailableCommands(this.get(conversationId)).some((command) => command.name === name);
   }
 
   typedElsewhere(conversationId: string) {
@@ -1107,7 +1102,6 @@ export class ConversationService {
     this.statusOverrides.delete(conversationId);
     this.terminalActivity.delete(conversationId);
     this.contextUsage.delete(conversationId);
-    this.agentCommandNames.delete(conversationId);
     this.stopReadingCredits(conversationId);
     this.unseenTurnEnds.delete(conversationId);
     this.lastWords.delete(conversationId);
@@ -1194,10 +1188,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     const released = this.releaseSession(conversationId, runtime, conversation.acpSessionId);
     this.stopDedicatedHarness(conversation.profileId, conversationId);
-    if (changesAgent) {
-      this.forgetContextUsage(conversationId);
-      this.agentCommandNames.delete(conversationId);
-    }
+    if (changesAgent) this.forgetContextUsage(conversationId);
     runtime.reportedModel = undefined;
     this.save({
       ...conversation,
@@ -2783,7 +2774,6 @@ export class ConversationService {
     if (update.sessionUpdate === "config_option_update") {
       this.save({ ...this.get(conversationId), configOptions: update.configOptions });
     }
-    if (update.sessionUpdate === "available_commands_update") this.agentCommandNames.set(conversationId, new Set(update.availableCommands.map(({ name }) => name)));
     if (update.sessionUpdate === "session_info_update" && update.title && !this.get(conversationId).titleSetByUser) {
       this.save({ ...this.get(conversationId), title: shownSessionTitle(this.get(conversationId).title, update.title) });
     }
