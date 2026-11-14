@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, eventsInOrderOn, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, eventsInOrderOn, lastAgentMessage, literally, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -83,7 +83,8 @@ test("a message sent while the advisor runs joins the turn once Claude Code give
 
   await waitForTurnToEnd(page);
   await expect(timeline).toContainText("ran-42");
-  await expect(lastAgentMessage(page)).toHaveText(`Answered: ${joining}`);
+  // The steer can reach Claude Code after it asked for its reply to the command's output, which then comes first in the same bubble.
+  await expect(lastAgentMessage(page)).toHaveText(new RegExp(`Answered: ${literally(joining)}$`));
   expect(eventsInOrder, "the message joined the turn rather than waiting for it to end").toEqual([stalling, joining, "turn-end"]);
   expect(advisorEndAndAgentTool, "the advisor's call ended once Claude Code asked again, not at the turn's end").toEqual(["agent's tool started", "advisor ended", "agent's tool finished"]);
   await expect(timeline).toContainText("Claude stopped this tool call before it ran.");
