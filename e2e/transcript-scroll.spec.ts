@@ -62,7 +62,7 @@ test("resizing the conversation keeps the reader at the bottom, or on the line t
 
 const jumpToLatest = (page: Page) => page.getByRole("button", { name: "Jump to the latest" });
 
-test("scrolled up, an arrow jumps to the latest entry, and the conversation is followed from there", async ({ page }) => {
+test("scrolled up, an arrow or sending a message jumps to the latest entry, and the conversation is followed from there", async ({ page }) => {
   await signIn(page, host);
   if (!(await workspaceCard(page, host.projectDir).isVisible())) await addWorkspace(page, host.projectDir);
   await startConversation(page);
@@ -75,16 +75,17 @@ test("scrolled up, an arrow jumps to the latest entry, and the conversation is f
 
   await timeline(page).evaluate((element) => element.scrollTo({ top: 0 }));
   await expect(jumpToLatest(page)).toBeVisible();
-  await runCommand(page, `echo "card-${CARDS + 1}: arrives while the reader is further up"`);
-  await expect(card(page, CARDS + 1).locator(".shell-output")).toBeAttached();
-  expect(await timeline(page).evaluate((element) => element.scrollTop)).toBe(0);
-  await expect(jumpToLatest(page)).toBeVisible();
-
   await jumpToLatest(page).click();
   await expect.poll(() => distanceFromBottom(page)).toBeLessThan(2);
   await expect(jumpToLatest(page)).toBeHidden();
+  await runCommand(page, `echo "card-${CARDS + 1}: arrives while the reader follows"`);
+  await expect(card(page, CARDS + 1).locator(".shell-output")).toBeVisible();
+  await expect.poll(() => distanceFromBottom(page)).toBeLessThan(2);
 
-  await runCommand(page, `echo "card-${CARDS + 2}: arrives while the reader follows"`);
+  await timeline(page).evaluate((element) => element.scrollTo({ top: 0 }));
+  await expect(jumpToLatest(page)).toBeVisible();
+  await runCommand(page, `echo "card-${CARDS + 2}: sent while the reader is further up"`);
   await expect(card(page, CARDS + 2).locator(".shell-output")).toBeVisible();
   await expect.poll(() => distanceFromBottom(page)).toBeLessThan(2);
+  await expect(jumpToLatest(page)).toBeHidden();
 });

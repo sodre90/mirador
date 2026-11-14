@@ -27,6 +27,7 @@ import { replyReadingOf } from "../shared/spoken-replies.ts";
 import { awaitingDelivery, outputOf, type UserCommand } from "../shared/user-commands.ts";
 import { speaksReplies, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
+import type { ClientMessage } from "../shared/protocol.ts";
 import { parseAnsi, plainTextOf } from "./ansi.ts";
 import { harnessSteers, useEnterWhileBusy, type EnterWhileBusy } from "./busy-sending.ts";
 import { connection } from "./connection.ts";
@@ -1747,6 +1748,7 @@ function Composer({
   voiceSettings,
   voiceEngine,
   onManageTemplates,
+  onMessageSent,
 }: {
   conversation: Conversation;
   reminderMorning: number;
@@ -1760,6 +1762,7 @@ function Composer({
   voiceSettings: VoiceSettings;
   voiceEngine: VoiceEngineStatus;
   onManageTemplates: () => void;
+  onMessageSent: () => void;
 }) {
   const [text, setText] = useDraft(conversation.id);
   const [pickingTemplate, setPickingTemplate] = useState(false);
@@ -1796,8 +1799,13 @@ function Composer({
   const pluginCommands = usePluginCommands(conversation.id);
   useEffect(() => textarea.current?.focus(), []);
 
+  const sendToConversation = (message: ClientMessage) => {
+    const sent = connection.send(message);
+    if (sent) onMessageSent();
+    return sent;
+  };
   const sendPrompt = (message: string, imageIds: string[], afterTurn: boolean) => {
-    if (!connection.send({ type: "conversation.prompt", conversationId: conversation.id, text: message, imageIds, afterTurn })) return;
+    if (!sendToConversation({ type: "conversation.prompt", conversationId: conversation.id, text: message, imageIds, afterTurn })) return;
     stopReading();
     forgetSpokenReply(conversation.id);
     const dictated = dictation.takeDictated() && speaksReplies(voiceSettings);
@@ -1837,7 +1845,7 @@ function Composer({
     }
     if (pluginCommands.run(message, () => setText(""))) return;
     if (command !== null) {
-      if (connection.send({ type: "conversation.run-command", conversationId: conversation.id, command })) setText("");
+      if (sendToConversation({ type: "conversation.run-command", conversationId: conversation.id, command })) setText("");
       return;
     }
     const imageIds = images.referenced.map(({ imageId }) => imageId);
@@ -1853,7 +1861,7 @@ function Composer({
     textarea.current?.focus();
   };
   const sendTemplate = (message: string) => {
-    if (connection.send({ type: "conversation.prompt", conversationId: conversation.id, text: message, imageIds: [], afterTurn: enterWhileBusy === "after-turn" })) closeTemplates();
+    if (sendToConversation({ type: "conversation.prompt", conversationId: conversation.id, text: message, imageIds: [], afterTurn: enterWhileBusy === "after-turn" })) closeTemplates();
   };
   const insertTemplate = (message: string) => {
     setText((current) => joinDrafts(current, message));
@@ -2302,6 +2310,7 @@ export function ChatPanel({
                       voiceSettings={voiceSettings}
                       voiceEngine={voiceEngine}
                       onManageTemplates={onManageTemplates}
+                      onMessageSent={jumpToLatest}
                     />
                     {!side && <Statusline conversation={conversation} profiles={profiles} />}
                   </TimelineNow.Provider>
