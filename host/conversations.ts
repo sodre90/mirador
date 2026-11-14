@@ -1933,11 +1933,6 @@ export class ConversationService {
     if (commandIds.length > 0) this.append(conversationId, { type: "user-command-dropped", commandIds });
   }
 
-  editQueuedMessage(conversationId: string, messageId: string, text: string) {
-    if (!text.trim()) return this.removeQueuedMessage(conversationId, messageId);
-    this.replaceQueue(conversationId, (queue) => queue.map((message) => (message.id === messageId ? { ...message, text } : message)), messageId);
-  }
-
   setQueuedMessageAfterTurn(conversationId: string, messageId: string, afterTurn: boolean) {
     const switched = ({ afterTurn: _, ...message }: QueuedMessage): QueuedMessage => ({ ...message, ...(afterTurn && { afterTurn }) });
     this.replaceQueue(conversationId, (queue) => queue.map((message) => (message.id === messageId ? switched(message) : message)), messageId);

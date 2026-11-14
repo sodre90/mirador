@@ -220,7 +220,6 @@ export type ClientMessage =
   | { type: "conversation.run-command"; conversationId: string; command: string }
   | { type: "conversation.stop-command"; conversationId: string; commandId: string }
   | { type: "conversation.drop-command-outputs"; conversationId: string; commandIds: string[] }
-  | { type: "conversation.queue.edit"; conversationId: string; messageId: string; text: string }
   | { type: "conversation.queue.remove"; conversationId: string; messageId: string }
   | { type: "images.discard"; conversationId: string; imageIds: string[] }
   | { type: "conversation.queue.move"; conversationId: string; messageId: string; beforeMessageId: string | null }
