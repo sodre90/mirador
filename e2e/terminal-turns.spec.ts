@@ -86,7 +86,8 @@ test("turns taken in a terminal join the conversation once the terminal is idle,
   await takeTurnInTerminal(sessionId, "Terminal task");
   openInTerminal(sessionId, "idle");
 
-  await expect(timeline.locator(".message.user", { hasText: "Terminal task" })).toHaveCount(1, { timeout: 30_000 });
+  // The turn joins once the host has reloaded the session, which took Claude Code 32 s on a busy Windows runner.
+  await expect(timeline.locator(".message.user", { hasText: "Terminal task" })).toHaveCount(1, { timeout: 60_000 });
   await expect(timeline).toContainText("Answered: Terminal task");
   await expect(timeline.locator(".message.user", { hasText: "First task" })).toHaveCount(1);
   rmSync(terminalRegistration);
