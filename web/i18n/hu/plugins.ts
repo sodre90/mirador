@@ -16,6 +16,7 @@ export const plugins: Messages["plugins"] = {
   checking: "Frissítések keresése…",
   upToDate: "Naprakész.",
   checkAgain: "Keresés újra",
+  needsNewerMirador: (api, newest) => `Ennek a frissítésnek a bővítmény-API-ja ${api}, ez a Mirador viszont az 1–${newest} bővítmény-API-kat ismeri, így újabb Mirador kell hozzá.`,
   newCommits: (plugin) => `Új commitok: ${plugin}`,
   update: "Frissítés",
   cloning: "Klónozás…",

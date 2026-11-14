@@ -381,6 +381,8 @@ export interface PluginCommit {
 export interface PluginNews {
   release: string | null;
   commits: PluginCommit[];
+  /** The plugin API the release or commits name when this Mirador speaks an older one: they can't go in until Mirador is updated. */
+  needsApi: number | null;
 }
 
 /**

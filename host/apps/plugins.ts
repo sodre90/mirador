@@ -98,15 +98,19 @@ function refuseTakenToolNames(plugin: CanvasPlugin, loadedBefore: CanvasPlugin[]
   }
 }
 
+/** The plugin API a plugin.json names, when it is newer than this Mirador speaks; null for any other, a broken one too. */
+export function newerApiOf(manifest: unknown): number | null {
+  const api = typeof manifest === "object" && manifest !== null && "api" in manifest ? (manifest as { api?: unknown }).api : undefined;
+  return typeof api === "number" && Number.isInteger(api) && api > APP_PLUGIN_API ? api : null;
+}
+
 /** The folder's plugin.json, held to what this Mirador loads; throws what is wrong with it. */
 export async function readManifest(folder: string): Promise<PluginManifest> {
   const file = join(folder, "plugin.json");
   if (!existsSync(file)) throw new HostProblemError({ code: "plugin-json-missing" });
   const manifest: unknown = await Bun.file(file).json();
-  const api = typeof manifest === "object" && manifest !== null && "api" in manifest ? (manifest as { api?: unknown }).api : undefined;
-  if (typeof api === "number" && Number.isInteger(api) && api > APP_PLUGIN_API) {
-    throw new HostProblemError({ code: "plugin-api-too-new", api, newest: APP_PLUGIN_API });
-  }
+  const api = newerApiOf(manifest);
+  if (api !== null) throw new HostProblemError({ code: "plugin-api-too-new", api, newest: APP_PLUGIN_API });
   if (!isPluginManifest(manifest)) {
     throw new HostProblemError({ code: "plugin-json-invalid" });
   }

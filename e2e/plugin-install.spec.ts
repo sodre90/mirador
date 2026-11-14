@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, createProfile, openPluginDetail, openPlugins, pluginTile, reloadFromRestartedHost, sendMessage, signIn } from "./helpers.ts";
+import { APP_PLUGIN_API } from "../shared/apps.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true, environment: { MIRADOR_PLUGIN_UPDATE_CHECK: "on" } });
@@ -27,10 +28,10 @@ function counterRepo() {
   git(repo(), "commit", "--quiet", "-m", "Count by one");
 }
 
-/** Commits plugin.json at the version and tags the commit v<version>. */
-function release(version: string) {
+/** Commits plugin.json at the version, with any other fields given, and tags the commit v<version>. */
+function release(version: string, fields: Record<string, unknown> = {}) {
   const manifest = join(repo(), "plugin.json");
-  writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), version }));
+  writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), version, ...fields }));
   git(repo(), "commit", "--quiet", "-am", `Release ${version}`);
   git(repo(), "tag", `v${version}`);
 }
@@ -215,7 +216,7 @@ test("a plugin added from a git repo is built only once the user agrees, works a
     expect(await canvasToolNames(conversation)).not.toContain("app_open");
   });
 
-  await test.step("without a branch, adding installs the newest release, and an update brings the next one", async () => {
+  await test.step("without a branch, adding installs the newest release, an update brings the next one, and one for a newer plugin API says it needs a newer Mirador", async () => {
     release("1.1.0");
     const plugins = await openPlugins(page);
     await plugins.getByRole("button", { name: "Add from git…" }).click();
@@ -237,5 +238,12 @@ test("a plugin added from a git repo is built only once the user agrees, works a
     await consent(counter, "Update Counter?").getByRole("button", { name: "Update", exact: true }).click();
     await expect(counter.locator(".plugin-upkeep dl")).toContainText("Version1.2.0");
     await expect(counter.locator(".plugin-source")).toHaveText(`${repo()} · releases · ${git(repo(), "rev-parse", "--short", "HEAD")} Release 1.2.0`);
+
+    release("1.3.0", { api: APP_PLUGIN_API + 1 });
+    await counter.getByRole("button", { name: "Check for updates" }).click();
+    await expect(counter.locator(".plugin-release")).toHaveText("1.2.0 → 1.3.0");
+    await expect(counter.getByText(`This update is for plugin API ${APP_PLUGIN_API + 1}; this Mirador speaks plugin API 1 to ${APP_PLUGIN_API}, so it needs a newer Mirador.`)).toBeVisible();
+    await expect(counter.getByRole("button", { name: "Update", exact: true })).toHaveCount(0);
+    await expect(counter.getByRole("button", { name: "Check again" })).toBeVisible();
   });
 });

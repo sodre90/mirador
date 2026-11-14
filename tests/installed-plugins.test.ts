@@ -293,7 +293,7 @@ describe("adding, updating and removing plugins", () => {
     const plugins = pluginsIn("update");
     await new InstalledPlugins(plugins, []).add(repo, null);
     const installed = new InstalledPlugins(plugins, []);
-    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [], needsApi: null });
 
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     const [newest] = (await installed.news("counter")).commits;
@@ -389,7 +389,7 @@ describe("adding, updating and removing plugins", () => {
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     const installedAt = git(join(plugins, "counter"), "rev-parse", "--short", "HEAD");
     const found = await installed.updatesFound(null);
-    expect(found).toEqual([{ folder: "counter", title: "Counter", from: installedAt, release: null, commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by two" }], ready: false, heldBack: null }]);
+    expect(found).toEqual([{ folder: "counter", title: "Counter", from: installedAt, release: null, commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Count by two" }], needsApi: null, ready: false, heldBack: null }]);
 
     rmSync(repo, { recursive: true, force: true });
     expect(await installed.updatesFound(found)).toEqual(found);
@@ -416,17 +416,35 @@ describe("adding, updating and removing plugins", () => {
 
     const [listed] = await installed.list();
     expect(listed).toMatchObject({ version: "1.10.0", source: { kind: "git", branch: null, release: "1.10.0", subject: "Release 1.10.0" } });
-    expect(await installed.news("counter")).toEqual({ release: null, commits: [] });
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [], needsApi: null });
 
     commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
     release(repo, "1.11.0");
-    const news = { release: "1.11.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.11.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }] };
+    const news = { release: "1.11.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.11.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }], needsApi: null };
     expect(await installed.news("counter")).toEqual(news);
     expect(await installed.updatesFound(null)).toEqual([{ folder: "counter", title: "Counter", from: listed!.source.kind === "git" ? listed!.source.commit : "", ...news, ready: false, heldBack: null }]);
 
     await installed.update("counter");
     expect((await installed.list())[0]).toMatchObject({ version: "1.11.0", source: { release: "1.11.0" }, waitsForRestart: true });
     expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
+  });
+
+  test("a release or commits for a newer plugin API are news that can't go in, so the updates found by itself leave them out", async () => {
+    const repo = builtCounterRepo("newer-api-repo");
+    git(repo, "tag", "v1.0.0");
+    const byRelease = new InstalledPlugins(pluginsIn("newer-api-release"), []);
+    await byRelease.add(repo, null);
+    const onBranch = new InstalledPlugins(pluginsIn("newer-api-branch"), []);
+    await onBranch.add(repo, "main");
+
+    const manifest = join(repo, "plugin.json");
+    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
+    release(repo, "2.0.0");
+    const forNewerApi = { release: "2.0.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 2.0.0" }], needsApi: APP_PLUGIN_API + 1 };
+    expect(await byRelease.news("counter")).toEqual(forNewerApi);
+    expect(await byRelease.updatesFound(null)).toEqual([]);
+    expect(await onBranch.news("counter")).toEqual({ ...forNewerApi, release: null });
+    expect(await onBranch.updatesFound(null)).toEqual([]);
   });
 
   test("refuses a release whose plugin.json gives another version, and a plugin without a version, which doesn't load either", async () => {

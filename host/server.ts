@@ -1681,7 +1681,7 @@ export function startServer(services: HostServices) {
             reply({ type: "plugins.commits-found", requestId: message.requestId, ...news, problem: null });
             pluginUpdates.recount();
           },
-          (error) => reply({ type: "plugins.commits-found", requestId: message.requestId, release: null, commits: [], ...shownProblemOf(error) }),
+          (error) => reply({ type: "plugins.commits-found", requestId: message.requestId, release: null, commits: [], needsApi: null, ...shownProblemOf(error) }),
         );
       case "devices.invite": {
         const invite = devices.invite();

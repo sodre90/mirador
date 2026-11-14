@@ -7,7 +7,7 @@ import { environmentWithoutPrompts } from "../git-environment.ts";
 import { localImage } from "../local-images.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import { parkedFolderOf, swapPlugin } from "./plugin-swaps.ts";
-import { AppProblem, messageOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
+import { AppProblem, messageOf, newerApiOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
 import { causeOf, HostProblemError, problemFieldsOf, type HostProblem } from "../../shared/host-problems.ts";
 
 const GIT_GIVES_UP_AFTER_MS = 5 * 60_000;
@@ -28,6 +28,15 @@ export async function gitOutput(folder: string, args: string[]): Promise<string 
     const child = Bun.spawn(["git", "-C", folder, ...args], { env: environmentWithoutPrompts(), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
     const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
     return exitCode === 0 ? output.trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** JSON that may be missing or broken, as git shows a file of a commit; null for either. */
+function parsedOrNull(json: string | null): unknown {
+  try {
+    return JSON.parse(json ?? "");
   } catch {
     return null;
   }
@@ -420,18 +429,19 @@ export class InstalledPlugins {
       const followed = await this.followed(folder);
       if (followed.branch === null) {
         const newest = await newestRelease(followed.remote);
-        if (!newest || !isNewerVersion(newest, followed.release)) return { release: null, commits: [] };
-        return { release: newest, commits: await this.commitsOf(folder, `refs/tags/${releaseTag(newest)}`) };
+        if (!newest || !isNewerVersion(newest, followed.release)) return { release: null, commits: [], needsApi: null };
+        return { release: newest, ...(await this.fetchedNews(folder, `refs/tags/${releaseTag(newest)}`)) };
       }
-      return { release: null, commits: await this.commitsOf(folder, followed.branch) };
+      return { release: null, ...(await this.fetchedNews(folder, followed.branch)) };
     });
   }
 
-  /** The commits the ref brings that the checkout doesn't have, newest first. */
-  private async commitsOf(folder: string, ref: string) {
+  /** What the ref brings that the checkout doesn't have: its commits, newest first, and the plugin API its plugin.json names when this Mirador's is older. */
+  private async fetchedNews(folder: string, ref: string) {
     const fetched = await run(["git", "fetch", "--quiet", "--no-tags", "origin", ref], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
     if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
-    return commitsOfLog((await gitOutput(folder, ["log", "--format=%h%x09%s", "HEAD..FETCH_HEAD"])) ?? "");
+    const [log, manifest] = await Promise.all([gitOutput(folder, ["log", "--format=%h%x09%s", "HEAD..FETCH_HEAD"]), gitOutput(folder, ["show", "FETCH_HEAD:plugin.json"])]);
+    return { commits: commitsOfLog(log ?? ""), needsApi: newerApiOf(parsedOrNull(manifest)) };
   }
 
   /** The plugins from git repos with news; one whose fetch fails, offline for one, keeps what was last found for it. */
@@ -446,7 +456,7 @@ export class InstalledPlugins {
         }
       }),
     );
-    return found.filter((update): update is PluginUpdate => update !== null && (update.release !== null || update.commits.length > 0));
+    return found.filter((update): update is PluginUpdate => update !== null && update.needsApi === null && (update.release !== null || update.commits.length > 0));
   }
 
   /**

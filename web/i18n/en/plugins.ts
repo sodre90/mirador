@@ -14,6 +14,7 @@ export const plugins = {
   checking: "Checking for updates…",
   upToDate: "Up to date.",
   checkAgain: "Check again",
+  needsNewerMirador: (api: number, newest: number) => `This update is for plugin API ${api}; this Mirador speaks plugin API 1 to ${newest}, so it needs a newer Mirador.`,
   newCommits: (plugin: string) => `New commits of ${plugin}`,
   update: "Update",
   cloning: "Cloning…",

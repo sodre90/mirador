@@ -16,6 +16,7 @@ export const plugins: Messages["plugins"] = {
   checking: "正在检查更新…",
   upToDate: "已是最新。",
   checkAgain: "再次检查",
+  needsNewerMirador: (api, newest) => `此更新面向插件 API ${api}；这个 Mirador 支持插件 API 1 到 ${newest}，因此需要更新版本的 Mirador。`,
   newCommits: (plugin) => `${plugin} 的新提交`,
   update: "更新",
   cloning: "正在克隆…",

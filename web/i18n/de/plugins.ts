@@ -18,6 +18,7 @@ export const plugins: Messages["plugins"] = {
   checking: "Suche nach Updates…",
   upToDate: "Auf dem neuesten Stand.",
   checkAgain: "Erneut suchen",
+  needsNewerMirador: (api, newest) => `Dieses Update ist für Plugin-API ${api}; dieses Mirador spricht Plugin-API 1 bis ${newest}, daher braucht es ein neueres Mirador.`,
   newCommits: (plugin) => `Neue Commits: ${plugin}`,
   update: "Aktualisieren",
   cloning: "Wird geklont…",

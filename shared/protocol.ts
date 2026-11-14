@@ -631,7 +631,7 @@ export type ServerMessage =
   | { type: "plugin-tab.state"; plugin: string; workspaceId: string; seq: number; shown: boolean; state: unknown; problem: string | null }
   | { type: "plugin-tab.acted"; requestId: string; reply: unknown; problem: string | null }
   /** What updating the plugin would bring: a newer release and its commits, or the commits on its branch it lacks, newest first. */
-  | { type: "plugins.commits-found"; requestId: string; release: string | null; commits: PluginCommit[]; problem: string | null; problemAbout?: HostProblem }
+  | { type: "plugins.commits-found"; requestId: string; release: string | null; commits: PluginCommit[]; needsApi: number | null; problem: string | null; problemAbout?: HostProblem }
   | { type: "devices.invited"; requestId: string; code: string; expiresAt: number; tunnel: InviteTunnel | null }
   /** The addresses that answered as this Mirador, and whether this machine has Tailscale to put its ports on the tailnet. */
   | { type: "address.found"; requestId: string; addresses: FoundAddress[]; tailscale: "absent" | "present"; problem: string | null; problemAbout?: HostProblem }
