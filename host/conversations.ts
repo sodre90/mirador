@@ -467,7 +467,11 @@ export class ConversationService {
   }
 
   planQuotasOf(conversationId: string, now: number) {
-    return this.planQuotas.of(this.get(conversationId).profileId, now);
+    return this.planQuotasOfProfile(this.get(conversationId).profileId, now);
+  }
+
+  planQuotasOfProfile(profileId: string | null, now: number) {
+    return this.planQuotas.of(profileId, now);
   }
 
   slashCommands(conversationId: string) {
@@ -2758,7 +2762,7 @@ export class ConversationService {
       const model = update._meta?.["_claude/model"];
       if (typeof model === "string") this.runtime(conversationId).reportedModel = model;
       const quotas = reportedQuotas(update._meta);
-      if (quotas) this.planQuotas.record(this.get(conversationId).profileId, quotas);
+      if (quotas) this.planQuotas.record(this.get(conversationId).profileId, quotas, Date.now());
       this.publish(this.get(conversationId));
       return;
     }

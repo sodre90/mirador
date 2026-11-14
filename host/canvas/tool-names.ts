@@ -1,9 +1,10 @@
 export const USAGE_STATS_TOOL = "usage_stats";
+export const PLAN_USAGE_TOOL = "plan_usage";
 export const TITLE_CONVERSATION_TOOL = "title_conversation";
 export const LAND_TOOL = "land";
 
 /** None of them changes files or runs commands for the agent, so none is worth a permission prompt. */
-export const PRE_ALLOWED_CANVAS_TOOLS = ["show", "ask", "when_done", USAGE_STATS_TOOL, TITLE_CONVERSATION_TOOL];
+export const PRE_ALLOWED_CANVAS_TOOLS = ["show", "ask", "when_done", USAGE_STATS_TOOL, PLAN_USAGE_TOOL, TITLE_CONVERSATION_TOOL];
 
 export const APP_TOOLS = ["app_open", "apply", "app_state", "app_run"];
 

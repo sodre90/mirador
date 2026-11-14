@@ -17,6 +17,7 @@ import type { PluginCatalog } from "../plugin-catalog.ts";
 import { registerPluginInstallTool } from "./plugin-install-tool.ts";
 import type { Store } from "../store.ts";
 import { registerUsageStatsTool } from "./usage-stats-tool.ts";
+import { registerPlanUsageTool } from "./plan-usage-tool.ts";
 import { registerLandTool } from "./land-tool.ts";
 
 const PROGRESS_HEARTBEAT_MS = 15_000;
@@ -269,6 +270,7 @@ function buildCanvasServer(
   canvasPlugins?.registerTools(server, conversationId, callingConversation, reviewFree);
   if (catalog && catalog.notInstalled().length > 0) registerPluginInstallTool(server, catalog, canvas, callingConversation);
   if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {}, reviewFree);
+  if (store) registerPlanUsageTool(server, store, conversations, callingConversation, reviewFree);
   if (store?.findConversation(conversationId)?.worktree) registerLandTool(server, conversations, callingConversation, loadedUpFront);
 
   return server;

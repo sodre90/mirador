@@ -47,18 +47,18 @@ describe("plan quotas", () => {
     expect(reportedQuotas({ "codex/rateLimits": { primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null } } })).toBeNull();
   });
 
-  test("each profile keeps its own, and a window reported alone leaves the other as it was", () => {
+  test("each profile keeps its own, and a window reported alone leaves the other as it was, with when it was reported", () => {
     const quotas = new PlanQuotasByProfile();
-    quotas.record(null, { fiveHour, sevenDay });
-    quotas.record(null, { fiveHour: null, sevenDay: { ...sevenDay, usedPercent: 90 } });
-    expect(quotas.of(null, 0)).toEqual({ fiveHour, sevenDay: { ...sevenDay, usedPercent: 90 } });
+    quotas.record(null, { fiveHour, sevenDay }, 1);
+    quotas.record(null, { fiveHour: null, sevenDay: { ...sevenDay, usedPercent: 90 } }, 2);
+    expect(quotas.of(null, 0)).toEqual({ fiveHour: { ...fiveHour, reportedAt: 1 }, sevenDay: { ...sevenDay, usedPercent: 90, reportedAt: 2 } });
     expect(quotas.of("cloudera", 0)).toBeNull();
   });
 
   test("a window that started over is no longer known", () => {
     const quotas = new PlanQuotasByProfile();
-    quotas.record("p1", { fiveHour, sevenDay });
-    expect(quotas.of("p1", fiveHour.resetsAt + HOUR_MS)).toEqual({ fiveHour: null, sevenDay });
+    quotas.record("p1", { fiveHour, sevenDay }, 1);
+    expect(quotas.of("p1", fiveHour.resetsAt + HOUR_MS)).toEqual({ fiveHour: null, sevenDay: { ...sevenDay, reportedAt: 1 } });
     expect(quotas.of("p1", sevenDay.resetsAt)).toBeNull();
   });
 });

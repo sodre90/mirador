@@ -42,14 +42,14 @@ test.afterAll(async () => {
   api.stop();
 });
 
-test("the plan's five-hour and weekly usage show after the context meter once the agent reports them, with when each starts over, and reach the statusline command", async ({ page }) => {
+test("the plan's five-hour and weekly usage show after the context meter once the agent reports them, with when each starts over, and reach the statusline command and the agent's plan_usage tool", async ({ page }) => {
   test.setTimeout(240_000);
   const now = Math.floor(Date.now() / 1000);
   api.limited = false;
   api.planUsage = { fiveHour: 0.3, fiveHourResetsAt: now + 2 * HOUR + 28 * MINUTE + 30, sevenDay: 0.8, sevenDayResetsAt: now + 2 * 24 * HOUR + 15 * HOUR + 30 };
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
-  const profiles = await createProfile(page, PROFILE, `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${claudeSettingsWithStatusline()}`);
+  const profiles = await createProfile(page, PROFILE, `${subscriptionEnvironment(api)}\nCLAUDE_CONFIG_DIR=${claudeSettingsWithStatusline()}\nENABLE_TOOL_SEARCH=false`);
   await profiles.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
   await startConversation(page);
@@ -87,5 +87,20 @@ test("the plan's five-hour and weekly usage show after the context meter once th
   await test.step("another conversation of the same profile shows them before its first answer", async () => {
     await startConversation(page);
     await expect(statusline.locator(".quota-meter")).toHaveText([/^5h 37% · 2h 2[89]m$/, /^7d 88% · 2d 1[45]h$/]);
+  });
+
+  await test.step("its agent reads them with the plan_usage tool, its own profile's or one it names, with when each was reported", async () => {
+    await sendMessage(page, ["CALL mcp__canvas__plan_usage {}", `CALL mcp__canvas__plan_usage {"profile": "${PROFILE.toUpperCase()}"}`, 'CALL mcp__canvas__plan_usage {"profile": "nobody"}'].join("\n"));
+    await waitForTurnToEnd(page);
+    expect(api.callResults).toHaveLength(1);
+    const [own, named, unknown] = api.callResults[0]!.split("\n");
+    const { fiveHourResetsAt, sevenDayResetsAt } = api.planUsage!;
+    const reported = (usedPercent: number, resetsAt: number) => ({ usedPercent, resetsAt: new Date(resetsAt * 1000).toISOString(), resetsAtEpochSeconds: resetsAt, reportedAt: expect.any(String) });
+    const ownLimits = JSON.parse(own!);
+    expect(ownLimits).toEqual({ profile: PROFILE, now: expect.any(String), fiveHour: reported(37, fiveHourResetsAt), sevenDay: reported(88, sevenDayResetsAt) });
+    expect(Date.parse(ownLimits.fiveHour.reportedAt)).toBeGreaterThan(now * 1000);
+    expect(Date.parse(ownLimits.fiveHour.reportedAt)).toBeLessThanOrEqual(Date.parse(ownLimits.now));
+    expect(JSON.parse(named!)).toMatchObject({ profile: PROFILE, fiveHour: { usedPercent: 37 }, sevenDay: { usedPercent: 88 } });
+    expect(unknown).toMatch(new RegExp(`No profile is called "nobody"\\. The profiles: .*\\b${PROFILE}\\b`));
   });
 });

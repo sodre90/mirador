@@ -47,19 +47,27 @@ function codexWindowFrom(reported: CodexWindow | undefined): QuotaWindow | null 
   return typeof usedPercent === "number" && typeof resetsAt === "number" ? { usedPercent, resetsAt: resetsAt * 1000 } : null;
 }
 
+export type ReportedQuotaWindow = QuotaWindow & { reportedAt: number };
+
+export interface ReportedPlanQuotas {
+  fiveHour: ReportedQuotaWindow | null;
+  sevenDay: ReportedQuotaWindow | null;
+}
+
 /** The latest usage limits each profile's agent reported, as each profile signs in to its own account. */
 export class PlanQuotasByProfile {
-  private readonly latest = new Map<string | null, PlanQuotas>();
+  private readonly latest = new Map<string | null, ReportedPlanQuotas>();
 
-  record(profileId: string | null, reported: PlanQuotas) {
+  record(profileId: string | null, reported: PlanQuotas, reportedAt: number) {
     const before = this.latest.get(profileId);
-    this.latest.set(profileId, { fiveHour: reported.fiveHour ?? before?.fiveHour ?? null, sevenDay: reported.sevenDay ?? before?.sevenDay ?? null });
+    const latestOf = (window: QuotaWindow | null, kept: ReportedQuotaWindow | null | undefined) => (window ? { ...window, reportedAt } : (kept ?? null));
+    this.latest.set(profileId, { fiveHour: latestOf(reported.fiveHour, before?.fiveHour), sevenDay: latestOf(reported.sevenDay, before?.sevenDay) });
   }
 
   /** Like Claude Code's own statusline, a window that started over since is no longer known. */
-  of(profileId: string | null, now: number): PlanQuotas | null {
+  of(profileId: string | null, now: number): ReportedPlanQuotas | null {
     const quotas = this.latest.get(profileId);
-    const current = (window: QuotaWindow | null | undefined) => (window && window.resetsAt > now ? window : null);
+    const current = (window: ReportedQuotaWindow | null | undefined) => (window && window.resetsAt > now ? window : null);
     const fiveHour = current(quotas?.fiveHour);
     const sevenDay = current(quotas?.sevenDay);
     return fiveHour || sevenDay ? { fiveHour, sevenDay } : null;
