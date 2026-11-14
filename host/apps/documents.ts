@@ -592,7 +592,7 @@ export class AppDocuments {
     filed: Filed,
     openedFile: string | undefined,
   ): Promise<AppDocument> {
-    const already = this.documents.get(documentIdOf(filed.key));
+    const already = this.documents.get(documentIdOf(filed.key)) ?? this.openUnderAnotherSpelling(workspace, plugin, filed);
     if (already) return this.refreshUnlessRead(already);
     const making = this.making.get(filed.key);
     if (making) return making;
@@ -605,6 +605,27 @@ export class AppDocuments {
     }
   }
 
+  /**
+   * An open document of that folder and app whose file another program saved under another spelling of its name: Windows
+   * then lists the file by the new spelling, which files it under another key.
+   */
+  private openUnderAnotherSpelling(workspace: Workspace, plugin: AppPlugin, filed: Filed): AppDocument | undefined {
+    const folder = dirname(filed.path);
+    const name = foldedName(basename(filed.path));
+    return [...this.documents.values()].find(
+      (opened) =>
+        opened.workspaceId === workspace.id &&
+        opened.plugin.manifest.name === plugin.manifest.name &&
+        dirname(opened.path) === folder &&
+        foldedName(basename(opened.path)) === name &&
+        listedPathOrNull(opened.path) === filed.path,
+    );
+  }
+
+  /**
+   * Reads the file, or makes it where it doesn't exist. A link to nothing is refused before anything is made: Windows
+   * would make the file it leads to, wherever that is.
+   */
   private async readDocument(
     plugin: AppPlugin,
     workspace: Workspace,
@@ -614,6 +635,7 @@ export class AppDocuments {
     openedFile: string | undefined,
   ): Promise<AppDocument> {
     const text = existsSync(filed.path) ? readFileSync(filed.path, "utf8") : null;
+    if (text === null && isLinkToNothing(filed.path)) throw new AppProblem(`${target.file} can't be made: it is a link to a file that doesn't exist.`);
     const document = text === null ? this.created(plugin, target.file, openedFile) : this.guarded(() => plugin.host.parse(text));
     const opened: AppDocument = {
       id: documentIdOf(filed.key),
@@ -649,10 +671,7 @@ export class AppDocuments {
    */
   private madeElsewhere(plugin: AppPlugin, workspace: Workspace, ownerId: string, target: { path: string; file: string }, filed: Filed, openedFile: string | undefined) {
     const existing = filedAs(workspace, plugin, filed.path);
-    if (existing.key === filed.key) {
-      if (isLinkToNothing(filed.path)) throw new AppProblem(`${target.file} can't be made: it is a link to a file that doesn't exist.`);
-      return this.readDocument(plugin, workspace, ownerId, target, filed, openedFile);
-    }
+    if (existing.key === filed.key) return this.readDocument(plugin, workspace, ownerId, target, filed, openedFile);
     const named = { path: existing.path, file: toPosix(join(dirname(target.file), basename(existing.path))) };
     return this.documentOpening(plugin, workspace, ownerId, named, existing, undefined);
   }

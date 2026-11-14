@@ -341,6 +341,8 @@ describe("AppDocuments", () => {
     symlinkSync(outside, join(workspacePath, "linked"));
     symlinkSync(join(outside, "secret.json"), join(workspacePath, "alias.json"));
     symlinkSync(join(outside, "not-made-yet"), join(workspacePath, "dangling"));
+    symlinkSync(join(outside, "planted.json"), join(workspacePath, "planted.json"));
+    await expect(apps.open("c1", "counter", "planted.json")).rejects.toThrow("planted.json can't be made: it is a link to a file that doesn't exist.");
     await expect(apps.open("c1", "counter", "linked/secret.json")).rejects.toThrow("linked/secret.json is outside the workspace");
     await expect(apps.open("c1", "counter", "linked/new.json")).rejects.toThrow("linked/new.json is outside the workspace");
     await expect(apps.open("c1", "counter", "linked/deeper/new.json")).rejects.toThrow("is outside the workspace");
