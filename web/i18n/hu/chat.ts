@@ -86,6 +86,7 @@ export const chat: Messages["chat"] = {
     warning: "Figyelmeztetés",
     filesPutBack: (message) => `A fájlok visszaálltak a kör előtti állapotukra: „${message}”.`,
     turnEnded: (reason) => `A kör véget ért: ${reason}`,
+    turnRecap: (duration, filesEdited) => [`Munkaidő: ${duration}`, filesEdited > 0 && `Szerkesztett fájlok: ${filesEdited}`].filter(Boolean).join(" · "),
     stopReasons: {
       max_tokens: "elérte a tokenkorlátot",
       max_turn_requests: "elérte a kérések korlátját",

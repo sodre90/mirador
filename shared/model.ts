@@ -383,6 +383,8 @@ export interface TurnSpend {
   startedAt?: number;
   /** The turn's own tool calls, not its subagents': about one model request each. */
   toolCalls?: number;
+  /** How many files the agent's edit tools changed in the turn, its subagents' included; a turn that edited none has none. */
+  filesEdited?: number;
   /** The context the agent last reported by the turn's end. */
   context?: { used: number; size: number };
   /** What the agent last reported the whole conversation cost by the turn's end. */

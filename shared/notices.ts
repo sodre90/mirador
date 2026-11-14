@@ -6,6 +6,7 @@ import { whatWasLeft, type Revert } from "./reverts.ts";
 export type NoticeAbout =
   | { kind: "files-put-back"; message: string; revert: Pick<Revert, "submodulesLeft" | "committed"> }
   | { kind: "turn-ended"; stopReason: string }
+  | { kind: "turn-recap"; workedMs: number; filesEdited: number }
   | { kind: "signed-in" }
   | { kind: "sign-in-unfinished" }
   | { kind: "usage-limit-wait-stopped" }
@@ -23,6 +24,19 @@ function profileChangedNotice(profileName: string | null, agent: HarnessId | und
   return agent ? `Now using ${harnessLabels[agent]}, with the profile “${profileName}”` : `Now using the profile “${profileName}”`;
 }
 
+/** A turn that ended by itself after working this long leaves a line saying so, for a user who wasn't watching it. */
+export const RECAPPED_FROM_MS = 2 * 60 * 1000;
+
+export const turnRecapOf = (endedAt: number, { startedAt, filesEdited = 0 }: { startedAt?: number; filesEdited?: number }): NoticeAbout | null =>
+  startedAt !== undefined && endedAt - startedAt >= RECAPPED_FROM_MS ? { kind: "turn-recap", workedMs: endedAt - startedAt, filesEdited } : null;
+
+function englishDuration(milliseconds: number) {
+  const minutes = Math.floor(Math.round(milliseconds / 1000) / 60);
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
+}
+
+const englishFilesEdited = (count: number) => (count === 1 ? "1 file edited" : `${count} files edited`);
+
 /** The notice in English, as searches find it. */
 export function englishNoticeText(about: NoticeAbout) {
   switch (about.kind) {
@@ -30,6 +44,8 @@ export function englishNoticeText(about: NoticeAbout) {
       return [`Files put back to how they were before the turn of “${about.message}”.`, whatWasLeft(about.revert)].filter(Boolean).join(" ");
     case "turn-ended":
       return `Turn ended: ${about.stopReason.replaceAll("_", " ")}`;
+    case "turn-recap":
+      return [`Worked ${englishDuration(about.workedMs)}`, about.filesEdited > 0 && englishFilesEdited(about.filesEdited)].filter(Boolean).join(" · ");
     case "signed-in":
       return "Signed in. Send your message again.";
     case "sign-in-unfinished":

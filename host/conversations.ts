@@ -93,7 +93,7 @@ import type { ImageStore } from "./images.ts";
 import { asyncTaskUpdateOf, AsyncTasks, tailTaskOutput } from "./async-tasks.ts";
 import { followJobProgram, JobWaits } from "./job-waits.ts";
 import type { NotifierMute } from "./notifier.ts";
-import { Changes } from "./changes.ts";
+import { agentEditsIn, Changes } from "./changes.ts";
 import type { Landable, Landed } from "../shared/changes.ts";
 import { Checkpoints, SNAPSHOTS_KEPT } from "./checkpoints.ts";
 import { profileToLaunch } from "./profiles.ts";
@@ -1469,7 +1469,7 @@ export class ConversationService {
       this.showHeldBackReply(conversationId);
       const limitReply = usageLimitReplyIn({ stopReason: response.stopReason, lastMessage: turn.lastMessage, messageId: turn.lastReplyMessageId }, this.get(conversationId).harness);
       const model = runtime.reportedModel ?? chosenModel(this.get(conversationId).configOptions)?.id;
-      const spent = { ...turnUsageOf(response), ...(model && { model }), ...this.measuredTurn(conversationId, turn) };
+      const spent = { ...turnUsageOf(response), ...(model && { model }), ...this.measuredTurn(conversationId, turn), ...this.filesEditedSince(conversationId, turnSeq) };
       if (limitReply !== null) {
         this.notifyTurnEnded(conversationId, this.recordTurnFailure(conversationId, { message: limitReply }, true, spent));
       } else {
@@ -2793,6 +2793,11 @@ export class ConversationService {
       ...(reported && reported.size > 0 && { context: { used: reported.used, size: reported.size } }),
       ...(reported?.cost && { costSoFar: reported.cost }),
     };
+  }
+
+  private filesEditedSince(conversationId: string, turnSeq: number | undefined): Pick<TurnSpend, "filesEdited"> {
+    const filesEdited = turnSeq === undefined ? 0 : agentEditsIn(this.store.listEventsFrom(conversationId, turnSeq)).length;
+    return filesEdited > 0 ? { filesEdited } : {};
   }
 
   private setContextUsage(conversationId: string, usage: ContextUsage) {

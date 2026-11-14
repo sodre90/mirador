@@ -3,6 +3,7 @@ import { harnessLabels, type JobWait } from "../shared/model.ts";
 import type { NoticeAbout } from "../shared/notices.ts";
 import { t } from "./i18n/index.ts";
 import { whatWasLeft } from "./revert-text.ts";
+import { formatDuration } from "./timestamps.ts";
 
 const words = t.chat.notice;
 
@@ -20,6 +21,8 @@ export function noticeText(about: NoticeAbout) {
       return [words.filesPutBack(about.message), whatWasLeft(about.revert)].filter(Boolean).join(" ");
     case "turn-ended":
       return words.turnEnded(stopReasonText(about.stopReason));
+    case "turn-recap":
+      return words.turnRecap(formatDuration(about.workedMs), about.filesEdited);
     case "signed-in":
       return words.signedIn;
     case "sign-in-unfinished":

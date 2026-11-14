@@ -86,6 +86,7 @@ export const chat: Messages["chat"] = {
     warning: "警告",
     filesPutBack: (message) => `文件已恢复到“${message}”这一轮之前的样子。`,
     turnEnded: (reason) => `本轮已结束：${reason}`,
+    turnRecap: (duration, filesEdited) => [`工作了 ${duration}`, filesEdited > 0 && `编辑了 ${filesEdited} 个文件`].filter(Boolean).join(" · "),
     stopReasons: {
       max_tokens: "达到 token 上限",
       max_turn_requests: "达到本轮请求上限",

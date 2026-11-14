@@ -15,7 +15,7 @@ import type {
 import { hookNoticeIn } from "./hook-message.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { StoredEvent } from "./model.ts";
-import { englishNoticeText, MODE_NAME_META_KEY, type NoticeAbout } from "./notices.ts";
+import { englishNoticeText, MODE_NAME_META_KEY, turnRecapOf, type NoticeAbout } from "./notices.ts";
 import type { EditDiff } from "./review.ts";
 import { turnTitle } from "./reverts.ts";
 import { mcpToolNameOf } from "./tool-title.ts";
@@ -447,7 +447,10 @@ class TimelineBuilder {
         );
       case "turn-end":
         this.endTurn(event.stopReason);
-        if (event.stopReason === "end_turn") return;
+        if (event.stopReason === "end_turn") {
+          const recap = turnRecapOf(at, event);
+          return recap ? this.push(noticeBlock(origin, recap)) : undefined;
+        }
         return this.push(noticeBlock(origin, { kind: "turn-ended", stopReason: event.stopReason }));
       case "error": {
         this.endTurn("cancelled");

@@ -135,6 +135,24 @@ describe("buildTimeline", () => {
     expect(notices.map((block) => block.kind === "notice" && block.text)).toEqual(["Now using the profile “Work”", "Now using opencode, with the profile “Radiance”"]);
   });
 
+  test("a turn that ended by itself after two minutes of work leaves a line saying how long it worked and what it edited", () => {
+    const minutes = 60_000;
+    const endedBy = (startedAt: number | undefined, filesEdited?: number) =>
+      buildTimeline(stored([{ type: "turn-end", stopReason: "end_turn", ...(startedAt !== undefined && { startedAt }), ...(filesEdited && { filesEdited }) }]));
+    expect(endedBy(1000 - 18 * minutes, 9)).toEqual([
+      { kind: "notice", key: "1", at: 1000, text: "Worked 18 min · 9 files edited", about: { kind: "turn-recap", workedMs: 18 * minutes, filesEdited: 9 } },
+    ]);
+    expect(endedBy(1000 - 2 * minutes).map((block) => block.kind === "notice" && block.text)).toEqual(["Worked 2 min"]);
+    expect(endedBy(1000 - 75 * minutes, 1).map((block) => block.kind === "notice" && block.text)).toEqual(["Worked 1 h 15 min · 1 file edited"]);
+    expect(endedBy(1000 - 2 * minutes + 1)).toEqual([]);
+    expect(endedBy(undefined, 3)).toEqual([]);
+  });
+
+  test("a stopped turn says that it was stopped, however long it worked", () => {
+    const timeline = buildTimeline(stored([{ type: "turn-end", stopReason: "cancelled", startedAt: 1000 - 3_600_000 }]));
+    expect(timeline.map((block) => block.kind === "notice" && block.text)).toEqual(["Turn ended: cancelled"]);
+  });
+
   test("shows abnormal turn endings only", () => {
     const timeline = buildTimeline(stored([{ type: "turn-end", stopReason: "end_turn" }, { type: "turn-end", stopReason: "cancelled" }]));
     expect(timeline).toEqual([{ kind: "notice", key: "2", at: 2000, text: "Turn ended: cancelled", about: { kind: "turn-ended", stopReason: "cancelled" } }]);

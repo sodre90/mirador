@@ -88,6 +88,8 @@ export const chat: Messages["chat"] = {
     warning: "Warnung",
     filesPutBack: (message) => `Dateien auf den Stand vor der Runde von „${message}“ zurückgesetzt.`,
     turnEnded: (reason) => `Runde beendet: ${reason}`,
+    turnRecap: (duration, filesEdited) =>
+      [`Gearbeitet: ${duration}`, filesEdited > 0 && plural(filesEdited, "1 Datei bearbeitet", `${filesEdited} Dateien bearbeitet`)].filter(Boolean).join(" · "),
     stopReasons: {
       max_tokens: "Token-Limit",
       max_turn_requests: "Limit der Anfragen pro Runde",

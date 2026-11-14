@@ -92,6 +92,8 @@ export const chat = {
     warning: "Warning",
     filesPutBack: (message: string) => `Files put back to how they were before the turn of “${message}”.`,
     turnEnded: (reason: string) => `Turn ended: ${reason}`,
+    turnRecap: (duration: string, filesEdited: number) =>
+      [`Worked ${duration}`, filesEdited > 0 && plural(filesEdited, "1 file edited", `${filesEdited} files edited`)].filter(Boolean).join(" · "),
     stopReasons: {
       max_tokens: "max tokens",
       max_turn_requests: "max turn requests",
