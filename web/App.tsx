@@ -100,7 +100,8 @@ function DesktopAppBanner({ state }: { state: AppState }) {
   if (!state.desktopAppOutdated) return null;
   return (
     <div className="banner desktop-app-outdated">
-      {t.shell.app.desktopAppOutdatedBefore} <code>bun run build</code> {t.shell.app.desktopAppOutdatedMiddle} <code>desktop/</code>.
+      {t.shell.app.desktopAppOutdatedBefore} <code>bun run app</code>
+      {t.shell.app.desktopAppOutdatedAfter}
     </div>
   );
 }

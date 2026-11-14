@@ -292,7 +292,7 @@ export const shell = {
     hostCodeChanged: "The host's code changed since it started.",
     restartHost: "Restart host",
     desktopAppOutdatedBefore: "The Mirador app is older than its code. Quit it and run",
-    desktopAppOutdatedMiddle: "in",
+    desktopAppOutdatedAfter: " in the Mirador folder.",
     noConversation: "No conversation selected",
     noConversationHint: "Add a workspace (a project directory) on the left, then start a conversation in it on one of your profiles.",
     desktopApp: "Desktop app…",

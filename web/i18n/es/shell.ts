@@ -300,7 +300,7 @@ export const shell: Messages["shell"] = {
     hostCodeChanged: "El código del host cambió desde que se inició.",
     restartHost: "Reiniciar host",
     desktopAppOutdatedBefore: "La aplicación de Mirador es más antigua que su código. Ciérrala y ejecuta",
-    desktopAppOutdatedMiddle: "en",
+    desktopAppOutdatedAfter: " en la carpeta de Mirador.",
     noConversation: "No hay ninguna conversación seleccionada",
     noConversationHint: "Agrega un espacio de trabajo (un directorio de proyecto) a la izquierda y luego inicia en él una conversación con uno de tus perfiles.",
     desktopApp: "Aplicación de escritorio…",

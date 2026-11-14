@@ -202,6 +202,8 @@ rm -f ~/.mirador/desktop.json ~/.mirador/desktop-host.pid ~/.mirador/desktop-460
 
 Built with [Electrobun](https://electrobun.dev) 2.0.5 (pinned). Electrobun doesn't cross-compile, so build on the system the app is for. Bun must be on your `PATH` at build time, in the version `.bun-version` names for a release build, and a build of your own bakes its absolute path and the checkout's in as defaults (see [Settings](#settings)).
 
+From the repository root, `bun run app` installs the app's dependencies and makes the same build as `bun run build` below.
+
 ```bash
 cd desktop
 bun install

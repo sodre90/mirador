@@ -429,7 +429,7 @@ A native window around Mirador, for macOS, Linux and Windows ([full details](des
 
 - **The host watches its own source.** `⌘R` reloads the page with the UI code as it is now (the bundle rebuilds when `web/` or `shared/` changes), also in the desktop window.
 - **Restart in place**: when `host/` or `shared/` changed, a banner offers a restart (also `⌘⇧R`, or *Restart the host* in the palette). The host stops working agents' turns the way Stop does, re-executes itself in the same process (so the desktop app, launchd or your terminal keeps seeing the same host), and then asks those agents to continue. Terminal shells start again, under the output they had. Queued messages and waiting marks survive any restart, and open pages reload by themselves.
-- **A desktop app older than its checkout** shows a banner until it quits, so you know to rebuild it.
+- **A desktop app older than its checkout** shows a banner until it quits, so you know to rebuild it: `bun run app` in the checkout.
 - **`bun run dev`** hot-reloads the UI, for working on `web/`.
 
 ### Security
@@ -451,6 +451,7 @@ A native window around Mirador, for macOS, Linux and Windows ([full details](des
 ```bash
 bun run typecheck
 bun run test            # unit tests
+bun run app             # builds the desktop app that runs this checkout (see desktop/README.md)
 bunx playwright test    # e2e: a real Claude Code on haiku against your model server, opencode and pi (and Codex with `MIRADOR_E2E_CODEX=1`) against a scripted fake model (installed Google Chrome on macOS, Playwright's Chromium elsewhere)
 MIRADOR_E2E_MINIMAL_ENV=1 bunx playwright test e2e/agent-flow.spec.ts   # host started with a bare environment
 MIRADOR_EXPERIMENT=1 MIRADOR_TEST_MODEL=default MIRADOR_TEST_EFFORT=default bunx playwright test e2e/experiment-unprompted.spec.ts

@@ -5,6 +5,7 @@
   "scripts": {
     "start": "bun host/main.ts",
     "dev": "MIRADOR_DEV=1 bun host/main.ts",
+    "app": "bun install --cwd desktop && bun desktop/scripts/build-app.ts",
     "test": "bun test ./tests",
     "e2e": "bunx playwright test",
     "typecheck": "tsc --noEmit"
