@@ -85,9 +85,10 @@ const chunk = (delta: object, finishReason: string | null = null) => ({
 
 /** Every reply reports the same token usage, so opencode's context report has a known value. */
 export const SCRIPTED_PROMPT_TOKENS = 42_000;
+export const SCRIPTED_COMPLETION_TOKENS = 500;
 const finish = (finishReason: string) => ({
   ...chunk({}, finishReason),
-  usage: { prompt_tokens: SCRIPTED_PROMPT_TOKENS, completion_tokens: 500, total_tokens: SCRIPTED_PROMPT_TOKENS + 500 },
+  usage: { prompt_tokens: SCRIPTED_PROMPT_TOKENS, completion_tokens: SCRIPTED_COMPLETION_TOKENS, total_tokens: SCRIPTED_PROMPT_TOKENS + SCRIPTED_COMPLETION_TOKENS },
 });
 
 /**
@@ -227,7 +228,7 @@ export class ScriptedModel {
   private streamResponse(response: ServerResponse, reply: Reply) {
     const id = `resp_${this.requests.length}`;
     const item = "text" in reply ? { type: "message", role: "assistant", id: `msg_${this.requests.length}`, content: [{ type: "output_text", text: reply.text }] } : functionCallItem(reply.call, this.requests.length);
-    const usage = { input_tokens: SCRIPTED_PROMPT_TOKENS, output_tokens: 500, total_tokens: SCRIPTED_PROMPT_TOKENS + 500 };
+    const usage = { input_tokens: SCRIPTED_PROMPT_TOKENS, output_tokens: SCRIPTED_COMPLETION_TOKENS, total_tokens: SCRIPTED_PROMPT_TOKENS + SCRIPTED_COMPLETION_TOKENS };
     response.writeHead(200, { ...this.responsesHeaders, "content-type": "text/event-stream" });
     response.end(
       [

@@ -3,9 +3,10 @@ import { realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
+import type { UsageReport } from "../host/usage-stats.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { addWorkspace, answerCanvasQuestion, createProfile, eventsInOrderOn, lastAgentMessage, pasteImage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
-import { ScriptedModel, forgetPiAcpSessionsUnder, piProgram, piSessionIdsUnder, scriptedPiEnvironment } from "./scripted-model.ts";
+import { SCRIPTED_COMPLETION_TOKENS, SCRIPTED_PROMPT_TOKENS, ScriptedModel, forgetPiAcpSessionsUnder, piProgram, piSessionIdsUnder, scriptedPiEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -85,7 +86,7 @@ async function rewindTo(message: string) {
   await expect(turn).toHaveCount(0);
 }
 
-test("a pi conversation replies, runs commands and uses the canvas tools", async () => {
+test("a pi conversation replies, runs commands and uses the canvas tools, and each turn reports the tokens of all its model requests", async () => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const dialog = await createProfile(page, PROFILE, scriptedPiEnvironment(model, host.root), "", "pi");
@@ -109,6 +110,8 @@ test("a pi conversation replies, runs commands and uses the canvas tools", async
   await sendMessage(page, "RUN printenv PI_ACP_SESSION || echo no-canvas-servers-in-env");
   await waitForTurnToEnd(page);
   await expect(page.locator(".shell-output").last()).toHaveText("no-canvas-servers-in-env");
+  const { totals } = JSON.parse(host.mirador("usage", "--profile", PROFILE, "--json")) as UsageReport;
+  expect(totals).toMatchObject({ turns: 2, inputTokens: 3 * SCRIPTED_PROMPT_TOKENS, outputTokens: 3 * SCRIPTED_COMPLETION_TOKENS, cachedReadTokens: 0 });
 
   await sendMessage(page, "SHOW Scripted page");
   await expect(canvasHeading()).toHaveText("Scripted page", { timeout: 60_000 });
