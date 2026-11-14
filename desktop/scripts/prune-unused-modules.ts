@@ -2,7 +2,7 @@
 /**
  * Removes from a staged Mirador's node_modules what it never loads, which is most of their size: the packages only
  * mermaid needs, as the canvas serves one self-contained file of mermaid's; three.js's sources, as it serves the built
- * files; and every package's source maps and type declarations.
+ * files; every package's source maps and type declarations; and the folders of the tools its authors work with.
  */
 import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
 import { join, normalize, relative } from "node:path";
@@ -11,6 +11,8 @@ import { join, normalize, relative } from "node:path";
 export const MERMAID_FILES_KEPT = ["package.json", "LICENSE", "dist/mermaid.min.js"];
 const UNSERVED_FOLDERS = ["three/src"];
 const NEVER_LOADED = /\.(js|mjs|cjs|css|ts|mts|cts)\.map$|\.d\.[mc]?ts$/;
+/** Some packages publish their CI's, editors' and coding agents' folders, such as lib0 its Playwright MCP's console logs. */
+const AUTHORS_TOOL_FOLDERS = new Set([".github", ".vscode", ".idea", ".claude", ".playwright-mcp"]);
 
 type Manifest = Partial<Record<"dependencies" | "optionalDependencies" | "peerDependencies", Record<string, string>>>;
 
@@ -52,6 +54,10 @@ const filesUnder = (folder: string) =>
   entriesUnder(folder)
     .filter((entry) => entry.isFile())
     .map((entry) => join(entry.parentPath, entry.name));
+const authorsToolFoldersUnder = (folder: string) =>
+  entriesUnder(folder)
+    .filter((entry) => entry.isDirectory() && AUTHORS_TOOL_FOLDERS.has(entry.name))
+    .map((entry) => join(entry.parentPath, entry.name));
 const deadLinksUnder = (folder: string) =>
   entriesUnder(folder)
     .filter((entry) => entry.isSymbolicLink())
@@ -80,6 +86,7 @@ export function pruneUnusedModules(stage: string) {
     .forEach((name) => rmSync(join(modules, name), { recursive: true, force: true }));
   keepOnly(join(modules, "mermaid"), MERMAID_FILES_KEPT);
   UNSERVED_FOLDERS.forEach((folder) => rmSync(join(modules, folder), { recursive: true, force: true }));
+  authorsToolFoldersUnder(modules).forEach((folder) => rmSync(folder, { recursive: true, force: true }));
   filesUnder(modules)
     .filter((file) => NEVER_LOADED.test(file))
     .forEach((file) => rmSync(file));

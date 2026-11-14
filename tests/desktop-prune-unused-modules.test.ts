@@ -31,6 +31,9 @@ beforeEach(() => {
   ["index.js", "index.js.map", "index.d.ts", "types/client.d.mts", "colors.map.json"].forEach((file) => write(`node_modules/react/${file}`));
   installed("three");
   ["build/three.module.js", "examples/jsm/controls/OrbitControls.js", "src/core/Object3D.js"].forEach((file) => write(`node_modules/three/${file}`));
+  [".playwright-mcp/console-2026-07-11.log", ".claude/settings.local.json", ".github/workflows/ci.yml", ".vscode/settings.json", ".idea/modules.xml", "github/index.js"].forEach((file) =>
+    write(`node_modules/shared-helper/${file}`),
+  );
   mkdirSync(join(modules, ".bin"), { recursive: true });
   symlinkSync("../mermaid/dist/mermaid.js", join(modules, ".bin", "mermaid"));
   symlinkSync("../react/index.js", join(modules, ".bin", "react"));
@@ -52,6 +55,13 @@ test("pruning keeps mermaid's served file and what the rest of the app needs, an
   ["shared-helper/package.json", "peer-of-react/package.json", "react/index.js", "react/colors.map.json", "three/build/three.module.js", "three/examples/jsm/controls/OrbitControls.js"].forEach(
     (kept) => expect(present(kept)).toBe(true),
   );
+});
+
+test("pruning drops the folders of the tools a package's authors work with, and keeps a folder of its own named alike", () => {
+  pruneUnusedModules(stage);
+
+  [".playwright-mcp", ".claude", ".github", ".vscode", ".idea"].forEach((gone) => expect(present(`shared-helper/${gone}`)).toBe(false));
+  expect(present("shared-helper/github/index.js")).toBe(true);
 });
 
 test("every file the canvas serves from a pruned package survives pruning", () => {
