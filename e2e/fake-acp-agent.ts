@@ -18,7 +18,8 @@ import { isSideChatBrief } from "../shared/side-chats.ts";
  * and texts fill in `{{folder}}` with the folder the session was started in, as `FOLDER` says, and `{{env:NAME}}`
  * with the agent process's environment variable NAME, or nothing when it isn't set; no other command fills them in.
  * `{"usage": "<used> <size> [costUsd]"}` reports that usage as `USAGE ` does, and ends the turn with those tokens as
- * the turn's own, so a run's totals show them, and `{"pause": "<ms>"}` takes that long before the next step. `SAY `
+ * the turn's own, so a run's totals show them; `{"tokens": "<input> <output> <cachedRead> <cachedWrite>"}` ends it with
+ * those as the turn's own instead, and `{"pause": "<ms>"}` takes that long before the next step. `SAY `
  * followed by text answers with that text, as markdown, `TITLE ` followed by text titles the session so, as agents
  * rename a conversation from its work, and answers,
  * `USAGE ` followed by the tokens used, the window's size and, if given, a cost in US dollars reports that usage,
@@ -267,7 +268,7 @@ async function askFromSubagent(client: acp.AgentContext, sessionId: string, titl
   return askPermissions(client, sessionId, [{ toolCallId: "subagent-0-step", title, kind: "execute", status: "pending" }]);
 }
 
-type WriteStep = { edit: string; content: string } | { shell: string; content: string } | { read: string } | { waitFor: string } | { usage: string } | { pause: string };
+type WriteStep = { edit: string; content: string } | { shell: string; content: string } | { read: string } | { waitFor: string } | { usage: string } | { tokens: string } | { pause: string };
 
 let nextToolCall = 0;
 
@@ -277,11 +278,17 @@ async function writeFiles(client: acp.AgentContext, sessionId: string, steps: Wr
   const expand = (text: string) => text.replaceAll("{{folder}}", folder).replaceAll(/\{\{env:(\w+)\}\}/g, (_, name: string) => process.env[name] ?? "");
   const filledIn = steps.map((step) => Object.fromEntries(Object.entries(step).map(([field, value]) => [field, expand(value)])) as WriteStep);
   let usage: acp.Usage | undefined;
+  let tokens: acp.Usage | undefined;
   for (const step of filledIn) {
     if ("usage" in step) {
       const [used = 0, size = 0, costUsd] = step.usage.split(" ").map(Number);
       await reportUsage(client, sessionId, used, size, costUsd);
       usage = { totalTokens: used, inputTokens: used, outputTokens: 0 };
+      continue;
+    }
+    if ("tokens" in step) {
+      const [inputTokens = 0, outputTokens = 0, cachedReadTokens = 0, cachedWriteTokens = 0] = step.tokens.split(" ").map(Number);
+      tokens = { totalTokens: inputTokens + outputTokens + cachedReadTokens + cachedWriteTokens, inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens };
       continue;
     }
     if ("pause" in step) {
@@ -305,7 +312,8 @@ async function writeFiles(client: acp.AgentContext, sessionId: string, steps: Wr
     if ("edit" in step) await update({ sessionUpdate: "tool_call_update", toolCallId, locations: [{ path }], content: [{ type: "diff", path, oldText, newText: step.content }] });
     await update({ sessionUpdate: "tool_call_update", toolCallId, status: "completed" });
   }
-  return { stopReason: "end_turn" as const, ...(usage && { usage }) };
+  const turnUsage = tokens ?? usage;
+  return { stopReason: "end_turn" as const, ...(turnUsage && { usage: turnUsage }) };
 }
 
 /** The agent's own plan, as Claude Code sends its to-do list: each entry "done" or not, the first one not done in progress. */
