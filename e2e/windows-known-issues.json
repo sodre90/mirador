@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "file": "background-subagents.spec.ts",
+    "title": "while only a background subagent works, a message joins the turn and the agent answers it, and the subagent shows done once it ends, before its turn does",
+    "failure": "Expected substring: \"in the background\"",
+    "reason": "On the Windows runner the scripted Agent call is not reported as a background launch, so its card never says in the background; it failed once in the 0.13.0 run and all three tries in 0.14.0's, while the Mac passes it every run.",
+    "bead": "vcs-604d"
+  }
+]

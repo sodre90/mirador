@@ -8,7 +8,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { giveNonceScript, showUpdateScript } from "../desktop/src/core/window-menu.ts";
 import type { DesktopMenuMessage, DesktopUpdate } from "../shared/desktop-menu.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
-import { openSettings, signIn, startDesktopNotifier } from "./helpers.ts";
+import { checkedOutText, openSettings, signIn, startDesktopNotifier } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 /** The fake GitHub's port is known only once it listens, which is before the host starts and reads this. */
@@ -210,7 +210,7 @@ test("a checkout shows the commits on its upstream that it lacks, and Pull bring
 
   await banner.getByRole("button", { name: "Pull" }).click();
   await expect(banner).toHaveCount(0);
-  expect(readFileSync(join(checkoutHost.sourceDir, "web", "pulled.txt"), "utf8")).toBe("pulled\n");
+  expect(checkedOutText(join(checkoutHost.sourceDir, "web", "pulled.txt"))).toBe("pulled\n");
 });
 
 test("Check for updates in Settings › About looks now, says when Mirador is up to date, shows a newer release, says why a check failed, and asks the desktop app to look too", async ({ page }) => {

@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, checkedOutText, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const home = scratchPath("worktrees-home");
@@ -177,7 +177,7 @@ test("a worktree conversation's commits merge into the project folder's branch f
   const folder = await agentFolder(page);
   const changes = page.locator(".canvas-panel:visible .changes");
   const refresh = () => changes.getByRole("button", { name: "Refresh" }).click();
-  const projectFile = (path: string) => readFileSync(join(host.projectDir, path), "utf8");
+  const projectFile = (path: string) => checkedOutText(join(host.projectDir, path));
   const commitInWorktree = (path: string, content: string, subject: string) => {
     writeFileSync(join(folder, path), content);
     gitIn(folder, "add", path);
@@ -220,7 +220,7 @@ test("a worktree conversation's commits merge into the project folder's branch f
     expect(answer).toContain("They were rebased onto what main gained meanwhile");
     expect(projectFile("merged.txt")).toBe("changed again in the worktree\n");
     expect(gitIn(folder, "rev-parse", "HEAD")).toBe(git("rev-parse", "main"));
-    expect(readFileSync(join(folder, "elsewhere.txt"), "utf8")).toBe("merged elsewhere\n");
+    expect(checkedOutText(join(folder, "elsewhere.txt"))).toBe("merged elsewhere\n");
   });
 
   await test.step("the conversation's changes still list after its commits were rebased", async () => {

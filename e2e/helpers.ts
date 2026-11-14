@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { loadavg } from "node:os";
 import { expect, test, type Frame, type FrameLocator, type Locator, type Page } from "@playwright/test";
 import type { TestHost } from "./test-host.ts";
@@ -433,3 +434,6 @@ export const notificationsShown = (scope: Page | Frame) =>
 /** Clicks the latest notification with this body, where other notifications may come after it. */
 export const clickNotification = (page: Page, body: string) =>
   page.evaluate((body) => (window as unknown as WithRecordedNotifications).recordedNotifications.findLast((notification) => notification.body === body)!.onclick!(), body);
+
+/** A file git checked out, as written: Git for Windows checks text files out with CRLF line ends. */
+export const checkedOutText = (path: string) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
