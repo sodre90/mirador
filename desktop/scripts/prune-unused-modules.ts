@@ -2,7 +2,8 @@
 /**
  * Removes from a staged Mirador's node_modules what it never loads, which is most of their size: the packages only
  * mermaid needs, as the canvas serves one self-contained file of mermaid's; three.js's sources, as it serves the built
- * files; every package's source maps and type declarations; and the folders of the tools its authors work with.
+ * files; every package's source maps and type declarations; the folders of the tools its authors work with; and the
+ * coverage reports of their tests.
  */
 import { existsSync, readdirSync, readFileSync, rmdirSync, rmSync } from "node:fs";
 import { join, normalize, relative } from "node:path";
@@ -13,6 +14,8 @@ const UNSERVED_FOLDERS = ["three/src"];
 const NEVER_LOADED = /\.(js|mjs|cjs|css|ts|mts|cts)\.map$|\.d\.[mc]?ts$/;
 /** Some packages publish their CI's, editors' and coding agents' folders, such as lib0 its Playwright MCP's console logs. */
 const AUTHORS_TOOL_FOLDERS = new Set([".github", ".vscode", ".idea", ".claude", ".playwright-mcp"]);
+/** A coverage folder holding one of these is a test run's report, such as the one lib0 publishes, not code of the package. */
+const COVERAGE_REPORTS = ["coverage-final.json", "coverage-summary.json", "lcov.info"];
 
 type Manifest = Partial<Record<"dependencies" | "optionalDependencies" | "peerDependencies", Record<string, string>>>;
 
@@ -58,6 +61,11 @@ const authorsToolFoldersUnder = (folder: string) =>
   entriesUnder(folder)
     .filter((entry) => entry.isDirectory() && AUTHORS_TOOL_FOLDERS.has(entry.name))
     .map((entry) => join(entry.parentPath, entry.name));
+const coverageReportsUnder = (folder: string) =>
+  entriesUnder(folder)
+    .filter((entry) => entry.isDirectory() && entry.name === "coverage")
+    .map((entry) => join(entry.parentPath, entry.name))
+    .filter((coverage) => COVERAGE_REPORTS.some((report) => existsSync(join(coverage, report))));
 const deadLinksUnder = (folder: string) =>
   entriesUnder(folder)
     .filter((entry) => entry.isSymbolicLink())
@@ -87,6 +95,7 @@ export function pruneUnusedModules(stage: string) {
   keepOnly(join(modules, "mermaid"), MERMAID_FILES_KEPT);
   UNSERVED_FOLDERS.forEach((folder) => rmSync(join(modules, folder), { recursive: true, force: true }));
   authorsToolFoldersUnder(modules).forEach((folder) => rmSync(folder, { recursive: true, force: true }));
+  coverageReportsUnder(modules).forEach((folder) => rmSync(folder, { recursive: true, force: true }));
   filesUnder(modules)
     .filter((file) => NEVER_LOADED.test(file))
     .forEach((file) => rmSync(file));

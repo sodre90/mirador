@@ -34,6 +34,8 @@ beforeEach(() => {
   [".playwright-mcp/console-2026-07-11.log", ".claude/settings.local.json", ".github/workflows/ci.yml", ".vscode/settings.json", ".idea/modules.xml", "github/index.js"].forEach((file) =>
     write(`node_modules/shared-helper/${file}`),
   );
+  ["coverage/coverage-final.json", "coverage/tmp/coverage-1.json"].forEach((file) => write(`node_modules/shared-helper/${file}`));
+  write("node_modules/react/lib/coverage/index.js");
   mkdirSync(join(modules, ".bin"), { recursive: true });
   symlinkSync("../mermaid/dist/mermaid.js", join(modules, ".bin", "mermaid"));
   symlinkSync("../react/index.js", join(modules, ".bin", "react"));
@@ -62,6 +64,13 @@ test("pruning drops the folders of the tools a package's authors work with, and 
 
   [".playwright-mcp", ".claude", ".github", ".vscode", ".idea"].forEach((gone) => expect(present(`shared-helper/${gone}`)).toBe(false));
   expect(present("shared-helper/github/index.js")).toBe(true);
+});
+
+test("pruning drops a package's coverage report, and keeps a folder of its code named coverage", () => {
+  pruneUnusedModules(stage);
+
+  expect(present("shared-helper/coverage")).toBe(false);
+  expect(present("react/lib/coverage/index.js")).toBe(true);
 });
 
 test("every file the canvas serves from a pruned package survives pruning", () => {
