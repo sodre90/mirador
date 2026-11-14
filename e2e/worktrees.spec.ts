@@ -206,7 +206,7 @@ test("a worktree conversation's commits merge into the project folder's branch f
     );
     expect(projectFile("merged.txt")).toBe("edited in the project folder\n");
     expect(git("log", "-1", "--format=%s", "main")).toBe("Add merged.txt");
-    writeFileSync(join(host.projectDir, "merged.txt"), "from the worktree\n");
+    git("checkout", "--", "merged.txt");
   });
 
   await test.step("the agent merges with its land tool, its commit rebased onto what main gained meanwhile", async () => {
