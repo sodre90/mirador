@@ -58,6 +58,8 @@ import { isSideChatBrief } from "../shared/side-chats.ts";
  * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
  * A side chat's brief, sent before its first question, is written to the prompts file but leaves the commands alone.
+ * Its start, its sessions and the prompts it takes go to stderr, which the host stamps into the agent's log, so a kept
+ * test host's log tells how far a turn got.
  */
 const promptsFile = process.env.FAKE_ACP_PROMPTS;
 const availableCommands: acp.AvailableCommand[] | null = process.env.FAKE_ACP_COMMANDS ? JSON.parse(process.env.FAKE_ACP_COMMANDS) : null;
@@ -80,6 +82,7 @@ const history: { sessionId: string; title: string; updates: acp.SessionUpdate[] 
 const startsWith = (prompt: acp.ContentBlock[], word: string) => prompt.every((block) => block.type === "text" && block.text.startsWith(word));
 
 const log = (entry: string) => process.env.FAKE_ACP_LOG && appendFileSync(process.env.FAKE_ACP_LOG, `${process.env.FAKE_ACP_NAME ?? "agent"} ${entry}\n`);
+const trace = (step: string) => process.stderr.write(`fake agent ${process.pid}: ${step}\n`);
 const answerLate = async <T>(answer: () => T) => {
   await Bun.sleep(answersAfterMs);
   return answer();
@@ -469,9 +472,11 @@ if (ignoresSigterm) {
 if (process.env.FAKE_ACP_PID_FILE) writeFileSync(process.env.FAKE_ACP_PID_FILE, String(process.pid));
 
 log("started");
+trace("started");
 acp
   .agent()
   .onRequest(acp.methods.agent.initialize, (ctx) => {
+    trace("initialize");
     noticesAdvertised = typeof ctx.params.clientCapabilities?.session?.notices === "object";
     const air = (ctx.params.clientCapabilities?._meta?.jetbrains as { air?: { capabilities?: unknown } } | undefined)?.air;
     asyncTasksAdvertised = Array.isArray(air?.capabilities) && (air.capabilities as unknown[]).includes("asyncTasks");
@@ -494,6 +499,7 @@ acp
   .onRequest(acp.methods.agent.session.new, (ctx) => {
     const sessionId = `fake-session-${process.pid}-${++nextSession}`;
     sessionFolders.set(sessionId, ctx.params.cwd);
+    trace(`new session ${sessionId}`);
     if (resumes) log(`new ${sessionId}`);
     if (availableCommands)
       setTimeout(() => ctx.client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "available_commands_update", availableCommands } }), 50);
@@ -535,6 +541,7 @@ acp
     const textOf = (blocks: acp.ContentBlock[]) => blocks.map((block) => (block.type === "text" ? block.text : "")).join("");
     const prompt = ctx.params.prompt.filter((block) => !(block.type === "text" && isSideChatBrief(block.text)));
     const text = textOf(prompt);
+    trace(`prompt in ${ctx.params.sessionId}: ${text.split("\n")[0]!.slice(0, 80)}`);
     appendFileSync(promptsFile!, `${textOf(ctx.params.prompt)}\n`);
     if (startsWith(prompt, "EDIT ")) return askToEdit(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("EDIT ".length)));
     if (startsWith(prompt, "RUN TOOLS ")) return runTools(ctx.client, ctx.params.sessionId, JSON.parse(text.slice("RUN TOOLS ".length)));

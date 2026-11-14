@@ -113,6 +113,7 @@ jobs:
           "::endgroup::"
           $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $env:SURVEY
           $env:MIRADOR_E2E_KEEP = "1"
+          $env:MIRADOR_E2E_HOST_LOGS = Join-Path $PWD "host-logs"
           $started = Get-Date
           # A loaded runner makes some specs fail once and pass when tried again. One try again tells those apart from a spec that
           # fails every time: the Verdict lists a spec that passed on its retry, but only a spec that fails twice holds the release.
@@ -135,8 +136,8 @@ jobs:
         shell: bash
         run: bun e2e/windows-suite-verdict.ts --shard "$SURVEY" e2e/windows-known-issues.json
       # Traces and the kept host folders are left out: they hold the sign-in link, browser tokens and databases. Only their
-      # logs go, and each failed test's page as error-context.md writes it, with auth links and the model server's address
-      # and key taken out.
+      # logs go, named after their spec as each host left them in host-logs, and each failed test's page as
+      # error-context.md writes it, with auth links and the model server's address and key taken out.
       - name: Collect host logs and failed tests' pages
         if: always()
         shell: pwsh
@@ -147,11 +148,10 @@ jobs:
           $modelServer = @($env:LLM_SERVER_KEY, $env:LLM_SERVER_URL, ($env:LLM_SERVER_URL -as [uri]).Host) | Where-Object { $_ }
           filter Hide-ModelServer { $text = $_; foreach ($secret in $modelServer) { $text = $text.Replace($secret, "REDACTED") }; $text }
           New-Item -ItemType Directory -Force e2e-logs | Out-Null
-          Get-ChildItem -Path $env:TEMP -Directory -Filter "mirador-e2e-*" | ForEach-Object {
-            $hostDir = $_
-            $logs = @(Get-Item -LiteralPath (Join-Path $hostDir.FullName "host.log") -ErrorAction SilentlyContinue) + @(Get-ChildItem -Path (Join-Path $hostDir.FullName "data\logs") -File -Filter *.log -ErrorAction SilentlyContinue)
-            $logs | ForEach-Object {
-              $target = Join-Path e2e-logs ($hostDir.Name + "-" + $_.Name)
+          if (Test-Path host-logs) {
+            $hostLogs = (Resolve-Path host-logs).Path
+            Get-ChildItem -Path $hostLogs -Recurse -File -Filter *.log | ForEach-Object {
+              $target = Join-Path e2e-logs ($_.FullName.Substring($hostLogs.Length + 1) -replace '[\\/]', '-')
               Get-Content -LiteralPath $_.FullName | Where-Object { $_ -notmatch 'auth\?(token|code)' } | Hide-ModelServer | Set-Content -LiteralPath $target
             }
           }

@@ -2,8 +2,9 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Locator, test } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
+import { sessionsOpenInTerminals } from "../host/terminal-sessions.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
@@ -41,6 +42,21 @@ function openInTerminal(sessionId: string, status: string) {
   writeFileSync(terminalRegistration, JSON.stringify({ pid: process.pid, sessionId, entrypoint: "cli", kind: "interactive", status }));
 }
 
+/** What the host's watcher reads of the session registry: whether the terminal's registration is still there, and what it makes of it. */
+async function registryAsTheHostReadsIt(sessionId: string) {
+  const registrations = existsSync(sessionRegistry) ? readdirSync(sessionRegistry).map((name) => `${name}: ${readFileSync(join(sessionRegistry, name), "utf8")}`) : [];
+  return { registrations, terminalActivity: (await sessionsOpenInTerminals(claudeConfigDir)).get(sessionId) ?? null };
+}
+
+/** A badge that never reads so says what the registry held then, telling a registration gone from one the host doesn't show. */
+async function expectBadgeText(badge: Locator, text: string, sessionId: string) {
+  try {
+    await expect(badge).toHaveText(text);
+  } catch (error) {
+    throw new Error(`${(error as Error).message}\nThe session registry as the host reads it: ${JSON.stringify(await registryAsTheHostReadsIt(sessionId), null, 2)}`);
+  }
+}
+
 /** A turn the user takes in the session from a terminal: `claude -p --resume` in the project directory. */
 async function takeTurnInTerminal(sessionId: string, prompt: string) {
   host.muteNotifier(sessionId);
@@ -65,7 +81,7 @@ test("turns taken in a terminal join the conversation once the terminal is idle,
 
   const terminalBadge = page.locator(".chat-header:visible .badge", { hasText: "in a terminal" });
   openInTerminal(sessionId, "busy");
-  await expect(terminalBadge).toHaveText("in a terminal · working");
+  await expectBadgeText(terminalBadge, "in a terminal · working", sessionId);
   await takeTurnInTerminal(sessionId, "Terminal task");
   openInTerminal(sessionId, "idle");
 

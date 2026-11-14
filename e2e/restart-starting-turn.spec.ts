@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { addWorkspace, createProfile, primaryModifier, reloadFromRestartedHost, sendMessage, signIn, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -21,6 +21,26 @@ const prompts = () =>
 
 const hostStarts = () => host.log.match(/Mirador is running/g)?.length ?? 0;
 
+/** A new conversation on a new opencode profile whose pre-launch command sleeps that long. */
+async function newConversationStartingSlowly(page: Page, profile: string, seconds: number) {
+  await test.step(`a new conversation on "${profile}", whose pre-launch command sleeps ${seconds} s`, async () => {
+    const profiles = await createProfile(page, profile, "", `sleep ${seconds}`, "opencode");
+    await profiles.getByRole("button", { name: "Close" }).click();
+    await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${profile} · opencode` });
+    const previousUrl = page.url();
+    await page.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(previousUrl);
+  });
+}
+
+async function firstTurn(page: Page, text: string, { timeout }: { timeout: number }) {
+  await test.step(`"${text}" reaches the agent once its pre-launch command ends, and its turn ends`, async () => {
+    await sendMessage(page, text);
+    await expect.poll(prompts, { timeout }).toContain(text);
+    await waitForTurnToEnd(page);
+  });
+}
+
 test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   fakeOpencode();
@@ -35,15 +55,8 @@ test.afterAll(async () => {
 test("Cmd+Shift+R while a turn's agent is still starting restarts the host, and messages go out after it", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
-  const profiles = await createProfile(page, "slow start", "", `sleep ${PRELAUNCH_SECONDS}`, "opencode");
-  await profiles.getByRole("button", { name: "Close" }).click();
-  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "slow start · opencode" });
-  const previousUrl = page.url();
-  await page.getByRole("button", { name: "+ New conversation" }).click();
-  await expect(page).not.toHaveURL(previousUrl);
-  await sendMessage(page, "first");
-  await expect.poll(prompts, { timeout: 30_000 }).toContain("first");
-  await waitForTurnToEnd(page);
+  await newConversationStartingSlowly(page, "slow start", PRELAUNCH_SECONDS);
+  await firstTurn(page, "first", { timeout: 30_000 });
 
   await test.step("after a restart from outside, the next turn waits for the agent's pre-launch command", async () => {
     await host.restart();
@@ -89,15 +102,8 @@ test("a turn the agent finished during the stop for a restart is not sent again 
 
 test("a turn whose agent was still starting when the stop ran out waits for its own message to go again, not the previous turn's", async ({ page }) => {
   await signIn(page, host);
-  const profiles = await createProfile(page, "very slow start", "", "sleep 15", "opencode");
-  await profiles.getByRole("button", { name: "Close" }).click();
-  await page.getByLabel("Agent", { exact: true }).selectOption({ label: "very slow start · opencode" });
-  const previousUrl = page.url();
-  await page.getByRole("button", { name: "+ New conversation" }).click();
-  await expect(page).not.toHaveURL(previousUrl);
-  await sendMessage(page, "slower first");
-  await expect.poll(prompts, { timeout: 60_000 }).toContain("slower first");
-  await waitForTurnToEnd(page);
+  await newConversationStartingSlowly(page, "very slow start", 15);
+  await firstTurn(page, "slower first", { timeout: 60_000 });
 
   await host.restart();
   await sendMessage(page, "slower second");
