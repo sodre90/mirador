@@ -101,6 +101,8 @@ const schema = `
     job TEXT NOT NULL, ssh_host TEXT, message TEXT NOT NULL, resume INTEGER NOT NULL, since INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS running_turns (
     conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE);
+  CREATE TABLE IF NOT EXISTS loaded_plugins (
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE, plugin TEXT NOT NULL, PRIMARY KEY (conversation_id, plugin));
   CREATE TABLE IF NOT EXISTS workspace_groups (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, position INTEGER NOT NULL, created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS terminal_tabs (
@@ -670,6 +672,22 @@ export class Store {
   appStorage(folderId: string, app: string): AppStorageItems {
     const rows = this.db.query("SELECT key, value FROM app_storage WHERE folder_id = ? AND app = ?").all(folderId, app) as { key: string; value: string }[];
     return Object.fromEntries(rows.map(({ key, value }) => [key, value]));
+  }
+
+  /** The plugins that load on request whose instructions and tools the conversation has, by name. */
+  loadedPlugins(conversationId: string): string[] {
+    const rows = this.db.query("SELECT plugin FROM loaded_plugins WHERE conversation_id = ? ORDER BY plugin").all(conversationId) as { plugin: string }[];
+    return rows.map(({ plugin }) => plugin);
+  }
+
+  /** A fork or side chat goes on with the plugins its source had loaded, as its copy of the session says it did. */
+  copyLoadedPlugins(fromConversationId: string, toConversationId: string) {
+    this.db.query("INSERT OR IGNORE INTO loaded_plugins (conversation_id, plugin) SELECT ?, plugin FROM loaded_plugins WHERE conversation_id = ?").run(toConversationId, fromConversationId);
+  }
+
+  /** True when the conversation didn't have the plugin yet. */
+  savePluginLoaded(conversationId: string, plugin: string): boolean {
+    return this.db.query("INSERT OR IGNORE INTO loaded_plugins (conversation_id, plugin) VALUES (?, ?)").run(conversationId, plugin).changes > 0;
   }
 
   /** A null value removes the item. */

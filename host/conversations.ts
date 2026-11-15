@@ -876,7 +876,9 @@ export class ConversationService {
     const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree } = this.get(conversationId);
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
-    return this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree);
+    const forked = this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree);
+    this.store.copyLoadedPlugins(conversationId, forked.id);
+    return forked;
   }
 
   private forkPointThrough(conversationId: string, seq: number): SessionForkPoint | null {
@@ -901,6 +903,7 @@ export class ConversationService {
     const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
     const { workspaceId, harness, profileId, worktree } = parent;
     const sideChat = this.insertConversation(workspaceId, { harness, profileId }, titleFrom(askedOutsideQuotes(text)) || UNTITLED, true, worktree, parent.id);
+    this.store.copyLoadedPlugins(parent.id, sideChat.id);
     this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
     this.send(sideChat.id, text).catch(() => {});
     return sideChat;

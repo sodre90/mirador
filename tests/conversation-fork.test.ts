@@ -80,6 +80,13 @@ test("forking a conversation copies its agent session into a new conversation on
   expect(store.findConversation(original.id)).toMatchObject({ acpSessionId: "original-session", title: "Plan the trip" });
 });
 
+test("a fork goes on with the plugins its original had loaded, as its copy of the session says it did", () => {
+  const { store, conversations, original } = hostWithAConversationOnOpencode();
+  withAFinishedTurn(store, original, { title: "Plan the trip" });
+  store.savePluginLoaded(original.id, "race");
+  expect(store.loadedPlugins(conversations.fork(original.id).id)).toEqual(["race"]);
+});
+
 test("a fork keeps a title the user gave the conversation safe from its agent's renaming, as the original does", async () => {
   const renamedByItsAgent = async (titleSetByUser: boolean) => {
     const { store, conversations, original } = hostWithAConversationOnOpencode();

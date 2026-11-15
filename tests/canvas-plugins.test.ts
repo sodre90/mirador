@@ -21,6 +21,114 @@ const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
 
 const setUp = () => canvasPluginHost(FIXTURES);
 
+describe("a plugin that loads on request", () => {
+  const SUMMARY = "cards the user presses and steps the agent ticks off, when a card says it better than words.";
+  const loadingOnRequest = { board: { ...board, guidance: { ...board.guidance, summary: SUMMARY } } };
+  const setUpOnRequest = (store = storeWithConversation()) => canvasPluginHost(FIXTURES, store, loadingOnRequest);
+  const toolsListed = async (mcpRequest: (method: string, params: Record<string, unknown>) => Promise<{ tools: { name: string; _meta?: Record<string, unknown> }[] }>) =>
+    (await mcpRequest("tools/list", {})).tools;
+  const onAgent = (store: Store, harness: "pi" | "opencode") => store.updateConversation({ ...store.findConversation("c1")!, harness });
+
+  test("a Claude Code conversation is told its summary alone, and gets its instructions and tools once the agent loads it", async () => {
+    const { plugins, mcpRequest, callTool, store } = await setUpOnRequest();
+    const instructions = canvasInstructions("http://127.0.0.1:4601", plugins.guidanceFor("c1"));
+    expect(instructions).toContain(`call plugin_load with its name: it answers with the plugin's instructions and puts its tools in your tool list.\n- board: ${SUMMARY}`);
+    expect(instructions).not.toContain("- show_card: show a card the user can press.");
+    expect(canvasUseGuidance(plugins.guidanceFor("c1"))).toContain("\n- show_card: when a card says it better than words. Load the board plugin with plugin_load first.\n");
+    expect(claudeSessionMeta("often", { canvasPlugins: plugins.guidanceFor("c1") }).claudeCode.options.allowedTools).toContain("mcp__canvas__plugin_load");
+    const before = (await toolsListed(mcpRequest)).map(({ name }) => name);
+    expect(before).toEqual(expect.arrayContaining(["show", "ask", "plugin_load"]));
+    expect(before).not.toContain("show_card");
+
+    const loaded = await callTool("plugin_load", { plugin: "board" });
+    expect(loaded.isError).toBe(false);
+    expect(loaded.text).toContain("- show_card: show a card the user can press.");
+    expect(loaded.text).toContain("Its tools are available to you now: show_card, change_card,");
+    const after = await toolsListed(mcpRequest);
+    expect(after.map(({ name }) => name)).toEqual(expect.arrayContaining(["show_card", "change_card", "track_steps"]));
+    expect(after.find(({ name }) => name === "show_card")!._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+    expect(after.find(({ name }) => name === "show")!._meta?.["anthropic/alwaysLoad"]).toBe(true);
+    expect(store.loadedPlugins("c1")).toEqual(["board"]);
+  });
+
+  test("the conversation keeps a loaded plugin's tools on its next connection, as after a restart of Mirador", async () => {
+    const store = storeWithConversation();
+    await (await setUpOnRequest(store)).callTool("plugin_load", { plugin: "board" });
+    expect((await toolsListed((await setUpOnRequest(store)).mcpRequest)).map(({ name }) => name)).toContain("show_card");
+  });
+
+  test("the user's command of the plugin brings its tools to the agent, though the command has shown the plugin's first item", async () => {
+    const store = storeWithConversation();
+    const { plugins } = await setUpOnRequest(store);
+    const toldToolsChanged: string[] = [];
+    plugins.tellsToolsChangedWith(async (conversationId) => void toldToolsChanged.push(conversationId));
+
+    expect(await plugins.runCommand("c1", "board:show_card", "title=Hello text=there")).toMatch(/^Shown as /);
+    expect(toldToolsChanged).toEqual(["c1"]);
+    expect(store.loadedPlugins("c1")).toEqual(["board"]);
+    await plugins.runCommand("c1", "board:show_card", "title=Again text=there");
+    expect(toldToolsChanged, "a plugin loaded already is not told again").toEqual(["c1"]);
+  });
+
+  test("what the agent is told stays as its session started, once it loaded the plugin, so a restart of Mirador keeps the prompt cache", async () => {
+    const store = storeWithConversation();
+    const { plugins, callTool, mcpRequest } = await setUpOnRequest(store);
+    const told = () => [canvasInstructions("http://127.0.0.1:4601", plugins.guidanceFor("c1")), canvasUseGuidance(plugins.guidanceFor("c1"))];
+    const atStart = told();
+    await callTool("plugin_load", { plugin: "board" });
+    expect(told()).toEqual(atStart);
+    expect((await toolsListed(mcpRequest)).map(({ name }) => name), "plugin_load stays, as Claude Code loads it up front").toContain("plugin_load");
+  });
+
+  test("a conversation where the plugin already has items has its tools without loading it", async () => {
+    const store = storeWithConversation();
+    store.saveCanvasItem({ id: "i1", conversationId: "c1", kind: "plugin", title: "Card", status: "shown", createdAt: 1, plugin: "board", type: "card", icon: "▤", placement: "page", data: { text: "a", presses: 0, heardPresses: 0 } });
+    expect((await toolsListed((await setUpOnRequest(store)).mcpRequest)).map(({ name }) => name)).toContain("show_card");
+  });
+
+  test("agents that don't take tools mid-session have its tools and instructions from the start, as before plugins loaded on request", async () => {
+    for (const harness of ["pi", "opencode"] as const) {
+      const store = storeWithConversation();
+      onAgent(store, harness);
+      const { plugins, mcpRequest } = await setUpOnRequest(store);
+      const tools = (await toolsListed(mcpRequest)).map(({ name }) => name);
+      expect(tools).toContain("show_card");
+      expect(tools).not.toContain("plugin_load");
+      const instructions = canvasInstructions("http://127.0.0.1:4601", plugins.guidanceFor("c1"));
+      expect(instructions).toContain("- show_card: show a card the user can press.");
+      expect(instructions).not.toContain("plugin_load");
+      expect(canvasUseGuidance(plugins.guidanceFor("c1"))).toContain("\n- show_card: when a card says it better than words.\n");
+    }
+  });
+
+  test("a conversation whose profile the plugin gives guidance of its own has its tools and instructions from the start", async () => {
+    const store = storeWithConversation();
+    const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), pluginsOff: [], createdAt: 1 });
+    profile("local", "Qwen 27b");
+    profile("main", "Personal", { board: { "hand-over-to": "local" } });
+    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
+    const { plugins, mcpRequest } = await setUpOnRequest(store);
+
+    expect((await toolsListed(mcpRequest)).map(({ name }) => name)).toEqual(expect.arrayContaining(["show_card", "hand_over"]));
+    expect(plugins.guidanceFor("c1").instructions).toEqual(expect.arrayContaining(["- show_card: show a card the user can press.", "- hand_over: hand tasks to Qwen 27b without asking."]));
+    expect(plugins.guidanceFor("c1").onRequest).toEqual([]);
+  });
+
+  test("plugin_load takes only the names of the plugins that load on request", async () => {
+    const { callTool, mcpRequest } = await setUpOnRequest();
+    const loadTool = (await toolsListed(mcpRequest)).find(({ name }) => name === "plugin_load") as unknown as { inputSchema: { properties: { plugin: { enum: string[] } } } };
+    expect(loadTool.inputSchema.properties.plugin.enum).toEqual(["board"]);
+    expect((await callTool("plugin_load", { plugin: "media" })).isError).toBe(true);
+  });
+
+  test("with no plugin that loads on request, there is no plugin_load and nothing about it in the instructions", async () => {
+    const { plugins, mcpRequest } = await setUp();
+    expect((await toolsListed(mcpRequest)).map(({ name }) => name)).not.toContain("plugin_load");
+    expect(canvasInstructions("http://127.0.0.1:4601", plugins.guidanceFor("c1"))).not.toContain("plugin_load");
+  });
+});
+
 describe("CanvasPlugins", () => {
   test("a plugin's tools join the canvas server, pre-allowed and loaded up front unless on demand, with its lines of guidance", async () => {
     const { plugins, mcpRequest } = await setUp();
@@ -64,6 +172,15 @@ describe("CanvasPlugins", () => {
     expect(appTools.filter(({ _meta }: { _meta?: Record<string, unknown> }) => _meta?.["anthropic/alwaysLoad"])).toEqual([]);
     const { instructions } = await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
     expect(instructions).toContain("\n- app_open: open an app the user installed (counter (Counter)) on a file of this workspace");
+  });
+
+  test("the instructions say what each installed app does, as the official catalog says it", async () => {
+    const apps = { installed: () => [{ name: "counter", title: "Counter" }, { name: "private", title: "Private" }] } as unknown as AppDocuments;
+    const catalog = { all: [{ name: "counter", tagline: "Count things with the agent." }], notInstalled: () => [] } as unknown as PluginCatalog;
+    const { mcpRequest } = await canvasPluginHost(FIXTURES, undefined, {}, { apps, catalog });
+    const { instructions } = await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
+    expect(instructions).toContain("app_run runs its tasks.\n  - counter: Count things with the agent.");
+    expect(instructions).not.toContain("  - private:");
   });
 
   test("app_open names only the file it opened when that is the one asked for, a file in a folder too, whatever the system's separator", async () => {
@@ -171,15 +288,6 @@ describe("CanvasPlugins", () => {
     await plugins.act(before!.id, { kind: "hold", inThisRun: false });
     expect(items().map((item) => plugins.listed(item).data)).toMatchObject([{ holding: true }, { holding: false }]);
     expect(items()[1]).toMatchObject({ data: { holding: true } });
-  });
-
-  test("the instructions say what each installed app does, as the official catalog says it", async () => {
-    const apps = { installed: () => [{ name: "counter", title: "Counter" }, { name: "private", title: "Private" }] } as unknown as AppDocuments;
-    const catalog = { all: [{ name: "counter", tagline: "Count things with the agent." }], notInstalled: () => [] } as unknown as PluginCatalog;
-    const { mcpRequest } = await canvasPluginHost(FIXTURES, undefined, {}, { apps, catalog });
-    const { instructions } = await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
-    expect(instructions).toContain("app_run runs its tasks.\n  - counter: Count things with the agent.");
-    expect(instructions).not.toContain("  - private:");
   });
 
   test("the canvas lists an item with what came of it as its plugin says now, such as one saved before the plugin changed how it says it", async () => {
@@ -638,6 +746,34 @@ describe("CanvasPlugins", () => {
 
     endpoints.toolsChangedForProfile("main");
     expect(listed).toEqual(["c1 tools_list_changed"]);
+  });
+
+  test("telling a conversation its tools changed waits until its agent lists them again, and not at all for one that never connected", async () => {
+    const { plugins } = await setUp();
+    const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", null, plugins, null, storeWithConversation());
+    const started = Date.now();
+    await endpoints.toolsChanged("c1");
+    expect(Date.now() - started).toBeLessThan(100);
+
+    await endpoints.handle("c1", new Request("http://127.0.0.1/mcp/c1", { method: "GET" }));
+    const { handlers } = endpoints as unknown as { handlers: Map<string, McpHttpHandler> };
+    const told: string[] = [];
+    handlers.get("c1")!.bus.subscribe((event) => void told.push(event.kind));
+    let relisted = false;
+    const changed = endpoints.toolsChanged("c1").then(() => (relisted = true));
+    await Bun.sleep(50);
+    expect(told).toEqual(["tools_list_changed"]);
+    expect(relisted).toBe(false);
+    await endpoints.handle(
+      "c1",
+      new Request("http://127.0.0.1/mcp/c1", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
+      }),
+    );
+    await changed;
+    expect(relisted).toBe(true);
   });
 
   test("a plugin tells its caller when it is installed, has a replied of its own and says so in its plugin.json", async () => {

@@ -1,12 +1,16 @@
 import type { CatalogPlugin } from "../../shared/apps.ts";
 import type { HarnessId } from "../../shared/model.ts";
-import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
+import { PLUGIN_LOAD_TOOL, TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 
-/** What the loaded canvas plugins add to what agents are told and allowed: their tools, and a line each of guidance. */
+/**
+ * What the canvas plugins add to what agents are told and allowed: their tools, and a line each of guidance.
+ * `onRequest` holds a line for each plugin that loads on request, "- name: what it does and when to reach for it".
+ */
 export interface CanvasPluginGuidance {
   toolNames: string[];
   instructions: string[];
   often: string[];
+  onRequest?: string[];
 }
 
 export const NO_CANVAS_PLUGINS: CanvasPluginGuidance = { toolNames: [], instructions: [], often: [] };
@@ -27,9 +31,15 @@ const linesAfter = (lines: string[]) => lines.map((line) => `\n${line}`).join(""
 
 const pluginToolLines = (lines: string[]) => (lines.length === 0 ? "" : `\n\nMore canvas tools:${linesAfter(lines)}`);
 
+const pluginsOnRequest = (lines: string[] = []) =>
+  lines.length === 0
+    ? ""
+    : `\n\nPlugins that load on request. When one fits what you or the user are doing, call ${PLUGIN_LOAD_TOOL} with its name: it answers with the plugin's instructions and puts its tools in your tool list.${linesAfter(lines)}`;
+
 /**
  * The canvas MCP server's instructions: how its tools are meant to be used, and how pages render. Claude Code keeps only
- * their first 4,096 characters, so the plugins' lines come last, where a long list of them can't push out how pages render.
+ * their first 4,096 characters, so the plugins' lines come last, where a long list of them can't push out how pages render,
+ * and the short lines of the plugins that load on request come before the longer ones of those sent up front.
  */
 export function canvasInstructions(assetsOrigin: string, plugins = NO_CANVAS_PLUGINS) {
   return `The canvas is a browser panel next to this conversation. The user finds long terminal text and ASCII diagrams hard to read, so prefer the canvas for anything visual.
@@ -41,7 +51,7 @@ Rendering environment: every page renders in a sandboxed iframe with NO network 
 - three.js (ES modules): <script type="module">import * as THREE from "three"; import { OrbitControls } from "three/addons/controls/OrbitControls.js";</script>
 - D3 v7: <script src="${assetsOrigin}/d3.min.js"></script> (global d3)
 - Mermaid: <script src="${assetsOrigin}/mermaid.min.js"></script><script>mermaid.initialize({ startOnLoad: true, theme: getComputedStyle(document.documentElement).colorScheme === "dark" ? "dark" : "default" })</script> with <pre class="mermaid">...</pre>
-When someone is viewing the conversation, show reports back script errors from the page so you can fix them.${pluginToolLines(plugins.instructions)}`;
+When someone is viewing the conversation, show reports back script errors from the page so you can fix them.${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins.instructions)}`;
 }
 
 /** Claude Code and Codex publish a title after their first turn; the others are asked to name their conversation instead. */

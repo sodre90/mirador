@@ -278,8 +278,14 @@ function buildCanvasServer(
   return server;
 }
 
+/** How long a plugin's message or plugin_load waits for the agent to list its tools again before it goes on anyway. */
+const TOOLS_RELISTED_WAIT_MS = 5_000;
+
+const listsTools = (message: unknown) => typeof message === "object" && message !== null && (message as { method?: unknown }).method === "tools/list";
+
 export class CanvasMcpEndpoints {
   private readonly handlers = new Map<string, McpHttpHandler>();
+  private readonly waitingForToolsListed = new Map<string, (() => void)[]>();
 
   constructor(
     private readonly canvas: CanvasService,
@@ -293,7 +299,41 @@ export class CanvasMcpEndpoints {
   ) {}
 
   handle(conversationId: string, request: Request) {
+    if (request.method === "POST" && this.waitingForToolsListed.has(conversationId)) void this.hearToolsListed(conversationId, request.clone());
     return this.handlerFor(conversationId).fetch(request);
+  }
+
+  private async hearToolsListed(conversationId: string, request: Request) {
+    try {
+      const body: unknown = await request.json();
+      if (!(Array.isArray(body) ? body : [body]).some(listsTools)) return;
+    } catch {
+      return;
+    }
+    const waiting = this.waitingForToolsListed.get(conversationId) ?? [];
+    this.waitingForToolsListed.delete(conversationId);
+    for (const listed of waiting) listed();
+  }
+
+  /**
+   * Tells the conversation's agent that its tools changed, and resolves once it listed them again, or after a few seconds
+   * when it doesn't; an agent not connected yet lists them as it connects.
+   */
+  async toolsChanged(conversationId: string) {
+    const handler = this.handlers.get(conversationId);
+    if (!handler) return;
+    let heard!: () => void;
+    const listed = new Promise<void>((resolve) => (heard = resolve));
+    this.waitingForToolsListed.set(conversationId, [...(this.waitingForToolsListed.get(conversationId) ?? []), heard]);
+    handler.notify.toolsChanged();
+    await Promise.race([listed, Bun.sleep(TOOLS_RELISTED_WAIT_MS)]);
+    this.stopWaitingForToolsListed(conversationId, heard);
+  }
+
+  private stopWaitingForToolsListed(conversationId: string, heard: () => void) {
+    const others = (this.waitingForToolsListed.get(conversationId) ?? []).filter((waiting) => waiting !== heard);
+    if (others.length === 0) this.waitingForToolsListed.delete(conversationId);
+    else this.waitingForToolsListed.set(conversationId, others);
   }
 
   forget(conversationId: string) {

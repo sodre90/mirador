@@ -28,7 +28,7 @@ import {
 } from "../../shared/canvas-plugins.ts";
 import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import type { Conversation, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
+import type { Conversation, HarnessId, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
@@ -40,6 +40,7 @@ import type { Hub } from "../hub.ts";
 import type { Store } from "../store.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
+import { PLUGIN_LOAD_TOOL } from "./tool-names.ts";
 import type { CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 
@@ -50,6 +51,22 @@ const actsOnConversations = ({ tools, guidance, guidanceFor, note, statusline, c
 
 /** With tool search on, Claude Code hides MCP tools until the agent searches for them; a plugin's tools are offered as the canvas's own are. */
 const loadedUpFront = { "anthropic/alwaysLoad": true };
+
+const summaryOf = ({ host }: CanvasPlugin) => host.guidance?.summary?.trim() ?? "";
+
+/** A plugin that gives a line of summary: conversations are told that line, and get its instructions and tools when the agent asks. */
+const loadsOnRequest = (plugin: CanvasPlugin) => summaryOf(plugin) !== "";
+
+/**
+ * The agents that list a canvas server's tools again within the turn, as soon as it says they changed. The others get
+ * the tools of a plugin that loads on request from the start, as they would never see them join.
+ */
+const TAKES_TOOLS_MID_SESSION: HarnessId[] = ["claude"];
+
+/** Claude Code with tool search on lists new MCP tools by name only, until the agent fetches them. */
+const FETCH_DEFERRED_TOOLS = " If they are listed as deferred, fetch them with ToolSearch before you call them.";
+
+const takesToolsMidSession = (harness: HarnessId | undefined) => harness !== undefined && TAKES_TOOLS_MID_SESSION.includes(harness);
 
 const countOf = (type: PluginItemType | undefined, data: unknown) => (type?.count ? { count: type.count(data) } : {});
 
@@ -68,6 +85,9 @@ const shownOf = (type: PluginItemType | undefined, data: unknown) => ({ ...count
 
 /** A plugin may change its window's state on every tool call; its windows get the state as it settles. */
 const WINDOW_STATE_SETTLES_MS = 100;
+
+/** Tells a conversation's agent that its canvas tools changed; resolves once it listed them again, or didn't in a few seconds. */
+export type ToolsChanged = (conversationId: string) => Promise<void>;
 
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
@@ -132,6 +152,8 @@ export class CanvasPlugins {
     throw new Error("Mirador can't ask agents what they offer yet.");
   };
 
+  private toolsChanged: ToolsChanged = async () => {};
+
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
@@ -171,6 +193,10 @@ export class CanvasPlugins {
     this.askProfileChoices = ask;
   }
 
+  tellsToolsChangedWith(tell: ToolsChanged) {
+    this.toolsChanged = tell;
+  }
+
   /** Once, as Mirador starts: each plugin's background work, whose failure is the plugin's alone. */
   startBackgroundWork() {
     for (const plugin of this.plugins.filter(({ host }) => host.background)) {
@@ -201,15 +227,26 @@ export class CanvasPlugins {
 
   /** As it is when asked: a conversation started after the catalog came, or after an install, hears of it so. */
   get guidance(): CanvasPluginGuidance {
-    return this.guidanceOf(this.plugins);
+    return this.guidanceOf(this.plugins, loadsOnRequest);
   }
 
-  private guidanceOf(plugins: CanvasPlugin[]): CanvasPluginGuidance {
+  /** Each plugin waiting to be loaded is told by its summary, and its use-often line says to load it first; the others by their instructions. */
+  private guidanceOf(plugins: CanvasPlugin[], waitsToBeLoaded: (plugin: CanvasPlugin) => boolean): CanvasPluginGuidance {
     const offered = this.catalog?.notInstalled() ?? [];
+    const loaded = plugins.filter((plugin) => !waitsToBeLoaded(plugin));
+    const waiting = plugins.filter(waitsToBeLoaded);
     return {
-      toolNames: [...plugins.flatMap(({ host }) => Object.keys(host.tools)), ...(offered.length > 0 ? [PLUGIN_INSTALL_TOOL] : [])],
-      instructions: [...plugins.flatMap(({ host }) => host.guidance?.instructions ?? []), ...offeredPluginsGuidance(offered)],
-      often: plugins.flatMap(({ host }) => host.guidance?.often ?? []),
+      toolNames: [
+        ...plugins.flatMap(({ host }) => Object.keys(host.tools)),
+        ...(plugins.some(loadsOnRequest) ? [PLUGIN_LOAD_TOOL] : []),
+        ...(offered.length > 0 ? [PLUGIN_INSTALL_TOOL] : []),
+      ],
+      instructions: [...loaded.flatMap(({ host }) => host.guidance?.instructions ?? []), ...offeredPluginsGuidance(offered)],
+      often: [
+        ...loaded.flatMap(({ host }) => host.guidance?.often ?? []),
+        ...waiting.flatMap(({ manifest, host }) => (host.guidance?.often ? [`${host.guidance.often} Load the ${manifest.name} plugin with ${PLUGIN_LOAD_TOOL} first.`] : [])),
+      ],
+      onRequest: waiting.map((plugin) => `- ${plugin.manifest.name}: ${summaryOf(plugin)}`),
     };
   }
 
@@ -237,22 +274,26 @@ export class CanvasPlugins {
 
   /** The guidance of the plugins the conversation's profile has on, with what each adds for that profile, which a conversation a plugin's tool started doesn't get. */
   guidanceFor(conversationId: string): CanvasPluginGuidance {
+    const conversation = this.store.findConversation(conversationId);
     const plugins = this.pluginsOf(conversationId);
-    const guidance = this.guidanceOf(plugins);
-    if (this.store.findConversation(conversationId)?.startedBy) return guidance;
-    const added = plugins.flatMap((plugin) => {
-      try {
-        return plugin.host.guidanceFor?.((id) => this.settingFor(plugin, conversationId, id)) ?? [];
-      } catch (error) {
-        console.error(`the ${plugin.manifest.name} plugin failed to give guidance for conversation ${conversationId}:`, error);
-        return [];
-      }
-    });
+    const guidance = this.guidanceOf(plugins, (plugin) => !this.getsToolsFromStart(plugin, conversation));
+    if (conversation?.startedBy) return guidance;
+    const added = plugins.flatMap((plugin) => this.addedGuidanceOf(plugin, conversationId) ?? []);
     return {
       ...guidance,
       instructions: [...guidance.instructions, ...added.flatMap(({ instructions }) => instructions ?? [])],
       often: [...guidance.often, ...added.flatMap(({ often }) => often ?? [])],
     };
+  }
+
+  /** What the plugin adds for the conversation's profile, as its guidanceFor says. */
+  private addedGuidanceOf(plugin: CanvasPlugin, conversationId: string) {
+    try {
+      return plugin.host.guidanceFor?.((id) => this.settingFor(plugin, conversationId, id)) ?? undefined;
+    } catch (error) {
+      console.error(`the ${plugin.manifest.name} plugin failed to give guidance for conversation ${conversationId}:`, error);
+      return undefined;
+    }
   }
 
   private profileSettingNamed(plugin: CanvasPlugin, id: string) {
@@ -566,7 +607,9 @@ export class CanvasPlugins {
     }
     const parsed = await fromJsonSchema(tool.input)["~standard"].validate(commandInput(writtenArguments, tool.input));
     if (parsed.issues) throw new Error(parsed.issues.map(({ message }) => message).join("; "));
-    return String(await tool.run(parsed.value, this.toolContext(plugin, conversationId, "user")));
+    const said = String(await tool.run(parsed.value, this.toolContext(plugin, conversationId, "user")));
+    await this.bringTools(plugin, conversationId);
+    return said;
   }
 
   private commandTool(name: string) {
@@ -616,9 +659,12 @@ export class CanvasPlugins {
   /** Puts every plugin's tools on a conversation's canvas server; what a tool throws reaches the agent as a tool error. */
   /** The tools of the plugins the conversation's profile has on; the conversations on one opencode process share its profile, so the calling one's are the same. */
   registerTools(server: McpServer, conversationId: string, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
-    for (const plugin of this.pluginsOf(conversationId)) {
+    const conversation = this.store.findConversation(conversationId);
+    const plugins = this.pluginsOf(conversationId);
+    if (plugins.some((each) => !this.getsToolsFromStart(each, conversation))) this.registerLoadTool(server, plugins.filter(loadsOnRequest), callingConversation, reviewFree);
+    for (const plugin of plugins.filter((each) => this.hasToolsOf(each, conversation))) {
       for (const [name, tool] of Object.entries(plugin.host.tools)) {
-        const loading = tool.onDemand ? {} : { _meta: loadedUpFront };
+        const loading = tool.onDemand || loadsOnRequest(plugin) ? {} : { _meta: loadedUpFront };
         server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading, ...reviewFree }, async (input, ctx) => {
           try {
             const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx), "agent"));
@@ -629,6 +675,33 @@ export class CanvasPlugins {
         });
       }
     }
+  }
+
+  private registerLoadTool(server: McpServer, onRequest: CanvasPlugin[], callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations }) {
+    if (onRequest.length === 0) return;
+    const input = {
+      type: "object",
+      properties: { plugin: { type: "string", enum: onRequest.map(({ manifest }) => manifest.name), description: "The plugin's name, as the canvas instructions list it." } },
+      required: ["plugin"],
+    };
+    server.registerTool(
+      PLUGIN_LOAD_TOOL,
+      {
+        description:
+          "Load a plugin that loads on request, before you first use it: answers with the plugin's instructions and puts its tools in your tool list. The canvas instructions list those plugins, with what each is for.",
+        inputSchema: fromJsonSchema(input),
+        _meta: loadedUpFront,
+        ...reviewFree,
+      },
+      async (input, ctx) => {
+        try {
+          const { plugin } = input as { plugin: string };
+          return { content: [{ type: "text" as const, text: await this.load(await callingConversation(ctx), plugin) }] };
+        } catch (error) {
+          return { isError: true, content: [{ type: "text" as const, text: messageOf(error) }] };
+        }
+      },
+    );
   }
 
   /** The user's action in an item's view, for the item's plugin to handle; resolves to the plugin's reply. */
@@ -694,13 +767,65 @@ export class CanvasPlugins {
 
   /** A message the plugin sends on its own, which the conversation shows as the plugin's; one from its view, for the user, stays the user's. */
   private promptOfItsOwn(plugin: CanvasPlugin, conversationId: string) {
-    return (text: string, { afterTurn = false } = {}) => this.sendPrompt(conversationId, text, { afterTurn, fromPlugin: plugin.manifest.title });
+    return async (text: string, { afterTurn = false } = {}) => {
+      await this.bringTools(plugin, conversationId);
+      return this.sendPrompt(conversationId, text, { afterTurn, fromPlugin: plugin.manifest.title });
+    };
+  }
+
+  /**
+   * Whether the conversation's agent gets the plugin's tools and instructions as its session starts: unless the plugin
+   * loads on request and the agent can take them once it asks, as a conversation the plugin started has asked already,
+   * and one whose profile the plugin gives guidance of its own is told to use them. What the agent is told depends on this
+   * alone, so it reads the same after a restart of Mirador and keeps the prompt cache.
+   */
+  private getsToolsFromStart(plugin: CanvasPlugin, conversation: Conversation | undefined): boolean {
+    if (!conversation || !loadsOnRequest(plugin) || !takesToolsMidSession(conversation.harness)) return true;
+    return conversation.startedBy?.plugin === plugin.manifest.name || this.addedGuidanceOf(plugin, conversation.id) !== undefined;
+  }
+
+  /** Whether the conversation's agent is to see the plugin's tools now: from the start, or once it loaded the plugin or the plugin showed items there. */
+  private hasToolsOf(plugin: CanvasPlugin, conversation: Conversation | undefined): boolean {
+    if (this.getsToolsFromStart(plugin, conversation)) return true;
+    return this.store.loadedPlugins(conversation!.id).includes(plugin.manifest.name) || this.itemsOf(plugin, conversation!.id).length > 0;
+  }
+
+  /**
+   * Puts the tools of a plugin that loads on request into the conversation, when its agent didn't get them from the start;
+   * resolves once the agent has listed its tools again. What the plugin asks of the agent, and what the user does with it,
+   * brings them as the agent's own plugin_load does, also when the user's command has just shown the plugin's first item.
+   */
+  private async bringTools(plugin: CanvasPlugin, conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation || this.getsToolsFromStart(plugin, conversation)) return;
+    if (this.store.savePluginLoaded(conversationId, plugin.manifest.name)) await this.toolsChanged(conversationId);
+  }
+
+  private fetchesDeferredTools(conversationId: string) {
+    return this.store.findConversation(conversationId)?.harness === "claude";
+  }
+
+  /** The agent's plugin_load: the plugin's instructions and the names of its tools, which are in the agent's tool list by the time it reads them. */
+  private async load(conversationId: string, name: string): Promise<string> {
+    const onRequest = this.pluginsOf(conversationId).filter(loadsOnRequest);
+    const plugin = onRequest.find(({ manifest }) => manifest.name === name);
+    if (!plugin) throw new Error(`No plugin named ${name} loads on request here; the ones that do are ${onRequest.map(({ manifest }) => manifest.name).join(", ") || "none"}.`);
+    await this.bringTools(plugin, conversationId);
+    const tools = Object.keys(plugin.host.tools);
+    return [
+      `${plugin.manifest.title} is loaded.`,
+      ...[plugin.host.guidance?.instructions ?? []].flat(),
+      tools.length > 0 ? `Its tools are available to you now: ${tools.join(", ")}.${this.fetchesDeferredTools(conversationId) ? FETCH_DEFERRED_TOOLS : ""}` : "It brings no tools.",
+    ].join("\n\n");
   }
 
   private actionContext(plugin: CanvasPlugin, conversationId: string): CanvasActionContext {
     return {
       ...this.context(plugin, conversationId, { byAgent: false }),
-      prompt: (text, { afterTurn = false } = {}) => this.sendPrompt(conversationId, text, { afterTurn }),
+      prompt: async (text, { afterTurn = false } = {}) => {
+        await this.bringTools(plugin, conversationId);
+        return this.sendPrompt(conversationId, text, { afterTurn });
+      },
       openInEditor: (file, line) => {
         if (!isAbsolute(file) || !Number.isInteger(line) || line < 1) throw new Error(`${file}:${line} is not an absolute path and a line in it.`);
         launchEditor(this.store.editorSetting(), file, line);
