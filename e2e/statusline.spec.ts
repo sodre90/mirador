@@ -106,6 +106,35 @@ test("in a Claude Code conversation, the statusline command from the profile's C
   });
 });
 
+test("a Claude Code conversation's statusline counts down its prompt cache, beside the command's output too, and says when it ran out", async ({ page }) => {
+  api.cacheWritten = "ephemeral_1h_input_tokens";
+  await page.clock.install();
+  await signIn(page, host);
+  const dialog = await createProfile(page, "cache claude", `${subscriptionEnvironment(api)}\n${statuslineEnvironment()}`);
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await startConversationOn(page, "cache claude", "Claude Code");
+  const statusline = page.getByRole("region", { name: "Statusline" });
+  const cache = statusline.locator(".prompt-cache");
+  await expect(statusline.locator(".statusline-terminal")).toBeVisible();
+  await expect(cache, "nothing to count down before the first request").toHaveCount(0);
+
+  await sendMessage(page, "hello");
+  await waitForTurnToEnd(page);
+  await expect(statusline.locator(".statusline-plugins .prompt-cache")).toHaveText(/^cache (1h 0m|59m)$/);
+  await expect(cache).toHaveAttribute("data-hint", /keeps this conversation so far for 1h after each request/);
+
+  await statusline.getByRole("button", { name: "Built-in" }).click();
+  await expect(statusline.locator(".statusline-chips .prompt-cache")).toHaveText(/^cache (1h 0m|59m)$/);
+
+  await page.clock.fastForward("00:20:00");
+  await expect(cache).toHaveText(/^cache (40m|39m)$/);
+  await page.clock.fastForward("00:41:00");
+  await expect(cache).toHaveText("cache cold");
+  await expect(cache).toHaveAttribute("data-hint", /^The prompt cache ran out/);
+  await statusline.getByRole("button", { name: "Your statusline" }).click();
+  api.cacheWritten = null;
+});
+
 test("an opencode conversation keeps the built-in statusline, with its context once a turn ends, even where Claude settings name a statusline command", async ({ page }) => {
   await signIn(page, host);
   const dialog = await createProfile(page, "statusline opencode", `${scriptedOpencodeEnvironment(model, host.root)}\n${statuslineEnvironment()}`, "", "opencode");

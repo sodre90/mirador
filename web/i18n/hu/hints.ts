@@ -350,6 +350,9 @@ export const hints: Messages["hints"] = {
   cost: "Amennyibe a beszélgetés eddig került, ahogy az ágens jelenti.",
   credits: "A beszélgetés által eddig felhasznált AI-kreditek, ahogy a GitHub Copilot számolja.",
   profileChip: "A profil, amellyel ennek a beszélgetésnek az ágense fut.",
+  promptCache: (lifetime: string) =>
+    `A prompt gyorsítótárából hátralévő idő: a modell szolgáltatója minden kérés után ${lifetime} ideig megőrzi a beszélgetés eddigi részét, és onnan nagyjából tizedáron olvassa. Ha lejár, a következő üzenetnél újra az egészet olvassa.`,
+  promptCacheCold: "A prompt gyorsítótára lejárt: a következő üzenetnél a modell teljes áron újraolvassa az egész beszélgetést, és új gyorsítótárat kezd.",
   quota: (limit, percent, resetsIn) =>
     `Az előfizetésed használati korlátja (${limit}): ${percent} felhasználva, újraindul: ${resetsIn}.\n\nAz ágens minden válasz után jelenti, a beszélgetés profiljához tartozó fiókra.`,
   statuslineCommand: (command) =>

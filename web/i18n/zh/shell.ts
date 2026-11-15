@@ -302,6 +302,8 @@ export const shell: Messages["shell"] = {
     costSoFar: (cost) => `目前的花费（按 Agent 的报告）：${cost}。`,
     contextAdvice: "上下文建议",
     compactNow: "立即压缩",
+    cacheLeft: (time: string) => `缓存 ${time}`,
+    cacheCold: "缓存已过期",
     credits: (amount) => `${amount} 积分`,
     days: (count) => `${count}天`,
     hours: (count) => `${count}小时`,

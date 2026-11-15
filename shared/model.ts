@@ -418,6 +418,15 @@ export interface StatuslineRender {
   pluginChips: PluginStatuslineChips[];
   /** The plugins' advice on the conversation's context, for its context meter, in the order they loaded. */
   contextHints: PluginContextHint[];
+  /** Known for a Claude Code conversation whose session wrote a prompt cache. */
+  promptCache: PromptCache | null;
+}
+
+/** The model provider's cache of the conversation so far, which makes the next request cheaper while it lasts. */
+export interface PromptCache {
+  expiresAt: number;
+  /** How long the cache lives after a request: 5 minutes or 1 hour, by the plan. */
+  lifetimeMs: number;
 }
 
 /** A plugin's advice on a conversation's context. */

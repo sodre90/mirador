@@ -324,6 +324,9 @@ export const hints: Messages["hints"] = {
   cost: "到目前为止这个对话的花费，按 Agent 报告的数据。",
   credits: "这个对话已用的 AI 积分，按 GitHub Copilot 的计算。",
   profileChip: "这个对话的 Agent 运行时所用的配置。",
+  promptCache: (lifetime: string) =>
+    `提示缓存的剩余时间：每次请求后，模型提供方会把到目前为止的对话保留 ${lifetime}，并以约十分之一的价格从缓存读取。缓存过期后，下一条消息会重新完整读取。`,
+  promptCacheCold: "提示缓存已过期：下一条消息会让模型以全价重新读取整个对话，并开始新的缓存。",
   quota: (limit: string, percent: string, resetsIn: string) =>
     `你的套餐的${limit}用量上限：已用 ${percent}，${resetsIn}后重新开始。\n\nAgent 在每次响应后报告它，对应这个对话所用配置的账号。`,
   statuslineCommand: (command: string) =>

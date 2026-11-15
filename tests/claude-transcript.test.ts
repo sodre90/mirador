@@ -3,7 +3,7 @@ import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { claudeTranscript, lastAnsweringModel, modelChoiceFor, recordsUserMessage, userMessageTakenInAt } from "../host/claude-transcript.ts";
+import { claudeTranscript, claudeTranscriptEnd, lastAnsweringModel, modelChoiceFor, promptCacheOf, recordsUserMessage, userMessageTakenInAt } from "../host/claude-transcript.ts";
 
 const record = (fields: Record<string, unknown>) => JSON.stringify(fields);
 const answer = (model: string, isSidechain = false) => record({ type: "assistant", isSidechain, message: { role: "assistant", model, content: [] } });
@@ -81,4 +81,40 @@ test("a session's transcript is found under whichever project directory Claude C
   expect(await claudeTranscript(configDir, "s-1")).toBe(answer("claude-haiku-4-5"));
   expect(await claudeTranscript(configDir, "s-2")).toBe("");
   expect(await claudeTranscript(join(configDir, "missing"), "s-1")).toBe("");
+});
+
+const request = (timestamp: string, cacheCreation: Record<string, number> | undefined, isSidechain = false) =>
+  record({ type: "assistant", isSidechain, timestamp, message: { role: "assistant", model: "claude-sonnet-5-5", content: [], usage: { input_tokens: 2, cache_creation: cacheCreation } } });
+const HOUR_MS = 3_600_000;
+
+test("a session's prompt cache lasts from its last request for as long as the kind of cache it last wrote lives", () => {
+  const oneHour = [
+    request("2026-11-15T07:00:00.000Z", { ephemeral_1h_input_tokens: 4000, ephemeral_5m_input_tokens: 0 }),
+    request("2026-11-15T07:10:00.000Z", { ephemeral_1h_input_tokens: 0, ephemeral_5m_input_tokens: 0 }),
+    request("2026-11-15T07:30:00.000Z", { ephemeral_1h_input_tokens: 9, ephemeral_5m_input_tokens: 0 }, true),
+    record({ type: "user", timestamp: "2026-11-15T07:40:00.000Z", message: { role: "user", content: "later" } }),
+  ].join("\n");
+  expect(promptCacheOf(oneHour)).toEqual({ expiresAt: Date.parse("2026-11-15T08:10:00.000Z"), lifetimeMs: HOUR_MS });
+
+  const fiveMinutes = [request("2026-11-15T07:00:00.000Z", { ephemeral_1h_input_tokens: 4000 }), request("2026-11-15T07:02:00.000Z", { ephemeral_5m_input_tokens: 120 })].join("\n");
+  expect(promptCacheOf(fiveMinutes)).toEqual({ expiresAt: Date.parse("2026-11-15T07:07:00.000Z"), lifetimeMs: HOUR_MS / 12 });
+});
+
+test("a session that made no request, or wrote no cache, has no prompt cache to count down", () => {
+  expect(promptCacheOf("")).toBeNull();
+  expect(promptCacheOf(record({ type: "user", timestamp: "2026-11-15T07:00:00.000Z", message: { role: "user", content: "hi" } }))).toBeNull();
+  expect(promptCacheOf(request("2026-11-15T07:00:00.000Z", undefined))).toBeNull();
+  expect(promptCacheOf(request("not a time", { ephemeral_1h_input_tokens: 4000 }))).toBeNull();
+});
+
+test("the end of a long transcript still holds its latest records, with the cut line skipped", async () => {
+  const configDir = mkdtempSync(join(tmpdir(), "mirador-claude-"));
+  mkdirSync(join(configDir, "projects", "-private-var-project"), { recursive: true });
+  const early = Array.from({ length: 4000 }, () => request("2026-11-15T06:00:00.000Z", { ephemeral_5m_input_tokens: 1 }));
+  const latest = request("2026-11-15T07:00:00.000Z", { ephemeral_1h_input_tokens: 4000 });
+  writeFileSync(join(configDir, "projects", "-private-var-project", "s-1.jsonl"), [...early, latest, ""].join("\n"));
+  const end = await claudeTranscriptEnd(configDir, "s-1");
+  expect(end.length).toBe(512 * 1024);
+  expect(promptCacheOf(end)).toEqual({ expiresAt: Date.parse("2026-11-15T08:00:00.000Z"), lifetimeMs: HOUR_MS });
+  expect(await claudeTranscriptEnd(configDir, "s-2")).toBe("");
 });

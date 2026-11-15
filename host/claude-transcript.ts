@@ -3,6 +3,7 @@ import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { resolveModelPreference } from "@agentclientprotocol/claude-agent-acp/dist/session-model.js";
 import { isRealModel } from "../shared/claude-models.ts";
 import { flatSelectOptions } from "../shared/config-options.ts";
+import type { PromptCache } from "../shared/model.ts";
 
 /**
  * A session's transcript, wherever Claude Code keeps it: under a directory named after the project path, which it
@@ -12,6 +13,20 @@ export async function claudeTranscript(configDir: string, sessionId: string): Pr
   try {
     const [path] = await Array.fromAsync(new Bun.Glob(`*/${sessionId}.jsonl`).scan({ cwd: join(configDir, "projects"), absolute: true }));
     return path ? await Bun.file(path).text() : "";
+  } catch {
+    return "";
+  }
+}
+
+const TRANSCRIPT_END_BYTES = 512 * 1024;
+
+/** The end of a session's transcript, which holds its latest records, however long the session grew; its first line may be cut. */
+export async function claudeTranscriptEnd(configDir: string, sessionId: string): Promise<string> {
+  try {
+    const [path] = await Array.fromAsync(new Bun.Glob(`*/${sessionId}.jsonl`).scan({ cwd: join(configDir, "projects"), absolute: true }));
+    if (!path) return "";
+    const file = Bun.file(path);
+    return await file.slice(Math.max(0, file.size - TRANSCRIPT_END_BYTES)).text();
   } catch {
     return "";
   }
@@ -31,6 +46,25 @@ const records = (transcript: string) =>
 export function lastAnsweringModel(transcript: string): string | null {
   const answer = records(transcript).findLast((record) => record.type === "assistant" && isRealModel(record.message?.model));
   return answer?.message.model ?? null;
+}
+
+const MINUTE_MS = 60_000;
+const cacheLifetimes = [
+  { written: "ephemeral_1h_input_tokens", lifetimeMs: 60 * MINUTE_MS },
+  { written: "ephemeral_5m_input_tokens", lifetimeMs: 5 * MINUTE_MS },
+];
+
+const cacheLifetimeOf = (record: any): number | null => cacheLifetimes.find(({ written }) => record.message.usage.cache_creation?.[written] > 0)?.lifetimeMs ?? null;
+
+/**
+ * Until when the prompt cache of a Claude Code session's main thread lasts: each request to the model renews it, for
+ * as long as the kind of cache the session last wrote lives. Null for a session that made no request or wrote no cache.
+ */
+export function promptCacheOf(transcript: string): PromptCache | null {
+  const requests = records(transcript).filter((record) => record.type === "assistant" && record.message?.usage && Number.isFinite(Date.parse(record.timestamp)));
+  const lastRequest = requests.at(-1);
+  const lifetimeMs = requests.map(cacheLifetimeOf).findLast((lifetime) => lifetime !== null);
+  return lastRequest && lifetimeMs ? { expiresAt: Date.parse(lastRequest.timestamp) + lifetimeMs, lifetimeMs } : null;
 }
 
 export const textOf = (content: unknown): string =>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { chosenModel, withMultiplier } from "../shared/config-options.ts";
 import type { StatuslineChip } from "../shared/canvas-plugins.ts";
-import type { ContextUsage, Conversation, PlanQuotas, PluginContextHint, PluginStatuslineChips, Profile, QuotaWindow, StatuslineRender } from "../shared/model.ts";
+import type { ContextUsage, Conversation, PlanQuotas, PluginContextHint, PluginStatuslineChips, Profile, PromptCache, QuotaWindow, StatuslineRender } from "../shared/model.ts";
 import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
 import { placedAbove, useClosing } from "./BarMenu.tsx";
 import { parseAnsi, plainTextOf, type AnsiRun } from "./ansi.ts";
@@ -17,6 +17,7 @@ import { drawsShapesOnly, statuslineLooks, type StatuslineLook } from "./termina
 import { terminalFontList, useTerminalSettings } from "./terminal-settings.ts";
 import { useShownTheme } from "./theme.ts";
 import {
+  cacheLifetimeLabel,
   compactTokenCount,
   contextHint,
   contextLevel,
@@ -116,6 +117,24 @@ function QuotaMeter({ name, window }: { name: QuotaName; window: QuotaWindow }) 
         <span style={{ width: `${share * 100}%` }} />
       </span>
       {quotaLabels[name]} {percent} · {resetsIn}
+    </span>
+  );
+}
+
+const CACHE_CLOCK_MS = 10_000;
+
+/** How long the conversation's prompt cache still lasts, counting down by itself between the host's readings. */
+function PromptCacheChip({ cache }: { cache: PromptCache }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    setNow(Date.now());
+    const clock = setInterval(() => setNow(Date.now()), CACHE_CLOCK_MS);
+    return () => clearInterval(clock);
+  }, [cache.expiresAt]);
+  const cold = cache.expiresAt <= now;
+  return (
+    <span className={`chip prompt-cache ${cold ? "cold" : ""}`} data-hint={cold ? hints.promptCacheCold : hints.promptCache(cacheLifetimeLabel(cache.lifetimeMs))}>
+      {cold ? words.cacheCold : words.cacheLeft(timeUntil(cache.expiresAt, now))}
     </span>
   );
 }
@@ -271,6 +290,7 @@ function BuiltInStatusline({
   profiles,
   gitBranch,
   quotas,
+  promptCache,
   pluginChips,
   contextHints,
 }: {
@@ -278,6 +298,7 @@ function BuiltInStatusline({
   profiles: Profile[];
   gitBranch: string | null;
   quotas: PlanQuotas | null;
+  promptCache: PromptCache | null;
   pluginChips: PluginStatuslineChips[];
   contextHints: PluginContextHint[];
 }) {
@@ -297,6 +318,7 @@ function BuiltInStatusline({
         </span>
       )}
       {usage && usage.size > 0 && <ContextMeter conversationId={conversation.id} usage={usage} advice={contextHints} />}
+      {promptCache && <PromptCacheChip cache={promptCache} />}
       {knownWindows(quotas).map(({ name, window }) => (
         <QuotaMeter key={name} name={name} window={window} />
       ))}
@@ -332,6 +354,7 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
   const commandOutput = prefersCommand ? (render?.output ?? null) : null;
   const pluginChips = render?.pluginChips ?? [];
   const contextHints = render?.contextHints ?? [];
+  const promptCache = render?.promptCache ?? null;
   const usage = conversation.contextUsage;
   const advisedUsage = contextHints.length > 0 && usage && usage.size > 0 ? usage : null;
 
@@ -346,14 +369,16 @@ export function Statusline({ conversation, profiles }: { conversation: Conversat
             profiles={profiles}
             gitBranch={render?.gitBranch ?? null}
             quotas={render?.quotas ?? null}
+            promptCache={promptCache}
             pluginChips={pluginChips}
             contextHints={contextHints}
           />
         )}
       </div>
-      {commandOutput !== null && (pluginChips.length > 0 || advisedUsage) && (
+      {commandOutput !== null && (pluginChips.length > 0 || advisedUsage || promptCache) && (
         <div className="statusline-plugins">
           {advisedUsage && <ContextMeter conversationId={conversation.id} usage={advisedUsage} advice={contextHints} />}
+          {promptCache && <PromptCacheChip cache={promptCache} />}
           <PluginChips groups={pluginChips} />
         </div>
       )}

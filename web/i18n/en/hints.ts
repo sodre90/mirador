@@ -326,6 +326,9 @@ export const hints = {
   cost: "What the conversation has cost so far, as the agent reports it.",
   credits: "AI credits this conversation has used, as GitHub Copilot counts them.",
   profileChip: "The profile this conversation's agent runs with.",
+  promptCache: (lifetime: string) =>
+    `Time left on the prompt cache: the model provider keeps this conversation so far for ${lifetime} after each request, and reads it from there at about a tenth of the price. Once it runs out, the next message is read in full again.`,
+  promptCacheCold: "The prompt cache ran out: with the next message the model reads the whole conversation again at full price, and starts a new cache.",
   quota: (limit: string, percent: string, resetsIn: string) =>
     `${limit} usage limit of your plan: ${percent} used, starts over in ${resetsIn}.\n\nThe agent reports it after each response, for the account of this conversation's profile.`,
   statuslineCommand: (command: string) =>

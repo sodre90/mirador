@@ -5,6 +5,7 @@ import { chosenModel } from "../shared/config-options.ts";
 import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
 import { harnessLabels, type Conversation, type ContextUsage, type PlanQuotas, type PluginContextHint, type PluginStatuslineChips, type QuotaWindow, type StatuslineRender } from "../shared/model.ts";
 import type { CanvasPlugins } from "./canvas/plugins.ts";
+import { claudeTranscriptEnd, promptCacheOf } from "./claude-transcript.ts";
 import { profileEnvironment } from "./acp/harnesses.ts";
 import type { ConversationService } from "./conversations.ts";
 import type { Store } from "./store.ts";
@@ -185,11 +186,12 @@ export class StatuslineService {
     const environment = this.environmentOf(conversation);
     const configDir = environment && claudeConfigDir(environment);
     const runsClaudeCode = conversation.harness === "claude";
-    const [gitBranch, command] = await Promise.all([
+    const [gitBranch, command, promptCache] = await Promise.all([
       currentGitBranch(directory),
       configDir && this.runsUserCommands && runsClaudeCode ? statusLineCommandIn(configDir) : null,
+      configDir && runsClaudeCode && conversation.acpSessionId ? claudeTranscriptEnd(configDir, conversation.acpSessionId).then(promptCacheOf) : null,
     ]);
-    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints };
+    if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints, promptCache };
     const transcriptPath = conversation.acpSessionId ? claudeTranscriptPath(configDir, directory, conversation.acpSessionId) : null;
     const result = await runStatusLineCommand(command, {
       input: statuslineInput(conversation, directory, transcriptPath, quotas, now, costOfPluginChips(pluginChips)),
@@ -198,8 +200,8 @@ export class StatuslineService {
       columns: clampColumns(columns),
     });
     return "output" in result
-      ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips, contextHints }
-      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips, contextHints };
+      ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips, contextHints, promptCache }
+      : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips, contextHints, promptCache };
   }
 
   /** A profile whose environment does not parse cannot run anything; its conversation says why elsewhere. */

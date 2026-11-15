@@ -361,6 +361,9 @@ export const hints: Messages["hints"] = {
   cost: "Was die Unterhaltung bisher gekostet hat, wie der Agent es meldet.",
   credits: "KI-Credits, die diese Unterhaltung bisher verbraucht hat, wie GitHub Copilot sie zählt.",
   profileChip: "Das Profil, mit dem der Agent dieser Unterhaltung läuft.",
+  promptCache: (lifetime: string) =>
+    `Verbleibende Zeit des Prompt-Caches: Der Modellanbieter behält die bisherige Unterhaltung nach jeder Anfrage ${lifetime} lang und liest sie von dort für etwa ein Zehntel des Preises. Läuft er ab, wird mit der nächsten Nachricht wieder alles gelesen.`,
+  promptCacheCold: "Der Prompt-Cache ist abgelaufen: Mit der nächsten Nachricht liest das Modell die ganze Unterhaltung zum vollen Preis neu und beginnt einen neuen Cache.",
   quota: (limit, percent, resetsIn) =>
     `${limit}-Nutzungslimit deines Plans: ${percent} verbraucht, beginnt von vorn in ${resetsIn}.\n\nDer Agent meldet es nach jeder Antwort, für das Konto des Profils dieser Unterhaltung.`,
   statuslineCommand: (command) =>

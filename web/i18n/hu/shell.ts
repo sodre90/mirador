@@ -307,6 +307,8 @@ export const shell: Messages["shell"] = {
     costSoFar: (cost) => `Eddigi költség az ágens szerint: ${cost}.`,
     contextAdvice: "Tanácsok a kontextusról",
     compactNow: "Tömörítés most",
+    cacheLeft: (time: string) => `gyorsítótár ${time}`,
+    cacheCold: "gyorsítótár lejárt",
     credits: (amount) => `${amount} kredit`,
     days: (count) => `${count}n`,
     hours: (count) => `${count}ó`,

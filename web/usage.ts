@@ -48,6 +48,10 @@ export const quotaShare = ({ usedPercent }: QuotaWindow) => Math.min(1, Math.max
 export const quotaPercentLabel = ({ usedPercent }: QuotaWindow) => `${Math.round(usedPercent)}%`;
 
 const MINUTE_MS = 60_000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/** "1h" or "5m": how long a prompt cache lives after a request. */
+export const cacheLifetimeLabel = (lifetimeMs: number) => (lifetimeMs >= HOUR_MS ? words.hours(Math.round(lifetimeMs / HOUR_MS)) : words.minutes(Math.round(lifetimeMs / MINUTE_MS)));
 
 /** "2d 15h", "2h 28m" or "12m" from now until then. */
 export function timeUntil(at: number, now: number) {

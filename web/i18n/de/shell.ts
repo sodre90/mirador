@@ -327,6 +327,8 @@ export const shell: Messages["shell"] = {
     costSoFar: (cost) => `Bisherige Kosten laut Agent: ${cost}.`,
     contextAdvice: "Hinweise zum Kontext",
     compactNow: "Jetzt verdichten",
+    cacheLeft: (time: string) => `Cache ${time}`,
+    cacheCold: "Cache abgelaufen",
     credits: (amount) => `${amount} Credits`,
     days: (count) => `${count} d`,
     hours: (count) => `${count} h`,

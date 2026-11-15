@@ -113,6 +113,8 @@ export class FakeClaudeApi {
   resetsAt = Math.floor(Date.now() / 1000) + 3 * 60 * 60;
   /** The plan's usage limits each answer reports, as shares of 0 to 1, and when they start over, in epoch seconds. */
   planUsage: { fiveHour: number; fiveHourResetsAt: number; sevenDay: number; sevenDayResetsAt: number } | null = null;
+  /** The kind of prompt cache every answer says it wrote, as the API does: one that lives an hour, or five minutes. */
+  cacheWritten: "ephemeral_1h_input_tokens" | "ephemeral_5m_input_tokens" | null = null;
   /** Ends every reply in text, e.g. with a question for the user. */
   replySuffix = "";
   readonly answered: string[] = [];
@@ -327,7 +329,7 @@ export class FakeClaudeApi {
   private send(body: MessagesRequest, response: ServerResponse, answers: Answer[], { pingsAfterBlocks = false } = {}) {
     const blocks = answers.map((answer) => (answer.type === "text" ? { ...answer, text: answer.text + this.replySuffix } : answer));
     const id = `msg_fake_${++this.replies}`;
-    const usage = { input_tokens: this.contextTokens ?? 10, output_tokens: 5 };
+    const usage = { input_tokens: this.contextTokens ?? 10, output_tokens: 5, ...(this.cacheWritten && { cache_creation: { [this.cacheWritten]: 20 } }) };
     const stopReason = blocks.some(({ type }) => type === "tool_use") ? "tool_use" : "end_turn";
     if (pingsAfterBlocks && !body.stream) return;
     if (!body.stream) {

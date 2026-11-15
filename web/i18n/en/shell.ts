@@ -317,6 +317,8 @@ export const shell = {
     costSoFar: (cost: string) => `Cost so far, as the agent reports it: ${cost}.`,
     contextAdvice: "Context advice",
     compactNow: "Compact now",
+    cacheLeft: (time: string) => `cache ${time}`,
+    cacheCold: "cache cold",
     credits: (amount: string) => `${amount} credits`,
     days: (count: number) => `${count}d`,
     hours: (count: number) => `${count}h`,

@@ -5889,6 +5889,14 @@ button.usage-meter:focus-visible {
   white-space: nowrap;
 }
 
+.chip.prompt-cache {
+  font-variant-numeric: tabular-nums;
+}
+
+.chip.prompt-cache.cold {
+  color: var(--warn);
+}
+
 .quota-meter .usage-bar {
   width: 28px;
 }
