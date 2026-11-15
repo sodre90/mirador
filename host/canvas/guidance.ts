@@ -25,18 +25,23 @@ export const offeredPluginsGuidance = (offered: CatalogPlugin[]) =>
 
 const linesAfter = (lines: string[]) => lines.map((line) => `\n${line}`).join("");
 
-/** The canvas MCP server's instructions: how its tools are meant to be used, and how pages render. */
+const pluginToolLines = (lines: string[]) => (lines.length === 0 ? "" : `\n\nMore canvas tools:${linesAfter(lines)}`);
+
+/**
+ * The canvas MCP server's instructions: how its tools are meant to be used, and how pages render. Claude Code keeps only
+ * their first 4,096 characters, so the plugins' lines come last, where a long list of them can't push out how pages render.
+ */
 export function canvasInstructions(assetsOrigin: string, plugins = NO_CANVAS_PLUGINS) {
   return `The canvas is a browser panel next to this conversation. The user finds long terminal text and ASCII diagrams hard to read, so prefer the canvas for anything visual.
 
-- show: render an HTML page: architecture or flow diagrams, UI mockups, side-by-side comparisons, charts, 3D scenes, visual explanations, code-review walkthroughs.
-- ask: whenever you need the user to decide between options (design choices, approaches, trade-offs), ask here instead of in plain text. Give each option a short label and, when it helps, an HTML preview; mark the one you recommend with recommended: true, not in its label. A question takes the canvas's place of what you showed before, so to ask about a page, pass it as the question's html rather than calling show first. When you have more than one thing to ask, ask them all in one call with questions, one entry each; never fold several questions into one, or offer \"accept all\" or \"change some answers\" as options.${linesAfter(plugins.instructions)}
+- show: render an HTML page: architecture or flow diagrams, UI mockups, side-by-side comparisons, charts, 3D scenes, visual explanations.
+- ask: whenever you need the user to decide between options (design choices, approaches, trade-offs), ask here instead of in plain text. Give each option a short label and, when it helps, an HTML preview; mark the one you recommend with recommended: true, not in its label. A question takes the canvas's place of what you showed before, so to ask about a page, pass it as the question's html rather than calling show first. Ask all you have to ask in one call.
 
-Rendering environment: every page renders in a sandboxed iframe with NO network access (no fetch, no external CDNs, fonts or images), shown light or dark as the panel's theme is. Write self-contained HTML with inline CSS and JS. Draw diagrams as real graphics: HTML boxes laid out with CSS grid or flexbox, inline SVG, or Mermaid. Never draw them with ASCII or box-drawing characters (│ ┌ ─ ▼) in a <pre> or monospace block: the user finds them as hard to read on the canvas as in the terminal. Keep <pre> for code. Pick every colour (background, text, cards, inline code and code blocks, borders, lines) with light-dark() so the page follows that theme, e.g. <style>html { background: light-dark(#ffffff, #111214); color: light-dark(#1c1c1e, #ececee); }</style>. Don't use @media (prefers-color-scheme): it follows the system, not the panel. A script that draws in colour reads the theme as getComputedStyle(document.documentElement).colorScheme, "light" or "dark". Available libraries:
+Rendering environment: every page renders in a sandboxed iframe with NO network access (no fetch, no external CDNs, fonts or images), shown light or dark as the panel's theme is. Write self-contained HTML with inline CSS and JS. Draw diagrams as real graphics: HTML boxes laid out with CSS grid or flexbox, inline SVG, or Mermaid. Never draw them with ASCII or box-drawing characters (│ ┌ ─ ▼) in a <pre> or monospace block; keep <pre> for code. Pick every colour (background, text, cards, code, borders, lines) with light-dark() so the page follows that theme, e.g. <style>html { background: light-dark(#ffffff, #111214); color: light-dark(#1c1c1e, #ececee); }</style>. Don't use @media (prefers-color-scheme): it follows the system, not the panel. A script that draws in colour reads the theme as getComputedStyle(document.documentElement).colorScheme, "light" or "dark". Available libraries:
 - three.js (ES modules): <script type="module">import * as THREE from "three"; import { OrbitControls } from "three/addons/controls/OrbitControls.js";</script>
 - D3 v7: <script src="${assetsOrigin}/d3.min.js"></script> (global d3)
 - Mermaid: <script src="${assetsOrigin}/mermaid.min.js"></script><script>mermaid.initialize({ startOnLoad: true, theme: getComputedStyle(document.documentElement).colorScheme === "dark" ? "dark" : "default" })</script> with <pre class="mermaid">...</pre>
-When someone is viewing the conversation, show reports back script errors from the page so you can fix them.`;
+When someone is viewing the conversation, show reports back script errors from the page so you can fix them.${pluginToolLines(plugins.instructions)}`;
 }
 
 /** Claude Code and Codex publish a title after their first turn; the others are asked to name their conversation instead. */

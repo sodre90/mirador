@@ -31,9 +31,18 @@ describe("CanvasPlugins", () => {
 
     const { guidance } = plugins;
     expect(guidance.toolNames).toEqual(["show_card", "change_card", "show_report", "change_verdict", "track_steps", "pin_card", "finish_step", "hand_over"]);
-    expect(canvasInstructions("http://127.0.0.1:4601", guidance)).toContain("\"change some answers\" as options.\n- show_card: show a card the user can press.\n\nRendering environment:");
+    expect(canvasInstructions("http://127.0.0.1:4601", guidance)).toEndWith("so you can fix them.\n\nMore canvas tools:\n- show_card: show a card the user can press.");
     expect(canvasUseGuidance(guidance)).toContain("add a preview when it helps.\n- show_card: when a card says it better than words.\n- Keep pages lean");
     expect(claudeSessionMeta("often", { canvasPlugins: guidance }).claudeCode.options.allowedTools).toContain("mcp__canvas__show_card");
+  });
+
+  test("how pages render comes before the plugins' lines, inside what Claude Code keeps of a server's instructions however many plugins there are", () => {
+    const CLAUDE_CODE_KEEPS = 4096;
+    const manyPlugins = { toolNames: [], often: [], instructions: Array.from({ length: 40 }, (_, index) => `- tool_${index}: ${"what it is for ".repeat(10)}`) };
+    const instructions = canvasInstructions("http://127.0.0.1:4601", manyPlugins);
+    expect(instructions.length).toBeGreaterThan(CLAUDE_CODE_KEEPS);
+    expect(instructions.slice(0, CLAUDE_CODE_KEEPS)).toContain("so you can fix them.\n\nMore canvas tools:\n- tool_0:");
+    expect(canvasInstructions("http://127.0.0.1:4601")).not.toContain("More canvas tools");
   });
 
   test("ask describes the fields of a question once, where the single question takes them", async () => {
