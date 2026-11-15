@@ -326,7 +326,7 @@ export async function answerCanvasQuestion(page: Page, label: string) {
 
 export const canvasMoreMenu = (page: Page) => page.getByRole("menu", { name: "More of the canvas bar" });
 
-/** The canvas bar's ⋯ menu, which holds what is done with what the canvas shows: find, export, its own window, older, newer and clear. */
+/** The canvas bar's ⋯ menu, which holds what is done with what the canvas shows: find, export, its own window and clear, and what a narrow bar folds. */
 export async function openCanvasMore(page: Page) {
   await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();
   return canvasMoreMenu(page);
