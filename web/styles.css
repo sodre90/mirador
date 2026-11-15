@@ -4511,11 +4511,9 @@ button.jump-to-latest svg {
   white-space: nowrap;
 }
 
-/* A review's verdict or the user's answer can run long: it gets only the room the title and the bar's buttons leave, cut short with an ellipsis. */
+/* A review's verdict or the user's answer shows whole up to a cap, past which it is cut short with an ellipsis; the title gives way first. */
 .canvas-outcome.free-text {
-  flex: 1000 1 0;
-  min-width: 4em;
-  max-width: max-content;
+  max-width: 16em;
   overflow: hidden;
   text-overflow: ellipsis;
 }

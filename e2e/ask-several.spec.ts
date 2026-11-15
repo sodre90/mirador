@@ -1,5 +1,5 @@
 import { expect, type Locator, test } from "@playwright/test";
-import { addWorkspace, callCanvasTool, openFromCanvasHistory, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, callCanvasTool, openFromCanvasHistory, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -173,7 +173,7 @@ test("Enter in the note of one of several questions goes on to the next question
   );
 });
 
-test("a long answer in the canvas bar gives way to the title and the bar's buttons", async ({ page }) => {
+test("an answer in the canvas bar shows whole up to a cap, past which it is cut, and a long title gives way to it first", async ({ page }) => {
   await signIn(page, host);
   await page.goto(host.origin);
   const conversationId = await startConversation(page);
@@ -201,11 +201,26 @@ test("a long answer in the canvas bar gives way to the title and the bar's butto
       text.selectNodeContents(element);
       return text.getBoundingClientRect().width <= element.getBoundingClientRect().width;
     });
-  await expect(bar.locator(".canvas-outcome")).toHaveAttribute("title", `→ ${longAnswers.join(" · ")}`);
-  for (const button of [/History \(/, "More", "Hide"]) {
-    expect(await rightEdge(bar.getByRole("button", { name: button }))).toBeLessThanOrEqual(await rightEdge(bar));
-  }
+  const outcome = bar.locator(".canvas-outcome");
+  const everyButtonFits = async () => {
+    for (const button of [/History \(/, "More", "Hide"]) {
+      expect(await rightEdge(bar.getByRole("button", { name: button }))).toBeLessThanOrEqual(await rightEdge(bar));
+    }
+  };
+  await expect(outcome).toHaveAttribute("title", `→ ${longAnswers.join(" · ")}`);
+  await everyButtonFits();
   expect(await fullyShown(bar.locator(".canvas-title"))).toBe(true);
+  expect(await fullyShown(outcome), "the long answer is cut at its cap").toBe(false);
+
+  const longTitle = "Multiple MCP servers would work, but there is a lighter route that keeps one canvas server for every agent. Which should I build?";
+  const shortAnswer = callCanvasTool(host, conversationId, "ask", { question: longTitle, options: [{ label: "System prompt" }, { label: "Multiple MCP servers" }] });
+  await answerCanvasQuestion(page, "System prompt");
+  await shortAnswer;
+  await openFromCanvasHistory(page, "Multiple MCP servers would work");
+  await expect(outcome).toHaveText("→ System prompt");
+  await everyButtonFits();
+  expect(await fullyShown(outcome), "a short answer shows whole").toBe(true);
+  expect(await fullyShown(bar.locator(".canvas-title")), "the long title gives way").toBe(false);
 });
 
 test("the ask tool advertises one question or several, tells the agent to ask several with questions, and neither form is required alone", async ({ page }) => {
