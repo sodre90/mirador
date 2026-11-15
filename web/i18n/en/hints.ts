@@ -336,6 +336,8 @@ export const hints = {
     `Your statusline, printed by ${command}.\n\nThe host runs it like Claude Code does: Claude Code's statusline JSON on stdin (model, cwd, session, transcript, context window, cost) and the conversation's profile environment. Switch to the built-in statusline here.`,
   statuslineBuiltIn: (command: string) =>
     `The built-in statusline.\n\nClaude Code's settings name a statusline command (${command}); switch to it here.`,
+  canvasOlder: "Show the previous canvas item.",
+  canvasNewer: "Show the next canvas item.",
   canvasHistory: "Everything the agent drew or asked in this conversation, newest first.",
   canvasPageTab: "Back to what the agent showed on the canvas.",
   canvasMore:

@@ -334,6 +334,8 @@ export const hints: Messages["hints"] = {
     `你的状态栏，由 ${command} 输出。\n\nhost 像 Claude Code 一样运行它：在 stdin 上提供 Claude Code 的状态栏 JSON（模型、cwd、会话、记录、上下文窗口、花费）以及这个对话所用配置的环境。在这里可切换到内置状态栏。`,
   statuslineBuiltIn: (command: string) =>
     `内置状态栏。\n\nClaude Code 的设置指定了一个状态栏命令（${command}）；在这里可切换到它。`,
+  canvasOlder: "显示上一个画布项目。",
+  canvasNewer: "显示下一个画布项目。",
   canvasHistory: "Agent 在这个对话中绘制或询问的一切，最新的在前。",
   canvasPageTab: "回到 Agent 在画布上显示的内容。",
   canvasMore:

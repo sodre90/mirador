@@ -54,12 +54,14 @@ test("the canvas bar holds what the canvas shows as tabs and what is done with a
   const pageTab = bar(page).locator(".page-tab");
   const changesTab = bar(page).getByRole("button", { name: "Changes", exact: true });
 
-  await test.step("with room, the tabs and Point and ask show, and More holds the page's actions", async () => {
+  await test.step("with room, the arrows, the tabs and Point and ask show, and More holds the page's actions", async () => {
     await moveDividerBy(page, -2 * 80);
     await expect.poll(async () => await barState(page)).toMatchObject({ fold: 0, fits: true });
     expect(await bar(page).locator("button:visible").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent))).toEqual([
       "Move canvas",
       "Sales by region, quarter by quarter · History (1)",
+      "Older",
+      "Newer",
       "Changes",
       "Checklist 0/1",
       "Point and ask",
@@ -77,8 +79,6 @@ test("the canvas bar holds what the canvas shows as tabs and what is done with a
       "Download",
       "Save to project…",
       "Save image to project…",
-      "Older",
-      "Newer",
       "Clear the canvas",
     ]);
     await page.keyboard.press("Escape");
@@ -103,7 +103,7 @@ test("the canvas bar holds what the canvas shows as tabs and what is done with a
   });
 
   const seen: Awaited<ReturnType<typeof barState>>[] = [];
-  await test.step("narrowing the pane down to its least width folds Point and ask first, then the tabs, and the bar always fits", async () => {
+  await test.step("narrowing the pane down to its least width folds Point and ask first, then the arrows and the tabs, and the bar always fits", async () => {
     for (let step = 0; step < 14; step++) {
       await moveDividerBy(page, 80);
       seen.push(await barState(page));

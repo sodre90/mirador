@@ -162,8 +162,6 @@ test("a page the agent showed can be copied as an image or HTML, downloaded, and
       "Ask agent to save Markdown file",
       "Save to project…",
       "Save image to project…",
-      "Older",
-      "Newer",
       "Clear the canvas",
     ]);
     await page.keyboard.press("Escape");
@@ -171,7 +169,7 @@ test("a page the agent showed can be copied as an image or HTML, downloaded, and
 
   await test.step("only a shown page offers Export: not the Changes tab over it", async () => {
     await page.locator(".canvas-header:visible .changes-toggle").click();
-    await expect((await openCanvasMore(page)).getByRole("menuitem")).toHaveText(["Older", "Newer", "Clear the canvas"]);
+    await expect((await openCanvasMore(page)).getByRole("menuitem")).toHaveText(["Clear the canvas"]);
     await page.keyboard.press("Escape");
   });
 });

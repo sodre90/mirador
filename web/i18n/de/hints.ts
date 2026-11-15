@@ -371,6 +371,8 @@ export const hints: Messages["hints"] = {
     `Deine Statuszeile, ausgegeben von: ${command}.\n\nDer Host führt sie aus wie Claude Code: das Statuszeilen-JSON von Claude Code auf stdin (Modell, cwd, Sitzung, Transkript, Kontextfenster, Kosten) und die Profilumgebung der Unterhaltung. Wechsle hier zur eingebauten Statuszeile.`,
   statuslineBuiltIn: (command) =>
     `Die eingebaute Statuszeile.\n\nDie Einstellungen von Claude Code nennen einen Statuszeilenbefehl (${command}); wechsle hier zu ihm.`,
+  canvasOlder: "Zeige das vorige Canvas-Element.",
+  canvasNewer: "Zeige das nächste Canvas-Element.",
   canvasHistory: "Alles, was der Agent in dieser Unterhaltung gezeichnet oder gefragt hat, das Neueste zuerst.",
   canvasPageTab: "Zurück zu dem, was der Agent auf dem Canvas gezeigt hat.",
   canvasMore:

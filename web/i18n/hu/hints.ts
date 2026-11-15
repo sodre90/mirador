@@ -359,6 +359,8 @@ export const hints: Messages["hints"] = {
   statuslineCommand: (command) =>
     `Az állapotsorod, amelyet ez ír ki: ${command}.\n\nA host úgy futtatja, mint a Claude Code: a Claude Code állapotsor-JSON-jével a stdin-en (modell, cwd, munkamenet, átirat, kontextusablak, költség) és a beszélgetés profiljának környezetével. Itt válthatsz a beépített állapotsorra.`,
   statuslineBuiltIn: (command) => `A beépített állapotsor.\n\nA Claude Code beállításai egy állapotsor-parancsot neveznek meg (${command}); itt válthatsz rá.`,
+  canvasOlder: "A vászon előző elemének megjelenítése.",
+  canvasNewer: "A vászon következő elemének megjelenítése.",
   canvasHistory: "Minden, amit az ágens ebben a beszélgetésben rajzolt vagy kérdezett, a legújabbal kezdve.",
   canvasPageTab: "Vissza ahhoz, amit az ágens a vásznon mutatott.",
   canvasMore:

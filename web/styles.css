@@ -4530,6 +4530,12 @@ button.jump-to-latest svg {
   flex: 1;
 }
 
+.canvas-header button.canvas-nav {
+  font-size: calc(18px * var(--font-scale));
+  line-height: 1;
+  padding: 2px 6px;
+}
+
 .canvas-header button.checklist-dismiss {
   flex-shrink: 0;
 }
@@ -4571,9 +4577,9 @@ button.jump-to-latest svg {
   white-space: nowrap;
 }
 
-/* The bar folds into the More menu as data-fold rises with how narrow it is: Point and ask first, then the tabs beside the page's. */
+/* The bar folds into the More menu as data-fold rises with how narrow it is: Point and ask first, then the arrows and the tabs beside the page's. */
 .canvas-header:not([data-fold="0"]) :is(.point-toggle, .mark-batch-toggle),
-.canvas-header[data-fold="2"] :is(.changes-toggle, .checklist-toggle, .checklist-dismiss, .app-toggle, .app-file) {
+.canvas-header[data-fold="2"] :is(.canvas-nav, .changes-toggle, .checklist-toggle, .checklist-dismiss, .app-toggle, .app-file) {
   display: none;
 }
 

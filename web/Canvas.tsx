@@ -637,7 +637,7 @@ function useReviewPlacement() {
   };
 }
 
-/** How much of the bar folds into its More menu as it narrows: Point and ask first, then the tabs beside the page's. */
+/** How much of the bar folds into its More menu as it narrows: Point and ask first, then the arrows and the tabs beside the page's. */
 const FOLDS = { none: 0, pageTools: 1, tabs: 2 };
 const FOLD_LEVELS = Object.values(FOLDS);
 const SMALLEST_TITLE_REM = 4;
@@ -896,8 +896,12 @@ export function CanvasPanel({
     ...firstAfterSeparator(foldedPageTools),
     ...firstAfterSeparator(pageActions),
     ...firstAfterSeparator([
-      { label: words.bar.older, disabled: !older, onChoose: () => older && pick(older.id) },
-      { label: words.bar.newer, disabled: !newer, onChoose: () => newer && pick(newer.id) },
+      ...(tabsFolded
+        ? [
+            { label: words.bar.older, disabled: !older, onChoose: () => older && pick(older.id) },
+            { label: words.bar.newer, disabled: !newer, onChoose: () => newer && pick(newer.id) },
+          ]
+        : []),
       { label: words.bar.clear, disabled: !somethingElseShown && !checklistOpen, onChoose: clear },
     ]),
     ...apps.elsewhere.map(({ workspaceId, app, documentId, title, file }, index) => ({
@@ -963,6 +967,12 @@ export function CanvasPanel({
             {words.bar.editsWaiting(edit.waiting)}
           </button>
         )}
+        <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
+          ‹
+        </button>
+        <button type="button" className="icon canvas-nav" aria-label={words.bar.newer} data-hint={hints.canvasNewer} disabled={!newer} onClick={() => newer && pick(newer.id)}>
+          ›
+        </button>
         <button
           type="button"
           className={`changes-toggle ${changesShown ? "on" : ""}`}

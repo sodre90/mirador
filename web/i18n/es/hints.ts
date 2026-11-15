@@ -369,6 +369,8 @@ export const hints: Messages["hints"] = {
     `Tu línea de estado, impresa por: ${command}.\n\nEl host la ejecuta como lo hace Claude Code: el JSON de línea de estado de Claude Code por stdin (modelo, cwd, sesión, transcripción, ventana de contexto, costo) y el entorno del perfil de la conversación. Cambia aquí a la línea de estado integrada.`,
   statuslineBuiltIn: (command) =>
     `La línea de estado integrada.\n\nLa configuración de Claude Code define un comando de línea de estado (${command}); cambia a él aquí.`,
+  canvasOlder: "Muestra el elemento anterior del lienzo.",
+  canvasNewer: "Muestra el elemento siguiente del lienzo.",
   canvasHistory: "Todo lo que el agente dibujó o preguntó en esta conversación, lo más reciente primero.",
   canvasPageTab: "Vuelve a lo que el agente mostró en el lienzo.",
   canvasMore:

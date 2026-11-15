@@ -121,12 +121,12 @@ test("an opencode conversation asks for permission in the browser and uses the c
   await expect(history).toBeHidden();
   await expect(page.locator(".ask-answer")).toContainText("You chose Blue");
   await expect(page.locator(".ask").getByRole("radio", { name: "Blue" })).toBeChecked();
-  await chooseFromCanvasMore(page, "Older");
+  const arrow = (name: "Older" | "Newer") => page.locator(".canvas-header:visible").getByRole("button", { name, exact: true });
+  await arrow("Older").click();
   await expect(page.locator(".canvas-title")).toHaveText("Scripted page");
   await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1")).toHaveText("Scripted page");
-  await expect((await openCanvasMore(page)).getByRole("menuitem", { name: "Older" })).toBeDisabled();
-  await page.keyboard.press("Escape");
-  await chooseFromCanvasMore(page, "Newer");
+  await expect(arrow("Older")).toBeDisabled();
+  await arrow("Newer").click();
   await expect(page.locator(".canvas-title")).toHaveText("Pick a color");
   await chooseFromCanvasMore(page, "Clear the canvas");
   await expect(page.locator(".canvas-body")).toContainText("Nothing on the canvas right now");
