@@ -324,6 +324,19 @@ export async function answerCanvasQuestion(page: Page, label: string) {
   await ask.getByRole("button", { name: "Submit" }).click();
 }
 
+export const canvasMoreMenu = (page: Page) => page.getByRole("menu", { name: "More of the canvas bar" });
+
+/** The canvas bar's ⋯ menu, which holds what is done with what the canvas shows: find, export, its own window, older, newer and clear. */
+export async function openCanvasMore(page: Page) {
+  await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();
+  return canvasMoreMenu(page);
+}
+
+export async function chooseFromCanvasMore(page: Page, entry: string) {
+  const menu = await openCanvasMore(page);
+  await menu.getByRole("menuitem", { name: entry, exact: true }).or(menu.getByRole("menuitemcheckbox", { name: entry, exact: true })).click();
+}
+
 export async function openCanvasHistory(page: Page) {
   const toggle = page.locator(".history-toggle:visible");
   if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();

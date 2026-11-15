@@ -355,16 +355,12 @@ export const hints: Messages["hints"] = {
   statuslineCommand: (command) =>
     `Az állapotsorod, amelyet ez ír ki: ${command}.\n\nA host úgy futtatja, mint a Claude Code: a Claude Code állapotsor-JSON-jével a stdin-en (modell, cwd, munkamenet, átirat, kontextusablak, költség) és a beszélgetés profiljának környezetével. Itt válthatsz a beépített állapotsorra.`,
   statuslineBuiltIn: (command) => `A beépített állapotsor.\n\nA Claude Code beállításai egy állapotsor-parancsot neveznek meg (${command}); itt válthatsz rá.`,
-  canvasOlder: "A vászon előző elemének megjelenítése.",
-  canvasNewer: "A vászon következő elemének megjelenítése.",
   canvasHistory: "Minden, amit az ágens ebben a beszélgetésben rajzolt vagy kérdezett, a legújabbal kezdve.",
-  canvasClear: "A vászon kiürítése. Semmi sem törlődik: az elem az Előzményekben marad.",
-  canvasOpenInWindow: "Az elem megjelenítése egy saját, mindig naprakész ablakban, például egy második képernyőn. Ha újra megnyitod, az ablak előre jön.",
-  canvasMore: "A sáv többi gombja, amelyeknek egy keskeny panelen nem jut hely, valamint az alkalmazások, amelyeket a munkaterület más beszélgetései használnak, hogy itt is megjelenhessenek.",
-  canvasPageExport: "Az oldal másolása képként vagy HTML-ként, az ágens megkérése, hogy írja meg Markdownként, vagy mentés külön fájlba.",
+  canvasPageTab: "Vissza ahhoz, amit az ágens a vásznon mutatott.",
+  canvasMore:
+    "Amit a vászon tartalmával tehetsz: keresés az oldalon, másolás vagy mentés, megnyitás saját ablakban, lépés a régebbi vagy újabb elemre, vagy a vászon kiürítése (semmi sem törlődik: az elem az előzményekben marad). Keskeny panelen a sáv többi gombja is itt van, ahogy a munkaterület más beszélgetései által használt alkalmazások is.",
   canvasPoint:
     "Mutass rá valamire az oldalon, hogy kérdezz róla az ágenstől, vagy módosíttasd: egy kattintás kiválasztja az egér alatti körvonalazott elemet, ahelyett hogy azt tenné, amit az oldal, egy húzás pedig keretet rajzol egy terület köré, amely képként megy el. Az Esc leállítja. Szövegről úgy kérdezhetsz, hogy egyszerűen kijelölöd.",
-  canvasPageFind: "Keresés az ágens által mutatott oldalon: minden találat kiemelve az oldalon, az aktuális a látható részre görgetve.",
   pageMarkChange: "Mondd meg az ágensnek, mit változtasson ott: újra megmutatja az oldalt a változtatással.",
   pageMarkAdd: "Tedd ezt a megjegyzést a listára és maradj pontmódban: az oldal többi részére írt megjegyzések az ágensnek egy üzenetben mennek el.",
   pageMarkBatchChange: "Mindet egyszerre küld el, és kérd el az oldalt úgy, hogy mindegyik módosítás megtörténjen.",
@@ -375,7 +371,6 @@ export const hints: Messages["hints"] = {
   canvasWorkspaceTab: "Egy bővítmény lapja ehhez a munkaterülethez, amely a munkaterület minden beszélgetésében ugyanaz.",
   canvasChecklist:
     "Az ágens munkájának lépései, kipipálva, ahogy végez velük. Te is kipipálhatod bármelyiket: az ágens a következő üzeneteddel értesül a pipáidról.",
-  checklistClose: "Vissza ahhoz, amit a vászon mutatott. Az Ellenőrzőlista gomb újra megnyitja.",
   checklistDismiss: "Az ellenőrzőlista végleges levétele a vászonról. Addig nem jön vissza, amíg az ágens újat nem tesz közzé.",
   checklistPlan: "Az ágens saját teendőlistája, ahogy utoljára frissítette. Ezeket csak az ágens pipálja ki.",
   changesScope: {

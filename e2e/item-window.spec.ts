@@ -1,7 +1,7 @@
 import { cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, createProfile, sendMessage, signIn } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseFromCanvasMore, createProfile, sendMessage, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 import type { DesktopMenuMessage } from "../shared/desktop-menu.ts";
 
@@ -22,7 +22,7 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-const popOutButton = (page: Page) => page.locator(".canvas-header:visible").getByRole("button", { name: "Open in its own window" });
+const openInOwnWindow = (page: Page) => chooseFromCanvasMore(page, "Open in its own window");
 const windowView = (page: Page) => page.frameLocator(".item-window .canvas-frame.plugin iframe");
 const canvasView = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-body > .canvas-frame.plugin iframe");
 
@@ -44,7 +44,7 @@ async function startConversation(page: Page) {
 
 async function popOut(page: Page) {
   const opened = page.context().waitForEvent("page");
-  await popOutButton(page).click();
+  await openInOwnWindow(page);
   const itemWindow = await opened;
   await itemWindow.waitForLoadState();
   return itemWindow;
@@ -77,7 +77,7 @@ test("a plugin's item opens in a window of its own, which stays live and is titl
 
   await test.step("opening it again brings back the same window", async () => {
     const pagesBefore = page.context().pages().length;
-    await popOutButton(page).click();
+    await openInOwnWindow(page);
     await expect(windowView(cardWindow).locator("#title")).toHaveText("Renamed");
     expect(page.context().pages()).toHaveLength(pagesBefore);
   });
@@ -91,24 +91,20 @@ test("a plugin's item opens in a window of its own, which stays live and is titl
   });
 });
 
-test("the tab's item opens in its own window too, from More where the bar is narrow, and says when the item is dismissed", async ({ page }) => {
+test("the tab's item opens in its own window too, and says when the item is dismissed", async ({ page }) => {
   await signIn(page, host);
   await page.goto(`${host.origin}/#/c/${conversationId}`);
   await callCanvasTool(host, conversationId, "track_steps", { title: "Release", steps: ["Build", "Ship"] });
   await expect(page.locator(".checklist:visible .canvas-frame.plugin")).toHaveCount(1);
 
-  await page.setViewportSize({ width: 820, height: 800 });
-  await expect(popOutButton(page)).toBeHidden();
   const opened = page.context().waitForEvent("page");
-  await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();
-  await page.getByRole("menu", { name: "More of the canvas bar" }).getByRole("menuitem", { name: "Open in its own window" }).click();
+  await openInOwnWindow(page);
   const stepsWindow = await opened;
   await expect(stepsWindow).toHaveTitle("Mirador: Release");
   await expect(windowView(stepsWindow).locator("#text")).toHaveText("0 of 2 steps done");
   await callCanvasTool(host, conversationId, "finish_step", {});
   await expect(windowView(stepsWindow).locator("#text")).toHaveText("1 of 2 steps done");
 
-  await page.setViewportSize({ width: 1280, height: 800 });
   await page.getByRole("button", { name: "Dismiss the checklist" }).click();
   await expect(stepsWindow.locator(".item-gone")).toHaveText("This item is no longer on the canvas: it was dismissed, or its conversation was deleted.");
   await stepsWindow.close();
@@ -134,7 +130,7 @@ test("inside the desktop app, the app opens the item's window, which tells the a
   await page.goto(`${host.origin}/#/c/${conversationId}`);
   await expect(canvasView(page).locator("#title")).toHaveText("Renamed");
   const pagesBefore = page.context().pages().length;
-  await popOutButton(page).click();
+  await openInOwnWindow(page);
   await expect.poll(() => sentToApp("desktop-open-item-window")).toEqual([
     { type: "desktop-open-item-window", nonce: "nonce-1", conversationId, itemId: expect.any(String), title: "Renamed" },
   ]);

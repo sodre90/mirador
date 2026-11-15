@@ -332,16 +332,12 @@ export const hints = {
     `Your statusline, printed by ${command}.\n\nThe host runs it like Claude Code does: Claude Code's statusline JSON on stdin (model, cwd, session, transcript, context window, cost) and the conversation's profile environment. Switch to the built-in statusline here.`,
   statuslineBuiltIn: (command: string) =>
     `The built-in statusline.\n\nClaude Code's settings name a statusline command (${command}); switch to it here.`,
-  canvasOlder: "Show the previous canvas item.",
-  canvasNewer: "Show the next canvas item.",
   canvasHistory: "Everything the agent drew or asked in this conversation, newest first.",
-  canvasClear: "Empty the canvas. Nothing is deleted: the item stays in History.",
-  canvasOpenInWindow: "Show this item in a window of its own that stays up to date, say on a second screen. Opening it again brings that window forward.",
-  canvasMore: "The bar's other buttons, which a narrow pane has no room for, and the apps other conversations of this workspace use, to show here too.",
-  canvasPageExport: "Copy this page as an image or as HTML, ask the agent to write it as Markdown, or save it as a file of its own.",
+  canvasPageTab: "Back to what the agent showed on the canvas.",
+  canvasMore:
+    "What you can do with what the canvas shows: find text on the page, copy or save it, open it in a window of its own, step to the older or newer item, or clear the canvas (nothing is deleted: it stays in the history). In a narrow pane the bar's other buttons are here too, and so are the apps other conversations of this workspace use.",
   canvasPoint:
     "Point at something on the page to ask the agent about it or have it changed: a click picks the outlined element under the mouse, instead of doing what the page does, and a drag draws a box around an area, which goes as a picture. Esc stops. To ask about text, just select it.",
-  canvasPageFind: "Find text on the page the agent showed: every match is marked on it, and the current one is scrolled into view.",
   pageMarkChange: "Tell the agent what to change there: it shows the page again with the change made.",
   pageMarkAdd: "Put this comment on the list and stay in point mode: comments on several parts of the page go to the agent together, as one message.",
   pageMarkBatchChange: "Send them all at once and ask for the page again with every one of them made.",
@@ -352,7 +348,6 @@ export const hints = {
   canvasWorkspaceTab: "A plugin's tab for this workspace, the same in each of its conversations.",
   canvasChecklist:
     "The steps of the agent's work, ticked as it finishes them. You can tick any of them too: the agent hears of your ticks with your next message.",
-  checklistClose: "Back to what the canvas showed. The Checklist button opens it again.",
   checklistDismiss: "Take the checklist off the canvas for good. It stays gone until the agent publishes a new one.",
   checklistPlan: "The agent's own to-do list, as it last updated it. Only the agent ticks these.",
   changesScope: {

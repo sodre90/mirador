@@ -365,17 +365,12 @@ export const hints: Messages["hints"] = {
     `Tu línea de estado, impresa por: ${command}.\n\nEl host la ejecuta como lo hace Claude Code: el JSON de línea de estado de Claude Code por stdin (modelo, cwd, sesión, transcripción, ventana de contexto, costo) y el entorno del perfil de la conversación. Cambia aquí a la línea de estado integrada.`,
   statuslineBuiltIn: (command) =>
     `La línea de estado integrada.\n\nLa configuración de Claude Code define un comando de línea de estado (${command}); cambia a él aquí.`,
-  canvasOlder: "Muestra el elemento anterior del lienzo.",
-  canvasNewer: "Muestra el elemento siguiente del lienzo.",
   canvasHistory: "Todo lo que el agente dibujó o preguntó en esta conversación, lo más reciente primero.",
-  canvasClear: "Vacía el lienzo. No se elimina nada: el elemento se queda en el Historial.",
-  canvasOpenInWindow: "Muestra este elemento en una ventana propia que se mantiene al día, por ejemplo en una segunda pantalla. Abrirlo de nuevo trae esa ventana al frente.",
+  canvasPageTab: "Vuelve a lo que el agente mostró en el lienzo.",
   canvasMore:
-    "Los otros botones de la barra, para los que un panel estrecho no tiene espacio, y las aplicaciones que usan otras conversaciones de este espacio de trabajo, para mostrarlas también aquí.",
-  canvasPageExport: "Copia esta página como imagen o como HTML, pide al agente que la escriba como Markdown, o guárdala como un archivo aparte.",
+    "Lo que puedes hacer con lo que muestra el lienzo: buscar texto en la página, copiarla o guardarla, abrirla en una ventana propia, pasar al elemento anterior o siguiente, o vaciar el lienzo (no se elimina nada: se queda en el historial). En un panel estrecho también están aquí los otros botones de la barra, y las aplicaciones que usan otras conversaciones de este espacio de trabajo.",
   canvasPoint:
     "Señala algo de la página para preguntarle al agente sobre ello o pedirle que lo cambie: un clic elige el elemento resaltado bajo el ratón, en lugar de hacer lo que hace la página, y arrastrar dibuja un recuadro alrededor de un área, que se envía como imagen. Esc lo detiene. Para preguntar sobre un texto, solo selecciónalo.",
-  canvasPageFind: "Buscar texto en la página que mostró el agente: cada coincidencia queda marcada en ella, y la actual se trae a la vista.",
   pageMarkChange: "Dile al agente qué cambiar ahí: vuelve a mostrar la página con el cambio hecho.",
   pageMarkAdd: "Pon este comentario en la lista y quédate en el modo de puntero: los comentarios sobre varias partes de la página van al agente juntos, en un solo mensaje.",
   pageMarkBatchChange: "Envíalos todos a la vez y pide la página de nuevo con todos ellos aplicados.",
@@ -386,7 +381,6 @@ export const hints: Messages["hints"] = {
   canvasWorkspaceTab: "La pestaña de un plugin para este espacio de trabajo, la misma en cada una de sus conversaciones.",
   canvasChecklist:
     "Los pasos del trabajo del agente, marcados a medida que los termina. Tú también puedes marcar cualquiera: el agente se entera de tus marcas con tu siguiente mensaje.",
-  checklistClose: "Vuelve a lo que mostraba el lienzo. El botón Checklist lo abre de nuevo.",
   checklistDismiss: "Quita la checklist del lienzo para siempre. No vuelve hasta que el agente publique una nueva.",
   checklistPlan: "La propia lista de tareas del agente, tal como la actualizó por última vez. Solo el agente las marca.",
   changesScope: {

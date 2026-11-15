@@ -202,7 +202,7 @@ test("a long answer in the canvas bar gives way to the title and the bar's butto
       return text.getBoundingClientRect().width <= element.getBoundingClientRect().width;
     });
   await expect(bar.locator(".canvas-outcome")).toHaveAttribute("title", `→ ${longAnswers.join(" · ")}`);
-  for (const button of [/^History/, "Clear", "Hide"]) {
+  for (const button of [/History \(/, "More", "Hide"]) {
     expect(await rightEdge(bar.getByRole("button", { name: button }))).toBeLessThanOrEqual(await rightEdge(bar));
   }
   expect(await fullyShown(bar.locator(".canvas-title"))).toBe(true);

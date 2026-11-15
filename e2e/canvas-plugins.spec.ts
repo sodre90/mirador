@@ -141,7 +141,7 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await callCanvasTool(host, conversationId, "track_steps", { title: "Release", steps: ["Build", "Ship"] });
     await expect(toggle(page)).toHaveText("Checklist 0/2");
     await expect(canvasTitle(page)).toHaveText("Release");
-    await expect(canvasKind(page)).toHaveText("◔");
+    await expect(canvasKind(page).last(), "beside the page tab's own icon").toHaveText("◔");
     await expect(tabView(page).locator("#text")).toHaveText("0 of 2 steps done");
     await callCanvasTool(host, conversationId, "finish_step", {});
     await expect(toggle(page)).toHaveText("Checklist 1/2");
@@ -151,10 +151,10 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
 
   await test.step("the view knows which of the agent's changes the user hasn't seen yet", async () => {
     await expect(tabView(page).locator("#unseen")).toHaveText("Changed since you looked");
-    await page.getByRole("button", { name: "Close the checklist" }).click();
+    await toggle(page).click();
     await toggle(page).click();
     await expect(tabView(page).locator("#unseen")).toHaveText("Nothing new");
-    await page.getByRole("button", { name: "Close the checklist" }).click();
+    await toggle(page).click();
     await callCanvasTool(host, conversationId, "finish_step", {});
     await expect(toggle(page)).toHaveText("Checklist 2/2");
     await toggle(page).click();

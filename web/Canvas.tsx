@@ -1,5 +1,5 @@
 import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
-import { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
+import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasShellUrl, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
 import { answersSummary, questionsOf } from "../shared/ask.ts";
@@ -49,15 +49,6 @@ function MarkBatchIcon() {
     <svg viewBox="0 0 16 16" aria-hidden="true">
       <path d="M2.5 3.2h11v7.3H8.2l-3 2.5v-2.5h-2.7z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
       <path d="M5 6h6M5 8h4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function MagnifierIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="6.75" cy="6.75" r="4.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M10.2 10.2l3.8 3.8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
@@ -646,8 +637,8 @@ function useReviewPlacement() {
   };
 }
 
-/** How many of the bar's buttons fold into its More menu, the least used first; each level folds the ones before it too. */
-const FOLDS = { none: 0, leastUsed: 1, navigation: 2, checklist: 3 };
+/** How much of the bar folds into its More menu as it narrows: Point and ask first, then the tabs beside the page's. */
+const FOLDS = { none: 0, pageTools: 1, tabs: 2 };
 const FOLD_LEVELS = Object.values(FOLDS);
 const SMALLEST_TITLE_REM = 4;
 
@@ -672,7 +663,7 @@ function useFoldLevel(bar: RefObject<HTMLElement | null>) {
       element.dataset.fold = String(candidate);
       return !crowded(element);
     });
-    const chosen = fitting ?? FOLDS.checklist;
+    const chosen = fitting ?? FOLDS.tabs;
     element.dataset.fold = String(chosen);
     setLevel(chosen);
   };
@@ -871,31 +862,44 @@ export function CanvasPanel({
   const bar = useRef<HTMLDivElement>(null);
   const foldLevel = useFoldLevel(bar);
   const checklistCountText = (tabItem || plan) && words.bar.checklist(String(tabCount(tabItem, plan)));
-  const foldedEntries: BarMenuEntry[] = [
-    ...(foldLevel >= FOLDS.navigation
-      ? [
-          { label: words.bar.older, disabled: !older, onChoose: () => older && pick(older.id) },
-          { label: words.bar.newer, disabled: !newer, onChoose: () => newer && pick(newer.id) },
-          { label: words.bar.changes, checked: changesShown, disabled: !somethingElseShown && !checklistOpen, onChoose: () => toggleTab("changes") },
-        ]
-      : []),
-    ...(foldLevel >= FOLDS.checklist && checklistCountText ? [{ label: checklistCountText, checked: checklistOpen, onChoose: () => toggleTab("checklist") }] : []),
-    ...(foldLevel >= FOLDS.checklist ? apps.open.map(({ app, title }) => ({ label: title, checked: tab === appTab(app), onChoose: () => toggleTab(appTab(app)) })) : []),
-    ...(foldLevel >= FOLDS.checklist
-      ? workspaceTabs.map(({ plugin, title }) => ({ label: title, checked: tab === pluginTab(plugin), onChoose: () => toggleTab(pluginTab(plugin)) }))
-      : []),
-    ...(foldLevel >= FOLDS.checklist && checklistOpen && tabItem ? [{ label: words.bar.dismiss, onChoose: dismissChecklist }] : []),
-    ...(foldLevel >= FOLDS.leastUsed
-      ? [
-          { label: words.bar.historyCount(pages.length), checked: historyOpen, disabled: pages.length === 0, onChoose: toggleHistory },
-          { label: words.bar.clear, disabled: !somethingElseShown && !checklistOpen, onChoose: clear },
-          ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
-          ...(shownPage ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, separatorBefore: true, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
-          ...(pageMarks.waiting > 0 ? [{ label: words.markBatch.bar(pageMarks.waiting), checked: pageMarks.listOpen, separatorBefore: true, onChoose: pageMarks.toggleList }] : []),
-          ...(shownPage ? [{ label: words.bar.findOnPage, onChoose: pageFind.openFind }] : []),
-          ...pageExport.entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry)),
-        ]
-      : []),
+  const pageInFront = !tab && somethingElseShown;
+  const underTabs = edit.shown
+    ? { kind: "✎", title: edit.shown.title, empty: false }
+    : selected
+      ? { kind: iconOf(selected), title: selected.title, empty: false }
+      : { kind: undefined, title: words.bar.canvas, empty: true };
+  const tabsFolded = foldLevel >= FOLDS.tabs;
+  const pageToolsFolded = foldLevel >= FOLDS.pageTools;
+  const firstAfterSeparator = (entries: BarMenuEntry[]) => entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry));
+  const foldedTabs: BarMenuEntry[] = tabsFolded
+    ? [
+        { label: words.bar.changes, checked: changesShown, disabled: !somethingElseShown && !checklistOpen, onChoose: () => toggleTab("changes") },
+        ...(checklistCountText ? [{ label: checklistCountText, checked: checklistOpen, onChoose: () => toggleTab("checklist") }] : []),
+        ...apps.open.map(({ app, title }) => ({ label: title, checked: tab === appTab(app), onChoose: () => toggleTab(appTab(app)) })),
+        ...workspaceTabs.map(({ plugin, title }) => ({ label: title, checked: tab === pluginTab(plugin), onChoose: () => toggleTab(pluginTab(plugin)) })),
+        ...(checklistOpen && tabItem ? [{ label: words.bar.dismiss, onChoose: dismissChecklist }] : []),
+      ]
+    : [];
+  const foldedPageTools: BarMenuEntry[] = pageToolsFolded
+    ? [
+        ...(shownPage ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
+        ...(pageMarks.waiting > 0 ? [{ label: words.markBatch.bar(pageMarks.waiting), checked: pageMarks.listOpen, onChoose: pageMarks.toggleList }] : []),
+      ]
+    : [];
+  const pageActions: BarMenuEntry[] = [
+    ...(shownPage ? [{ label: words.bar.findOnPage, onChoose: pageFind.openFind }] : []),
+    ...pageExport.entries,
+    ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
+  ];
+  const moreEntries: BarMenuEntry[] = [
+    ...foldedTabs,
+    ...firstAfterSeparator(foldedPageTools),
+    ...firstAfterSeparator(pageActions),
+    ...firstAfterSeparator([
+      { label: words.bar.older, disabled: !older, onChoose: () => older && pick(older.id) },
+      { label: words.bar.newer, disabled: !newer, onChoose: () => newer && pick(newer.id) },
+      { label: words.bar.clear, disabled: !somethingElseShown && !checklistOpen, onChoose: clear },
+    ]),
     ...apps.elsewhere.map(({ workspaceId, app, documentId, title, file }, index) => ({
       label: words.bar.showApp(title, file),
       separatorBefore: index === 0,
@@ -921,46 +925,30 @@ export function CanvasPanel({
     <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape}>
       <div className="canvas-header" data-pane-bar ref={bar} data-fold={foldLevel}>
         <PaneGrip pane="canvas" />
-        {changesOpen ? (
-          <span className="canvas-title">{words.bar.changes}</span>
-        ) : shownApp ? (
-          <>
-            <span className="canvas-title">{shownApp.title}</span>
-            <span className="canvas-outcome app-file">{shownApp.file}</span>
-          </>
-        ) : shownPluginTab ? (
-          <span className="canvas-title">{shownPluginTab.title}</span>
-        ) : checklistOpen ? (
-          <>
-            <span className="canvas-kind">{tabItem?.icon ?? PLAN_ICON}</span>
-            <span className="canvas-title">{tabItem?.title ?? words.bar.agentsPlan}</span>
-            <button type="button" className="icon checklist-close" aria-label={words.bar.closeChecklist} data-hint={hints.checklistClose} onClick={() => setTab(null)}>
-              ×
-            </button>
-            {tabItem && (
-              <button type="button" className="icon checklist-dismiss" aria-label={words.bar.dismissChecklist} data-hint={hints.checklistDismiss} onClick={dismissChecklist}>
-                {words.bar.dismiss}
-              </button>
-            )}
-          </>
-        ) : edit.shown ? (
-          <>
-            <span className="canvas-kind">✎</span>
-            <span className="canvas-title">{edit.shown.title}</span>
-            <span className="canvas-outcome status-waiting">{words.outcome.needsYourAnswer}</span>
-          </>
-        ) : selected ? (
-          <>
-            <span className="canvas-kind">{iconOf(selected)}</span>
-            <span className="canvas-title">{selected.title}</span>
-            {outcome && (
-              <span className={`canvas-outcome status-${selected.status}${outcomeIsFreeText(selected) ? " free-text" : ""}`} title={outcome}>
-                {outcome}
-              </span>
-            )}
-          </>
-        ) : (
-          <span className="canvas-title empty-title">{words.bar.canvas}</span>
+        <button
+          type="button"
+          className={`page-tab history-toggle ${pageInFront ? "on" : ""}`}
+          aria-pressed={pageInFront}
+          aria-expanded={historyOpen}
+          aria-label={`${underTabs.title} · ${words.bar.historyCount(pages.length)}`}
+          data-hint={tab ? hints.canvasPageTab : hints.canvasHistory}
+          disabled={!tab && pages.length === 0}
+          data-bar-title
+          onClick={({ detail: clicksInARow }) => (clicksInARow > 1 ? setHistoryOpen(false) : tab ? setTab(null) : toggleHistory())}
+        >
+          {underTabs.kind && <span className="canvas-kind">{underTabs.kind}</span>}
+          <span className={tab ? "page-tab-title" : underTabs.empty ? "canvas-title empty-title" : "canvas-title"}>{underTabs.title}</span>
+          {pages.length > 0 && (
+            <span className="page-tab-history" aria-hidden="true">
+              ▾
+            </span>
+          )}
+        </button>
+        {!tab && edit.shown && <span className="canvas-outcome status-waiting">{words.outcome.needsYourAnswer}</span>}
+        {!tab && !edit.shown && selected && outcome && (
+          <span className={`canvas-outcome status-${selected.status}${outcomeIsFreeText(selected) ? " free-text" : ""}`} title={outcome}>
+            {outcome}
+          </span>
         )}
         {(tab || !edit.shown) && edit.waiting > 0 && (
           <button
@@ -975,6 +963,64 @@ export function CanvasPanel({
             {words.bar.editsWaiting(edit.waiting)}
           </button>
         )}
+        <button
+          type="button"
+          className={`changes-toggle ${changesShown ? "on" : ""}`}
+          aria-pressed={changesShown}
+          data-hint={hints.canvasChanges}
+          disabled={!somethingElseShown && !checklistOpen}
+          onClick={() => toggleTab("changes")}
+        >
+          <span className={changesOpen ? "canvas-title" : undefined}>{words.bar.changes}</span>
+        </button>
+        {(tabItem || plan) && (
+          <button
+            type="button"
+            className={["checklist-toggle", checklistOpen && "on", checklistFlashing && "agent-edited"].filter(Boolean).join(" ")}
+            aria-pressed={checklistOpen}
+            data-hint={hints.canvasChecklist}
+            onClick={() => toggleTab("checklist")}
+          >
+            {checklistCountText}
+          </button>
+        )}
+        {checklistOpen && (
+          <>
+            <span className="canvas-kind">{tabItem?.icon ?? PLAN_ICON}</span>
+            <span className="canvas-title">{tabItem?.title ?? words.bar.agentsPlan}</span>
+          </>
+        )}
+        {checklistOpen && tabItem && (
+          <button type="button" className="icon checklist-dismiss" aria-label={words.bar.dismissChecklist} data-hint={hints.checklistDismiss} onClick={dismissChecklist}>
+            {words.bar.dismiss}
+          </button>
+        )}
+        {apps.open.map(({ app, title, file }) => {
+          const shown = tab === appTab(app);
+          return (
+            <Fragment key={app}>
+              <button type="button" className={`app-toggle ${shown ? "on" : ""}`} aria-pressed={shown} data-hint={hints.canvasApp} onClick={() => toggleTab(appTab(app))}>
+                <span className={shown ? "canvas-title" : undefined}>{title}</span>
+              </button>
+              {shown && <span className="canvas-outcome app-file">{file}</span>}
+            </Fragment>
+          );
+        })}
+        {workspaceTabs.map(({ plugin, title }) => {
+          const shown = tab === pluginTab(plugin);
+          return (
+            <button
+              key={plugin}
+              type="button"
+              className={`app-toggle workspace-tab-toggle ${shown ? "on" : ""}`}
+              aria-pressed={shown}
+              data-hint={hints.canvasWorkspaceTab}
+              onClick={() => toggleTab(pluginTab(plugin))}
+            >
+              <span className={shown ? "canvas-title" : undefined}>{title}</span>
+            </button>
+          );
+        })}
         <span className="spacer" />
         {pageMarks.waiting > 0 && (
           <button
@@ -1000,102 +1046,14 @@ export function CanvasPanel({
             {words.bar.pointAndAsk}
           </button>
         )}
-        {poppable && (
-          <button type="button" className="icon open-in-window" aria-label={words.bar.openInWindow} data-hint={hints.canvasOpenInWindow} onClick={popOut}>
-            ⧉
-          </button>
-        )}
-        {shownPage && <BarMenu className="page-export" label={words.bar.export} menuName={words.bar.exportMenu} hint={hints.canvasPageExport} entries={pageExport.entries} />}
-        {shownPage && (
-          <button
-            type="button"
-            className="icon page-find-toggle"
-            aria-label={words.bar.findOnPage}
-            data-hint={hints.canvasPageFind}
-            data-shortcut={shortcutKeys().find}
-            onClick={pageFind.openFind}
-          >
-            <MagnifierIcon />
-          </button>
-        )}
-        <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
-          ‹
-        </button>
-        <button type="button" className="icon canvas-nav" aria-label={words.bar.newer} data-hint={hints.canvasNewer} disabled={!newer} onClick={() => newer && pick(newer.id)}>
-          ›
-        </button>
-        <button
-          type="button"
-          className={`changes-toggle ${changesShown ? "on" : ""}`}
-          aria-pressed={changesShown}
-          data-hint={hints.canvasChanges}
-          disabled={!somethingElseShown && !checklistOpen}
-          onClick={() => toggleTab("changes")}
-        >
-          {words.bar.changes}
-        </button>
-        {(tabItem || plan) && (
-          <button
-            type="button"
-            className={["checklist-toggle", checklistOpen && "on", checklistFlashing && "agent-edited"].filter(Boolean).join(" ")}
-            aria-pressed={checklistOpen}
-            data-hint={hints.canvasChecklist}
-            onClick={() => toggleTab("checklist")}
-          >
-            {checklistCountText}
-          </button>
-        )}
-        {apps.open.map(({ app, title }) => (
-          <button
-            key={app}
-            type="button"
-            className={`app-toggle ${tab === appTab(app) ? "on" : ""}`}
-            aria-pressed={tab === appTab(app)}
-            data-hint={hints.canvasApp}
-            onClick={() => toggleTab(appTab(app))}
-          >
-            {title}
-          </button>
-        ))}
-        {workspaceTabs.map(({ plugin, title }) => (
-          <button
-            key={plugin}
-            type="button"
-            className={`app-toggle workspace-tab-toggle ${tab === pluginTab(plugin) ? "on" : ""}`}
-            aria-pressed={tab === pluginTab(plugin)}
-            data-hint={hints.canvasWorkspaceTab}
-            onClick={() => toggleTab(pluginTab(plugin))}
-          >
-            {title}
-          </button>
-        ))}
-        <button
-          type="button"
-          className={`history-toggle ${historyOpen ? "on" : ""}`}
-          aria-expanded={historyOpen}
-          data-hint={hints.canvasHistory}
-          disabled={pages.length === 0}
-          onClick={toggleHistory}
-        >
-          {words.bar.historyCount(pages.length)}
-        </button>
-        <button
-          type="button"
-          className="canvas-clear"
-          data-hint={hints.canvasClear}
-          disabled={!somethingElseShown && !checklistOpen}
-          onClick={clear}
-        >
-          {words.bar.clear}
-        </button>
         <BarMenu
-          className={apps.elsewhere.length > 0 ? "canvas-more offers-apps" : "canvas-more"}
+          className="canvas-more"
           label="⋯"
           buttonName={words.bar.more}
           menuName={words.bar.moreMenu}
           hint={hints.canvasMore}
-          entries={foldedEntries}
-          flashing={foldLevel >= FOLDS.checklist && checklistFlashing}
+          entries={moreEntries}
+          flashing={foldLevel >= FOLDS.tabs && checklistFlashing}
         />
         <FullscreenToggle pane="canvas" />
         <button type="button" className="link canvas-hide" data-hint={hints.canvasHide} data-shortcut={shortcutKeys().toggleCanvas} onClick={onHide}>

@@ -367,17 +367,12 @@ export const hints: Messages["hints"] = {
     `Deine Statuszeile, ausgegeben von: ${command}.\n\nDer Host führt sie aus wie Claude Code: das Statuszeilen-JSON von Claude Code auf stdin (Modell, cwd, Sitzung, Transkript, Kontextfenster, Kosten) und die Profilumgebung der Unterhaltung. Wechsle hier zur eingebauten Statuszeile.`,
   statuslineBuiltIn: (command) =>
     `Die eingebaute Statuszeile.\n\nDie Einstellungen von Claude Code nennen einen Statuszeilenbefehl (${command}); wechsle hier zu ihm.`,
-  canvasOlder: "Zeige das vorige Canvas-Element.",
-  canvasNewer: "Zeige das nächste Canvas-Element.",
   canvasHistory: "Alles, was der Agent in dieser Unterhaltung gezeichnet oder gefragt hat, das Neueste zuerst.",
-  canvasClear: "Leere den Canvas. Nichts wird gelöscht: Das Element bleibt im Verlauf.",
-  canvasOpenInWindow: "Zeige dieses Element in einem eigenen Fenster, das aktuell bleibt, etwa auf einem zweiten Bildschirm. Erneutes Öffnen holt dieses Fenster nach vorn.",
+  canvasPageTab: "Zurück zu dem, was der Agent auf dem Canvas gezeigt hat.",
   canvasMore:
-    "Die übrigen Buttons der Leiste, für die ein schmaler Bereich keinen Platz hat, und die Apps, die andere Unterhaltungen dieses Arbeitsbereichs nutzen, um sie auch hier zu zeigen.",
-  canvasPageExport: "Kopiere diese Seite als Bild oder als HTML, bitte den Agenten, sie als Markdown zu schreiben, oder speichere sie als eigene Datei.",
+    "Was du mit dem tun kannst, was der Canvas zeigt: Text auf der Seite suchen, sie kopieren oder speichern, sie in einem eigenen Fenster öffnen, zum älteren oder neueren Element gehen oder den Canvas leeren (nichts wird gelöscht: Es bleibt im Verlauf). In einem schmalen Bereich stehen hier auch die übrigen Buttons der Leiste und die Apps, die andere Unterhaltungen dieses Arbeitsbereichs nutzen.",
   canvasPoint:
     "Zeige auf etwas auf der Seite, um den Agenten danach zu fragen oder es ändern zu lassen: Ein Klick wählt das umrandete Element unter der Maus, statt das zu tun, was die Seite tut, und Ziehen zeichnet einen Rahmen um einen Bereich, der als Bild mitgeht. Esc beendet das. Um nach Text zu fragen, wähle ihn einfach aus.",
-  canvasPageFind: "Text auf der Seite suchen, die der Agent gezeigt hat: Alle Treffer werden auf ihr markiert, der aktuelle in Sicht gerollt.",
   pageMarkChange: "Sag dem Agenten, was er dort ändern soll: Er zeigt die Seite mit der Änderung erneut.",
   pageMarkAdd: "Setze diese Anmerkung auf die Liste und bleib im Zeigemodus: Anmerkungen zu mehreren Teilen der Seite gehen zusammen als eine Nachricht an den Agenten.",
   pageMarkBatchChange: "Sende sie alle auf einmal und bitte den Agenten, die Seite mit allen Änderungen zu zeigen.",
@@ -388,7 +383,6 @@ export const hints: Messages["hints"] = {
   canvasWorkspaceTab: "Der Tab eines Plugins für diesen Arbeitsbereich, in jeder seiner Unterhaltungen derselbe.",
   canvasChecklist:
     "Die Schritte der Arbeit des Agenten, abgehakt, sobald er sie erledigt. Du kannst auch jeden davon abhaken: Der Agent erfährt mit deiner nächsten Nachricht von deinen Haken.",
-  checklistClose: "Zurück zu dem, was der Canvas gezeigt hat. Der Button Checkliste öffnet sie wieder.",
   checklistDismiss: "Nimm die Checkliste endgültig vom Canvas. Sie bleibt weg, bis der Agent eine neue veröffentlicht.",
   checklistPlan: "Die eigene To-do-Liste des Agenten, wie er sie zuletzt aktualisiert hat. Nur der Agent hakt diese ab.",
   changesScope: {

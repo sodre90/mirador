@@ -289,8 +289,7 @@ button.icon.layout-toggle[aria-pressed="true"]:hover:not(:disabled) {
   background: var(--panel-2);
 }
 
-button.icon.layout-toggle svg,
-button.icon.page-find-toggle svg {
+button.icon.layout-toggle svg {
   display: block;
   width: 1em;
   height: 1em;
@@ -4531,13 +4530,6 @@ button.jump-to-latest svg {
   flex: 1;
 }
 
-.canvas-header button.canvas-nav {
-  font-size: calc(18px * var(--font-scale));
-  line-height: 1;
-  padding: 2px 6px;
-}
-
-.canvas-header button.checklist-close,
 .canvas-header button.checklist-dismiss {
   flex-shrink: 0;
 }
@@ -4551,8 +4543,7 @@ button.jump-to-latest svg {
 .app-toggle,
 .history-toggle,
 .point-toggle,
-.bar-menu-toggle,
-.canvas-clear {
+.bar-menu-toggle {
   flex-shrink: 0;
   font-size: calc(12px * var(--font-scale));
   height: 26px;
@@ -4580,15 +4571,49 @@ button.jump-to-latest svg {
   white-space: nowrap;
 }
 
-/* The bar folds its buttons into the More menu, the least used first, as data-fold rises with how narrow it is. */
-.canvas-header[data-fold="0"] .canvas-more:not(.offers-apps),
-.canvas-header:not([data-fold="0"]) :is(.history-toggle, .canvas-clear, .point-toggle, .mark-batch-toggle, .page-find-toggle, .page-export, .open-in-window),
-.canvas-header:is([data-fold="2"], [data-fold="3"]) :is(.canvas-nav, .changes-toggle),
-.canvas-header[data-fold="3"] :is(.checklist-toggle, .checklist-dismiss, .app-toggle) {
+/* The bar folds into the More menu as data-fold rises with how narrow it is: Point and ask first, then the tabs beside the page's. */
+.canvas-header:not([data-fold="0"]) :is(.point-toggle, .mark-batch-toggle),
+.canvas-header[data-fold="2"] :is(.changes-toggle, .checklist-toggle, .checklist-dismiss, .app-toggle, .app-file) {
   display: none;
 }
 
-.canvas-header[data-fold="3"] .canvas-outcome {
+/* Tabs: what the canvas can show sits side by side, and the one in front is raised. */
+.canvas-header :is(.page-tab, .changes-toggle, .checklist-toggle, .app-toggle) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-color: transparent;
+  background: none;
+}
+
+.canvas-header :is(.page-tab, .changes-toggle, .checklist-toggle, .app-toggle).on {
+  border-color: var(--border);
+  background: var(--panel-2);
+}
+
+.canvas-header .page-tab {
+  flex-shrink: 1;
+  min-width: 3rem;
+  font-size: calc(13px * var(--font-scale));
+}
+
+.canvas-header .page-tab:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.page-tab-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.page-tab-history {
+  flex: none;
+  color: var(--faint);
+}
+
+.canvas-header[data-fold="2"] .canvas-outcome {
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;

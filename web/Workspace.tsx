@@ -23,6 +23,8 @@ const MIN_PANE_HEIGHT = 120;
 const MIN_CONVERSATION_HEIGHT = 300;
 const minimumHeightOf = (pane: PaneId) => (pane === "conversation" ? MIN_CONVERSATION_HEIGHT : MIN_PANE_HEIGHT);
 const paneOrder: PaneId[] = ["conversation", "canvas", "terminals"];
+/** A bar's title takes the double click as the bar does, even where it is a button. */
+const BAR_TITLE = "[data-bar-title]";
 const NOT_A_BAR_BACKGROUND = "button, a, input, select, textarea, label, [role=tab], [role=separator], [role=dialog], .renamable, [contenteditable]";
 
 interface PaneControls {
@@ -191,7 +193,7 @@ export function WorkspaceArea({
   const fullscreenFromBar = (event: ReactMouseEvent<HTMLDivElement>) => {
     const target = event.target as Element;
     const bar = target.closest("[data-pane-bar]");
-    if (!bar || target.closest(NOT_A_BAR_BACKGROUND)) return;
+    if (!bar || (target.closest(NOT_A_BAR_BACKGROUND) && !target.closest(BAR_TITLE))) return;
     const pane = bar.closest<HTMLElement>("[data-pane]")?.dataset.pane as PaneId | undefined;
     if (pane) toggleFullscreen(pane);
   };

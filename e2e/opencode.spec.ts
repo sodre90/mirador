@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
-import { addWorkspace, answerCanvasQuestion, chooseInWorkspaceMenu, conversationSettings, createProfile, dragOnto, lastAgentMessage, openCanvasHistory, openFromCanvasHistory, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, chooseFromCanvasMore, chooseInWorkspaceMenu, conversationSettings, createProfile, dragOnto, lastAgentMessage, openCanvasHistory, openCanvasMore, openFromCanvasHistory, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { SPARE_MODELS, ScriptedModel, opencodeProgram, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost, spawnProgram } from "./test-host.ts";
 
@@ -121,15 +121,16 @@ test("an opencode conversation asks for permission in the browser and uses the c
   await expect(history).toBeHidden();
   await expect(page.locator(".ask-answer")).toContainText("You chose Blue");
   await expect(page.locator(".ask").getByRole("radio", { name: "Blue" })).toBeChecked();
-  await page.getByRole("button", { name: "Older" }).click();
+  await chooseFromCanvasMore(page, "Older");
   await expect(page.locator(".canvas-title")).toHaveText("Scripted page");
   await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1")).toHaveText("Scripted page");
-  await expect(page.getByRole("button", { name: "Older" })).toBeDisabled();
-  await page.getByRole("button", { name: "Newer" }).click();
+  await expect((await openCanvasMore(page)).getByRole("menuitem", { name: "Older" })).toBeDisabled();
+  await page.keyboard.press("Escape");
+  await chooseFromCanvasMore(page, "Newer");
   await expect(page.locator(".canvas-title")).toHaveText("Pick a color");
-  await page.getByRole("button", { name: "Clear" }).click();
+  await chooseFromCanvasMore(page, "Clear the canvas");
   await expect(page.locator(".canvas-body")).toContainText("Nothing on the canvas right now");
-  await expect(page.getByRole("button", { name: "Clear" })).toBeDisabled();
+  await expect((await openCanvasMore(page)).getByRole("menuitem", { name: "Clear the canvas" })).toBeDisabled();
 });
 
 test("continuing an opencode session from a terminal gives the agent its earlier context", async ({ page }) => {

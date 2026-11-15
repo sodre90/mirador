@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseFromCanvasMore, openCanvasMore, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 /** Agents are told the public canvas address, but this browser reaches the host locally and draws pages from the local one. */
@@ -24,14 +24,12 @@ const chart = () => ({
 });
 
 const canvasPage = (page: Page) => page.locator(".canvas-panel:visible .canvas-frame.show iframe").contentFrame();
-const exportToggle = (page: Page) => page.locator(".canvas-header:visible .page-export .bar-menu-toggle");
 const exportStatus = (page: Page) => page.locator(".page-export-status");
 const saveForm = (page: Page) => page.locator(".page-save");
 const savedFile = join(host.projectDir, "docs", "sales-by-region.html");
 
 async function exportBy(page: Page, action: string) {
-  await exportToggle(page).click();
-  await page.getByRole("menu", { name: "Export the page" }).getByRole("menuitem", { name: action }).click();
+  await chooseFromCanvasMore(page, action);
 }
 
 async function saveToProject(page: Page) {
@@ -120,7 +118,7 @@ test("a page the agent showed can be copied as an image or HTML, downloaded, and
     await page.setViewportSize({ width: 1920, height: viewport.height });
     await page.evaluate(() => localStorage.setItem("mirador-language", "hu"));
     await page.reload();
-    await exportToggle(page).click();
+    await page.locator(".canvas-header:visible .canvas-more .bar-menu-toggle").click();
     await page.getByRole("menuitem", { name: "Mentés a projektbe…" }).click();
     await saveForm(page).getByLabel("Mentés a projektbe ezen a néven").fill("../outside.html");
     await saveForm(page).getByRole("button", { name: "Mentés", exact: true }).click();
@@ -156,21 +154,25 @@ test("a page the agent showed can be copied as an image or HTML, downloaded, and
       window.__electrobunSendToHost = () => {};
     });
     await page.reload();
-    await exportToggle(page).click();
-    await expect(page.getByRole("menu", { name: "Export the page" }).getByRole("menuitem")).toHaveText([
+    await expect((await openCanvasMore(page)).getByRole("menuitem")).toHaveText([
+      "Find on this page",
       "Copy as image",
       "Copy HTML",
       "Ask agent for Markdown",
       "Ask agent to save Markdown file",
       "Save to project…",
       "Save image to project…",
+      "Older",
+      "Newer",
+      "Clear the canvas",
     ]);
     await page.keyboard.press("Escape");
   });
 
   await test.step("only a shown page offers Export: not the Changes tab over it", async () => {
     await page.locator(".canvas-header:visible .changes-toggle").click();
-    await expect(exportToggle(page)).toHaveCount(0);
+    await expect((await openCanvasMore(page)).getByRole("menuitem")).toHaveText(["Older", "Newer", "Clear the canvas"]);
+    await page.keyboard.press("Escape");
   });
 });
 

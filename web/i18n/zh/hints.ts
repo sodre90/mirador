@@ -330,16 +330,12 @@ export const hints: Messages["hints"] = {
     `你的状态栏，由 ${command} 输出。\n\nhost 像 Claude Code 一样运行它：在 stdin 上提供 Claude Code 的状态栏 JSON（模型、cwd、会话、记录、上下文窗口、花费）以及这个对话所用配置的环境。在这里可切换到内置状态栏。`,
   statuslineBuiltIn: (command: string) =>
     `内置状态栏。\n\nClaude Code 的设置指定了一个状态栏命令（${command}）；在这里可切换到它。`,
-  canvasOlder: "显示上一个画布项目。",
-  canvasNewer: "显示下一个画布项目。",
   canvasHistory: "Agent 在这个对话中绘制或询问的一切，最新的在前。",
-  canvasClear: "清空画布。不会删除任何内容：该项目仍保留在历史中。",
-  canvasOpenInWindow: "在一个始终保持最新的单独窗口中显示此项目，例如放在第二块屏幕上。再次打开会把该窗口带到前面。",
-  canvasMore: "栏中的其他按钮（窄窗格放不下它们），以及这个工作区其他对话所用的、也可以在这里显示的应用。",
-  canvasPageExport: "把这个页面复制为图片或 HTML，请 Agent 把它写成 Markdown，或者另存为单独的文件。",
+  canvasPageTab: "回到 Agent 在画布上显示的内容。",
+  canvasMore:
+    "对画布所显示内容的操作：在页面里查找文字、复制或保存页面、在单独的窗口中打开、切换到更早或更新的项目，或清空画布（不会删除任何内容：它仍保留在历史中）。窗格较窄时，栏中的其他按钮也在这里，还有这个工作区其他对话所用的应用。",
   canvasPoint:
     "指向页面上的某处，向 Agent 提问或让它修改：点击会选中鼠标下带轮廓的元素，而不是执行页面本身的操作；拖动会在一个区域周围画框，作为图片发送。按 Esc 停止。要询问文字，直接选中它即可。",
-  canvasPageFind: "在 Agent 显示的页面里查找文字：每个匹配项都会在页面上标出，当前的那个会滚动到视野中。",
   pageMarkChange: "告诉 Agent 那里要改什么：它会重新显示改好后的页面。",
   pageMarkAdd: "把这条评论放到列表里，并留在指点模式：你写在页面各处的评论会一起作为一条消息发给 Agent。",
   pageMarkBatchChange: "把它们一起发出去，并请 Agent 按每一处重新显示这个页面。",
@@ -350,7 +346,6 @@ export const hints: Messages["hints"] = {
   canvasWorkspaceTab: "插件为这个工作区提供的标签页，在工作区的每个对话中都相同。",
   canvasChecklist:
     "Agent 工作的各个步骤，完成时会被勾选。你也可以勾选其中任何一项：Agent 会随你的下一条消息得知你的勾选。",
-  checklistClose: "回到画布原先显示的内容。“清单”按钮可再次打开它。",
   checklistDismiss: "把清单从画布上永久移除。在 Agent 发布新的清单之前它不会再出现。",
   checklistPlan: "Agent 自己的待办列表，为它最后更新时的样子。只有 Agent 会勾选这些。",
   changesScope: {

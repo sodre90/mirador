@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, lastAgentMessage, openSettings, sendMessage, signIn } from "./helpers.ts";
+import { addWorkspace, chooseFromCanvasMore, createProfile, lastAgentMessage, openSettings, sendMessage, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -90,7 +90,7 @@ test("an edit the agent waits to make takes the canvas with the file's line numb
   await expect(editView(page)).toHaveCount(0);
   await expect(lastAgentMessage(page)).toHaveText("Edit src/app.ts: allow");
   await expect(page.locator(".timeline:visible .permission.resolved .permission-outcome")).toHaveText("Allow");
-  await expect(canvas(page).getByRole("button", { name: /^History/ })).toHaveText("History (0)");
+  await expect(canvas(page).locator(".history-toggle")).toHaveAccessibleName("Canvas · History (0)");
 });
 
 test("edits waiting at once show oldest first, one not found in the file shows the agent's snippet, and Clear sets them aside", async ({ page }) => {
@@ -106,7 +106,7 @@ test("edits waiting at once show oldest first, one not found in the file shows t
   await expect(view.locator(".code-row.removed")).toContainText("not in the file");
 
   await test.step("Clear sets the edits aside, and the header brings them back", async () => {
-    await canvas(page).getByRole("button", { name: "Clear" }).click();
+    await chooseFromCanvasMore(page, "Clear the canvas");
     await expect(view).toHaveCount(0);
     await canvas(page).getByRole("button", { name: "2 edits waiting" }).click();
     await expect(canvas(page).locator(".canvas-title")).toHaveText("Edit src/app.ts");
