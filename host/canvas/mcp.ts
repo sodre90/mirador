@@ -102,13 +102,16 @@ const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null,
   hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps, taglineIn(catalog))] } : guidance;
 
 const CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS = 4096;
-let warnedOfCutInstructions = false;
 
-/** Once a run, as the canvas server is built for each request. */
-function warnOnceWhenClaudeCodeCuts(harness: HarnessId | undefined, instructions: string) {
-  if (warnedOfCutInstructions || harness !== "claude" || instructions.length <= CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS) return;
-  warnedOfCutInstructions = true;
-  console.warn(`The canvas server's instructions run to ${instructions.length} characters, and Claude Code keeps only the first ${CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS}.`);
+/** Warns once, as the canvas server is built for each request. */
+class CutInstructionsWarning {
+  private warned = false;
+
+  check(harness: HarnessId | undefined, instructions: string) {
+    if (this.warned || harness !== "claude" || instructions.length <= CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS) return;
+    this.warned = true;
+    console.warn(`The canvas server's instructions run to ${instructions.length} characters, and Claude Code keeps only the first ${CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS}.`);
+  }
 }
 
 /**
@@ -132,6 +135,7 @@ function buildCanvasServer(
   catalog: PluginCatalog | null,
   store: Store | null,
   antigravityAskWaitMs: number,
+  cutInstructionsWarning: CutInstructionsWarning,
 ) {
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
@@ -139,7 +143,7 @@ function buildCanvasServer(
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
   const instructions = canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
-  warnOnceWhenClaudeCodeCuts(harness, instructions);
+  cutInstructionsWarning.check(harness, instructions);
   const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
   /**
@@ -299,6 +303,7 @@ const listsTools = (message: unknown) => typeof message === "object" && message 
 export class CanvasMcpEndpoints {
   private readonly handlers = new Map<string, McpHttpHandler>();
   private readonly waitingForToolsListed = new Map<string, (() => void)[]>();
+  private readonly cutInstructionsWarning = new CutInstructionsWarning();
 
   constructor(
     private readonly canvas: CanvasService,
@@ -364,7 +369,7 @@ export class CanvasMcpEndpoints {
     let handler = this.handlers.get(conversationId);
     if (!handler) {
       handler = createMcpHandler(() =>
-        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog, this.store, this.antigravityAskWaitMs),
+        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog, this.store, this.antigravityAskWaitMs, this.cutInstructionsWarning),
       );
       this.handlers.set(conversationId, handler);
     }
