@@ -37,7 +37,7 @@ test("a desktop app built from older code than the checkout's shows a banner unt
   currentApp.kill();
 
   const oldApp = await desktopAppBuiltFrom("0123456789abcdef");
-  await expect(banner).toHaveText("The Mirador app is older than its code. Quit it and run bun run app in the Mirador folder.");
+  await expect(banner).toHaveText("The Mirador app is older than its code. Run bun run app in the Mirador folder, then quit the app: it opens again with the new build.");
   await page.reload();
   await expect(banner).toBeVisible();
 
