@@ -73,6 +73,11 @@ export const settings = {
     hint: "Mirador runs the Claude Code installed on the host's computer. A change restarts its agents, which stops the turns they are running.",
     programPlaceholder: "Found on its own",
   },
+  olderConversations: {
+    title: "Older conversations",
+    hint: "Conversations nobody wrote in for this long fold under Older in their workspace, here and on your phones. Favourites, ones waiting for you, ones with a reminder and ones still at work stay in the list.",
+    after: "Fold under Older after",
+  },
   sleep: {
     title: "Sleep",
     hint: "Kept by the host. Its computer can still sleep when you close a laptop's lid, and its display still turns off.",

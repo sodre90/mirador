@@ -217,7 +217,8 @@ export const hints: Messages["hints"] = {
     "Csoport hozzáadása: egy összecsukható fejléc, amely alá munkaterületeket gyűjthetsz, például projektenként vagy ügyfelenként. Húzz egy munkaterületet a fejlécénél fogva egy csoportba, a munkaterületeket és csoportokat pedig bármilyen sorrendbe.",
   foldWorkspace: "A munkaterület összecsukása a fejlécére. Ha megnyitod valamelyik beszélgetését, kinyílik.",
   unfoldWorkspace: "A munkaterület beszélgetéseinek újbóli megjelenítése.",
-  olderConversations: "Beszélgetések, amelyekbe egy hete senki sem írt. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak. Ha írsz valamelyikbe, visszakerül.",
+  olderConversations: (after) =>
+    `Beszélgetések, amelyekbe ennyi ideje senki sem írt: ${after}; az időt a Beállítások adja meg. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak. Ha írsz valamelyikbe, visszakerül.`,
   workspaceGroupCount: "A csoport munkaterületei.",
   waitingInGroup: "A csoport munkaterületeinek rád váró beszélgetései.",
   waitingAbove: "Rád váró beszélgetések, fent kigördülve a látómezőből. Kattints a legközelebbi megjelenítéséhez.",

@@ -75,6 +75,11 @@ export const settings: Messages["settings"] = {
     hint: "Mirador 运行 host 所在电脑上安装的 Claude Code。更改会重启它的 Agent，正在进行的轮次会因此中断。",
     programPlaceholder: "自动查找",
   },
+  olderConversations: {
+    title: "较早的对话",
+    hint: "这么久没有人写过消息的对话会折叠到其工作区的“较早”下，在这里和你的手机上都是如此。收藏的、等你处理的、设了提醒的和仍在工作的对话留在列表里。",
+    after: "多久之后折叠到“较早”下",
+  },
   sleep: {
     title: "睡眠",
     hint: "由 host 保存。合上笔记本盖子时，它所在的电脑仍可能休眠，显示器也仍会关闭。",

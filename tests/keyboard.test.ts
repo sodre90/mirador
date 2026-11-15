@@ -331,7 +331,7 @@ describe("navigation", () => {
     expect(nextWaitingConversation({ ...onlyOpenOneWaits, selectedConversationId: "a-old" })).toBe("a-new");
   });
 
-  describe("conversations nobody touched for a week", () => {
+  describe("conversations nobody touched for as long as the setting says", () => {
     const DAY = 24 * 60 * 60 * 1000;
     const now = 100 * DAY;
     const madeDaysAgo = (id: string, days: number, more: Partial<Conversation> = {}) => ({ ...conversation(id, "a", now - days * DAY), ...more });
@@ -339,7 +339,16 @@ describe("navigation", () => {
 
     test("fold under Older, counted from the last message or reply, else from when they were made", () => {
       const listed = [madeDaysAgo("stale", 30), madeDaysAgo("fresh", 2), madeDaysAgo("written-in", 30, { lastMessageAt: now - DAY }), madeDaysAgo("answered", 30, { lastReplyAt: now - 6 * DAY })];
-      expect(idsOf(apartFromOlder(listed, now))).toEqual({ current: ["fresh", "written-in", "answered"], older: ["stale"] });
+      expect(idsOf(apartFromOlder(listed, now, "1-week"))).toEqual({ current: ["fresh", "written-in", "answered"], older: ["stale"] });
+    });
+
+    test("fold after as long as the setting says, and not at all when it is off", () => {
+      const listed = [madeDaysAgo("two-days", 2), madeDaysAgo("ten-days", 10), madeDaysAgo("twenty-days", 20), madeDaysAgo("forty-days", 40)];
+      expect(idsOf(apartFromOlder(listed, now, "1-day")).older).toEqual(["two-days", "ten-days", "twenty-days", "forty-days"]);
+      expect(idsOf(apartFromOlder(listed, now, "3-days")).older).toEqual(["ten-days", "twenty-days", "forty-days"]);
+      expect(idsOf(apartFromOlder(listed, now, "2-weeks")).older).toEqual(["twenty-days", "forty-days"]);
+      expect(idsOf(apartFromOlder(listed, now, "1-month")).older).toEqual(["forty-days"]);
+      expect(idsOf(apartFromOlder(listed, now, "off"))).toEqual({ current: ["two-days", "ten-days", "twenty-days", "forty-days"], older: [] });
     });
 
     test("stay in the list while there is something to come back to them for", () => {
@@ -351,13 +360,13 @@ describe("navigation", () => {
         madeDaysAgo("in-terminal", 30, { openInTerminal: "idle" }),
         madeDaysAgo("stale", 30),
       ];
-      expect(idsOf(apartFromOlder(listed, now)).older).toEqual(["stale"]);
+      expect(idsOf(apartFromOlder(listed, now, "1-week")).older).toEqual(["stale"]);
     });
 
     test("keep the tasks listed under them, and stay in the list while one of those is in use", () => {
       const under = (id: string, callerId: string, more: Partial<Conversation> = {}) => madeDaysAgo(id, 30, { startedBy: { conversationId: callerId, plugin: "delegate", reply: null, dismissed: false }, ...more });
       const listed = [madeDaysAgo("resting", 30), under("resting-task", "resting"), madeDaysAgo("delegating", 30), under("busy-task", "delegating", { status: "running" })];
-      expect(idsOf(apartFromOlder(listed, now))).toEqual({ current: ["delegating", "busy-task"], older: ["resting", "resting-task"] });
+      expect(idsOf(apartFromOlder(listed, now, "1-week"))).toEqual({ current: ["delegating", "busy-task"], older: ["resting", "resting-task"] });
     });
 
     test("are stepped past and not numbered, as the sidebar doesn't list them", () => {

@@ -2,7 +2,7 @@ import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import type { PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
-import { type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
+import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
@@ -104,6 +104,7 @@ export function SettingsDialog({
   keepAwake,
   reminderMorning,
   keepDeletedCanvas,
+  olderAfter,
   claudeProgram,
   scriptProgram,
   editor,
@@ -127,6 +128,7 @@ export function SettingsDialog({
   keepAwake: KeepAwake;
   reminderMorning: number;
   keepDeletedCanvas: KeepDeletedCanvas;
+  olderAfter: OlderAfter;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
   editor: EditorState;
@@ -166,6 +168,7 @@ export function SettingsDialog({
         <EditorSettings editor={editor} />
         {isMac && <TypingSettings />}
         <ReminderSettings morning={reminderMorning} />
+        <OlderConversationSettings olderAfter={olderAfter} />
       </>
     ),
     agents: () => (
@@ -770,6 +773,27 @@ function ReminderSettings({ morning }: { morning: number }) {
         <label>
           {t.reminders.morning}
           <input type="time" className="reminder-morning" value={timeOfDay(morning)} onChange={(event) => event.target.value && setMorning(event.target.value)} />
+        </label>
+      </div>
+    </>
+  );
+}
+
+function OlderConversationSettings({ olderAfter }: { olderAfter: OlderAfter }) {
+  return (
+    <>
+      <h3>{text.olderConversations.title}</h3>
+      <p className="hint">{text.olderConversations.hint}</p>
+      <div className="sending-settings">
+        <label>
+          {text.olderConversations.after}
+          <select className="older-after" value={olderAfter} onChange={(event) => connection.send({ type: "settings.set-older-after", olderAfter: event.target.value as OlderAfter })}>
+            {OLDER_AFTER_CHOICES.map((choice) => (
+              <option key={choice} value={choice}>
+                {t.labels.olderAfter[choice]}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
     </>

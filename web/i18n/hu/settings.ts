@@ -75,6 +75,11 @@ export const settings: Messages["settings"] = {
     hint: "A Mirador a host gépére telepített Claude Code-ot futtatja. Ha módosítod, újraindulnak az ágensei, és leállnak a futó köreik.",
     programPlaceholder: "Magától megtalálja",
   },
+  olderConversations: {
+    title: "Régebbi beszélgetések",
+    hint: "Azok a beszélgetések, amelyekbe ennyi ideje senki sem írt, a munkaterületükön a Régebbiek alá kerülnek, itt és a telefonjaidon is. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak.",
+    after: "Régebbiek alá kerül ennyi idő után",
+  },
   sleep: {
     title: "Alvás",
     hint: "A host őrzi meg. A gépe így is elalszik, ha lecsukod a laptop fedelét, és a kijelzője is kikapcsol.",

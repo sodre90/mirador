@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, openSettings, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -16,7 +16,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 const expectOpen = (page: Page, conversationId: string) => expect(page).toHaveURL(new RegExp(`#/c/${conversationId}$`));
 
-test("a workspace folds the conversations nobody touched for a week under Older, and keeps favourites in the list", async ({ page }) => {
+test("a workspace folds the conversations nobody touched for a week under Older, keeps favourites in the list, and Settings choose how long or turn the fold off", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const resting = await startConversation(page);
@@ -35,7 +35,7 @@ test("a workspace folds the conversations nobody touched for a week under Older,
     await page.clock.setFixedTime(Date.now() + 8 * DAY_MS);
     await row(resting).click();
     await expect(olderToggle).toHaveText("▾ Older (2)");
-    await expect(olderToggle).toHaveAttribute("data-hint", /nobody wrote in for a week/);
+    await expect(olderToggle).toHaveAttribute("data-hint", /nobody wrote in for 1 week/);
     await expect(older.locator("li")).toHaveCount(2);
     await expect(list).toHaveCount(0);
   });
@@ -66,5 +66,29 @@ test("a workspace folds the conversations nobody touched for a week under Older,
     await row(starred).click();
     await expect(older).toHaveCount(0);
     await expect(list.locator("li")).toHaveCount(2);
+  });
+
+  const foldAfter = async (choice: string) => {
+    const settings = await openSettings(page, "Conversations");
+    await settings.locator("select.older-after").selectOption({ label: choice });
+    await settings.getByRole("button", { name: "Close" }).click();
+  };
+
+  await test.step("two days on, a day is long enough once Settings say so", async () => {
+    await page.clock.setFixedTime(Date.now() + 2 * DAY_MS);
+    await row(starred).click();
+    await expect(older).toHaveCount(0);
+    await foldAfter("1 day");
+    await expect(olderToggle).toHaveText(/Older \(1\)$/);
+    await expect(olderToggle).toHaveAttribute("data-hint", /nobody wrote in for 1 day/);
+  });
+
+  await test.step("Never folds none, and the host keeps the choice", async () => {
+    await foldAfter("Never");
+    await expect(older).toHaveCount(0);
+    await expect(list.locator("li")).toHaveCount(2);
+    await page.reload();
+    const settings = await openSettings(page, "Conversations");
+    await expect(settings.locator("select.older-after")).toHaveValue("off");
   });
 });

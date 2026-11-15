@@ -26,7 +26,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "../shared/model.ts";
-import { isCanvasUse, isConversationPlace, isKeepAwake, isKeepDeletedCanvas, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationWorktree, type KeepAwake, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
+import { DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
 import { computerName } from "./machine-name.ts";
@@ -975,6 +975,15 @@ export class Store {
 
   setReminderMorning(minutes: number) {
     this.setSetting("reminder_morning", String(minutes));
+  }
+
+  olderAfter(): OlderAfter {
+    const saved = this.setting("older_after");
+    return isOlderAfter(saved) ? saved : DEFAULT_OLDER_AFTER;
+  }
+
+  setOlderAfter(olderAfter: OlderAfter) {
+    this.setSetting("older_after", olderAfter);
   }
 
   chosenConversationOrder(): ConversationOrder {

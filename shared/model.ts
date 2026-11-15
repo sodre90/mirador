@@ -239,6 +239,23 @@ export const isKeepDeletedCanvas = (value: unknown): value is KeepDeletedCanvas 
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/** How long nobody touches a conversation before the sidebar and the phone fold it under Older; off folds none. */
+export const OLDER_AFTER_CHOICES = ["off", "1-day", "3-days", "1-week", "2-weeks", "1-month"] as const;
+
+export type OlderAfter = (typeof OLDER_AFTER_CHOICES)[number];
+
+export const DEFAULT_OLDER_AFTER: OlderAfter = "1-week";
+
+export const isOlderAfter = (value: unknown): value is OlderAfter => OLDER_AFTER_CHOICES.includes(value as OlderAfter);
+
+const olderAfterDays: Record<OlderAfter, number | null> = { off: null, "1-day": 1, "3-days": 3, "1-week": 7, "2-weeks": 14, "1-month": 30 };
+
+/** That long in milliseconds; null when no conversation folds. */
+export function olderAfterMs(olderAfter: OlderAfter): number | null {
+  const days = olderAfterDays[olderAfter];
+  return days === null ? null : days * DAY_MS;
+}
+
 /** How long it is kept, in milliseconds; null to keep it until its session is continued. */
 export const keptForMs = (keep: KeepDeletedCanvas): number | null => ({ "7-days": 7 * DAY_MS, "30-days": 30 * DAY_MS, forever: null })[keep];
 

@@ -1,4 +1,4 @@
-import type { CanvasUse, KeepAwake, KeepDeletedCanvas, Pastel } from "../../../shared/model.ts";
+import type { CanvasUse, KeepAwake, KeepDeletedCanvas, OlderAfter, Pastel } from "../../../shared/model.ts";
 import type { PageLibraries } from "../../../shared/canvas-export.ts";
 import type { ShellOutputStyle } from "../../../shared/shell-output.ts";
 import type { EnterWhileBusy } from "../../busy-sending.ts";
@@ -38,6 +38,7 @@ export const labels = {
   canvasUse: { "as-needed": "As needed", often: "Often" } satisfies Record<CanvasUse, string>,
   keepAwake: { never: "Never", "while-working": "While agents work", always: "Always" } satisfies Record<KeepAwake, string>,
   keepDeletedCanvas: { "7-days": "7 days", "30-days": "30 days", forever: "Forever" } satisfies Record<KeepDeletedCanvas, string>,
+  olderAfter: { off: "Never", "1-day": "1 day", "3-days": "3 days", "1-week": "1 week", "2-weeks": "2 weeks", "1-month": "1 month" } satisfies Record<OlderAfter, string>,
   pageLibraries: {
     cdn: "From a public CDN: small files that need a network connection to draw",
     inline: "Inside the file: works offline, but Mermaid adds about 3 MB",

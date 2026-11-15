@@ -75,6 +75,11 @@ export const settings: Messages["settings"] = {
     hint: "Mirador führt das Claude Code aus, das auf dem Computer des Hosts installiert ist. Eine Änderung startet seine Agenten neu, was ihre laufenden Runden stoppt.",
     programPlaceholder: "Wird selbst gefunden",
   },
+  olderConversations: {
+    title: "Ältere Unterhaltungen",
+    hint: "Unterhaltungen, in die so lange niemand geschrieben hat, werden in ihrem Arbeitsbereich unter Ältere eingeklappt, hier und auf deinen Telefonen. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben in der Liste.",
+    after: "Unter Ältere einklappen nach",
+  },
   sleep: {
     title: "Ruhezustand",
     hint: "Vom Host gespeichert. Sein Computer kann trotzdem schlafen, wenn du den Deckel eines Laptops schließt, und sein Bildschirm schaltet sich trotzdem aus.",

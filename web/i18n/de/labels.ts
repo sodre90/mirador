@@ -26,6 +26,7 @@ export const labels: Messages["labels"] = {
   canvasUse: { "as-needed": "Bei Bedarf", often: "Oft" },
   keepAwake: { never: "Nie", "while-working": "Während Agenten arbeiten", always: "Immer" },
   keepDeletedCanvas: { "7-days": "7 Tage", "30-days": "30 Tage", forever: "Für immer" },
+  olderAfter: { off: "Nie", "1-day": "1 Tag", "3-days": "3 Tage", "1-week": "1 Woche", "2-weeks": "2 Wochen", "1-month": "1 Monat" },
   pageLibraries: {
     cdn: "Von einem öffentlichen CDN: kleine Dateien, die zum Zeichnen eine Netzwerkverbindung brauchen",
     inline: "In der Datei: funktioniert offline, aber Mermaid fügt etwa 3 MB hinzu",

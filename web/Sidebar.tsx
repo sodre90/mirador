@@ -6,6 +6,7 @@ import {
   type WaitingFor,
   type Workspace,
   type Pastel,
+  type OlderAfter,
 } from "../shared/model.ts";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
@@ -455,6 +456,7 @@ function ConversationOrderMenu({ order }: { order: ConversationOrder }) {
 function WorkspaceSection({
   workspace,
   conversations,
+  olderAfter,
   draggable,
   putAway,
   profiles,
@@ -469,6 +471,7 @@ function WorkspaceSection({
 }: {
   workspace: Workspace;
   conversations: Conversation[];
+  olderAfter: OlderAfter;
   /** Only the custom order has places to drag a conversation to. */
   draggable: boolean;
   putAway: Conversation[];
@@ -504,7 +507,7 @@ function WorkspaceSection({
   const openedDelegations = useOpenedDelegations();
   const listedUnder = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && callerIdOf(conversation) === caller.id);
   const delegatedTo = (caller: Conversation) => listedUnder(caller).filter(({ startedBy }) => startedBy);
-  const { current, older } = apartFromOlder(conversations, Date.now());
+  const { current, older } = apartFromOlder(conversations, Date.now(), olderAfter);
   const listedNow = (some: Conversation[]) => some.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
   const shown = listedNow(current);
   const olderCount = older.filter((conversation) => !isUnderCaller(conversation, conversations)).length;
@@ -647,7 +650,7 @@ function WorkspaceSection({
       )}
       {!folded && olderCount > 0 && (
         <div className="later-group older-group" aria-label={`${workspace.name} · ${words.older(olderCount)}`}>
-          <button type="button" aria-expanded={olderOpen} data-hint={hints.olderConversations} onClick={() => setOlderOpen(!olderOpen)}>
+          <button type="button" aria-expanded={olderOpen} data-hint={hints.olderConversations(t.labels.olderAfter[olderAfter])} onClick={() => setOlderOpen(!olderOpen)}>
             {olderOpen ? "▾" : "▸"} {words.older(olderCount)}
           </button>
           {olderOpen && <ul>{listedNow(older).map((conversation) => conversationRow(conversation))}</ul>}
@@ -873,6 +876,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
       onStartDrag={(event) => startWorkspaceDrag(workspace, event)}
       workspace={workspace}
       conversations={conversationsIn(state, workspace.id)}
+      olderAfter={state.olderAfter}
       draggable={state.conversationOrder.by === "custom"}
       putAway={putAwayIn(state, workspace.id)}
       profiles={state.profiles}

@@ -842,6 +842,7 @@ export function App() {
           keepAwake={state.keepAwake}
           reminderMorning={state.reminderMorning}
           keepDeletedCanvas={state.keepDeletedCanvas}
+          olderAfter={state.olderAfter}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
           editor={state.editor}

@@ -39,6 +39,7 @@ function connectedAt(canvasAssetsOrigin: string): AppState {
     canvasViews: {},
     conversationPlugins: [],
     pluginLooks: {},
+    olderAfter: "1-week",
   } satisfies ServerMessage;
   const connected = reducer(initialState, { type: "server", message: snapshot });
   return reducer(connected, { type: "select", conversationId: "a" });

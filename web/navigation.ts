@@ -1,3 +1,4 @@
+import { DEFAULT_OLDER_AFTER, olderAfterMs, type OlderAfter } from "../shared/model.ts";
 import type { Conversation, Workspace } from "../shared/model.ts";
 import { isPutAway } from "../shared/reminders.ts";
 import { CUSTOM_ORDER, inConversationOrder, lastActivityOf, type ConversationOrder } from "../shared/conversation-order.ts";
@@ -13,6 +14,7 @@ export interface NavigationState {
   heldTurnTimes?: HeldTurnTimes | null;
   /** The time by which the sidebar folds conversations away under Older, where the keys don't step; without it, none are folded. */
   now?: number;
+  olderAfter?: OlderAfter;
 }
 
 export type HeldTurnTimes = Map<string, Pick<Conversation, "lastMessageAt" | "lastReplyAt">>;
@@ -60,11 +62,9 @@ export const isUnderCaller = (conversation: Conversation, listed: Conversation[]
 export const showsInSidebar = (conversation: Conversation, listed: Conversation[], callersOpened: ReadonlySet<string>) =>
   !isUnderCaller(conversation, listed) || callersOpened.has(callerIdOf(conversation)!) || Boolean(conversation.waitingFor);
 
-export const OLDER_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** Nobody wrote in it and the agent didn't answer for a week, and nothing about it is there for the user to come back to. */
-const restsUntouched = (conversation: Conversation, now: number) =>
-  now - lastActivityOf(conversation) > OLDER_AFTER_MS &&
+/** Nobody wrote in it and the agent didn't answer for that long, and nothing about it is there for the user to come back to. */
+const restsUntouched = (conversation: Conversation, now: number, olderAfterMs: number) =>
+  now - lastActivityOf(conversation) > olderAfterMs &&
   !conversation.favourite &&
   !conversation.waitingFor &&
   conversation.status === "idle" &&
@@ -74,11 +74,13 @@ const restsUntouched = (conversation: Conversation, now: number) =>
 
 /**
  * A workspace's listed conversations in two: those the sidebar lists, and those it folds under Older, which rest
- * untouched. One listed under its caller stays with it, and a caller stays in the list while any under it does.
+ * untouched for as long as `olderAfter` says. One listed under its caller stays with it, and a caller stays in the list while any under it does.
  */
-export function apartFromOlder(listed: Conversation[], now: number): { current: Conversation[]; older: Conversation[] } {
+export function apartFromOlder(listed: Conversation[], now: number, olderAfter: OlderAfter): { current: Conversation[]; older: Conversation[] } {
+  const restsAfterMs = olderAfterMs(olderAfter);
+  if (restsAfterMs === null) return { current: listed, older: [] };
   const familyOf = (conversation: Conversation) => (isUnderCaller(conversation, listed) ? callerIdOf(conversation)! : conversation.id);
-  const inUse = new Set(listed.filter((conversation) => !restsUntouched(conversation, now)).map(familyOf));
+  const inUse = new Set(listed.filter((conversation) => !restsUntouched(conversation, now, restsAfterMs)).map(familyOf));
   return { current: listed.filter((conversation) => inUse.has(familyOf(conversation))), older: listed.filter((conversation) => !inUse.has(familyOf(conversation))) };
 }
 
@@ -87,7 +89,7 @@ const newest = (conversations: Conversation[]) => conversations.reduce((newest, 
 /** The conversations to step through and number: a side chat opens beside its conversation, so it has no place of its own. */
 const steppedThrough = (state: NavigationState, workspaceId: string) => {
   const listed = conversationsIn(state, workspaceId);
-  return (state.now === undefined ? listed : apartFromOlder(listed, state.now).current).filter((conversation) => !isSideChat(conversation));
+  return (state.now === undefined ? listed : apartFromOlder(listed, state.now, state.olderAfter ?? DEFAULT_OLDER_AFTER).current).filter((conversation) => !isSideChat(conversation));
 };
 
 const sidebarOrder = (state: NavigationState) => state.workspaces.flatMap(({ id }) => steppedThrough(state, id));

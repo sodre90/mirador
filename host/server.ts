@@ -8,10 +8,12 @@ import index from "../web/index.html";
 import {
   isCanvasUse,
   isKeepDeletedCanvas,
+  isOlderAfter,
   isKeepAwake,
   isPastel,
   type CanvasUse,
   type KeepDeletedCanvas,
+  type OlderAfter,
   type KeepAwake,
   type ClientAddress,
   type FoundAddress,
@@ -1088,6 +1090,12 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.reminder-morning", minutes });
   }
 
+  function setOlderAfter(olderAfter: OlderAfter) {
+    if (!isOlderAfter(olderAfter)) throw new HostProblemError({ code: "unknown-older-after", value: String(olderAfter) });
+    store.setOlderAfter(olderAfter);
+    hub.broadcast({ type: "settings.older-after", olderAfter });
+  }
+
   function setConversationOrder(order: ConversationOrder) {
     if (!isConversationOrder(order)) throw new HostProblemError({ code: "unknown-conversation-order", value: JSON.stringify(order) });
     store.setChosenConversationOrder(order);
@@ -1201,6 +1209,8 @@ export function startServer(services: HostServices) {
         return setReminderMorning(message.minutes);
       case "settings.set-conversation-order":
         return setConversationOrder(message.order);
+      case "settings.set-older-after":
+        return setOlderAfter(message.olderAfter);
       case "settings.set-keep-deleted-canvas":
         return setKeepDeletedCanvas(message.keep);
       case "settings.set-claude-program":
@@ -1808,6 +1818,7 @@ export function startServer(services: HostServices) {
       keepDeletedCanvas: store.keepDeletedCanvas(),
       reminderMorning: store.reminderMorning(),
       conversationOrder: store.chosenConversationOrder(),
+      olderAfter: store.olderAfter(),
       pushKinds: [...NOTIFICATION_KINDS],
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),

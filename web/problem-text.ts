@@ -86,6 +86,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.notADirectory(problem.path);
     case "unknown-canvas-use":
       return words.unknownCanvasUse(problem.value);
+    case "unknown-older-after":
+      return words.unknownOlderAfter(problem.value);
     case "unknown-keep-awake":
       return words.unknownKeepAwake(problem.value);
     case "unknown-conversation-order":

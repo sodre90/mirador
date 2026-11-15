@@ -166,6 +166,7 @@ export const problems: Messages["problems"] = {
   unknownConversationOrder: (value) => `Ismeretlen beszélgetéssorrend: ${value}`,
   unknownPluginUpdateMode: (value) => `Ismeretlen bővítményfrissítési beállítás: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Ismeretlen beállítás a törölt vásznak megőrzéséhez: ${value}`,
+  unknownOlderAfter: (value) => `Ismeretlen beállítás a régebbi beszélgetések összecsukásához: ${value}`,
   unknownWorkspaceColour: (value) => `Ismeretlen munkaterület-szín: ${value}`,
   notAMachineAddress: (address) => `Ez nem egy gép címe: „${address}”.`,
   machineAlreadyAdded: (origin) => `Ez már a gépeid között van: ${origin}.`,
