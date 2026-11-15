@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { AutostartEntry, autostartEntry, autostartEntryPath, execArgument } from "../desktop/src/core/autostart.ts";
@@ -47,7 +47,7 @@ describe("host user service unit", () => {
     expect(execStartArgument("50%\\done")).toBe('"50%%\\\\done"');
   });
 
-  test("runs the host through the login shell, restarts it, and appends its output to the log", () => {
+  test("runs the host through the login shell, restarts it, stops only the host, and appends its output to the log", () => {
     const unit = hostServiceUnit({ port: 4600, argv: hostArgv("/bin/bash", "/bun/bin/bun", {}, "/repo"), workingDirectory: "/repo", logPath: "/home/me/.mirador/logs/host.log" });
     expect(unit).toBe(
       [
@@ -58,6 +58,7 @@ describe("host user service unit", () => {
         'ExecStart="/bin/bash" "-ilc" "cd -- \\"$$0\\" && exec \\"$$@\\"" "/repo" "/bun/bin/bun" "host/main.ts"',
         "WorkingDirectory=/repo",
         "Restart=always",
+        "KillMode=process",
         "StandardOutput=append:/home/me/.mirador/logs/host.log",
         "StandardError=append:/home/me/.mirador/logs/host.log",
         "",
@@ -96,6 +97,20 @@ describe("host user service", () => {
     expect(systemctl.changes()).toEqual([]);
 
     await service.ensureLoaded({ ...settings, bun: "/other/bun" });
+    expect(systemctl.changes()).toEqual(["daemon-reload", "enable mirador-host-4600.service", "restart mirador-host-4600.service"]);
+  });
+
+  test("rewrites a unit that still lets a stop end every process the host started, and restarts it under the new one", async () => {
+    const directory = scratchDirectory();
+    const unitPath = join(directory, "systemd", "user", "mirador-host-4600.service");
+    const systemctl = new FakeSystemctl();
+    const service = serviceIn(directory, systemctl);
+    await service.ensureLoaded(settings);
+    writeFileSync(unitPath, readFileSync(unitPath, "utf8").replace("KillMode=process\n", ""));
+    systemctl.calls = [];
+
+    await service.ensureLoaded(settings);
+    expect(readFileSync(unitPath, "utf8")).toContain("Restart=always\nKillMode=process\n");
     expect(systemctl.changes()).toEqual(["daemon-reload", "enable mirador-host-4600.service", "restart mirador-host-4600.service"]);
   });
 

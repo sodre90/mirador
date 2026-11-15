@@ -21,6 +21,10 @@ export interface HostServiceSpec {
   logPath: string;
 }
 
+/**
+ * A stop signals the host alone: it ends its terminals and agents itself, and a job they started detached (nohup,
+ * podman run -d) keeps running, as it does when the host restarts in place.
+ */
 export const hostServiceUnit = ({ port, argv, workingDirectory, logPath }: HostServiceSpec) =>
   [
     "[Unit]",
@@ -30,6 +34,7 @@ export const hostServiceUnit = ({ port, argv, workingDirectory, logPath }: HostS
     `ExecStart=${argv.map(execStartArgument).join(" ")}`,
     `WorkingDirectory=${escapeSpecifiers(workingDirectory)}`,
     "Restart=always",
+    "KillMode=process",
     `StandardOutput=append:${escapeSpecifiers(logPath)}`,
     `StandardError=append:${escapeSpecifiers(logPath)}`,
     "",
