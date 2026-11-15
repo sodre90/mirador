@@ -1,6 +1,6 @@
 import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState } from "../shared/editors.ts";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import type { PushRelaySetting } from "../shared/push.ts";
+import { pushRelayHost, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
 import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
@@ -1104,7 +1104,7 @@ function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
   return (
     <>
       <h3>{text.pushRelay.title}</h3>
-      <p className="hint push-relay-hint">{text.pushRelay.hint(pushRelay.grantRelay && new URL(pushRelay.grantRelay).host)}</p>
+      <p className="hint push-relay-hint">{text.pushRelay.hint(pushRelayHost(pushRelay.grantRelay))}</p>
       <div className="sending-settings push-relay">
         <label data-hint={hints.pushRelayAddress}>
           {text.pushRelay.address}

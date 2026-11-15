@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { loadConfig } from "../host/config.ts";
 import { pushRegistrationProblem, PushNotifications } from "../host/push-notifications.ts";
 import { Store } from "../host/store.ts";
-import { openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRequest } from "../shared/push.ts";
+import { DEFAULT_PUSH_RELAY, openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, pushRelayHost, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRequest } from "../shared/push.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import vector from "../shared/push-test-vector.json";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
@@ -295,6 +299,24 @@ describe("push settings", () => {
     expect(pushRelayAddressProblem("http://127.0.0.1:8790")).toBeNull();
     expect(pushRelayAddressProblem("http://push.example.com")).not.toBeNull();
     expect(pushRelayAddressProblem("push.example.com")).not.toBeNull();
+  });
+
+  test("the relay MIRADOR_PUSH_RELAY names is checked at the start like one Settings take, and kept as its origin", () => {
+    const grantRelayOf = (value?: string) =>
+      loadConfig({ MIRADOR_DATA_DIR: mkdtempSync(join(tmpdir(), "mirador-push-relay-")), ...(value !== undefined && { MIRADOR_PUSH_RELAY: value }) }).pushGrantRelay;
+    expect(grantRelayOf()).toBe(DEFAULT_PUSH_RELAY);
+    expect(grantRelayOf("")).toBe(DEFAULT_PUSH_RELAY);
+    expect(grantRelayOf("off")).toBeNull();
+    expect(grantRelayOf("https://push.example.com/")).toBe("https://push.example.com");
+    expect(grantRelayOf("http://127.0.0.1:8790")).toBe("http://127.0.0.1:8790");
+    expect(() => grantRelayOf("push.example.com")).toThrow("MIRADOR_PUSH_RELAY: The push relay's address isn't a web address.");
+    expect(() => grantRelayOf("https://push.example.com/health")).toThrow(/^MIRADOR_PUSH_RELAY: /);
+  });
+
+  test("Settings name the relay's host, and none for an address that isn't a web address", () => {
+    expect(pushRelayHost("https://push.example.com")).toBe("push.example.com");
+    expect(pushRelayHost(null)).toBeNull();
+    expect(pushRelayHost("push.example.com")).toBeNull();
   });
 
   test("a registration needs a known platform, a token, a list of kinds and a key of the right size", () => {

@@ -62,6 +62,9 @@ export function pushRelayAddressProblem(address: string): HostProblem | null {
   return justOrigin ? null : { code: "push-relay-is-origin" };
 }
 
+/** The relay's host to name in Settings, or null when there is none or it isn't a web address. */
+export const pushRelayHost = (address: string | null) => (address ? (URL.parse(address)?.host ?? null) : null);
+
 /** What Apple's and Google's tokens look like; the Mac and the relay take only these. */
 export const DEVICE_TOKEN_PATTERNS: Record<PushPlatform, RegExp> = { ios: /^[0-9a-f]{64,200}$/i, android: /^[\w:.-]{20,512}$/ };
 

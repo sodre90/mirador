@@ -4,8 +4,8 @@ import { dirname, join, resolve } from "node:path";
 import type { PublicAddress } from "../shared/model.ts";
 import { RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { relayPorts } from "../shared/relay-ports.ts";
-import { HostProblemError } from "../shared/host-problems.ts";
-import { DEFAULT_PUSH_RELAY } from "../shared/push.ts";
+import { englishProblem, HostProblemError } from "../shared/host-problems.ts";
+import { DEFAULT_PUSH_RELAY, pushRelayAddressProblem } from "../shared/push.ts";
 
 const PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/sodre90/mirador-plugins/main/index.json";
 const DEFAULT_PLUGINS_FILE = join(dirname(import.meta.dir), "plugins", "defaults.json");
@@ -115,6 +115,15 @@ export function publicAddressOf(origin: unknown, canvasOrigin: unknown, names: A
     throw names === SETTINGS_ADDRESS_NAMES ? new HostProblemError({ code: "set-both-addresses-or-neither" }) : new Error(`Set both ${names.origin} and ${names.canvasOrigin}, or neither.`);
   }
   return { origin: webOrigin(origin, names.origin), canvasOrigin: webOrigin(canvasOrigin, names.canvasOrigin) };
+}
+
+/** Checked like the address Settings take, so a value the host could never push to stops it at the start. */
+function pushRelayInEnvironment(value: string | undefined) {
+  const address = value?.trim() || DEFAULT_PUSH_RELAY;
+  if (address === "off") return null;
+  const problem = pushRelayAddressProblem(address);
+  if (problem) throw new Error(`MIRADOR_PUSH_RELAY: ${englishProblem(problem)}`);
+  return new URL(address).origin;
 }
 
 const publicAddressInEnvironment = (env: NodeJS.ProcessEnv) =>
@@ -234,7 +243,7 @@ export function loadConfig(env = process.env): HostConfig {
     checksForPluginUpdates: env.MIRADOR_PLUGIN_UPDATE_CHECK !== "off",
     latestReleaseUrl: env.MIRADOR_LATEST_RELEASE_URL ?? `https://api.github.com/repos/${RELEASES_REPOSITORY}/releases/latest`,
     pluginCatalogUrl: env.MIRADOR_PLUGIN_CATALOG === "off" ? null : (env.MIRADOR_PLUGIN_CATALOG ?? PLUGIN_CATALOG_URL),
-    pushGrantRelay: env.MIRADOR_PUSH_RELAY === "off" ? null : (env.MIRADOR_PUSH_RELAY ?? DEFAULT_PUSH_RELAY),
+    pushGrantRelay: pushRelayInEnvironment(env.MIRADOR_PUSH_RELAY),
     defaultPluginsFile: env.MIRADOR_DEFAULT_PLUGINS === "off" ? null : (env.MIRADOR_DEFAULT_PLUGINS ?? DEFAULT_PLUGINS_FILE),
     voiceModelsUrl: env.MIRADOR_VOICE_MODELS_URL ?? "https://huggingface.co",
     voiceEnginePython: env.MIRADOR_VOICE_PYTHON ?? null,
