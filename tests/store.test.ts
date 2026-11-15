@@ -305,7 +305,8 @@ describe("Store", () => {
   test("updates a conversation's persisted fields but always loads it idle", () => {
     const { store, conversation } = seededStore();
     store.saveProfile({ id: "p1", name: "work", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
-    store.updateConversation({ ...conversation, profileId: "p1", title: "renamed", askMode: "next-message", bypassPermissions: true, acpSessionId: "s1", status: "running" });
+    const running: Conversation = { ...conversation, profileId: "p1", title: "renamed", askMode: "next-message", bypassPermissions: true, acpSessionId: "s1", status: "running" };
+    store.updateConversation(running);
     expect(store.findConversation("c1")).toMatchObject({ profileId: "p1", title: "renamed", askMode: "next-message", bypassPermissions: true, acpSessionId: "s1", status: "idle" });
   });
 

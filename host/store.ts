@@ -195,6 +195,12 @@ export interface OtherConversationToolCalls {
 
 export type UnseenTurnEnd = "finished" | "error" | "unread";
 
+/** What updateConversation saves. The rest have writers of their own, so that saving a conversation read earlier cannot bring an old value back. */
+export type ConversationUpdate = Pick<
+  Conversation,
+  "id" | "harness" | "profileId" | "title" | "titleSetByUser" | "acpSessionId" | "askMode" | "bypassPermissions" | "configOptions" | "pluginSettings" | "updatedAt"
+>;
+
 type WorkspaceRow = {
   id: string;
   name: string;
@@ -826,7 +832,7 @@ export class Store {
     this.setPositions("conversations", conversationIds);
   }
 
-  updateConversation(conversation: Conversation) {
+  updateConversation(conversation: ConversationUpdate) {
     this.db
       .query(
         `UPDATE conversations SET harness = ?, profile_id = ?, title = ?, title_set_by_user = ?, acp_session_id = ?, ask_mode = ?, bypass_permissions = ?, config_options = ?, plugin_settings = ?, updated_at = ? WHERE id = ?`,
