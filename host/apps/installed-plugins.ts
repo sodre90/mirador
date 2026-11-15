@@ -99,6 +99,17 @@ const newestRelease = async (url: string) => (await releasesOf(url))[0] ?? null;
 
 const NO_NEWS: PluginNews = { release: null, commits: [], needsApi: null };
 
+/** Where a plugin's clone keeps the releases its update checks fetch, apart from its own tags, which say what it has installed. */
+const FETCHED_RELEASES = "refs/mirador/releases/";
+const fetchedReleaseRef = (release: string) => `${FETCHED_RELEASES}${releaseTag(release)}`;
+
+/** Every release in one fetch, a tag the repo moved since included, so reading the newer ones' plugin.json fetches nothing more. */
+async function fetchReleases(folder: string) {
+  const releases = `+refs/tags/${RELEASE_TAG_PREFIX}*:${FETCHED_RELEASES}${RELEASE_TAG_PREFIX}*`;
+  const fetched = await run(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", releases], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
+  if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
+}
+
 async function sourceOf(folder: string): Promise<PluginSource> {
   if (lstatSync(folder).isSymbolicLink()) return { kind: "linked", target: resolve(dirname(folder), readlinkSync(folder)) };
   if (!existsSync(join(folder, ".git"))) return { kind: "folder" };
@@ -200,6 +211,13 @@ const commitsOfLog = (log: string) =>
       const [commit = "", ...subject] = line.split("\t");
       return { commit, subject: subject.join("\t") };
     });
+
+/** What a fetched release brings that the checkout doesn't have, newest first; a tag the repo deleted after listing it fails as fetching it did. */
+async function commitsOfFetchedRelease(folder: string, release: string) {
+  const log = await gitOutput(folder, ["log", "--format=%h%x09%s", `HEAD..${fetchedReleaseRef(release)}`]);
+  if (log === null) throw new HostProblemError({ code: "git-fetch-failed", output: `fatal: couldn't find remote ref refs/tags/${releaseTag(release)}` });
+  return commitsOfLog(log);
+}
 
 /** Every text in a problem, without credentials, as the page may show any of them. */
 const problemWithoutCredentials = (problem: HostProblem): HostProblem =>
@@ -447,13 +465,17 @@ export class InstalledPlugins {
    * newer release needs a newer Mirador, the newest of them, saying which plugin API it needs.
    */
   private async releaseNews(folder: string, remote: string, installed: string): Promise<PluginNews> {
-    let newestForNewerApi: PluginNews | null = null;
-    for (const release of (await releasesOf(remote)).filter((release) => isNewerVersion(release, installed))) {
-      const news = { release, ...(await this.fetchedNews(folder, `refs/tags/${releaseTag(release)}`)) };
-      if (news.needsApi === null) return news;
-      newestForNewerApi ??= news;
+    const newer = (await releasesOf(remote)).filter((release) => isNewerVersion(release, installed));
+    const newest = newer[0];
+    if (newest === undefined) return NO_NEWS;
+    await fetchReleases(folder);
+    let apiTheNewestNeeds: number | null = null;
+    for (const release of newer) {
+      const needsApi = newerApiOf(parsedOrNull(await gitOutput(folder, ["show", `${fetchedReleaseRef(release)}:plugin.json`])));
+      if (needsApi === null) return { release, needsApi, commits: await commitsOfFetchedRelease(folder, release) };
+      apiTheNewestNeeds ??= needsApi;
     }
-    return newestForNewerApi ?? NO_NEWS;
+    return { release: newest, needsApi: apiTheNewestNeeds, commits: await commitsOfFetchedRelease(folder, newest) };
   }
 
   /** What the ref brings that the checkout doesn't have: its commits, newest first, and the plugin API its plugin.json names when this Mirador's is older. */

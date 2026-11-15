@@ -474,6 +474,43 @@ describe("adding, updating and removing plugins", () => {
     expect(await installed.news("counter")).toMatchObject({ release: "2.1.0", needsApi: APP_PLUGIN_API + 1 });
   });
 
+  test("reads the newer releases' plugin.json after one fetch, annotated tags too, and follows tags the repo moved without losing which release is installed", async () => {
+    const repo = builtCounterRepo("one-fetch-repo");
+    git(repo, "tag", "v1.0.0");
+    const plugins = pluginsIn("one-fetch");
+    const installed = new InstalledPlugins(plugins, []);
+    await installed.add(repo, null);
+
+    commit(repo, "src/view.js", "document.body.textContent = 'Counting by two';\n", "Count by two");
+    release(repo, "1.1.0");
+    git(repo, "tag", "--force", "--annotate", "v1.1.0", "--message", "Release 1.1.0");
+    const supported = { release: "1.1.0", commits: [{ commit: git(repo, "rev-parse", "--short", "HEAD"), subject: "Release 1.1.0" }, { commit: git(repo, "rev-parse", "--short", "HEAD~1"), subject: "Count by two" }], needsApi: null };
+    const manifest = join(repo, "plugin.json");
+    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), api: APP_PLUGIN_API + 1 }));
+    ["2.0.0", "2.1.0", "2.2.0"].forEach((version) => release(repo, version));
+
+    const trace = join(root, "one-fetch.trace");
+    const fetchesOf = async (check: () => Promise<unknown>) => {
+      writeFileSync(trace, "");
+      const usersTrace = process.env.GIT_TRACE;
+      process.env.GIT_TRACE = trace;
+      try {
+        await check();
+      } finally {
+        if (usersTrace === undefined) delete process.env.GIT_TRACE;
+        else process.env.GIT_TRACE = usersTrace;
+      }
+      return readFileSync(trace, "utf8").split("\n").filter((line) => line.includes("built-in: git fetch")).length;
+    };
+    expect(await fetchesOf(async () => expect(await installed.news("counter")).toEqual(supported))).toBe(1);
+
+    git(repo, "tag", "--force", "v1.0.0", "HEAD");
+    git(repo, "tag", "--delete", "v2.2.0");
+    expect(await installed.news("counter")).toEqual(supported);
+    expect((await installed.list())[0], "the installed release is still the one its own tag names").toMatchObject({ source: { release: "1.0.0" } });
+    expect(git(join(plugins, "counter"), "for-each-ref", "--format=%(refname:short)", "refs/mirador/releases/")).not.toContain("v2.2.0");
+  });
+
   test("refuses a release whose plugin.json gives another version, and a plugin without a version, which doesn't load either", async () => {
     const repo = builtCounterRepo("mistagged-repo");
     release(repo, "1.2.0", "v1.3.0");
