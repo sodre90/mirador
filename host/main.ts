@@ -152,7 +152,16 @@ await apps.reopenAll();
 const stopWatchingViews = watchViews(loadedPlugins, () =>
   hub.broadcast({ type: "plugins.views", installedApps: apps.installed(), canvasViews: canvasPlugins.viewPaths() }),
 );
-const mcp = new CanvasMcpEndpoints(canvas, conversations, config.canvasAssetsOrigin, apps, canvasPlugins, catalog, store, config.antigravityAskWaitMs);
+const mcp = new CanvasMcpEndpoints({
+  canvas,
+  conversations,
+  assetsOrigin: config.canvasAssetsOrigin,
+  apps,
+  canvasPlugins,
+  catalog,
+  store,
+  antigravityAskWaitMs: config.antigravityAskWaitMs,
+});
 canvasPlugins.tellsToolsChangedWith((conversationId) => mcp.toolsChanged(conversationId));
 const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugins.viewCode(pathname);
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);

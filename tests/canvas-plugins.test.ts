@@ -815,7 +815,7 @@ describe("CanvasPlugins", () => {
     store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
     store.insertConversation({ ...store.findConversation("c1")!, id: "c2", profileId: "other" });
     const { plugins } = await setUp();
-    const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", null, plugins, null, store);
+    const endpoints = new CanvasMcpEndpoints({ canvas: {} as CanvasService, conversations: {} as ConversationService, assetsOrigin: "http://127.0.0.1:4601", canvasPlugins: plugins, store });
     const listed: string[] = [];
     for (const conversationId of ["c1", "c2"]) {
       await endpoints.handle(conversationId, new Request(`http://127.0.0.1/mcp/${conversationId}`, { method: "GET" }));
@@ -829,7 +829,13 @@ describe("CanvasPlugins", () => {
 
   test("telling a conversation its tools changed waits until its agent lists them again, and not at all for one that never connected", async () => {
     const { plugins } = await setUp();
-    const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", null, plugins, null, storeWithConversation());
+    const endpoints = new CanvasMcpEndpoints({
+      canvas: {} as CanvasService,
+      conversations: {} as ConversationService,
+      assetsOrigin: "http://127.0.0.1:4601",
+      canvasPlugins: plugins,
+      store: storeWithConversation(),
+    });
     const started = Date.now();
     await endpoints.toolsChanged("c1");
     expect(Date.now() - started).toBeLessThan(100);

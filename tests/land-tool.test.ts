@@ -18,7 +18,7 @@ function canvasServerOf({ inWorktree, land }: { inWorktree: boolean; land: () =>
       return land();
     },
   } as unknown as ConversationService;
-  const endpoints = new CanvasMcpEndpoints({} as CanvasService, conversations, "http://127.0.0.1:4601", null, null, null, store);
+  const endpoints = new CanvasMcpEndpoints({ canvas: {} as CanvasService, conversations, assetsOrigin: "http://127.0.0.1:4601", store });
   const mcpRequest = async (method: string, params: Record<string, unknown>) => {
     const response = await endpoints.handle(
       "c1",

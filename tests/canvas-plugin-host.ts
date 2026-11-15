@@ -74,7 +74,15 @@ export async function canvasPluginHost(
   );
   const prompts: { conversationId: string; text: string; afterTurn: boolean; fromPlugin?: string }[] = [];
   plugins.sendsPromptsWith(async (conversationId, text, options) => void prompts.push({ conversationId, text, ...options }));
-  const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", apps, plugins, catalog, readsTheStore ? store : null);
+  const endpoints = new CanvasMcpEndpoints({
+    canvas: {} as CanvasService,
+    conversations: {} as ConversationService,
+    assetsOrigin: "http://127.0.0.1:4601",
+    apps,
+    canvasPlugins: plugins,
+    catalog,
+    store: readsTheStore ? store : null,
+  });
   const items = () => store.listCanvasItems("c1") as PluginCanvasItem[];
 
   const mcpRequest = async (method: string, params: Record<string, unknown>) => {

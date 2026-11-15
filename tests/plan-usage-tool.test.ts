@@ -15,7 +15,7 @@ function canvasServer() {
   store.saveProfile({ id: "codex1", name: "ChatGPT plan", harness: "codex", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   const quotas = new PlanQuotasByProfile();
   const conversations = { planQuotasOfProfile: (profileId: string | null, now: number) => quotas.of(profileId, now) } as unknown as ConversationService;
-  const endpoints = new CanvasMcpEndpoints({} as CanvasService, conversations, "http://127.0.0.1:4601", null, null, null, store);
+  const endpoints = new CanvasMcpEndpoints({ canvas: {} as CanvasService, conversations, assetsOrigin: "http://127.0.0.1:4601", store });
   const callPlanUsage = async (args: Record<string, unknown>) => {
     const response = await endpoints.handle(
       "c1",

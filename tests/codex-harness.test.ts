@@ -103,7 +103,7 @@ test("a command Codex runs keeps its output, sent in Zed's terminal_output chunk
 async function canvasToolsOf(harness: HarnessId) {
   const store = storeWithConversation();
   store.updateConversation({ ...store.findConversation("c1")!, harness });
-  const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", null, null, null, store);
+  const endpoints = new CanvasMcpEndpoints({ canvas: {} as CanvasService, conversations: {} as ConversationService, assetsOrigin: "http://127.0.0.1:4601", store });
   const response = await endpoints.handle(
     "c1",
     new Request("http://127.0.0.1/mcp/c1", {

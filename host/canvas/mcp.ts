@@ -125,18 +125,20 @@ export function canvasServerInstructions(harness: HarnessId | undefined, canvasU
   return parts.join("\n\n");
 }
 
-function buildCanvasServer(
-  conversationId: string,
-  canvas: CanvasService,
-  conversations: ConversationService,
-  assetsOrigin: string,
-  apps: AppDocuments | null,
-  canvasPlugins: CanvasPlugins | null,
-  catalog: PluginCatalog | null,
-  store: Store | null,
-  antigravityAskWaitMs: number,
-  cutInstructionsWarning: CutInstructionsWarning,
-) {
+/** What the conversations' canvas servers are built from; a part left out is null, and Antigravity's ask wait its default. */
+export interface CanvasServerParts {
+  canvas: CanvasService;
+  conversations: ConversationService;
+  assetsOrigin: string;
+  apps?: AppDocuments | null;
+  canvasPlugins?: CanvasPlugins | null;
+  catalog?: PluginCatalog | null;
+  store?: Store | null;
+  antigravityAskWaitMs?: number;
+}
+
+function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning) {
+  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
@@ -305,16 +307,7 @@ export class CanvasMcpEndpoints {
   private readonly waitingForToolsListed = new Map<string, (() => void)[]>();
   private readonly cutInstructionsWarning = new CutInstructionsWarning();
 
-  constructor(
-    private readonly canvas: CanvasService,
-    private readonly conversations: ConversationService,
-    private readonly assetsOrigin: string,
-    private readonly apps: AppDocuments | null = null,
-    private readonly canvasPlugins: CanvasPlugins | null = null,
-    private readonly catalog: PluginCatalog | null = null,
-    private readonly store: Store | null = null,
-    private readonly antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS,
-  ) {}
+  constructor(private readonly parts: CanvasServerParts) {}
 
   handle(conversationId: string, request: Request) {
     if (request.method === "POST" && this.waitingForToolsListed.has(conversationId)) void this.hearToolsListed(conversationId, request.clone());
@@ -361,16 +354,14 @@ export class CanvasMcpEndpoints {
   /** The profile's conversations list their tools again, once a save turned one of its plugins on or off; Claude Code does at once. */
   toolsChangedForProfile(profileId: string) {
     for (const [conversationId, handler] of this.handlers) {
-      if (this.store?.findConversation(conversationId)?.profileId === profileId) handler.notify.toolsChanged();
+      if (this.parts.store?.findConversation(conversationId)?.profileId === profileId) handler.notify.toolsChanged();
     }
   }
 
   private handlerFor(conversationId: string) {
     let handler = this.handlers.get(conversationId);
     if (!handler) {
-      handler = createMcpHandler(() =>
-        buildCanvasServer(conversationId, this.canvas, this.conversations, this.assetsOrigin, this.apps, this.canvasPlugins, this.catalog, this.store, this.antigravityAskWaitMs, this.cutInstructionsWarning),
-      );
+      handler = createMcpHandler(() => buildCanvasServer(conversationId, this.parts, this.cutInstructionsWarning));
       this.handlers.set(conversationId, handler);
     }
     return handler;
