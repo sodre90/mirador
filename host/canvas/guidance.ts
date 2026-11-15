@@ -20,7 +20,7 @@ export const offeredPluginsGuidance = (offered: CatalogPlugin[]) =>
     ? []
     : [
         `- ${PLUGIN_INSTALL_TOOL}: official Mirador plugins the user hasn't installed. When one would help with what the user is doing, recommend it in a sentence; if they want it, call ${PLUGIN_INSTALL_TOOL}, which asks them before installing anything:`,
-        ...offered.map(({ name, title, description, recommendWhen }) => `  - ${name} (${title}): ${description} Recommend it when ${recommendWhen}.`),
+        ...offered.map(({ name, title, description, tagline, recommendWhen }) => `  - ${name} (${title}): ${tagline ?? description} Recommend it when ${recommendWhen}.`),
       ];
 
 const linesAfter = (lines: string[]) => lines.map((line) => `\n${line}`).join("");

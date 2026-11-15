@@ -74,6 +74,8 @@ test("the agent hears of the plugins not installed, a line each, and of the tool
   const [tool, line] = offeredPluginsGuidance([media]);
   expect(tool).toContain("call plugin_install, which asks them before installing anything");
   expect(line).toBe("  - media (Media): Edit a video with the agent. Recommend it when the user wants to edit a video.");
+  const [, shorter] = offeredPluginsGuidance([{ ...media, tagline: "Mark a moment; the agent edits." }]);
+  expect(shorter).toBe("  - media (Media): Mark a moment; the agent edits. Recommend it when the user wants to edit a video.");
 });
 
 test("the catalog keeps an entry's tagline and kinds when they can be shown, and the entry without them when they can't", () => {

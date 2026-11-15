@@ -173,6 +173,15 @@ describe("CanvasPlugins", () => {
     expect(items()[1]).toMatchObject({ data: { holding: true } });
   });
 
+  test("the instructions say what each installed app does, as the official catalog says it", async () => {
+    const apps = { installed: () => [{ name: "counter", title: "Counter" }, { name: "private", title: "Private" }] } as unknown as AppDocuments;
+    const catalog = { all: [{ name: "counter", tagline: "Count things with the agent." }], notInstalled: () => [] } as unknown as PluginCatalog;
+    const { mcpRequest } = await canvasPluginHost(FIXTURES, undefined, {}, { apps, catalog });
+    const { instructions } = await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
+    expect(instructions).toContain("app_run runs its tasks.\n  - counter: Count things with the agent.");
+    expect(instructions).not.toContain("  - private:");
+  });
+
   test("the canvas lists an item with what came of it as its plugin says now, such as one saved before the plugin changed how it says it", async () => {
     const { plugins, callTool, items } = await setUp();
     await callTool("show_report", { title: "Report", verdict: "Approve" });

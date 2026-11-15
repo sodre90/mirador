@@ -87,8 +87,10 @@ const OPENCODE_SESSION_META = "ai.opencode/sessionID";
 
 const hasApps = (apps: AppDocuments | null): apps is AppDocuments => apps !== null && apps.installed().length > 0;
 
-const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null): CanvasPluginGuidance =>
-  hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps)] } : guidance;
+const taglineIn = (catalog: PluginCatalog | null) => (app: string) => catalog?.all.find(({ name }) => name === app)?.tagline ?? null;
+
+const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null, catalog: PluginCatalog | null): CanvasPluginGuidance =>
+  hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps, taglineIn(catalog))] } : guidance;
 
 /**
  * Copilot has no system prompt Mirador can append to, so the canvas use guidance Claude Code, pi and Codex get there
@@ -122,7 +124,7 @@ function buildCanvasServer(
         harness,
         store?.canvasUse() ?? "often",
         assetsOrigin,
-        withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps),
+        withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps, catalog),
       ),
     },
   );
