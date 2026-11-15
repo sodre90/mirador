@@ -5,6 +5,7 @@ import type { PublicAddress } from "../shared/model.ts";
 import { RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { relayPorts } from "../shared/relay-ports.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
+import { DEFAULT_PUSH_RELAY } from "../shared/push.ts";
 
 const PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/sodre90/mirador-plugins/main/index.json";
 const DEFAULT_PLUGINS_FILE = join(dirname(import.meta.dir), "plugins", "defaults.json");
@@ -65,6 +66,8 @@ export interface HostConfig {
   latestReleaseUrl: string;
   /** Where the catalog of official plugins is; MIRADOR_PLUGIN_CATALOG=off, as test hosts have it unless a spec gives one, fetches none. */
   pluginCatalogUrl: string | null;
+  /** The relay this Mac pushes through with phones' grants while Settings name no relay of its own; MIRADOR_PUSH_RELAY=off, as test hosts have it unless a spec gives one, pushes with none. */
+  pushGrantRelay: string | null;
   /** The plugins Mirador installs once at its start; MIRADOR_DEFAULT_PLUGINS=off, as test hosts have it unless a spec gives a file, installs none. */
   defaultPluginsFile: string | null;
   /** Where setting up voice on this Mac downloads its models: Hugging Face, or e2e's fake of it. */
@@ -231,6 +234,7 @@ export function loadConfig(env = process.env): HostConfig {
     checksForPluginUpdates: env.MIRADOR_PLUGIN_UPDATE_CHECK !== "off",
     latestReleaseUrl: env.MIRADOR_LATEST_RELEASE_URL ?? `https://api.github.com/repos/${RELEASES_REPOSITORY}/releases/latest`,
     pluginCatalogUrl: env.MIRADOR_PLUGIN_CATALOG === "off" ? null : (env.MIRADOR_PLUGIN_CATALOG ?? PLUGIN_CATALOG_URL),
+    pushGrantRelay: env.MIRADOR_PUSH_RELAY === "off" ? null : (env.MIRADOR_PUSH_RELAY ?? DEFAULT_PUSH_RELAY),
     defaultPluginsFile: env.MIRADOR_DEFAULT_PLUGINS === "off" ? null : (env.MIRADOR_DEFAULT_PLUGINS ?? DEFAULT_PLUGINS_FILE),
     voiceModelsUrl: env.MIRADOR_VOICE_MODELS_URL ?? "https://huggingface.co",
     voiceEnginePython: env.MIRADOR_VOICE_PYTHON ?? null,

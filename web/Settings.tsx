@@ -1080,7 +1080,7 @@ function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
   return (
     <>
       <h3>{text.pushRelay.title}</h3>
-      <p className="hint">{text.pushRelay.hint}</p>
+      <p className="hint push-relay-hint">{text.pushRelay.hint(pushRelay.grantRelay && new URL(pushRelay.grantRelay).host)}</p>
       <div className="sending-settings push-relay">
         <label data-hint={hints.pushRelayAddress}>
           {text.pushRelay.address}

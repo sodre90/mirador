@@ -61,6 +61,8 @@ These terms stay the same everywhere:
 | phone | telefon | teléfono | 手机 | Handy |
 | invite code (also a bare "code" in the join flow) | meghívókód | código de invitación | 邀请码 | Einladungscode |
 | Voice on this Mac (the local engine) | Hang ezen a Macen | Voz en este Mac | 这台 Mac 上的语音 | Sprachfunktionen auf diesem Mac |
+| push relay | push-továbbító | relé push | 推送中继 | Push-Relay (das) |
+| grant (a push relay's, which a phone holds) | engedély | permiso | 授权 | Freigabe |
 
 ## Hungarian
 

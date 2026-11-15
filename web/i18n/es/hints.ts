@@ -333,7 +333,7 @@ export const hints: Messages["hints"] = {
     "Qué hace Enter con un mensaje mientras el agente trabaja; ⌥Enter (Alt+Enter) hace lo otro. Con opencode, los mensajes siempre esperan a que termine el turno.",
   openFile:
     "Abre el archivo en el programa que el sistema del host usa para él, en la máquina en la que se ejecuta Mirador. Un script se abre como texto, en el programa que elige Configuración › Conversaciones. Un programa no se abre.",
-  pushRelayAddress: "A dónde envía este Mac las notificaciones push para tus teléfonos; vacío, no envía ninguna. Los teléfonos reciben notificaciones push solo cuando se registran en este Mac.",
+  pushRelayAddress: "Un relé propio, en lugar del de Mirador: a dónde envía este Mac las notificaciones push para tus teléfonos. Vacío, el Mac envía a través del relé de Mirador. Los teléfonos reciben notificaciones push solo cuando se registran en este Mac.",
   pushRelayToken: "El token que el dueño del relé creó para este Mac. Mirador lo guarda y no lo vuelve a mostrar; déjalo vacío para conservar el que está definido.",
   machineName:
     "Cómo llaman los teléfonos a esta máquina: lo toman al conectarse, y un teléfono puede darle un nombre propio. También se une a otras máquinas como Mirador con este nombre. Vacío, usa el nombre de su equipo.",

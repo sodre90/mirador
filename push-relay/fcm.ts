@@ -10,12 +10,8 @@ const ANSWER_TIMEOUT_MS = 15_000;
 /** How long Google keeps a push for a phone that is off, as Apple does: one that needs you is stale long before a day passes. */
 const KEPT_FOR_AN_OFF_PHONE = "1800s";
 
-/** A clear goes at normal priority: Google lowers an app's high priority when its messages show nothing, which would slow its alerts. */
-export interface FcmPush {
-  kind: "alert" | "clear";
-  deviceToken: string;
-  blob: string;
-}
+/** A clear and a grant go at normal priority: Google lowers an app's high priority when its messages show nothing, which would slow its alerts. */
+export type FcmPush = { kind: "alert" | "clear"; deviceToken: string; blob: string } | { kind: "grant"; deviceToken: string; grant: string; requestId: string };
 
 /** The fields Mirador reads from the Firebase service account's JSON key. */
 export interface ServiceAccount {
@@ -51,12 +47,12 @@ export class Fcm {
     return answer.status === 404 || answer.errorCode === "UNREGISTERED" ? "gone" : "failed";
   }
 
-  private async post({ kind, deviceToken, blob }: FcmPush, { renewed = false } = {}) {
+  private async post(push: FcmPush, { renewed = false } = {}) {
     if (renewed) this.accessToken = null;
     const response = await fetch(`${this.settings.origin ?? FCM_ORIGIN}/v1/projects/${this.settings.account.project_id}/messages:send`, {
       method: "POST",
       headers: { authorization: `Bearer ${await this.currentAccessToken()}`, "content-type": "application/json" },
-      body: JSON.stringify({ message: { token: deviceToken, data: { m: blob }, android: { priority: kind === "alert" ? "high" : "normal", ttl: KEPT_FOR_AN_OFF_PHONE } } }),
+      body: JSON.stringify({ message: { token: push.deviceToken, data: dataOf(push), android: { priority: push.kind === "alert" ? "high" : "normal", ttl: KEPT_FOR_AN_OFF_PHONE } } }),
       signal: AbortSignal.timeout(ANSWER_TIMEOUT_MS),
     });
     return { ok: response.ok, status: response.status, errorCode: response.ok ? null : await errorCodeIn(response) };
@@ -104,3 +100,5 @@ async function errorCodeIn(response: Response): Promise<string | null> {
     return null;
   }
 }
+
+const dataOf = (push: FcmPush) => (push.kind === "grant" ? { g: push.grant, q: push.requestId } : { m: push.blob });

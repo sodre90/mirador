@@ -396,8 +396,7 @@ export type ServerMessage =
       machineName?: string | null;
       /** The computer's own name, which the machine goes by while Settings give it none. */
       computerName?: string;
-      /** Absent from hosts before pushes. */
-      pushRelay?: PushRelaySetting;
+      pushRelay: PushRelaySetting;
       /** The user's profile picture as a small square PNG data URL; null when they set none. */
       avatar: string | null;
       /** The agents this machine has a program for, which a new profile can run. */

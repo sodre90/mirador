@@ -1,7 +1,18 @@
-import { DEVICE_TOKEN_PATTERNS, isPushKey, sealedPushBlob, type ClearMessage, type PushKind, type PushMessage, type PushOutcome, type PushRegistration, type PushRequest } from "../shared/push.ts";
+import {
+  DEVICE_TOKEN_PATTERNS,
+  isPushKey,
+  PUSH_GRANT_PATTERN,
+  sealedPushBlob,
+  type ClearMessage,
+  type PushKind,
+  type PushMessage,
+  type PushOutcome,
+  type PushRegistration,
+  type PushRelaySetting,
+  type PushRequest,
+} from "../shared/push.ts";
 import type { NotificationKind, SystemNotification } from "../shared/system-notifications.ts";
 import type { Store } from "./store.ts";
-import type { HostProblem } from "../shared/host-problems.ts";
 
 /** How long a phone with a connection gets to say it showed a notification before the Mac pushes it too. */
 export const SHOWN_WAIT_MS = 5_000;
@@ -13,39 +24,36 @@ const WAITING_KINDS = new Set<NotificationKind>(["question", "permission", "fini
 export interface PushNotificationsOptions {
   shownWaitMs?: number;
   post?: typeof fetch;
-}
-
-/** A relay is reached over HTTPS; plain HTTP only on this machine, for trying one out. */
-export function pushRelayAddressProblem(address: string): HostProblem | null {
-  let url: URL;
-  try {
-    url = new URL(address);
-  } catch {
-    return { code: "push-relay-not-web-address" };
-  }
-  const onThisMachine = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
-  if (url.protocol !== "https:" && !(url.protocol === "http:" && onThisMachine)) return { code: "push-relay-needs-https" };
-  const justOrigin = url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password;
-  return justOrigin ? null : { code: "push-relay-is-origin" };
+  /** Where to push with phones' grants while Settings name no relay of their own; null to push with none. */
+  grantRelay?: string | null;
 }
 
 export function pushRegistrationProblem(registration: PushRegistration): string | null {
-  const { platform, deviceToken, sandbox, kinds } = registration;
+  const { platform, deviceToken, sandbox, kinds, grant } = registration;
   if (platform !== "ios" && platform !== "android") return "Pushes go to iPhones and Android phones only.";
   if (typeof deviceToken !== "string" || !DEVICE_TOKEN_PATTERNS[platform].test(deviceToken)) return "The phone's push token isn't one.";
   if (typeof sandbox !== "boolean" || !Array.isArray(kinds) || !kinds.every((kind) => typeof kind === "string")) return "The push registration isn't one.";
+  if (grant !== null && (typeof grant !== "string" || !PUSH_GRANT_PATTERN.test(grant))) return "The phone's relay grant isn't one.";
   return typeof registration.keyId === "string" && typeof registration.key === "string" && isPushKey(registration) ? null : "The phone's push key isn't one.";
 }
 
 /** A phone newer than this host may ask for kinds it doesn't know yet; it gets the ones it knows. */
-const registrationOf = ({ platform, deviceToken, sandbox, keyId, key, kinds }: PushRegistration): PushRegistration => ({
+const registrationOf = ({ platform, deviceToken, sandbox, keyId, key, kinds, grant }: PushRegistration): PushRegistration => ({
   platform,
   deviceToken,
   sandbox,
   keyId,
   key,
   kinds: kinds.filter((kind) => NOTIFICATION_KINDS.has(kind)),
+  grant,
 });
+
+/** Where a push to one phone goes: the relay Settings name, with this Mac's token, or the grant relay, with the phone's grant. */
+interface PushRoute {
+  address: string;
+  token: string | null;
+  grant: string | null;
+}
 
 /** The phones told that a conversation waits, and whether this machine has seen it waiting since; the store keeps it too, so a restart can still clear. */
 interface ToldOfWaiting {
@@ -64,14 +72,21 @@ export class PushNotifications {
   private waiting = new Set<string>();
   private readonly shownWaitMs: number;
   private readonly post: typeof fetch;
+  private readonly grantRelay: string | null;
 
   constructor(
     private readonly store: Store,
-    { shownWaitMs = SHOWN_WAIT_MS, post = fetch }: PushNotificationsOptions = {},
+    { shownWaitMs = SHOWN_WAIT_MS, post = fetch, grantRelay = null }: PushNotificationsOptions = {},
   ) {
     this.shownWaitMs = shownWaitMs;
     this.post = post;
+    this.grantRelay = grantRelay;
     store.pushTold().forEach(({ conversationId, devices, seenWaiting }) => this.toldOf.set(conversationId, { devices: new Set(devices), seenWaiting }));
+  }
+
+  /** What pages and phones learn of where this Mac pushes. */
+  relaySetting(): PushRelaySetting {
+    return { ...this.store.pushRelaySetting(), grantRelay: this.grantRelay };
   }
 
   register(deviceId: string, registration: PushRegistration) {
@@ -91,7 +106,7 @@ export class PushNotifications {
   /** Another machine's notifications reach phones from that machine, which they join themselves. */
   notify(notification: SystemNotification): Promise<void> {
     const { id, kind, conversationId, title, workspace, body } = notification;
-    if (!id || notification.machineId || !this.store.pushRelay() || this.store.pushRegistrations().length === 0) return Promise.resolve();
+    if (!id || notification.machineId || !this.store.pushRegistrations().some(({ registration }) => this.routeTo(registration))) return Promise.resolve();
     this.shownOn.set(id, new Set());
     const told = conversationId && WAITING_KINDS.has(kind) ? this.toldOfWaiting(conversationId) : null;
     return new Promise((resolve) =>
@@ -148,14 +163,20 @@ export class PushNotifications {
     await Promise.all(told.map(({ deviceId, registration }) => this.push(deviceId, registration, "clear", message)));
   }
 
+  private routeTo({ grant }: PushRegistration): PushRoute | null {
+    const ownRelay = this.store.pushRelay();
+    if (ownRelay) return { ...ownRelay, grant: null };
+    return this.grantRelay && grant ? { address: this.grantRelay, token: null, grant } : null;
+  }
+
   private async push(deviceId: string, registration: PushRegistration, kind: Exclude<PushKind, "live-activity-end">, message: PushMessage | ClearMessage) {
-    const relay = this.store.pushRelay();
-    if (!relay) return;
+    const route = this.routeTo(registration);
+    if (!route) return;
     const blob = await sealedPushBlob(registration, message);
-    const request: PushRequest = { platform: registration.platform, deviceToken: registration.deviceToken, sandbox: registration.sandbox, kind, blob };
-    const outcome = await this.post(`${relay.address.replace(/\/+$/, "")}/push`, {
+    const request: PushRequest = { platform: registration.platform, deviceToken: registration.deviceToken, sandbox: registration.sandbox, kind, blob, ...(route.grant && { grant: route.grant }) };
+    const outcome = await this.post(`${route.address.replace(/\/+$/, "")}/push`, {
       method: "POST",
-      headers: { authorization: `Bearer ${relay.token}`, "content-type": "application/json" },
+      headers: { ...(route.token && { authorization: `Bearer ${route.token}` }), "content-type": "application/json" },
       body: JSON.stringify(request),
       signal: AbortSignal.timeout(RELAY_TIMEOUT_MS),
     })

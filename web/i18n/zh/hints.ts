@@ -301,7 +301,7 @@ export const hints: Messages["hints"] = {
   enterWhileBusy: "Agent 工作时，Enter 对消息的处理方式；⌥Enter（Alt+Enter）执行另一种。使用 opencode 时，消息始终等到轮次结束。",
   openFile:
     "用 host 的系统为该文件指定的程序打开它，在 Mirador 所运行的机器上。脚本作为文本打开，使用 设置 › 对话 中选定的程序。程序文件不会被打开。",
-  pushRelayAddress: "这台 Mac 把推送发往你手机的地址；留空则不发送。手机只有在向这台 Mac 注册后才会收到推送。",
+  pushRelayAddress: "你自己的中继，用来代替 Mirador 的中继：这台 Mac 把推送发往你手机的地址。留空则通过 Mirador 的中继发送。手机只有在向这台 Mac 注册后才会收到推送。",
   pushRelayToken: "中继的所有者为这台 Mac 生成的令牌。Mirador 会保存它，之后不再显示；留空则保留已设置的那个。",
   machineName: "手机对这台机器的称呼：它们连接时会获取这个名称，手机仍可以给它起自己的名字。它也会以这个名称作为 Mirador 加入其他机器。留空则使用电脑的名称。",
   scriptProgram:

@@ -8,14 +8,18 @@ import { join } from "node:path";
 import { ownServingCertificate } from "../host/certificates.ts";
 import { Apns, type ApnsPush } from "../push-relay/apns.ts";
 import { Fcm, type FcmPush } from "../push-relay/fcm.ts";
+import { GRANT_LIFETIME_S, Grants } from "../push-relay/grants.ts";
 import { addHostToken, hostOf, hostTokenLabels, removeHostToken } from "../push-relay/host-tokens.ts";
+import { RateLimit } from "../push-relay/rate-limit.ts";
 import { relayHandler, type Senders } from "../push-relay/server.ts";
-import { PUSH_BLOB_BYTES } from "../shared/push.ts";
+import { PUSH_BLOB_BYTES, PUSH_GRANT_PATTERN, pushGrantExpiresAt } from "../shared/push.ts";
 
 const scratch = () => mkdtempSync(join(tmpdir(), "push-relay-"));
 const fullBlob = Buffer.alloc(PUSH_BLOB_BYTES, 7).toString("base64");
 const iosToken = "ab".repeat(32);
 const androidToken = "fcm-token:" + "x".repeat(40);
+const grantSecret = "a relay's grant secret, long enough";
+const requestId = "request-0123456789";
 
 function partsOf(jwt: string) {
   const [header, claims, signature] = jwt.split(".");
@@ -34,6 +38,44 @@ describe("host tokens", () => {
     expect(() => addHostToken(file, "a label")).toThrow();
     removeHostToken(file, "studio-mac");
     expect(hostOf(file, token)).toBeNull();
+  });
+});
+
+describe("grants", () => {
+  let clock = Date.UTC(2026, 10, 15);
+  const grants = new Grants(grantSecret, () => clock);
+  const phone = { platform: "ios" as const, sandbox: false, deviceToken: iosToken };
+
+  test("a grant lets the one device token it was made for push, until it expires", () => {
+    const grant = grants.issue(phone);
+    expect(grant).toMatch(PUSH_GRANT_PATTERN);
+    expect(pushGrantExpiresAt(grant)).toBe(clock + GRANT_LIFETIME_S * 1000);
+    expect(grants.allows(grant, phone)).toBe(true);
+    expect(grants.allows(grant, { ...phone, deviceToken: "cd".repeat(32) })).toBe(false);
+    expect(grants.allows(grant, { ...phone, sandbox: true })).toBe(false);
+    expect(grants.allows(grant, { ...phone, platform: "android" })).toBe(false);
+    clock += GRANT_LIFETIME_S * 1000;
+    expect(grants.allows(grant, phone)).toBe(false);
+  });
+
+  test("only the relay's secret makes a grant, and a later expiry can't be written in", () => {
+    const grant = grants.issue(phone);
+    expect(new Grants(grantSecret.replace("long", "LONG"), () => clock).allows(grant, phone)).toBe(false);
+    const [expiresAt, mac] = grant.split(".");
+    expect(grants.allows(`${Number(expiresAt) + 86_400}.${mac}`, phone)).toBe(false);
+    expect(grants.allows("not a grant", phone)).toBe(false);
+    expect(() => new Grants("short")).toThrow();
+  });
+});
+
+describe("rate limits", () => {
+  test("count each key's uses in the window, and forget keys gone quiet", () => {
+    let clock = 0;
+    const limit = new RateLimit(2, 1_000, () => clock);
+    expect([limit.allows("a"), limit.allows("a"), limit.allows("a"), limit.allows("b")]).toEqual([true, true, false, true]);
+    clock += 1_001;
+    expect(limit.allows("a")).toBe(true);
+    expect(limit.keyCount).toBe(1);
   });
 });
 
@@ -110,6 +152,17 @@ describe("Apple", () => {
     expect(headers["apns-priority"]).toBe("5");
     expect(headers["apns-topic"]).toBe("com.sodre90.mirador");
     expect(body).toEqual({ aps: { "content-available": 1 }, m: fullBlob });
+    sender.close();
+  });
+
+  test("a grant is a quiet background push carrying the grant and the request it answers", async () => {
+    received.length = 0;
+    const sender = apns();
+    expect(await sender.send({ kind: "grant", deviceToken: iosToken, sandbox: true, grant: "1234567890.mac", requestId })).toBe("sent");
+    const [{ headers, body }] = received;
+    expect(headers["apns-push-type"]).toBe("background");
+    expect(headers["apns-priority"]).toBe("5");
+    expect(body).toEqual({ aps: { "content-available": 1 }, g: "1234567890.mac", q: requestId });
     sender.close();
   });
 
@@ -230,6 +283,11 @@ describe("Google", () => {
     expect(sends.at(-1)!.body.message).toEqual({ token: androidToken, data: { m: fullBlob }, android: { priority: "normal", ttl: "1800s" } });
   });
 
+  test("a grant goes as a normal priority data message with the request it answers", async () => {
+    expect(await fcm().send({ kind: "grant", deviceToken: androidToken, grant: "1234567890.mac", requestId })).toBe("sent");
+    expect(sends.at(-1)!.body.message).toEqual({ token: androidToken, data: { g: "1234567890.mac", q: requestId }, android: { priority: "normal", ttl: "1800s" } });
+  });
+
   test("the access token is reused until near its end, and replaced when Google refuses it", async () => {
     const sender = fcm();
     const before = issued;
@@ -347,5 +405,94 @@ describe("the relay", () => {
     const appleOnly = relayHandler({ tokensFile, senders: { ...senders, fcm: null } });
     const response = await appleOnly(new Request("http://relay/push", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ platform: "android", deviceToken: androidToken, kind: "alert", blob: fullBlob }) }));
     expect(response.status).toBe(502);
+  });
+});
+
+describe("the relay's grants", () => {
+  const tokensFile = join(scratch(), "tokens");
+  const token = addHostToken(tokensFile, "studio-mac");
+  const sent: Record<string, unknown>[] = [];
+  const senders: Senders = {
+    apns: { send: async (push) => (sent.push(push), "sent") },
+    fcm: { send: async (push) => (sent.push(push), "sent") },
+  };
+  let clock = Date.UTC(2026, 10, 15);
+  const grants = new Grants(grantSecret, () => clock);
+  const handle = relayHandler({ tokensFile, senders, grants, clientAddressHeader: "x-real-ip", perMinute: 2, grantAsksPerHour: 3, grantsPerDay: 2, now: () => clock });
+  const ask = (body: unknown, address = "203.0.113.7") =>
+    handle(new Request("http://relay/grant", { method: "POST", headers: { "x-real-ip": address }, body: JSON.stringify(body) }), "192.168.1.165");
+  const push = (body: unknown) => handle(new Request("http://relay/push", { method: "POST", body: JSON.stringify(body) }));
+  const iosAsk = { platform: "ios", deviceToken: iosToken, sandbox: true, requestId };
+  const lastGrant = () => String(sent.at(-1)!.grant);
+
+  test("a phone's grant goes to its own token in a push, never in the answer", async () => {
+    const response = await ask(iosAsk);
+    expect(response.status).toBe(202);
+    expect(await response.json()).toEqual({ outcome: "sent" });
+    expect(sent.at(-1)).toEqual({ kind: "grant", deviceToken: iosToken, sandbox: true, grant: expect.stringMatching(PUSH_GRANT_PATTERN), requestId });
+    expect(grants.allows(lastGrant(), { platform: "ios", sandbox: true, deviceToken: iosToken })).toBe(true);
+    expect((await ask({ platform: "android", deviceToken: androidToken, sandbox: true, requestId })).status).toBe(202);
+    expect(sent.at(-1)).toEqual({ kind: "grant", deviceToken: androidToken, grant: expect.stringMatching(PUSH_GRANT_PATTERN), requestId });
+    expect(grants.allows(lastGrant(), { platform: "android", sandbox: false, deviceToken: androidToken }), "Android has no sandbox").toBe(true);
+  });
+
+  test("a Mac pushes with a phone's grant to that phone alone, and with no grant at all for a Live Activity", async () => {
+    clock += 60_000;
+    await ask({ ...iosAsk, sandbox: false });
+    const grant = lastGrant();
+    const alert = { platform: "ios", deviceToken: iosToken, kind: "alert", blob: fullBlob, grant };
+    expect((await push(alert)).status).toBe(200);
+    expect(sent.at(-1)).toEqual({ kind: "alert", deviceToken: iosToken, sandbox: false, blob: fullBlob });
+    expect((await push({ ...alert, deviceToken: "cd".repeat(32) })).status).toBe(401);
+    expect((await push({ ...alert, sandbox: true })).status).toBe(401);
+    expect((await push({ platform: "ios", deviceToken: iosToken, kind: "live-activity-end", grant })).status).toBe(401);
+    expect((await push({ ...alert, grant: undefined })).status).toBe(401);
+    expect((await push({ ...alert, grant: "not a grant" })).status).toBe(400);
+  });
+
+  test("holds each phone's grant to its pushes a minute, apart from the Macs' own", async () => {
+    clock += 60_000;
+    const alert = { platform: "android", deviceToken: androidToken, kind: "alert", blob: fullBlob, grant: grants.issue({ platform: "android", sandbox: false, deviceToken: androidToken }) };
+    const statuses = [];
+    for (const _ of [1, 2, 3]) statuses.push((await push(alert)).status);
+    expect(statuses).toEqual([200, 200, 429]);
+    const withToken = await handle(new Request("http://relay/push", { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ ...alert, grant: undefined }) }));
+    expect(withToken.status).toBe(200);
+    clock += 60_001;
+    expect((await push(alert)).status).toBe(200);
+  });
+
+  test("an expired grant pushes nothing", async () => {
+    const alert = { platform: "android", deviceToken: androidToken, kind: "alert", blob: fullBlob, grant: grants.issue({ platform: "android", sandbox: false, deviceToken: androidToken }) };
+    clock += GRANT_LIFETIME_S * 1000;
+    expect((await push(alert)).status).toBe(401);
+  });
+
+  test("refuses asks that aren't one", async () => {
+    clock += 86_400_000;
+    const statuses = await Promise.all(
+      [{ ...iosAsk, deviceToken: "not hex" }, { ...iosAsk, platform: "windows" }, { ...iosAsk, sandbox: "yes" }, { ...iosAsk, requestId: "short" }, { ...iosAsk, requestId: undefined }, "not json", null].map(
+        async (body) => (await ask(body)).status,
+      ),
+    );
+    expect(statuses.every((status) => status === 400)).toBe(true);
+  });
+
+  test("gives a device token a few grants a day, and an address a few asks an hour, by the address its proxy names", async () => {
+    clock += 86_400_000;
+    const otherToken = (index: number) => `${index}`.padStart(64, "e");
+    expect([(await ask(iosAsk)).status, (await ask(iosAsk)).status, (await ask(iosAsk, "198.51.100.1")).status]).toEqual([202, 202, 429]);
+    expect([(await ask({ ...iosAsk, deviceToken: otherToken(1) })).status, (await ask({ ...iosAsk, deviceToken: otherToken(2) })).status]).toEqual([202, 429]);
+    expect((await ask({ ...iosAsk, deviceToken: otherToken(3) }, "198.51.100.1")).status).toBe(202);
+    clock += 3_600_001;
+    expect((await ask({ ...iosAsk, deviceToken: otherToken(4) })).status).toBe(202);
+    expect((await ask(iosAsk, "198.51.100.2")).status, "a day for each token").toBe(429);
+  });
+
+  test("a relay without a grant secret makes no grants and takes none", async () => {
+    const tokensOnly = relayHandler({ tokensFile, senders, now: () => clock });
+    expect((await tokensOnly(new Request("http://relay/grant", { method: "POST", body: JSON.stringify(iosAsk) }))).status).toBe(404);
+    const alert = { platform: "ios", deviceToken: iosToken, kind: "alert", blob: fullBlob, grant: grants.issue({ platform: "ios", sandbox: false, deviceToken: iosToken }) };
+    expect((await tokensOnly(new Request("http://relay/push", { method: "POST", body: JSON.stringify(alert) }))).status).toBe(401);
   });
 });

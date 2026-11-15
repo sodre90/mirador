@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Browser, type Page } from "@playwright/test";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { openedPushBlob, type ClearMessage, type PushKey, type PushRequest } from "../shared/push.ts";
@@ -14,10 +14,11 @@ const host = new TestHost({
     MIRADOR_NETWORK: "on",
     MIRADOR_PUBLIC_ORIGIN: networkOriginAt(port),
     MIRADOR_PUBLIC_CANVAS_ORIGIN: `https://127.0.0.1:${port + 3}`,
+    MIRADOR_PUSH_RELAY: relayOrigin(),
   }),
 });
 
-/** Stands in for the push relay: it takes what the Mac posts, with the token it came with. */
+/** Stands in for the push relay, both the one Settings name and Mirador's own: it takes what the Mac posts, with the token it came with. */
 const relayed: { authorization: string | undefined; push: PushRequest }[] = [];
 let relay: Server;
 const relayOrigin = () => `http://127.0.0.1:${(relay.address() as AddressInfo).port}`;
@@ -43,15 +44,16 @@ test.afterAll(async () => {
 });
 
 const pushKey: PushKey = { keyId: Buffer.alloc(16, 4).toString("base64url"), key: Buffer.alloc(32, 5).toString("base64url") };
+const grant = `1795000000.${"g".repeat(43)}`;
 
 /** What the phone app does on its own connection: registers for pushes, and says it showed a notification only when told to. */
-async function registerForPushes(phone: Page, { answerShown }: { answerShown: boolean }) {
+async function registerForPushes(phone: Page, { answerShown, grant = null }: { answerShown: boolean; grant?: string | null }) {
   await phone.evaluate(
-    ({ pushKey, answerShown }) =>
+    ({ pushKey, answerShown, grant }) =>
       new Promise<void>((resolve) => {
         const socket = new WebSocket(`${location.origin.replace(/^http/, "ws")}/ws`);
         socket.onopen = () => {
-          socket.send(JSON.stringify({ type: "push.register", platform: "ios", deviceToken: "cd".repeat(32), sandbox: true, ...pushKey, kinds: ["question", "finished"] }));
+          socket.send(JSON.stringify({ type: "push.register", platform: "ios", deviceToken: "cd".repeat(32), sandbox: true, ...pushKey, kinds: ["question", "finished"], grant }));
           resolve();
         };
         socket.onmessage = async ({ data }) => {
@@ -65,8 +67,20 @@ async function registerForPushes(phone: Page, { answerShown }: { answerShown: bo
         (window as unknown as { pushSocket: WebSocket }).pushSocket?.close();
         (window as unknown as { pushSocket: WebSocket }).pushSocket = socket;
       }),
-    { pushKey, answerShown },
+    { pushKey, answerShown, grant },
   );
+}
+
+/** A phone joined with an invite from Settings, showing the Mac's workspaces. */
+async function joinedPhone(page: Page, browser: Browser) {
+  const settings = await openSettings(page, "Devices");
+  await settings.getByRole("button", { name: "Invite a device" }).click();
+  const link = (await settings.locator(".invite-link").textContent())!;
+  await page.keyboard.press("Escape");
+  const phone = await browser.newPage({ ignoreHTTPSErrors: true });
+  await phone.goto(link);
+  await expect(workspaceCard(phone, host.projectDir)).toBeVisible();
+  return phone;
 }
 
 const askInBackground = (conversationId: string, question: string) =>
@@ -102,14 +116,8 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
     await page.keyboard.press("Escape");
   });
 
-  const settings = await openSettings(page, "Devices");
-  await settings.getByRole("button", { name: "Invite a device" }).click();
-  const link = (await settings.locator(".invite-link").textContent())!;
-  await page.keyboard.press("Escape");
+  const phone = await joinedPhone(page, browser);
   await page.goto(`${host.origin}/#/c/${answerLater}`);
-  const phone = await browser.newPage({ ignoreHTTPSErrors: true });
-  await phone.goto(link);
-  await expect(workspaceCard(phone, host.projectDir)).toBeVisible();
 
   await test.step("a phone that says it showed the notification gets no push", async () => {
     await registerForPushes(phone, { answerShown: true });
@@ -178,5 +186,28 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
     expect(relayed[6].push.kind, "the turn ended before the restart, and reading it after still clears it").toBe("clear");
     expect((await openedPushBlob<ClearMessage>(pushKey, relayed[6].push.blob!)).cleared).toEqual({ conversationId: acrossRestart });
   });
+  await phone.close();
+});
+
+test("with no relay of its own set, the Mac pushes through Mirador's relay with the grant the phone holds, and no token", async ({ page, browser }) => {
+  await signIn(page, host);
+  const settings = await openSettings(page, "Notifications");
+  await settings.locator(".push-relay-address").fill("");
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings.locator(".push-relay-token")).toHaveAttribute("placeholder", "");
+  await expect(settings.locator(".push-relay-hint")).toContainText(`This Mac pushes through Mirador's relay at ${new URL(relayOrigin()).host}`);
+  await page.keyboard.press("Escape");
+  const asking = await startConversation(page);
+  const elsewhere = await startConversation(page);
+  const phone = await joinedPhone(page, browser);
+  await page.goto(`${host.origin}/#/c/${elsewhere}`);
+  await registerForPushes(phone, { answerShown: false, grant });
+  const before = relayed.length;
+  askInBackground(asking, "Pushed with the phone's grant?");
+  await expect.poll(() => relayed.slice(before).filter(({ push }) => push.kind === "alert"), { timeout: 15_000 }).toHaveLength(1);
+  const { authorization, push } = relayed.slice(before).find(({ push }) => push.kind === "alert")!;
+  expect(authorization).toBeUndefined();
+  expect(push).toMatchObject({ platform: "ios", deviceToken: "cd".repeat(32), sandbox: true, kind: "alert", grant });
+  expect((await openedPushBlob(pushKey, push.blob!)).notification).toMatchObject({ kind: "question", conversationId: asking, body: "Asks: Pushed with the phone's grant?" });
   await phone.close();
 });

@@ -138,7 +138,10 @@ export const settings: Messages["settings"] = {
   },
   pushRelay: {
     title: "Teléfonos sin Mirador abierto",
-    hint: "Un relé push avisa a tus teléfonos cuando un agente te necesita y Mirador no está abierto en ellos. No puede leer lo que transmite.",
+    hint: (relay: string | null) =>
+      relay
+        ? `Un relé push avisa a tus teléfonos cuando un agente te necesita y Mirador no está abierto en ellos. Este Mac envía a través del relé de Mirador en ${relay}, con un permiso que cada teléfono obtiene de él, salvo que definas abajo un relé propio. Un relé no puede leer lo que transmite.`
+        : "Un relé push avisa a tus teléfonos cuando un agente te necesita y Mirador no está abierto en ellos. Define uno abajo; no puede leer lo que transmite.",
     address: "Dirección del relé",
     token: "Token de este Mac",
     tokenSet: "Definido",

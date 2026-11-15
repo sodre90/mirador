@@ -75,7 +75,7 @@ const forgettingDeletedCanvases = setInterval(() => store.forgetExpiredDeletedCa
 const hub = new Hub();
 const images = new ImageStore(join(config.dataDir, "images"));
 const droppedFiles = new DroppedFiles(join(config.dataDir, "dropped-files"));
-const pushes = new PushNotifications(store);
+const pushes = new PushNotifications(store, { grantRelay: config.pushGrantRelay });
 const notifications = new SystemNotifications(store, hub, pushes);
 const notifierMute = new NotifierMute(config.notifierDir, join(config.dataDir, MUTED_LIST_FILE));
 notifierMute.unmuteSessionsOfEarlierRuns();

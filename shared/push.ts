@@ -1,3 +1,4 @@
+import type { HostProblem } from "./host-problems.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 
 /** Every push blob has this many bytes before base64, whatever it says, so neither the relay nor Apple or Google can tell pushes apart by size. */
@@ -11,6 +12,9 @@ export type PushPlatform = "ios" | "android";
  */
 export type PushKind = "alert" | "clear" | "live-activity-end";
 
+/** The relay Macs push through with the grants phones get from it, unless their owner sets a relay of their own. */
+export const DEFAULT_PUSH_RELAY = "https://push.sodre90.com";
+
 /** What a Mac posts to the push relay's /push. */
 export interface PushRequest {
   platform: PushPlatform;
@@ -21,6 +25,41 @@ export interface PushRequest {
   kind: PushKind;
   /** Base64 of exactly PUSH_BLOB_BYTES bytes, for an alert or a clear. */
   blob?: string;
+  /** Instead of a Mac's own token: the phone's grant from this relay, made for this platform, sandbox and device token. */
+  grant?: string;
+}
+
+/**
+ * A relay's grant: when it expires, in seconds since 1970, then a MAC only the relay can make. It lets any Mac push
+ * through that relay to the one device token it was made for, and the relay pushes it to that token, so only the
+ * phone holding the token gets it.
+ */
+export const PUSH_GRANT_PATTERN = /^\d{10}\.[\w-]{43}$/;
+
+export const pushGrantExpiresAt = (grant: string) => Number(grant.slice(0, grant.indexOf("."))) * 1000;
+
+/** What a phone posts to a relay's /grant; the grant comes back in a push carrying the request's id, not in the answer. */
+export interface PushGrantRequest {
+  platform: PushPlatform;
+  deviceToken: string;
+  sandbox: boolean;
+  requestId: string;
+}
+
+export const GRANT_REQUEST_ID_PATTERN = /^[\w-]{16,64}$/;
+
+/** A relay is reached over HTTPS; plain HTTP only on this machine, for trying one out. */
+export function pushRelayAddressProblem(address: string): HostProblem | null {
+  let url: URL;
+  try {
+    url = new URL(address);
+  } catch {
+    return { code: "push-relay-not-web-address" };
+  }
+  const onThisMachine = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.protocol !== "https:" && !(url.protocol === "http:" && onThisMachine)) return { code: "push-relay-needs-https" };
+  const justOrigin = url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password;
+  return justOrigin ? null : { code: "push-relay-is-origin" };
 }
 
 /** What Apple's and Google's tokens look like; the Mac and the relay take only these. */
@@ -128,10 +167,17 @@ export interface PushRegistration extends PushKey {
   sandbox: boolean;
   /** The notifications the phone lets through: a push it would hide still wakes it, so the Mac sends only these. */
   kinds: NotificationKind[];
+  /** The phone's grant from the relay the Mac names, which the Mac pushes with while no relay of its own is set. */
+  grant: string | null;
 }
 
 /** Where this Mac sends pushes; the token stays on the Mac, and pages learn only whether one is set. */
 export interface PushRelaySetting {
   address: string | null;
   tokenSet: boolean;
+  /** Where it pushes with phones' grants while no address and token are set, so phones ask it for theirs; null where a test host has none. */
+  grantRelay: string | null;
 }
+
+/** Whether a Mac pushes through a relay of its own, with its own token, rather than with phones' grants. */
+export const pushesWithOwnRelay = ({ address, tokenSet }: PushRelaySetting) => address !== null && tokenSet;

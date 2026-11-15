@@ -1041,7 +1041,7 @@ export class Store {
     return id;
   }
 
-  pushRelaySetting(): PushRelaySetting {
+  pushRelaySetting(): Omit<PushRelaySetting, "grantRelay"> {
     return { address: this.setting("push_relay_address"), tokenSet: this.setting("push_relay_token") !== null };
   }
 

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { pushRegistrationProblem, pushRelayAddressProblem, PushNotifications } from "../host/push-notifications.ts";
+import { pushRegistrationProblem, PushNotifications } from "../host/push-notifications.ts";
 import { Store } from "../host/store.ts";
-import { openedPushBlob, PUSH_BLOB_BYTES, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRequest } from "../shared/push.ts";
+import { openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRequest } from "../shared/push.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import vector from "../shared/push-test-vector.json";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
@@ -48,24 +48,28 @@ describe("push blobs", () => {
   });
 });
 
-const registration = (kinds: PushRegistration["kinds"] = ["question", "permission"]): PushRegistration => ({
+const grant = `1795000000.${"g".repeat(43)}`;
+const GRANT_RELAY = "https://push.mirador.example";
+
+const registration = (kinds: PushRegistration["kinds"] = ["question", "permission"], grant: string | null = null): PushRegistration => ({
   platform: "ios",
   deviceToken: "ab".repeat(32),
   sandbox: true,
   ...pushKey,
   kinds,
+  grant,
 });
 
-function pushingHost(answer: { status: number; outcome: string } = { status: 200, outcome: "sent" }) {
+function pushingHost(answer: { status: number; outcome: string } = { status: 200, outcome: "sent" }, { ownRelay = true } = {}) {
   const store = storeWithConversation();
   const posted: { url: string; authorization: string | null; request: PushRequest }[] = [];
   const post = (async (url: URL, init: RequestInit) => {
     posted.push({ url: String(url), authorization: new Headers(init.headers).get("authorization"), request: JSON.parse(String(init.body)) });
     return Response.json({ outcome: answer.outcome }, { status: answer.status });
   }) as unknown as typeof fetch;
-  const pushes = new PushNotifications(store, { shownWaitMs: 10, post });
+  const pushes = new PushNotifications(store, { shownWaitMs: 10, post, grantRelay: GRANT_RELAY });
   store.insertDevice({ id: "phone", name: "Peter's iPhone", joinedAt: 1, lastSeenAt: 1 }, "hash");
-  store.setPushRelay("https://push.example.com", "relay-token");
+  if (ownRelay) store.setPushRelay("https://push.example.com", "relay-token");
   return { store, pushes, posted, post };
 }
 
@@ -116,12 +120,39 @@ describe("pushing notifications", () => {
     expect(posted).toHaveLength(0);
   });
 
-  test("nothing is pushed until the relay is set", async () => {
-    const { store, pushes, posted } = pushingHost();
-    store.setPushRelay(null, null);
+  test("with no relay of its own, the Mac pushes through the grant relay with the phone's grant instead of a token", async () => {
+    const { pushes, posted } = pushingHost(undefined, { ownRelay: false });
+    pushes.register("phone", registration(undefined, grant));
+    await pushes.notify(notification);
+    expect(posted).toHaveLength(1);
+    const [{ url, authorization, request }] = posted;
+    expect(url).toBe(`${GRANT_RELAY}/push`);
+    expect(authorization).toBeNull();
+    expect(request).toMatchObject({ platform: "ios", deviceToken: "ab".repeat(32), sandbox: true, kind: "alert", grant });
+  });
+
+  test("a relay of its own goes with the Mac's token, and no phone's grant", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(undefined, grant));
+    await pushes.notify(notification);
+    expect(posted.map(({ url, authorization, request }) => [url, authorization, request.grant])).toEqual([["https://push.example.com/push", "Bearer relay-token", undefined]]);
+  });
+
+  test("a phone with no grant yet gets nothing pushed while the Mac has no relay of its own, nor does any where there's no grant relay", async () => {
+    const { store, pushes, posted, post } = pushingHost(undefined, { ownRelay: false });
     pushes.register("phone", registration());
     await pushes.notify(notification);
     expect(posted).toHaveLength(0);
+    pushes.register("phone", registration(undefined, grant));
+    await new PushNotifications(store, { shownWaitMs: 10, post, grantRelay: null }).notify(notification);
+    expect(posted).toHaveLength(0);
+  });
+
+  test("pages and phones learn where the Mac pushes, and where phones get their grants", () => {
+    const { store, pushes } = pushingHost(undefined, { ownRelay: false });
+    expect(pushes.relaySetting()).toEqual({ address: null, tokenSet: false, grantRelay: GRANT_RELAY });
+    store.setPushRelay("https://push.example.com", "relay-token");
+    expect(pushes.relaySetting()).toEqual({ address: "https://push.example.com", tokenSet: true, grantRelay: GRANT_RELAY });
   });
 
   test("a phone the relay says is gone is forgotten, and one it failed for is kept", async () => {
@@ -233,8 +264,8 @@ describe("pushing notifications", () => {
   test("registering again replaces the phone's registration, keeping only its known fields", () => {
     const { store, pushes } = pushingHost();
     pushes.register("phone", registration());
-    pushes.register("phone", { ...registration(["finished"]), extra: "dropped" } as PushRegistration);
-    expect(store.pushRegistrations()).toEqual([{ deviceId: "phone", registration: registration(["finished"]) }]);
+    pushes.register("phone", { ...registration(["finished"], grant), extra: "dropped" } as PushRegistration);
+    expect(store.pushRegistrations()).toEqual([{ deviceId: "phone", registration: registration(["finished"], grant) }]);
   });
 });
 
@@ -276,5 +307,8 @@ describe("push settings", () => {
     expect(pushRegistrationProblem({ ...registration(), kinds: [3 as unknown as "question"] })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), key: Buffer.alloc(16).toString("base64url") })).not.toBeNull();
     expect(pushRegistrationProblem({ ...registration(), keyId: "not base64url!" })).not.toBeNull();
+    expect(pushRegistrationProblem(registration(undefined, grant))).toBeNull();
+    expect(pushRegistrationProblem(registration(undefined, "not a grant"))).not.toBeNull();
+    expect(pushRegistrationProblem({ ...registration(), grant: undefined as unknown as null })).not.toBeNull();
   });
 });

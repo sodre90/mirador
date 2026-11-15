@@ -19,6 +19,7 @@ function connectedAt(canvasAssetsOrigin: string): AppState {
     claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
     scriptProgram: "",
     editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
+    pushRelay: { address: null, tokenSet: false, grantRelay: null },
     avatar: null,
     canvasAssetsOrigin,
     agentsCanvasAssetsOrigin: agentsOrigin,
