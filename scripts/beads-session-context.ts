@@ -9,7 +9,7 @@ import { dirname } from "node:path";
 
 const REPOSITORY = dirname(import.meta.dir);
 
-const HOLD_FOR_ANY_TASK = ["commit-policy", "shared-index-commits", "no-backward-compat"];
+const HOLD_FOR_ANY_TASK = ["no-backward-compat"];
 
 const bd = async (...args: string[]) => {
   const { stdout, exitCode } = await $`bd -C ${REPOSITORY} ${args}`.nothrow().quiet();
