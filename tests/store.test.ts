@@ -922,6 +922,44 @@ describe("Store", () => {
     store.close();
   });
 
+  test("conversations from before they kept their agent's commands get them from their events once, leaving out lists from before a move to another agent", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
+    const { conversation } = seededStore();
+    const listing = (name: string) => ({
+      type: "acp" as const,
+      update: { sessionUpdate: "available_commands_update" as const, availableCommands: [{ name, description: name }] },
+    });
+    const before = new Store(path);
+    before.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    before.insertConversation({ ...conversation, id: "listed" });
+    before.insertConversation({ ...conversation, id: "moved", harness: "opencode" });
+    before.insertConversation({ ...conversation, id: "fresh" });
+    before.appendEvent("listed", listing("older"));
+    before.appendEvent("listed", listing("latest"));
+    before.appendEvent("moved", listing("claude-only"));
+    before.appendEvent("moved", { type: "profile-changed", profileName: "local", agent: "opencode" });
+    before.close();
+    const forgetCommands = (alsoTheFilling: boolean) => {
+      const old = new Database(path);
+      old.run("UPDATE conversations SET agent_commands = NULL, agent_commands_at = NULL");
+      if (alsoTheFilling) old.run("DELETE FROM settings WHERE key = 'agent_commands_filled'");
+      old.close();
+    };
+    const namesAfterOpening = (id: string, harness: Conversation["harness"] = "claude") => {
+      const store = new Store(path);
+      const names = store.latestAvailableCommands({ ...conversation, id, harness }).map(({ name }) => name);
+      store.close();
+      return names;
+    };
+
+    forgetCommands(true);
+    expect(namesAfterOpening("listed")).toEqual(["latest"]);
+    expect(namesAfterOpening("fresh"), "another conversation on the agent and profile lends its list").toEqual(["latest"]);
+    expect(namesAfterOpening("moved", "opencode"), "listed by the agent it left").toEqual([]);
+    forgetCommands(false);
+    expect(namesAfterOpening("listed"), "filled once, not at every start").toEqual([]);
+  });
+
   test("what was typed in a workspace's other conversations comes newest first, without other events or workspaces", () => {
     const { store, conversation } = seededStore();
     store.insertWorkspace({ id: "w2", name: "other", path: "/tmp/other", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });

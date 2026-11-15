@@ -41,6 +41,8 @@ const TYPED_IN_WORKSPACE_LIMIT = 100;
 
 /** A host made before hosts kept track was offered these when it was created, so one the user deleted since stays deleted. */
 const TEMPLATES_OFFERED_BEFORE_TRACKING = ["default-deep-pr-review"];
+/** Set once the conversations from before they kept their agent's commands have them filled in from their events. */
+const AGENT_COMMANDS_FILLED = "agent_commands_filled";
 
 const deviceColumns = "id, name, joined_at AS joinedAt, last_seen_at AS lastSeenAt";
 const joinRequestColumns = `id, secret_hash AS secretHash, name, from_address AS fromAddress, tailscale_user AS tailscaleUser,
@@ -380,6 +382,7 @@ export class Store {
     this.keyAppsByFolder();
     this.keyOpenAppsByConversation();
     if (!hasTurnTimes) this.fillTurnTimesFromEvents();
+    if (!this.setting(AGENT_COMMANDS_FILLED)) this.fillAgentCommandsFromEvents();
     this.shareSidebarOrder();
     this.handSavedChecklistsToThePlugin();
     this.handSavedWalkthroughsToThePlugin();
@@ -1890,6 +1893,30 @@ export class Store {
        AND json_extract(event, '$.fromMirador') IS NULL AND json_extract(event, '$.fromPlugin') IS NULL`,
     );
     fill("last_reply_at", "json_extract(event, '$.type') = 'turn-end' OR (json_extract(event, '$.type') = 'error' AND json_extract(event, '$.endsTurn') = 1)");
+  }
+
+  /**
+   * Conversations from before they kept their agent's commands: what appendEvent would have written, the latest list
+   * since the conversation last moved to another agent. Goes through events_by_type, so only the agent's updates are read.
+   */
+  private fillAgentCommandsFromEvents() {
+    this.db.run(
+      `WITH last_agent_change AS MATERIALIZED (
+         SELECT conversation_id, MAX(seq) AS seq FROM events
+         WHERE json_extract(event, '$.type') = 'profile-changed' AND json_extract(event, '$.agent') IS NOT NULL
+         GROUP BY conversation_id
+       ),
+       listed AS (
+         SELECT e.conversation_id, e.at, json_extract(e.event, '$.update.availableCommands') AS commands,
+                ROW_NUMBER() OVER (PARTITION BY e.conversation_id ORDER BY e.seq DESC) AS newest_first
+         FROM events e LEFT JOIN last_agent_change moved ON moved.conversation_id = e.conversation_id
+         WHERE json_extract(e.event, '$.type') = 'acp' AND json_extract(e.event, '$.update.sessionUpdate') = 'available_commands_update'
+           AND e.seq > COALESCE(moved.seq, -1)
+       )
+       UPDATE conversations SET agent_commands = listed.commands, agent_commands_at = listed.at
+       FROM listed WHERE listed.conversation_id = conversations.id AND listed.newest_first = 1 AND conversations.agent_commands IS NULL`,
+    );
+    this.setSetting(AGENT_COMMANDS_FILLED, "1");
   }
 
   private allocateSeq(conversationId: string) {

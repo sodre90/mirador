@@ -1,8 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true, runsUserStatusLine: true });
@@ -96,4 +97,21 @@ test("with the user's own statusline command showing, the context meter shows af
   await waitForTurnToEnd(page);
   await expect(meter).toHaveAttribute("data-hint", /\n\nThe last turn made 0 tool calls and left \d+ tokens in context\. /);
   await expect(statusline.locator(".statusline-terminal")).toHaveAttribute("aria-label", "my own statusline");
+});
+
+test("a conversation from before Mirador kept its agent's commands still offers Compact now, with no message sent since", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · opencode` });
+  await startConversation(page, { withModels: false });
+  await sendMessage(page, `WRITE ${JSON.stringify([{ usage: "150000 200000 0.5" }])}`);
+  await waitForTurnToEnd(page);
+  const meter = page.getByRole("region", { name: "Statusline" }).getByRole("button", { name: "Context 75% used" });
+  await expect(meter).toBeVisible();
+
+  await host.stop();
+  execFileSync("bun", [join(import.meta.dirname, "clear-agent-commands.ts"), join(host.dataDir, "state.sqlite")]);
+  await host.start();
+  await reloadFromRestartedHost(page);
+  await expect(meter, "Compact now is offered from the commands the agent listed before").toBeVisible();
 });
