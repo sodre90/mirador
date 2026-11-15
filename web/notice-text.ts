@@ -22,7 +22,7 @@ export function noticeText(about: NoticeAbout) {
     case "turn-ended":
       return words.turnEnded(stopReasonText(about.stopReason));
     case "turn-recap":
-      return words.turnRecap(formatDuration(about.workedMs), about.filesEdited);
+      return words.turnRecap(formatDuration(about.tookMs), about.filesEdited);
     case "signed-in":
       return words.signedIn;
     case "sign-in-unfinished":

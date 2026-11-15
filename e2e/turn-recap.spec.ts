@@ -37,7 +37,7 @@ function turnEndsHeardOn(page: Page) {
 
 const notices = (page: Page) => page.locator(".timeline:visible .notice-line");
 
-test("a turn that worked for minutes ends with a line saying how long it worked and how many files it edited", async ({ page }) => {
+test("a turn that took minutes ends with a line saying how long it took and how many files it edited", async ({ page }) => {
   const turnEnds = turnEndsHeardOn(page);
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
@@ -52,7 +52,7 @@ test("a turn that worked for minutes ends with a line saying how long it worked 
     await waitForTurnToEnd(page);
     await expect.poll(() => turnEnds.length).toBe(2);
     expect(turnEnds[1]!.filesEdited).toBeUndefined();
-    await expect(notices(page).filter({ hasText: "Worked" })).toHaveCount(0);
+    await expect(notices(page).filter({ hasText: "Took" })).toHaveCount(0);
   });
 
   await test.step("a turn of 18 minutes that edited 9 files says so under its reply, and the short turn after it says nothing", async () => {
@@ -60,9 +60,9 @@ test("a turn that worked for minutes ends with a line saying how long it worked 
     execFileSync("bun", [join(import.meta.dirname, "seed-turn-recap.ts"), join(host.dataDir, "state.sqlite"), conversationId, "18", "9"]);
     await host.start();
     await reloadFromRestartedHost(page);
-    await expect(notices(page).filter({ hasText: "Worked" })).toHaveText(["Worked 18 min · 9 files edited"]);
+    await expect(notices(page).filter({ hasText: "Took" })).toHaveText(["Took 18 min · 9 files edited"]);
     const entries = page.locator(".timeline:visible .timeline-entry");
-    const recapIndex = await entries.evaluateAll((all) => all.findIndex((entry) => entry.textContent?.includes("Worked 18 min")));
+    const recapIndex = await entries.evaluateAll((all) => all.findIndex((entry) => entry.textContent?.includes("Took 18 min")));
     await expect(entries.nth(recapIndex - 1)).toContainText("The checkout is refactored.");
     await expect(entries.nth(recapIndex + 1)).toContainText("thanks");
     await expect(entries.last()).toContainText("You're welcome.");
