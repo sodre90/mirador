@@ -792,8 +792,10 @@ describe("CanvasPlugins", () => {
   test("a conversation a plugin's tool started gets no tools of a plugin its own profile turned off either", async () => {
     const store = storeWithConversation();
     store.saveProfile({ id: "main", name: "Personal", harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: ["board"], createdAt: 1 });
-    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main", startedBy: { conversationId: "c0", plugin: "board", reply: null, dismissed: false } });
+    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
+    store.recordStartedBy("c1", { conversationId: "c0", plugin: "board" });
     const { plugins } = await canvasPluginHost(FIXTURES, store);
+    expect(store.findConversation("c1")?.startedBy).toMatchObject({ conversationId: "c0", plugin: "board" });
     expect(plugins.guidanceFor("c1").toolNames).toEqual([]);
   });
 

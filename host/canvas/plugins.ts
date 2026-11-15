@@ -667,8 +667,11 @@ export class CanvasPlugins {
     }
   }
 
-  /** Puts every plugin's tools on a conversation's canvas server; what a tool throws reaches the agent as a tool error. */
-  /** The tools of the plugins the conversation's profile has on; the conversations on one opencode process share its profile, so the calling one's are the same. */
+  /**
+   * Puts on the conversation's canvas server the tools of the plugins its profile has on, and plugin_load for those waiting to
+   * be loaded; what a tool throws reaches the agent as a tool error. The conversations on one opencode process share its
+   * profile, so the calling one's tools are the same.
+   */
   registerTools(server: McpServer, conversationId: string, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
     const conversation = this.store.findConversation(conversationId);
     const plugins = this.pluginsOf(conversationId);
