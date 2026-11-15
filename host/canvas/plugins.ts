@@ -227,7 +227,7 @@ export class CanvasPlugins {
 
   /** As it is when asked: a conversation started after the catalog came, or after an install, hears of it so. */
   get guidance(): CanvasPluginGuidance {
-    return this.guidanceOf(this.plugins, loadsOnRequest);
+    return this.withOfferedPlugins(this.guidanceOf(this.plugins, loadsOnRequest));
   }
 
   /** Each plugin waiting to be loaded is told by its summary, and its use-often line says to load it first; the others by their instructions. */
@@ -241,13 +241,18 @@ export class CanvasPlugins {
         ...(plugins.some(loadsOnRequest) ? [PLUGIN_LOAD_TOOL] : []),
         ...(offered.length > 0 ? [PLUGIN_INSTALL_TOOL] : []),
       ],
-      instructions: [...loaded.flatMap(({ host }) => host.guidance?.instructions ?? []), ...offeredPluginsGuidance(offered)],
+      instructions: loaded.flatMap(({ host }) => host.guidance?.instructions ?? []),
       often: [
         ...loaded.flatMap(({ host }) => host.guidance?.often ?? []),
         ...waiting.flatMap(({ manifest, host }) => (host.guidance?.often ? [`${host.guidance.often} Load the ${manifest.name} plugin with ${PLUGIN_LOAD_TOOL} first.`] : [])),
       ],
       onRequest: waiting.map((plugin) => `- ${plugin.manifest.name}: ${summaryOf(plugin)}`),
     };
+  }
+
+  /** The official plugins not installed come last: they are the lines to lose where an agent cuts the instructions short. */
+  private withOfferedPlugins(guidance: CanvasPluginGuidance): CanvasPluginGuidance {
+    return { ...guidance, instructions: [...guidance.instructions, ...offeredPluginsGuidance(this.catalog?.notInstalled() ?? [])] };
   }
 
   /** The plugins the profile's conversations go without: those it turned off, and those whose switch reads off for it. */
@@ -277,13 +282,19 @@ export class CanvasPlugins {
     const conversation = this.store.findConversation(conversationId);
     const plugins = this.pluginsOf(conversationId);
     const guidance = this.guidanceOf(plugins, (plugin) => !this.getsToolsFromStart(plugin, conversation));
-    if (conversation?.startedBy) return guidance;
+    if (conversation?.startedBy) return this.withOfferedPlugins(guidance);
     const added = plugins.flatMap((plugin) => this.addedGuidanceOf(plugin, conversationId) ?? []);
-    return {
+    return this.withOfferedPlugins({
       ...guidance,
-      instructions: [...guidance.instructions, ...added.flatMap(({ instructions }) => instructions ?? [])],
+      instructions: [...added.flatMap(({ instructions }) => instructions ?? []), ...guidance.instructions],
       often: [...guidance.often, ...added.flatMap(({ often }) => often ?? [])],
-    };
+    });
+  }
+
+  /** The plugins that load on request whose tools the conversation doesn't get from the start: the same for its whole session, as plugin_load is loaded up front. */
+  private waitingPlugins(conversationId: string): CanvasPlugin[] {
+    const conversation = this.store.findConversation(conversationId);
+    return this.pluginsOf(conversationId).filter((plugin) => !this.getsToolsFromStart(plugin, conversation));
   }
 
   /** What the plugin adds for the conversation's profile, as its guidanceFor says. */
@@ -661,7 +672,7 @@ export class CanvasPlugins {
   registerTools(server: McpServer, conversationId: string, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
     const conversation = this.store.findConversation(conversationId);
     const plugins = this.pluginsOf(conversationId);
-    if (plugins.some((each) => !this.getsToolsFromStart(each, conversation))) this.registerLoadTool(server, plugins.filter(loadsOnRequest), callingConversation, reviewFree);
+    this.registerLoadTool(server, this.waitingPlugins(conversationId), callingConversation, reviewFree);
     for (const plugin of plugins.filter((each) => this.hasToolsOf(each, conversation))) {
       for (const [name, tool] of Object.entries(plugin.host.tools)) {
         const loading = tool.onDemand || loadsOnRequest(plugin) ? {} : { _meta: loadedUpFront };
@@ -677,11 +688,11 @@ export class CanvasPlugins {
     }
   }
 
-  private registerLoadTool(server: McpServer, onRequest: CanvasPlugin[], callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations }) {
-    if (onRequest.length === 0) return;
+  private registerLoadTool(server: McpServer, waiting: CanvasPlugin[], callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations }) {
+    if (waiting.length === 0) return;
     const input = {
       type: "object",
-      properties: { plugin: { type: "string", enum: onRequest.map(({ manifest }) => manifest.name), description: "The plugin's name, as the canvas instructions list it." } },
+      properties: { plugin: { type: "string", enum: waiting.map(({ manifest }) => manifest.name), description: "The plugin's name, as the canvas instructions list it." } },
       required: ["plugin"],
     };
     server.registerTool(
@@ -807,9 +818,9 @@ export class CanvasPlugins {
 
   /** The agent's plugin_load: the plugin's instructions and the names of its tools, which are in the agent's tool list by the time it reads them. */
   private async load(conversationId: string, name: string): Promise<string> {
-    const onRequest = this.pluginsOf(conversationId).filter(loadsOnRequest);
-    const plugin = onRequest.find(({ manifest }) => manifest.name === name);
-    if (!plugin) throw new Error(`No plugin named ${name} loads on request here; the ones that do are ${onRequest.map(({ manifest }) => manifest.name).join(", ") || "none"}.`);
+    const waiting = this.waitingPlugins(conversationId);
+    const plugin = waiting.find(({ manifest }) => manifest.name === name);
+    if (!plugin) throw new Error(`No plugin named ${name} loads on request here; the ones that do are ${waiting.map(({ manifest }) => manifest.name).join(", ") || "none"}.`);
     await this.bringTools(plugin, conversationId);
     const tools = Object.keys(plugin.host.tools);
     return [

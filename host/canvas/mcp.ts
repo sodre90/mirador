@@ -3,7 +3,16 @@ import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
 import { BACKGROUNDED_COMMAND_NEEDS_NO_WAIT, JobWaitRefused, jobWaitToolDescription } from "../job-waits.ts";
-import { canvasInstructions, canvasUseGuidance, namesItsOwnConversation, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "./guidance.ts";
+import {
+  canvasInstructions,
+  canvasUseGuidance,
+  getsPluginLinesInSystemPrompt,
+  namesItsOwnConversation,
+  NO_CANVAS_PLUGINS,
+  titleGuidance,
+  withoutPluginLines,
+  type CanvasPluginGuidance,
+} from "./guidance.ts";
 import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
@@ -92,6 +101,16 @@ const taglineIn = (catalog: PluginCatalog | null) => (app: string) => catalog?.a
 const withAppTools = (guidance: CanvasPluginGuidance, apps: AppDocuments | null, catalog: PluginCatalog | null): CanvasPluginGuidance =>
   hasApps(apps) ? { ...guidance, instructions: [...guidance.instructions, appToolsGuidance(apps, taglineIn(catalog))] } : guidance;
 
+const CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS = 4096;
+let warnedOfCutInstructions = false;
+
+/** Once a run, as the canvas server is built for each request. */
+function warnOnceWhenClaudeCodeCuts(harness: HarnessId | undefined, instructions: string) {
+  if (warnedOfCutInstructions || harness !== "claude" || instructions.length <= CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS) return;
+  warnedOfCutInstructions = true;
+  console.warn(`The canvas server's instructions run to ${instructions.length} characters, and Claude Code keeps only the first ${CLAUDE_CODE_KEEPS_OF_INSTRUCTIONS}.`);
+}
+
 /**
  * Copilot has no system prompt Mirador can append to, so the canvas use guidance Claude Code, pi and Codex get there
  * comes in the canvas server's instructions.
@@ -117,17 +136,11 @@ function buildCanvasServer(
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
-  const server = new McpServer(
-    { name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION },
-    {
-      instructions: canvasServerInstructions(
-        harness,
-        store?.canvasUse() ?? "often",
-        assetsOrigin,
-        withAppTools(canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS, apps, catalog),
-      ),
-    },
-  );
+  const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
+  const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
+  const instructions = canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
+  warnOnceWhenClaudeCodeCuts(harness, instructions);
+  const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
   /**
    * The conversations on one opencode agent process each add their canvas server under the same name, and opencode keeps

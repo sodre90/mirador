@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
 import { cpSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,6 +20,8 @@ import board from "./fixtures/canvas-plugins/board/host.ts";
 const FIXTURES = join(import.meta.dir, "fixtures", "canvas-plugins");
 
 const setUp = () => canvasPluginHost(FIXTURES);
+
+const CLAUDE_CODE_KEEPS = 4096;
 
 describe("a plugin that loads on request", () => {
   const SUMMARY = "cards the user presses and steps the agent ticks off, when a card says it better than words.";
@@ -115,6 +117,28 @@ describe("a plugin that loads on request", () => {
     expect(plugins.guidanceFor("c1").onRequest).toEqual([]);
   });
 
+  test("plugin_load takes only the plugins whose tools the conversation doesn't have from the start, so its schema stays the same all session", async () => {
+    const folder = mkdtempSync(join(tmpdir(), "canvas-plugins-"));
+    cpSync(join(FIXTURES, "board"), join(folder, "board"), { recursive: true });
+    cpSync(join(FIXTURES, "board", "canvas.js"), join(folder, "notes", "canvas.js"));
+    writeFileSync(join(folder, "notes", "plugin.json"), JSON.stringify({ name: "notes", title: "Notes", version: "1.0.0", api: 9, canvas: { host: "host.ts", view: "canvas.js" } }));
+    writeFileSync(
+      join(folder, "notes", "host.ts"),
+      `export default { items: {}, tools: { take_note: { description: "Take a note.", input: { type: "object", properties: {} }, run: () => "Noted." } }, guidance: { instructions: "- take_note: take a note.", summary: "notes; when the user asks for one." } };`,
+    );
+    const store = storeWithConversation();
+    store.recordStartedBy("c1", { conversationId: "c0", plugin: "board" });
+    const { callTool, mcpRequest, plugins } = await canvasPluginHost(folder, store, loadingOnRequest);
+    const loadTool = (await toolsListed(mcpRequest)).find(({ name }) => name === "plugin_load") as unknown as { inputSchema: { properties: { plugin: { enum: string[] } } } };
+
+    expect(loadTool.inputSchema.properties.plugin.enum).toEqual(["notes"]);
+    expect(plugins.guidanceFor("c1").onRequest).toEqual(["- notes: notes; when the user asks for one."]);
+    expect((await callTool("plugin_load", { plugin: "board" })).isError).toBe(true);
+    await callTool("plugin_load", { plugin: "notes" });
+    const reloaded = (await toolsListed(mcpRequest)).find(({ name }) => name === "plugin_load") as unknown as { inputSchema: { properties: { plugin: { enum: string[] } } } };
+    expect(reloaded.inputSchema.properties.plugin.enum, "a loaded plugin stays listed").toEqual(["notes"]);
+  });
+
   test("plugin_load takes only the names of the plugins that load on request", async () => {
     const { callTool, mcpRequest } = await setUpOnRequest();
     const loadTool = (await toolsListed(mcpRequest)).find(({ name }) => name === "plugin_load") as unknown as { inputSchema: { properties: { plugin: { enum: string[] } } } };
@@ -144,8 +168,61 @@ describe("CanvasPlugins", () => {
     expect(claudeSessionMeta("often", { canvasPlugins: guidance }).claudeCode.options.allowedTools).toContain("mcp__canvas__show_card");
   });
 
+  test("Claude Code gets the plugins' lines in its system prompt, however often Settings ask for the canvas, and not in the canvas server's instructions, which keep the app tools", async () => {
+    const apps = { installed: () => [{ name: "counter", title: "Counter" }] } as unknown as AppDocuments;
+    const store = storeWithConversation();
+    const { plugins, mcpRequest } = await canvasPluginHost(FIXTURES, store, {}, { apps, readsTheStore: true });
+    const instructionsOfServer = async () => (await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } })).instructions as string;
+
+    const instructions = await instructionsOfServer();
+    expect(instructions).toContain("so you can fix them.");
+    expect(instructions).toContain("\n- app_open: open an app the user installed (counter (Counter))");
+    expect(instructions).not.toContain("show_card");
+    for (const canvasUse of ["often", "as-needed"] as const) {
+      expect(claudeSessionMeta(canvasUse, { canvasPlugins: plugins.guidanceFor("c1") }).systemPrompt.append).toContain(
+        "# Canvas plugins\nMirador's plugins add these to the canvas server, whose tools are named mcp__canvas__<tool>.\n\nMore canvas tools:\n- show_card: show a card the user can press.",
+      );
+    }
+    expect(claudeSessionMeta("as-needed").systemPrompt.append, "without plugins there is no section for them").not.toContain("# Canvas plugins");
+
+    expect(instructions.length, "what is left fits what Claude Code keeps of a server's instructions, with room for more apps").toBeLessThan(CLAUDE_CODE_KEEPS - 500);
+
+    store.updateConversation({ ...store.findConversation("c1")!, harness: "opencode" });
+    expect(await instructionsOfServer(), "other agents still find them in the server's instructions").toContain("- show_card: show a card the user can press.");
+  });
+
+  test("the host warns once when a Claude conversation's canvas server instructions grow past what Claude Code keeps", async () => {
+    const manyApps = Array.from({ length: 120 }, (_, index) => ({ name: `app-${index}`, title: `An app with a long title, number ${index}` }));
+    const apps = { installed: () => manyApps } as unknown as AppDocuments;
+    const { mcpRequest } = await canvasPluginHost(FIXTURES, storeWithConversation(), {}, { apps, readsTheStore: true });
+    const warn = spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      for (const _ of [1, 2]) await mcpRequest("initialize", { protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "test", version: "1" } });
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(String(warn.mock.calls[0]?.[0])).toContain("Claude Code keeps only the first 4096.");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  test("a profile's own plugin lines come first and the official plugins on offer last, the ones to lose where an agent cuts the instructions short", async () => {
+    const store = storeWithConversation();
+    const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
+      store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), pluginsOff: [], createdAt: 1 });
+    profile("local", "Qwen 27b");
+    profile("main", "Personal", { board: { "hand-over-to": "local" } });
+    store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
+    const { plugins } = await canvasPluginHost(FIXTURES, store);
+    const offered = [{ name: "media", title: "Media", description: "Edit a video.", recommendWhen: "the user edits a video", repo: "https://example.com/media.git" }];
+    plugins.offersFrom({ notInstalled: () => offered } as unknown as PluginCatalog);
+
+    const { instructions } = plugins.guidanceFor("c1");
+    expect(instructions.slice(0, 2)).toEqual(["- hand_over: hand tasks to Qwen 27b without asking.", "- show_card: show a card the user can press."]);
+    expect(instructions.at(-2)).toStartWith("- plugin_install: official Mirador plugins");
+    expect(instructions.at(-1)).toBe("  - media (Media): Edit a video. Recommend it when the user edits a video.");
+  });
+
   test("how pages render comes before the plugins' lines, inside what Claude Code keeps of a server's instructions however many plugins there are", () => {
-    const CLAUDE_CODE_KEEPS = 4096;
     const manyPlugins = { toolNames: [], often: [], instructions: Array.from({ length: 40 }, (_, index) => `- tool_${index}: ${"what it is for ".repeat(10)}`) };
     const instructions = canvasInstructions("http://127.0.0.1:4601", manyPlugins);
     expect(instructions.length).toBeGreaterThan(CLAUDE_CODE_KEEPS);

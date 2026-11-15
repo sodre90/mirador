@@ -48,13 +48,14 @@ export function storeWithConversation(path = ":memory:", worktree?: Conversation
 
 /**
  * Conversation c1's canvas server with the canvas plugins of `pluginsFolder`, and nothing else behind it. `hosts` stand
- * in for the host code of plugins by name; the prompts plugins send are kept in `prompts`. `apps` and `catalog` give it the app tools and plugin_install.
+ * in for the host code of plugins by name; the prompts plugins send are kept in `prompts`. `apps` and `catalog` give it the app tools and plugin_install;
+ * `readsTheStore` lets the canvas server read the conversation, its harness say.
  */
 export async function canvasPluginHost(
   pluginsFolder: string,
   store = storeWithConversation(),
   hosts: Record<string, CanvasHost> = {},
-  { apps = null, catalog = null }: { apps?: AppDocuments | null; catalog?: PluginCatalog | null } = {},
+  { apps = null, catalog = null, readsTheStore = false }: { apps?: AppDocuments | null; catalog?: PluginCatalog | null; readsTheStore?: boolean } = {},
 ) {
   const published: ServerMessage[] = [];
   const toPluginWindows: ServerMessage[] = [];
@@ -73,7 +74,7 @@ export async function canvasPluginHost(
   );
   const prompts: { conversationId: string; text: string; afterTurn: boolean; fromPlugin?: string }[] = [];
   plugins.sendsPromptsWith(async (conversationId, text, options) => void prompts.push({ conversationId, text, ...options }));
-  const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", apps, plugins, catalog);
+  const endpoints = new CanvasMcpEndpoints({} as CanvasService, {} as ConversationService, "http://127.0.0.1:4601", apps, plugins, catalog, readsTheStore ? store : null);
   const items = () => store.listCanvasItems("c1") as PluginCanvasItem[];
 
   const mcpRequest = async (method: string, params: Record<string, unknown>) => {

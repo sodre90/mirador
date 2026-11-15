@@ -37,6 +37,20 @@ const pluginsOnRequest = (lines: string[] = []) =>
     : `\n\nPlugins that load on request. When one fits what you or the user are doing, call ${PLUGIN_LOAD_TOOL} with its name: it answers with the plugin's instructions and puts its tools in your tool list.${linesAfter(lines)}`;
 
 /**
+ * Claude Code keeps only the first 4,096 characters of an MCP server's instructions, so its conversations get the plugins'
+ * lines in their system prompt, which it doesn't cut, rather than in the canvas server's instructions.
+ */
+export const getsPluginLinesInSystemPrompt = (harness: HarnessId | undefined) => harness === "claude";
+
+export const withoutPluginLines = (plugins: CanvasPluginGuidance): CanvasPluginGuidance => ({ ...plugins, instructions: [], onRequest: [] });
+
+/** The plugins' lines of the canvas server's instructions, for the agents that get them in their system prompt instead. */
+export function canvasPluginInstructions(plugins = NO_CANVAS_PLUGINS) {
+  const lines = `${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins.instructions)}`;
+  return lines === "" ? "" : `# Canvas plugins\nMirador's plugins add these to the canvas server, whose tools are named mcp__canvas__<tool>.${lines}`;
+}
+
+/**
  * The canvas MCP server's instructions: how its tools are meant to be used, and how pages render. Claude Code keeps only
  * their first 4,096 characters, so the plugins' lines come last, where a long list of them can't push out how pages render,
  * and the short lines of the plugins that load on request come before the longer ones of those sent up front.

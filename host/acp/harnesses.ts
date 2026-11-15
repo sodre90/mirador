@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile } from "../../shared/model.ts";
-import { canvasInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
+import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
@@ -281,7 +281,7 @@ function canvasPromptAppendix(canvasUse: CanvasUse, canvasAssetsOrigin: string, 
  */
 export function claudeSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true } = {}) {
   return {
-    systemPrompt: { append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), jobWaitGuidance()].join("\n\n") },
+    systemPrompt: { append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), canvasPluginInstructions(canvasPlugins), jobWaitGuidance()].filter(Boolean).join("\n\n") },
     claudeCode: {
       options: {
         ...(withoutUserSettings && { settingSources: ["project", "local"] }),
