@@ -81,6 +81,12 @@ test("conversations, workspaces, the canvas and the dialogs are all reachable fr
   await palette.press("Enter");
   await expectSelected(page, inSecondProject);
 
+  const canvasBar = page.locator(".canvas-header:visible");
+  await page.keyboard.press(`${primary}+Shift+ArrowRight`);
+  await expect(canvasBar.getByRole("button", { name: "More" })).toBeFocused();
+  await page.keyboard.press(`${primary}+Shift+ArrowLeft`);
+  await expect.poll(() => focusedTag(page)).toBe("TEXTAREA");
+
   await callCanvasTool(host, inSecondProject, "show", { title: "Page", html: "<p>canvas page</p>" });
   await expect(page.locator(".canvas-panel:visible .canvas-frame.show iframe")).toBeVisible();
   await page.keyboard.press(`${primary}+Backslash`);
@@ -89,6 +95,13 @@ test("conversations, workspaces, the canvas and the dialogs are all reachable fr
   await expect(page.locator(".canvas-panel:visible .canvas-frame.show iframe")).toBeVisible();
   await expect.poll(() => focusedTag(page)).toBe("IFRAME");
   await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").getByText("canvas page")).toBeVisible();
+  await page.keyboard.press(`${primary}+Shift+ArrowLeft`);
+  await expect.poll(() => focusedTag(page)).toBe("TEXTAREA");
+  await canvasBar.locator(".changes-toggle").click();
+  await page.keyboard.press(`${primary}+Shift+ArrowRight`);
+  await expect(canvasBar.locator(".changes-toggle")).toBeFocused();
+  await canvasBar.locator(".changes-toggle").click();
+  await expect(page.locator(".canvas-panel:visible .canvas-frame.show iframe")).toBeVisible();
   await page.keyboard.press(`${primary}+Shift+ArrowLeft`);
   await expect.poll(() => focusedTag(page)).toBe("TEXTAREA");
 

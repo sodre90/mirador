@@ -46,13 +46,21 @@ export function startRenamingOpenConversation() {
   onScreen<HTMLElement>('.chat-header [data-rename-trigger="click"]')?.click();
 }
 
-/** The canvas takes focus on the control the user most likely wants: an answer button, else the page itself. */
+/**
+ * The canvas takes focus on the control the user most likely wants: an answer button, else the page itself, else the
+ * bar's tab for what is in front, else the bar's ⋯ button, as when the bar has folded its tabs into it.
+ */
+const CANVAS_FOCUS_ORDER = [
+  ".canvas-body .choose",
+  ".canvas-body iframe",
+  '.canvas-header :is(.page-tab, .changes-toggle, .checklist-toggle, .app-toggle)[aria-pressed="true"]:not(:disabled)',
+  ".canvas-header .canvas-more .bar-menu-toggle",
+];
+
 export function focusPane(pane: "chat" | "canvas") {
   if (pane === "chat") return onScreen<HTMLElement>(".composer textarea, .composer .formatted-box")?.focus();
   const panel = onScreen(".canvas-panel");
-  const target =
-    panel?.querySelector<HTMLElement>(".canvas-body .choose") ??
-    panel?.querySelector<HTMLElement>(".canvas-body iframe") ??
-    panel?.querySelector<HTMLElement>(".canvas-tab.active");
+  if (!panel) return;
+  const target = CANVAS_FOCUS_ORDER.flatMap((selector) => [...panel.querySelectorAll<HTMLElement>(selector)]).find((element) => element.checkVisibility());
   target?.focus();
 }
