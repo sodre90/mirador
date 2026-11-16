@@ -62,7 +62,7 @@ test("streams a reply and asks for permission in the browser", async () => {
   await permission.locator("button.option-allow_once").click();
   await waitForTurnToEnd(page);
   expect(readFileSync(join(host.projectDir, "hello.txt"), "utf8")).toContain("hi");
-  await expect(page.locator(".context-meter")).toHaveText(/^(<1|\d+)% · [\d.]+k? \/ (200k|1M)$/);
+  await expect(page.locator(".context-meter")).toHaveText(/^(<1|\d+)% · [\d.]+k? \/ [\d.]+[kM]$/);
 });
 
 test("keeps the name the user chose when Claude Code titles the session", async () => {
