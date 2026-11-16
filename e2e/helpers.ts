@@ -326,6 +326,9 @@ export async function answerCanvasQuestion(page: Page, label: string) {
 
 export const canvasMoreMenu = (page: Page) => page.getByRole("menu", { name: "More of the canvas bar" });
 
+/** The ⋯ menu's find entry as it reads, with its keys at the end. */
+export const findOnPageEntryText = async (page: Page) => `Find on this page${(await primaryModifier(page)) === "Meta" ? "⌘F" : "Ctrl+F"}`;
+
 /** The canvas bar's ⋯ menu, which holds what is done with what the canvas shows: find, export, its own window and clear, and what a narrow bar folds. */
 export async function openCanvasMore(page: Page) {
   await page.locator(".canvas-header:visible").getByRole("button", { name: "More" }).click();

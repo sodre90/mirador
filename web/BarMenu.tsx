@@ -47,6 +47,8 @@ export interface BarMenuEntry {
   /** For an entry that turns something on or off: whether it is on. */
   checked?: boolean;
   separatorBefore?: boolean;
+  /** The keys that do the same, shown at the entry's end. */
+  shortcut?: string;
 }
 
 /** A button in a pane's bar that opens a menu under it. */
@@ -106,6 +108,7 @@ export function BarMenu({
                   onClick={() => choose(entry)}
                 >
                   {entry.label}
+                  {entry.shortcut && <kbd aria-hidden="true">{entry.shortcut}</kbd>}
                 </button>
               </li>
             </Fragment>

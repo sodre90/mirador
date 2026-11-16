@@ -1,7 +1,7 @@
 import { cpSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, findOnPageEntryText, signIn, startConversation } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -71,7 +71,7 @@ test("the canvas bar holds what the canvas shows as tabs and what is done with a
     ]);
     await more(page).click();
     await expect(moreMenu(page).locator("button")).toHaveText([
-      "Find on this page",
+      await findOnPageEntryText(page),
       "Copy as image",
       "Copy HTML",
       "Ask agent for Markdown",
@@ -124,7 +124,7 @@ test("the canvas bar holds what the canvas shows as tabs and what is done with a
       "Changes",
       "Checklist 0/1",
       "Point and ask",
-      "Find on this page",
+      await findOnPageEntryText(page),
       "Copy as image",
       "Copy HTML",
       "Ask agent for Markdown",

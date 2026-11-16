@@ -1,7 +1,7 @@
 import { appendFileSync, cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseFromCanvasMore, createProfile, openCanvasMore, primaryModifier, sendMessage, signIn } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, createProfile, openCanvasMore, primaryModifier, sendMessage, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -90,8 +90,10 @@ test("the user finds text on the page the agent showed, from the canvas bar's �
   await callCanvasTool(host, conversationId, "show", { title: "Lighthouse log", html: pageHtml });
   await expect(canvasPage(page).locator("h1")).toHaveText("Lighthouse log");
 
-  await test.step("the ⋯ menu opens the bar; typing finds three matches, Enter steps to the next, Shift+Enter back, and a word that is not there says so", async () => {
-    await chooseFromCanvasMore(page, findOnPage);
+  await test.step("the ⋯ menu's find shows its shortcut and opens the bar; typing finds three matches, Enter steps to the next, Shift+Enter back, and a word that is not there says so", async () => {
+    const findEntry = (await openCanvasMore(page)).getByRole("menuitem", { name: findOnPage, exact: true });
+    await expect(findEntry.locator("kbd")).toHaveText((await primaryModifier(page)) === "Meta" ? "⌘F" : "Ctrl+F");
+    await findEntry.click();
     await expect(findBar(page)).toBeVisible();
     await expect(findInput(page)).toBeFocused();
     await findInput(page).fill("keeper");

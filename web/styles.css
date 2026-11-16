@@ -4675,6 +4675,13 @@ button.jump-to-latest svg {
   padding-left: 10px;
 }
 
+.bar-menu [role="menu"] button:has(kbd) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .bar-menu [role="menu"] button[aria-checked="true"]::before {
   content: "✓";
   position: absolute;

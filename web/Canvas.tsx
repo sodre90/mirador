@@ -887,7 +887,7 @@ export function CanvasPanel({
       ]
     : [];
   const pageActions: BarMenuEntry[] = [
-    ...(shownPage ? [{ label: words.bar.findOnPage, onChoose: pageFind.openFind }] : []),
+    ...(shownPage ? [{ label: words.bar.findOnPage, shortcut: shortcutKeys().find, onChoose: pageFind.openFind }] : []),
     ...pageExport.entries,
     ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
   ];

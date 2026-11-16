@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseFromCanvasMore, openCanvasMore, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseFromCanvasMore, findOnPageEntryText, openCanvasMore, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 /** Agents are told the public canvas address, but this browser reaches the host locally and draws pages from the local one. */
@@ -155,7 +155,7 @@ test("a page the agent showed can be copied as an image or HTML, downloaded, and
     });
     await page.reload();
     await expect((await openCanvasMore(page)).getByRole("menuitem")).toHaveText([
-      "Find on this page",
+      await findOnPageEntryText(page),
       "Copy as image",
       "Copy HTML",
       "Ask agent for Markdown",
