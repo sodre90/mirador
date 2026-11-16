@@ -405,6 +405,15 @@ describe("job wait guidance", () => {
     }
   });
 
+  test("on every platform, in the system prompt and the tool alike, says the follow tab tails the log and a pipe shows the user no log", () => {
+    for (const platform of ["darwin", "linux", "win32"] as const) {
+      for (const text of [jobWaitGuidance(platform), jobWaitToolDescription(platform)]) {
+        expect(text).toContain("Mirador's follow tab tails that file, so the user reads the job's output as it runs");
+        expect(text).toContain("shows the user a running process with no log");
+      }
+    }
+  });
+
   test("on Windows, asks for the job's Windows pid, which Git Bash's $! is not, in the system prompt and the tool alike", () => {
     for (const describe of [jobWaitGuidance, jobWaitToolDescription]) {
       expect(describe("win32")).toContain("Mirador needs the Windows pid of a job on this machine, which `$!` in Git Bash is not: read it a second after the start, as in `sleep 1; cat /proc/$!/winpid`.");
