@@ -70,6 +70,9 @@ export const shell: Messages["shell"] = {
     removeArmed: "Entfernen?",
     deleteConversation: "Unterhaltung löschen",
     deleteArmed: "Löschen?",
+    deleteOlder: "Ältere Unterhaltungen löschen",
+    deleteAll: "Alle löschen",
+    deleteOlderArmed: (count) => `${count} löschen?`,
     newConversationLabel: "+ Neue Unterhaltung",
     continueSessionLabel: "Sitzung fortsetzen…",
     workspaceMenu: "Menü des Arbeitsbereichs",
@@ -116,6 +119,16 @@ export const shell: Messages["shell"] = {
       ),
     keeps: "Der Projektordner und die in den Worktrees gemachten Commits bleiben erhalten.",
     removeAnyway: "Trotzdem entfernen",
+  },
+  olderDelete: {
+    title: "Die älteren Unterhaltungen und ihre Worktrees löschen?",
+    loses: (count) =>
+      plural(
+        count,
+        "Ihre Worktrees enthalten 1 nicht committete Datei, die mit ihnen gelöscht wird.",
+        `Ihre Worktrees enthalten ${count} nicht committete Dateien, die mit ihnen gelöscht werden.`,
+      ),
+    deleteAnyway: "Trotzdem löschen",
   },
   sessions: {
     label: "Sitzung fortsetzen",

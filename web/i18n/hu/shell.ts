@@ -68,6 +68,9 @@ export const shell: Messages["shell"] = {
     removeArmed: "Eltávolítod?",
     deleteConversation: "Beszélgetés törlése",
     deleteArmed: "Törlöd?",
+    deleteOlder: "Régebbi beszélgetések törlése",
+    deleteAll: "Összes törlése",
+    deleteOlderArmed: (count) => `${count} törlése?`,
     newConversationLabel: "+ Új beszélgetés",
     continueSessionLabel: "Munkamenet folytatása…",
     workspaceMenu: "Munkaterület menüje",
@@ -105,6 +108,11 @@ export const shell: Messages["shell"] = {
     loses: (count) => `A worktree-jeiben legalább ${count} nem commitolt fájl van, ez is törlődik velük.`,
     keeps: "A projektkönyvtár és a worktree-kben készült commitok megmaradnak.",
     removeAnyway: "Eltávolítás mindenképp",
+  },
+  olderDelete: {
+    title: "Törlöd a régebbi beszélgetéseket és a worktree-jeiket?",
+    loses: (count) => `A worktree-jeikben ${count} nem commitolt fájl van, ez is törlődik velük.`,
+    deleteAnyway: "Törlés mindenképp",
   },
   sessions: {
     label: "Munkamenet folytatása",

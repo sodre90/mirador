@@ -9230,7 +9230,8 @@ span.voice-engine-problem {
   margin: 2px 0 0;
 }
 
-.later-group > button {
+.later-group > button,
+.older-heading > .older-toggle {
   display: flex;
   width: 100%;
   gap: 6px;
@@ -9248,6 +9249,33 @@ span.voice-engine-problem {
 
 .later-group li {
   opacity: 0.75;
+}
+
+.older-heading {
+  display: flex;
+  align-items: center;
+}
+
+.older-heading .older-delete {
+  flex: none;
+  border: none;
+  margin-right: 4px;
+  padding: 1px 6px;
+  font-size: calc(11px * var(--font-scale));
+}
+
+.older-heading .older-delete:not(.armed) {
+  visibility: hidden;
+  background: none;
+  color: var(--muted);
+}
+
+.older-heading:is(:hover, :focus-within) .older-delete {
+  visibility: visible;
+}
+
+.older-heading .older-delete:not(.armed):hover {
+  color: var(--danger);
 }
 
 .reminder-banner {

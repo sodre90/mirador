@@ -1010,24 +1010,24 @@ export class ConversationService {
       .forEach((conversation) => this.publish(conversation));
   }
 
-  /** The conversation, the tasks its plugin tools started and its side chats, which deleting it closes with it. */
-  private closingWith(conversationId: string): Set<string> {
+  /** The conversations, the tasks their plugin tools started and their side chats, which deleting them closes with them. */
+  private closingWith(conversationIds: string[]): Set<string> {
     const closing = new Set<string>();
     const close = (id: string) => {
       if (closing.has(id)) return;
       closing.add(id);
       [...this.store.conversationsStartedBy(id), ...this.store.sideChatsOf(id)].forEach(close);
     };
-    close(conversationId);
+    conversationIds.forEach(close);
     return closing;
   }
 
   /**
-   * The worktrees deleting the conversation removes — its own and its delegated tasks' — each with the uncommitted
-   * files it holds: none while another conversation works there too.
+   * The worktrees deleting the conversations removes — their own and their delegated tasks' — each once, with the
+   * uncommitted files it holds: none while a conversation that stays works there too.
    */
-  async worktreesLostWith(conversationId: string): Promise<{ worktree: ConversationWorktree; uncommittedFiles: number }[]> {
-    const closing = this.closingWith(conversationId);
+  async worktreesLostWith(...conversationIds: string[]): Promise<{ worktree: ConversationWorktree; uncommittedFiles: number }[]> {
+    const closing = this.closingWith(conversationIds);
     const worktrees = new Map<string, ConversationWorktree>();
     for (const id of closing) {
       const { worktree } = this.get(id);
@@ -1057,9 +1057,15 @@ export class ConversationService {
     return this.worktrees.land(this.existingWorkspace(workspaceId), worktree, { mayRebase });
   }
 
-  /** The uncommitted files deleting the conversation removes with its worktrees and its delegated tasks'. */
-  async uncommittedFilesLostWith(conversationId: string) {
-    return (await this.worktreesLostWith(conversationId)).reduce((sum, { uncommittedFiles }) => sum + uncommittedFiles, 0);
+  /** Those of the conversations still there that neither work nor wait for the user, which deleting a workspace's Older fold may take. */
+  stillResting(conversationIds: string[]) {
+    const rests = ({ status, waitingFor }: Conversation) => status === "idle" && !waitingFor;
+    return conversationIds.filter((id) => this.store.hasConversation(id) && rests(this.get(id)));
+  }
+
+  /** The uncommitted files deleting the conversations removes with their worktrees and their delegated tasks'. */
+  async uncommittedFilesLostWith(...conversationIds: string[]) {
+    return (await this.worktreesLostWith(...conversationIds)).reduce((sum, { uncommittedFiles }) => sum + uncommittedFiles, 0);
   }
 
   /**

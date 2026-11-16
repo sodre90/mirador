@@ -120,6 +120,30 @@ test("a delegated task's own worktree stays while a fork works in it too", async
   expect(await conversations.uncommittedFilesLostWith(caller.id)).toBe(0);
 });
 
+test("conversations deleted together lose a worktree only they work in once, which neither loses alone", async () => {
+  const { conversations } = hostWithAWorkspaceOnClaude();
+  (conversations as any).worktrees = { isMade: async () => true, uncommittedFiles: async ({ id }: { id: string }) => (id === "shared" ? 3 : 2) };
+  const first = conversations.create("w1", undefined, undefined, undefined, {}, worktreeAt("shared"));
+  const fork = conversations.create("w1", undefined, undefined, undefined, {}, worktreeAt("shared"));
+  const own = conversations.create("w1", undefined, undefined, undefined, {}, worktreeAt("own"));
+
+  expect(await conversations.uncommittedFilesLostWith(first.id)).toBe(0);
+  expect(await conversations.uncommittedFilesLostWith(first.id, fork.id)).toBe(3);
+  expect((await conversations.worktreesLostWith(first.id, fork.id, own.id)).map(({ worktree }) => worktree.branch)).toEqual(["mirador/shared", "mirador/own"]);
+  expect(await conversations.uncommittedFilesLostWith(first.id, fork.id, own.id)).toBe(5);
+});
+
+test("conversations deleted together leave out those gone, at work or waiting for the user by now", () => {
+  const { conversations } = hostWithAWorkspaceOnClaude();
+  const resting = conversations.create("w1");
+  const working = conversations.create("w1");
+  const finished = conversations.create("w1");
+  (conversations as any).statusOverrides.set(working.id, { status: "running" });
+  (conversations as any).unseenTurnEnds.set(finished.id, "finished");
+
+  expect(conversations.stillResting([resting.id, working.id, finished.id, "gone"])).toEqual([resting.id]);
+});
+
 function hostWithAWorktreeConversation(uncommittedFiles: number) {
   const store = storeWithConversation();
   const worktree = worktreeAt("wt1");

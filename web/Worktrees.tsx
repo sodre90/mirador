@@ -163,3 +163,35 @@ export function WorkspaceDeletePrompt({ workspaceToDelete, dispatch }: { workspa
     </section>
   );
 }
+
+/**
+ * Before a workspace's older conversations are deleted together whose worktrees hold uncommitted files, which go with
+ * them. It takes the focus on Cancel, so a stray Enter deletes nothing.
+ */
+export function OlderDeletePrompt({ conversationsToDelete, dispatch }: { conversationsToDelete: AppState["conversationsToDelete"]; dispatch: Dispatch<AppAction> }) {
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => cancelButton.current?.focus(), [conversationsToDelete]);
+  if (!conversationsToDelete) return null;
+  const promptWords = t.shell.olderDelete;
+  const cancel = () => dispatch({ type: "dismiss-conversations-to-delete" });
+  const deleteAnyway = () => {
+    connection.send({ type: "conversations.delete", conversationIds: conversationsToDelete.conversationIds, discardsUncommitted: true });
+    cancel();
+  };
+  return (
+    <section className="file-to-open worktree-to-delete" role="alertdialog" aria-label={promptWords.title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
+      <h2>{promptWords.title}</h2>
+      <p>
+        {promptWords.loses(conversationsToDelete.uncommittedFiles)} {words.deleteKeeps(conversationsToDelete.branches)}
+      </p>
+      <div className="actions">
+        <button type="button" className="danger" onClick={deleteAnyway}>
+          {promptWords.deleteAnyway}
+        </button>
+        <button ref={cancelButton} type="button" onClick={cancel}>
+          {words.cancel}
+        </button>
+      </div>
+    </section>
+  );
+}

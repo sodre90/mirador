@@ -504,6 +504,7 @@ function WorkspaceSection({
   ];
   const deleteWorkspace = () => connection.send({ type: "workspace.delete", workspaceId: workspace.id });
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
+  const deleteOlder = (older: Conversation[]) => connection.send({ type: "conversations.delete", conversationIds: older.map(({ id }) => id) });
   const openedDelegations = useOpenedDelegations();
   const listedUnder = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && callerIdOf(conversation) === caller.id);
   const delegatedTo = (caller: Conversation) => listedUnder(caller).filter(({ startedBy }) => startedBy);
@@ -650,9 +651,21 @@ function WorkspaceSection({
       )}
       {!folded && olderCount > 0 && (
         <div className="later-group older-group" aria-label={`${workspace.name} · ${words.older(olderCount)}`}>
-          <button type="button" aria-expanded={olderOpen} data-hint={hints.olderConversations(t.labels.olderAfter[olderAfter])} onClick={() => setOlderOpen(!olderOpen)}>
-            {olderOpen ? "▾" : "▸"} {words.older(olderCount)}
-          </button>
+          <div className="older-heading">
+            <button type="button" className="older-toggle" aria-expanded={olderOpen} data-hint={hints.olderConversations(t.labels.olderAfter[olderAfter])} onClick={() => setOlderOpen(!olderOpen)}>
+              {olderOpen ? "▾" : "▸"} {words.older(olderCount)}
+            </button>
+            <ConfirmButton
+              className="older-delete"
+              label={words.deleteOlder}
+              hint={hints.deleteOlder}
+              armedText={words.deleteOlderArmed(olderCount)}
+              armedHint={hints.deleteOlderArmed}
+              onConfirm={() => deleteOlder(older)}
+            >
+              {words.deleteAll}
+            </ConfirmButton>
+          </div>
           {olderOpen && <ul>{listedNow(older).map((conversation) => conversationRow(conversation))}</ul>}
         </div>
       )}

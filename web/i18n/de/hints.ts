@@ -240,6 +240,9 @@ export const hints: Messages["hints"] = {
   deleteConversation:
     "Lösche diese Unterhaltung, ihre Zeitleiste und ihren Canvas-Verlauf aus der App. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte. Ihr eigener Worktree wird mit gelöscht; enthält er nicht committete Dateien, wird vorher gefragt.",
   deleteConversationArmed: "Klicke erneut, um diese Unterhaltung zu löschen. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte.",
+  deleteOlder:
+    "Lösche alle Unterhaltungen unter Ältere, wie × eine löscht: ihre Zeitleisten und ihr Canvas-Verlauf verschwinden aus der App, die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte. Ihre eigenen Worktrees werden mit gelöscht; enthält einer davon nicht committete Dateien, wird vorher einmal gefragt.",
+  deleteOlderArmed: "Klicke erneut, um alle Unterhaltungen unter Ältere zu löschen, mit ihren Nebenchats und delegierten Aufgaben. Die eigenen Sitzungsdateien des Agenten bleiben auf der Festplatte.",
   deleteProfileArmed: "Klicke erneut, um dieses Profil zu löschen. Seine Unterhaltungen können mit einem anderen Profil weitergehen.",
   profileColour: "Ein Punkt in dieser Farbe steht überall vor dem Namen des Profils, und seine Unterhaltungen bekommen in der Seitenleiste einen Rand in dieser Farbe.",
   profilePrelaunch: "Optional. Läuft mit deiner Shell und dieser Umgebung, bevor der Agent startet. Er muss innerhalb einer Minute fertig sein; starte lang laufende Proxys im Hintergrund.",

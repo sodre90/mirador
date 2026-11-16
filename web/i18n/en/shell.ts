@@ -72,6 +72,9 @@ export const shell = {
     removeArmed: "Remove?",
     deleteConversation: "Delete conversation",
     deleteArmed: "Delete?",
+    deleteOlder: "Delete older conversations",
+    deleteAll: "Delete all",
+    deleteOlderArmed: (count: number) => `Delete ${count}?`,
     newConversationLabel: "+ New conversation",
     continueSessionLabel: "Continue a session…",
     workspaceMenu: "Workspace menu",
@@ -118,6 +121,12 @@ export const shell = {
       ),
     keeps: "The project folder and the commits made in the worktrees stay.",
     removeAnyway: "Remove anyway",
+  },
+  olderDelete: {
+    title: "Delete the older conversations and their worktrees?",
+    loses: (count: number) =>
+      plural(count, "Their worktrees hold 1 uncommitted file, which is deleted with them.", `Their worktrees hold ${count} uncommitted files, which are deleted with them.`),
+    deleteAnyway: "Delete anyway",
   },
   sessions: {
     label: "Continue a session",

@@ -927,6 +927,15 @@ export function startServer(services: HostServices) {
     hub.send(socket, { type: "conversation.delete-asks", conversationId, uncommittedFiles, branches: lost.map(({ worktree }) => worktree.branch) });
   }
 
+  /** Deleting conversations together, as a workspace's Older fold does, asks once for all the uncommitted files their worktrees hold. */
+  async function deleteConversationsOrAsk(socket: BrowserSocket, conversationIds: string[], discardsUncommitted: boolean) {
+    const resting = conversations.stillResting(conversationIds);
+    const lost = discardsUncommitted ? [] : await conversations.worktreesLostWith(...resting);
+    const uncommittedFiles = lost.reduce((sum, { uncommittedFiles }) => sum + uncommittedFiles, 0);
+    if (uncommittedFiles > 0) return hub.send(socket, { type: "conversations.delete-asks", conversationIds: resting, uncommittedFiles, branches: lost.map(({ worktree }) => worktree.branch) });
+    resting.forEach((id) => deleteConversation(id, { keepsUncommittedWork: !discardsUncommitted }));
+  }
+
   function deleteWorkspace(workspaceId: string, { keepsUncommittedWork = false } = {}) {
     conversations
       .list()
@@ -1293,6 +1302,8 @@ export function startServer(services: HostServices) {
         return conversations.promoteSideChat(message.conversationId);
       case "conversation.delete":
         return deleteConversationOrAsk(socket, message.conversationId, message.discardsUncommitted ?? false);
+      case "conversations.delete":
+        return deleteConversationsOrAsk(socket, message.conversationIds, message.discardsUncommitted ?? false);
       case "conversation.move":
         return conversations.move(message.conversationId, message.beforeConversationId);
       case "conversation.subscribe":

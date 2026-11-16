@@ -187,6 +187,11 @@ export type ClientMessage =
   | { type: "conversation.side-chat.promote"; conversationId: string }
   /** Without `discardsUncommitted`, a conversation whose worktree holds uncommitted files stays, and the host answers `conversation.delete-asks`. */
   | { type: "conversation.delete"; conversationId: string; discardsUncommitted?: boolean }
+  /**
+   * Deletes them together, as a workspace's Older fold does, leaving out any at work or waiting for the user by now. Without
+   * `discardsUncommitted`, when their worktrees hold uncommitted files none goes, and the host answers `conversations.delete-asks`.
+   */
+  | { type: "conversations.delete"; conversationIds: string[]; discardsUncommitted?: boolean }
   | { type: "conversation.rename"; conversationId: string; title: string }
   | { type: "conversation.set-favourite"; conversationId: string; favourite: boolean }
   | { type: "conversation.set-unread"; conversationId: string; unread: boolean }
@@ -603,6 +608,8 @@ export type ServerMessage =
   /** A file link leads to a file outside the workspace that the agent did not change: the page asks before it opens `file`, the real file. */
   | { type: "files.ask-to-open"; conversationId: string; file: string }
   | { type: "conversation.delete-asks"; conversationId: string; uncommittedFiles: number; branches: string[] }
+  /** Deleting the conversations together would delete the uncommitted files of their worktrees, each counted once, so they stay until the page sends `discardsUncommitted`. */
+  | { type: "conversations.delete-asks"; conversationIds: string[]; uncommittedFiles: number; branches: string[] }
   /** Removing the workspace would delete the uncommitted files of its conversations' worktrees, so it stays until the page sends `discardsUncommitted`. */
   | { type: "workspace.delete-asks"; workspaceId: string; uncommittedFiles: number }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */

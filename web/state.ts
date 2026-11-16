@@ -123,6 +123,8 @@ export interface AppState {
   worktreeToDelete: { conversationId: string; uncommittedFiles: number; branches: string[] } | null;
   /** A workspace the user asked to remove, whose conversations' worktrees hold uncommitted files that would go with it. */
   workspaceToDelete: { workspaceId: string; uncommittedFiles: number } | null;
+  /** A workspace's older conversations the user asked to delete together, whose worktrees hold uncommitted files that would go with them. */
+  conversationsToDelete: { conversationIds: string[]; uncommittedFiles: number; branches: string[] } | null;
   /** The host process run this page last heard from; another one means the host restarted, maybe with new code. */
   hostRunId: string | null;
   hostCodeChanged: boolean;
@@ -159,6 +161,7 @@ export type AppAction =
   | { type: "dismiss-file-to-open" }
   | { type: "dismiss-worktree-to-delete" }
   | { type: "dismiss-workspace-to-delete" }
+  | { type: "dismiss-conversations-to-delete" }
   | { type: "reminder-set"; undo: ReminderUndo }
   | { type: "dismiss-reminder-undo" };
 
@@ -221,6 +224,7 @@ export const initialState: AppState = {
   fileToOpen: null,
   worktreeToDelete: null,
   workspaceToDelete: null,
+  conversationsToDelete: null,
 };
 
 export function initialStateFor(conversationId: string | null): AppState {
@@ -452,6 +456,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, worktreeToDelete: { conversationId: message.conversationId, uncommittedFiles: message.uncommittedFiles, branches: message.branches } };
     case "workspace.delete-asks":
       return { ...state, workspaceToDelete: { workspaceId: message.workspaceId, uncommittedFiles: message.uncommittedFiles } };
+    case "conversations.delete-asks":
+      return { ...state, conversationsToDelete: { conversationIds: message.conversationIds, uncommittedFiles: message.uncommittedFiles, branches: message.branches } };
     case "fs.completions":
     case "pong":
     case "profile.saved":
@@ -570,6 +576,8 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return { ...state, worktreeToDelete: null };
     case "dismiss-workspace-to-delete":
       return { ...state, workspaceToDelete: null };
+    case "dismiss-conversations-to-delete":
+      return { ...state, conversationsToDelete: null };
     case "reminder-set":
       return { ...state, reminderUndo: { ...action.undo, id: (state.reminderUndo?.id ?? 0) + 1 } };
     case "dismiss-reminder-undo":

@@ -68,6 +68,9 @@ export const shell: Messages["shell"] = {
     removeArmed: "移除？",
     deleteConversation: "删除对话",
     deleteArmed: "删除？",
+    deleteOlder: "删除更早的对话",
+    deleteAll: "全部删除",
+    deleteOlderArmed: (count) => `删除 ${count} 个？`,
     newConversationLabel: "+ 新建对话",
     continueSessionLabel: "继续会话…",
     workspaceMenu: "工作区菜单",
@@ -104,6 +107,11 @@ export const shell: Messages["shell"] = {
     loses: (count) => `它的工作树中至少有 ${count} 个未提交的文件，将一并删除。`,
     keeps: "项目文件夹以及在工作树中完成的提交都会保留。",
     removeAnyway: "仍然移除",
+  },
+  olderDelete: {
+    title: "删除更早的对话及其工作树？",
+    loses: (count) => `它们的工作树中有 ${count} 个未提交的文件，将一并删除。`,
+    deleteAnyway: "仍然删除",
   },
   sessions: {
     label: "继续会话",

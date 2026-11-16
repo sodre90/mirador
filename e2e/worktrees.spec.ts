@@ -282,6 +282,44 @@ test("one conversation starts in the other place, a clean worktree goes without 
   });
 });
 
+test("deleting a workspace's older conversations together asks once before their worktrees' uncommitted files go", async ({ page }) => {
+  await signIn(page, host);
+  await startNewConversation(page, host.projectDir);
+  const conversationId = page.url().match(/#\/c\/(.+)$/)![1]!;
+  const folder = await agentFolder(page);
+  writeFileSync(join(folder, "scratch.txt"), "not committed\n");
+  const workspace = workspaceCard(page, host.projectDir);
+  const row = workspace.locator(`li[data-reorder-id="${conversationId}"]`);
+  const older = workspace.locator(".older-group");
+  const question = page.getByRole("alertdialog", { name: "Delete the older conversations and their worktrees?" });
+  const deleteOlder = async () => {
+    await older.locator(".older-heading").hover();
+    await older.getByRole("button", { name: "Delete older conversations" }).click();
+    await older.getByRole("button", { name: "Confirm: Delete older conversations" }).click();
+  };
+  await page.clock.setFixedTime(Date.now() + 8 * 24 * 60 * 60 * 1000);
+  await selectedRow(page).click();
+
+  await test.step("Cancel keeps them all, with the uncommitted file", async () => {
+    await deleteOlder();
+    await expect(question).toContainText(/Their worktrees hold \d+ uncommitted files?, which (?:is|are) deleted with them\./);
+    await expect(question.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await question.getByRole("button", { name: "Cancel" }).click();
+    await expect(question).toHaveCount(0);
+    await expect(older.locator(`li[data-reorder-id="${conversationId}"]`)).toHaveCount(1);
+    expect(existsSync(join(folder, "scratch.txt"))).toBe(true);
+  });
+
+  await test.step("Delete anyway deletes them all with their worktrees, and leaves the workspace", async () => {
+    await deleteOlder();
+    await question.getByRole("button", { name: "Delete anyway" }).click();
+    await expect(question).toHaveCount(0);
+    await expect(row).toHaveCount(0);
+    await expect(workspace).toHaveCount(1);
+    await expect.poll(() => existsSync(folder)).toBe(false);
+  });
+});
+
 test("removing a workspace asks before its worktrees' uncommitted files go, and a workspace with none asks nothing", async ({ page }) => {
   await signIn(page, host);
   await startNewConversation(page, host.projectDir);

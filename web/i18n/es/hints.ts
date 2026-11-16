@@ -240,6 +240,9 @@ export const hints: Messages["hints"] = {
   deleteConversation:
     "Elimina de la aplicación esta conversación, su línea de tiempo y su historial del lienzo. Los archivos de sesión del propio agente se quedan en el disco. Su propio worktree también se elimina; si tiene archivos sin commit, pregunta antes.",
   deleteConversationArmed: "Haz clic de nuevo para eliminar esta conversación. Los archivos de sesión del propio agente se quedan en el disco.",
+  deleteOlder:
+    "Elimina todas las conversaciones de Anteriores, como × elimina una: sus líneas de tiempo y su historial del lienzo salen de la aplicación, y los archivos de sesión del propio agente se quedan en el disco. Sus propios worktrees también se eliminan; si alguno tiene archivos sin commit, pregunta una vez antes.",
+  deleteOlderArmed: "Haz clic de nuevo para eliminar todas las conversaciones de Anteriores, con sus chats laterales y sus tareas delegadas. Los archivos de sesión del propio agente se quedan en el disco.",
   deleteProfileArmed: "Haz clic de nuevo para eliminar este perfil. Sus conversaciones pueden continuar con otro perfil.",
   profileColour: "Un punto de este color va delante del nombre del perfil dondequiera que aparezca, y sus conversaciones llevan un borde de este color en la barra lateral.",
   profilePrelaunch: "Opcional. Se ejecuta con tu shell y este entorno antes de que se inicie el agente. Debe terminar en menos de un minuto; inicia en segundo plano los proxies de larga duración.",

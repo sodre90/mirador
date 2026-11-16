@@ -18,3 +18,13 @@ test("a workspace deleted elsewhere takes its own ask away, and leaves another's
   expect(reducer(asking, deleted("w2")).workspaceToDelete).toEqual({ workspaceId: "w1", uncommittedFiles: 3 });
   expect(reducer(asking, deleted("w1")).workspaceToDelete).toBeNull();
 });
+
+test("the host asking before a workspace's older conversations go together shows its count and branches, until the user turns it down", () => {
+  const asking = reducer(initialState, {
+    type: "server",
+    message: { type: "conversations.delete-asks", conversationIds: ["c1", "c2"], uncommittedFiles: 4, branches: ["mirador/c1"] },
+  });
+  expect(asking.conversationsToDelete).toEqual({ conversationIds: ["c1", "c2"], uncommittedFiles: 4, branches: ["mirador/c1"] });
+
+  expect(reducer(asking, { type: "dismiss-conversations-to-delete" }).conversationsToDelete).toBeNull();
+});
