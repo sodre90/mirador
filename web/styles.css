@@ -1066,6 +1066,11 @@ body.resizing iframe {
   color: color-mix(in srgb, var(--text) 60%, transparent);
 }
 
+/* A tint lowers the grey's contrast, as it does for the folder line (4.5:1 or more on every pastel). */
+.workspace[data-color] > header button.icon:is(.workspace-new, .workspace-more) {
+  color: color-mix(in srgb, var(--text) 70%, transparent);
+}
+
 .workspace > header button.icon:is(.workspace-new, .workspace-more):hover {
   color: var(--text);
 }
