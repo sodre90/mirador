@@ -346,6 +346,42 @@ test("a pi turn the model refuses ends with the model's error and Try again, not
   await expect(lastAgentMessage(page)).toContainText("Echo: After the refusal");
 });
 
+test("a model call pi retries says why on a notice of its own, and the reply that follows carries no retry text", async () => {
+  const rateLimited = "Rate limit exceeded for team. Limit type: tokens. Remaining: 0";
+  const notices = page.locator(".timeline:visible .agent-notice");
+  const noticesBefore = await notices.count();
+  model.failure = { status: 429, body: { error: { message: rateLimited, type: "throttling_error" } }, times: 1 };
+
+  await sendMessage(page, "Rate limited once");
+  await waitForTurnToEnd(page);
+
+  await expect(lastAgentMessage(page)).toHaveText("Echo: Rate limited once");
+  await expect(notices).toHaveCount(noticesBefore + 1);
+  await expect(notices.last()).toHaveClass(/warning/);
+  await expect(notices.last()).toContainText("Warning: Retrying (attempt 1/3, waiting 1s): ");
+  await expect(notices.last()).toContainText(rateLimited);
+});
+
+test("a model call that keeps failing says each retry, then that pi gave up, and ends with the error and Try again", async () => {
+  const overloaded = "The model is overloaded right now";
+  const notices = page.locator(".timeline:visible .agent-notice");
+  const noticesBefore = await notices.count();
+  model.failure = { status: 503, body: { error: { message: overloaded, type: "server_error" } } };
+  try {
+    await sendMessage(page, "Overloaded throughout");
+    const failedTurn = page.locator(".timeline:visible .try-again-line").last();
+    await expect(failedTurn).toContainText(overloaded, { timeout: 60_000 });
+    await waitForTurnToEnd(page);
+  } finally {
+    model.failure = null;
+  }
+
+  await expect(notices).toHaveCount(noticesBefore + 4);
+  for (const attempt of [1, 2, 3]) await expect(notices.nth(noticesBefore + attempt - 1)).toContainText(`Retrying (attempt ${attempt}/3, waiting 1s): `);
+  await expect(notices.last()).toHaveText("Warning: Gave up after 3 retries");
+  await expect(page.locator(".timeline:visible")).not.toContainText("Retry finished");
+});
+
 test("a message that joined a pi turn goes out again after Stop if pi had not read it yet, as the next turn", async () => {
   model.hold();
   await sendMessage(page, "Before the stop");

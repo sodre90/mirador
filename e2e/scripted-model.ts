@@ -101,8 +101,8 @@ export class ScriptedModel {
   readonly requests: ChatRequest[] = [];
   private readonly requestHeaders: IncomingHttpHeaders[] = [];
   private readonly responsesRequests: ResponsesRequest[] = [];
-  /** While set, every request for a reply gets this error response instead, as from a provider that is down. */
-  failure: { status: number; body: object } | null = null;
+  /** While set, every request for a reply gets this error response instead, as from a provider that is down; with `times`, only that many. */
+  failure: { status: number; body: object; times?: number } | null = null;
   /** Response headers every Responses API reply carries, such as the `x-codex-*` rate limits ChatGPT's backend sends Codex. */
   responsesHeaders: Record<string, string> = {};
   private server?: Server;
@@ -189,7 +189,9 @@ export class ScriptedModel {
 
   private reply(request: ChatRequest, response: ServerResponse, viaResponses: boolean) {
     if ((request.tools ?? []).length > 0 && this.failure) {
-      return response.writeHead(this.failure.status, { "content-type": "application/json" }).end(JSON.stringify(this.failure.body));
+      const { status, body, times } = this.failure;
+      if (times !== undefined) this.failure = times > 1 ? { ...this.failure, times: times - 1 } : null;
+      return response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(body));
     }
     const reply = withAntigravityToolSummary(request, this.scriptedReply(request));
     if (viaResponses) return this.streamResponse(response, reply);
@@ -322,6 +324,7 @@ export function opencodeProgram() {
  * within pi-acp's 800 ms.
  */
 const NPM_WITHOUT_A_REGISTRY = ["npm_config_registry=http://127.0.0.1:9/", "npm_config_offline=true"];
+const PI_QUICK_RETRIES = { baseDelayMs: 100 };
 
 /**
  * A profile environment that points pi at the scripted model and keeps it away from the user's own pi setup: settings,
@@ -336,7 +339,7 @@ export function scriptedPiEnvironment(model: ScriptedModel, root: string, defaul
   ];
   const provider = { baseUrl: model.url, api: "openai-completions", apiKey: "unused", models };
   writeFileSync(join(agentDirectory, "models.json"), JSON.stringify({ providers: { e2e: provider } }));
-  writeFileSync(join(agentDirectory, "settings.json"), JSON.stringify({ defaultProvider: "e2e", defaultModel }));
+  writeFileSync(join(agentDirectory, "settings.json"), JSON.stringify({ defaultProvider: "e2e", defaultModel, retry: PI_QUICK_RETRIES }));
   return [`PI_CODING_AGENT_DIR=${agentDirectory}`, "PI_OFFLINE=1", ...NPM_WITHOUT_A_REGISTRY].join("\n");
 }
 
