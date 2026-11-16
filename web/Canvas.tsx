@@ -14,7 +14,7 @@ import { EditApproval } from "./EditApproval.tsx";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
-import { usePageFind } from "./PageFind.tsx";
+import { useFindOnPageRequests, usePageFind } from "./PageFind.tsx";
 import { usePageMarks } from "./PageMarks.tsx";
 import { canOpenItemWindows, openItemWindow } from "./item-window.ts";
 import { PluginItemView } from "./PluginItemView.tsx";
@@ -924,9 +924,10 @@ export function CanvasPanel({
     const page = step === "back" ? older : newer;
     if (page) pick(page.id);
   });
+  useFindOnPageRequests(panel, pageFind.openFind);
 
   return (
-    <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape}>
+    <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape} data-page-shown={shownPage ? "" : undefined}>
       <div className="canvas-header" data-pane-bar ref={bar} data-fold={foldLevel}>
         <PaneGrip pane="canvas" />
         <button

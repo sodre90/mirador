@@ -10,6 +10,25 @@ const matchCaseName = t.canvas.find.matchCase;
 
 const noTally = { total: 0, current: 0 };
 
+const FIND_ON_PAGE_EVENT = "mirador-find-on-page";
+
+/** Opens the find bar of the page `panel` shows, wherever the canvas bar keeps its find entry. */
+export function askToFindOnPage(panel: HTMLElement) {
+  panel.dispatchEvent(new Event(FIND_ON_PAGE_EVENT));
+}
+
+export function useFindOnPageRequests(panel: RefObject<HTMLElement | null>, openFind: () => void) {
+  const openFindRef = useRef(openFind);
+  openFindRef.current = openFind;
+  useEffect(() => {
+    const element = panel.current;
+    if (!element) return;
+    const open = () => openFindRef.current();
+    element.addEventListener(FIND_ON_PAGE_EVENT, open);
+    return () => element.removeEventListener(FIND_ON_PAGE_EVENT, open);
+  }, []);
+}
+
 /**
  * Finding text on the page the agent showed: the panel asks the page to search and marks what it finds there,
  * and shows the bar under the canvas header with the tally the page reports back.

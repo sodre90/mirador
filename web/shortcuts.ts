@@ -94,7 +94,7 @@ export function commandFor(press: KeyPress, typing: TypingState, mac = isMac): S
 /**
  * Where ⌘F finds text: on the canvas page when the keys came from a canvas frame, or the canvas panel holding a shown
  * page has focus; in the conversation everywhere else. A key from a frame that isn't a shown page finds nothing:
- * its bar has no find button to open.
+ * the panel shows no page to find on.
  */
 export const findsInCanvasPage = (fromCanvas: boolean, canvasPageFocused: boolean) => fromCanvas || canvasPageFocused;
 

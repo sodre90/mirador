@@ -2,6 +2,7 @@ import type { Dispatch } from "react";
 import { sessionHasRecord } from "../shared/conversation-begun.ts";
 import type { Conversation, ConversationPlace, StoredEvent, Workspace } from "../shared/model.ts";
 import { connection } from "./connection.ts";
+import { askToFindOnPage } from "./PageFind.tsx";
 import type { AppAction } from "./state.ts";
 
 /**
@@ -31,18 +32,15 @@ export function findInOpenConversation() {
   onScreen<HTMLButtonElement>(".chat-header .find-trigger")?.click();
 }
 
-/** The shown page's find button, which the canvas bar holds only while a page is on it. */
-const pageFindButton = () => onScreen<HTMLElement>(".canvas-header .page-find-toggle");
+const canvasPanelShowingPage = () => onScreen<HTMLElement>(".canvas-panel[data-page-shown]");
 
 export function findInCanvasPage() {
-  pageFindButton()?.click();
+  const panel = canvasPanelShowingPage();
+  if (panel) askToFindOnPage(panel);
 }
 
 /** Whether focus sits in the canvas panel that has a shown page, where ⌘F finds on the page rather than in the conversation. */
-export const canvasPageHasFocus = () => {
-  const panel = onScreen<HTMLElement>(".canvas-panel");
-  return Boolean(panel && pageFindButton() && panel.contains(document.activeElement));
-};
+export const canvasPageHasFocus = () => Boolean(canvasPanelShowingPage()?.contains(document.activeElement));
 
 export function startRenamingOpenConversation() {
   onScreen<HTMLElement>('.chat-header [data-rename-trigger="click"]')?.click();

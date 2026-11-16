@@ -1,7 +1,7 @@
 import { appendFileSync, cpSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, createProfile, primaryModifier, sendMessage, signIn } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, chooseFromCanvasMore, createProfile, openCanvasMore, primaryModifier, sendMessage, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -42,7 +42,7 @@ const pageHtml = `<h1>Lighthouse log</h1>
 <p>Keeper or not, the bell rings at every hour.</p>`;
 
 const canvasPage = (page: Page) => page.locator(".canvas-panel:visible .canvas-frame.show iframe").contentFrame();
-const findButton = (page: Page) => page.locator(".canvas-header:visible .page-find-toggle");
+const findOnPage = "Find on this page";
 const findBar = (page: Page) => page.locator(".canvas-panel:visible .page-find");
 const findInput = (page: Page) => findBar(page).locator("input");
 const tally = (page: Page) => findBar(page).locator(".find-tally");
@@ -69,7 +69,7 @@ async function waitForIdle(page: Page) {
   await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle", { timeout: 60_000 });
 }
 
-test("the user finds text on the page the agent showed, from the canvas bar's button or with ⌘F inside the page", async ({ page }) => {
+test("the user finds text on the page the agent showed, from the canvas bar's ⋯ menu or with ⌘F inside the page", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const profiles = await createProfile(page, profileName, "", "", "opencode");
@@ -77,8 +77,12 @@ test("the user finds text on the page the agent showed, from the canvas bar's bu
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${profileName} · opencode` });
   const conversationId = await startConversationWithoutModel(page);
 
-  await test.step("the canvas bar holds no find button until a page is on it", async () => {
-    await expect(findButton(page)).toHaveCount(0);
+  await test.step("the ⋯ menu offers no find until a page is on the canvas", async () => {
+    const menu = await openCanvasMore(page);
+    await expect(menu.getByRole("menuitem", { name: "Clear the canvas", exact: true })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: findOnPage, exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
   });
 
   await sendMessage(page, "Start");
@@ -86,9 +90,8 @@ test("the user finds text on the page the agent showed, from the canvas bar's bu
   await callCanvasTool(host, conversationId, "show", { title: "Lighthouse log", html: pageHtml });
   await expect(canvasPage(page).locator("h1")).toHaveText("Lighthouse log");
 
-  await test.step("the button opens the bar; typing finds three matches, Enter steps to the next, Shift+Enter back, and a word that is not there says so", async () => {
-    await expect(findButton(page)).toBeVisible();
-    await findButton(page).click();
+  await test.step("the ⋯ menu opens the bar; typing finds three matches, Enter steps to the next, Shift+Enter back, and a word that is not there says so", async () => {
+    await chooseFromCanvasMore(page, findOnPage);
     await expect(findBar(page)).toBeVisible();
     await expect(findInput(page)).toBeFocused();
     await findInput(page).fill("keeper");
