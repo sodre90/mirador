@@ -89,6 +89,8 @@ export function ConfirmButton({
         if (armed) confirm();
         else setArmedBy("click");
       }}
+      // WebKit doesn't focus a pressed button but blurs the focused one, which would disarm it before its click.
+      onMouseDown={(event) => event.preventDefault()}
       onBlur={() => setArmedBy(null)}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !armed) return;
