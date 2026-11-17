@@ -59,9 +59,9 @@ test("the canvas bar holds what the canvas shows as tabs and what is done with a
     await expect.poll(async () => await barState(page)).toMatchObject({ fold: 0, fits: true });
     expect(await bar(page).locator("button:visible").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent))).toEqual([
       "Move canvas",
-      "Sales by region, quarter by quarter · History (1)",
       "Older",
       "Newer",
+      "Sales by region, quarter by quarter · History (1)",
       "Changes",
       "Checklist 0/1",
       "Point and ask",

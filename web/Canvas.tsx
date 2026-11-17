@@ -930,6 +930,12 @@ export function CanvasPanel({
     <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape} data-page-shown={shownPage ? "" : undefined}>
       <div className="canvas-header" data-pane-bar ref={bar} data-fold={foldLevel}>
         <PaneGrip pane="canvas" />
+        <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
+          ‹
+        </button>
+        <button type="button" className="icon canvas-nav" aria-label={words.bar.newer} data-hint={hints.canvasNewer} disabled={!newer} onClick={() => newer && pick(newer.id)}>
+          ›
+        </button>
         <button
           type="button"
           className={`page-tab history-toggle ${pageInFront ? "on" : ""}`}
@@ -968,12 +974,6 @@ export function CanvasPanel({
             {words.bar.editsWaiting(edit.waiting)}
           </button>
         )}
-        <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
-          ‹
-        </button>
-        <button type="button" className="icon canvas-nav" aria-label={words.bar.newer} data-hint={hints.canvasNewer} disabled={!newer} onClick={() => newer && pick(newer.id)}>
-          ›
-        </button>
         <button
           type="button"
           className={`changes-toggle ${changesShown ? "on" : ""}`}
