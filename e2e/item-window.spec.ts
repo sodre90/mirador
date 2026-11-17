@@ -70,7 +70,7 @@ test("a plugin's item opens in a window of its own, which stays live and is titl
   });
 
   await test.step("the item's changes reach the window, and its title follows the item's", async () => {
-    await callCanvasTool(host, conversationId, "change_card", { text: "Second", title: "Renamed" });
+    await callCanvasTool(host, conversationId, "use_tool", { tool: "change_card", input: { text: "Second", title: "Renamed" } });
     await expect(windowView(cardWindow).locator("#text")).toHaveText("Second (pressed 1 times)");
     await expect(cardWindow).toHaveTitle("Mirador: Renamed");
   });
@@ -85,7 +85,7 @@ test("a plugin's item opens in a window of its own, which stays live and is titl
   await test.step("the window keeps up after its host restarts", async () => {
     await host.restart();
     await expect(windowView(cardWindow).locator("#text")).toHaveText("Second (pressed 1 times)", { timeout: 30_000 });
-    await callCanvasTool(host, conversationId, "change_card", { text: "Third" });
+    await callCanvasTool(host, conversationId, "use_tool", { tool: "change_card", input: { text: "Third" } });
     await expect(windowView(cardWindow).locator("#text")).toHaveText("Third (pressed 1 times)");
     await cardWindow.close();
   });

@@ -41,7 +41,7 @@ const askForACard = async (page: import("@playwright/test").Page) => {
   await expect(lastAgentMessage(page)).toContainText("DONE");
 };
 
-test("a real agent loads a plugin that loads on request, then uses its tool in the same turn", async ({ page }) => {
+test("a real agent loads a plugin that loads on request, then runs its tool through use_tool in the same turn", async ({ page }) => {
   test.setTimeout(660_000);
   await expect.poll(modelServerStatus, { message: "the model server answers", timeout: 180_000, intervals: [5_000] }).toBe(200);
   await signIn(page, host);
@@ -50,7 +50,7 @@ test("a real agent loads a plugin that loads on request, then uses its tool in t
   await askForACard(page);
 });
 
-test("with Claude Code's tool search on, the loaded plugin's tools come deferred, and the agent fetches them in the same turn", async ({ page }) => {
+test("with Claude Code's tool search on, the plugin's tools stay out of the tool list and run through use_tool", async ({ page }) => {
   test.setTimeout(660_000);
   await signIn(page, host);
   const profiles = await createProfile(page, "Tool search", "ENABLE_TOOL_SEARCH=true");
@@ -58,5 +58,5 @@ test("with Claude Code's tool search on, the loaded plugin's tools come deferred
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "Tool search · Claude Code" });
   await startConversation(page);
   await askForACard(page);
-  await expect(page.locator(".tool-title", { hasText: /ToolSearch|Tool search|select:/i }).first()).toBeAttached();
+  await expect(page.locator(".tool-title", { hasText: "Board · show_card" }).first()).toBeAttached();
 });

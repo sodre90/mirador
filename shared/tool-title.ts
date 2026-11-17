@@ -25,13 +25,38 @@ export function antigravityMcpToolName(update: { name?: unknown; title?: string 
 export const mcpToolNameOf = (update: { _meta?: { [key: string]: unknown } | null; rawInput?: unknown; name?: unknown; title?: string | null }) =>
   codexMcpToolName(update) ?? antigravityMcpToolName(update);
 
-/** An MCP tool's call as "server · tool", or for a plugin's tool on the canvas server, "plugin's title · tool". */
-export function readableToolTitle(title: string, pluginToolTitles: Record<string, string>) {
+/** The one canvas tool through which agents run the plugin tools that are not in their tool list. */
+export const USE_TOOL_TOOL = "use_tool";
+
+/** A canvas tool's own name, as each agent prefixes it: `mcp__canvas__ask` in Claude Code, `canvas_ask` in opencode, `mcp_canvas_ask` in Antigravity. */
+export const canvasToolName = (tool: string) => /^(?:mcp__canvas__|mcp_canvas_|canvas__|canvas_)(.+)$/.exec(tool)?.[1] ?? null;
+
+/** A use_tool call's payload: codex-acp puts an MCP call's arguments under `arguments`, beside the server and tool it names. */
+export const useToolPayloadOf = (rawInput: unknown): { tool?: unknown; input?: unknown } => {
+  const given = (rawInput ?? {}) as { server?: unknown; tool?: unknown; arguments?: unknown };
+  const payload =
+    given.server === "canvas" && given.tool === USE_TOOL_TOOL && typeof given.arguments === "object" && given.arguments !== null ? given.arguments : given;
+  return payload as { tool?: unknown; input?: unknown };
+};
+
+/** The tool a use_tool call names in its input, when it has one yet. */
+const toolNamedIn = (rawInput: unknown): string | null => {
+  const { tool } = useToolPayloadOf(rawInput);
+  return typeof tool === "string" && tool !== "" ? tool : null;
+};
+
+/**
+ * An MCP tool's call as "server · tool", or for a plugin's tool on the canvas server, "plugin's title · tool". A use_tool
+ * call reads as the tool it ran, named in its raw input, whichever prefix the agent gives it.
+ */
+export function readableToolTitle(title: string, pluginToolTitles: Record<string, string>, rawInput?: unknown) {
+  const wrapped = canvasToolName(title) === USE_TOOL_TOOL ? toolNamedIn(rawInput) : null;
   const mcpTool = title.match(/^mcp__(.+?)__(.+)$/);
-  if (!mcpTool) return title;
+  if (!mcpTool) return wrapped === null ? title : `${pluginToolTitles[wrapped] ?? "canvas"} · ${wrapped}`;
   const [, server = "", tool = ""] = mcpTool;
-  const plugin = server === "canvas" ? pluginToolTitles[tool] : undefined;
-  return `${plugin ?? server} · ${tool}`;
+  const shown = wrapped ?? tool;
+  const plugin = server === "canvas" ? pluginToolTitles[shown] : undefined;
+  return `${plugin ?? server} · ${shown}`;
 }
 
 /** The tool an update is of, by the name its agent gives it. */

@@ -162,7 +162,6 @@ const mcp = new CanvasMcpEndpoints({
   store,
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
-canvasPlugins.tellsToolsChangedWith((conversationId) => mcp.toolsChanged(conversationId));
 const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugins.viewCode(pathname);
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
 const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });

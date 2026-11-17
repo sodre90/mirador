@@ -1,7 +1,7 @@
 import type { ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import type { AskOption, AskQuestion, StoredEvent } from "../../shared/model.ts";
-import { toolNameOf } from "../../shared/tool-title.ts";
-import { canvasToolName } from "./tool-names.ts";
+import { toolNameOf, useToolPayloadOf } from "../../shared/tool-title.ts";
+import { canvasToolName, USE_TOOL_TOOL } from "./tool-names.ts";
 import type { LoadedSession } from "../conversations.ts";
 import type { Store } from "../store.ts";
 import type { CanvasPlugins } from "./plugins.ts";
@@ -132,7 +132,21 @@ export function canvasCallsIn(events: StoredEvent[]): CanvasCall[] {
     }
   }
   endUserMessage();
-  return [...calls.values()].filter(({ completed }) => completed).map(({ completed: _, ...call }) => call);
+  return [...calls.values()]
+    .filter(({ completed }) => completed)
+    .map(({ completed: _, ...call }) => call)
+    .flatMap((call) => {
+      const unwrapped = asWrappedToolCall(call);
+      return unwrapped ? [unwrapped] : [];
+    });
+}
+
+/** A use_tool call as the call of the tool it ran; a describe-only call, which ran nothing, is left out. */
+function asWrappedToolCall(call: CanvasCall): CanvasCall | null {
+  if (call.tool !== USE_TOOL_TOOL) return call;
+  const { tool, input } = useToolPayloadOf(call.input);
+  if (typeof tool !== "string" || typeof input !== "object" || input === null) return null;
+  return { ...call, tool, input: input as Record<string, unknown> };
 }
 
 function noteProgress(call: CallInProgress, update: ToolCallUpdate) {

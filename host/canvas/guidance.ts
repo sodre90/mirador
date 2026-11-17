@@ -1,16 +1,18 @@
 import type { CatalogPlugin } from "../../shared/apps.ts";
 import type { HarnessId } from "../../shared/model.ts";
-import { PLUGIN_LOAD_TOOL, TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
+import { PLUGIN_LOAD_TOOL, TITLE_CONVERSATION_TOOL, USE_TOOL_TOOL } from "./tool-names.ts";
 
 /**
  * What the canvas plugins add to what agents are told and allowed: their tools, and a line each of guidance.
  * `onRequest` holds a line for each plugin that loads on request, "- name: what it does and when to reach for it".
+ * `useToolNames` holds the plugin tools that run through use_tool rather than being in the agent's tool list.
  */
 export interface CanvasPluginGuidance {
   toolNames: string[];
   instructions: string[];
   often: string[];
   onRequest?: string[];
+  useToolNames?: string[];
 }
 
 export const NO_CANVAS_PLUGINS: CanvasPluginGuidance = { toolNames: [], instructions: [], often: [] };
@@ -29,12 +31,21 @@ export const offeredPluginsGuidance = (offered: CatalogPlugin[]) =>
 
 const linesAfter = (lines: string[]) => lines.map((line) => `\n${line}`).join("");
 
-const pluginToolLines = (lines: string[]) => (lines.length === 0 ? "" : `\n\nMore canvas tools:${linesAfter(lines)}`);
+const useToolSentence = (names: string[] = []) =>
+  names.length === 0
+    ? ""
+    : `${USE_TOOL_TOOL} runs the canvas tools that are not in your tool list (${names.join(", ")}); call it with just tool to read a tool's description and input schema, then with tool and input to run it.`;
+
+const pluginToolLines = (plugins: CanvasPluginGuidance) => {
+  const listed = plugins.instructions.length === 0 ? "" : `More canvas tools:${linesAfter(plugins.instructions)}`;
+  const parts = [listed, useToolSentence(plugins.useToolNames)].filter(Boolean);
+  return parts.length === 0 ? "" : `\n\n${parts.join("\n")}`;
+};
 
 const pluginsOnRequest = (lines: string[] = []) =>
   lines.length === 0
     ? ""
-    : `\n\nPlugins that load on request. When one fits what you or the user are doing, call ${PLUGIN_LOAD_TOOL} with its name: it answers with the plugin's instructions and puts its tools in your tool list.${linesAfter(lines)}`;
+    : `\n\nPlugins that load on request. When one fits what you or the user are doing, call ${PLUGIN_LOAD_TOOL} with its name: it answers with the plugin's instructions and the names of its tools, which run through ${USE_TOOL_TOOL}.${linesAfter(lines)}`;
 
 /**
  * Claude Code keeps only the first 4,096 characters of an MCP server's instructions, so its conversations get the plugins'
@@ -42,11 +53,11 @@ const pluginsOnRequest = (lines: string[] = []) =>
  */
 export const getsPluginLinesInSystemPrompt = (harness: HarnessId | undefined) => harness === "claude";
 
-export const withoutPluginLines = (plugins: CanvasPluginGuidance): CanvasPluginGuidance => ({ ...plugins, instructions: [], onRequest: [] });
+export const withoutPluginLines = (plugins: CanvasPluginGuidance): CanvasPluginGuidance => ({ ...plugins, instructions: [], onRequest: [], useToolNames: [] });
 
 /** The plugins' lines of the canvas server's instructions, for the agents that get them in their system prompt instead. */
 export function canvasPluginInstructions(plugins = NO_CANVAS_PLUGINS) {
-  const lines = `${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins.instructions)}`;
+  const lines = `${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins)}`;
   return lines === "" ? "" : `# Canvas plugins\nMirador's plugins add these to the canvas server, whose tools are named mcp__canvas__<tool>.${lines}`;
 }
 
@@ -65,7 +76,7 @@ Rendering environment: every page renders in a sandboxed iframe with NO network 
 - three.js (ES modules): <script type="module">import * as THREE from "three"; import { OrbitControls } from "three/addons/controls/OrbitControls.js";</script>
 - D3 v7: <script src="${assetsOrigin}/d3.min.js"></script> (global d3)
 - Mermaid: <script src="${assetsOrigin}/mermaid.min.js"></script><script>mermaid.initialize({ startOnLoad: true, theme: getComputedStyle(document.documentElement).colorScheme === "dark" ? "dark" : "default" })</script> with <pre class="mermaid">...</pre>
-When someone is viewing the conversation, show reports back script errors from the page so you can fix them.${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins.instructions)}`;
+When someone is viewing the conversation, show reports back script errors from the page so you can fix them.${pluginsOnRequest(plugins.onRequest)}${pluginToolLines(plugins)}`;
 }
 
 /** Claude Code and Codex publish a title after their first turn; the others are asked to name their conversation instead. */
