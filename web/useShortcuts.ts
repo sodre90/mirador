@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { isCanvasFrameMessage } from "../shared/canvas-document.ts";
-import { commandFor, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
+import { commandFor, repeatsWhenHeld, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
 import { terminalKeyAction } from "./terminal-keys.ts";
 
 /** A terminal's find field is a text field for every other key, but its own find key selects its query again. */
@@ -20,6 +20,7 @@ export function useShortcuts(onCommand: (command: ShortcutCommand, fromCanvas: b
       const command = commandFor(event, typingStateOf(document.activeElement));
       if (!command || reselectsTerminalFind(event)) return;
       event.preventDefault();
+      if (event.repeat && !repeatsWhenHeld(command)) return;
       latest.current(command, false);
     };
     const onFrameMessage = (event: MessageEvent) => {
@@ -27,7 +28,7 @@ export function useShortcuts(onCommand: (command: ShortcutCommand, fromCanvas: b
       if (!(focused instanceof HTMLIFrameElement) || event.source !== focused.contentWindow) return;
       if (!isCanvasFrameMessage(event.data) || event.data.kind !== "key") return;
       const command = commandFor(event.data, event.data.typing ? "typing" : "not-typing");
-      if (command) latest.current(command, true);
+      if (command && (!event.data.repeat || repeatsWhenHeld(command))) latest.current(command, true);
     };
     window.addEventListener("keydown", onKeyDown, true);
     window.addEventListener("message", onFrameMessage);

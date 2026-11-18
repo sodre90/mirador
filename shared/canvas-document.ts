@@ -30,6 +30,7 @@ export type CanvasFrameMessage =
       ctrlKey: boolean;
       altKey: boolean;
       shiftKey: boolean;
+      repeat: boolean;
       typing: boolean;
     }
   /** An app's view is ready for its document's state. */
@@ -1389,8 +1390,8 @@ ${HIDDEN_ERROR_SCRIPT}
   const forwardKey = (event) => {
     const target = event.target;
     const typing = Boolean(target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)));
-    const { key, code, metaKey, ctrlKey, altKey, shiftKey } = event;
-    post({ kind: "key", key, code, metaKey, ctrlKey, altKey, shiftKey, typing });
+    const { key, code, metaKey, ctrlKey, altKey, shiftKey, repeat } = event;
+    post({ kind: "key", key, code, metaKey, ctrlKey, altKey, shiftKey, repeat, typing });
   };
   const withModifier = (event) => event.metaKey || event.ctrlKey || event.altKey;
   const findKeys = (event) => (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.code === "KeyF";
