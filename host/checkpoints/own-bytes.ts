@@ -78,7 +78,7 @@ export class OwnBytesStaging {
    * taken away while a stage runs, so one that fails or never ends leaves the next to work it all out again.
    */
   async stageEverything(workspace: Workspace, location: Location): Promise<Staged> {
-    const state = await this.takeOwnBytesState(workspace);
+    const state = await this.stateGitStillHolds(workspace);
     const upToDate = state !== null && (await this.leftAsItWas(workspace, state));
     const beforeAdd = this.git.fileOf(workspace, ".before-add.index");
     if (upToDate) await copyFile(this.git.fileOf(workspace, ".index"), beforeAdd);
@@ -237,6 +237,23 @@ export class OwnBytesStaging {
   private async stillFiles(atTop: Workspace, paths: string[]) {
     const found = await Promise.all(paths.map(async (path) => ((await lstat(join(atTop.path, path)).catch(() => null))?.isFile() ? [path] : [])));
     return found.flat();
+  }
+
+  /**
+   * The last stage's state while git still has the trees it names. Those trees, and the blobs of our indexes, are in no
+   * ref of the repository once the snapshots holding them are gone, so a git gc may prune them; our indexes then go too,
+   * and the stage hashes every file again.
+   */
+  private async stateGitStillHolds(workspace: Workspace) {
+    const state = await this.takeOwnBytesState(workspace);
+    if (state === null || (await this.hasTrees(workspace, [state.converted, state.ownBytes]))) return state;
+    await Promise.all([".index", ".own-bytes.index"].map((suffix) => rm(this.git.fileOf(workspace, suffix), { force: true })));
+    return null;
+  }
+
+  private async hasTrees(workspace: Workspace, trees: string[]) {
+    const checked = await this.git.run(workspace, ["cat-file", "--batch-check=%(objecttype)"], { input: `${[...new Set(trees)].join("\n")}\n` });
+    return checked.exitCode === 0 && checked.stdout.split(/\r?\n/).every((type) => type === "tree");
   }
 
   private async takeOwnBytesState(workspace: Workspace) {
