@@ -89,9 +89,40 @@ type LineKind = "quote" | "bullet" | "numbered";
 const PATTERNS: Record<LineKind, RegExp> = { quote: QUOTE, bullet: BULLET, numbered: NUMBERED };
 const kindOf = (line: string) => (Object.keys(PATTERNS) as LineKind[]).find((kind) => PATTERNS[kind].test(line));
 
+const indentOfMarker = (marker: string) => " ".repeat(marker.length);
+
+/** The lines from `from` that make one block: a quote's or list's own lines, and the lines indented under a list item. */
+function runFrom(kind: LineKind, lines: string[], from: number): string[] {
+  const run: string[] = [];
+  let indent: string | null = null;
+  for (let index = from; index < lines.length; index++) {
+    const line = lines[index]!;
+    const marker = PATTERNS[kind].exec(line)?.[0];
+    if (marker !== undefined) indent = indentOfMarker(marker);
+    else if (kind === "quote" || indent === null || !line.startsWith(indent)) break;
+    run.push(line);
+  }
+  return run;
+}
+
+/** The lines of each list item, its marker and the indent of its continuation lines taken off. */
+function itemsOfRun(kind: LineKind, run: string[]): string[][] {
+  const items: string[][] = [];
+  let indent = "";
+  for (const line of run) {
+    const marker = PATTERNS[kind].exec(line)?.[0];
+    if (marker === undefined) items.at(-1)!.push(line.slice(indent.length));
+    else {
+      indent = indentOfMarker(marker);
+      items.push([line.slice(marker.length)]);
+    }
+  }
+  return items;
+}
+
 function blockOfRun(kind: LineKind, run: string[]): Block {
   if (kind === "quote") return { kind: "quote", inlines: linesOf(run.map((line) => line.replace(QUOTE, "")), inlinesOfLine) };
-  return { kind: "list", ordered: kind === "numbered", items: run.map((line) => inlinesOfLine(line.replace(PATTERNS[kind], ""))) };
+  return { kind: "list", ordered: kind === "numbered", items: itemsOfRun(kind, run).map((item) => linesOf(item, inlinesOfLine)) };
 }
 
 /** A block with the lines it was read from. */
@@ -126,8 +157,8 @@ function blocksOf(text: string): Read[] {
       continue;
     }
     endProse();
-    const run: string[] = [];
-    while (index < lines.length && PATTERNS[kind].test(lines[index]!)) run.push(lines[index++]!);
+    const run = runFrom(kind, lines, index);
+    index += run.length;
     blocks.push({ block: blockOfRun(kind, run), lines: run });
   }
   endProse();
@@ -269,7 +300,12 @@ function markdownOfBlock(block: Block): string {
         .map((line) => `> ${line}`)
         .join("\n");
     case "list":
-      return block.items.map((item, index) => `${block.ordered ? `${index + 1}.` : "-"} ${markdownOfInlines(item)}`).join("\n");
+      return block.items
+        .map((item, index) => {
+          const marker = `${block.ordered ? `${index + 1}.` : "-"} `;
+          return `${marker}${markdownOfInlines(item).replaceAll("\n", `\n${indentOfMarker(marker)}`)}`;
+        })
+        .join("\n");
   }
 }
 

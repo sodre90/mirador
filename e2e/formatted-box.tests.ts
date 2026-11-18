@@ -275,6 +275,15 @@ export function formattedBoxTests() {
     await expectSent("Plan\na\tb");
   });
 
+  test("lines pasted into a list item reach the agent as lines of that item", async () => {
+    await page.keyboard.type("- a");
+    await expect(box().locator("li")).toHaveCount(1);
+    await pasteHtml(box(), "<div>x</div><div>y</div>", "x\ny");
+    await expect.poll(boxValue).toBe("- ax\n  y");
+    await expect(box().locator("li")).toHaveCount(1);
+    await expectSent("- ax\n  y", "ControlOrMeta+Enter");
+  });
+
   test("code pasted from an editor or a terminal arrives as it was copied", async () => {
     const code = "function f(a, b) {\n    return a * b; // some_var `x\n\tindented   \n\n}";
     await pasteText(box(), code);

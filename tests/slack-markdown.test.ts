@@ -41,6 +41,9 @@ const AS_TYPED = [
   "***both*** and **bold *and italic*** and **a *b* c**",
   "**`code` in bold** and *~~struck~~*",
   "**fine**\n3. odd list\n4. two\n- **ok** list",
+  "- a\n  b\n- c",
+  "1. a\n   b\n   \n   c\n2. d",
+  "- a\n b",
 ];
 
 const marked = (inlines: Inline[]) => inlines.flatMap((inline) => (inline.kind === "text" && inline.marks.length ? [[inline.text, ...inline.marks]] : []));
@@ -124,6 +127,16 @@ describe("what stays as typed", () => {
 
   test("an unclosed fence is text, not the start of a block", () => {
     expect(kinds(parseMessage("```\nnever closed"))).toEqual(["lines"]);
+  });
+
+  test("lines indented under a list item belong to it, with a break before each", () => {
+    const blocks = parseMessage("- a\n  b\n1. c\n   d");
+    expect(kinds(blocks)).toEqual(["list", "list"]);
+    expect(blocks[0]).toEqual({
+      kind: "list",
+      ordered: false,
+      items: [[{ kind: "text", text: "a", marks: [] }, { kind: "break" }, { kind: "text", text: "b", marks: [] }]],
+    });
   });
 
   test("a list it couldn't write back the same, numbered from 3, reads as plain lines rather than renumbered", () => {

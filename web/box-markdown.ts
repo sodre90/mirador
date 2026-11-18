@@ -106,10 +106,10 @@ class Writer {
     }
   }
 
-  linesOf(element: ElementNode, prefix = "") {
+  linesOf(element: ElementNode, prefix = "", continuationPrefix = prefix) {
     linesIn(element).forEach(({ child, nodes }, index) => {
       if (index > 0) this.markdown += "\n";
-      this.line(element, child, nodes, prefix);
+      this.line(element, child, nodes, index === 0 ? prefix : continuationPrefix);
     });
   }
 
@@ -137,7 +137,8 @@ class Writer {
         .filter($isListItemNode)
         .forEach((item, index) => {
           if (index > 0) this.markdown += "\n";
-          this.line(item, 0, item.getChildren().filter((node) => !$isLineBreakNode(node)), numbered ? `${index + 1}. ` : "- ");
+          const marker = numbered ? `${index + 1}. ` : "- ";
+          this.linesOf(item, marker, " ".repeat(marker.length));
         });
     } else if ($isElementNode(block)) this.linesOf(block);
     else this.markdown += block.getTextContent();
