@@ -361,6 +361,23 @@ test("each snapshot stands on its own, and only the newest are kept", async () =
   expect(await keepingTwo.keeps(workspace, second)).toBe(true);
 });
 
+test("a snapshot after git gc pruned what the last one staged, its refs deleted, hashes the files again and can be restored", async () => {
+  await write("kept.txt", "not committed\n");
+  const anHourAgo = new Date(Date.now() - 3_600_000);
+  await utimes(join(projectDir, "kept.txt"), anHourAgo, anHourAgo);
+  await checkpoints.snapshot(workspace);
+  for (const ref of (await git(projectDir, ["for-each-ref", "--format=%(refname)", "refs/mirador/"])).stdout.split("\n")) await git(projectDir, ["update-ref", "-d", ref]);
+  await git(projectDir, ["gc", "--quiet", "--prune=now"]);
+  await write("added.txt", "new\n");
+
+  const snapshot = await checkpoints.snapshot(workspace);
+  expect(snapshot).toMatch(/^[0-9a-f]{40}$/);
+  await write("kept.txt", "changed by the agent\n");
+  expect(await checkpoints.restore(workspace, snapshot!)).toEqual({ restored: 1, removed: 0 });
+  expect(await read("kept.txt")).toBe("not committed\n");
+  expect(await read("added.txt")).toBe("new\n");
+});
+
 test("the chain snapshots made before each had a ref is kept as one, and goes when it is the oldest", async () => {
   const tree = (await git(projectDir, ["write-tree"])).stdout;
   const older = (await git(projectDir, ["commit-tree", tree, "-m", "older"])).stdout;
@@ -897,12 +914,12 @@ test("a turn's snapshots, list of changes, preview and restore start no more git
 
   expect(started).toEqual({
     "first snapshot": 12,
-    "snapshot after an edit": 12,
-    "changes since it": 7,
-    preview: 8,
-    restore: 8,
-    "snapshot after the restore": 12,
-    "snapshot of no change": 10,
+    "snapshot after an edit": 13,
+    "changes since it": 8,
+    preview: 9,
+    restore: 9,
+    "snapshot after the restore": 13,
+    "snapshot of no change": 11,
   });
 }, 15_000);
 
