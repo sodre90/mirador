@@ -117,6 +117,45 @@ describe("pastAnswerOf", () => {
     });
   });
 
+  test("reads back the answer to a plugin install question without what came of the install, which the message tells first", () => {
+    const install: AskItem = { ...single, question: "Install the Media plugin?" };
+    const message = 'Mirador installed the Media plugin.\n\nMy answer to your question "Install the Media plugin?": Install';
+    expect(pastAnswerOf(install, "Showing.", message)).toEqual({ label: "Install", deliveredAs: "next-message" });
+  });
+
+  test("reads a label or note that spans lines back whole from a tool result", () => {
+    expect(pastAnswerOf(single, answerAsToolResult({ label: "Two\nor three", note: "first line\nsecond line\n\nfourth line" }), null)).toEqual({
+      label: "Two\nor three",
+      note: "first line\nsecond line\n\nfourth line",
+      deliveredAs: "tool-result",
+    });
+    const answers = [
+      { question: "First?", label: "B\nand more", note: "why\nbecause" },
+      { question: "Second?", label: "C" },
+    ];
+    expect(pastAnswerOf(several, answerAsToolResult({ label: "B · C", answers, note: "all\nof them" }), null)).toEqual({
+      label: "B\nand more · C",
+      note: "all\nof them",
+      answers,
+      deliveredAs: "tool-result",
+    });
+  });
+
+  test("reads a label or note that spans lines back whole from the user's next message", () => {
+    const given = { label: "One\nor two", note: "fine\nreally" };
+    expect(pastAnswerOf(single, "Showing.", `My answer to your question "Which?": ${given.label}\nNote: ${given.note}`)).toEqual({ ...given, deliveredAs: "next-message" });
+    const message = 'My answers to your questions:\n1. "First?": A\nand more\n   Note: why\nbecause\n2. "Second?": D\nNote on all the answers: all\nof them';
+    expect(pastAnswerOf(several, "Showing.", message)).toEqual({
+      label: "A\nand more · D",
+      note: "all\nof them",
+      answers: [
+        { question: "First?", label: "A\nand more", note: "why\nbecause" },
+        { question: "Second?", label: "D" },
+      ],
+      deliveredAs: "next-message",
+    });
+  });
+
   test("finds no answer when neither holds one for every question", () => {
     expect(pastAnswerOf(single, "The question is now showing in the user's browser.", "Never mind, do something else")).toBeNull();
     expect(pastAnswerOf(several, "The user answered 2 questions:\n1. First?\n   The user chose: A", null)).toBeNull();

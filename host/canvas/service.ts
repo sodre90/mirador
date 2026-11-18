@@ -197,7 +197,7 @@ export class CanvasService {
 
   private async installThenTell(item: AskItem, offerId: string, given: GivenAnswer) {
     const outcome = await this.pluginInstaller.settle(offerId, given.label === INSTALL_ANSWER);
-    await this.conversations.send(item.conversationId, `${answerAsMessage(item, given)}\n${outcome}`).catch(() => {});
+    await this.conversations.send(item.conversationId, `${outcome}\n\n${answerAsMessage(item, given)}`).catch(() => {});
   }
 
   /** What the canvas has for the agent to hear of with the user's next message. */
@@ -373,13 +373,23 @@ interface ReadAnswer {
 /** The answer `answerAsToolResult` or `answerAsMessage` wrote for the question, read back; null when neither holds one. */
 export function pastAnswerOf(item: AskItem, toolResult: string, nextUserMessage: string | null): CanvasAnswer | null {
   const questions = questionsOf(item);
-  const fromToolResult = readAnswer(toolResult, () => /^\s*The user chose: (.*)$/, /^\s*Their note: (.*)$/, /^Their note on all the answers: (.*)$/);
+  const questionLine = (index: number) => new RegExp(`^${index + 1}\\. ${escapeRegExp(questions[index]?.question.split("\n")[0] ?? "")}`);
+  const fromToolResult = readAnswer(toolResult, {
+    chosenLine: () => /^\s*The user chose: (.*)$/,
+    noteLine: /^\s*Their note: (.*)$/,
+    overallNoteLine: /^Their note on all the answers: (.*)$/,
+    ...(item.questions && { questionLine }),
+  });
   const answerLinePrefix = (index: number) =>
     item.questions ? `${index + 1}. "${questions[index]?.question}": ` : `My answer to your question "${item.question}": `;
   const fromNextMessage =
     nextUserMessage === null
       ? null
-      : readAnswer(nextUserMessage, (index) => new RegExp(`^${escapeRegExp(answerLinePrefix(index))}(.*)$`), /^\s*Note: (.*)$/, /^Note on all the answers: (.*)$/);
+      : readAnswer(nextUserMessage, {
+          chosenLine: (index) => new RegExp(`^${escapeRegExp(answerLinePrefix(index))}(.*)$`),
+          noteLine: /^\s*Note: (.*)$/,
+          overallNoteLine: /^Note on all the answers: (.*)$/,
+        });
   const read = [
     { answer: fromToolResult, deliveredAs: "tool-result" as const },
     { answer: fromNextMessage, deliveredAs: "next-message" as const },
@@ -391,17 +401,46 @@ export function pastAnswerOf(item: AskItem, toolResult: string, nextUserMessage:
   return { label: answersSummary(answers), ...(note && { note }), answers, deliveredAs: read.deliveredAs };
 }
 
-function readAnswer(text: string, chosenLine: (index: number) => RegExp, noteLine: RegExp, overallNoteLine: RegExp): ReadAnswer {
+interface AnswerFormat {
+  chosenLine: (index: number) => RegExp;
+  noteLine: RegExp;
+  overallNoteLine: RegExp;
+  /** The line that names a question before its answer, where the format has one. */
+  questionLine?: (index: number) => RegExp;
+}
+
+function readAnswer(text: string, { chosenLine, noteLine, overallNoteLine, questionLine }: AnswerFormat): ReadAnswer {
   const read: ReadAnswer = { entries: [] };
+  const fields: { lines: string[]; store: (text: string) => void }[] = [];
+  const startField = (firstLine: string, store: (text: string) => void) => {
+    const lines = [firstLine];
+    fields.push({ lines, store });
+    return lines;
+  };
+  let openLines: string[] | null = null;
   for (const line of text.split("\n")) {
     const chosen = chosenLine(read.entries.length).exec(line)?.[1];
     const overallNote = overallNoteLine.exec(line)?.[1];
     const note = noteLine.exec(line)?.[1];
     const latest = read.entries.at(-1);
-    if (chosen !== undefined) read.entries.push({ label: chosen });
-    else if (overallNote !== undefined) read.note = overallNote;
-    else if (note !== undefined && latest) latest.note = note;
+    if (chosen !== undefined) {
+      const entry: AskAnswerEntry = { label: chosen };
+      read.entries.push(entry);
+      openLines = startField(chosen, (label) => (entry.label = label));
+    } else if (overallNote !== undefined) {
+      openLines = startField(overallNote, (written) => (read.note = written));
+    } else if (note !== undefined && latest) {
+      openLines = startField(note, (written) => (latest.note = written));
+    } else if (questionLine?.(read.entries.length).test(line)) {
+      openLines = null;
+    } else {
+      openLines?.push(line);
+    }
   }
+  fields.forEach(({ lines, store }) => {
+    while (lines.length > 1 && lines.at(-1)!.trim() === "") lines.pop();
+    store(lines.join("\n"));
+  });
   return read;
 }
 
