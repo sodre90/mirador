@@ -169,3 +169,25 @@ test("keys pressed inside a focused canvas page navigate, but cannot create conv
   await page.waitForTimeout(1_000);
   await expect(page.locator(".workspace li")).toHaveCount(conversationsBefore);
 });
+
+test("holding a shortcut that creates makes one conversation, while holding one that steps keeps stepping", async ({ page }) => {
+  await signIn(page, host);
+  const conversations = page.locator(".workspace").nth(0).locator("li");
+  const before = await conversations.count();
+
+  await page.keyboard.down("Alt");
+  for (let keydown = 0; keydown < 5; keydown++) await page.keyboard.down("KeyT");
+  await page.keyboard.up("KeyT");
+  await page.keyboard.up("Alt");
+  await expect(conversations).toHaveCount(before + 1);
+  await page.waitForTimeout(1_000);
+  await expect(conversations).toHaveCount(before + 1);
+
+  await conversations.first().click();
+  await page.keyboard.down("Alt");
+  await page.keyboard.down("ArrowDown");
+  await page.keyboard.down("ArrowDown");
+  await page.keyboard.up("ArrowDown");
+  await page.keyboard.up("Alt");
+  await expect(conversations.nth(2)).toHaveClass(/selected/);
+});

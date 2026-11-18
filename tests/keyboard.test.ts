@@ -11,7 +11,7 @@ import {
   type NavigationState,
 } from "../web/navigation.ts";
 import { matchesQuery } from "../web/Palette.tsx";
-import { commandFor, dictates, findsInCanvasPage, findsTemplate, shortcutKeys, type KeyPress } from "../web/shortcuts.ts";
+import { commandFor, dictates, findsInCanvasPage, findsTemplate, repeatsWhenHeld, shortcutKeys, type KeyPress } from "../web/shortcuts.ts";
 import { terminalKeyAction } from "../web/terminal-keys.ts";
 
 const press = (code: string, modifiers: Partial<KeyPress> = {}, key = ""): KeyPress => ({
@@ -136,6 +136,31 @@ describe("commandFor", () => {
     // Ctrl+Shift+Minus (Ctrl+_) is readline undo in bash/zsh; font-shrink must not intercept it
     expect(commandFor(press("Minus", { ctrlKey: true, shiftKey: true }), "terminal", false)).toBeNull();
     expect(commandFor(press("Minus", { metaKey: true, shiftKey: true }), "terminal", true)).toBeNull();
+  });
+});
+
+describe("repeatsWhenHeld", () => {
+  const held = (code: string, modifiers: Partial<KeyPress>, mac = true) => repeatsWhenHeld(commandFor(press(code, modifiers), "not-typing", mac)!);
+
+  test("keys that step, through conversations, workspaces, your messages and the text size, keep running while held", () => {
+    expect(held("ArrowDown", { altKey: true })).toBe(true);
+    expect(held("ArrowUp", { altKey: true, shiftKey: true })).toBe(true);
+    expect(held("ArrowUp", { metaKey: true })).toBe(true);
+    expect(held("Equal", { metaKey: true })).toBe(true);
+    expect(held("Minus", { metaKey: true })).toBe(true);
+  });
+
+  test("keys that create, open, toggle, restart or reset run once for a press", () => {
+    expect(held("KeyT", { altKey: true })).toBe(false);
+    expect(held("KeyT", { altKey: true, shiftKey: true })).toBe(false);
+    expect(held("KeyR", { metaKey: true, shiftKey: true })).toBe(false);
+    expect(held("KeyR", { metaKey: true })).toBe(false);
+    expect(held("KeyK", { metaKey: true })).toBe(false);
+    expect(held("KeyS", { metaKey: true, shiftKey: true })).toBe(false);
+    expect(held("Backslash", { metaKey: true })).toBe(false);
+    expect(held("Digit2", { altKey: true })).toBe(false);
+    expect(held("KeyY", { metaKey: true, shiftKey: true })).toBe(false);
+    expect(held("Digit0", { metaKey: true })).toBe(false);
   });
 });
 

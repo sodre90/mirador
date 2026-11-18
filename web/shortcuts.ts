@@ -26,6 +26,17 @@ export type ShortcutCommand =
   | { type: "reload-page" }
   | { type: "restart-host" };
 
+const COMMANDS_THAT_REPEAT_WHEN_HELD: ReadonlySet<ShortcutCommand["type"]> = new Set([
+  "adjacent-conversation",
+  "adjacent-workspace",
+  "own-message",
+  "bigger-font",
+  "smaller-font",
+]);
+
+/** Whether the command runs again for each repeat of a key held down: stepping does, anything that creates, opens, toggles or restarts runs once per press. */
+export const repeatsWhenHeld = (command: ShortcutCommand) => COMMANDS_THAT_REPEAT_WHEN_HELD.has(command.type);
+
 export interface KeyPress {
   key: string;
   code: string;
