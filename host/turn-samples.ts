@@ -1,10 +1,10 @@
 import type { TurnSample, UsageHistory } from "../shared/canvas-plugins.ts";
-import type { StoredEvent } from "../shared/model.ts";
+import { endsTurnWithSpend, type StoredEvent } from "../shared/model.ts";
 import type { Store } from "./store.ts";
 
 /** A stored turn end, or an error that ended a turn, as a plugin reads the turn; null for any other event. */
 export function turnSampleOf(conversationId: string, { at, event }: StoredEvent): TurnSample | null {
-  if (event.type !== "turn-end" && !(event.type === "error" && event.endsTurn)) return null;
+  if (!endsTurnWithSpend(event)) return null;
   return {
     conversationId,
     startedAt: event.startedAt ?? null,

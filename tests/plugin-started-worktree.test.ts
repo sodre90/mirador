@@ -251,6 +251,17 @@ test("a plugin reads the tokens of a conversation it started, summed over its tu
   expect(conversations.usageOf(callerId, "race", started.id)).toEqual({ inputTokens: 200, outputTokens: 40, cachedReadTokens: 10, cachedWriteTokens: 0, cost: null, turns: 2 });
 });
 
+test("a plugin's token count includes the turns a usage limit or an error ended", async () => {
+  const { conversations, store, callerId, replied } = await callerInWorkspace({ inRepository: true });
+  const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
+  await replied(1);
+  const usage = { inputTokens: 5, outputTokens: 7, cachedReadTokens: 0, cachedWriteTokens: 0 };
+  store.appendEvent(started.id, { type: "error", message: "limit", usageLimit: { resetsAt: null }, endsTurn: true, usage });
+  store.appendEvent(started.id, { type: "error", message: "beside a turn", usage: { ...usage, inputTokens: 1000 } });
+
+  expect(conversations.usageOf(callerId, "race", started.id)).toMatchObject({ inputTokens: 105, outputTokens: 27, turns: 2 });
+});
+
 test("the cost is what the agent last reported for the conversation", async () => {
   const { conversations, callerId, prompted, replied } = await callerInWorkspace({ inRepository: true });
   const started = await conversations.startInOwnWorktree(callerId, "race", "Helper", "Fix the bug");
