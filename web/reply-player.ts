@@ -120,8 +120,9 @@ async function audible() {
   if (context!.state !== "running") throw new Error(AUDIO_BLOCKED);
 }
 
-async function played(sound: AudioBuffer, onSource: (source: AudioBufferSourceNode) => void) {
+async function played(sound: AudioBuffer, signal: AbortSignal, onSource: (source: AudioBufferSourceNode) => void) {
   await audible();
+  if (signal.aborted) return;
   return new Promise<void>((resolve) => {
     const source = context!.createBufferSource();
     source.buffer = sound;
@@ -171,7 +172,7 @@ async function speak(conversationId: string, key: string, summary: (signal: Abor
       if (index + 1 < sentences.length) next = inAdvance(soundOf(index + 1));
       if (aborts.signal.aborted) return false;
       if (snapshot.reading?.phase !== "speaking") publish({ reading: { ...reading, phase: "speaking" } });
-      await played(sound, (playing) => (source = playing));
+      await played(sound, aborts.signal, (playing) => (source = playing));
       if (aborts.signal.aborted) return false;
     }
     return true;
