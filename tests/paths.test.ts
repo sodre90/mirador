@@ -1,8 +1,8 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, symlinkSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import { completeDirectories, createsDirectory, directoryToAdd, existingDirectory, expandHome, parentOf } from "../host/paths.ts";
+import { completeDirectories, createsDirectory, directoryToAdd, existingDirectory, expandHome, onSameFolder, parentOf } from "../host/paths.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "mirador-paths-"));
 ["alpha", "beta", ".hidden"].forEach((name) => mkdirSync(join(folder, name)));
@@ -47,5 +47,22 @@ describe("paths typed by the user", () => {
     expect(await completeDirectories(`${folder}\\al`)).toEqual([`${folder}\\alpha/`]);
     expect((await completeDirectories("~\\")).every((path) => path.startsWith("~\\"))).toBe(true);
     expect(await existingDirectory("~\\")).toBe(homedir());
+  });
+});
+
+describe("a folder added again", () => {
+  test("is found under another spelling: through a symlink, or in another letter case where the disk ignores case", async () => {
+    const held = [{ path: join(folder, "beta") }, { path: join(folder, "gone") }, { path: join(folder, "alpha") }];
+    const link = join(folder, "alpha-link");
+    symlinkSync(join(folder, "alpha"), link, "junction");
+    expect(await onSameFolder(held, link)).toBe(held[2]);
+    expect(await onSameFolder(held, join(folder, "alpha"))).toBe(held[2]);
+    expect(await onSameFolder(held, join(folder, ".hidden"))).toBeUndefined();
+    if (existsSync(join(folder, "ALPHA"))) expect(await onSameFolder(held, join(folder, "ALPHA"))).toBe(held[2]);
+  });
+
+  test("a folder inside one already held is a folder of its own", async () => {
+    mkdirSync(join(folder, "alpha", "package"), { recursive: true });
+    expect(await onSameFolder([{ path: join(folder, "alpha") }], join(folder, "alpha", "package"))).toBeUndefined();
   });
 });

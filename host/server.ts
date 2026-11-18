@@ -74,7 +74,7 @@ import { MAX_DROPPED_FILE_BYTES, type DroppedFiles } from "./dropped-files.ts";
 import { MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { imagesOf, lowDataEvent, pageEvent, wholeToolOutput } from "./low-data.ts";
 import { localImage } from "./local-images.ts";
-import { completeDirectories, createsDirectory, directoryToAdd } from "./paths.ts";
+import { completeDirectories, createsDirectory, directoryToAdd, onSameFolder } from "./paths.ts";
 import { launchForNewWorkspace, profileFor, type ProfileService } from "./profiles.ts";
 import { errorResponse, problemResponse } from "./problem-response.ts";
 import type { DesktopAppCheck } from "./desktop-app-check.ts";
@@ -1152,7 +1152,7 @@ export function startServer(services: HostServices) {
 
   async function createWorkspace(path: string, profileId: string | null): Promise<Workspace> {
     const directory = await directoryToAdd(path);
-    const existing = store.findWorkspaceByPath(directory);
+    const existing = store.findWorkspaceByPath(directory) ?? (await onSameFolder(store.listWorkspaces(), directory));
     if (existing) return existing;
     return store.insertWorkspace({
       id: crypto.randomUUID(),
