@@ -19,9 +19,9 @@ function machine() {
 }
 
 /** A device asking to join as the protocol has it: it commits to its nonce, reveals it, and works out the number it shows. */
-async function askToJoin(requests: JoinRequestService, checkedAgainst: string | null = machineAuthority, sentFingerprint = checkedAgainst) {
+async function askToJoin(requests: JoinRequestService, checkedAgainst: string | null = machineAuthority, sentFingerprint = checkedAgainst, fromAddress = "192.168.1.23") {
   const nonce = newNonce();
-  const opened = requests.open({ name: "Laptop", commitment: await commitmentTo(nonce), authorityFingerprint: sentFingerprint, fromAddress: "192.168.1.23", tailscaleUser: null });
+  const opened = requests.open({ name: "Laptop", commitment: await commitmentTo(nonce), authorityFingerprint: sentFingerprint, fromAddress, tailscaleUser: null });
   await requests.reveal(opened.id, opened.secret, nonce);
   return { ...opened, number: await matchingNumber(checkedAgainst, nonce, opened.machineNonce) };
 }
@@ -96,15 +96,50 @@ test("a request waits for approval only once its device revealed the nonce it co
 
 test("at most three requests wait at once, each for five minutes", async () => {
   const { clock, requests } = machine();
-  const first = await askToJoin(requests);
-  await askToJoin(requests);
-  await askToJoin(requests);
-  await expect(askToJoin(requests)).rejects.toThrow("Too many devices are waiting to join this machine.");
+  const askingFrom = (lastNumber: number) => askToJoin(requests, machineAuthority, machineAuthority, `192.168.1.${lastNumber}`);
+  const first = await askingFrom(1);
+  await askingFrom(2);
+  await askingFrom(3);
+  await expect(askingFrom(4)).rejects.toThrow("Too many devices are waiting to join this machine.");
 
   clock.now += 5 * 60_000;
   expect(requests.waiting()).toEqual([]);
   expect(() => requests.poll(first.id, first.secret)).toThrow("This request to join expired, or was never made.");
+  await askingFrom(4);
+});
+
+test("one sender, an IPv4 address or an IPv6 /64 network, holds one place: its new request takes the place of the one it waits on", async () => {
+  const { requests } = machine();
+  const askingFrom = (address: string) => askToJoin(requests, machineAuthority, machineAuthority, address);
+  const waitingFrom = () => requests.waiting().map(({ fromAddress }) => fromAddress);
+
+  const abandoned = await askingFrom("192.168.1.23");
+  await askingFrom("::ffff:192.168.1.23");
+  await askingFrom("::ffff:c0a8:117");
+  expect(waitingFrom()).toEqual(["::ffff:c0a8:117"]);
+  expect(() => requests.poll(abandoned.id, abandoned.secret)).toThrow("This request to join expired, or was never made.");
+  await askingFrom("192.168.1.24");
+
+  await askingFrom("2001:db8:1:2:aaaa::1");
+  await askingFrom("2001:db8:1:2:bbbb::2");
+  await askingFrom("2001:0db8:0001:0002::3%en0");
+  expect(new Set(waitingFrom())).toEqual(new Set(["::ffff:c0a8:117", "192.168.1.24", "2001:0db8:0001:0002::3%en0"]));
+  await expect(askingFrom("2001:db8:1:3::1")).rejects.toThrow("Too many devices are waiting to join this machine.");
+});
+
+test("a sender whose request was answered, or whose request expired, may ask again", async () => {
+  const { clock, requests } = machine();
+  const first = await askToJoin(requests);
+  expect(await requests.approve(first.id, first.number)).toBe(true);
   await askToJoin(requests);
+  clock.now += 5 * 60_000;
+  await askToJoin(requests);
+});
+
+test("requests from an address that is no network address, such as the peer-to-peer tunnel, are not limited per sender", async () => {
+  const { requests } = machine();
+  await askToJoin(requests, machineAuthority, machineAuthority, "the peer-to-peer tunnel");
+  await askToJoin(requests, machineAuthority, machineAuthority, "the peer-to-peer tunnel");
 });
 
 test("one sender asks at most five times a minute", () => {
@@ -137,12 +172,12 @@ test("mirador approve asks for the number each waiting device shows, and approve
   expect(approveTyping()).toContain("No device is asking to join this Mirador.");
   const store = new Store(join(dataDir, "state.sqlite"));
   const requests = new JoinRequestService(store, new DeviceService(store), null);
-  const approved = await askToJoin(requests, null);
-  const mistyped = await askToJoin(requests, null);
-  const answeredLater = await askToJoin(requests, null);
+  const approved = await askToJoin(requests, null, null, "192.168.1.1");
+  const mistyped = await askToJoin(requests, null, null, "192.168.1.2");
+  const answeredLater = await askToJoin(requests, null, null, "192.168.1.3");
 
   const output = approveTyping(spacedNumber(approved.number), anotherNumber(mistyped.number), "");
-  expect(output).toContain("Laptop asks to join, from 192.168.1.23 (5 minutes left).");
+  expect(output).toContain("Laptop asks to join, from 192.168.1.1 (5 minutes left).");
   expect(output).toContain("Approved. Laptop gets in when it next checks, within seconds.");
   expect(output).toContain("That is not the number it shows, so its request was denied.");
   expect(output).toContain("Left waiting.");

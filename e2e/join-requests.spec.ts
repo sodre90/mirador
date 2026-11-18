@@ -103,16 +103,24 @@ test("another Mirador asks to join over HTTPS, and gets in once someone at the m
   await serverPage.close();
 });
 
-test("a browser on the network asks to join, and is signed in once someone at the machine types the number it shows", async ({ browser }) => {
+test("a browser on the network asks to join, asking again in place of the request it gave up on, and is signed in once someone at the machine types the number it shows", async ({ browser }) => {
   const serverPage = await browser.newPage();
   await signIn(serverPage, server);
-  const phone = await browser.newPage({ ignoreHTTPSErrors: true });
+  const phoneOnTheLan = "192.168.1.40";
+  const phone = await browser.newPage({ ignoreHTTPSErrors: true, extraHTTPHeaders: { "x-forwarded-for": phoneOnTheLan } });
   await phone.goto(networkOrigin());
-  await phone.getByLabel("Name this device").fill("Phone");
-  await phone.getByRole("button", { name: "Ask to join" }).click();
-  const number = await numberShownIn(phone.locator(".join-machine"));
-
   const prompt = serverPage.getByRole("alertdialog", { name: "Phone asks to join" });
+  const askToJoin = async () => {
+    await phone.getByLabel("Name this device").fill("Phone");
+    await phone.getByRole("button", { name: "Ask to join" }).click();
+    return numberShownIn(phone.locator(".join-machine"));
+  };
+  await askToJoin();
+  await expect(prompt).toContainText(`From ${phoneOnTheLan}`);
+  await phone.reload();
+  const number = await askToJoin();
+  await expect(prompt).toHaveCount(1);
+
   await prompt.getByLabel("Number it shows").fill(number.replace(" ", ""));
   await prompt.getByRole("button", { name: "Approve" }).click();
   await expect(phone.getByRole("button", { name: "Settings…" })).toBeVisible();

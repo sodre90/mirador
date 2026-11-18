@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { isIPv4, isIPv6 } from "node:net";
 import { commitmentTo, matchingNumber, newNonce, typedNumber, type JoinRequestAnswer, type JoinRequestOpened } from "../shared/join-requests.ts";
 import type { JoinRequest } from "../shared/model.ts";
 import { deviceName, hashed, type DeviceService } from "./devices.ts";
@@ -9,6 +10,9 @@ const LIFETIME_MILLISECONDS = 5 * 60_000;
 const MOST_UNANSWERED = 3;
 const MOST_ASKED_PER_SENDER_A_MINUTE = 5;
 const SHA256_IN_BASE64URL = /^[\w-]{43}$/;
+const IPV6_GROUPS = 8;
+const IPV6_NETWORK_GROUPS = 4;
+const IPV4_MAPPED_PREFIX = [0, 0, 0, 0, 0, 0xffff];
 
 /** Why the machine refused a request about joining it, with the HTTP status that says so. */
 export class JoinRequestRefused extends Error {
@@ -26,6 +30,31 @@ export interface Opening {
   authorityFingerprint: unknown;
   fromAddress: string;
   tailscaleUser: string | null;
+}
+
+const groupsOfDottedIPv4 = (address: string) => {
+  const [a, b, c, d] = address.split(".").map(Number);
+  return [(a << 8) | b, (c << 8) | d];
+};
+
+const groupsOfIPv6 = (address: string) => {
+  const [before, after] = address.split("%")[0].split("::");
+  const groupsOf = (text: string | undefined) => (text ? text.split(":") : []).flatMap((group) => (group.includes(".") ? groupsOfDottedIPv4(group) : [parseInt(group, 16)]));
+  const [front, back] = [groupsOf(before), groupsOf(after)];
+  return [...front, ...Array<number>(IPV6_GROUPS - front.length - back.length).fill(0), ...back];
+};
+
+/**
+ * Who a request is from, for keeping one sender from holding several places: an IPv4 address, or the /64 network of an
+ * IPv6 one, within which a single device can take as many addresses as it likes. Null for what is no network address,
+ * such as the peer-to-peer tunnel.
+ */
+export function senderOf(address: string): string | null {
+  if (isIPv4(address)) return address;
+  if (!isIPv6(address)) return null;
+  const groups = groupsOfIPv6(address);
+  if (IPV4_MAPPED_PREFIX.every((group, index) => groups[index] === group)) return groups.slice(6).map((group) => `${group >> 8}.${group & 0xff}`).join(".");
+  return `${groups.slice(0, IPV6_NETWORK_GROUPS).map((group) => group.toString(16)).join(":")}::/64`;
 }
 
 const shownToApprovers = ({ id, name, fromAddress, tailscaleUser, expiresAt }: StoredJoinRequest): JoinRequest => ({ id, name, fromAddress, tailscaleUser, expiresAt });
@@ -50,7 +79,8 @@ export class JoinRequestService {
       throw new JoinRequestRefused(409, "This machine's certificate authority is not the one you checked its certificate against. Something between you may be posing as it.");
     }
     const now = this.now();
-    if (this.store.unansweredJoinRequests(now).length >= MOST_UNANSWERED) {
+    const unanswered = this.withoutEarlierRequestsOf(senderOf(fromAddress), this.store.unansweredJoinRequests(now));
+    if (unanswered.length >= MOST_UNANSWERED) {
       throw new JoinRequestRefused(429, "Too many devices are waiting to join this machine. Try again in a few minutes.");
     }
     const secret = randomBytes(32).toString("base64url");
@@ -109,6 +139,14 @@ export class JoinRequestService {
   deny(id: string) {
     this.waitingRequest(id);
     this.store.answerJoinRequest(id, "denied");
+  }
+
+  /** A sender's new request takes the place of the ones it is still waiting on, which a device that gave up on one leaves behind. */
+  private withoutEarlierRequestsOf(sender: string | null, unanswered: StoredJoinRequest[]) {
+    if (sender === null) return unanswered;
+    const [earlier, others] = [unanswered.filter((request) => senderOf(request.fromAddress) === sender), unanswered.filter((request) => senderOf(request.fromAddress) !== sender)];
+    earlier.forEach(({ id }) => this.store.deleteJoinRequest(id));
+    return others;
   }
 
   private askedBy(id: string, secret: unknown) {
