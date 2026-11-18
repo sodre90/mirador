@@ -26,7 +26,7 @@ async function askToJoin(requests: JoinRequestService, checkedAgainst: string | 
   return { ...opened, number: await matchingNumber(checkedAgainst, nonce, opened.machineNonce) };
 }
 
-test("the approver types the number the device shows, and the device gets its key once", async () => {
+test("the approver types the number the device shows, and the device gets its key", async () => {
   const { devices, requests } = machine();
   const asked = await askToJoin(requests);
   expect(asked.expiresIn).toBe(5 * 60_000);
@@ -38,8 +38,47 @@ test("the approver types the number the device shows, and the device gets its ke
   expect(answer).toMatchObject({ answer: "approved" });
   if (answer.answer !== "approved") return;
   expect(devices.deviceWithToken(answer.token)).toMatchObject({ id: answer.deviceId, name: "Laptop" });
-  expect(() => requests.poll(asked.id, asked.secret)).toThrow("This request to join expired, or was never made.");
   expect(requests.waiting()).toEqual([]);
+});
+
+test("a device whose answer was lost polls again for a new key of the same device, which replaces the first, until the request expires", async () => {
+  const { clock, devices, requests } = machine();
+  const asked = await askToJoin(requests);
+  await requests.approve(asked.id, asked.number);
+  const lost = requests.poll(asked.id, asked.secret);
+  const again = requests.poll(asked.id, asked.secret);
+  if (lost.answer !== "approved" || again.answer !== "approved") throw new Error("Both polls should have been approved.");
+
+  expect(again.deviceId).toBe(lost.deviceId);
+  expect(again.token).not.toBe(lost.token);
+  expect(devices.deviceWithToken(lost.token)).toBeUndefined();
+  expect(devices.deviceWithToken(again.token)).toMatchObject({ id: lost.deviceId, name: "Laptop" });
+  expect(devices.list()).toHaveLength(1);
+  expect(requests.waiting()).toEqual([]);
+  expect(() => requests.poll(asked.id, "not-the-secret")).toThrow("This request to join expired, or was never made.");
+
+  clock.now += 5 * 60_000;
+  expect(() => requests.poll(asked.id, asked.secret)).toThrow("This request to join expired, or was never made.");
+  expect(devices.deviceWithToken(again.token)).toMatchObject({ id: lost.deviceId });
+});
+
+test("a device revoked after it was admitted gets no new key by polling again", async () => {
+  const { devices, requests } = machine();
+  const asked = await askToJoin(requests);
+  await requests.approve(asked.id, asked.number);
+  const admitted = requests.poll(asked.id, asked.secret);
+  if (admitted.answer !== "approved") throw new Error("The poll should have been approved.");
+  devices.revoke(admitted.deviceId);
+  expect(() => requests.poll(asked.id, asked.secret)).toThrow("This request to join expired, or was never made.");
+});
+
+test("a delivered request no longer counts among those waiting, and its sender may ask again", async () => {
+  const { requests } = machine();
+  const asked = await askToJoin(requests);
+  await requests.approve(asked.id, asked.number);
+  requests.poll(asked.id, asked.secret);
+  expect(requests.waiting()).toEqual([]);
+  await askToJoin(requests);
 });
 
 const anotherNumber = (number: string) => String((Number(number) + 1) % 1_000_000).padStart(6, "0");

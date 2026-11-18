@@ -46,7 +46,7 @@ const AGENT_COMMANDS_FILLED = "agent_commands_filled";
 
 const deviceColumns = "id, name, joined_at AS joinedAt, last_seen_at AS lastSeenAt";
 const joinRequestColumns = `id, secret_hash AS secretHash, name, from_address AS fromAddress, tailscale_user AS tailscaleUser,
-  authority_fingerprint AS authorityFingerprint, commitment, machine_nonce AS machineNonce, requester_nonce AS requesterNonce, answer, expires_at AS expiresAt`;
+  authority_fingerprint AS authorityFingerprint, commitment, machine_nonce AS machineNonce, requester_nonce AS requesterNonce, answer, device_id AS deviceId, expires_at AS expiresAt`;
 
 /** What the machine keeps about a join request; only the hash of the secret the device asking polls with. */
 export interface StoredJoinRequest extends JoinRequest {
@@ -58,6 +58,8 @@ export interface StoredJoinRequest extends JoinRequest {
   /** Null until the device asking reveals it; only then does the request wait for approval. */
   requesterNonce: string | null;
   answer: "approved" | "denied" | null;
+  /** The device an approved request admitted when its device first collected the answer; the request stays until it expires, in case that answer was lost. */
+  deviceId: string | null;
 }
 
 /** The events that count as the agent having replied, as the SQL condition on an events row: not the turn a restart cut short. */
@@ -151,6 +153,7 @@ const addedColumns = [
   { table: "conversations", column: "profile_id", definition: "TEXT" },
   { table: "workspaces", column: "default_harness", definition: "TEXT NOT NULL DEFAULT 'claude'" },
   { table: "profiles", column: "harness", definition: "TEXT NOT NULL DEFAULT 'claude'" },
+  { table: "join_requests", column: "device_id", definition: "TEXT" },
   { table: "conversations", column: "title_set_by_user", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "bypass_permissions", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "queued_messages", definition: "TEXT NOT NULL DEFAULT '[]'" },
@@ -1402,6 +1405,10 @@ export class Store {
     return this.db.query("UPDATE join_requests SET answer = ? WHERE id = ? AND answer IS NULL").run(answer, id).changes > 0;
   }
 
+  setJoinRequestDevice(id: string, deviceId: string) {
+    this.db.query("UPDATE join_requests SET device_id = ? WHERE id = ?").run(deviceId, id);
+  }
+
   deleteJoinRequest(id: string) {
     this.db.query("DELETE FROM join_requests WHERE id = ?").run(id);
   }
@@ -1418,6 +1425,11 @@ export class Store {
     this.db
       .query("INSERT INTO devices (id, name, token_hash, joined_at, last_seen_at) VALUES (?, ?, ?, ?, ?)")
       .run(id, name, tokenHash, joinedAt, lastSeenAt);
+  }
+
+  /** Whether the device is still there to take it. */
+  setDeviceTokenHash(id: string, tokenHash: string) {
+    return this.db.query("UPDATE devices SET token_hash = ? WHERE id = ?").run(tokenHash, id).changes > 0;
   }
 
   setDeviceLastSeen(id: string, at: number) {

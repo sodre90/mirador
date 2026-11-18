@@ -10,6 +10,7 @@ const LIFETIME_MILLISECONDS = 5 * 60_000;
 const MOST_UNANSWERED = 3;
 const MOST_ASKED_PER_SENDER_A_MINUTE = 5;
 const SHA256_IN_BASE64URL = /^[\w-]{43}$/;
+const NO_SUCH_REQUEST = "This request to join expired, or was never made.";
 const IPV6_GROUPS = 8;
 const IPV6_NETWORK_GROUPS = 4;
 const IPV4_MAPPED_PREFIX = [0, 0, 0, 0, 0, 0xffff];
@@ -95,6 +96,7 @@ export class JoinRequestService {
       machineNonce: newNonce(),
       requesterNonce: null,
       answer: null,
+      deviceId: null,
       expiresAt: now + LIFETIME_MILLISECONDS,
     };
     this.store.addJoinRequest(request);
@@ -111,14 +113,22 @@ export class JoinRequestService {
     return shownToApprovers(request);
   }
 
-  /** The machine's answer so far; an approved device gets its token here, once. */
+  /** The machine's answer so far; an approved device gets its token here, and a new one each time it asks again, in case the answer was lost. */
   poll(id: string, secret: unknown): JoinRequestAnswer {
     const request = this.askedBy(id, secret);
     if (request.answer === null) return { answer: "waiting" };
-    this.store.deleteJoinRequest(id);
-    if (request.answer === "denied") return { answer: "denied" };
-    const { device, token } = this.devices.admit(request.name);
-    return { answer: "approved", deviceId: device.id, token };
+    if (request.answer === "denied") {
+      this.store.deleteJoinRequest(id);
+      return { answer: "denied" };
+    }
+    if (request.deviceId === null) {
+      const { device, token } = this.devices.admit(request.name);
+      this.store.setJoinRequestDevice(id, device.id);
+      return { answer: "approved", deviceId: device.id, token };
+    }
+    const token = this.devices.reissueToken(request.deviceId);
+    if (token === null) throw new JoinRequestRefused(404, NO_SUCH_REQUEST);
+    return { answer: "approved", deviceId: request.deviceId, token };
   }
 
   waiting(): JoinRequest[] {
@@ -152,7 +162,7 @@ export class JoinRequestService {
   private askedBy(id: string, secret: unknown) {
     const request = this.store.findJoinRequest(id, this.now());
     if (!request || typeof secret !== "string" || hashed(secret) !== request.secretHash) {
-      throw new JoinRequestRefused(404, "This request to join expired, or was never made.");
+      throw new JoinRequestRefused(404, NO_SUCH_REQUEST);
     }
     return request;
   }

@@ -9,6 +9,7 @@ const INVITE_LENGTH = 12;
 const DEVICE_NAME_LENGTH = 80;
 
 export const hashed = (secret: string) => createHash("sha256").update(secret).digest("hex");
+const newToken = () => randomBytes(32).toString("base64url");
 const withoutSeparators = (code: string) => code.toUpperCase().replace(/[^A-Z0-9]/g, "");
 /** The same for every way an invite code is written, and kept instead of the code. */
 export const inviteKey = (code: string) => hashed(withoutSeparators(code));
@@ -43,10 +44,16 @@ export class DeviceService {
   /** Lets a new device in, with the token it signs in with from now on; only its hash is kept. */
   admit(name: string): { device: Device; token: string } {
     const now = this.now();
-    const token = randomBytes(32).toString("base64url");
+    const token = newToken();
     const device = { id: crypto.randomUUID(), name, joinedAt: now, lastSeenAt: now };
     this.store.insertDevice(device, hashed(token));
     return { device, token };
+  }
+
+  /** A device that never got the token it was admitted with gets another, and the first stops working; null if the device is gone. */
+  reissueToken(deviceId: string) {
+    const token = newToken();
+    return this.store.setDeviceTokenHash(deviceId, hashed(token)) ? token : null;
   }
 
   deviceWithToken(token: string) {
