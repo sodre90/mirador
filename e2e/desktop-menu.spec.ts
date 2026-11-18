@@ -1,6 +1,6 @@
-import { expect, test, type Page } from "@playwright/test";
-import type { DesktopMenu, DesktopMenuMessage } from "../shared/desktop-menu.ts";
-import { addWorkspace, chooseInSettings, openSettings, signIn, startConversation } from "./helpers.ts";
+import { expect, test } from "@playwright/test";
+import type { DesktopMenu } from "../shared/desktop-menu.ts";
+import { actAsDesktopApp, addWorkspace, chooseInSettings, openSettings, pressCommandWInTheApp, signIn, startConversation } from "./helpers.ts";
 import { keepShellBusy } from "./terminal-shell.ts";
 import { jobControlShell, TestHost } from "./test-host.ts";
 
@@ -25,20 +25,6 @@ const menuWith = (openAtLogin: boolean): DesktopMenu => ({
   ],
 });
 
-/** Stands in for Electrobun's page-to-app bridge, answering a menu request as the Linux desktop app does. */
-async function actAsDesktopApp(page: Page) {
-  await page.addInitScript((menu) => {
-    const sent: DesktopMenuMessage[] = [];
-    Object.assign(window, { sentToDesktopApp: sent });
-    window.__electrobunSendToHost = (message) => {
-      sent.push(message);
-      if (message.type === "desktop-menu-request") setTimeout(() => window.dispatchEvent(new CustomEvent("mirador:desktop-menu", { detail: menu })));
-      if (message.type === "desktop-nonce-request") setTimeout(() => window.dispatchEvent(new CustomEvent("mirador:desktop-nonce", { detail: menu.nonce })));
-    };
-  }, menuWith(false));
-  return () => page.evaluate(() => (window as unknown as { sentToDesktopApp: DesktopMenuMessage[] }).sentToDesktopApp);
-}
-
 test("in a browser there is no desktop app menu", async ({ page }) => {
   await signIn(page, host);
   await expect(page.getByRole("button", { name: "Profiles…" })).toBeVisible();
@@ -46,7 +32,7 @@ test("in a browser there is no desktop app menu", async ({ page }) => {
 });
 
 test("inside the Linux desktop app, the sidebar offers the tray's menu and sends the chosen action with the app's nonce", async ({ page }) => {
-  const sentToDesktopApp = await actAsDesktopApp(page);
+  const sentToDesktopApp = await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   const button = page.getByRole("button", { name: "Desktop app…" });
   await button.click();
@@ -67,7 +53,7 @@ test("inside the Linux desktop app, the sidebar offers the tray's menu and sends
 });
 
 test("inside the desktop app, a link to another site opens in the browser when the page asks the app with its nonce, and no other frame can ask", async ({ page }) => {
-  const sentToDesktopApp = await actAsDesktopApp(page);
+  const sentToDesktopApp = await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   await expect.poll(sentToDesktopApp).toContainEqual({ type: "desktop-nonce-request" });
   await page.evaluate(() => {
@@ -105,16 +91,15 @@ test("inside a desktop app that hands over no nonce, as one built before it did,
 });
 
 test("inside the macOS desktop app, ⌘W closes the open dialog, else the focused terminal's shell or answers its question, and with nothing to close asks the app with its nonce", async ({ page }) => {
-  const sentToDesktopApp = await actAsDesktopApp(page);
+  const sentToDesktopApp = await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   await expect.poll(sentToDesktopApp).toContainEqual({ type: "desktop-nonce-request" });
-  const pressCommandWInTheApp = () => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-close")));
   const askedToCloseWindow = async () => (await sentToDesktopApp()).filter(({ type }) => type === "desktop-close-window");
 
   await test.step("an open dialog closes", async () => {
     await page.getByRole("button", { name: "Settings…" }).click();
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
   });
 
@@ -126,7 +111,7 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
     const splits = page.locator(".terminal-pane .terminal-split");
     await expect(splits).toHaveCount(2);
     await page.locator(".terminal-pane .xterm").nth(1).click();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(splits).toHaveCount(1);
   });
 
@@ -134,7 +119,7 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
     await page.locator(".terminal-pane .xterm").click();
     await page.getByRole("button", { name: "Settings…" }).evaluate((button: HTMLButtonElement) => button.click());
     await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(page.getByRole("dialog", { name: "Settings" })).toHaveCount(0);
     await expect(page.locator(".terminal-pane .terminal-split")).toHaveCount(1);
   });
@@ -144,7 +129,7 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
     await page.keyboard.press((await page.evaluate(() => navigator.userAgent.includes("Mac"))) ? "Meta+F" : "Control+Shift+F");
     const findBar = page.locator(".terminal-pane .terminal-find");
     await expect(findBar.getByLabel("Find in this terminal")).toBeFocused();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(findBar).toHaveCount(0);
     await expect(page.locator(".terminal-pane .terminal-split")).toHaveCount(1);
   });
@@ -152,7 +137,7 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
   await test.step("with focus elsewhere and no dialog open, the page asks the app to close the window", async () => {
     expect(await askedToCloseWindow()).toEqual([]);
     await page.locator(".composer:visible textarea").focus();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect.poll(askedToCloseWindow).toEqual([{ type: "desktop-close-window", nonce: "nonce-1" }]);
     await expect(page.locator(".terminal-pane .terminal-split")).toHaveCount(1);
   });
@@ -169,11 +154,11 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
 
   await test.step("on a shell running a command, ⌘W asks; Esc, or waiting, keeps it and gives the shell back the keys", async () => {
     await runSleepInASecondSplit();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(question).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(typingInto(1)).toBeFocused();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(question).toBeFocused();
     await expect(typingInto(1)).toBeFocused({ timeout: 6_000 });
     await expect(page.getByRole("button", { name: "Close terminal 2", exact: true })).toHaveText("×");
@@ -181,9 +166,9 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
   });
 
   await test.step("⌘W again while it asks closes that shell, and never asks the app to close the window", async () => {
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(question).toBeFocused();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(splits).toHaveCount(1);
     expect(await askedToCloseWindow()).toHaveLength(1);
   });
@@ -192,7 +177,7 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
     await runSleepInASecondSplit();
     await page.getByRole("button", { name: "Close terminal 2", exact: true }).click();
     await expect(question).toBeFocused();
-    await pressCommandWInTheApp();
+    await pressCommandWInTheApp(page);
     await expect(question).toBeVisible();
     await expect(splits).toHaveCount(2);
     expect(await askedToCloseWindow()).toHaveLength(1);
@@ -202,7 +187,7 @@ test("inside the macOS desktop app, ⌘W closes the open dialog, else the focuse
 });
 
 test("inside the desktop app, the page gives the app the chosen theme with its nonce, once handed the nonce and on every choice after", async ({ page }) => {
-  const sentToDesktopApp = await actAsDesktopApp(page);
+  const sentToDesktopApp = await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   const appearances = async () => (await sentToDesktopApp()).filter(({ type }) => type === "desktop-appearance");
   const given = (...appearances: string[]) => appearances.map((appearance) => ({ type: "desktop-appearance", nonce: "nonce-1", appearance }));
@@ -214,7 +199,7 @@ test("inside the desktop app, the page gives the app the chosen theme with its n
 });
 
 test("inside the desktop app, the page tells the app Mirador's language with its nonce, and again in the new language after a switch", async ({ page }) => {
-  const sentToDesktopApp = await actAsDesktopApp(page);
+  const sentToDesktopApp = await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   const languages = async () => (await sentToDesktopApp()).filter(({ type }) => type === "desktop-language");
   await expect.poll(languages).toEqual([{ type: "desktop-language", nonce: "nonce-1", language: "en" }]);
@@ -224,7 +209,7 @@ test("inside the desktop app, the page tells the app Mirador's language with its
 });
 
 test("the desktop app menu reaches past the sidebar's edge without being cut off", async ({ page }) => {
-  await actAsDesktopApp(page);
+  await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   await page.getByRole("button", { name: "Desktop app…" }).click();
   const menu = page.getByRole("menu", { name: "Desktop app" });
