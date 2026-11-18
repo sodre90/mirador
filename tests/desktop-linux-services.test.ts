@@ -22,11 +22,13 @@ afterEach(() => directories.splice(0).forEach((directory) => rmSync(directory, {
 class FakeSystemctl {
   calls: string[][] = [];
   enabled = false;
+  nothingFailed = false;
 
   run: CommandRunner = async (argv) => {
     const verbs = argv.slice(2);
     this.calls.push(verbs);
     if (verbs[0] === "is-enabled") return { exitCode: this.enabled ? 0 : 1, output: "" };
+    if (verbs[0] === "reset-failed" && this.nothingFailed) return { exitCode: 1, output: "Unit is not failed" };
     if (verbs[0] === "enable") this.enabled = true;
     if (verbs[0] === "disable") this.enabled = false;
     return { exitCode: 0, output: "" };
@@ -81,7 +83,7 @@ describe("host user service", () => {
   const serviceIn = (directory: string, systemctl: FakeSystemctl) =>
     new HostUserService(4600, join(directory, "systemd", "user", "mirador-host-4600.service"), { shell: "/bin/bash", overrides: {}, logPath: join(directory, "logs", "host.log") }, systemctl.run);
 
-  test("writes the unit, then enables and starts it, and leaves a matching enabled unit alone", async () => {
+  test("writes the unit, then enables and starts it, and only starts a matching enabled unit, which may be stopped or have failed", async () => {
     const directory = scratchDirectory();
     const systemctl = new FakeSystemctl();
     const service = serviceIn(directory, systemctl);
@@ -94,8 +96,9 @@ describe("host user service", () => {
 
     systemctl.calls = [];
     await service.ensureLoaded(settings);
-    expect(systemctl.changes()).toEqual([]);
+    expect(systemctl.changes()).toEqual(["reset-failed mirador-host-4600.service", "start mirador-host-4600.service"]);
 
+    systemctl.calls = [];
     await service.ensureLoaded({ ...settings, bun: "/other/bun" });
     expect(systemctl.changes()).toEqual(["daemon-reload", "enable mirador-host-4600.service", "restart mirador-host-4600.service"]);
   });
@@ -112,6 +115,18 @@ describe("host user service", () => {
     await service.ensureLoaded(settings);
     expect(readFileSync(unitPath, "utf8")).toContain("Restart=always\nKillMode=process\n");
     expect(systemctl.changes()).toEqual(["daemon-reload", "enable mirador-host-4600.service", "restart mirador-host-4600.service"]);
+  });
+
+  test("starts an enabled unit that was stopped, where reset-failed has nothing to reset", async () => {
+    const directory = scratchDirectory();
+    const systemctl = new FakeSystemctl();
+    const service = serviceIn(directory, systemctl);
+    await service.ensureLoaded(settings);
+    systemctl.calls = [];
+    systemctl.nothingFailed = true;
+
+    await service.ensureLoaded(settings);
+    expect(systemctl.changes()).toEqual(["reset-failed mirador-host-4600.service", "start mirador-host-4600.service"]);
   });
 
   test("removing it stops and disables it, and deletes the unit", async () => {

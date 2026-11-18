@@ -64,13 +64,19 @@ export class HostUserService implements BackgroundHost {
 
   async ensureLoaded(settings: DesktopSettings) {
     const unit = this.unitFor(settings);
-    if ((await this.isLoaded()) && this.unitText() === unit) return;
+    if ((await this.isLoaded()) && this.unitText() === unit) return this.startIfDown();
     mkdirSync(dirname(this.environment.logPath), { recursive: true });
     mkdirSync(dirname(this.unitPath), { recursive: true });
     writeFileSync(this.unitPath, unit);
     await this.systemctlOrThrow("reload the user units", "daemon-reload");
     await this.systemctlOrThrow(`enable ${this.name}`, "enable", this.name);
     await this.systemctlOrThrow(`start ${this.name}`, "restart", this.name);
+  }
+
+  /** An enabled unit may be stopped, or failed after systemd's start limit, which refuses a start until the failure is reset. A start does nothing to a unit that runs. */
+  private async startIfDown() {
+    await this.run(systemctl("reset-failed", this.name));
+    await this.systemctlOrThrow(`start ${this.name}`, "start", this.name);
   }
 
   restart() {
