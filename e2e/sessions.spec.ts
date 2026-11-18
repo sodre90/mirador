@@ -1,13 +1,13 @@
-import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync, spawn } from "node:child_process";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, chooseInWorkspaceMenu, conversationSettings, createProfile, sendMessage, signIn, workspaceCard } from "./helpers.ts";
+import { addWorkspace, chooseInWorkspaceMenu, conversationSettings, createProfile, pickProfileIfAsked, reloadFromRestartedHost, sendMessage, signIn, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -40,8 +40,8 @@ test.afterAll(async () => {
   gateway.stop();
 });
 
-async function openSessionsDialog(page: Page) {
-  await chooseInWorkspaceMenu(page, "Continue a session…");
+async function openSessionsDialog(page: Page, card?: Locator) {
+  await chooseInWorkspaceMenu(page, "Continue a session…", card);
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   await expect(dialog.locator(".session-list")).toBeVisible({ timeout: 30_000 });
   return dialog;
@@ -121,4 +121,46 @@ test("a terminal session continues and forks on the model that answered in it, n
   await expect(page.locator(".timeline").filter({ visible: true })).toContainText("Answered: Say hi", { timeout: 30_000 });
   await expect((await model()).locator("option:checked")).toHaveText(/^Haiku/);
   api.stop();
+});
+
+/** What an older Mirador let in: a second workspace on the project folder, under the spelling `path` gives it. */
+function addSecondWorkspaceOnProjectFolder(path: string) {
+  const insert = `
+    import { Database } from "bun:sqlite";
+    const [databasePath, path, projectDir] = process.argv.slice(1);
+    new Database(databasePath).query("INSERT INTO workspaces (id, name, path, created_at, default_profile_id, default_harness) SELECT 'second-on-project', 'project-link', ?, created_at + 1, default_profile_id, default_harness FROM workspaces WHERE path = ?").run(path, projectDir);
+  `;
+  execFileSync("bun", ["-e", insert, join(host.dataDir, "state.sqlite"), path, host.projectDir]);
+}
+
+test("the project folder added again under another spelling is the workspace already there, and a second workspace on it lists none of the first one's sessions", async ({ page }) => {
+  const sameFolder = join(host.root, "project-link");
+  symlinkSync(host.projectDir, sameFolder, "junction");
+  await signIn(page, host);
+  await page.getByRole("button", { name: "Add workspace" }).click();
+  const input = page.getByLabel("Workspace directory");
+  await input.fill(sameFolder);
+  await input.press("Enter");
+  await pickProfileIfAsked(page, sameFolder);
+  await expect(input).toHaveCount(0);
+  await expect(page.locator(".workspace")).toHaveCount(1);
+  await expect(workspaceCard(page, host.projectDir)).toBeVisible();
+
+  const freshSessionId = await runClaudeInTerminal(host.projectDirInTerminal, "a session nobody holds yet");
+  await host.stop();
+  addSecondWorkspaceOnProjectFolder(sameFolder);
+  await host.start();
+  await reloadFromRestartedHost(page);
+  const second = workspaceCard(page, sameFolder);
+  await expect(second).toBeVisible();
+
+  const dialog = await openSessionsDialog(page, second);
+  await expect(sessionRow(dialog, freshSessionId)).toBeVisible();
+  await expect(terminalSessionRow(dialog)).toHaveCount(0);
+  await expect(dialog.getByRole("button", { name: "Open" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Close" }).click();
+
+  const first = await openSessionsDialog(page, workspaceCard(page, host.projectDir));
+  await expect(terminalSessionRow(first).getByRole("button", { name: "Open" })).toBeVisible();
+  await expect(sessionRow(first, freshSessionId)).toBeVisible();
 });

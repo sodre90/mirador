@@ -837,7 +837,10 @@ export class ConversationService {
     }
   }
 
-  /** The harness's sessions for the workspace directory, newest first, with the app's conversation on each. */
+  /**
+   * The harness's sessions for the workspace directory, newest first, with the app's conversation on each. A session a
+   * conversation of another workspace holds is that workspace's, though both may name one folder under two spellings.
+   */
   private async harnessSessions(workspaceId: string, launch: Launch) {
     const directory = await recordedDirectory(this.existingWorkspace(workspaceId));
     const profile = profileToLaunch(this.store, launch);
@@ -845,8 +848,10 @@ export class ConversationService {
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.sessionCapabilities?.list) throw new HostProblemError({ code: "agent-cannot-list-sessions", agent: harness.spec.label });
     const { sessions } = await harness.listSessions(directory);
-    const conversationIdBySession = new Map(this.store.listConversations().map(({ acpSessionId, id }) => [acpSessionId, id]));
-    return { profile, sessions: sessions.filter(({ cwd }) => cwd === directory), conversationIdBySession };
+    const conversations = this.store.listConversations();
+    const conversationIdBySession = new Map(conversations.map(({ acpSessionId, id }) => [acpSessionId, id]));
+    const heldInAnotherWorkspace = new Set(conversations.filter((conversation) => conversation.workspaceId !== workspaceId).map(({ acpSessionId }) => acpSessionId));
+    return { profile, sessions: sessions.filter(({ cwd, sessionId }) => cwd === directory && !heldInAnotherWorkspace.has(sessionId)), conversationIdBySession };
   }
 
   /** Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation. */

@@ -1,4 +1,4 @@
-import { mkdir, readdir, stat } from "node:fs/promises";
+import { mkdir, readdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
@@ -35,6 +35,13 @@ export async function createsDirectory(path: string): Promise<boolean> {
 export async function directoryToAdd(path: string): Promise<string> {
   if (await createsDirectory(path)) await mkdir(absolutePath(path), { recursive: true });
   return existingDirectory(path);
+}
+
+/** The one of `held` whose folder is `directory`, however either path spells it: through a symlink, or in another letter case where the disk ignores case. */
+export async function onSameFolder<T extends { path: string }>(held: T[], directory: string): Promise<T | undefined> {
+  const folder = await realpath(directory);
+  const folders = await Promise.all(held.map(({ path }) => realpath(path).catch(() => null)));
+  return held.find((_, index) => folders[index] === folder);
 }
 
 export async function existingDirectory(path: string): Promise<string> {
