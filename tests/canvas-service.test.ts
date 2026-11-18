@@ -180,8 +180,8 @@ describe("CanvasService", () => {
       ["agreed", true],
     ]);
     expect(nextMessages).toEqual([
-      'My answer to your question "Install the Media plugin?": Not now\nNothing was installed.',
-      'My answer to your question "Install the Media plugin?": Install\nMirador installed the Media plugin.',
+      'Nothing was installed.\n\nMy answer to your question "Install the Media plugin?": Not now',
+      'Mirador installed the Media plugin.\n\nMy answer to your question "Install the Media plugin?": Install',
     ]);
   });
 
