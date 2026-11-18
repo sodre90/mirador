@@ -740,6 +740,10 @@ export type ConversationEvent =
   | { type: "revert"; revertId: string; toSeq: number; restored: number; removed: number; submodulesLeft?: number; committed?: CommittedFiles }
   | { type: "job-wait-ended"; wait: JobWait; end: JobWaitEnd };
 
+/** An event that ended a turn: its end, or the error the turn failed with. */
+export const endsTurnWithSpend = (event: ConversationEvent): event is Extract<ConversationEvent, { type: "turn-end" }> | (Extract<ConversationEvent, { type: "error" }> & { endsTurn: true }) =>
+  event.type === "turn-end" || (event.type === "error" && event.endsTurn === true);
+
 /** A harness session in a workspace directory, possibly started outside the app. */
 export interface ExternalSession {
   sessionId: string;

@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {
   busyTexts,
+  endsTurnWithSpend,
   harnessIds,
   harnessLabels,
   isConversationPlace,
@@ -683,7 +684,7 @@ export class ConversationService {
     if (!this.startedFromCallerBy(conversation.startedBy, callerId, plugin)) {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so its usage can't be read from here.`);
     }
-    const tokens = this.store.listEventsFrom(conversationId, 0).flatMap(({ event }) => (event.type === "turn-end" && event.usage ? [event.usage] : []));
+    const tokens = this.store.listEventsFrom(conversationId, 0).flatMap(({ event }) => (endsTurnWithSpend(event) && event.usage ? [event.usage] : []));
     const sum = (key: keyof TurnUsage) => tokens.reduce((total, usage) => total + usage[key], 0);
     return {
       inputTokens: sum("inputTokens"),

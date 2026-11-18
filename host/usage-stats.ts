@@ -1,5 +1,5 @@
 import type { PermissionOptionKind, StopReason, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
-import { askModeLabels, harnessLabels, type ConversationEvent, type HarnessId, type StoredEvent, type TurnUsage } from "../shared/model.ts";
+import { askModeLabels, endsTurnWithSpend, harnessLabels, type ConversationEvent, type HarnessId, type StoredEvent, type TurnUsage } from "../shared/model.ts";
 import { toolNameOf, useToolPayloadOf } from "../shared/tool-title.ts";
 import { PLUGIN_INSTALL_TOOL } from "./canvas/guidance.ts";
 import { BUILT_IN_CANVAS_TOOLS, canvasToolName, USE_TOOL_TOOL } from "./canvas/tool-names.ts";
@@ -340,11 +340,10 @@ export function foldConversation(conversationId: string, profile: string, events
       }
       if (turnStart === null) lastTurnEnd = null;
       turnStart ??= at;
-    } else if (event.type === "turn-end") {
+    } else if (endsTurnWithSpend(event)) {
       endTurn(at, event);
     } else if (event.type === "error") {
-      if (event.endsTurn) endTurn(at, event);
-      else if (turnStart !== null) unmarkedError = { at, event };
+      if (turnStart !== null) unmarkedError = { at, event };
     } else if (event.type === "permission") {
       const call = calls.get(event.toolCall.toolCallId) ?? null;
       const permission: PermissionRecord = {
