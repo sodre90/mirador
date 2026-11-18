@@ -117,4 +117,33 @@ test("a long conversation opens with its newest part, and earlier parts come fro
     await expect(bar.locator(".find-tally")).toHaveText(`${unheldTurn + 1} of ${TURNS}`);
     await expect.poll(() => currentMatch(page)).toMatchObject({ entry: expect.stringContaining(numbered("reply", unheldTurn)), inView: true });
   });
+
+  await test.step("a connection that drops while a part is asked for does not keep the page from asking again", async () => {
+    let dropsTheNextAsk = false;
+    await page.routeWebSocket(/\/ws\?/, (socket) => {
+      const server = socket.connectToServer();
+      socket.onMessage((message) => {
+        if (dropsTheNextAsk && /"type":"conversation\.load-earlier"/.test(String(message))) {
+          dropsTheNextAsk = false;
+          server.close();
+          return void socket.close();
+        }
+        server.send(message);
+      });
+    });
+    await page.reload();
+    await expect(entries(page)).toHaveCount(TURNS_PER_PART * ENTRIES_PER_TURN);
+    dropsTheNextAsk = true;
+    await firstEntryAfterScrollingToTheTop(page);
+    await expect.poll(() => dropsTheNextAsk, "the connection drops with the part asked for").toBe(false);
+    await expect(page.locator(".banner.connection")).toBeVisible();
+    await expect(page.locator(".banner.connection")).toHaveCount(0);
+    await expect(entries(page)).toHaveCount(TURNS_PER_PART * ENTRIES_PER_TURN);
+    await page.locator(".timeline").evaluate(async (timeline) => {
+      timeline.scrollTop = timeline.scrollHeight;
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    });
+    await firstEntryAfterScrollingToTheTop(page);
+    await expect(entries(page)).toHaveCount(2 * TURNS_PER_PART * ENTRIES_PER_TURN);
+  });
 });

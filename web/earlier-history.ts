@@ -27,6 +27,8 @@ export function useEarlierHistory({ conversationId, events, hasEarlier }: OpenCo
       }),
     [],
   );
+  // A request the socket dropped under is never answered, and the reconnect brings the same newest part again.
+  useEffect(() => connection.onStatus((status) => status !== "open" && setAsked(null)), []);
 
   const load = (reaching?: number) => {
     if (!hasEarlier || firstSeq === undefined || loading) return false;
