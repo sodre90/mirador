@@ -89,6 +89,11 @@ export function ConfirmButton({
         if (armed) confirm();
         else setArmedBy("click");
       }}
+      // WebKit blurs a focused button on mousedown, before the click lands, which would disarm it first. Keep the
+      // focus it already holds; a button not yet focused still takes it on click, as the terminal's ⌘W flow needs.
+      onMouseDown={(event) => {
+        if (hasFocus()) event.preventDefault();
+      }}
       onBlur={() => setArmedBy(null)}
       onKeyDown={(event) => {
         if (event.key !== "Escape" || !armed) return;
