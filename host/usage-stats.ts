@@ -1,8 +1,8 @@
 import type { PermissionOptionKind, StopReason, ToolCallUpdate } from "@agentclientprotocol/sdk/unstable";
 import { askModeLabels, harnessLabels, type ConversationEvent, type HarnessId, type StoredEvent, type TurnUsage } from "../shared/model.ts";
-import { toolNameOf } from "../shared/tool-title.ts";
+import { toolNameOf, useToolPayloadOf } from "../shared/tool-title.ts";
 import { PLUGIN_INSTALL_TOOL } from "./canvas/guidance.ts";
-import { BUILT_IN_CANVAS_TOOLS, canvasToolName } from "./canvas/tool-names.ts";
+import { BUILT_IN_CANVAS_TOOLS, canvasToolName, USE_TOOL_TOOL } from "./canvas/tool-names.ts";
 import type { UsageConversation, UsageData, UsageWorkspace } from "./usage-data.ts";
 
 /** What a report covers; every field may be left out. */
@@ -413,6 +413,15 @@ const parentToolUseIdOf = (update: ToolCallUpdate) => ((update._meta?.claudeCode
 function noteProgress(record: ToolCallRecord, update: ToolCallUpdate) {
   if (update.title) record.title = update.title;
   if (update.rawInput && typeof update.rawInput === "object" && Object.keys(update.rawInput).length > 0) record.rawInput = update.rawInput as Record<string, unknown>;
+  record.tool = countedToolName(record.tool, record.rawInput);
+}
+
+/** A use_tool call counts as the tool it ran, under the same prefix its agent gives the canvas tools. */
+function countedToolName(tool: string, rawInput: Record<string, unknown>): string {
+  if (canvasToolName(tool) !== USE_TOOL_TOOL) return tool;
+  const wrapped = useToolPayloadOf(rawInput).tool;
+  if (typeof wrapped !== "string" || wrapped === "") return tool;
+  return tool.slice(0, tool.length - USE_TOOL_TOOL.length) + wrapped;
 }
 
 /** The call's input as the user would recognise it: the command, address, file or search it took, else its title, else all it was given. */

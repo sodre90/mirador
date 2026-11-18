@@ -11,6 +11,8 @@ import { settledEditNote, type EditRequest } from "./edit-approval.ts";
 import { ChangesView } from "./Changes.tsx";
 import { ChecklistView, currentTabItem, isTabItem, tabCount, useFlashOnAgentEdit } from "./Checklist.tsx";
 import { EditApproval } from "./EditApproval.tsx";
+import { FONT_SCALES, useFontScale } from "./font-scale.ts";
+import { filledStyles, fittedStyles, type ContentSize } from "./frame-fit.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
@@ -37,12 +39,6 @@ const words = t.canvas;
 const MAX_CONTENT_WIDTH = 2400;
 /** Past this, a page's unwrapped lines are prose that reads fine wrapped, rather than a layout that needs the room. */
 const MAX_UNWRAPPED_WIDTH_ASKED = 720;
-
-interface ContentSize {
-  height: number;
-  /** The width the content asked for when it overflowed; kept once known, as the frame drawn that wide reports no overflow. */
-  width: number | null;
-}
 
 function MarkBatchIcon() {
   return (
@@ -73,9 +69,6 @@ function useElementWidth(element: RefObject<HTMLElement | null>) {
   return width;
 }
 
-/** The fitted frames (a question's page and its option previews) have a 1px border. */
-const FRAME_BORDERS = 2;
-
 /** A wheel turn reported by a page that could not use it: the panel holding the page scrolls by it instead. */
 function scrollPanelBy(frame: HTMLIFrameElement | null, wheel: { deltaY: number; deltaMode: number }) {
   const panel = scrollableAncestor(frame);
@@ -90,18 +83,6 @@ function scrollableAncestor(element: HTMLElement | null): HTMLElement | null {
     if ((overflow === "auto" || overflow === "scroll") && node.scrollHeight > node.clientHeight) return node;
   }
   return null;
-}
-
-/** Sized to its content; content wider than the room is drawn at its own width and scaled down to fit, so none of it is cut off. */
-function fittedStyles(contentSize: ContentSize | undefined, roomWidth: number): { box?: CSSProperties; frame?: CSSProperties } {
-  if (!contentSize) return {};
-  const { width, height } = contentSize;
-  if (!width || !roomWidth || width + FRAME_BORDERS <= roomWidth) return { frame: { height } };
-  const scale = roomWidth / (width + FRAME_BORDERS);
-  return {
-    box: { height: Math.ceil((height + FRAME_BORDERS) * scale) },
-    frame: { position: "absolute", width, height, transform: `scale(${scale})`, transformOrigin: "0 0" },
-  };
 }
 
 const openable = (href: unknown): href is string => typeof href === "string" && /^(https?|mailto):/i.test(href);
@@ -121,6 +102,7 @@ export function CanvasFrame({
   padded = fitsContent,
   policy,
   markable = false,
+  followsTextSize = false,
   allow,
   onRendered,
   onContentWidth,
@@ -137,6 +119,8 @@ export function CanvasFrame({
   policy?: CanvasPagePolicy;
   /** Whether the user may mark part of the page to ask the agent about; fixed for the frame's life, as a change reloads the page. */
   markable?: boolean;
+  /** Whether the page zooms with the text size Settings chose, as a page the agent wrote does: plugin views and apps size their text themselves. */
+  followsTextSize?: boolean;
   /** Browser features the page may use, as the iframe's allow attribute names them. */
   allow?: string;
   onRendered?: (errors: string[]) => void;
@@ -150,6 +134,8 @@ export function CanvasFrame({
   const frame = frameRef ?? ownFrame;
   const box = useRef<HTMLDivElement>(null);
   const roomWidth = useElementWidth(box);
+  const [fontScale] = useFontScale();
+  const zoom = followsTextSize ? FONT_SCALES[fontScale] : 1;
   const [errors, setErrors] = useState<string[]>([]);
   const [contentSize, setContentSize] = useState<ContentSize>();
   const [unwrappedWidth, setUnwrappedWidth] = useState(0);
@@ -205,8 +191,8 @@ export function CanvasFrame({
 
   useEffect(() => {
     const wantedWidth = Math.max(contentSize?.width ?? 0, unwrappedWidth);
-    if (wantedWidth) onContentWidthRef.current?.(wantedWidth);
-  }, [contentSize?.width, unwrappedWidth]);
+    if (wantedWidth) onContentWidthRef.current?.(Math.ceil(wantedWidth * zoom));
+  }, [contentSize?.width, unwrappedWidth, zoom]);
 
   useEffect(() => onShownThemeChange(() => postThemeTo(frame)), []);
 
@@ -215,7 +201,7 @@ export function CanvasFrame({
     if (!shown) frame.current?.contentWindow?.postMessage(canvasHiddenMessage(), "*");
   }, [shown]);
 
-  const fitted = fitsContent ? fittedStyles(contentSize, roomWidth) : {};
+  const fitted = fitsContent ? fittedStyles(contentSize, roomWidth, zoom) : filledStyles(zoom);
   return (
     <div ref={box} className={`canvas-frame ${className ?? ""}`} style={fitted.box}>
       <iframe
@@ -317,7 +303,7 @@ function AskQuestionFields({
 
   return (
     <>
-      {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" fitsContent />}
+      {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" fitsContent followsTextSize />}
       <div className="ask-options" role="radiogroup" aria-label={question.question} style={optionsStyle}>
         {question.options.map((option, index) => (
           <label key={option.label} className={`ask-option ${isChosen(option.label) ? "chosen" : ""}`}>
@@ -341,6 +327,7 @@ function AskQuestionFields({
                 assetsOrigin={assetsOrigin}
                 className="ask-preview"
                 fitsContent
+                followsTextSize
                 onContentWidth={(width) => setPreviewWidths((current) => ({ ...current, [option.label]: width }))}
               />
             )}
@@ -453,7 +440,7 @@ function AskView({ item, pagesBefore, assetsOrigin }: { item: AskItem; pagesBefo
           <div className="ask-page-before-title" data-hint={hints.askPageBefore}>
             {words.ask.shownJustBefore(before.title)}
           </div>
-          <CanvasFrame frameId={`${item.id}-before-${before.id}`} html={before.html ?? ""} assetsOrigin={assetsOrigin} className="ask-context" fitsContent />
+          <CanvasFrame frameId={`${item.id}-before-${before.id}`} html={before.html ?? ""} assetsOrigin={assetsOrigin} className="ask-context" fitsContent followsTextSize />
         </section>
       ))}
       {onReviewPage && (
@@ -930,6 +917,12 @@ export function CanvasPanel({
     <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape} data-page-shown={shownPage ? "" : undefined}>
       <div className="canvas-header" data-pane-bar ref={bar} data-fold={foldLevel}>
         <PaneGrip pane="canvas" />
+        <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
+          ‹
+        </button>
+        <button type="button" className="icon canvas-nav" aria-label={words.bar.newer} data-hint={hints.canvasNewer} disabled={!newer} onClick={() => newer && pick(newer.id)}>
+          ›
+        </button>
         <button
           type="button"
           className={`page-tab history-toggle ${pageInFront ? "on" : ""}`}
@@ -968,12 +961,6 @@ export function CanvasPanel({
             {words.bar.editsWaiting(edit.waiting)}
           </button>
         )}
-        <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
-          ‹
-        </button>
-        <button type="button" className="icon canvas-nav" aria-label={words.bar.newer} data-hint={hints.canvasNewer} disabled={!newer} onClick={() => newer && pick(newer.id)}>
-          ›
-        </button>
         <button
           type="button"
           className={`changes-toggle ${changesShown ? "on" : ""}`}
@@ -1110,6 +1097,7 @@ export function CanvasPanel({
             assetsOrigin={assetsOrigin}
             className="show"
             markable
+            followsTextSize
             frameRef={shownPageFrame}
             onRendered={reportRender(selected.id)}
             onMessage={receiveShownPageMessage}

@@ -6,6 +6,7 @@ import {
   type CanvasActionContext,
   type CanvasPluginContext,
   type CanvasPluginStorage,
+  type CanvasTool,
   type CanvasToolContext,
   type PluginActivity,
   type PluginActivityEvent,
@@ -28,7 +29,7 @@ import {
 } from "../../shared/canvas-plugins.ts";
 import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import type { Conversation, HarnessId, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
+import type { Conversation, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
@@ -40,7 +41,7 @@ import type { Hub } from "../hub.ts";
 import type { Store } from "../store.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
 import { offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
-import { PLUGIN_LOAD_TOOL } from "./tool-names.ts";
+import { PLUGIN_LOAD_TOOL, USE_TOOL_TOOL } from "./tool-names.ts";
 import type { CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 
@@ -54,19 +55,15 @@ const loadedUpFront = { "anthropic/alwaysLoad": true };
 
 const summaryOf = ({ host }: CanvasPlugin) => host.guidance?.summary?.trim() ?? "";
 
-/** A plugin that gives a line of summary: conversations are told that line, and get its instructions and tools when the agent asks. */
+/** A plugin that gives a line of summary: conversations are told that line, and get its instructions when the agent asks. */
 const loadsOnRequest = (plugin: CanvasPlugin) => summaryOf(plugin) !== "";
 
-/**
- * The agents that list a canvas server's tools again within the turn, as soon as it says they changed. The others get
- * the tools of a plugin that loads on request from the start, as they would never see them join.
- */
-const TAKES_TOOLS_MID_SESSION: HarnessId[] = ["claude"];
+/** A plugin tool in the agent's tool list on its own; the rest are reached through use_tool, on every agent. */
+const runsNatively = (plugin: CanvasPlugin, tool: CanvasTool) => !tool.onDemand && !loadsOnRequest(plugin);
 
-/** Claude Code with tool search on lists new MCP tools by name only, until the agent fetches them. */
-const FETCH_DEFERRED_TOOLS = " If they are listed as deferred, fetch them with ToolSearch before you call them.";
+const toolText = (parts: string[]) => ({ content: [{ type: "text" as const, text: parts.filter(Boolean).join("\n\n") }] });
 
-const takesToolsMidSession = (harness: HarnessId | undefined) => harness !== undefined && TAKES_TOOLS_MID_SESSION.includes(harness);
+const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
 const countOf = (type: PluginItemType | undefined, data: unknown) => (type?.count ? { count: type.count(data) } : {});
 
@@ -85,9 +82,6 @@ const shownOf = (type: PluginItemType | undefined, data: unknown) => ({ ...count
 
 /** A plugin may change its window's state on every tool call; its windows get the state as it settles. */
 const WINDOW_STATE_SETTLES_MS = 100;
-
-/** Tells a conversation's agent that its canvas tools changed; resolves once it listed them again, or didn't in a few seconds. */
-export type ToolsChanged = (conversationId: string) => Promise<void>;
 
 /** `fromPlugin`: the title of the plugin that sends it on its own, rather than for the user from its view. */
 export type SendPrompt = (conversationId: string, text: string, options: { afterTurn: boolean; fromPlugin?: string }) => Promise<void>;
@@ -152,8 +146,6 @@ export class CanvasPlugins {
     throw new Error("Mirador can't ask agents what they offer yet.");
   };
 
-  private toolsChanged: ToolsChanged = async () => {};
-
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
@@ -191,10 +183,6 @@ export class CanvasPlugins {
 
   asksProfileChoicesWith(ask: AskProfileChoices) {
     this.askProfileChoices = ask;
-  }
-
-  tellsToolsChangedWith(tell: ToolsChanged) {
-    this.toolsChanged = tell;
   }
 
   /** Once, as Mirador starts: each plugin's background work, whose failure is the plugin's alone. */
@@ -235,12 +223,15 @@ export class CanvasPlugins {
     const offered = this.catalog?.notInstalled() ?? [];
     const loaded = plugins.filter((plugin) => !waitsToBeLoaded(plugin));
     const waiting = plugins.filter(waitsToBeLoaded);
+    const useToolNames = this.useToolToolsOf(plugins).map(({ name }) => name);
     return {
       toolNames: [
         ...plugins.flatMap(({ host }) => Object.keys(host.tools)),
+        ...(useToolNames.length > 0 ? [USE_TOOL_TOOL] : []),
         ...(plugins.some(loadsOnRequest) ? [PLUGIN_LOAD_TOOL] : []),
         ...(offered.length > 0 ? [PLUGIN_INSTALL_TOOL] : []),
       ],
+      useToolNames,
       instructions: loaded.flatMap(({ host }) => host.guidance?.instructions ?? []),
       often: [
         ...loaded.flatMap(({ host }) => host.guidance?.often ?? []),
@@ -248,6 +239,15 @@ export class CanvasPlugins {
       ],
       onRequest: waiting.map((plugin) => `- ${plugin.manifest.name}: ${summaryOf(plugin)}`),
     };
+  }
+
+  /** The plugins' tools that are not in the agent's tool list, each with its plugin, in the order the plugins name them. */
+  private useToolToolsOf(plugins: CanvasPlugin[]): { plugin: CanvasPlugin; name: string; tool: CanvasTool }[] {
+    return plugins.flatMap((plugin) =>
+      Object.entries(plugin.host.tools)
+        .filter(([, tool]) => !runsNatively(plugin, tool))
+        .map(([name, tool]) => ({ plugin, name, tool })),
+    );
   }
 
   /** The official plugins not installed come last: they are the lines to lose where an agent cuts the instructions short. */
@@ -281,7 +281,7 @@ export class CanvasPlugins {
   guidanceFor(conversationId: string): CanvasPluginGuidance {
     const conversation = this.store.findConversation(conversationId);
     const plugins = this.pluginsOf(conversationId);
-    const guidance = this.guidanceOf(plugins, (plugin) => !this.getsToolsFromStart(plugin, conversation));
+    const guidance = this.guidanceOf(plugins, (plugin) => this.waitsToBeLoaded(plugin, conversation));
     if (conversation?.startedBy) return this.withOfferedPlugins(guidance);
     const added = plugins.flatMap((plugin) => this.addedGuidanceOf(plugin, conversationId) ?? []);
     return this.withOfferedPlugins({
@@ -291,10 +291,10 @@ export class CanvasPlugins {
     });
   }
 
-  /** The plugins that load on request whose tools the conversation doesn't get from the start: the same for its whole session, as plugin_load is loaded up front. */
+  /** The plugins that load on request and the conversation hasn't asked for already: the same for its whole session, as plugin_load is loaded up front. */
   private waitingPlugins(conversationId: string): CanvasPlugin[] {
     const conversation = this.store.findConversation(conversationId);
-    return this.pluginsOf(conversationId).filter((plugin) => !this.getsToolsFromStart(plugin, conversation));
+    return this.pluginsOf(conversationId).filter((plugin) => this.waitsToBeLoaded(plugin, conversation));
   }
 
   /** What the plugin adds for the conversation's profile, as its guidanceFor says. */
@@ -619,7 +619,7 @@ export class CanvasPlugins {
     const parsed = await fromJsonSchema(tool.input)["~standard"].validate(commandInput(writtenArguments, tool.input));
     if (parsed.issues) throw new Error(parsed.issues.map(({ message }) => message).join("; "));
     const said = String(await tool.run(parsed.value, this.toolContext(plugin, conversationId, "user")));
-    await this.bringTools(plugin, conversationId);
+    this.recordLoaded(plugin, conversationId);
     return said;
   }
 
@@ -668,18 +668,17 @@ export class CanvasPlugins {
   }
 
   /**
-   * Puts on the conversation's canvas server the tools of the plugins its profile has on, and plugin_load for those waiting to
-   * be loaded; what a tool throws reaches the agent as a tool error. The conversations on one opencode process share its
-   * profile, so the calling one's tools are the same.
+   * Puts on the conversation's canvas server the plugin tools its agent calls on their own, use_tool for the rest, and
+   * plugin_load for the plugins waiting to be loaded; what a tool throws reaches the agent as a tool error. The
+   * conversations on one opencode process share its profile, so the calling one's tools are the same.
    */
   registerTools(server: McpServer, conversationId: string, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations } = {}) {
-    const conversation = this.store.findConversation(conversationId);
     const plugins = this.pluginsOf(conversationId);
     this.registerLoadTool(server, this.waitingPlugins(conversationId), callingConversation, reviewFree);
-    for (const plugin of plugins.filter((each) => this.hasToolsOf(each, conversation))) {
+    for (const plugin of plugins) {
       for (const [name, tool] of Object.entries(plugin.host.tools)) {
-        const loading = tool.onDemand || loadsOnRequest(plugin) ? {} : { _meta: loadedUpFront };
-        server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), ...loading, ...reviewFree }, async (input, ctx) => {
+        if (!runsNatively(plugin, tool)) continue;
+        server.registerTool(name, { description: tool.description, inputSchema: fromJsonSchema(tool.input), _meta: loadedUpFront, ...reviewFree }, async (input, ctx) => {
           try {
             const text = await tool.run(input, this.toolContext(plugin, await callingConversation(ctx), "agent"));
             return { content: [{ type: "text" as const, text: String(text) }] };
@@ -689,6 +688,50 @@ export class CanvasPlugins {
         });
       }
     }
+    if (this.useToolToolsOf(plugins).length > 0) this.registerUseTool(server, callingConversation, reviewFree);
+  }
+
+  /** use_tool's definition is the same in every session, so the prompt cache holds: the tool it names is a plain string, not an enum. */
+  private registerUseTool(server: McpServer, callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations }) {
+    const input = {
+      type: "object",
+      properties: {
+        tool: { type: "string", description: "The tool's name, as the canvas instructions list it." },
+        input: { type: "object", description: "The tool's arguments, as its input schema says; leave it out to read that schema first." },
+      },
+      required: ["tool"],
+    };
+    server.registerTool(
+      USE_TOOL_TOOL,
+      {
+        description:
+          "Run a canvas tool that is not in your tool list; the canvas instructions name them. Call it with just `tool` to read that tool's description and input schema, then again with `tool` and `input` to run it.",
+        inputSchema: fromJsonSchema(input),
+        _meta: loadedUpFront,
+        ...reviewFree,
+      },
+      async (args, ctx) => {
+        const { tool: name, input } = args as { tool: string; input?: Record<string, unknown> };
+        const caller = await callingConversation(ctx);
+        const available = this.useToolToolsOf(this.pluginsOf(caller));
+        const found = available.find((each) => each.name === name);
+        if (!found) return toolError(`No canvas tool named ${name} runs through ${USE_TOOL_TOOL} here; the ones that do are ${available.map(({ name: toolName }) => toolName).join(", ") || "none"}.`);
+        const { plugin, tool } = found;
+        const loadText = this.loadForUseTool(plugin, caller);
+        const schema = `Input schema:\n${JSON.stringify(tool.input, null, 2)}`;
+        if (input === undefined)
+          return toolText([loadText, `${plugin.manifest.title} · ${name}`, tool.description, schema, `Call ${USE_TOOL_TOOL} again with tool: "${name}" and input to run it.`]);
+        const parsed = await fromJsonSchema(tool.input)["~standard"].validate(input);
+        if (parsed.issues)
+          return toolError([loadText, `The input doesn't fit ${name}'s schema:`, ...parsed.issues.map(({ path, message }) => `- ${path?.length ? `${path.map((segment) => (typeof segment === "object" ? segment.key : segment)).join(".")}: ` : ""}${message}`), schema].filter(Boolean).join("\n"));
+        try {
+          const text = await tool.run(parsed.value, this.toolContext(plugin, caller, "agent"));
+          return toolText([loadText, String(text)]);
+        } catch (error) {
+          return toolError([loadText, messageOf(error)].filter(Boolean).join("\n"));
+        }
+      },
+    );
   }
 
   private registerLoadTool(server: McpServer, waiting: CanvasPlugin[], callingConversation: (ctx: ServerContext) => Promise<string>, reviewFree: { annotations?: ToolAnnotations }) {
@@ -702,7 +745,7 @@ export class CanvasPlugins {
       PLUGIN_LOAD_TOOL,
       {
         description:
-          "Load a plugin that loads on request, before you first use it: answers with the plugin's instructions and puts its tools in your tool list. The canvas instructions list those plugins, with what each is for.",
+          "Load a plugin that loads on request, before you first use it: answers with the plugin's instructions and the names of its tools, which run through use_tool. The canvas instructions list those plugins, with what each is for.",
         inputSchema: fromJsonSchema(input),
         _meta: loadedUpFront,
         ...reviewFree,
@@ -710,7 +753,7 @@ export class CanvasPlugins {
       async (input, ctx) => {
         try {
           const { plugin } = input as { plugin: string };
-          return { content: [{ type: "text" as const, text: await this.load(await callingConversation(ctx), plugin) }] };
+          return { content: [{ type: "text" as const, text: this.load(await callingConversation(ctx), plugin) }] };
         } catch (error) {
           return { isError: true, content: [{ type: "text" as const, text: messageOf(error) }] };
         }
@@ -782,54 +825,50 @@ export class CanvasPlugins {
   /** A message the plugin sends on its own, which the conversation shows as the plugin's; one from its view, for the user, stays the user's. */
   private promptOfItsOwn(plugin: CanvasPlugin, conversationId: string) {
     return async (text: string, { afterTurn = false } = {}) => {
-      await this.bringTools(plugin, conversationId);
+      this.recordLoaded(plugin, conversationId);
       return this.sendPrompt(conversationId, text, { afterTurn, fromPlugin: plugin.manifest.title });
     };
   }
 
   /**
-   * Whether the conversation's agent gets the plugin's tools and instructions as its session starts: unless the plugin
-   * loads on request and the agent can take them once it asks, as a conversation the plugin started has asked already,
-   * and one whose profile the plugin gives guidance of its own is told to use them. What the agent is told depends on this
-   * alone, so it reads the same after a restart of Mirador and keeps the prompt cache.
+   * Whether the plugin loads on request and the conversation is told its summary alone until it asks for it: a
+   * conversation the plugin started has asked already, and one whose profile the plugin gives guidance of its own is
+   * told to use it. What the agent is told depends on this alone, so it reads the same after a restart of Mirador and
+   * keeps the prompt cache.
    */
-  private getsToolsFromStart(plugin: CanvasPlugin, conversation: Conversation | undefined): boolean {
-    if (!conversation || !loadsOnRequest(plugin) || !takesToolsMidSession(conversation.harness)) return true;
-    return conversation.startedBy?.plugin === plugin.manifest.name || this.addedGuidanceOf(plugin, conversation.id) !== undefined;
-  }
-
-  /** Whether the conversation's agent is to see the plugin's tools now: from the start, or once it loaded the plugin or the plugin showed items there. */
-  private hasToolsOf(plugin: CanvasPlugin, conversation: Conversation | undefined): boolean {
-    if (this.getsToolsFromStart(plugin, conversation)) return true;
-    return this.store.loadedPlugins(conversation!.id).includes(plugin.manifest.name) || this.itemsOf(plugin, conversation!.id).length > 0;
+  private waitsToBeLoaded(plugin: CanvasPlugin, conversation: Conversation | undefined): boolean {
+    if (!conversation || !loadsOnRequest(plugin)) return false;
+    return conversation.startedBy?.plugin !== plugin.manifest.name && this.addedGuidanceOf(plugin, conversation.id) === undefined;
   }
 
   /**
-   * Puts the tools of a plugin that loads on request into the conversation, when its agent didn't get them from the start;
-   * resolves once the agent has listed its tools again. What the plugin asks of the agent, and what the user does with it,
-   * brings them as the agent's own plugin_load does, also when the user's command has just shown the plugin's first item.
+   * Records a plugin that loads on request as loaded, when the conversation was told its summary alone. What the plugin
+   * asks of the agent, and what the user does with it, loads it as the agent's own plugin_load does; its tools run
+   * through use_tool either way.
    */
-  private async bringTools(plugin: CanvasPlugin, conversationId: string) {
+  private recordLoaded(plugin: CanvasPlugin, conversationId: string) {
     const conversation = this.store.findConversation(conversationId);
-    if (!conversation || this.getsToolsFromStart(plugin, conversation)) return;
-    if (this.store.savePluginLoaded(conversationId, plugin.manifest.name)) await this.toolsChanged(conversationId);
+    if (!conversation || !this.waitsToBeLoaded(plugin, conversation)) return;
+    this.store.savePluginLoaded(conversationId, plugin.manifest.name);
   }
 
-  private fetchesDeferredTools(conversationId: string) {
-    return this.store.findConversation(conversationId)?.harness === "claude";
+  /** use_tool loads a plugin that loads on request the first time it reaches one of its tools, as plugin_load does. */
+  private loadForUseTool(plugin: CanvasPlugin, conversationId: string): string {
+    if (!this.waitingPlugins(conversationId).includes(plugin) || this.store.loadedPlugins(conversationId).includes(plugin.manifest.name)) return "";
+    return this.load(conversationId, plugin.manifest.name);
   }
 
-  /** The agent's plugin_load: the plugin's instructions and the names of its tools, which are in the agent's tool list by the time it reads them. */
-  private async load(conversationId: string, name: string): Promise<string> {
+  /** The agent's plugin_load: the plugin's instructions and the names of its tools, which run through use_tool. */
+  private load(conversationId: string, name: string): string {
     const waiting = this.waitingPlugins(conversationId);
     const plugin = waiting.find(({ manifest }) => manifest.name === name);
     if (!plugin) throw new Error(`No plugin named ${name} loads on request here; the ones that do are ${waiting.map(({ manifest }) => manifest.name).join(", ") || "none"}.`);
-    await this.bringTools(plugin, conversationId);
+    this.recordLoaded(plugin, conversationId);
     const tools = Object.keys(plugin.host.tools);
     return [
       `${plugin.manifest.title} is loaded.`,
       ...[plugin.host.guidance?.instructions ?? []].flat(),
-      tools.length > 0 ? `Its tools are available to you now: ${tools.join(", ")}.${this.fetchesDeferredTools(conversationId) ? FETCH_DEFERRED_TOOLS : ""}` : "It brings no tools.",
+      tools.length > 0 ? `Its tools run through ${USE_TOOL_TOOL}: ${tools.join(", ")}.` : "It brings no tools.",
     ].join("\n\n");
   }
 
@@ -837,7 +876,7 @@ export class CanvasPlugins {
     return {
       ...this.context(plugin, conversationId, { byAgent: false }),
       prompt: async (text, { afterTurn = false } = {}) => {
-        await this.bringTools(plugin, conversationId);
+        this.recordLoaded(plugin, conversationId);
         return this.sendPrompt(conversationId, text, { afterTurn });
       },
       openInEditor: (file, line) => {

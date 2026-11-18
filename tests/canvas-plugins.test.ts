@@ -31,45 +31,44 @@ describe("a plugin that loads on request", () => {
     (await mcpRequest("tools/list", {})).tools;
   const onAgent = (store: Store, harness: "pi" | "opencode") => store.updateConversation({ ...store.findConversation("c1")!, harness });
 
-  test("a Claude Code conversation is told its summary alone, and gets its instructions and tools once the agent loads it", async () => {
+  test("a conversation is told its summary alone, and plugin_load answers with the instructions and the tools use_tool runs", async () => {
     const { plugins, mcpRequest, callTool, store } = await setUpOnRequest();
     const instructions = canvasInstructions("http://127.0.0.1:4601", plugins.guidanceFor("c1"));
-    expect(instructions).toContain(`call plugin_load with its name: it answers with the plugin's instructions and puts its tools in your tool list.\n- board: ${SUMMARY}`);
+    expect(instructions).toContain(`call plugin_load with its name: it answers with the plugin's instructions and the names of its tools, which run through use_tool.\n- board: ${SUMMARY}`);
     expect(instructions).not.toContain("- show_card: show a card the user can press.");
     expect(canvasUseGuidance(plugins.guidanceFor("c1"))).toContain("\n- show_card: when a card says it better than words. Load the board plugin with plugin_load first.\n");
     expect(claudeSessionMeta("often", { canvasPlugins: plugins.guidanceFor("c1") }).claudeCode.options.allowedTools).toContain("mcp__canvas__plugin_load");
-    const before = (await toolsListed(mcpRequest)).map(({ name }) => name);
-    expect(before).toEqual(expect.arrayContaining(["show", "ask", "plugin_load"]));
-    expect(before).not.toContain("show_card");
+    const before = await toolsListed(mcpRequest);
+    expect(before.map(({ name }) => name)).toEqual(expect.arrayContaining(["show", "ask", "plugin_load", "use_tool"]));
+    expect(before.map(({ name }) => name)).not.toContain("show_card");
+    expect(before.find(({ name }) => name === "use_tool")!._meta?.["anthropic/alwaysLoad"]).toBe(true);
 
     const loaded = await callTool("plugin_load", { plugin: "board" });
     expect(loaded.isError).toBe(false);
     expect(loaded.text).toContain("- show_card: show a card the user can press.");
-    expect(loaded.text).toContain("Its tools are available to you now: show_card, change_card,");
+    expect(loaded.text).toContain("Its tools run through use_tool: show_card, change_card,");
     const after = await toolsListed(mcpRequest);
-    expect(after.map(({ name }) => name)).toEqual(expect.arrayContaining(["show_card", "change_card", "track_steps"]));
-    expect(after.find(({ name }) => name === "show_card")!._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+    expect(after.map(({ name }) => name), "the plugin's tools stay out of the tool list, reached through use_tool").not.toContain("show_card");
+    expect(after.map(({ name }) => name)).toContain("use_tool");
     expect(after.find(({ name }) => name === "show")!._meta?.["anthropic/alwaysLoad"]).toBe(true);
     expect(store.loadedPlugins("c1")).toEqual(["board"]);
   });
 
-  test("the conversation keeps a loaded plugin's tools on its next connection, as after a restart of Mirador", async () => {
+  test("the conversation keeps the plugin loaded on its next connection, as after a restart of Mirador", async () => {
     const store = storeWithConversation();
     await (await setUpOnRequest(store)).callTool("plugin_load", { plugin: "board" });
-    expect((await toolsListed((await setUpOnRequest(store)).mcpRequest)).map(({ name }) => name)).toContain("show_card");
+    const { callTool } = await setUpOnRequest(store);
+    expect((await callTool("use_tool", { tool: "show_card", input: { title: "Hello", text: "there" } })).text).toMatch(/^Shown as /);
   });
 
-  test("the user's command of the plugin brings its tools to the agent, though the command has shown the plugin's first item", async () => {
+  test("the user's command of the plugin loads it for the agent, though the command has shown the plugin's first item", async () => {
     const store = storeWithConversation();
     const { plugins } = await setUpOnRequest(store);
-    const toldToolsChanged: string[] = [];
-    plugins.tellsToolsChangedWith(async (conversationId) => void toldToolsChanged.push(conversationId));
 
     expect(await plugins.runCommand("c1", "board:show_card", "title=Hello text=there")).toMatch(/^Shown as /);
-    expect(toldToolsChanged).toEqual(["c1"]);
     expect(store.loadedPlugins("c1")).toEqual(["board"]);
     await plugins.runCommand("c1", "board:show_card", "title=Again text=there");
-    expect(toldToolsChanged, "a plugin loaded already is not told again").toEqual(["c1"]);
+    expect(store.loadedPlugins("c1")).toEqual(["board"]);
   });
 
   test("what the agent is told stays as its session started, once it loaded the plugin, so a restart of Mirador keeps the prompt cache", async () => {
@@ -82,39 +81,48 @@ describe("a plugin that loads on request", () => {
     expect((await toolsListed(mcpRequest)).map(({ name }) => name), "plugin_load stays, as Claude Code loads it up front").toContain("plugin_load");
   });
 
-  test("a conversation where the plugin already has items has its tools without loading it", async () => {
+  test("a conversation where the plugin already has items still loads it through use_tool, whose answer begins with the load text", async () => {
     const store = storeWithConversation();
     store.saveCanvasItem({ id: "i1", conversationId: "c1", kind: "plugin", title: "Card", status: "shown", createdAt: 1, plugin: "board", type: "card", icon: "▤", placement: "page", data: { text: "a", presses: 0, heardPresses: 0 } });
-    expect((await toolsListed((await setUpOnRequest(store)).mcpRequest)).map(({ name }) => name)).toContain("show_card");
+    const { callTool } = await setUpOnRequest(store);
+    const shown = await callTool("use_tool", { tool: "show_card", input: { title: "Hello", text: "there" } });
+    expect(shown.isError).toBe(false);
+    expect(shown.text).toStartWith("Board is loaded.");
+    expect(shown.text).toContain("Shown as ");
+    expect(store.loadedPlugins("c1")).toEqual(["board"]);
   });
 
-  test("agents that don't take tools mid-session have its tools and instructions from the start, as before plugins loaded on request", async () => {
+  test("every agent is told the summary alone and reaches the plugin's tools through use_tool", async () => {
     for (const harness of ["pi", "opencode"] as const) {
       const store = storeWithConversation();
       onAgent(store, harness);
       const { plugins, mcpRequest } = await setUpOnRequest(store);
       const tools = (await toolsListed(mcpRequest)).map(({ name }) => name);
-      expect(tools).toContain("show_card");
-      expect(tools).not.toContain("plugin_load");
+      expect(tools).toEqual(expect.arrayContaining(["plugin_load", "use_tool"]));
+      expect(tools).not.toContain("show_card");
       const instructions = canvasInstructions("http://127.0.0.1:4601", plugins.guidanceFor("c1"));
-      expect(instructions).toContain("- show_card: show a card the user can press.");
-      expect(instructions).not.toContain("plugin_load");
-      expect(canvasUseGuidance(plugins.guidanceFor("c1"))).toContain("\n- show_card: when a card says it better than words.\n");
+      expect(instructions).toContain(`- board: ${SUMMARY}`);
+      expect(instructions).not.toContain("- show_card: show a card the user can press.");
+      expect(canvasUseGuidance(plugins.guidanceFor("c1"))).toContain("\n- show_card: when a card says it better than words. Load the board plugin with plugin_load first.\n");
     }
   });
 
-  test("a conversation whose profile the plugin gives guidance of its own has its tools and instructions from the start", async () => {
+  test("a conversation whose profile the plugin gives guidance of its own has its instructions from the start, and no plugin_load", async () => {
     const store = storeWithConversation();
     const profile = (id: string, name: string, pluginSettings?: Record<string, Record<string, string>>) =>
       store.saveProfile({ id, name, harness: "claude", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, ...(pluginSettings && { pluginSettings }), pluginsOff: [], createdAt: 1 });
     profile("local", "Qwen 27b");
     profile("main", "Personal", { board: { "hand-over-to": "local" } });
     store.updateConversation({ ...store.findConversation("c1")!, profileId: "main" });
-    const { plugins, mcpRequest } = await setUpOnRequest(store);
+    const { plugins, mcpRequest, callTool } = await setUpOnRequest(store);
 
-    expect((await toolsListed(mcpRequest)).map(({ name }) => name)).toEqual(expect.arrayContaining(["show_card", "hand_over"]));
+    const tools = (await toolsListed(mcpRequest)).map(({ name }) => name);
+    expect(tools).toContain("use_tool");
+    expect(tools).not.toContain("plugin_load");
+    expect(tools).not.toContain("hand_over");
     expect(plugins.guidanceFor("c1").instructions).toEqual(expect.arrayContaining(["- show_card: show a card the user can press.", "- hand_over: hand tasks to Qwen 27b without asking."]));
     expect(plugins.guidanceFor("c1").onRequest).toEqual([]);
+    expect((await callTool("use_tool", { tool: "show_card", input: { title: "Hello", text: "there" } })).text).toMatch(/^Shown as /);
   });
 
   test("plugin_load takes only the plugins whose tools the conversation doesn't have from the start, so its schema stays the same all session", async () => {
@@ -153,19 +161,104 @@ describe("a plugin that loads on request", () => {
   });
 });
 
+describe("use_tool", () => {
+  const SUMMARY = "cards the user presses and steps the agent ticks off, when a card says it better than words.";
+  const loadingOnRequest = { board: { ...board, guidance: { ...board.guidance, summary: SUMMARY } } };
+  const setUpOnRequest = (store = storeWithConversation()) => canvasPluginHost(FIXTURES, store, loadingOnRequest);
+
+  test("without input it answers with the plugin's title, the tool's description and its schema, and runs nothing", async () => {
+    const { callTool, items } = await setUp();
+    const described = await callTool("use_tool", { tool: "change_card" });
+    expect(described.isError).toBe(false);
+    expect(described.text).toStartWith("Board · change_card\n\nChange the text of the newest card, and its title if given.");
+    expect(described.text).toContain(`Input schema:\n${JSON.stringify(board.tools.change_card!.input, null, 2)}`);
+    expect(described.text).toEndWith('Call use_tool again with tool: "change_card" and input to run it.');
+    expect(items()).toEqual([]);
+  });
+
+  test("with input it runs the tool as the native path does, as the agent's change", async () => {
+    const { callTool, items } = await setUp();
+    await callTool("show_card", { title: "Hello", text: "First" });
+    expect(await callTool("use_tool", { tool: "change_card", input: { text: "Second" } })).toEqual({ text: "Changed.", isError: false });
+    expect(items()[0]).toMatchObject({ data: { text: "Second" }, agentEditedAt: expect.any(Number) });
+  });
+
+  test("input the tool's schema refuses is an error naming each issue's path, followed by the schema", async () => {
+    const { callTool, items } = await setUp();
+    const refused = await callTool("use_tool", { tool: "change_card", input: {} });
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("- data must have required property 'text'");
+    expect(refused.text).toContain("Input schema:");
+    const mistyped = await callTool("use_tool", { tool: "change_card", input: { text: 3 } });
+    expect(mistyped.isError).toBe(true);
+    expect(mistyped.text).toContain("- data/text must be string");
+    expect(items()).toEqual([]);
+  });
+
+  test("a tool it doesn't run, a native one included, is an error naming the tools it does run", async () => {
+    const { callTool } = await setUp();
+    for (const tool of ["nope", "show_card", "show"]) {
+      const refused = await callTool("use_tool", { tool });
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toBe(`No canvas tool named ${tool} runs through use_tool here; the ones that do are change_card.`);
+    }
+  });
+
+  test("what the tool throws reaches the agent as a tool error", async () => {
+    const { callTool } = await setUp();
+    expect(await callTool("use_tool", { tool: "change_card", input: { text: "Second" } })).toEqual({ text: "There is no card to change; show one with show_card.", isError: true });
+  });
+
+  test("on a plugin not loaded yet it loads it first, and its answer begins with the load text, once", async () => {
+    const store = storeWithConversation();
+    const { callTool } = await setUpOnRequest(store);
+    const described = await callTool("use_tool", { tool: "show_card" });
+    expect(described.isError).toBe(false);
+    expect(described.text).toStartWith("Board is loaded.");
+    expect(described.text).toContain("- show_card: show a card the user can press.");
+    expect(described.text).toContain("Its tools run through use_tool: show_card, change_card,");
+    expect(described.text).toContain("Board · show_card");
+    expect(store.loadedPlugins("c1")).toEqual(["board"]);
+
+    const shown = await callTool("use_tool", { tool: "show_card", input: { title: "Hello", text: "there" } });
+    expect(shown.text).toMatch(/^Shown as /);
+  });
+
+  test("a conversation the plugin started hears no load text, as it has asked already", async () => {
+    const store = storeWithConversation();
+    store.recordStartedBy("c1", { conversationId: "c0", plugin: "board" });
+    const { callTool } = await setUpOnRequest(store);
+    expect((await callTool("use_tool", { tool: "show_card", input: { title: "Hello", text: "there" } })).text).toMatch(/^Shown as /);
+  });
+
+  test("its definition is the same in every session, so the prompt cache holds", async () => {
+    const definition = async (host: Awaited<ReturnType<typeof setUp>>) => {
+      const { tools } = await host.mcpRequest("tools/list", {});
+      const { name, ...rest } = (tools as { name: string }[]).find(({ name }) => name === "use_tool")!;
+      return rest;
+    };
+    expect(await definition(await setUp())).toEqual(await definition(await setUpOnRequest()));
+  });
+});
+
 describe("CanvasPlugins", () => {
-  test("a plugin's tools join the canvas server, pre-allowed and loaded up front unless on demand, with its lines of guidance", async () => {
+  test("a plugin's tools join the canvas server loaded up front, the on-demand ones through use_tool, with its lines of guidance", async () => {
     const { plugins, mcpRequest } = await setUp();
     const { tools } = await mcpRequest("tools/list", {});
-    expect(tools.map(({ name }: { name: string }) => name)).toEqual(expect.arrayContaining(["show", "show_card", "change_card", "show_report", "change_verdict", "track_steps", "finish_step"]));
+    expect(tools.map(({ name }: { name: string }) => name)).toEqual(expect.arrayContaining(["show", "show_card", "show_report", "change_verdict", "track_steps", "finish_step", "use_tool"]));
+    expect(tools.map(({ name }: { name: string }) => name)).not.toContain("change_card");
     expect(tools.find(({ name }: { name: string }) => name === "show_card")).toMatchObject({ description: "Show a card the user can press.", _meta: { "anthropic/alwaysLoad": true } });
-    expect(tools.find(({ name }: { name: string }) => name === "change_card")._meta?.["anthropic/alwaysLoad"]).toBeUndefined();
+    expect(tools.find(({ name }: { name: string }) => name === "use_tool")).toMatchObject({ _meta: { "anthropic/alwaysLoad": true } });
 
     const { guidance } = plugins;
-    expect(guidance.toolNames).toEqual(["show_card", "change_card", "show_report", "change_verdict", "track_steps", "pin_card", "finish_step", "hand_over"]);
-    expect(canvasInstructions("http://127.0.0.1:4601", guidance)).toEndWith("so you can fix them.\n\nMore canvas tools:\n- show_card: show a card the user can press.");
+    expect(guidance.toolNames).toEqual(["show_card", "change_card", "show_report", "change_verdict", "track_steps", "pin_card", "finish_step", "hand_over", "use_tool"]);
+    expect(guidance.useToolNames).toEqual(["change_card"]);
+    expect(canvasInstructions("http://127.0.0.1:4601", guidance)).toEndWith(
+      "so you can fix them.\n\nMore canvas tools:\n- show_card: show a card the user can press.\nuse_tool runs the canvas tools that are not in your tool list (change_card); call it with just tool to read a tool's description and input schema, then with tool and input to run it.",
+    );
     expect(canvasUseGuidance(guidance)).toContain("add a preview when it helps.\n- show_card: when a card says it better than words.\n- Keep pages lean");
     expect(claudeSessionMeta("often", { canvasPlugins: guidance }).claudeCode.options.allowedTools).toContain("mcp__canvas__show_card");
+    expect(claudeSessionMeta("often", { canvasPlugins: guidance }).claudeCode.options.allowedTools).toContain("mcp__canvas__use_tool");
   });
 
   test("Claude Code gets the plugins' lines in its system prompt, however often Settings ask for the canvas, and not in the canvas server's instructions, which keep the app tools", async () => {
@@ -300,7 +393,7 @@ describe("CanvasPlugins", () => {
     expect(card).toMatchObject({ kind: "plugin", plugin: "board", type: "card", icon: "▤", placement: "page", title: "Hello", status: "shown", data: { text: "First", presses: 0 } });
     expect(card).not.toHaveProperty("agentEditedAt");
 
-    expect(await callTool("change_card", { text: "Second" })).toEqual({ text: "Changed.", isError: false });
+    expect(await callTool("use_tool", { tool: "change_card", input: { text: "Second" } })).toEqual({ text: "Changed.", isError: false });
     expect(items()).toHaveLength(1);
     expect(items()[0]).toMatchObject({ id: card!.id, data: { text: "Second" }, agentEditedAt: expect.any(Number) });
     expect(published.map((message) => message.type === "canvas.upserted" && (message.item as PluginCanvasItem).data)).toEqual([
@@ -311,7 +404,7 @@ describe("CanvasPlugins", () => {
 
   test("what a tool throws, and arguments its schema refuses, reach the agent as tool errors and change nothing", async () => {
     const { callTool, items } = await setUp();
-    expect(await callTool("change_card", { text: "Second" })).toEqual({ text: "There is no card to change; show one with show_card.", isError: true });
+    expect(await callTool("use_tool", { tool: "change_card", input: { text: "Second" } })).toEqual({ text: "There is no card to change; show one with show_card.", isError: true });
     const refused = await callTool("show_card", { text: "No title" });
     expect(refused.isError).toBe(true);
     expect(refused.text).toContain("title");
@@ -827,40 +920,6 @@ describe("CanvasPlugins", () => {
     expect(listed).toEqual(["c1 tools_list_changed"]);
   });
 
-  test("telling a conversation its tools changed waits until its agent lists them again, and not at all for one that never connected", async () => {
-    const { plugins } = await setUp();
-    const endpoints = new CanvasMcpEndpoints({
-      canvas: {} as CanvasService,
-      conversations: {} as ConversationService,
-      assetsOrigin: "http://127.0.0.1:4601",
-      canvasPlugins: plugins,
-      store: storeWithConversation(),
-    });
-    const started = Date.now();
-    await endpoints.toolsChanged("c1");
-    expect(Date.now() - started).toBeLessThan(100);
-
-    await endpoints.handle("c1", new Request("http://127.0.0.1/mcp/c1", { method: "GET" }));
-    const { handlers } = endpoints as unknown as { handlers: Map<string, McpHttpHandler> };
-    const told: string[] = [];
-    handlers.get("c1")!.bus.subscribe((event) => void told.push(event.kind));
-    let relisted = false;
-    const changed = endpoints.toolsChanged("c1").then(() => (relisted = true));
-    await Bun.sleep(50);
-    expect(told).toEqual(["tools_list_changed"]);
-    expect(relisted).toBe(false);
-    await endpoints.handle(
-      "c1",
-      new Request("http://127.0.0.1/mcp/c1", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} }),
-      }),
-    );
-    await changed;
-    expect(relisted).toBe(true);
-  });
-
   test("a plugin tells its caller when it is installed, has a replied of its own and says so in its plugin.json", async () => {
     const { plugins } = await setUp();
     expect(plugins.tellsItsCaller("board")).toBe(true);
@@ -982,6 +1041,9 @@ describe("loading canvas plugins", () => {
   test("refuses a tool named as one of Mirador's own or another plugin's, and a canvas host module that lacks what it needs", async () => {
     const takesShow = boardCopy((manifest) => manifest, `export default { items: {}, tools: { show: { description: "d", input: { type: "object" }, run: () => "" } } };`);
     expect((await loadPlugins(takesShow)).problems.map(({ message }) => message)).toEqual(["its tool show has the name of one of Mirador's own canvas tools"]);
+
+    const takesUseTool = boardCopy((manifest) => manifest, `export default { items: {}, tools: { use_tool: { description: "d", input: { type: "object" }, run: () => "" } } };`);
+    expect((await loadPlugins(takesUseTool)).problems.map(({ message }) => message)).toEqual(["its tool use_tool has the name of one of Mirador's own canvas tools"]);
 
     const twice = boardCopy((manifest) => manifest);
     cpSync(join(twice, "board"), join(twice, "second-board"), { recursive: true });

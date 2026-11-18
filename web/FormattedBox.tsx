@@ -10,6 +10,7 @@ import {
   $createParagraphNode,
   CLEAR_HISTORY_COMMAND,
   $getSelection,
+  $isElementNode,
   $isRangeSelection,
   $isTextNode,
   COMMAND_PRIORITY_CRITICAL,
@@ -79,7 +80,8 @@ function $typedBlockStart() {
 function $startBlock({ paragraph, first, typed, start }: NonNullable<ReturnType<typeof $typedBlockStart>>) {
   first.setTextContent(first.getTextContent().slice(typed.length));
   const block = start.block();
-  const holder = $isListNode(block) ? block.getFirstChildOrThrow<ElementNode>() : block;
+  const holder = $isListNode(block) ? block.getFirstChildOrThrow() : block;
+  if (!$isElementNode(holder)) return;
   const rest = paragraph.getChildren().filter((node) => !$isTextNode(node) || node.getTextContentSize() > 0);
   holder.append(...rest);
   paragraph.replace(block);

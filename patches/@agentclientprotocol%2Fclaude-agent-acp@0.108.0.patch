@@ -1,8 +1,8 @@
-diff --git a/dist/acp-agent.js b/dist/acp-agent.js
-index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a893cc6045 100644
---- a/dist/acp-agent.js
-+++ b/dist/acp-agent.js
-@@ -2857,6 +2857,9 @@ export class ClaudeAcpAgent {
+diff --git a/dist/v1/acp-agent.js b/dist/v1/acp-agent.js
+index a9b2af4291c36f0905cd26184708102b2d412c58..feeda2b5cbde39e8cfe25fc03374e35bc6e76dda 100644
+--- a/dist/v1/acp-agent.js
++++ b/dist/v1/acp-agent.js
+@@ -1707,6 +1707,9 @@ export class ClaudeAcpAgent {
          // after a cancel since their record last reset, so the record no longer
          // matches what the client got (see the stream_event case).
          const droppedStreams = new Set();
@@ -12,9 +12,9 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
          // A client gets the consolidated subagent text when it negotiated the
          // transcript extension or the `forwardSubagentText` session option. AIR
          // also gets it with native subagent sessions, and AIR gets no streamed
-@@ -3428,6 +3431,22 @@ export class ClaudeAcpAgent {
-             settleLiveBackgroundTask(session, taskId);
-             this.syncAwaitingUser(params.sessionId, session);
+@@ -2295,6 +2298,22 @@ export class ClaudeAcpAgent {
+             if (settled)
+                 registerLiveTask(taskId, settled.parentToolUseId, true, { backgrounded: true });
          };
 +        /** Tells the client how a subagent's task stands, on the Agent tool call
 +         *  that started it: a client that takes no native subagent sessions hears
@@ -32,12 +32,12 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
 +                },
 +            });
 +        };
-         /** Registers a settled subagent again when the SDK resumes it without a
-          *  new `task_started`. The active turn is the one that resumed it, so it
-          *  holds until the subagent settles again, unless the client declared
-@@ -3522,6 +3541,17 @@ export class ClaudeAcpAgent {
-             session.toolCallParents?.delete(toolCallId);
-             await sendUpdate({ sessionId: params.sessionId, update: report });
+         /** Whether any background subagent this turn spawned is still live —
+          *  while true, the turn's settlement stays deferred so the subagent's
+          *  output and permission requests land inside it (see
+@@ -2468,6 +2487,17 @@ export class ClaudeAcpAgent {
+                 return;
+             await closeOpenToolCalls((parentToolUseId) => parentToolUseId === agentToolUseId);
          };
 +        /** Closes the server tool calls that a later reply on their stream showed
 +         *  to have ended without their result: Claude Code gave up on the reply
@@ -50,16 +50,16 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
 +                await closeToolCall(toolCallId, renderer.unfinished({ toolCallId, ran: false }));
 +            }
 +        };
-         /** Whether the subagent that the Agent call `agentToolUseId` started runs in
-          *  the background and has not ended. */
-         const runsInBackground = (agentToolUseId) => [...session.liveBackgroundTasks.values()].some((task) => task.isSubagent &&
-@@ -4756,11 +4786,13 @@ export class ClaudeAcpAgent {
+         /** Delivers the results that the work a cancel stopped sends for tool calls
+          *  that the client holds open. Claude Code's interrupt ends each running tool
+          *  of the main conversation with an error result, before the result that
+@@ -3618,11 +3648,13 @@ export class ClaudeAcpAgent {
                                      // The subagent streams no more text under this parent.
                                      streamedBlocksByParent.delete(message.tool_use_id);
                                      droppedStreams.delete(message.tool_use_id);
 +                                    serverToolCalls.forget(message.tool_use_id);
                                  }
-                                 await endBackgroundTask(message.task_id, message.status);
+                                 await endBackgroundTask(message.task_id);
                                  if (message.status === "stopped") {
                                      await closeStoppedSubagentToolCalls(message.tool_use_id);
                                  }
@@ -67,21 +67,21 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
                                  settleLiveTask(message.task_id);
                                  break;
                              case "task_updated":
-@@ -4790,11 +4822,13 @@ export class ClaudeAcpAgent {
+@@ -3651,11 +3683,13 @@ export class ClaudeAcpAgent {
                                      if (parentToolUseId) {
                                          streamedBlocksByParent.delete(parentToolUseId);
                                          droppedStreams.delete(parentToolUseId);
 +                                        serverToolCalls.forget(parentToolUseId);
                                      }
-                                     await endBackgroundTask(message.task_id, message.patch.status === "killed" ? "stopped" : message.patch.status);
+                                     await endBackgroundTask(message.task_id);
                                      if (message.patch.status === "killed") {
                                          await closeStoppedSubagentToolCalls(parentToolUseId);
                                      }
 +                                    await announceSubagentTaskStatus(message.task_id, message.patch.status);
                                      settleLiveTask(message.task_id);
                                  }
-                                 else if (message.patch.status === "paused") {
-@@ -4810,6 +4844,7 @@ export class ClaudeAcpAgent {
+                                 else if (message.patch.status === "running" ||
+@@ -3663,6 +3697,7 @@ export class ClaudeAcpAgent {
                                      // The SDK can resume a finished subagent under the same
                                      // agent id without a new task_started.
                                      resumeLiveTask(message.task_id);
@@ -89,7 +89,7 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
                                      await subagents.taskResumed(message.task_id, sendUpdate, sendMessageResumePrompt(session.toolUseCache, message.task_id));
                                  }
                                  break;
-@@ -5662,6 +5697,7 @@ export class ClaudeAcpAgent {
+@@ -4482,6 +4517,7 @@ export class ClaudeAcpAgent {
                          // it) can all be tagged with the same, replay-stable id.
                          if (message.event.type === "message_start") {
                              currentStreamMessageId = message.event.message.id || undefined;
@@ -97,7 +97,7 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
                              await subagents.reportModel(message.parent_tool_use_id, message.event.message.model, sendUpdate);
                              // A new top-level message starts: clear any streamed-content
                              // residue from a prior message that never reached its
-@@ -5830,6 +5866,11 @@ export class ClaudeAcpAgent {
+@@ -4611,6 +4647,11 @@ export class ClaudeAcpAgent {
                              // the stamped parentToolUseId meta and are excluded there.
                              await sendUpdate(notification);
                          }
@@ -109,7 +109,7 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
                          break;
                      }
                      case "user":
-@@ -5845,6 +5886,12 @@ export class ClaudeAcpAgent {
+@@ -4628,6 +4669,12 @@ export class ClaudeAcpAgent {
                                      recordReachedToolUse(session, block.id, stoppedWorkOutput);
                                  }
                              }
@@ -122,16 +122,7 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
                          }
                          // Record the ACP messageId -> SDK uuid mapping for this message
                          // (including replays). The consolidated message carries both ids, so
-@@ -9729,7 +9776,7 @@ export class ClaudeAcpAgent {
-                 log: (message) => this.logger.log(message),
-             }, 
-             // The CLI's own environment: process env, the client's and the provider's.
--            { env });
-+            { env, settingsOverride: configuredSettingsObject });
-             timing.phase("register");
-             this.backgroundWork.sync(sessionId, this.sessions[sessionId], this.foregroundState(sessionId));
-             this.refreshContextWindowInBackground(sessionId, this.sessions[sessionId]);
-@@ -10839,12 +10886,72 @@ function recordDispatchedToolCall(session, toolCallId) {
+@@ -8379,12 +8426,72 @@ function recordDispatchedToolCall(session, toolCallId) {
              calls.delete(oldest);
      }
  }
@@ -205,50 +196,15 @@ index a92039bb8e54d3ceb3fc2db36434568e4c0332e1..37ac083abe3e6ec07c101db586be77a8
              recordDispatchedToolCall(session, block.id);
      }
  }
-diff --git a/dist/idle-compaction.js b/dist/idle-compaction.js
-index 119ff7e905a25f4d811259583ddf7f62c44d5a97..f01156f9130849c897d174ab54fe7424f0510c2c 100644
---- a/dist/idle-compaction.js
-+++ b/dist/idle-compaction.js
-@@ -35,6 +35,7 @@ function parseCacheTtl(usage) {
- export class IdleCompaction {
-     host;
-     env;
-+    settingsOverride;
-     setTimer;
-     ttl;
-     lastRequestAt;
-@@ -51,6 +52,7 @@ export class IdleCompaction {
-     constructor(host, options = {}) {
-         this.host = host;
-         this.env = options.env ?? process.env;
-+        this.settingsOverride = options.settingsOverride;
-         this.setTimer = options.setTimeout ?? ((cb, ms) => setTimeout(cb, ms));
-     }
-     /** Whether an idle compaction it started is still running. `acp-agent.ts` reports
-@@ -178,7 +180,7 @@ export class IdleCompaction {
-         return undefined;
-     }
-     disabledBy() {
--        const settings = this.host.settings();
-+        const settings = this.settings();
-         if (settings.idleCompaction === false)
-             return "idleCompaction setting";
-         if (settings.autoCompactEnabled === false)
-@@ -191,7 +193,16 @@ export class IdleCompaction {
-     }
-     /** The CLI applies the settings `env` block after the launch env, so it wins. */
-     claudeCodeEnv(name) {
--        return this.host.settings().env?.[name] ?? this.env[name];
-+        return this.settings().env?.[name] ?? this.env[name];
-+    }
-+    /** `host.settings()` under `settingsOverride`: its keys win, and so do its `env` entries.
-+     *  Upstream: agentclientprotocol/claude-agent-acp PR 1555. */
-+    settings() {
-+        const files = this.host.settings();
-+        const override = this.settingsOverride;
-+        if (!override)
-+            return files;
-+        return { ...files, ...override, env: { ...files.env, ...override.env } };
-     }
-     /** `0` and invalid values fall back to 200,000, as in the CLI, which declares the variable
-      *  with `min: 1` and computes `Math.max(100000, env ?? 200000)`. */
+diff --git a/package.json b/package.json
+index f11dce102e5dca295e1d0a6940c236e9f37d44ac..e9b5649dd0843634485d151493b0d94d741019ea 100644
+--- a/package.json
++++ b/package.json
+@@ -16,6 +16,7 @@
+       "types": "./dist/lib.d.ts",
+       "import": "./dist/lib.js"
+     },
++    "./dist/*.js": "./dist/*.js",
+     "./package.json": "./package.json"
+   },
+   "files": [

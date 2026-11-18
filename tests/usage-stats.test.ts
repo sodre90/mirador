@@ -738,6 +738,33 @@ describe("where tools come from", () => {
     expect(sourceOf("mcp__github__create_issue", plugins)).toBe("MCP server github");
   });
 
+  test("a use_tool call counts as the tool it ran, under the prefix its agent gives canvas tools, even when the input arrives later", () => {
+    const store = seededStore();
+    write(store, "c1", 0, message);
+    write(store, "c1", 1, started("t1", "mcp__canvas__use_tool", "other", { tool: "review", input: { title: "Retry payments" } }));
+    write(store, "c1", 2, ended("t1", "completed"));
+    write(store, "c1", 3, started("t2", "canvas_use_tool", "other", { tool: "tour", input: { title: "The fix" } }));
+    write(store, "c1", 4, ended("t2", "completed"));
+    write(store, "c1", 5, started("t3", "mcp__canvas__use_tool", "other"));
+    write(store, "c1", 6, { type: "acp", update: { sessionUpdate: "tool_call_update", toolCallId: "t3", rawInput: { tool: "review", input: { title: "Again" } } } });
+    write(store, "c1", 7, ended("t3", "completed"));
+    write(store, "c1", 8, started("t4", "mcp__canvas__use_tool", "other", { tool: "review" }));
+    write(store, "c1", 9, ended("t4", "failed", "The input doesn't fit review's schema."));
+    write(store, "c1", 10, {
+      type: "acp",
+      update: { sessionUpdate: "tool_call", toolCallId: "t5", title: "mcp.canvas.use_tool", kind: "execute", status: "pending", rawInput: { server: "canvas", tool: "use_tool", arguments: { tool: "tour", input: { title: "From Codex" } } }, _meta: { is_mcp_tool_call: true } },
+    });
+    write(store, "c1", 11, ended("t5", "completed"));
+
+    const report = reportOn(store, {}, { pluginTools: { review: "Code review", tour: "Code review" } });
+    expect(report.tools.map(({ tool, calls, source }) => [tool, calls, source])).toEqual([
+      ["mcp__canvas__review", 3, "Code review plugin"],
+      ["canvas_tour", 1, "Code review plugin"],
+      ["mcp__canvas__tour", 1, "Code review plugin"],
+    ]);
+    expect(report.sources.map(({ source, calls }) => [source, calls])).toEqual([["Code review plugin", 5]]);
+  });
+
   test("each source's share of the calls, its failures and its tools", () => {
     const store = seededStore();
     write(store, "c1", 0, message);

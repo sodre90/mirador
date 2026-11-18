@@ -465,7 +465,7 @@ export interface CanvasTool<Data = unknown> {
   input: Record<string, unknown>;
   /** Resolves to the text its caller gets. What it throws reaches the caller as an error, so its message should say what would work. */
   run(input: unknown, context: CanvasToolContext<Data>): string | Promise<string>;
-  /** Left out of every request until the agent searches for it, for a tool rarely called: Claude Code with tool search on. */
+  /** Not in the agent's tool list, for a tool rarely called: the agent reads its description and input schema through use_tool, and runs it the same way, on every agent. */
   onDemand?: boolean;
   /**
    * Lists the tool in the slash menu as /<plugin>:<tool>, with this description, for the user to run without the agent,
@@ -507,11 +507,9 @@ export interface CanvasHost<Data = unknown> {
     /**
      * What the plugin does and when to reach for it, in one short line without the plugin's name, e.g. "edit videos and
      * images on a timeline; when the user wants a clip cut, joined or captioned." A plugin that gives it loads on request,
-     * for the agents that can take new tools mid-turn (Claude Code): a conversation is told that line alone, and `often`
-     * with a note to load it first, and gets `instructions` and the plugin's tools once its agent calls plugin_load with
-     * the plugin's name, or once the plugin starts a conversation, has items in one, or gives guidanceFor its profile.
-     * Other agents get it all from the start. It needs no newer `api`: a Mirador that doesn't know it tells `instructions`
-     * and gives the tools as before, so a plugin keeps giving all three.
+     * on every agent: a conversation is told that line alone, and `often` with a note to load it first, and gets
+     * `instructions` once its agent calls plugin_load with the plugin's name, or use_tool reaches one of its tools, or
+     * once the plugin starts a conversation or gives guidanceFor its profile. Its tools run through use_tool either way.
      */
     summary?: string;
   };

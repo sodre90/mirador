@@ -62,8 +62,14 @@ export async function untilFramePainted(page: Page, iframe: Locator) {
   await page.evaluate(twoFramesPainted);
 }
 
-export async function signIn(page: Page, host: TestHost) {
-  await page.goto(host.authUrl);
+export async function signIn(page: Page, host: TestHost, triesLeft = 3) {
+  try {
+    await page.goto(host.authUrl);
+  } catch (error) {
+    if (triesLeft === 1 || !RELOAD_CUT_SHORT.some((message) => String(error).includes(message))) throw error;
+    test.info().annotations.push({ type: "sign-in cut short", description: "the page's own reload, on reaching the restarted host, cut the spec's short" });
+    return signIn(page, host, triesLeft - 1);
+  }
   await expect(page.getByText("No conversation selected").or(page.getByRole("heading", { name: "Set up a profile to start" }))).toBeVisible();
 }
 

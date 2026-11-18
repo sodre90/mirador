@@ -76,8 +76,8 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     await expect(pageView(page).locator("#text")).toHaveText("First (pressed 0 times)");
   });
 
-  await test.step("another tool changes the card in place", async () => {
-    expect(await callCanvasTool(host, conversationId, "change_card", { text: "Second" })).toBe("Changed.");
+  await test.step("another tool, reached through use_tool, changes the card in place", async () => {
+    expect(await callCanvasTool(host, conversationId, "use_tool", { tool: "change_card", input: { text: "Second" } })).toBe("Changed.");
     await expect(pageView(page).locator("#text")).toHaveText("Second (pressed 0 times)");
     await expect(page.getByRole("button", { name: "History (1)" })).toBeVisible();
   });
@@ -462,10 +462,12 @@ test("a plugin's tools show its items on the canvas and in the tab, its view tak
     const calls = [
       { title: "mcp__canvas__hand_over", kind: "other", rawInput: { task: "Find the callers" } },
       { title: "mcp__canvas__show", kind: "other", rawInput: { title: "Plan" } },
+      { title: "mcp__canvas__use_tool", kind: "other", rawInput: { tool: "change_card", input: { text: "Through use_tool" } } },
     ];
     await sendAndWait(page, `RUN TOOLS ${JSON.stringify(calls)}`);
     await expect(page.locator(".timeline:visible .tool-title").filter({ hasText: "hand_over" })).toHaveText("Board · hand_over");
     await expect(page.locator(".timeline:visible .tool-title").filter({ hasText: " · show" })).toHaveText("canvas · show");
+    await expect(page.locator(".timeline:visible .tool-title").filter({ hasText: "change_card" })).toHaveText("Board · change_card");
     const showCall = page.locator(".timeline:visible .tool summary").filter({ hasText: " · show" });
     await expect(showCall, "the card leaves out the agent's tool category").not.toContainText("other");
   });

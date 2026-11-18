@@ -11,6 +11,7 @@ test("Claude Code runs every tool of the canvas's own without a permission promp
     "mcp__canvas__usage_stats",
     "mcp__canvas__plan_usage",
     "mcp__canvas__title_conversation",
+    "mcp__canvas__use_tool",
   ]);
 });
 

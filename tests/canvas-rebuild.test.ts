@@ -24,6 +24,14 @@ function claudeCall(id: string, tool: string, input: Record<string, unknown>, re
   ];
 }
 
+/** A use_tool call as codex-acp sends it: a command whose raw input names the server and tool beside the arguments. */
+function codexUseToolCall(id: string, input: Record<string, unknown>, result: string): ConversationEvent[] {
+  return [
+    acp({ sessionUpdate: "tool_call", toolCallId: id, title: "mcp.canvas.use_tool", kind: "execute", status: "pending", rawInput: { server: "canvas", tool: "use_tool", arguments: input }, _meta: { is_mcp_tool_call: true } }),
+    acp({ sessionUpdate: "tool_call_update", toolCallId: id, status: "completed", content: [{ type: "content", content: { type: "text", text: result } }] }),
+  ];
+}
+
 const single: AskItem = {
   id: "a",
   conversationId: "c1",
@@ -57,6 +65,23 @@ describe("canvasCallsIn", () => {
     expect(canvasCallsIn(events)).toEqual([
       { tool: "show", input: { title: "Plan", html: "<p>x</p>" }, result: "Shown to the user as canvas item 1.", nextUserMessage: 'My answer to your question "Which?": Two', userMessagesBefore: 1 },
       { tool: "ask", input: { question: "Which?", options: [] }, result: "The question is now showing in the user's browser.", nextUserMessage: 'My answer to your question "Which?": Two', userMessagesBefore: 1 },
+    ]);
+  });
+
+  test("a use_tool call becomes the call of the tool it ran; a describe-only call, which ran nothing, is left out", () => {
+    const events = stored([
+      userSays("Track it"),
+      ...claudeCall("t1", "mcp__canvas__use_tool", { tool: "track_steps" }, "Input schema:\n{}"),
+      ...claudeCall("t2", "mcp__canvas__use_tool", { tool: "track_steps", input: { title: "Steps", steps: ["a"] } }, "Tracking 1 steps."),
+      ...claudeCall("t3", "canvas_use_tool", { tool: "finish_step", input: {} }, "1 done."),
+      ...claudeCall("t4", "mcp__canvas__use_tool", { input: { title: "No tool named" } }, "Invalid", "failed"),
+      ...codexUseToolCall("t5", { tool: "track_steps", input: { title: "From Codex", steps: ["b"] } }, "Tracking 1 steps."),
+      ...codexUseToolCall("t6", { tool: "track_steps" }, "Input schema:\n{}"),
+    ]);
+    expect(canvasCallsIn(events)).toEqual([
+      { tool: "track_steps", input: { title: "Steps", steps: ["a"] }, result: "Tracking 1 steps.", nextUserMessage: null, userMessagesBefore: 1 },
+      { tool: "finish_step", input: {}, result: "1 done.", nextUserMessage: null, userMessagesBefore: 1 },
+      { tool: "track_steps", input: { title: "From Codex", steps: ["b"] }, result: "Tracking 1 steps.", nextUserMessage: null, userMessagesBefore: 1 },
     ]);
   });
 });
@@ -137,6 +162,17 @@ describe("rebuildCanvas", () => {
     const { store, canvas, plugins } = await setUp();
     await rebuildCanvas("c1", stored(claudeCall("t1", "mcp__canvas__show_card", { title: "Hello", text: "First" }, "Shown.")), canvas, plugins);
     expect(store.listCanvasItems("c1")).toEqual([]);
+  });
+
+  test("rebuilds the items a use_tool call made, and leaves its describe-only calls alone", async () => {
+    const { store, canvas, plugins } = await setUp();
+    const events = stored([
+      ...claudeCall("t1", "mcp__canvas__use_tool", { tool: "track_steps" }, "Input schema:\n{}"),
+      ...claudeCall("t2", "mcp__canvas__use_tool", { tool: "track_steps", input: { title: "Steps", steps: ["a", "b"] } }, "Tracking 2 steps."),
+      ...claudeCall("t3", "mcp__canvas__use_tool", { tool: "finish_step", input: {} }, "1 done."),
+    ]);
+    await rebuildCanvas("c1", events, canvas, plugins);
+    expect(store.listCanvasItems("c1")).toMatchObject([{ kind: "plugin", plugin: "board", title: "Steps", data: { steps: ["a", "b"], done: 1 } }]);
   });
 });
 

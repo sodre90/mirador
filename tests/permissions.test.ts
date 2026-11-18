@@ -18,6 +18,8 @@ describe("canvas tools the host allows without asking", () => {
     expect(canvasToolAskedFor(call("mcp__canvas__review"), [])).toBe("review");
     expect(canvasToolAskedFor(call("canvas_checklist"), [])).toBe("checklist");
     expect(canvasToolAskedFor(call("canvas-tour"), [])).toBe("tour");
+    expect(canvasToolAskedFor(call("mcp__canvas__use_tool"), [])).toBe("use_tool");
+    expect(canvasToolAskedFor(call("canvas_use_tool"), [])).toBe("use_tool");
     expect(canvasToolAskedFor(call("Run", { rawInput: { server: "canvas", tool: "update_checklist" }, _meta: { is_mcp_tool_call: true } }), [])).toBe("update_checklist");
   });
 
@@ -45,6 +47,7 @@ describe("canvas tools the host allows without asking", () => {
 
   test("the pre-allowed tools and the plugins' tools are allowed, other canvas tools are asked about", () => {
     expect(isPreAllowedCanvasTool("show", [])).toBe(true);
+    expect(isPreAllowedCanvasTool("use_tool", [])).toBe(true);
     expect(isPreAllowedCanvasTool("review", ["review", "tour"])).toBe(true);
     expect(isPreAllowedCanvasTool("review", [])).toBe(false);
     expect(isPreAllowedCanvasTool("app_run", ["review"])).toBe(false);

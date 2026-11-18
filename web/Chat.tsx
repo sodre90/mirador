@@ -317,7 +317,7 @@ function RawOutput({ block, conversationId }: { block: ToolBlock; conversationId
   );
 }
 
-const readableToolTitle = (title: string) => readableToolTitleOf(title, toolTitlesOfPlugins());
+const readableToolTitle = (block: ToolBlock) => readableToolTitleOf(block.title, toolTitlesOfPlugins(), block.rawInput);
 
 const statusIcons: Record<string, string> = { pending: "○", in_progress: "◐", completed: "●", failed: "✕" };
 
@@ -447,7 +447,7 @@ function ToolCard({ block, conversationId }: { block: ToolBlock; conversationId:
     <details className={`tool tool-${status}`}>
       <summary>
         <span className="tool-status">{statusIcons[status]}</span>
-        <span className="tool-title">{readableToolTitle(block.title)}</span>
+        <span className="tool-title">{readableToolTitle(block)}</span>
       </summary>
       {block.locations.length > 0 && (
         <div className="locations">
@@ -515,7 +515,7 @@ function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock
         <span className="subagent-label">{words.subagent.label}</span>
         <span className="subagent-task">{subagentTask(block)}</span>
         <span className="subagent-facts">{facts.join(" · ")}</span>
-        {state === "running" && latestCall && <span className="subagent-now">{words.subagent.now(readableToolTitle(latestCall.title))}</span>}
+        {state === "running" && latestCall && <span className="subagent-now">{words.subagent.now(readableToolTitle(latestCall))}</span>}
       </summary>
       {typeof prompt === "string" && (
         <details className="raw subagent-prompt">
@@ -546,7 +546,7 @@ const subagentTask = (block: SubagentBlock) => {
   const { description, prompt } = subagentInput(block);
   if (typeof description === "string" && description) return description;
   if (typeof prompt === "string" && prompt) return prompt.split("\n")[0]!.slice(0, 80);
-  return readableToolTitle(block.title);
+  return readableToolTitle(block);
 };
 
 const tokensHint = ({ cacheReadTokens, cacheWriteTokens, inputTokens }: SubagentUsage) =>
@@ -574,7 +574,7 @@ function RunningSubagents({ conversationId, subagents, onShow }: { conversationI
             <span className="subagent-facts" data-hint={spent ? tokensHint(spent) : undefined}>
               {facts.filter(Boolean).join(" · ")}
             </span>
-            {latestCall && <span className="subagent-now">{words.subagent.now(readableToolTitle(latestCall.title))}</span>}
+            {latestCall && <span className="subagent-now">{words.subagent.now(readableToolTitle(latestCall))}</span>}
           </button>
         );
       })}

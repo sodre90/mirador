@@ -180,7 +180,7 @@ const stopDoubleCharge = [
     locations: [{ path: join(shopApi, "src/checkout.ts") }],
     content: [{ type: "diff", path: join(shopApi, "src/checkout.ts"), oldText: captureLine, newText: captureLine.replace("cart.total)", "cart.total, { idempotencyKey: cart.id })") }],
   }),
-  toolCall("toolu_tour", "mcp__canvas__tour", "other", { title: "What the fix changed" }, "Shown to the user as a tour."),
+  toolCall("toolu_tour", "mcp__canvas__use_tool", "other", { tool: "tour", input: { title: "What the fix changed" } }, "Shown to the user as a tour."),
   agentSays("The capture now sends the cart's id as its idempotency key, so retrying a capture the bank already took doesn't charge the card again. I walked through the change on the canvas, and the files are under *Changes*."),
   turnEnd,
 ];
@@ -412,7 +412,7 @@ test("the README's screenshots", async ({ page }) => {
 
   await test.step("a review, as a tour of the code and its findings", async () => {
     await openConversation(page, ids.reviewRetries);
-    await callCanvasTool(host, ids.reviewRetries, "review", review);
+    await callCanvasTool(host, ids.reviewRetries, "use_tool", { tool: "review", input: review });
     const view = walkthroughView(page).locator(".review");
     await expect(view.locator(".verdict")).toBeVisible();
     await view.getByRole("tab", { name: /Flow/ }).click();
@@ -445,7 +445,7 @@ test("the README's screenshots", async ({ page }) => {
   });
 
   await test.step("a tour of what the agent changed", async () => {
-    await callCanvasTool(host, ids.stopDoubleCharge, "tour", fixTour);
+    await callCanvasTool(host, ids.stopDoubleCharge, "use_tool", { tool: "tour", input: fixTour });
     const view = walkthroughView(page).locator(".review");
     await view.getByRole("tab", { name: /Flow/ }).click();
     await expect(view.locator(".code-row.added")).toContainText(["idempotencyKey: cart.id"]);
