@@ -705,7 +705,8 @@ export type ConversationEvent =
   /** `edits`: the files the tool would change, as the host found the change in each, for a request that changes files. */
   | { type: "permission"; permissionId: string; toolCall: ToolCallUpdate; options: PermissionOption[]; edits?: EditDiff[] }
   | { type: "permission-resolved"; permissionId: string; optionId: string | null }
-  | ({ type: "turn-end"; stopReason: StopReason } & TurnSpend)
+  /** `cutShortByRestart`: the host came back up with nobody answering the turn, so it ended without a reply. */
+  | ({ type: "turn-end"; stopReason: StopReason; cutShortByRestart?: true } & TurnSpend)
   /**
    * `agent`: the conversation moved to another agent, which it may do before it has begun.
    * `from`: the profile it left; a profile id without a name is one deleted by then.
