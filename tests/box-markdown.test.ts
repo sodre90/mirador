@@ -25,6 +25,8 @@ const MESSAGES = [
   "3. odd\n4. list\n**fine**",
   "src/**/*.ts and 2 * 3 * 4 and some_var",
   "[Image #1] {{file}} @web/Chat.tsx",
+  "- a\n  b\n- c",
+  "1. a\n   b\n   \n   c\n2. d",
 ];
 
 describe("markdown put in the box is written back the same", () => {
@@ -87,5 +89,36 @@ describe("formatting applied in the box shows the same in the sent message", () 
   test("formatting inside a word can't be written in markdown, and its markers go out as typed", () => {
     expect(boxWithRuns([["un", []], ["do", ["bold"]], ["ne", []]])).toBe("un**do**ne");
     expect(marked(inlinesOfLine("un**do**ne"))).toEqual([]);
+  });
+});
+
+describe("a line break inside a list item reaches the agent as a line break", () => {
+  const pasteAtEndOfBox = (markdown: string, pasted: string) => {
+    update(() => {
+      $readBox(markdown);
+      $getRoot().selectEnd();
+      const selection = $getSelection();
+      if ($isRangeSelection(selection)) selection.insertRawText(pasted);
+    });
+    return written().markdown;
+  };
+  const NINE_ITEMS = Array.from({ length: 9 }, (_, index) => `${index + 1}. a`).join("\n");
+
+  test.each([
+    ["bullet", "- a", "- ax\n  y"],
+    ["numbered", "1. a\n2. b", "1. a\n2. bx\n   y"],
+    ["tenth numbered", `${NINE_ITEMS}\n10. b`, `${NINE_ITEMS}\n10. bx\n    y`],
+  ])("%s item: text pasted across lines is written as continuation lines", (_, markdown, expected) => {
+    expect(pasteAtEndOfBox(markdown, "x\ny")).toBe(expected);
+    update(() => $readBox(expected));
+    expect(written().markdown).toBe(expected);
+  });
+
+  test("a continuation line is read back into its item, with the break", () => {
+    update(() => $readBox("- a\n  b\n- c"));
+    const items = editor.read(() =>
+      ($getRoot().getFirstChildOrThrow() as ListNode).getChildren().map((item) => (item as ListItemNode).getChildren().map((node) => node.getType())),
+    );
+    expect(items).toEqual([["text", "linebreak", "text"], ["text"]]);
   });
 });
