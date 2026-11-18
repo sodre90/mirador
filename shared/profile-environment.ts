@@ -4,8 +4,8 @@ export interface ProfileEnvironment {
   errors: string[];
 }
 
-const assignment = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s"'#]*))\s*(?:#.*)?$/;
-const unsetting = /^-u\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:#.*)?$/;
+const assignment = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s"']*))(?:\s+#.*)?$/;
+const unsetting = /^-u\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+#.*)?$/;
 const secretName = /TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL/i;
 
 /**

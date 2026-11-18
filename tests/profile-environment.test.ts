@@ -25,6 +25,19 @@ describe("parseEnvironment", () => {
     });
   });
 
+  test("a # starts a comment only at the start of a line or after a space, as in a shell", () => {
+    const pasted = ["KEY=sk-ab#cd", "URL=https://h/p#frag", "NOTE=x #note", "SPACED=y   # note", 'QUOTED="a b" # note', "EMPTY= # note", "-u OLD # gone", "-u OTHER"].join("\n");
+    expect(parseEnvironment(pasted)).toEqual({
+      set: { KEY: "sk-ab#cd", URL: "https://h/p#frag", NOTE: "x", SPACED: "y", QUOTED: "a b", EMPTY: "" },
+      unset: ["OLD", "OTHER"],
+      errors: [],
+    });
+  });
+
+  test("an unset name followed by a # without a space is no name", () => {
+    expect(parseEnvironment("-u OLD#gone").errors).toHaveLength(1);
+  });
+
   test("reports lines it does not understand and values that would need expansion", () => {
     const { errors } = parseEnvironment('local -a claude_env=(\nANTHROPIC_MODEL="$model"\nOK=1');
     expect(errors).toHaveLength(2);
