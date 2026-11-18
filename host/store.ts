@@ -60,6 +60,10 @@ export interface StoredJoinRequest extends JoinRequest {
   answer: "approved" | "denied" | null;
 }
 
+/** The events that count as the agent having replied, as the SQL condition on an events row: not the turn a restart cut short. */
+const REPLY_EVENTS = `((json_extract(event, '$.type') = 'turn-end' AND json_extract(event, '$.cutShortByRestart') IS NULL)
+  OR (json_extract(event, '$.type') = 'error' AND json_extract(event, '$.endsTurn') = 1))`;
+
 const schema = `
   CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, path TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL);
@@ -1450,7 +1454,7 @@ export class Store {
 
   /** Nobody answered when the host came back up, so the time of the last reply stays: a restart doesn't lift the conversation in the sidebar's orders. */
   endTurnCutShortByRestart(conversationId: string): StoredEvent {
-    return this.insertEvent(conversationId, { type: "turn-end", stopReason: "cancelled" });
+    return this.insertEvent(conversationId, { type: "turn-end", stopReason: "cancelled", cutShortByRestart: true });
   }
 
   appendEvent(conversationId: string, event: ConversationEvent): StoredEvent {
@@ -1477,7 +1481,7 @@ export class Store {
       .query(
         `UPDATE conversations SET
            last_message_at = (SELECT MAX(at) FROM events WHERE conversation_id = ? AND json_extract(event, '$.type') = 'user-message' AND json_extract(event, '$.fromScript') IS NULL AND json_extract(event, '$.fromMirador') IS NULL AND json_extract(event, '$.fromPlugin') IS NULL),
-           last_reply_at = (SELECT MAX(at) FROM events WHERE conversation_id = ? AND (json_extract(event, '$.type') = 'turn-end' OR (json_extract(event, '$.type') = 'error' AND json_extract(event, '$.endsTurn') = 1)))
+           last_reply_at = (SELECT MAX(at) FROM events WHERE conversation_id = ? AND ${REPLY_EVENTS})
          WHERE id = ?`,
       )
       .run(conversationId, conversationId, conversationId);
@@ -1892,7 +1896,7 @@ export class Store {
       `json_extract(event, '$.type') = 'user-message' AND json_extract(event, '$.fromScript') IS NULL
        AND json_extract(event, '$.fromMirador') IS NULL AND json_extract(event, '$.fromPlugin') IS NULL`,
     );
-    fill("last_reply_at", "json_extract(event, '$.type') = 'turn-end' OR (json_extract(event, '$.type') = 'error' AND json_extract(event, '$.endsTurn') = 1)");
+    fill("last_reply_at", REPLY_EVENTS);
   }
 
   /**

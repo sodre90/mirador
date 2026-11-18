@@ -109,6 +109,41 @@ describe("Store", () => {
     expect(store.findConversation("c1")!.lastReplyAt).toBe(replied.at);
   });
 
+  test("a rewind keeps the time of the last reply, not that of a turn the host was killed in", () => {
+    const { store } = seededStore();
+    setSystemTime(new Date("2026-10-02T10:00:00Z"));
+    const replied = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    setSystemTime(new Date("2026-10-02T10:01:00Z"));
+    store.appendEvent("c1", { type: "user-message", text: "go on" });
+    setSystemTime(new Date("2026-10-02T10:02:00Z"));
+    store.endTurnCutShortByRestart("c1");
+    setSystemTime(new Date("2026-10-02T10:03:00Z"));
+    const later = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    setSystemTime();
+
+    store.deleteEventsFrom("c1", later.seq);
+    expect(store.findConversation("c1")!.lastReplyAt).toBe(replied.at);
+  });
+
+  test("a database from before these times does not count a turn the host was killed in as a reply", () => {
+    const path = join(mkdtempSync(join(tmpdir(), "mirador-order-")), "state.sqlite");
+    const { conversation } = seededStore();
+    const store = new Store(path);
+    store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    store.insertConversation(conversation);
+    setSystemTime(new Date("2026-10-02T10:00:00Z"));
+    const replied = store.appendEvent("c1", { type: "turn-end", stopReason: "end_turn" });
+    setSystemTime(new Date("2026-10-02T10:01:00Z"));
+    store.endTurnCutShortByRestart("c1");
+    setSystemTime();
+    const older = new Database(path);
+    older.run("ALTER TABLE conversations DROP COLUMN last_message_at");
+    older.run("ALTER TABLE conversations DROP COLUMN last_reply_at");
+    older.close();
+
+    expect(new Store(path).findConversation("c1")!.lastReplyAt).toBe(replied.at);
+  });
+
   test("a database from before these times gets them from its events", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-order-")), "state.sqlite");
     const { conversation } = seededStore();
