@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { loadavg } from "node:os";
 import { expect, test, type Frame, type FrameLocator, type Locator, type Page } from "@playwright/test";
+import type { DesktopMenu, DesktopMenuMessage } from "../shared/desktop-menu.ts";
 import type { TestHost } from "./test-host.ts";
 
 /** A path as the agent's Bash takes it: Git Bash reads a backslash as an escape, so on Windows the path is written with slashes. */
@@ -465,3 +466,20 @@ export const clickNotification = (page: Page, body: string) =>
 
 /** A file git checked out, as written: Git for Windows checks text files out with CRLF line ends. */
 export const checkedOutText = (path: string) => readFileSync(path, "utf8").replaceAll("\r\n", "\n");
+
+/** Stands in for Electrobun's page-to-app bridge, answering a menu request as the Linux desktop app does. */
+export async function actAsDesktopApp(page: Page, menu: DesktopMenu) {
+  await page.addInitScript((menu) => {
+    const sent: DesktopMenuMessage[] = [];
+    Object.assign(window, { sentToDesktopApp: sent });
+    window.__electrobunSendToHost = (message) => {
+      sent.push(message);
+      if (message.type === "desktop-menu-request") setTimeout(() => window.dispatchEvent(new CustomEvent("mirador:desktop-menu", { detail: menu })));
+      if (message.type === "desktop-nonce-request") setTimeout(() => window.dispatchEvent(new CustomEvent("mirador:desktop-nonce", { detail: menu.nonce })));
+    };
+  }, menu);
+  return () => page.evaluate(() => (window as unknown as { sentToDesktopApp: DesktopMenuMessage[] }).sentToDesktopApp);
+}
+
+/** ⌘W as the macOS desktop app passes it to the page. */
+export const pressCommandWInTheApp = (page: Page) => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-close")));
