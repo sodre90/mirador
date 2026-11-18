@@ -68,7 +68,7 @@ const DURATION_UNITS: Record<string, number> = { m: MINUTE_MS, h: HOUR_MS, d: 24
 
 const durationPattern = /^(?:in\s+)?(\d+(?:\.\d+)?)\s*(m|mins?|minutes?|h|hrs?|hours?|d|days?)\b/;
 const clockPattern = /^(?:at\s+)?(noon|midnight|(\d{1,2})(?::(\d{2}))?\s*(am|pm)?)(?=\s|$)/;
-const dayPattern = /^(today|tonight|this evening|evening|morning|tomorrow|tmrw?|next week|(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)[a-z]*)(?=\s|$)/;
+const dayPattern = /^(today|tonight|this evening|evening|morning|tomorrow|tmrw?|next week|sun(?:day)?|mon(?:day)?|tue(?:s|sday)?|wed(?:s|nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?)(?=\s|$)/;
 
 /** Minutes after midnight a clock time names, as 24-hour unless it says am or pm. */
 function clockMinutes(match: RegExpExecArray): number | null {
