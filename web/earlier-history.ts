@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { connection } from "./connection.ts";
 import type { OpenConversation } from "./state.ts";
 
@@ -15,13 +15,18 @@ export function useEarlierHistory({ conversationId, events, hasEarlier }: OpenCo
   const [asked, setAsked] = useState<{ requestId: string; conversationId: string; beforeSeq: number } | null>(null);
   const firstSeq = events[0]?.seq;
   const loading = asked !== null && asked.conversationId === conversationId && asked.beforeSeq === firstSeq;
-
-  useEffect(() => {
-    if (!asked) return;
-    return connection.onMessage((message) => {
-      if (message.type === "conversation.earlier" && message.requestId === asked.requestId) setAsked(null);
-    });
-  }, [asked]);
+  // The listener reads the request it waits on from a ref, and is subscribed once: a listener that
+  // waited for the effect of `asked` would miss an answer that arrives before that effect runs, and
+  // the part would then stay loading, with every later ask refused, for the rest of the page's life.
+  const waitingFor = useRef(asked);
+  waitingFor.current = asked;
+  useEffect(
+    () =>
+      connection.onMessage((message) => {
+        if (message.type === "conversation.earlier" && message.requestId === waitingFor.current?.requestId) setAsked(null);
+      }),
+    [],
+  );
 
   const load = (reaching?: number) => {
     if (!hasEarlier || firstSeq === undefined || loading) return false;

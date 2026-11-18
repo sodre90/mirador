@@ -61,7 +61,8 @@ export function useOwnMessageSteps({
   takesSteps: boolean;
 }) {
   const keyToShow = useRef<string | null>(null);
-  const goesBackOnceLoaded = useRef(false);
+  /** A step pressed at a moment the page could not take it: its entries were still being drawn, or the part holding it was on its way. */
+  const pendingStep = useRef<MessageStep | null>(null);
 
   const show = (element: HTMLElement, entry: HTMLElement) => {
     element.scrollTop = topIn(element, entry) - READING_LINE;
@@ -73,7 +74,10 @@ export function useOwnMessageSteps({
     const element = timelineRef.current;
     if (!takesSteps || !element?.checkVisibility()) return;
     const drawn = drawnEntries(element);
-    if (drawn.length !== timeline.length - firstLoaded) return;
+    if (drawn.length !== timeline.length - firstLoaded) {
+      pendingStep.current = direction;
+      return;
+    }
     const places = timeline.flatMap((block, index) => (isOwn(block) ? [{ index, top: index < firstLoaded ? null : topIn(element, drawn[index - firstLoaded]!) }] : []));
     const target = ownMessageAway(places, element.scrollTop + READING_LINE, direction);
     if (target?.top != null) return show(element, drawn[target.index - firstLoaded]!);
@@ -82,7 +86,9 @@ export function useOwnMessageSteps({
       return loadFrom(target.index);
     }
     if (direction === 1) return jumpToLatest();
-    goesBackOnceLoaded.current = earlier.load();
+    if (earlier.load()) return;
+    // A part is already on its way: the step is taken once it lands.
+    if (earlier.loading) pendingStep.current = direction;
   };
   const latestStep = useRef(step);
   latestStep.current = step;
@@ -98,15 +104,19 @@ export function useOwnMessageSteps({
     if (!element) return;
     if (keyToShow.current !== null) {
       const index = timeline.findIndex(({ key }) => key === keyToShow.current);
-      if (index === -1) return void (keyToShow.current = null);
-      if (index < firstLoaded) return;
-      keyToShow.current = null;
-      const entry = drawnEntries(element)[index - firstLoaded];
-      return entry && show(element, entry);
+      if (index === -1) keyToShow.current = null;
+      else if (index >= firstLoaded) {
+        const entry = drawnEntries(element)[index - firstLoaded];
+        if (entry) {
+          keyToShow.current = null;
+          return show(element, entry);
+        }
+      }
     }
-    if (goesBackOnceLoaded.current && !earlier.loading) {
-      goesBackOnceLoaded.current = false;
-      step(-1);
+    if (pendingStep.current !== null) {
+      const direction = pendingStep.current;
+      pendingStep.current = null;
+      step(direction);
     }
   }, [timeline, firstLoaded, earlier.loading]);
 }
