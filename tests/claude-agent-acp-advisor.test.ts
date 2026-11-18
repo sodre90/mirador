@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { toAcpNotifications } from "@agentclientprotocol/claude-agent-acp";
+import { toAcpNotifications } from "@agentclientprotocol/claude-agent-acp/dist/sdk-to-acp.js";
 
 /** The advisor answers on the server, in an advisor_tool_result block that has to close its call. */
 type Notifications = ReturnType<typeof toAcpNotifications>;
