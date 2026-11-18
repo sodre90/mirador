@@ -30,6 +30,20 @@ describe("reminder times", () => {
     expect(parsed("next week")).toBe("Mon 9/11 09:00");
   });
 
+  test("every usual weekday name and abbreviation is a day", () => {
+    const names = ["sun", "sunday", "mon", "monday", "tue", "tues", "tuesday", "wed", "weds", "wednesday", "thu", "thur", "thurs", "thursday", "fri", "friday", "sat", "saturday"];
+    const days = names.map((name) => parsed(name)?.slice(0, 3));
+    expect(days).toEqual(["Sun", "Sun", "Mon", "Mon", "Tue", "Tue", "Tue", "Wed", "Wed", "Wed", "Thu", "Thu", "Thu", "Thu", "Fri", "Fri", "Sat", "Sat"]);
+    expect(parsed("MONDAY 8")).toBe("Mon 9/11 08:00");
+  });
+
+  test("a word that only starts like a weekday is no day and stays in the note", () => {
+    ["monitor", "satisfy", "sunrise", "thumbnail", "wedding", "friday-ish"].forEach((word) => {
+      expect(parseReminderTime(`${word} the build`, wednesday(14))).toBeNull();
+    });
+    expect(reminderFromCommand(reminderCommandIn("/later 16 monitor the build")!, wednesday(14))).toEqual({ at: wednesday(16).getTime(), mode: "away", note: "monitor the build" });
+  });
+
   test("after midnight, tomorrow is still the morning ahead", () => {
     expect(parsed("tomorrow", wednesday(1, 30))).toBe("Wed 4/11 09:00");
     expect(parsed("tomorrow", wednesday(8))).toBe("Thu 5/11 09:00");
