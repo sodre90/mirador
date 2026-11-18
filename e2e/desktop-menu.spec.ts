@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import type { DesktopMenu, DesktopMenuMessage } from "../shared/desktop-menu.ts";
+import { expect, test } from "@playwright/test";
+import type { DesktopMenu } from "../shared/desktop-menu.ts";
 import { actAsDesktopApp, addWorkspace, chooseInSettings, openSettings, pressCommandWInTheApp, signIn, startConversation } from "./helpers.ts";
 import { keepShellBusy } from "./terminal-shell.ts";
 import { jobControlShell, TestHost } from "./test-host.ts";
