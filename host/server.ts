@@ -370,7 +370,9 @@ export function startServer(services: HostServices) {
     answerAboutJoining(request, ({ name, commitment, authorityFingerprint }) => {
       const { fromAddress, tailscaleUser } = clientAddressOf(request, server);
       if (!askingToJoin.allows(tailscaleUser ?? fromAddress)) throw new JoinRequestRefused(429, "This device asked to join too often. Try again in a minute.");
-      return Response.json(joinRequests.open({ name, commitment, authorityFingerprint, fromAddress, tailscaleUser }), { status: 201 });
+      const opened = joinRequests.open({ name, commitment, authorityFingerprint, fromAddress, tailscaleUser });
+      sendJoinRequestsToEveryPage();
+      return Response.json(opened, { status: 201 });
     });
 
   const revealJoinRequestNonce = (request: Bun.BunRequest<"/join-requests/:id/reveal">) =>
