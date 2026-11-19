@@ -765,7 +765,11 @@ export function App() {
       <FileToOpenPrompt fileToOpen={state.fileToOpen} dispatch={dispatch} />
       <WorktreeDeletePrompt worktreeToDelete={state.worktreeToDelete} dispatch={dispatch} />
       <WorkspaceDeletePrompt workspaceToDelete={state.workspaceToDelete} dispatch={dispatch} />
-      <OlderDeletePrompt conversationsToDelete={state.conversationsToDelete} dispatch={dispatch} />
+      <OlderDeletePrompt
+        conversationsToDelete={state.conversationsToDelete}
+        workspaceId={state.conversations.find(({ id }) => id === state.conversationsToDelete?.conversationIds[0])?.workspaceId}
+        dispatch={dispatch}
+      />
       <div className="notices">
         {state.notices.map((notice) => (
           <div key={notice.id} className="notice" onClick={() => dispatch({ type: "dismiss-notice", id: notice.id })}>
