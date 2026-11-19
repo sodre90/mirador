@@ -54,6 +54,23 @@ async function onScreen(frame: Locator, element: Locator) {
 /** A frame scaled up shows its text blurred on a 1x screen: the text size zooms the page inside it instead. */
 const transformOf = (frame: Locator) => frame.evaluate((node) => getComputedStyle(node).transform);
 
+/** The screen's own pixel ratio, as Mirador's window has it: a shown page is told the ratio times the text size's zoom. */
+const screenPixelRatio = (page: Page) => page.evaluate(() => devicePixelRatio);
+
+const canvasDrawing = {
+  title: "Canvas drawing",
+  html: `<canvas id="drawing" style="width: 200px; height: 50px; display: block"></canvas>
+<script>
+  const drawing = document.getElementById("drawing");
+  const fitToScreen = () => {
+    drawing.width = Math.round(drawing.clientWidth * devicePixelRatio);
+    drawing.height = Math.round(drawing.clientHeight * devicePixelRatio);
+  };
+  fitToScreen();
+  addEventListener("resize", fitToScreen);
+</script>`,
+};
+
 /** How much of a picture is clearly green, as the page's field is. */
 const greenShare = (picture: Locator) =>
   picture.evaluate(async (image: HTMLImageElement) => {
@@ -137,10 +154,11 @@ test("pages the agent shows or asks with follow the text size chosen in Settings
       const bitmap = await createImageBitmap(await item!.getType("image/png"));
       return { width: bitmap.width, height: bitmap.height };
     });
-    const drawn = await shownPage(page).locator("html").evaluate((root) => ({
-      width: Math.round(root.scrollWidth * devicePixelRatio),
-      height: Math.round(root.scrollHeight * devicePixelRatio),
-    }));
+    const ratio = await screenPixelRatio(page);
+    const drawn = await shownPage(page).locator("html").evaluate((root, ratio) => ({
+      width: Math.round(root.scrollWidth * ratio),
+      height: Math.round(root.scrollHeight * ratio),
+    }), ratio);
     expect(picture).toEqual(drawn);
   });
 
@@ -243,5 +261,18 @@ test("pages the agent shows or asks with follow the text size chosen in Settings
     await expect.poll(async () => (await onScreen(shownFrame(page), field)).width).toBeCloseTo(480, 0);
     await field.evaluate((node) => node.scrollIntoView({ block: "end" }));
     await expect.poll(withinField).toEqual(at140);
+  });
+
+  await test.step("a canvas the page sizes by its pixel ratio is drawn at the screen's resolution, also after the text size changes", async () => {
+    await chooseInSettings(page, "Text size", "140%");
+    await callCanvasTool(host, conversationId, "show", canvasDrawing);
+    const drawing = shownPage(page).locator("#drawing");
+    await expect(drawing).toBeAttached();
+    const ratio = await screenPixelRatio(page);
+    const bitmapAndScreenWidths = () => drawing.evaluate((node: HTMLCanvasElement, ratio) => [node.width, Math.round(node.getBoundingClientRect().width * ratio)], ratio);
+    const screenWidthAt = (zoom: number) => Math.round(200 * zoom * ratio);
+    await expect.poll(bitmapAndScreenWidths).toEqual([screenWidthAt(1.4), screenWidthAt(1.4)]);
+    await chooseInSettings(page, "Text size", "200%");
+    await expect.poll(bitmapAndScreenWidths).toEqual([screenWidthAt(2), screenWidthAt(2)]);
   });
 });
