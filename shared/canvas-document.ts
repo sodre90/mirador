@@ -1,6 +1,7 @@
 import { APP_MEDIA_PATH, APP_STORAGE_CHARACTERS, type AppStorageItems } from "./apps.ts";
 import type { PluginItem } from "./canvas-plugins.ts";
 import { MAX_AREA_SIDE, MAX_BATCH_COMMENTS, MAX_MARKED_HTML, MAX_MARKED_TEXT, type WaitingMark } from "./page-marks.ts";
+import { viewportUnitsUnzoomed } from "./viewport-units.ts";
 
 export const CANVAS_MESSAGE_SOURCE = "mirador-canvas";
 
@@ -1179,7 +1180,24 @@ ${pageDrawing(assetsOrigin)}
 /** On a shown page the panel finds instead, so the browser's own find must not open; other frames keep the key for their own find. */
 const CANCEL_BROWSER_FIND = "if (findKeys(event)) event.preventDefault();";
 
-function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean) {
+/** A canvas the page sizes to the window, from innerWidth and innerHeight as three.js scenes are, is zoom times its panel. */
+const WINDOW_SIZED_CANVAS_FIT =
+  "canvas[data-mirador-window-sized]{width:calc(100vw / var(--mirador-zoom)) !important;height:calc(100vh / var(--mirador-zoom)) !important}";
+
+// Only canvases sized to the window are fitted to it: fitting every canvas would squash a wide strip or a tall chart.
+// Their declared size is what's compared, which the fit leaves as the page set it.
+const WINDOW_SIZED_CANVAS_MARKING = `
+  const declaredSize = (canvas, side) => {
+    const styled = canvas.style[side];
+    return styled ? (styled.endsWith("px") ? parseFloat(styled) : NaN) : canvas[side];
+  };
+  const isWindowSized = (canvas) => Math.abs(declaredSize(canvas, "width") - innerWidth) <= 1 && Math.abs(declaredSize(canvas, "height") - innerHeight) <= 1;
+  const markWindowSizedCanvases = () => document.querySelectorAll("canvas").forEach((canvas) => canvas.toggleAttribute("data-mirador-window-sized", isWindowSized(canvas)));
+  new MutationObserver(markWindowSizedCanvases).observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ["style", "width", "height"] });
+  addEventListener("resize", markWindowSizedCanvases);
+`;
+
+function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean, followsTextSize: boolean) {
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
@@ -1196,7 +1214,7 @@ function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, as
   let zoom = 1;
   const zoomTo = (scale) => {
     zoom = scale > 0 ? scale : 1;
-    textZoom.textContent = zoom === 1 ? "" : ":root{zoom:" + zoom + "}";
+    textZoom.textContent = zoom === 1 ? "" : ":root{zoom:" + zoom + ";--mirador-zoom:" + zoom + "}" + ${JSON.stringify(WINDOW_SIZED_CANVAS_FIT)};
     dispatchEvent(new Event("mirador-zoom"));
   };
   zoomTo(${JSON.stringify(textScale)});
@@ -1265,6 +1283,7 @@ ${pageDrawing(assetsOrigin)}
   // Canvas code sizes its bitmap as clientWidth × devicePixelRatio, and clientWidth leaves the root's zoom out: told the
   // ratio times the zoom, it draws at the screen's resolution rather than being stretched blurry.
   Object.defineProperty(window, "devicePixelRatio", { get: () => screenPixelRatio() * zoom, configurable: true });
+${followsTextSize ? WINDOW_SIZED_CANVAS_MARKING : ""}
   const capture = async (requestId) => {
     try {
       const drawn = await drawnPage();
@@ -1493,8 +1512,9 @@ export function buildCanvasDocument(
     policy = {},
     markable = false,
     measuresNaturalWidth = false,
+    followsTextSize = false,
     textScale = 1,
-  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean; textScale?: number } = {},
+  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean; followsTextSize?: boolean; textScale?: number } = {},
 ) {
   const withoutDoctype = html.replace(/^\s*<!doctype[^>]*>/i, "");
   return [
@@ -1503,10 +1523,10 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, textScale, assetsOrigin, measuresNaturalWidth, markable)}</script>`,
+    `<script>${frameReporter(itemId, theme, textScale, assetsOrigin, measuresNaturalWidth, markable, followsTextSize)}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),
-    withoutDoctype,
+    followsTextSize ? viewportUnitsUnzoomed(withoutDoctype) : withoutDoctype,
   ].join("\n");
 }

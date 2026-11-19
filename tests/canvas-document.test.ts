@@ -34,6 +34,17 @@ describe("buildCanvasDocument", () => {
     expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light")).not.toContain('document.createElement("mirador-marks")');
   });
 
+  test("only a page that follows the text size has its viewport units divided by the zoom and its window-sized canvases marked", () => {
+    const page = '<style>#screen{height:100vh}</style><div style="width:100vw"></div>';
+    const following = buildCanvasDocument(page, "item", assetsOrigin, "light", { followsTextSize: true });
+    expect(following).toContain("#screen{height:calc(100vh / var(--mirador-zoom, 1))}");
+    expect(following).toContain('<div style="width:calc(100vw / var(--mirador-zoom, 1))"></div>');
+    expect(following).toContain("markWindowSizedCanvases");
+    const own = buildCanvasDocument(page, "item", assetsOrigin, "light");
+    expect(own).toContain(page);
+    expect(own).not.toContain("markWindowSizedCanvases");
+  });
+
   test("puts the CSP before any agent markup, even for a full document with its own doctype", () => {
     const document = buildCanvasDocument("<!DOCTYPE html><html><head><script>evil()</script></head></html>", "item", assetsOrigin, "light");
     expect(document.startsWith("<!doctype html>\n<meta http-equiv=\"Content-Security-Policy\"")).toBe(true);
