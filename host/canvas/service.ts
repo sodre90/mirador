@@ -36,6 +36,9 @@ export interface RenderReport {
 
 export type RenderOutcome = RenderReport | "no-viewer";
 
+/** Why a tool call stopped waiting for its question's answer, whose answer then goes as the user's next message. */
+export type AnswerWaitGivenUp = "turn-ended" | "time-up";
+
 interface AnswerWaiter {
   answered(answer: Pick<CanvasAnswer, "label" | "note">): void;
   withdrawn(): void;
@@ -43,6 +46,7 @@ interface AnswerWaiter {
 
 export class CanvasService {
   private readonly answerWaiters = new Map<string, AnswerWaiter>();
+  private readonly askingTurns = new Map<string, { conversationId: string; turnEnded: AbortController }>();
   private readonly renderWaiters = new Map<string, (report: RenderReport) => void>();
 
   constructor(
@@ -152,17 +156,37 @@ export class CanvasService {
   }
 
   /**
-   * The answer, or null when `limitMs` passes first: the question stays open, and an answer given later goes to the
-   * agent as the user's next message.
+   * The answer, or why the wait gave up first: the turn that asked ended, or `limitMs` passed. The question stays open,
+   * and an answer given later goes to the agent as the user's next message.
    */
-  async waitForAnswerWithin(item: CanvasItem, signal: AbortSignal, limitMs: number) {
-    const timeUp = AbortSignal.timeout(limitMs);
+  async waitForAnswerDuringTurn(
+    item: CanvasItem,
+    signal: AbortSignal,
+    limitMs: number | null = null,
+  ): Promise<Pick<CanvasAnswer, "label" | "note" | "answers"> | AnswerWaitGivenUp> {
+    const turnEnded = new AbortController();
+    this.askingTurns.set(item.id, { conversationId: item.conversationId, turnEnded });
+    const timeUp = limitMs === null ? [] : [AbortSignal.timeout(limitMs)];
     try {
-      return await this.waitForAnswer(item, AbortSignal.any([signal, timeUp]));
+      return await this.waitForAnswer(item, AbortSignal.any([signal, turnEnded.signal, ...timeUp]));
     } catch (error) {
-      if (timeUp.aborted && !signal.aborted) return null;
+      if (signal.aborted) throw error;
+      if (turnEnded.signal.aborted) return "turn-ended";
+      if (timeUp.some((time) => time.aborted)) return "time-up";
       throw error;
+    } finally {
+      this.askingTurns.delete(item.id);
     }
+  }
+
+  /**
+   * A turn can end while a tool call of its own still waits on a question: Codex's code mode hands the model back the
+   * script running the ask after 30 s, and the model may end its turn there. Nobody would read that tool call's answer.
+   */
+  turnEnded(conversationId: string) {
+    this.askingTurns.forEach(({ conversationId: askedIn, turnEnded }) => {
+      if (askedIn === conversationId) turnEnded.abort();
+    });
   }
 
   answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[]) {

@@ -16,7 +16,7 @@ import {
 import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
-import { answerAsToolResult, type CanvasService, type RenderOutcome } from "./service.ts";
+import { answerAsToolResult, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
 import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import type { CanvasUse, HarnessId } from "../../shared/model.ts";
@@ -86,8 +86,13 @@ const SHOWS_ONLY_IN_MIRADOR = { annotations: { readOnlyHint: true, destructiveHi
 
 const reviewFreeFor = (harness: HarnessId | undefined) => (harness === "codex" ? SHOWS_ONLY_IN_MIRADOR : {});
 
-const ANSWER_STILL_TO_COME =
-  "The user hasn't answered yet. The question stays open in their browser, and their answer will arrive as their next message. End your turn now without assuming an answer.";
+/** Read in the turn that asked when a time limit cuts the wait short, but only in a later one when that turn ended first. */
+const ANSWER_COMES_LATER: Record<AnswerWaitGivenUp, string> = {
+  "time-up":
+    "The user hasn't answered yet. The question stays open in their browser, and their answer will arrive as their next message. End your turn now without assuming an answer.",
+  "turn-ended":
+    "The turn that asked this question ended before the user answered, so their answer comes as a message of theirs instead. Go by that message.",
+};
 
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
@@ -230,8 +235,8 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
                 .catch(() => {});
             }, PROGRESS_HEARTBEAT_MS);
       try {
-        const answer = askWaitLimitMs === null ? await canvas.waitForAnswer(item, ctx.mcpReq.signal) : await canvas.waitForAnswerWithin(item, ctx.mcpReq.signal, askWaitLimitMs);
-        return { content: [{ type: "text", text: answer ? answerAsToolResult(answer) : ANSWER_STILL_TO_COME }] };
+        const answer = await canvas.waitForAnswerDuringTurn(item, ctx.mcpReq.signal, askWaitLimitMs);
+        return { content: [{ type: "text", text: typeof answer === "string" ? ANSWER_COMES_LATER[answer] : answerAsToolResult(answer) }] };
       } finally {
         clearInterval(heartbeat);
       }

@@ -116,6 +116,7 @@ conversations.hearRepliesWith(
 );
 conversations.hearActivityWith((conversationId, activity) => {
   canvasPlugins.activity(conversationId, activity);
+  if (activity.kind === "turn-ended") canvas.turnEnded(conversationId);
   const conversation = activity.kind === "turn-ended" ? store.findConversation(conversationId) : undefined;
   if (conversation) apps.filesMayHaveChanged(workingCopyIdOf(conversation));
 });
