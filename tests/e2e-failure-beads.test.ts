@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { beadTitleOf, errorsOutsideTests, failedTests, keepBeadsFor, withoutSecrets, type Beads, type E2eReport, type FoundBead } from "../scripts/e2e-failure-beads.ts";
+import { beadTitleOf, errorsOutsideTests, failedTests, keepBeadsFor, specFilesOf, stopsTheGate, withoutSecrets, withRunAlone, type Beads, type E2eReport, type FoundBead } from "../scripts/e2e-failure-beads.ts";
 
 const signInTimedOut =
   "Error: \u001b[2mpage.goto: \u001b[22mTimeout 30000ms exceeded.\nCall log:\n  - navigating to \"http://127.0.0.1:26461/auth?token=0123456789abcdef\", waiting until \"load\"\n";
@@ -26,6 +26,15 @@ const report: E2eReport = {
       ],
     },
     { title: "ping.spec.ts", specs: [{ file: "ping.spec.ts", line: 5, title: "skipped one", tests: [{ status: "skipped", results: [] }] }] },
+  ],
+};
+
+/** Tests written in a file that spec files for two browsers share. */
+const sharedTests: E2eReport = {
+  config: report.config,
+  suites: [
+    { title: "box.spec.ts", specs: [{ file: "box.tests.ts", line: 90, title: "a pair formats", tests: [{ status: "expected", results: [{}] }] }] },
+    { title: "box-webkit.spec.ts", specs: [{ file: "box.tests.ts", line: 90, title: "a pair formats", tests: [{ status: "unexpected", results: [{ error: { message: "Error: in WebKit" } }] }] }] },
   ],
 };
 
@@ -106,7 +115,51 @@ describe("the release gate's beads for failed e2e tests", () => {
   });
 
   test("a long title is cut short, and secrets in any query go", () => {
-    expect(beadTitleOf({ file: "a.spec.ts", line: 1, title: "x".repeat(200), error: "" })).toHaveLength("E2E a.spec.ts:1 failed: ".length + 90);
+    expect(beadTitleOf({ file: "a.spec.ts", specFile: "a.spec.ts", line: 1, title: "x".repeat(200), error: "" })).toHaveLength("E2E a.spec.ts:1 failed: ".length + 90);
     expect(withoutSecrets("https://h/x?sig=abc&jwt=def.ghi and /auth?token=xyz")).toBe("https://h/x?sig=…&jwt=… and /auth?token=…");
+  });
+
+  describe("when the failed tests' files ran again alone", () => {
+    const [putAway, listsReminders] = failedTests(report);
+    const passingAlone = { file: "ping.spec.ts", specFile: "ping.spec.ts", line: 9, title: "pings", error: "Error: only alone" };
+
+    test("each failed test's spec file runs once, whole", () => {
+      expect(specFilesOf(failedTests(report))).toEqual(["e2e/reminders.spec.ts"]);
+    });
+
+    test("a test written in a shared file runs again from the spec file that ran it, and keeps the bead of where it is written", () => {
+      const [failed] = failedTests(sharedTests);
+      expect(specFilesOf([failed!])).toEqual(["e2e/box-webkit.spec.ts"]);
+      expect(beadTitleOf(failed!)).toBe("E2E box.tests.ts:90 failed: a pair formats");
+    });
+
+    test("tests that all passed alone let the gate go on, and their beads call them flakes", () => {
+      const { beads, done } = beadsHolding();
+      const tests = withRunAlone([putAway!, listsReminders!], []);
+      expect(stopsTheGate(tests)).toBe(false);
+      keepBeadsFor(tests, beads, run);
+      expect(done[0]).toContain("Failed in the release gate on 2026-11-05, at 61a91fc, then passed when its file ran again alone, so the gate went on. A flake:");
+    });
+
+    test("a test that failed alone too stops the gate, and its bead points at both runs' files", () => {
+      const { beads, done } = beadsHolding();
+      const tests = withRunAlone([putAway!, listsReminders!], [listsReminders!]);
+      expect(tests.map(({ alone }) => alone)).toEqual(["passed alone", "failed alone too"]);
+      expect(stopsTheGate(tests)).toBe(true);
+      keepBeadsFor(tests, beads, { ...run, aloneCopy: "/tmp/mirador-e2e-run-alone" });
+      expect(done[1]).toContain("Failed in the release gate on 2026-11-05, at 61a91fc, and again when its file ran alone:");
+      expect(done[1]).toContain("/tmp/mirador-e2e-run-abc/test-results");
+      expect(done[1]).toContain("Its run alone: /tmp/mirador-e2e-run-alone.");
+    });
+
+    test("a test that passed in the gate's run but failed alone stops the gate too, with the files of its run alone", () => {
+      const { beads, done } = beadsHolding();
+      const tests = withRunAlone([putAway!], [passingAlone]);
+      expect(tests.map(({ alone }) => alone)).toEqual(["passed alone", "failed only alone"]);
+      expect(stopsTheGate(tests)).toBe(true);
+      keepBeadsFor(tests, beads, { ...run, aloneCopy: "/tmp/mirador-e2e-run-alone" });
+      expect(done[1]).toContain("Passed in the release gate on 2026-11-05, at 61a91fc, then failed when its file ran again alone:");
+      expect(done[1]).toContain("Traces and screenshots: /tmp/mirador-e2e-run-alone/test-results.");
+    });
   });
 });

@@ -345,6 +345,15 @@ test("going on from the windows step takes up the run of this commit: waits for 
   expect(windowsRunStep(earlier, head, { status: "completed", conclusion: "cancelled" })).toBe("run its failed jobs again");
 });
 
+test("a Windows run the gate started goes on beside it, and its failure is told rather than run again in the same try", () => {
+  const head = "6c6453d0123456789abcdef0123456789abcdef0";
+  const startedAtTheGate = { id: "39248803467", commit: head };
+  expect(windowsRunStep(startedAtTheGate, head, { status: "in_progress", conclusion: "" }, true)).toBe("wait for it");
+  expect(windowsRunStep(startedAtTheGate, head, { status: "completed", conclusion: "success" }, true)).toBe("take its files");
+  expect(windowsRunStep(startedAtTheGate, head, { status: "completed", conclusion: "failure" }, true)).toBe("tell its failure");
+  expect(windowsRunStep(startedAtTheGate, head, { status: "completed", conclusion: "failure" }, false)).toBe("run its failed jobs again");
+});
+
 test("a build line names the commit however many digits its clone shortens it to", () => {
   const commit = "6c6453d0123456789abcdef0123456789abcdef0";
   expect(isBuildOf("== release of v0.4.3-12-g6c6453d", commit)).toBe(true);
