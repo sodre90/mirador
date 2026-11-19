@@ -69,6 +69,11 @@ describe("buildCanvasDocument", () => {
     expect(buildCanvasDocument(agentStyle, "item", assetsOrigin, "light")).not.toContain("html{padding");
   });
 
+  test("a page opens zoomed to the text size Settings chose, and at its own size without one", () => {
+    expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light", { textScale: 1.4 })).toContain("zoomTo(1.4);");
+    expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light")).toContain("zoomTo(1);");
+  });
+
   test("embeds the item id safely in the error reporter", () => {
     const document = buildCanvasDocument("<p>", '"; alert(1); "', assetsOrigin, "light");
     expect(document).toContain(JSON.stringify('"; alert(1); "'));

@@ -117,6 +117,11 @@ export function canvasThemeMessage(theme: CanvasTheme) {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "theme", theme };
 }
 
+/** Tells a canvas page the text size Settings chose changed, as a factor: the page zooms by it, since agents write sizes in px. */
+export function canvasTextScaleMessage(scale: number) {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "text-scale", scale };
+}
+
 /** Turns point mode on or off on a page that takes marks: the page outlines what is under the pointer, and a click picks it instead of doing what the page does. */
 export function canvasPointMessage(on: boolean) {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "point", on };
@@ -772,6 +777,9 @@ const PAGE_FIND_SCRIPT = `
  */
 function pageDrawing(assetsOrigin: string) {
   return `
+  // The text size Settings chose zooms the root. Its scrollWidth and scrollHeight, rectangles and pointer positions all
+  // have the zoom in; only marks, which sit in the zoomed root, undo it.
+  const rootZoom = () => parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
   // The library puts a bare copy of each <use> target, without the page's styles, in front of the page, where it wins
   // over the page's own copy. That copy has all its computed styles written out, so the bare one goes, and the page's copy
   // gives up the values it only inherited where it sits, to inherit them from each <use> as the browser does.
@@ -873,7 +881,14 @@ ${pageDrawing(assetsOrigin)}
     '.pill{position:absolute;display:none;pointer-events:auto;font:500 12px/1.4 system-ui,sans-serif;padding:4px 10px;border:none;border-radius:999px;background:#2563eb;color:#fff;box-shadow:0 2px 8px rgb(0 0 0/0.25);cursor:pointer;white-space:nowrap}' +
     '</style><div class="waitings"></div><div class="outline"></div><div class="chosen"></div><button class="pill" type="button">Ask about this</button>';
   const [waitings, outline, chosen, pill] = ["waitings", "outline", "chosen", "pill"].map((name) => shadow.querySelector("." + name));
+  // Marks are placed by rectangles that have the root's zoom in already, so they undo it rather than take it twice.
+  const unzoom = () => host.style.setProperty("zoom", String(1 / rootZoom()), "important");
+  addEventListener("mirador-zoom", () => {
+    unzoom();
+    followScrolling();
+  });
   const attach = () => {
+    unzoom();
     document.documentElement.append(host);
     post({ kind: "marks-ready" });
   };
@@ -893,6 +908,9 @@ ${pageDrawing(assetsOrigin)}
   };
   const onPage = (rect) => ({ left: rect.left + scrollX, top: rect.top + scrollY, width: rect.width, height: rect.height });
   const placeOver = (box, rect) => placeAt(box, onPage(rect));
+  // A box the page keeps or posts leaves the text size's zoom out, so it still fits its part after the size changes.
+  const scaledBox = (box, factor) => ({ left: box.left * factor, top: box.top * factor, width: box.width * factor, height: box.height * factor });
+  const unzoomedBox = (box) => scaledBox(box, 1 / rootZoom());
   const hide = (box) => (box.style.display = "none");
   const clipped = (text, most) => (text.length > most ? text.slice(0, most - 1) + "…" : text);
   const stepTo = (element) => {
@@ -983,7 +1001,7 @@ ${pageDrawing(assetsOrigin)}
     if (!selected) return;
     const holder = selected.commonAncestorContainer;
     const element = holder instanceof Element ? holder : holder.parentElement;
-    post({ kind: "mark", mark: { kind: "text", text: clipped(selected.toString().trim(), MAX_TEXT), element: described(element), box: onPage(selected.getBoundingClientRect()) } });
+    post({ kind: "mark", mark: { kind: "text", text: clipped(selected.toString().trim(), MAX_TEXT), element: described(element), box: unzoomedBox(onPage(selected.getBoundingClientRect())) } });
     hide(pill);
   });
 
@@ -1036,7 +1054,7 @@ ${pageDrawing(assetsOrigin)}
     post({ kind: "pointing", on: false });
     const element = described(holderOf(area));
     try {
-      post({ kind: "mark", mark: { kind: "area", element, image: await drawnArea(area), box: area } });
+      post({ kind: "mark", mark: { kind: "area", element, image: await drawnArea(area), box: unzoomedBox(area) } });
     } catch (error) {
       hide(chosen);
       post({ kind: "mark-failed", message: String((error && error.message) || error) });
@@ -1055,7 +1073,7 @@ ${pageDrawing(assetsOrigin)}
     picked = element;
     stopPointing();
     placeOver(chosen, picked.getBoundingClientRect());
-    post({ kind: "mark", mark: { kind: "element", element: described(picked), box: onPage(picked.getBoundingClientRect()) } });
+    post({ kind: "mark", mark: { kind: "element", element: described(picked), box: unzoomedBox(onPage(picked.getBoundingClientRect())) } });
   };
   // The mark is made on pointerup: a touch screen fires no click once its touches were cancelled.
   addEventListener("pointerup", (event) => {
@@ -1116,7 +1134,7 @@ ${pageDrawing(assetsOrigin)}
   const whereWaiting = (mark) => {
     const element = mark.kind === "element" || !isBox(mark.box) ? elementAt(mark.path) : null;
     if (element) return onPage(element.getBoundingClientRect());
-    return isBox(mark.box) ? mark.box : null;
+    return isBox(mark.box) ? scaledBox(mark.box, rootZoom()) : null;
   };
   const outlineWaiting = () => {
     waitings.replaceChildren(...waiting.flatMap((mark) => {
@@ -1159,7 +1177,7 @@ ${pageDrawing(assetsOrigin)}
 /** On a shown page the panel finds instead, so the browser's own find must not open; other frames keep the key for their own find. */
 const CANCEL_BROWSER_FIND = "if (findKeys(event)) event.preventDefault();";
 
-function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean) {
+function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean) {
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
@@ -1169,6 +1187,17 @@ function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string,
   const showIn = (theme) => { colorScheme.textContent = ":root{color-scheme:" + (theme === "dark" ? "dark" : "light") + " !important}"; };
   showIn(${JSON.stringify(theme)});
   document.head.append(colorScheme);
+  // Zoom rather than a root font-size, which only rem and em sizes follow; and inside the page rather than scaling its
+  // frame, which a 1x screen shows blurred. Measured in the frame's own pixels, getBoundingClientRect, client coordinates
+  // and scrollX include the zoom, as do the root's scrollWidth and scrollHeight. vh and vw take the zoom too.
+  const textZoom = document.createElement("style");
+  const zoomTo = (scale) => {
+    const zoom = scale > 0 ? scale : 1;
+    textZoom.textContent = zoom === 1 ? "" : ":root{zoom:" + zoom + "}";
+    dispatchEvent(new Event("mirador-zoom"));
+  };
+  zoomTo(${JSON.stringify(textScale)});
+  document.head.append(textZoom);
 ${TEXT_CONTRAST_SCRIPT}
   // Pages often pick colours for one theme only. Text that all but vanishes on its own background takes the theme
   // text colour that reads there; each check gives the text its own colour back first, so a theme change starts afresh.
@@ -1246,6 +1275,10 @@ ${PAGE_FIND_SCRIPT}
     if (data.kind === "theme") {
       showIn(data.theme);
       checkText();
+    }
+    if (data.kind === "text-scale") {
+      zoomTo(data.scale);
+      reportSize();
     }
     if (data.kind === "capture") capture(data.requestId);
     if (data.kind === "hidden") document.querySelectorAll("video, audio").forEach((media) => media.pause());
@@ -1437,7 +1470,8 @@ export function buildCanvasDocument(
     policy = {},
     markable = false,
     measuresNaturalWidth = false,
-  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean } = {},
+    textScale = 1,
+  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean; textScale?: number } = {},
 ) {
   const withoutDoctype = html.replace(/^\s*<!doctype[^>]*>/i, "");
   return [
@@ -1446,7 +1480,7 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, assetsOrigin, measuresNaturalWidth, markable)}</script>`,
+    `<script>${frameReporter(itemId, theme, textScale, assetsOrigin, measuresNaturalWidth, markable)}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),

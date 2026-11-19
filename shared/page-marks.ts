@@ -18,7 +18,8 @@ export interface PageBox {
 /**
  * What the user pointed at on a canvas page: text they selected, in the element that holds it, an element they picked, or
  * an area they drew a box around, as a PNG data URL of it, in the smallest element that holds the box. `box` is where it
- * was, for the page to keep it outlined while its comment waits; a page from before it left it out.
+ * was, in the page's own pixels with the text size's zoom left out, for the page to keep it outlined while its comment
+ * waits, at whatever size; a page from before it left it out.
  */
 export type PageMark = (
   | { kind: "text"; text: string; element: MarkedElement }
