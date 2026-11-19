@@ -10,7 +10,7 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-test("typing / suggests the agent's commands: arrows pick, Tab writes one out, Enter runs one or writes out one that takes arguments, Esc puts them away", async ({ page }) => {
+test("typing / suggests the agent's commands: arrows pick, Tab and Enter write one out, Enter runs one typed in full, Esc puts them away", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   await startConversation(page);
@@ -59,8 +59,17 @@ test("typing / suggests the agent's commands: arrows pick, Tab writes one out, E
     await expect(picked).toHaveText("/init");
   });
 
-  await test.step("Enter runs a command that takes no arguments", async () => {
+  await test.step("Enter writes out a command picked from the list, so its arguments can follow, though it takes none", async () => {
     await composer.fill("/contex");
+    await expect(picked).toHaveText("/context");
+    await composer.press("Enter");
+    await expect(composer).toHaveValue("/context ");
+    await expect(menu).toBeHidden();
+    await expect(page.locator(".message.user")).toHaveCount(0);
+  });
+
+  await test.step("Enter runs a command that takes no arguments when its whole name is typed", async () => {
+    await composer.fill("/context");
     await expect(picked).toHaveText("/context");
     await composer.press("Enter");
     await expect(page.locator(".message.user").last()).toContainText("/context");

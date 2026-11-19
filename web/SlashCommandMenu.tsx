@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type KeyboardEvent } from "react";
 import type { HarnessId, StoredEvent } from "../shared/model.ts";
 import { panelSlashCommands } from "../shared/panel-commands.ts";
-import { clearSlashCommand, latestSlashCommands, matchingCommands, reloadSlashCommand, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
+import { clearSlashCommand, latestSlashCommands, matchingCommands, reloadSlashCommand, runsOnEnter, slashQuery, type SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
 import { loginSlashCommand } from "./login-request.ts";
 import { laterSlashCommand, remindSlashCommand } from "./reminders.ts";
@@ -60,7 +60,8 @@ const withMiradorCommands = (commands: SlashCommand[], own: SlashCommand[]) => [
 
 /**
  * Suggests the agent's slash commands while the message is a / and the start of a name, as Claude Code does: ↑/↓
- * pick, Tab writes the command out, Enter runs it (or writes it out to type its arguments after), Esc puts it away.
+ * pick, Tab writes the command out, Enter writes it out to type its arguments after (or runs one typed in full), Esc
+ * puts it away.
  */
 export function useSlashCommandMenu({
   conversationId,
@@ -99,8 +100,8 @@ export function useSlashCommandMenu({
     else if (key === "previous") move(-1);
     else if (key === "complete") writeOut(command);
     else if (key === "choose") {
-      if (command.hint) writeOut(command);
-      else run(`/${command.name}`, event);
+      if (runsOnEnter(command, text)) run(`/${command.name}`, event);
+      else writeOut(command);
     } else setDismissedAt(text);
     event.preventDefault();
     return true;
