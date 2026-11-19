@@ -25,7 +25,7 @@ export const reminders: Messages["reminders"] = {
   undo: "Deshacer",
   putAwayUntil: (when) => `Apartada hasta ${when}`,
   remindAt: (when) => `Recordatorio para ${when}`,
-  later: (count) => `Más tarde (${count})`,
+  later: (count) => `Más tarde · ${count}`,
   remindMe: "Recordarme…",
   changeReminder: "Cambiar recordatorio…",
   pending: (when) => `Recordatorio para ${when}`,

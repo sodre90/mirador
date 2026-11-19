@@ -29,7 +29,7 @@ test("Delete all on the Older line deletes every conversation under it, the open
     await row(kept).getByRole("button", { name: "Add to favourites" }).click();
     await page.clock.setFixedTime(Date.now() + 8 * DAY_MS);
     await row(first).click();
-    await expect(older.getByRole("button", { name: /^. Older/ })).toHaveText("▾ Older (2)");
+    await expect(older.getByRole("button", { name: /^Older/ })).toHaveText("Older · 2");
     await expect(deleteAll).toBeHidden();
     await older.locator(".older-heading").hover();
     await expect(deleteAll).toBeVisible();

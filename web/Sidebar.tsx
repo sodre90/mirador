@@ -652,8 +652,9 @@ function WorkspaceSection({
       {!folded && olderCount > 0 && (
         <div className="later-group older-group" aria-label={`${workspace.name} · ${words.older(olderCount)}`}>
           <div className="older-heading">
-            <button type="button" className="older-toggle" aria-expanded={olderOpen} data-hint={hints.olderConversations(t.labels.olderAfter[olderAfter])} onClick={() => setOlderOpen(!olderOpen)}>
-              {olderOpen ? "▾" : "▸"} {words.older(olderCount)}
+            <button type="button" className="section-toggle" aria-expanded={olderOpen} data-hint={hints.olderConversations(t.labels.olderAfter[olderAfter])} onClick={() => setOlderOpen(!olderOpen)}>
+              <span className="section-label">{words.older(olderCount)}</span>
+              <span className="section-rule" />
             </button>
             <ConfirmButton
               className="older-delete"

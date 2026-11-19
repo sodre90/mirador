@@ -25,7 +25,7 @@ export const reminders: Messages["reminders"] = {
   undo: "撤销",
   putAwayUntil: (when) => `已放一边，直到 ${when}`,
   remindAt: (when) => `已设置提醒：${when}`,
-  later: (count) => `稍后（${count}）`,
+  later: (count) => `稍后 · ${count}`,
   remindMe: "提醒我…",
   changeReminder: "更改提醒…",
   pending: (when) => `提醒时间：${when}`,

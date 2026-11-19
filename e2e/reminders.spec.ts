@@ -65,7 +65,7 @@ test("a conversation can be put away or kept with a reminder, and comes back at 
     await expect(picker).toHaveCount(0);
     await expect(toast).toContainText(/Put away until (tomorrow|today) 0?9:00/);
     await expect(row(third)).toHaveCount(0);
-    await expect(laterGroup.getByRole("button", { name: /Later \(1\)/ })).toBeVisible();
+    await expect(laterGroup.getByRole("button", { name: "Later · 1" })).toBeVisible();
     await expect(page).not.toHaveURL(new RegExp(`#/c/${third}$`));
     await toast.getByRole("button", { name: "Undo" }).click();
     await expect(row(third)).toBeVisible();
@@ -97,7 +97,7 @@ test("a conversation can be put away or kept with a reminder, and comes back at 
     agentLogLinesBeforePuttingFirstAway = agentLogLines().length;
     await page.locator(".composer:visible textarea").press("Enter");
     await expect(row(first)).toHaveCount(0);
-    await laterGroup.getByRole("button", { name: /Later \(1\)/ }).click();
+    await laterGroup.getByRole("button", { name: "Later · 1" }).click();
     await expect(laterGroup.locator("li")).toHaveCount(1);
   });
 
