@@ -200,7 +200,7 @@ rm -f ~/.mirador/desktop.json ~/.mirador/desktop-host.pid ~/.mirador/desktop-460
 
 ## Build and release
 
-Built with [Electrobun](https://electrobun.dev) 2.0.5 (pinned). Electrobun doesn't cross-compile, so build on the system the app is for. Bun must be on your `PATH` at build time, in the version `.bun-version` names for a release build, and a build of your own bakes its absolute path and the checkout's in as defaults (see [Settings](#settings)).
+Built with [Electrobun](https://electrobun.dev) 2.0.6 (pinned). Electrobun doesn't cross-compile, so build on the system the app is for. Bun must be on your `PATH` at build time, in the version `.bun-version` names for a release build, and a build of your own bakes its absolute path and the checkout's in as defaults (see [Settings](#settings)).
 
 From the repository root, `bun run app` installs the app's dependencies and makes the same build as `bun run build` below. On macOS it then puts that build where Mirador runs from: over the app that runs once you quit it, then it opens the app again; over `~/Applications/Mirador.app` or `/Applications/Mirador.app` at once when none runs. Until you quit, a process waits for it, which logs to `install-app.log` in the temporary folder, and a later `bun run app` takes its place.
 
