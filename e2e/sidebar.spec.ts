@@ -199,6 +199,7 @@ test("a workspace folds to its heading, by its chevron or its name, stays folded
     await card.locator("li.selected .conversation-title").dblclick();
     await page.getByLabel("Conversation name").fill("Folded away");
     await page.getByLabel("Conversation name").press("Enter");
+    await expect(card.locator("li.selected .conversation-title"), "the palette finds the conversation only once the host has its new name").toHaveText("Folded away");
     await card.getByRole("button", { name: `Fold ${name}` }).click();
     await expect(card.locator("li")).toHaveCount(0);
     await page
