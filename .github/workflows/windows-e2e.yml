@@ -115,18 +115,37 @@ jobs:
           $env:MIRADOR_E2E_KEEP = "1"
           $env:MIRADOR_E2E_HOST_LOGS = Join-Path $PWD "host-logs"
           # A runner was seen to stand still for two minutes at a time, every process at once (vcs-0p0qr.3): the machine's
-          # memory, paging, CPU and disk every 5 s, and its biggest processes every 30 s, go out with the host logs.
+          # memory, paging, CPU and disk every 5 s, and every 30 s its biggest processes and the ones that took the most CPU,
+          # against all the CPU the machine spent (what's left was spent by processes that ended), go out with the host logs.
           New-Item -ItemType Directory -Force host-logs | Out-Null
           $runnerLoad = Start-Job -ArgumentList (Join-Path $env:MIRADOR_E2E_HOST_LOGS "runner-load-shard-${{ matrix.shard }}.log") -ScriptBlock {
             param($log)
+            $cores = [Environment]::ProcessorCount
+            $defender = try { $status = Get-MpComputerStatus; "real-time protection $($status.RealTimeProtectionEnabled), antivirus $($status.AntivirusEnabled)" } catch { "unknown: $($_.Exception.Message -replace '\s+', ' ')" }
+            Add-Content $log "logical processors: $cores; defender: $defender"
+            $cpuSecondsById = @{}
+            function Get-CpuSecondsSinceLastCall($processes) {
+              $processes | ForEach-Object {
+                $seconds = $_.CPU ?? 0
+                [pscustomobject]@{ Name = $_.ProcessName; Seconds = $seconds - ($cpuSecondsById[$_.Id] ?? 0) }
+                $cpuSecondsById[$_.Id] = $seconds
+              }
+            }
+            Get-CpuSecondsSinceLastCall (Get-Process) | Out-Null
+            $busySeconds = 0
             $counters = '\Memory\Available MBytes', '\Memory\% Committed Bytes In Use', '\Memory\Pages/sec', '\Processor(_Total)\% Processor Time', '\PhysicalDisk(_Total)\Current Disk Queue Length'
             $samples = 0
             Get-Counter -Counter $counters -SampleInterval 5 -Continuous | ForEach-Object {
               $values = $_.CounterSamples | ForEach-Object { "$(($_.Path -split '\\')[-1]) $([math]::Round($_.CookedValue))" }
               Add-Content $log "$($_.Timestamp.ToUniversalTime().ToString('o'))  $($values -join ', ')"
+              $busySeconds += ($_.CounterSamples | Where-Object Path -like '*% processor time').CookedValue / 100 * 5 * $cores
               if ((($samples++) % 6) -eq 0) {
-                $biggest = Get-Process | Group-Object ProcessName | ForEach-Object { "$($_.Name) x$($_.Count) $([math]::Round(($_.Group | Measure-Object WorkingSet64 -Sum).Sum / 1MB)) MB" } | Sort-Object { [int](($_ -split ' ')[-2]) } -Descending | Select-Object -First 10
+                $processes = Get-Process
+                $biggest = $processes | Group-Object ProcessName | ForEach-Object { "$($_.Name) x$($_.Count) $([math]::Round(($_.Group | Measure-Object WorkingSet64 -Sum).Sum / 1MB)) MB" } | Sort-Object { [int](($_ -split ' ')[-2]) } -Descending | Select-Object -First 10
+                $busiest = Get-CpuSecondsSinceLastCall $processes | Group-Object Name | ForEach-Object { "$($_.Name) x$($_.Count) $([math]::Round(($_.Group | Measure-Object Seconds -Sum).Sum)) s" } | Sort-Object { [int](($_ -split ' ')[-2]) } -Descending | Select-Object -First 10
                 Add-Content $log "  biggest: $($biggest -join ', ')"
+                Add-Content $log "  busiest of $([math]::Round($busySeconds)) CPU s: $($busiest -join ', ')"
+                $busySeconds = 0
               }
             }
           }
