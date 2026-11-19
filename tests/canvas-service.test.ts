@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ConversationService } from "../host/conversations.ts";
-import { answerAsToolResult, CanvasService } from "../host/canvas/service.ts";
+import { answerAsToolResult, CanvasService, severalQuestionsRequest } from "../host/canvas/service.ts";
 import { Hub } from "../host/hub.ts";
 import { Store } from "../host/store.ts";
 import type { SystemNotifications } from "../host/system-notifications.ts";
@@ -273,6 +273,23 @@ describe("CanvasService", () => {
     const { canvas } = setUp();
     const { render } = await canvas.show("c1", { title: "x", html: "<p>" });
     expect(render).toBe("no-viewer");
+  });
+});
+
+describe("severalQuestionsRequest", () => {
+  const color = { question: "Which color?", options: [{ label: "Red" }, { label: "Blue" }] };
+  const size = { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] };
+
+  test("a page given beside the questions goes to the first question when it has none of its own", () => {
+    expect(severalQuestionsRequest([color, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, html: "<p>Wall</p>" }, size] });
+    expect(severalQuestionsRequest([{ ...color, html: "" }, size], "<p>Wall</p>")).toEqual({ questions: [{ ...color, html: "<p>Wall</p>" }, size] });
+  });
+
+  test("the first question's own page stays, and without a page beside them the questions go as they are", () => {
+    const withPage = { ...color, html: "<p>Own</p>" };
+    expect(severalQuestionsRequest([withPage, size], "<p>Wall</p>")).toEqual({ questions: [withPage, size] });
+    expect(severalQuestionsRequest([color, size], undefined)).toEqual({ questions: [color, size] });
+    expect(severalQuestionsRequest([], "<p>Wall</p>")).toEqual({ questions: [] });
   });
 });
 

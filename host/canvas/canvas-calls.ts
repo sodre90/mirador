@@ -5,7 +5,7 @@ import { canvasToolName, USE_TOOL_TOOL } from "./tool-names.ts";
 import type { LoadedSession } from "../conversations.ts";
 import type { Store } from "../store.ts";
 import type { CanvasPlugins } from "./plugins.ts";
-import type { AskRequest, CanvasService, ShowRequest } from "./service.ts";
+import { severalQuestionsRequest, type AskRequest, type CanvasService, type ShowRequest } from "./service.ts";
 
 /** A canvas tool call the agent made, as its session's history has it: what it was given, and what it returned. */
 export interface CanvasCall {
@@ -69,7 +69,7 @@ const showRequestOf = ({ title, html }: Record<string, unknown>): ShowRequest | 
   typeof title === "string" && typeof html === "string" ? { title, html } : null;
 
 function askRequestOf({ questions, question, options, html, allowOther, optionWidth }: Record<string, unknown>): AskRequest | null {
-  if (Array.isArray(questions)) return { questions: questions as AskQuestion[] };
+  if (Array.isArray(questions)) return severalQuestionsRequest(questions as AskQuestion[], typeof html === "string" ? html : undefined);
   if (typeof question !== "string" || !Array.isArray(options)) return null;
   return {
     question,
