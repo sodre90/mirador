@@ -277,7 +277,7 @@ Windows support is new and experimental: expect rough edges, and please report w
 
 - **Images**: paste or drag them in; each lands as `[Image #n]` where the caret is, and shows as a chip while it uploads. Deleting the marker drops the image, and a pasted image you never send is deleted from the host.
 - **`@` paths**: completes workspace files, folder by folder, as well as absolute and `~` paths, anywhere in the message.
-- **`/` commands**: the agent's commands plus Mirador's `/clear`, `/reload` and `/login`. Tab writes one out, Enter runs one that takes no arguments, Esc closes the list.
+- **`/` commands**: the agent's commands plus Mirador's `/clear`, `/reload` and `/login`. Tab or Enter writes the picked one out so you can add arguments, Enter on a name typed in full runs it unless it asks for arguments, Esc closes the list.
 - **Claude Code's panels**: `/plugin`, `/hooks`, `/permissions`, `/memory`, `/status`, `/help` and the other commands Claude Code shows only in its own terminal open a terminal tab running Claude Code with the conversation's profile.
 - **Edit a stopped message**: press ↑ after stopping an answer. Enter replaces the message, its answer and the files it changed; Esc keeps them, and your edit goes out as a new message after them.
 - **`!` shell commands**: run in the workspace's folder with your login shell. The output shows inline with Run/Stop, and goes to the agent with your next message unless you drop it.

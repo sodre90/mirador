@@ -31,6 +31,12 @@ export function matchingCommands(commands: SlashCommand[], query: string): Slash
   return [...closestFirst, ...named.filter((command) => !startsWithQuery(command))];
 }
 
+/**
+ * Whether Enter on the picked command sends it rather than writing it out: only one without a hint whose whole name is
+ * typed. Picked from the list, a skill (Claude Code gives it a hint only when its SKILL.md sets one) waits for arguments.
+ */
+export const runsOnEnter = (command: SlashCommand, message: string) => !command.hint && message === `/${command.name}`;
+
 /** The commands the agent last said it has in this conversation, or null if it has not said yet; another agent's from before a move to this one don't count. */
 export function latestSlashCommands(events: StoredEvent[]): SlashCommand[] | null {
   const sinceAgentChanged = events.slice(events.findLastIndex(({ event }) => event.type === "profile-changed" && event.agent !== undefined) + 1);

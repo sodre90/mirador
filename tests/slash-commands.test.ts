@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { StoredEvent } from "../shared/model.ts";
-import { commandNamedIn, latestSlashCommands, matchingCommands, slashQuery } from "../shared/slash-commands.ts";
+import { commandNamedIn, latestSlashCommands, matchingCommands, runsOnEnter, slashQuery } from "../shared/slash-commands.ts";
 
 const command = (name: string) => ({ name, description: `${name} it`, hint: null });
 
@@ -51,5 +51,12 @@ describe("slash commands", () => {
     expect(commandNamedIn('/board:pin text="a  b"\n size=2 ', [pin])).toEqual({ command: pin, writtenArguments: 'text="a  b"\n size=2' });
     expect(commandNamedIn("/board:pinned", [pin])).toBeNull();
     expect(commandNamedIn("please /board:pin", [pin])).toBeNull();
+  });
+
+  test("Enter sends a command without a hint only when its whole name is typed, and writes out one picked from the list", () => {
+    expect(runsOnEnter(command("context"), "/context")).toBe(true);
+    expect(runsOnEnter(command("simplify"), "/sim")).toBe(false);
+    expect(runsOnEnter(command("simplify"), "/")).toBe(false);
+    expect(runsOnEnter({ ...command("compact"), hint: "<instructions>" }, "/compact")).toBe(false);
   });
 });
