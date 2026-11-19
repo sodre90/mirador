@@ -198,8 +198,8 @@ export const hints: Messages["hints"] = {
   newConversation: "在这个工作区中开始一个对话，使用这张卡片上所选的配置。",
   continueSession: "将在终端里启动的会话作为这个工作区中的对话继续。",
   whereConversationsWork: "选择新对话是在项目文件夹中工作，还是各自在自己的 git 工作树中工作。",
-  workspaceMenu:
-    "这个工作区的更多操作，例如移除它。移除时它的对话和它在 Mirador 数据文件夹中的工作树也会被删除，但项目目录会保留。",
+  removeWorkspace:
+    "移除这个工作区。它的对话和它在 Mirador 数据文件夹中的工作树会一起被删除，但项目目录会保留。再点一次确认。",
   addWorkspace: "添加一个项目目录。它的对话以该目录作为工作目录运行。",
   hideSidebar: "隐藏侧边栏，让对话、画布和终端占满整个宽度。此浏览器会记住这个设置。",
   showSidebar: "重新显示包含工作区和对话的侧边栏。",

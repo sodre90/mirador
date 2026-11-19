@@ -73,7 +73,6 @@ export const shell: Messages["shell"] = {
     deleteOlderArmed: (count) => `${count} törlése?`,
     newConversationLabel: "+ Új beszélgetés",
     continueSessionLabel: "Munkamenet folytatása…",
-    workspaceMenu: "Munkaterület menüje",
     settings: "Beállítások…",
     profiles: "Profilok…",
     machines: "Gépek…",

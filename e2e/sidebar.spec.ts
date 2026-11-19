@@ -2,7 +2,7 @@ import { mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, chooseInWorkspaceMenu, createProfile, dragOnto, pickProfileIfAsked, removeWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, dragOnto, pickProfileIfAsked, removeWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -39,39 +39,65 @@ test("a workspace is a card: its folder under the name, new conversations on top
   await expect(chip).toHaveText("home llama · opencode");
 });
 
-test("a card's heading holds + and the profile chip, and its ⋯ menu holds what is rarely needed", async ({ page }) => {
+test("a card's heading holds + and the profile chip, and shows its other buttons as icons while the pointer is on the heading", async ({ page }) => {
   const directory = join(host.root, "tidy-card");
   mkdirSync(directory, { recursive: true });
   await signIn(page, host);
   await addWorkspaceFromSidebar(page, directory);
   const card = workspaceCard(page, directory);
   const heading = card.locator(":scope > header");
+  const newConversation = heading.getByRole("button", { name: "+ New conversation" });
+  const continueButton = heading.getByRole("button", { name: "Continue a session…", exact: true });
+  const worktreesButton = heading.getByRole("button", { name: "Where conversations work…", exact: true });
+  const trash = heading.getByRole("button", { name: "Remove workspace", exact: true });
+  const confirm = heading.getByRole("button", { name: "Confirm: Remove workspace" });
+  const viewport = page.viewportSize()!;
+  const clickAway = () => page.mouse.click(viewport.width - 5, viewport.height - 5);
+  const iconsHidden = async () => {
+    for (const button of [continueButton, worktreesButton, trash]) await expect(button).toBeHidden();
+  };
 
-  await expect(heading.getByRole("button", { name: "+ New conversation" })).toBeVisible();
+  await expect(newConversation).toBeVisible();
   await expect(heading.locator(".agent-chip")).toBeVisible();
   await expect(card.locator(":scope > :not(header, ul)")).toHaveCount(0);
 
-  await test.step("Continue and worktrees are icons in the heading, shown while the pointer or the keyboard is on the card", async () => {
-    const continueButton = heading.getByRole("button", { name: "Continue a session…", exact: true });
-    const worktreesButton = heading.getByRole("button", { name: "Where conversations work…", exact: true });
-    const blurFocus = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
-    await expect(continueButton).toBeHidden();
-    await expect(worktreesButton).toBeHidden();
-    await card.getByRole("button", { name: `Fold ${basename(directory)}` }).focus();
-    await page.keyboard.press("Tab");
-    await expect(continueButton).toBeVisible();
-    await blurFocus();
-    await expect(continueButton).toBeHidden();
+  await test.step("away from the heading only + shows, and pointing at the conversations leaves it so", async () => {
+    const previousUrl = page.url();
+    await newConversation.click();
+    await expect(page).not.toHaveURL(previousUrl);
+    await clickAway();
+    await iconsHidden();
+    await card.locator("li").first().hover();
+    await iconsHidden();
+  });
+
+  await test.step("on the heading clock, branch and trash show before +, which stays where it was", async () => {
+    const plusAtRest = await newConversation.boundingBox();
     await heading.hover();
-    await expect(continueButton.locator("svg")).toBeVisible();
-    await expect(worktreesButton.locator("svg")).toBeVisible();
+    for (const button of [continueButton, worktreesButton, trash]) await expect(button.locator("svg")).toBeVisible();
+    expect(await newConversation.boundingBox()).toEqual(plusAtRest);
+    const lefts = await Promise.all([continueButton, worktreesButton, trash, newConversation].map(async (button) => (await button.boundingBox())!.x));
+    expect(lefts).toEqual([...lefts].sort((a, b) => a - b));
     await expect(continueButton).toHaveAttribute("data-hint", /^Continue a session that was started in a terminal/);
     await expect(worktreesButton).toHaveAttribute("data-hint", /^Choose whether new conversations work in the project folder/);
+    await expect(trash).toHaveAttribute("data-hint", /^Remove this workspace\. Its conversations and its worktrees/);
     await worktreesButton.click();
     const worktrees = page.getByRole("dialog", { name: `Where conversations work in ${basename(directory)}` });
     await expect(worktrees).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(worktrees).toHaveCount(0);
+  });
+
+  await test.step("the keyboard on a heading button shows them too, but not on the profile chip", async () => {
+    await clickAway();
+    await iconsHidden();
+    await card.getByRole("button", { name: `Fold ${basename(directory)}` }).focus();
+    await page.keyboard.press("Tab");
+    await expect(continueButton).toBeVisible();
+    await newConversation.focus();
+    await page.keyboard.press("Tab");
+    await expect(heading.getByLabel("Agent")).toBeFocused();
+    await iconsHidden();
   });
 
   await test.step("choosing the profile in the heading leaves the card unfolded", async () => {
@@ -80,29 +106,36 @@ test("a card's heading holds + and the profile chip, and its ⋯ menu holds what
     await expect(card.getByRole("button", { name: `Fold ${basename(directory)}` })).toHaveAttribute("aria-expanded", "true");
   });
 
-  await test.step("the menu holds Remove, drawn with its icon", async () => {
-    const menuButton = heading.getByRole("button", { name: "Workspace menu" });
-    await expect(menuButton).toHaveAttribute("data-hint", /^More for this workspace, such as removing it/);
-    await menuButton.click();
-    const entries = page.getByRole("menu", { name: basename(directory) }).getByRole("menuitem");
-    await expect(entries).toHaveText(["Remove workspace…"]);
-    await expect(entries.locator("svg")).toHaveCount(1);
-    await page.keyboard.press("Escape");
-    await expect(page.getByRole("menu")).toHaveCount(0);
-  });
-
-  await test.step("Remove asks again in the heading, and Esc gives the menu back", async () => {
-    await chooseInWorkspaceMenu(page, "Remove workspace…", card);
-    const confirm = heading.getByRole("button", { name: "Confirm: Remove workspace" });
+  await test.step("the trash asks again in its place, hiding the buttons beside it, and Esc leaves the focus on it", async () => {
+    await clickAway();
+    await heading.hover();
+    await trash.click();
     await expect(confirm).toHaveText("Remove?");
     await expect(confirm).toBeFocused();
+    for (const button of [continueButton, worktreesButton, newConversation]) await expect(button).toBeHidden();
+    await page.mouse.move(viewport.width - 5, viewport.height - 5);
+    await expect(confirm).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(confirm).toHaveCount(0);
-    await expect(heading.getByRole("button", { name: "Workspace menu" })).toBeVisible();
+    await expect(trash).toBeFocused();
+    await expect(newConversation).toBeVisible();
 
-    await removeWorkspace(page, card);
+    await removeWorkspace(card);
     await expect(card).toHaveCount(0);
   });
+});
+
+test("on a touch screen, with no pointer to hover, a card's heading shows its icons at rest", async ({ browser }) => {
+  const directory = join(host.root, "touch-card");
+  mkdirSync(directory, { recursive: true });
+  const touch = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 1280, height: 800 } });
+  const page = await touch.newPage();
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, directory);
+  const heading = workspaceCard(page, directory).locator(":scope > header");
+  for (const name of ["Continue a session…", "Where conversations work…", "Remove workspace", "+ New conversation"]) {
+    await expect(heading.getByRole("button", { name, exact: true })).toBeVisible();
+  }
+  await touch.close();
 });
 
 test("the sidebar's footer is one row of named icons", async ({ page }) => {
@@ -204,7 +237,7 @@ test("a folded workspace's tooltip offers to unfold it, it moves by its heading 
   await expect(card.getByRole("button", { name: `Unfold ${name}` })).toHaveAttribute("aria-expanded", "false");
 
   expect(await foldedIds()).toContain(workspaceId);
-  await removeWorkspace(page, card);
+  await removeWorkspace(card);
   await expect(card).toHaveCount(0);
   await expect.poll(foldedIds).not.toContain(workspaceId);
 });

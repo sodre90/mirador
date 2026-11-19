@@ -210,8 +210,8 @@ export const hints: Messages["hints"] = {
   newConversation: "Beszélgetés indítása ezen a munkaterületen, a kártyán kiválasztott profilon.",
   continueSession: "Egy terminálban indított munkamenet folytatása beszélgetésként ezen a munkaterületen.",
   whereConversationsWork: "Annak megadása, hogy az új beszélgetések a projektmappában vagy mindegyik saját git worktree-ben dolgozzon.",
-  workspaceMenu:
-    "Továbbiak ehhez a munkaterülethez, például az eltávolítása. Az eltávolítás a beszélgetéseit és a Mirador adatmappájában lévő worktree-jeit is törli, de a projektkönyvtár megmarad.",
+  removeWorkspace:
+    "A munkaterület eltávolítása. A beszélgetései és a Mirador adatmappájában lévő worktree-jei vele mennek, de a projektkönyvtár megmarad. Egy második kattintás erősíti meg.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",
   hideSidebar: "Elrejti az oldalsávot, hogy a beszélgetés, a vászon és a terminál kapja a teljes szélességet. Ez a böngésző megjegyzi.",
   showSidebar: "Újra megjeleníti az oldalsávot a munkaterületekkel és a beszélgetésekkel.",

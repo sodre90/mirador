@@ -118,21 +118,15 @@ const cssString = (text: string) => `"${text.replaceAll("\\", "\\\\").replaceAll
 export const workspaceCard = (scope: Page | FrameLocator, directory: string) =>
   scope.locator(".workspace", { has: scope.locator(`.workspace-heading[title=${cssString(directory)}]`) });
 
-/** An entry of a workspace card's ⋯ menu: "Remove workspace…". */
-export async function chooseInWorkspaceMenu(page: Page, entry: string, card: Locator = page.locator(".workspace")) {
-  await card.getByRole("button", { name: "Workspace menu" }).click();
-  await page.getByRole("menuitem", { name: entry, exact: true }).click();
-}
-
-/** A button of a workspace card's heading that shows while the pointer is on the card: "Continue a session…" or "Where conversations work…". */
+/** A button of a workspace card's heading that shows while the pointer is on the heading: "Continue a session…" or "Where conversations work…". */
 export async function clickWorkspaceButton(card: Locator, name: string) {
-  await card.locator("header").hover();
+  await card.locator(":scope > header").hover();
   await card.getByRole("button", { name, exact: true }).click();
 }
 
-/** Remove is asked twice: in the card's menu, and on the button that takes the menu's place in the heading. */
-export async function removeWorkspace(page: Page, card: Locator) {
-  await chooseInWorkspaceMenu(page, "Remove workspace…", card);
+/** Remove is asked twice: the heading's trash arms, and a second click on it confirms. */
+export async function removeWorkspace(card: Locator) {
+  await clickWorkspaceButton(card, "Remove workspace");
   await card.getByRole("button", { name: "Confirm: Remove workspace" }).click();
 }
 

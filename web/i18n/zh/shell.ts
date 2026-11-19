@@ -73,7 +73,6 @@ export const shell: Messages["shell"] = {
     deleteOlderArmed: (count) => `删除 ${count} 个？`,
     newConversationLabel: "+ 新建对话",
     continueSessionLabel: "继续会话…",
-    workspaceMenu: "工作区菜单",
     settings: "设置…",
     profiles: "配置…",
     machines: "机器…",

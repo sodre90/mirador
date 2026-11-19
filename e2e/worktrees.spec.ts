@@ -327,7 +327,7 @@ test("removing a workspace asks before its worktrees' uncommitted files go, and 
   const branch = gitIn(folder, "branch", "--show-current");
   writeFileSync(join(folder, "scratch.txt"), "not committed\n");
 
-  const removeWorkspace = (directory: string) => removeWorkspaceCard(page, workspaceCard(page, directory));
+  const removeWorkspace = (directory: string) => removeWorkspaceCard(workspaceCard(page, directory));
   const question = page.getByRole("alertdialog", { name: "Remove the workspace and its worktrees?" });
 
   await test.step("Cancel keeps the workspace, its worktree and the uncommitted file", async () => {
