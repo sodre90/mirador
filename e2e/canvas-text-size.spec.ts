@@ -307,24 +307,6 @@ test("pages the agent shows or asks with follow the text size chosen in Settings
     await expect.poll(bitmapAndScreenWidths).toEqual([screenWidthAt(2), screenWidthAt(2)]);
   });
 
-  await test.step("an option preview sized to the viewport keeps about its column's width at 140%, and a plain one isn't scaled", async () => {
-    await chooseInSettings(page, "Text size", "140%");
-    const options = [
-      { label: "Viewport", html: `<div style="width:100vw;height:30px;background:#eef">VIEWPORT</div>` },
-      { label: "Short", html: "<p>Short</p>" },
-    ];
-    void callCanvasTool(host, conversationId, "ask", { question: "Which width?", options }).catch(() => {});
-    await expect(page.getByRole("heading", { name: "Which width?" })).toBeVisible();
-    const previews = page.locator(".ask-option:visible iframe");
-    await expect(previews.nth(0).contentFrame().getByText("VIEWPORT")).toBeAttached();
-    await expect(previews.nth(1).contentFrame().getByText("Short")).toBeAttached();
-    // Chasing its content, a preview sized to the viewport grew a few dozen pixels a round: give it the time.
-    await page.waitForTimeout(2_000);
-    expect(await scaleOf(previews.nth(0))).toBeGreaterThan(0.9);
-    expect(await scaleOf(previews.nth(1))).toBe(1);
-    await answerCanvasQuestion(page, "Short");
-  });
-
   await test.step("a page one screen tall fits the panel at any text size, without scrolling", async () => {
     await callCanvasTool(host, conversationId, "show", fullHeight);
     const screen = shownPage(page).locator("#screen");
@@ -358,5 +340,38 @@ test("pages the agent shows or asks with follow the text size chosen in Settings
       await page.mouse.move(sceneBox.x + sceneBox.width * 0.9, sceneBox.y + sceneBox.height * 0.5);
       await expect.poll(pointedAt).toEqual([0.9, 0.5]);
     }
+  });
+
+  await test.step("at 140% an option preview sized to the viewport keeps about its column's width, one a screen tall and a caption more keeps its height, and a plain one isn't scaled", async () => {
+    await chooseInSettings(page, "Text size", "140%");
+    // Asked after the window-sized scene, which the question carries among the pages shown before it, each in a frame
+    // as tall as its page: a scene as tall as the window and a strip more once grew that frame without end.
+    const options = [
+      { label: "Viewport", html: `<div style="width:100vw;height:30px;background:#eef">VIEWPORT</div>` },
+      { label: "Short", html: "<p>Short</p>" },
+      { label: "Screen", html: `<div style="height:100vh;background:#eef">SCREEN</div><p>Caption</p>` },
+    ];
+    void callCanvasTool(host, conversationId, "ask", { question: "Which width?", options }).catch(() => {});
+    await expect(page.getByRole("heading", { name: "Which width?" })).toBeVisible();
+    const previews = page.locator(".ask-option:visible iframe");
+    await expect(previews.nth(0).contentFrame().getByText("VIEWPORT")).toBeAttached();
+    await expect(previews.nth(1).contentFrame().getByText("Short")).toBeAttached();
+    await expect(previews.nth(2).contentFrame().getByText("Caption")).toBeAttached();
+    // Chasing its content, a preview sized to the viewport grew a few dozen pixels a round: give it the time.
+    await page.waitForTimeout(2_000);
+    expect(await scaleOf(previews.nth(0))).toBeGreaterThan(0.9);
+    expect(await scaleOf(previews.nth(1))).toBe(1);
+    const pagesBefore = page.locator(".ask-page-before:visible iframe");
+    await expect(pagesBefore.first()).toBeAttached();
+    const heights = async () => [
+      await previews.nth(2).evaluate((node: HTMLIFrameElement) => node.clientHeight),
+      ...(await pagesBefore.evaluateAll((nodes) => nodes.map((node) => (node as HTMLIFrameElement).clientHeight))),
+    ];
+    const settled = await heights();
+    // The plan page among them is about 1,100px tall at 140%; one chasing its frame was tens of thousands by now.
+    for (const height of settled) expect(height).toBeLessThan(2_000);
+    await page.waitForTimeout(1_000);
+    expect(await heights()).toEqual(settled);
+    await answerCanvasQuestion(page, "Short");
   });
 });

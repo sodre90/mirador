@@ -34,15 +34,22 @@ describe("buildCanvasDocument", () => {
     expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light")).not.toContain('document.createElement("mirador-marks")');
   });
 
-  test("only a page that follows the text size has its viewport units divided by the zoom and its window-sized canvases marked", () => {
+  test("only a page that follows the text size has its viewport units read the frame's and its window-sized canvases marked", () => {
     const page = '<style>#screen{height:100vh}</style><div style="width:100vw"></div>';
     const following = buildCanvasDocument(page, "item", assetsOrigin, "light", { followsTextSize: true });
-    expect(following).toContain("#screen{height:calc(100vh / var(--mirador-zoom, 1))}");
-    expect(following).toContain('<div style="width:calc(100vw / var(--mirador-zoom, 1))"></div>');
+    expect(following).toContain("#screen{height:calc(100 * var(--mirador-vh, 1vh))}");
+    expect(following).toContain('<div style="width:calc(100 * var(--mirador-vw, 1vw))"></div>');
     expect(following).toContain("markWindowSizedCanvases");
     const own = buildCanvasDocument(page, "item", assetsOrigin, "light");
     expect(own).toContain(page);
     expect(own).not.toContain("markWindowSizedCanvases");
+  });
+
+  test("only a page that follows the text size in a frame sized to its content keeps the window's first height", () => {
+    const pinning = "pinWindowHeight";
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true, fitsContent: true })).toContain(pinning);
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).not.toContain(pinning);
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).not.toContain(pinning);
   });
 
   test("puts the CSP before any agent markup, even for a full document with its own doctype", () => {

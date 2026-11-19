@@ -1,7 +1,7 @@
 import { APP_MEDIA_PATH, APP_STORAGE_CHARACTERS, type AppStorageItems } from "./apps.ts";
 import type { PluginItem } from "./canvas-plugins.ts";
 import { MAX_AREA_SIDE, MAX_BATCH_COMMENTS, MAX_MARKED_HTML, MAX_MARKED_TEXT, type WaitingMark } from "./page-marks.ts";
-import { viewportUnitsUnzoomed } from "./viewport-units.ts";
+import { viewportUnitsFromFrame } from "./viewport-units.ts";
 
 export const CANVAS_MESSAGE_SOURCE = "mirador-canvas";
 
@@ -1182,7 +1182,7 @@ const CANCEL_BROWSER_FIND = "if (findKeys(event)) event.preventDefault();";
 
 /** A canvas the page sizes to the window, from innerWidth and innerHeight as three.js scenes are, is zoom times its panel. */
 const WINDOW_SIZED_CANVAS_FIT =
-  "canvas[data-mirador-window-sized]{width:calc(100vw / var(--mirador-zoom)) !important;height:calc(100vh / var(--mirador-zoom)) !important}";
+  "canvas[data-mirador-window-sized]{width:calc(100 * var(--mirador-vw)) !important;height:calc(100 * var(--mirador-vh)) !important}";
 
 // Only canvases sized to the window are fitted to it: fitting every canvas would squash a wide strip or a tall chart.
 // Their declared size is what's compared, which the fit leaves as the page set it.
@@ -1197,7 +1197,31 @@ const WINDOW_SIZED_CANVAS_MARKING = `
   addEventListener("resize", markWindowSizedCanvases);
 `;
 
-function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, assetsOrigin: string, measuresNaturalWidth: boolean, findsOnPage: boolean, followsTextSize: boolean) {
+// A frame as tall as its page would grow with a page as tall as the window, and the window with it, without end: there
+// the window keeps the first height the frame had, for innerHeight and the page's vh alike. The first one not 0, as a
+// frame that loaded hidden has none; its resize handler comes before the page's, which then read the pinned height.
+const WINDOW_HEIGHT_PINNING = `
+  const pinWindowHeight = () => {
+    if (pinnedHeight) return;
+    pinnedHeight = frameHeight();
+    showZoom();
+    if (pinnedHeight) requestAnimationFrame(() => reportSize());
+  };
+  pinWindowHeight();
+  addEventListener("resize", pinWindowHeight);
+  Object.defineProperty(window, "innerHeight", { get: () => pinnedHeight || frameHeight(), configurable: true });
+`;
+
+function frameReporter(
+  itemId: string,
+  theme: CanvasTheme,
+  textScale: number,
+  assetsOrigin: string,
+  measuresNaturalWidth: boolean,
+  findsOnPage: boolean,
+  followsTextSize: boolean,
+  pinsWindowHeight: boolean,
+) {
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
@@ -1212,14 +1236,23 @@ function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, as
   // and scrollX include the zoom, as do the root's scrollWidth and scrollHeight. vh and vw take the zoom too.
   const textZoom = document.createElement("style");
   let zoom = 1;
+  const frameHeight = Object.getOwnPropertyDescriptor(window, "innerHeight").get.bind(window);
+  let pinnedHeight = 0;
+  const frameViewportUnits = () => {
+    const vh = pinnedHeight ? pinnedHeight / zoom / 100 + "px" : "calc(1vh / " + zoom + ")";
+    return ":root{--mirador-vw:calc(1vw / " + zoom + ");--mirador-vh:" + vh + "}";
+  };
+  const showZoom = () => {
+    textZoom.textContent = (zoom === 1 ? "" : ":root{zoom:" + zoom + "}" + ${JSON.stringify(WINDOW_SIZED_CANVAS_FIT)}) + frameViewportUnits();
+  };
   const zoomTo = (scale) => {
     zoom = scale > 0 ? scale : 1;
-    textZoom.textContent = zoom === 1 ? "" : ":root{zoom:" + zoom + ";--mirador-zoom:" + zoom + "}" + ${JSON.stringify(WINDOW_SIZED_CANVAS_FIT)};
+    showZoom();
     dispatchEvent(new Event("mirador-zoom"));
   };
   zoomTo(${JSON.stringify(textScale)});
   document.head.append(textZoom);
-${TEXT_CONTRAST_SCRIPT}
+${pinsWindowHeight ? WINDOW_HEIGHT_PINNING : ""}${TEXT_CONTRAST_SCRIPT}
   // Pages often pick colours for one theme only. Text that all but vanishes on its own background takes the theme
   // text colour that reads there; each check gives the text its own colour back first, so a theme change starts afresh.
   const fixedText = new Map();
@@ -1373,6 +1406,8 @@ ${HIDDEN_ERROR_SCRIPT}
     return Math.ceil(root.scrollWidth + bodyLeft);
   };
   const reportSize = () => {
+    // Hidden, the page is laid out in no room at all; the frame keeps its first height to pin when it shows.
+    if (${pinsWindowHeight} && !pinnedHeight) return;
     const root = document.documentElement;
     const bodyLeft = document.body ? document.body.getBoundingClientRect().left + scrollX : 0;
     const overflowWidth = widthToAskFor(root, bodyLeft);
@@ -1513,8 +1548,17 @@ export function buildCanvasDocument(
     markable = false,
     measuresNaturalWidth = false,
     followsTextSize = false,
+    fitsContent = false,
     textScale = 1,
-  }: { padded?: boolean; policy?: CanvasPagePolicy; markable?: boolean; measuresNaturalWidth?: boolean; followsTextSize?: boolean; textScale?: number } = {},
+  }: {
+    padded?: boolean;
+    policy?: CanvasPagePolicy;
+    markable?: boolean;
+    measuresNaturalWidth?: boolean;
+    followsTextSize?: boolean;
+    fitsContent?: boolean;
+    textScale?: number;
+  } = {},
 ) {
   const withoutDoctype = html.replace(/^\s*<!doctype[^>]*>/i, "");
   return [
@@ -1523,10 +1567,10 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, textScale, assetsOrigin, measuresNaturalWidth, markable, followsTextSize)}</script>`,
+    `<script>${frameReporter(itemId, theme, textScale, assetsOrigin, measuresNaturalWidth, markable, followsTextSize, followsTextSize && fitsContent)}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),
-    followsTextSize ? viewportUnitsUnzoomed(withoutDoctype) : withoutDoctype,
+    followsTextSize ? viewportUnitsFromFrame(withoutDoctype) : withoutDoctype,
   ].join("\n");
 }

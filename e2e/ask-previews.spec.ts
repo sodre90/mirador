@@ -334,6 +334,98 @@ test("a preview sized to the viewport keeps about its column's width rather than
   await answerCanvasQuestion(page, "Viewport");
 });
 
+test("a page or canvas as tall as its frame and a caption more keeps a steady height in a question, rather than growing round after round, while one that grows after it loads still grows to show whole", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const screenAndCaption = `<div style="height:100vh;background:#eef">SCREEN</div><p>Caption</p>`;
+  const sceneAndCaption = `<canvas id="scene" style="display:block;background:#eef"></canvas><p>Caption</p>
+<script>
+  const scene = document.getElementById("scene");
+  const fitToWindow = () => {
+    scene.style.width = innerWidth + "px";
+    scene.style.height = innerHeight + "px";
+  };
+  fitToWindow();
+  addEventListener("resize", fitToWindow);
+</script>`;
+  const growingTall = `<div id="tall" style="height:30px;background:#eef">TOP</div>
+<script>
+  const tall = document.getElementById("tall");
+  setTimeout(() => (tall.style.height = "600px"), 500);
+  setTimeout(() => (tall.style.height = "1200px"), 1500);
+</script>`;
+
+  const animatedTall = `<div id="animated" style="height:30px;transition:height 1s ease-in;background:#eef">ANIMATED</div>`;
+
+  askInBackground(conversationId, {
+    question: "Which height?",
+    html: sceneAndCaption,
+    options: [
+      { label: "Screen", html: screenAndCaption },
+      { label: "Growing", html: growingTall },
+      { label: "Animated", html: animatedTall },
+    ],
+  });
+  const context = page.locator(".ask-context:visible iframe");
+  const options = page.locator(".ask-option:visible");
+  await expect(options).toHaveCount(3);
+  await expect(context.contentFrame().getByText("Caption")).toBeAttached();
+  const screenPreview = preview(options.nth(0));
+  await expect(screenPreview.contentFrame().getByText("Caption")).toBeAttached();
+  // Chasing a page always a caption taller than itself, a frame grew by the caption a round: give it the time.
+  await page.waitForTimeout(2_000);
+  const heights = () => Promise.all([context, screenPreview].map((frame) => frame.evaluate((node: HTMLIFrameElement) => node.clientHeight)));
+  const settled = await heights();
+  for (const height of settled) expect(height).toBeLessThan(1_000);
+  await page.waitForTimeout(1_000);
+  expect(await heights()).toEqual(settled);
+
+  const grown = preview(options.nth(1));
+  await expect.poll(() => grown.contentFrame().locator("#tall").evaluate((node: HTMLElement) => node.style.height)).toBe("1200px");
+  await expect.poll(() => grown.contentFrame().locator("html").evaluate((root) => root.scrollHeight - root.clientHeight)).toBe(0);
+  // Growing every frame, it stays ahead of its frame until it stops. Started in view: a browser draws no frame offscreen.
+  const animated = preview(options.nth(2));
+  await animated.scrollIntoViewIfNeeded();
+  const animatedBox = animated.contentFrame().locator("#animated");
+  await animatedBox.evaluate((node: HTMLElement) => (node.style.height = "900px"));
+  await expect.poll(() => animatedBox.evaluate((node) => node.getBoundingClientRect().height)).toBe(900);
+  await expect.poll(() => animated.contentFrame().locator("html").evaluate((root) => root.scrollHeight - root.clientHeight)).toBe(0);
+  await answerCanvasQuestion(page, "Screen");
+});
+
+test("a question asked while its conversation isn't shown opens with its pages at their starting height, not the height they had hidden", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await signIn(page, host);
+  const hidden = await startConversation(page);
+  await startConversation(page);
+  const sceneAndCaption = `<canvas id="scene" style="display:block;background:#eef"></canvas><p>Caption</p>
+<script>
+  const scene = document.getElementById("scene");
+  const fitToWindow = () => {
+    scene.style.width = innerWidth + "px";
+    scene.style.height = innerHeight + "px";
+  };
+  fitToWindow();
+  addEventListener("resize", fitToWindow);
+</script>`;
+  askInBackground(hidden, { question: "Asked while hidden?", html: sceneAndCaption, options: [{ label: "Text", html: fluid("Just a line of text") }, { label: "Plain" }] });
+  // Hidden, a page is laid out in no room: the scene has no height, and the page is as tall as its caption.
+  await page.waitForTimeout(2_000);
+  await page.evaluate((id) => (location.hash = `#/c/${id}`), hidden);
+  await expect(page.getByRole("heading", { name: "Asked while hidden?" })).toBeVisible();
+  const context = page.locator(".ask-context:visible iframe");
+  const scene = context.contentFrame().locator("#scene");
+  await expect.poll(() => scene.evaluate((node) => node.getBoundingClientRect().height)).toBeGreaterThan(300);
+  const text = page.locator(".ask-option:visible iframe").first();
+  const textFrameHeight = () => text.evaluate((node: HTMLIFrameElement) => node.clientHeight);
+  const textPageHeight = () => text.contentFrame().locator("html").evaluate((root) => Math.ceil(root.getBoundingClientRect().height));
+  // Its frame still measures the page it shows, so a line of text gets a line's height.
+  await expect.poll(async () => (await textFrameHeight()) - (await textPageHeight())).toBe(0);
+  expect(await textFrameHeight()).toBeLessThan(100);
+  await answerCanvasQuestion(page, "Plain");
+});
+
 test("a question that arrives together with the answer to the one before it takes the canvas", async ({ page }) => {
   let heldAnswer: string | null = null;
   await page.routeWebSocket(/\/ws\?/, (socket) => {

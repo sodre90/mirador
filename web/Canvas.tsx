@@ -151,9 +151,10 @@ export function CanvasFrame({
         markable,
         measuresNaturalWidth,
         followsTextSize,
+        fitsContent,
         textScale: zoomRef.current,
       }),
-    [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, measuresNaturalWidth, followsTextSize],
+    [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, measuresNaturalWidth, followsTextSize, fitsContent],
   );
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
