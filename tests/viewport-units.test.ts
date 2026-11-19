@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { viewportUnitsFromFrame } from "../shared/viewport-units.ts";
 
-const VH = "var(--mirador-vh, 1vh)";
-const VW = "var(--mirador-vw, 1vw)";
+const VH = "var(--mirador-vh)";
+const VW = "var(--mirador-vw)";
 const vh = (amount: string) => `calc(${amount} * ${VH})`;
 const vw = (amount: string) => `calc(${amount} * ${VW})`;
 

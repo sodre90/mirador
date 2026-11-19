@@ -218,11 +218,12 @@ export function CanvasFrame({
     if (!shown) frame.current?.contentWindow?.postMessage(canvasHiddenMessage(), "*");
   }, [shown]);
 
-  // A page sized to its content takes its column's width as its window's, rather than the frame's, which grows with it.
-  // A page sized to its window overflows by more or less in another, so the width it asked for is forgotten until it reports again.
+  // A page in a frame sized to its content takes its column's width as its window's, rather than the frame's, which
+  // grows with it. A page sized to its window overflows by more or less in another, so the width it asked for is
+  // forgotten until it reports again.
   const pageRoomWidth = roomWidth - FRAME_BORDERS;
   useEffect(() => {
-    if (!followsTextSize || !fitsContent || pageRoomWidth <= 0) return;
+    if (!fitsContent || pageRoomWidth <= 0) return;
     setContentSize((current) => current && { ...current, width: null });
     setUnwrappedWidth(0);
     frame.current?.contentWindow?.postMessage(canvasRoomMessage(pageRoomWidth), "*");
