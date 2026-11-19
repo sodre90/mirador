@@ -1,6 +1,6 @@
 import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
-import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasShellUrl, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
+import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
 import { answersSummary, questionsOf } from "../shared/ask.ts";
 import type { AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
@@ -12,7 +12,7 @@ import { ChangesView } from "./Changes.tsx";
 import { ChecklistView, currentTabItem, isTabItem, tabCount, useFlashOnAgentEdit } from "./Checklist.tsx";
 import { EditApproval } from "./EditApproval.tsx";
 import { FONT_SCALES, useFontScale } from "./font-scale.ts";
-import { filledStyles, fittedStyles, type ContentSize } from "./frame-fit.ts";
+import { fittedStyles, type ContentSize } from "./frame-fit.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
@@ -136,14 +136,22 @@ export function CanvasFrame({
   const roomWidth = useElementWidth(box);
   const [fontScale] = useFontScale();
   const zoom = followsTextSize ? FONT_SCALES[fontScale] : 1;
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
   const [errors, setErrors] = useState<string[]>([]);
   const [contentSize, setContentSize] = useState<ContentSize>();
   const [unwrappedWidth, setUnwrappedWidth] = useState(0);
-  // The theme is not a dependency: changing it would reload the page, so it reaches a shown page by message instead.
+  // Neither the theme nor the zoom is a dependency: changing one would reload the page, so it reaches a shown page by message instead.
   const imagesFromOtherSites = policy?.imagesFromOtherSites ?? false;
   const measuresNaturalWidth = onContentWidth !== undefined;
   const document = useMemo(
-    () => buildCanvasDocument(html, frameId, assetsOrigin, shownTheme(), { padded, policy: { imagesFromOtherSites }, markable, measuresNaturalWidth }),
+    () => buildCanvasDocument(html, frameId, assetsOrigin, shownTheme(), {
+        padded,
+        policy: { imagesFromOtherSites },
+        markable,
+        measuresNaturalWidth,
+        textScale: zoomRef.current,
+      }),
     [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, measuresNaturalWidth],
   );
   const onRenderedRef = useRef(onRendered);
@@ -191,17 +199,24 @@ export function CanvasFrame({
 
   useEffect(() => {
     const wantedWidth = Math.max(contentSize?.width ?? 0, unwrappedWidth);
-    if (wantedWidth) onContentWidthRef.current?.(Math.ceil(wantedWidth * zoom));
-  }, [contentSize?.width, unwrappedWidth, zoom]);
+    if (wantedWidth) onContentWidthRef.current?.(wantedWidth);
+  }, [contentSize?.width, unwrappedWidth]);
 
   useEffect(() => onShownThemeChange(() => postThemeTo(frame)), []);
+  useEffect(() => {
+    if (!followsTextSize) return;
+    // The page overflows by more or less at another zoom, so the width it asked for before is forgotten until it reports again.
+    setContentSize((current) => current && { ...current, width: null });
+    setUnwrappedWidth(0);
+    postTextScaleTo(frame, zoom);
+  }, [zoom]);
 
   const shown = useContext(CanvasShown);
   useEffect(() => {
     if (!shown) frame.current?.contentWindow?.postMessage(canvasHiddenMessage(), "*");
   }, [shown]);
 
-  const fitted = fitsContent ? fittedStyles(contentSize, roomWidth, zoom) : filledStyles(zoom);
+  const fitted = fitsContent ? fittedStyles(contentSize, roomWidth) : {};
   return (
     <div ref={box} className={`canvas-frame ${className ?? ""}`} style={fitted.box}>
       <iframe
@@ -215,6 +230,7 @@ export function CanvasFrame({
         onLoad={() => {
           shellLoaded.current = frame.current?.contentWindow ?? null;
           postThemeTo(frame);
+          if (followsTextSize) postTextScaleTo(frame, zoomRef.current);
         }}
       />
       {errors.length > 0 && (
@@ -231,6 +247,10 @@ export function CanvasFrame({
 /** Also on load: a theme chosen while the page was still opening went to the frame's blank window and was lost. */
 function postThemeTo(frame: RefObject<HTMLIFrameElement | null>) {
   frame.current?.contentWindow?.postMessage(canvasThemeMessage(shownTheme()), "*");
+}
+
+function postTextScaleTo(frame: RefObject<HTMLIFrameElement | null>, zoom: number) {
+  frame.current?.contentWindow?.postMessage(canvasTextScaleMessage(zoom), "*");
 }
 
 function reportRender(itemId: string) {
