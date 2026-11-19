@@ -278,6 +278,18 @@ export function eventsInOrderOn(page: Page) {
   return events;
 }
 
+/** The agent session of the conversation the page last heard of starting one, as the host names it to the page. */
+export function agentSessionIdOn(page: Page) {
+  let sessionId: string | null = null;
+  page.on("websocket", (socket) =>
+    socket.on("framereceived", ({ payload }) => {
+      const message = JSON.parse(String(payload));
+      sessionId = message.type === "conversation.upserted" ? (message.conversation.acpSessionId ?? sessionId) : sessionId;
+    }),
+  );
+  return () => sessionId;
+}
+
 export async function waitForTurnToEnd(page: Page) {
   await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle", { timeout: 180_000 });
 }
