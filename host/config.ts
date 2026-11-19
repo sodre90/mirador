@@ -62,6 +62,12 @@ export interface HostConfig {
   checksForNewerVersion: boolean;
   /** Test hosts turn it off with MIRADOR_PLUGIN_UPDATE_CHECK=off, so they fetch no plugin's repo unless a spec asks. */
   checksForPluginUpdates: boolean;
+  /**
+   * Test hosts that run from the shared checkout turn it off with MIRADOR_SOURCE_WATCH=off: nobody edits it mid-run, yet
+   * macOS under load tells every watcher of it that web/ or shared/ changed, which rebuilt each host's page at once and
+   * showed the host's-code-changed banner in the middle of unrelated tests.
+   */
+  watchesSource: boolean;
   /** Where a release finds the latest published release; e2e points it at a fake. */
   latestReleaseUrl: string;
   /** Where the catalog of official plugins is; MIRADOR_PLUGIN_CATALOG=off, as test hosts have it unless a spec gives one, fetches none. */
@@ -241,6 +247,7 @@ export function loadConfig(env = process.env): HostConfig {
     runsUserStatusLine: env.MIRADOR_STATUSLINE !== "off",
     checksForNewerVersion: env.MIRADOR_NEWER_VERSION_CHECK !== "off",
     checksForPluginUpdates: env.MIRADOR_PLUGIN_UPDATE_CHECK !== "off",
+    watchesSource: env.MIRADOR_SOURCE_WATCH !== "off",
     latestReleaseUrl: env.MIRADOR_LATEST_RELEASE_URL ?? `https://api.github.com/repos/${RELEASES_REPOSITORY}/releases/latest`,
     pluginCatalogUrl: env.MIRADOR_PLUGIN_CATALOG === "off" ? null : (env.MIRADOR_PLUGIN_CATALOG ?? PLUGIN_CATALOG_URL),
     pushGrantRelay: pushRelayInEnvironment(env.MIRADOR_PUSH_RELAY),
