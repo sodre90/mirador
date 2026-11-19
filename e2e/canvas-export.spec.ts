@@ -2,19 +2,27 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, callCanvasTool, chooseFromCanvasMore, findOnPageEntryText, openCanvasMore, openSettings, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
 import { TestHost } from "./test-host.ts";
 
 /** Agents are told the public canvas address, but this browser reaches the host locally and draws pages from the local one. */
+// The export asks the agent in a message; the spec checks the message, so a scripted Claude answering it is enough.
+const api = new FakeClaudeApi();
 const host = new TestHost({
-  environment: { MIRADOR_PUBLIC_ORIGIN: "https://mirador.example.com", MIRADOR_PUBLIC_CANVAS_ORIGIN: "https://mirador.example.com:8443" },
+  environment: () => ({ ...fakeClaudeEnvironment(api), MIRADOR_PUBLIC_ORIGIN: "https://mirador.example.com", MIRADOR_PUBLIC_CANVAS_ORIGIN: "https://mirador.example.com:8443" }),
 });
 const localAssetsOrigin = () => `http://127.0.0.1:${host.port + 1}`;
 const cdnD3 = /https:\/\/cdn\.jsdelivr\.net\/npm\/d3@\d+\.\d+\.\d+\/dist\/d3\.min\.js/;
 
-test.beforeAll(() => host.start());
+test.beforeAll(async () => {
+  api.limited = false;
+  await api.start();
+  await host.start();
+});
 test.afterAll(async () => {
   await host.stop();
   await host.cleanUp();
+  api.stop();
 });
 
 const chart = () => ({
