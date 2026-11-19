@@ -1,4 +1,5 @@
 import type { CanvasItem } from "../../shared/model.ts";
+import { USE_TOOL_TOOL } from "../../shared/tool-title.ts";
 
 /**
  * Checks on the reply that ends an agent's turn, for when Settings ask for the canvas often: a question written in chat
@@ -48,10 +49,16 @@ export function repeatsPageInChat(reply: string): boolean {
   return lines.length > MOST_LINES_AFTER_A_PAGE || lines.some((line) => TABLE_SEPARATOR.test(line));
 }
 
-/** What the turn did, as Mirador saw it: when its tool calls started, the canvas items, and when its job waits began. */
+/** A tool call of the turn: when Mirador heard the agent report it, and the canvas tool it was, if it was one. */
+export interface TurnToolCall {
+  at: number;
+  canvasTool: string | null;
+}
+
+/** What the turn did, as Mirador saw it: its tool calls, the canvas items, and when its job waits began. */
 export interface TurnActivity {
   startedAt: number;
-  toolCallsAt: number[];
+  toolCalls: TurnToolCall[];
   items: CanvasItem[];
   jobWaitsSince: number[];
 }
@@ -67,14 +74,20 @@ const isCanvasStepBesideThePage = (item: CanvasItem, after: (time: number | unde
  * page did other work than asking, ticking the checklist or waiting for a job. A turn that went on working after its
  * page ends with a reply about that work, which may well be long.
  */
-export function canvasUseOf({ startedAt, toolCallsAt, items, jobWaitsSince }: TurnActivity): { asked: boolean; showedPage: boolean } {
+export function canvasUseOf({ startedAt, toolCalls, items, jobWaitsSince }: TurnActivity): { asked: boolean; showedPage: boolean } {
   const asked = items.some((item) => item.kind === "ask" && item.createdAt >= startedAt);
   const shownAt = items.flatMap(pageTimes).filter((time) => time >= startedAt);
   if (shownAt.length === 0) return { asked, showedPage: false };
   const pageAt = Math.max(...shownAt);
   const after = (time: number | undefined) => time !== undefined && time > pageAt;
   const canvasStepsAfter = items.filter((item) => isCanvasStepBesideThePage(item, after)).length + jobWaitsSince.filter(after).length;
-  return { asked, showedPage: toolCallsAt.filter(after).length <= canvasStepsAfter };
+  const callsAfter = toolCalls.filter(({ at }) => after(at));
+  const latestPageIsAPluginPage = items.some((item) => item.kind === "plugin" && item.placement === "page" && pageTimes(item).includes(pageAt));
+  const madeTheLatestPage = ({ canvasTool }: TurnToolCall) => canvasTool === "show" || (latestPageIsAPluginPage && canvasTool === USE_TOOL_TOOL);
+  // The agent's report of a call and the call itself reach Mirador on separate channels, so on a busy machine the call
+  // that made the page can be heard of only after the page is there: it is the page, not work after it.
+  const workAfter = callsAfter.length - (callsAfter.some(madeTheLatestPage) ? 1 : 0);
+  return { asked, showedPage: workAfter <= canvasStepsAfter };
 }
 
 /** What the turn did on the canvas, and the reply it ended with. */
