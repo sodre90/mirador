@@ -28,6 +28,25 @@ async function expectWhollyShown(frame: Locator) {
   await expect(frame.contentFrame().getByText("END")).toBeInViewport({ ratio: WHOLLY_SHOWN_RATIO });
 }
 
+const scaleOf = (frame: Locator) =>
+  frame.evaluate((node) => {
+    const transform = getComputedStyle(node).transform;
+    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
+  });
+
+const viewportWide = `<div style="width:100vw;height:30px;background:#eef">VIEWPORT</div>`;
+
+/** A page as wide as its window fills its column: not drawn narrower than it, nor wider and scaled down. */
+async function expectAsWideAsItsColumn(option: Locator) {
+  await expect(async () => {
+    const [page, column] = await Promise.all([preview(option).contentFrame().getByText("VIEWPORT").boundingBox(), option.locator(".canvas-frame").boundingBox()]);
+    const share = page!.width / column!.width;
+    expect(share).toBeGreaterThan(0.9);
+    expect(share).toBeLessThan(1.01);
+    expect(await scaleOf(preview(option))).toBeGreaterThan(0.9);
+  }).toPass({ timeout: 5_000 });
+}
+
 test("previews show whole: option columns widen to fit them, and what is wider than the canvas is scaled down", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1000 });
   await signIn(page, host);
@@ -298,40 +317,88 @@ test("all option previews are shown whole when columns widen, without right-edge
   await answerCanvasQuestion(page, "Alpha");
 });
 
-test("a preview sized to the viewport keeps about its column's width rather than widening round after round, while one that grows after it loads still widens to show whole", async ({ page }) => {
+test("a preview sized to the viewport keeps its column's width as the window changes, rather than widening round after round, while one that grows or animates wider after it loads still widens to show whole", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1000 });
   await signIn(page, host);
   const conversationId = await startConversation(page);
   const options = page.locator(".ask-option:visible");
+  // Only wider, not taller, so its frame keeps its height.
   const growing = `<div id="box" style="width:300px;display:flex;justify-content:space-between;background:#eef;padding:8px"><b>START</b><b>END</b></div>
 <script>
   const box = document.getElementById("box");
-  setTimeout(() => Object.assign(box.style, { width: "700px", height: "60px" }), 500);
-  setTimeout(() => Object.assign(box.style, { width: "1300px", height: "90px" }), 1500);
+  setTimeout(() => (box.style.width = "700px"), 500);
+  setTimeout(() => (box.style.width = "1300px"), 1500);
 </script>`;
+  const animatedWide = `<div id="wide" style="width:300px;transition:width 1s ease-in;display:flex;justify-content:space-between;background:#eef;padding:8px"><b>START</b><b>END</b></div>`;
 
   askInBackground(conversationId, {
     question: "Which width?",
     options: [
-      { label: "Viewport", html: `<div style="width:100vw;height:30px;background:#eef">VIEWPORT</div>` },
+      { label: "Viewport", html: viewportWide },
       { label: "Growing", html: growing },
+      { label: "Animated", html: animatedWide },
     ],
   });
-  await expect(options).toHaveCount(2);
-  const viewportSized = preview(options.nth(0));
-  await expect(viewportSized.contentFrame().getByText("VIEWPORT")).toBeAttached();
+  await expect(options).toHaveCount(3);
+  const viewportSized = options.nth(0);
+  await expect(preview(viewportSized).contentFrame().getByText("VIEWPORT")).toBeAttached();
   // Chasing its 100vw content, the frame grew a few dozen pixels a round up to 2400px, scaled down to a sliver: give it the time.
   await page.waitForTimeout(2_000);
-  const scale = await viewportSized.evaluate((node) => {
-    const transform = getComputedStyle(node).transform;
-    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
-  });
-  expect(scale).toBeGreaterThan(0.9);
+  await expectAsWideAsItsColumn(viewportSized);
+  const columnWidth = () => viewportSized.locator(".canvas-frame").evaluate((node) => node.clientWidth);
+  for (const width of [1600, 1100]) {
+    const before = await columnWidth();
+    await page.setViewportSize({ width, height: 1000 });
+    await expect.poll(columnWidth).not.toBe(before);
+    await expectAsWideAsItsColumn(viewportSized);
+  }
 
   const grown = preview(options.nth(1));
   await expect.poll(() => grown.contentFrame().locator("#box").evaluate((node: HTMLElement) => node.style.width)).toBe("1300px");
   await expectWhollyShown(grown);
+  // Widening every frame, it stays ahead of its frame until it stops. Started in view: a browser draws no frame offscreen.
+  const animated = preview(options.nth(2));
+  await animated.scrollIntoViewIfNeeded();
+  const animatedBox = animated.contentFrame().locator("#wide");
+  await animatedBox.evaluate((node: HTMLElement) => (node.style.width = "1300px"));
+  await expect.poll(() => animatedBox.evaluate((node: HTMLElement) => node.offsetWidth)).toBe(1316);
+  await expectWhollyShown(animated);
   await answerCanvasQuestion(page, "Viewport");
+});
+
+test("a preview at rest does no work, also when Mirador recolours its text to keep it readable", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  askInBackground(conversationId, {
+    question: "Which shade?",
+    options: [
+      { label: "Pale", html: `<div style="background:#fff;padding:8px"><p id="pale" style="color:#eee">Pale text</p></div>` },
+      { label: "Plain" },
+    ],
+  });
+  const pale = preview(page.locator(".ask-option:visible").first());
+  await pale.scrollIntoViewIfNeeded();
+  const text = pale.contentFrame().locator("#pale");
+  await expect.poll(() => text.evaluate((node: HTMLElement) => node.style.getPropertyPriority("color"))).toBe("important");
+  await page.waitForTimeout(500);
+
+  await pale.evaluate((frame: HTMLIFrameElement) => {
+    const sizes = window as unknown as { sizesPosted: number };
+    sizes.sizesPosted = 0;
+    addEventListener("message", (event) => {
+      if (event.source === frame.contentWindow && event.data?.kind === "size") sizes.sizesPosted++;
+    });
+  });
+  await text.evaluate(() => {
+    const changes = window as unknown as { pageChanges: number };
+    changes.pageChanges = 0;
+    new MutationObserver((records) => (changes.pageChanges += records.length)).observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
+  });
+  await page.waitForTimeout(1_000);
+  expect(await text.evaluate(() => (window as unknown as { pageChanges: number }).pageChanges)).toBe(0);
+  expect(await page.evaluate(() => (window as unknown as { sizesPosted: number }).sizesPosted)).toBe(0);
+  await answerCanvasQuestion(page, "Plain");
 });
 
 test("a page or canvas as tall as its frame and a caption more keeps a steady height in a question, rather than growing round after round, while one that grows after it loads still grows to show whole", async ({ page }) => {
@@ -394,7 +461,7 @@ test("a page or canvas as tall as its frame and a caption more keeps a steady he
   await answerCanvasQuestion(page, "Screen");
 });
 
-test("a question asked while its conversation isn't shown opens with its pages at their starting height, not the height they had hidden", async ({ page }) => {
+test("a question asked while its conversation isn't shown opens with its pages at their starting size, not the size they had hidden", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1000 });
   await signIn(page, host);
   const hidden = await startConversation(page);
@@ -409,7 +476,11 @@ test("a question asked while its conversation isn't shown opens with its pages a
   fitToWindow();
   addEventListener("resize", fitToWindow);
 </script>`;
-  askInBackground(hidden, { question: "Asked while hidden?", html: sceneAndCaption, options: [{ label: "Text", html: fluid("Just a line of text") }, { label: "Plain" }] });
+  askInBackground(hidden, {
+    question: "Asked while hidden?",
+    html: sceneAndCaption,
+    options: [{ label: "Text", html: fluid("Just a line of text") }, { label: "Viewport", html: viewportWide }, { label: "Plain" }],
+  });
   // Hidden, a page is laid out in no room: the scene has no height, and the page is as tall as its caption.
   await page.waitForTimeout(2_000);
   await page.evaluate((id) => (location.hash = `#/c/${id}`), hidden);
@@ -423,6 +494,8 @@ test("a question asked while its conversation isn't shown opens with its pages a
   // Its frame still measures the page it shows, so a line of text gets a line's height.
   await expect.poll(async () => (await textFrameHeight()) - (await textPageHeight())).toBe(0);
   expect(await textFrameHeight()).toBeLessThan(100);
+  // Hidden, its window had no width at all: shown, it takes its column's.
+  await expectAsWideAsItsColumn(page.locator(".ask-option:visible").nth(1));
   await answerCanvasQuestion(page, "Plain");
 });
 

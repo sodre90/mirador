@@ -45,11 +45,16 @@ describe("buildCanvasDocument", () => {
     expect(own).not.toContain("markWindowSizedCanvases");
   });
 
-  test("only a page that follows the text size in a frame sized to its content keeps the window's first height", () => {
-    const pinning = "pinWindowHeight";
+  test("only a page that follows the text size in a frame sized to its content keeps the window's first size", () => {
+    const pinning = "pinWindowSize";
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true, fitsContent: true })).toContain(pinning);
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).not.toContain(pinning);
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).not.toContain(pinning);
+  });
+
+  test("only a page in a frame sized to its content is measured again as it changes, not only as its box resizes", () => {
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).toContain("const contentWatcher = true");
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).toContain("const contentWatcher = false");
   });
 
   test("puts the CSP before any agent markup, even for a full document with its own doctype", () => {

@@ -1,6 +1,6 @@
 import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
-import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
+import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoomMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
 import { answersSummary, questionsOf } from "../shared/ask.ts";
 import type { AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
@@ -12,7 +12,7 @@ import { ChangesView } from "./Changes.tsx";
 import { ChecklistView, currentTabItem, isTabItem, tabCount, useFlashOnAgentEdit } from "./Checklist.tsx";
 import { EditApproval } from "./EditApproval.tsx";
 import { FONT_SCALES, useFontScale } from "./font-scale.ts";
-import { fittedStyles, type ContentSize } from "./frame-fit.ts";
+import { FRAME_BORDERS, fittedStyles, type ContentSize } from "./frame-fit.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
@@ -217,6 +217,16 @@ export function CanvasFrame({
   useEffect(() => {
     if (!shown) frame.current?.contentWindow?.postMessage(canvasHiddenMessage(), "*");
   }, [shown]);
+
+  // A page sized to its content takes its column's width as its window's, rather than the frame's, which grows with it.
+  // A page sized to its window overflows by more or less in another, so the width it asked for is forgotten until it reports again.
+  const pageRoomWidth = roomWidth - FRAME_BORDERS;
+  useEffect(() => {
+    if (!followsTextSize || !fitsContent || pageRoomWidth <= 0) return;
+    setContentSize((current) => current && { ...current, width: null });
+    setUnwrappedWidth(0);
+    frame.current?.contentWindow?.postMessage(canvasRoomMessage(pageRoomWidth), "*");
+  }, [pageRoomWidth]);
 
   const fitted = fitsContent ? fittedStyles(contentSize, roomWidth) : {};
   return (
