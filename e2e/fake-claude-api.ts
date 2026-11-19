@@ -65,6 +65,9 @@ const offersBash = ({ tools }: MessagesRequest) => (tools ?? []).some(({ name })
 
 const offersAgent = ({ tools }: MessagesRequest) => (tools ?? []).some(({ name }) => name === "Agent");
 
+/** Claude Code asks for a session's title, as it reads the first prompt, with no tools offered. */
+const asksForTitle = ({ tools }: MessagesRequest) => (tools ?? []).length === 0;
+
 /** A request Claude Code makes on its own once a command it ran in the background ends. */
 const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
   const content = messages.findLast(({ role }) => role === "user")?.content ?? "";
@@ -172,7 +175,10 @@ export class FakeClaudeApi {
     this.server?.close();
   }
 
-  /** Keeps every reply from now on waiting, so a turn stays running until `answerHeld`. */
+  /**
+   * Keeps every reply but a title's waiting from now on, so a turn stays running until `answerHeld`. The title Claude
+   * Code asks for at a first prompt quotes that prompt, so held it would pass for the turn's own request in `held`.
+   */
   hold() {
     this.heldReplies ??= [];
   }
@@ -199,7 +205,7 @@ export class FakeClaudeApi {
   }
 
   private reply(body: MessagesRequest, response: ServerResponse) {
-    if (this.heldReplies) {
+    if (this.heldReplies && !asksForTitle(body)) {
       this.held.push(lastTypedText(body));
       this.heldRequests.push(body.messages.map(({ role, content }) => `${role}: ${textOf(content)}`));
       return void this.heldReplies.push(() => this.reply(body, response));
