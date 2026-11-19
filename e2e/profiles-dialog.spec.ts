@@ -79,18 +79,12 @@ test("a profile's fields sit on Launch and Defaults tabs, with their explanation
     const yolo = dialog.locator("label.checkbox", { hasText: "YOLO" });
     await expect(yolo).toHaveText("YOLO");
     await expect(yolo).toHaveAttribute("data-hint", /^Approve whatever the agent asks permission for/);
-    // The agent's models and effort levels come a moment later and push YOLO down, which would leave the pointer over
-    // the effort field: hover once YOLO stays where it is.
-    let yoloTop: number | undefined;
-    await expect
-      .poll(async () => {
-        const [before, now] = [yoloTop, (await yolo.boundingBox())?.y];
-        yoloTop = now;
-        return now !== undefined && now === before;
-      }, { intervals: [500] })
-      .toBe(true);
-    await yolo.hover();
-    await expect(page.locator(".hint-bubble")).toContainText("Approve whatever the agent asks permission for");
+    // The agent's models and effort levels come later, seconds later on a loaded Windows runner, and push YOLO down,
+    // which leaves the pointer over the effort field: hover YOLO again where it went.
+    await expect(async () => {
+      await yolo.hover();
+      await expect(page.locator(".hint-bubble")).toContainText("Approve whatever the agent asks permission for", { timeout: 2_000 });
+    }).toPass({ timeout: 60_000 });
   });
 
   await test.step("a new profile picks its agent on Launch, and the tab stays the one last opened", async () => {
