@@ -25,7 +25,7 @@ export const reminders: Messages["reminders"] = {
   undo: "Visszavonás",
   putAwayUntil: (when) => `Félretéve eddig: ${when}`,
   remindAt: (when) => `Emlékeztető beállítva: ${when}`,
-  later: (count) => `Később (${count})`,
+  later: (count) => `Később · ${count}`,
   remindMe: "Emlékeztess…",
   changeReminder: "Emlékeztető módosítása…",
   pending: (when) => `Emlékeztető: ${when}`,

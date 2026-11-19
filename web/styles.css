@@ -9232,24 +9232,76 @@ span.voice-engine-problem {
 }
 
 .later-group {
-  margin: 2px 0 0;
+  margin: 6px 0 0;
 }
 
-.later-group > button,
-.older-heading > .older-toggle {
+/* The chevron sits in the status dots' column and the label starts where the titles do */
+.section-toggle {
   display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
   width: 100%;
-  gap: 6px;
+  padding: 4px 4px 4px 10px;
   background: none;
   border: none;
   color: var(--muted);
-  font-size: calc(12px * var(--font-scale));
-  padding: 3px 8px;
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-align: left;
 }
 
-.later-group > button .later-next {
-  margin-left: auto;
+.section-toggle:hover {
+  background: none;
+  color: var(--text);
+}
+
+.section-toggle::before {
+  content: "";
+  flex: none;
+  width: 8px;
+  height: 8px;
+  -webkit-mask: var(--select-chevron) no-repeat center / contain;
+  mask: var(--select-chevron) no-repeat center / contain;
+  background-color: currentColor;
+  transform: rotate(-90deg);
+  transition: transform 0.12s;
+}
+
+.section-toggle[aria-expanded="true"]::before {
+  transform: none;
+}
+
+/* High-contrast mode strips masks: there the chevron is a text arrow, turned the same way */
+@media (forced-colors: active) {
+  .section-toggle::before {
+    content: "▾";
+    width: auto;
+    height: auto;
+    -webkit-mask: none;
+    mask: none;
+    background-color: transparent;
+  }
+}
+
+.section-label {
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.section-rule {
+  flex: 1;
+  min-width: 12px;
+  height: 1px;
+  background: color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.later-group .later-next {
+  flex: none;
+  font-weight: 400;
+  letter-spacing: normal;
 }
 
 .later-group li {
@@ -9269,14 +9321,15 @@ span.voice-engine-problem {
   font-size: calc(11px * var(--font-scale));
 }
 
+/* Out of the layout until wanted, so the rule runs to the card's edge */
 .older-heading .older-delete:not(.armed) {
-  visibility: hidden;
+  display: none;
   background: none;
   color: var(--muted);
 }
 
 .older-heading:is(:hover, :focus-within) .older-delete {
-  visibility: visible;
+  display: block;
 }
 
 .older-heading .older-delete:not(.armed):hover {

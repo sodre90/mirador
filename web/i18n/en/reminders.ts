@@ -25,7 +25,7 @@ export const reminders = {
   undo: "Undo",
   putAwayUntil: (when: string) => `Put away until ${when}`,
   remindAt: (when: string) => `Reminder set for ${when}`,
-  later: (count: number) => `Later (${count})`,
+  later: (count: number) => `Later · ${count}`,
   remindMe: "Remind me…",
   changeReminder: "Change reminder…",
   pending: (when: string) => `Reminder for ${when}`,

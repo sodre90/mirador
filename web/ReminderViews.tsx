@@ -49,10 +49,9 @@ export function LaterGroup({
   }, [holdsSelected]);
   return (
     <div className="later-group" aria-label={`${workspace.name} · ${t.reminders.later(putAway.length)}`}>
-      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>
-        <span>
-          {open ? "▾" : "▸"} {t.reminders.later(putAway.length)}
-        </span>
+      <button type="button" className="section-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className="section-label">{t.reminders.later(putAway.length)}</span>
+        <span className="section-rule" />
         <span className="later-next">{reminderChipText(putAway[0]!.reminder!.at)}</span>
       </button>
       {open && (

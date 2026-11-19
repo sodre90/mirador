@@ -23,7 +23,7 @@ test("a workspace folds the conversations nobody touched for a week under Older,
   const starred = await startConversation(page);
   const list = page.locator(".workspace > ul");
   const older = page.locator(".workspace .older-group");
-  const olderToggle = older.getByRole("button", { name: /^. Older/ });
+  const olderToggle = older.getByRole("button", { name: /^Older/ });
   const row = (conversationId: string) => page.locator(`.workspace li[data-reorder-id="${conversationId}"]`);
 
   await test.step("conversations of this week are all in the list", async () => {
@@ -34,7 +34,8 @@ test("a workspace folds the conversations nobody touched for a week under Older,
   await test.step("eight days on, they are under Older, which is open as it holds the open conversation", async () => {
     await page.clock.setFixedTime(Date.now() + 8 * DAY_MS);
     await row(resting).click();
-    await expect(olderToggle).toHaveText("▾ Older (2)");
+    await expect(olderToggle).toHaveText("Older · 2");
+    await expect(olderToggle).toHaveAttribute("aria-expanded", "true");
     await expect(olderToggle).toHaveAttribute("data-hint", /nobody wrote in for 1 week/);
     await expect(older.locator("li")).toHaveCount(2);
     await expect(list).toHaveCount(0);
@@ -45,13 +46,13 @@ test("a workspace folds the conversations nobody touched for a week under Older,
     await row(starred).getByRole("button", { name: "Add to favourites" }).click();
     await expect(list.locator("li")).toHaveCount(1);
     await expect(list.locator(`li[data-reorder-id="${starred}"]`)).toBeVisible();
-    await expect(olderToggle).toHaveText("▾ Older (1)");
+    await expect(olderToggle).toHaveText("Older · 1");
   });
 
   await test.step("Older folds to its line and opens again, and the keys step past what it holds", async () => {
     await row(starred).click();
     await olderToggle.click();
-    await expect(olderToggle).toHaveText("▸ Older (1)");
+    await expect(olderToggle).toHaveAttribute("aria-expanded", "false");
     await expect(row(resting)).toHaveCount(0);
     await page.keyboard.press("Alt+ArrowDown");
     await expectOpen(page, starred);
@@ -79,7 +80,7 @@ test("a workspace folds the conversations nobody touched for a week under Older,
     await row(starred).click();
     await expect(older).toHaveCount(0);
     await foldAfter("1 day");
-    await expect(olderToggle).toHaveText(/Older \(1\)$/);
+    await expect(olderToggle).toHaveText("Older · 1");
     await expect(olderToggle).toHaveAttribute("data-hint", /nobody wrote in for 1 day/);
   });
 
