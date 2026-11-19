@@ -82,15 +82,18 @@ export const programName = (program: string) => win32.basename(program).replace(
 
 const withoutElevatedPrefix = (title: string) => title.replace(/^[^\\:]+: /, "");
 
+const WINDOWS_POWERSHELL_TITLE = /^windows powershell(?: [\d.]+)?$/;
+
 /**
- * Windows titles a new console with its program's path, and Windows PowerShell titles its own "Windows PowerShell", both
- * after "Administrator: " in the system's language when elevated: a terminal named so says no more than its tab's name.
+ * Windows titles a new console with its program's path, and Windows PowerShell titles its own "Windows PowerShell", with
+ * its version on newer Windows, both after "Administrator: " in the system's language when elevated: a terminal named so
+ * says no more than its tab's name.
  */
 export function isConsoleTitleOf(program: string, title: string, platform: NodeJS.Platform = process.platform): boolean {
   if (platform !== "win32") return false;
   const name = programName(program).toLowerCase();
   const shown = withoutElevatedPrefix(title).toLowerCase();
-  return programName(shown) === name || (name === "powershell" && shown === "windows powershell");
+  return programName(shown) === name || (name === "powershell" && WINDOWS_POWERSHELL_TITLE.test(shown));
 }
 
 /**

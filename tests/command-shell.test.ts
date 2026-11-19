@@ -100,6 +100,8 @@ describe("a terminal tab", () => {
     expect(isConsoleTitleOf(pwsh, "Rendszergazda: C:\\PROGRAM FILES\\POWERSHELL\\7\\PWSH.EXE", "win32")).toBe(true);
     expect(isConsoleTitleOf("powershell.exe", "Windows PowerShell", "win32")).toBe(true);
     expect(isConsoleTitleOf("powershell.exe", "Administrator: Windows PowerShell", "win32")).toBe(true);
+    expect(isConsoleTitleOf("powershell.exe", "Administrator: Windows PowerShell 5.1", "win32")).toBe(true);
+    expect(isConsoleTitleOf("powershell.exe", "Windows PowerShell ISE", "win32")).toBe(false);
     expect(isConsoleTitleOf(pwsh, "Windows PowerShell", "win32")).toBe(false);
     expect(isConsoleTitleOf(pwsh, "my-title", "win32")).toBe(false);
     expect(isConsoleTitleOf(pwsh, "build: C:\\project", "win32")).toBe(false);
