@@ -9,9 +9,10 @@
  *                                  release's worktree
  * The release is made in a worktree of its own, so nothing uncommitted in this checkout reaches it, and into
  * dist/<version>/. An x.y.0 release is made from main and starts the branch release/x.y.x at its commit; a patch x.y.z
- * is made from that branch, so a fix ships without what main gained since. After the gate the Linux, Windows and macOS
- * builds run at once, each making its patches once it is in, and the draft waits for all three. A step that fails names
- * the steps to go on from once it is fixed.
+ * is made from that branch, so a fix ships without what main gained since. The gate starts the Windows build on GitHub,
+ * whose run outlasts the gate. After the gate the Linux, Windows and macOS builds run at once, the windows step waiting
+ * for that run, each making its patches once it is in, and the draft waits for all three. A step that fails names the
+ * steps to go on from once it is fixed.
  */
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -23,7 +24,7 @@ import { buildMachineBun, definedBunVersion, requireDefinedBun } from "../deskto
 import type { Platform } from "../desktop/scripts/update-files.ts";
 import { isNewerVersion, RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { answersWithin, modelServerStatus } from "../e2e/model-server.ts";
-import { errorsOutsideTests, failedTests, keepBeadsFor, type Beads, type E2eReport } from "./e2e-failure-beads.ts";
+import { errorsOutsideTests, failedTests, keepBeadsFor, specFilesOf, stopsTheGate, withRunAlone, type Beads, type E2eReport, type FailedTest, type GateRun } from "./e2e-failure-beads.ts";
 
 const CHECKOUT = join(import.meta.dir, "..");
 const VERSION_FILE = join("shared", "version.ts");
@@ -108,17 +109,19 @@ export interface RunState {
   conclusion: string;
 }
 
-export type WindowsRunStep = "start a run" | "wait for it" | "take its files" | "run its failed jobs again";
+export type WindowsRunStep = "start a run" | "wait for it" | "take its files" | "run its failed jobs again" | "tell its failure";
 
 /**
  * What the windows step does with the run an earlier try of the release started: it starts a run when there is none of
  * this commit, waits for one still going, takes the files of one that passed, and runs only the failed jobs of one that
- * failed again, as the build and the shards that passed keep their artifacts.
+ * failed again, as the build and the shards that passed keep their artifacts. A run this try started itself, at the
+ * gate, is not run again by itself: its failure is told, and going on from the windows step runs it again.
  */
-export function windowsRunStep(earlier: WindowsRun | null, head: string, state: RunState | null): WindowsRunStep {
+export function windowsRunStep(earlier: WindowsRun | null, head: string, state: RunState | null, startedByThisTry = false): WindowsRunStep {
   if (!earlier || earlier.commit !== head || !state) return "start a run";
   if (state.status !== "completed") return "wait for it";
-  return state.conclusion === "success" ? "take its files" : "run its failed jobs again";
+  if (state.conclusion === "success") return "take its files";
+  return startedByThisTry ? "tell its failure" : "run its failed jobs again";
 }
 
 /** The run `gh workflow run` started, from the URL it prints. */
@@ -342,27 +345,66 @@ const modelServerAnswers = () => answersWithin(modelServerStatus, 3 * 60_000, 5_
  * Restart specs flake under load, so the gate waits for a mirador-mobile e2e run another session started. The specs
  * that wait for a real reply fail while the owner's model server doesn't answer, so the gate needs it to start, and
  * files no beads for a run it stopped answering in: they would be its outage, and the run again finds what isn't.
+ * A red run's failed files run again alone, at one worker: when they pass, the failures were the load's, so the gate
+ * goes on and their beads say so, rather than holding the release for a whole run again.
  */
 async function gate(release: Release) {
   if (Bun.spawnSync(["pgrep", "-f", "mirador-mobile/e2e/run.ts"]).exitCode === 0) throw new Error("A mirador-mobile e2e run is going on; wait for it to end");
   if (!(await modelServerAnswers())) throw new Error("The e2e model server doesn't answer, so the specs that wait for a real reply would fail; run the gate once it does");
   requireDefinedBun(buildMachineBun(), definedBunVersion(release.worktree));
+  if (release.windows) startWindowsRunAtTheGate(release);
   run(["bunx", "tsc", "--noEmit", "-p", "."], release.worktree);
   run(["bun", "run", "test"], release.worktree);
   // Not in release.dist, whose every file the draft takes for an asset.
-  const results = join(mkdtempSync(join(tmpdir(), "mirador-gate-")), "e2e-results.json");
+  const results = mkdtempSync(join(tmpdir(), "mirador-gate-"));
+  const wholeRun = join(results, "e2e-results.json");
   try {
-    run(["scripts/e2e.sh"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: results });
+    run(["scripts/e2e.sh"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: wholeRun });
+    return;
   } catch (failed) {
-    if (!(await modelServerAnswers())) throw new Error(`${messageOf(failed)}\nThe e2e model server doesn't answer now, so the failures may be its outage: no beads were filed. Run the gate again once it answers.`);
-    try {
-      keepBeadsForFailedTests(results, release);
-    } catch (error) {
-      console.error(`Keeping beads for the failed tests failed: ${error instanceof Error ? error.message : error}`);
+    const outage = () => new Error(`${messageOf(failed)}\nThe e2e model server doesn't answer now, so the failures may be its outage: no beads were filed. Run the gate again once it answers.`);
+    if (!(await modelServerAnswers())) throw outage();
+    const report = reportAt(wholeRun);
+    const failedInTheRun = report ? failedTests(report) : [];
+    if (!report || failedInTheRun.length === 0) {
+      console.error(report ? `No test failed on its own, so no bead was filed. The run's own errors:\n${errorsOutsideTests(report)}` : `No results at ${wholeRun}, so no beads for the failed tests`);
+      throw failed;
     }
-    throw failed;
+    const alone = runAlone(failedInTheRun, release, join(results, "e2e-alone-results.json"));
+    if ((!alone || alone.failed.length > 0) && !(await modelServerAnswers())) throw outage();
+    const tests = alone ? withRunAlone(failedInTheRun, alone.failed) : failedInTheRun;
+    try {
+      keepBeadsForFailedTests(tests, { ...gateRunOf(release, report), aloneCopy: alone?.keptCopy });
+    } catch (error) {
+      console.error(`Keeping beads for the failed tests failed: ${messageOf(error)}`);
+    }
+    if (!alone || stopsTheGate(tests)) throw failed;
+    console.log(`\n${tests.length === 1 ? "The test that failed passed" : `The ${tests.length} tests that failed passed`} when their files ran again alone, so the gate goes on.`);
   }
 }
+
+const reportAt = (path: string) => (existsSync(path) ? (JSON.parse(readFileSync(path, "utf8")) as E2eReport) : undefined);
+
+/** The tests that failed when the failed tests' files ran again, alone at one worker, or nothing when that run wrote no report. */
+function runAlone(failedInTheRun: FailedTest[], release: Release, results: string) {
+  console.log(`\nRunning the failed tests' files again, alone: ${specFilesOf(failedInTheRun).join(" ")}`);
+  try {
+    run(["scripts/e2e.sh", ...specFilesOf(failedInTheRun), "--workers=1"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: results });
+    return { failed: [] };
+  } catch {
+    const report = reportAt(results);
+    if (!report) return console.error(`No results at ${results} from the run alone`);
+    const failed = failedTests(report);
+    if (failed.length === 0) return console.error(`The run alone failed with no test failing. Its own errors:\n${errorsOutsideTests(report)}`);
+    return { failed, keptCopy: dirname(report.config.rootDir) };
+  }
+}
+
+const gateRunOf = (release: Release, report: E2eReport): GateRun => ({
+  commit: read(["git", "rev-parse", "--short", "HEAD"], release.worktree),
+  date: new Date().toISOString().slice(0, 10),
+  keptCopy: dirname(report.config.rootDir),
+});
 
 /** Beads through bd in the checkout, which holds the project's beads. */
 const beadsOfTheCheckout: Beads = {
@@ -373,17 +415,9 @@ const beadsOfTheCheckout: Beads = {
   reopen: (id, reason) => void read(["bd", "reopen", id, "--reason", reason]),
 };
 
-function keepBeadsForFailedTests(results: string, release: Release) {
-  if (!existsSync(results)) return console.error(`No results at ${results}, so no beads for the failed tests`);
-  const report = JSON.parse(readFileSync(results, "utf8")) as E2eReport;
-  const run = { commit: read(["git", "rev-parse", "--short", "HEAD"], release.worktree), date: new Date().toISOString().slice(0, 10), keptCopy: dirname(report.config.rootDir) };
-  const failed = failedTests(report);
-  if (failed.length === 0) {
-    console.error(`No test failed on its own, so no bead was filed. The run's own errors:\n${errorsOutsideTests(report)}`);
-    return;
-  }
-  keepBeadsFor(failed, beadsOfTheCheckout, run).forEach((outcome) =>
-    console.error(`${outcome.was} ${"id" in outcome ? outcome.id : outcome.problem}: ${outcome.test.file}:${outcome.test.line} ${outcome.test.title}`),
+function keepBeadsForFailedTests(tests: FailedTest[], run: GateRun) {
+  keepBeadsFor(tests, beadsOfTheCheckout, run).forEach((outcome) =>
+    console.error(`${outcome.was} ${"id" in outcome ? outcome.id : outcome.problem}: ${outcome.test.file}:${outcome.test.line} ${outcome.test.title}${outcome.test.alone ? ` (${outcome.test.alone})` : ""}`),
   );
 }
 
@@ -417,13 +451,24 @@ function windowsRunState(runId: string) {
   }
 }
 
+const windowsRunsStartedByThisTry = new Set<string>();
+
 function startWindowsRun(release: Release, head: string) {
   const started = readBoth(["gh", "workflow", "run", WINDOWS_WORKFLOW, "--repo", RELEASES_REPOSITORY, "--ref", release.branch, "-f", `commit=${head}`]);
   const runId = runIdIn(started);
   if (!runId) throw new Error(`gh started the Windows build without naming its run; find "Windows release of ${head}" with gh run list --workflow ${WINDOWS_WORKFLOW}`);
   mkdirSync(release.dist, { recursive: true });
   writeFileSync(join(release.dist, WINDOWS_RUN_FILE), JSON.stringify({ id: runId, commit: head } satisfies WindowsRun));
+  windowsRunsStartedByThisTry.add(runId);
   return runId;
+}
+
+/** A run of this commit that is already there, going, passed or failed, is the windows step's to take up. */
+function startWindowsRunAtTheGate(release: Release) {
+  const head = headOf(release);
+  const earlierRun = earlierWindowsRun(release);
+  if (windowsRunStep(earlierRun, head, earlierRun && windowsRunState(earlierRun.id)) !== "start a run") return;
+  console.log(`Started the Windows build, which goes on beside the gate: ${runUrl(startWindowsRun(release, head))}`);
 }
 
 /** gh run rerun can return before GitHub has the run going again, and a watch then would end at once on the failed try. */
@@ -446,20 +491,25 @@ async function waitForWindowsRun(runId: string, release: Release, shell: Shell) 
   try {
     await shell.run(["gh", "run", "watch", runId, "--repo", RELEASES_REPOSITORY, "--exit-status", "--compact", "--interval", "30"], release.worktree, true);
   } catch (error) {
-    const failed = unfinishedJobsOf(runId);
-    if (failed.length === 0) throw error;
-    throw new Error(
-      `The Windows run failed in ${failed.join(", ")}: ${runUrl(runId)}. Going on from the windows step runs only those jobs again; once the shards' artifacts are over 7 days old, delete ${join(release.dist, WINDOWS_RUN_FILE)} for a new run.`,
-    );
+    throw windowsRunFailure(runId, release) ?? error;
   }
+}
+
+function windowsRunFailure(runId: string, release: Release) {
+  const failed = unfinishedJobsOf(runId);
+  if (failed.length === 0) return undefined;
+  return new Error(
+    `The Windows run failed in ${failed.join(", ")}: ${runUrl(runId)}. Going on from the windows step runs only those jobs again; once the shards' artifacts are over 7 days old, delete ${join(release.dist, WINDOWS_RUN_FILE)} for a new run.`,
+  );
 }
 
 /** Built on GitHub's Windows runner from the release's commit, as Electrobun does not cross-compile. */
 export async function windows(release: Release, shell: Shell) {
   const head = headOf(release);
   const earlierRun = earlierWindowsRun(release);
-  const step = windowsRunStep(earlierRun, head, earlierRun && windowsRunState(earlierRun.id));
+  const step = windowsRunStep(earlierRun, head, earlierRun && windowsRunState(earlierRun.id), windowsRunsStartedByThisTry.has(earlierRun?.id ?? ""));
   const runId = step === "start a run" ? startWindowsRun(release, head) : earlierRun!.id;
+  if (step === "tell its failure") throw windowsRunFailure(runId, release) ?? new Error(`The Windows run did not pass: ${runUrl(runId)}`);
   if (step === "run its failed jobs again") await runFailedJobsAgain(runId, release, shell);
   if (step !== "take its files") await waitForWindowsRun(runId, release, shell);
   for (const earlier of readdirSync(release.dist).filter((file) => WINDOWS_FILE.test(file))) rmSync(join(release.dist, earlier));

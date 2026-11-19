@@ -4,12 +4,23 @@
  */
 
 export interface FailedTest {
+  /** Where the test is written, which may be a file of tests several spec files share. */
   file: string;
+  /** The spec file that ran it, the one to run again. */
+  specFile: string;
   line: number;
   /** The test's title under its describe blocks, joined as Playwright's list shows it. */
   title: string;
   error: string;
+  /** What happened when the gate ran its file again alone, once the whole run had failed. */
+  alone?: Alone;
 }
+
+/**
+ * A test that fails in the gate's run but passes when its file runs again alone, with the machine otherwise quiet, is a
+ * flake: the gate goes on and its bead says so. One that fails alone too stops the gate.
+ */
+export type Alone = "passed alone" | "failed alone too" | "failed only alone";
 
 interface ReportSpec {
   file: string;
@@ -46,27 +57,43 @@ export const withoutSecrets = (text: string) =>
 
 const firstLinesOf = (message: string) => withoutTerminalColours(message).split("\n").slice(0, ERROR_LINES).join("\n").trim().slice(0, ERROR_LENGTH);
 
-function failedIn(suite: ReportSuite, describedAs: string[]): FailedTest[] {
+function failedIn(suite: ReportSuite, specFile: string, describedAs: string[]): FailedTest[] {
   const failedSpecs = (suite.specs ?? []).flatMap((spec) =>
     spec.tests
       .filter(({ status }) => status === "unexpected")
       .map(({ results }) => ({
         file: spec.file,
+        specFile,
         line: spec.line,
         title: [...describedAs, spec.title].join(" › "),
         error: firstLinesOf(results.find(({ error }) => error?.message)?.error?.message ?? "no error message"),
       })),
   );
-  return [...failedSpecs, ...(suite.suites ?? []).flatMap((inner) => failedIn(inner, [...describedAs, inner.title]))];
+  return [...failedSpecs, ...(suite.suites ?? []).flatMap((inner) => failedIn(inner, specFile, [...describedAs, inner.title]))];
 }
 
-/** The file's own suite is named after the file, which each test names already. */
-export const failedTests = (report: E2eReport): FailedTest[] => report.suites.flatMap((fileSuite) => failedIn(fileSuite, []));
+/** The file's own suite is named after the spec file, which each test names already unless it is written in a shared file. */
+export const failedTests = (report: E2eReport): FailedTest[] => report.suites.flatMap((fileSuite) => failedIn(fileSuite, fileSuite.title, []));
 
 export const errorsOutsideTests = (report: E2eReport) =>
   withoutSecrets((report.errors ?? []).map(({ message }) => firstLinesOf(message ?? "")).join("\n\n") || "none");
 
 export const externalRefOf = ({ file, title }: Pick<FailedTest, "file" | "title">) => `e2e:${file} › ${title}`;
+
+/** The spec file that ran each failed test, once: serial specs only run whole. */
+export const specFilesOf = (tests: FailedTest[]) => [...new Set(tests.map(({ specFile }) => `e2e/${specFile}`))];
+
+/** The run's failed tests with what their files' run alone made of them, then the tests that failed only alone. */
+export function withRunAlone(failedInTheRun: FailedTest[], failedAlone: FailedTest[]): FailedTest[] {
+  const failedAloneRefs = new Set(failedAlone.map(externalRefOf));
+  const failedInTheRunRefs = new Set(failedInTheRun.map(externalRefOf));
+  return [
+    ...failedInTheRun.map((test): FailedTest => ({ ...test, alone: failedAloneRefs.has(externalRefOf(test)) ? "failed alone too" : "passed alone" })),
+    ...failedAlone.filter((test) => !failedInTheRunRefs.has(externalRefOf(test))).map((test): FailedTest => ({ ...test, alone: "failed only alone" })),
+  ];
+}
+
+export const stopsTheGate = (tests: FailedTest[]) => tests.some(({ alone }) => alone !== "passed alone");
 
 const cut = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);
 
@@ -89,16 +116,27 @@ export interface GateRun {
   date: string;
   /** The folder of the run's kept copy, whose test-results and host-logs hold what the failures left. */
   keptCopy: string;
+  /** The kept copy of the run of the failed tests' files alone, when that failed too. */
+  aloneCopy?: string;
 }
 
-const failureNote = (test: FailedTest, { commit, date, keptCopy }: GateRun) =>
-  withoutSecrets(
-    [
-      `Failed in the release gate on ${date}, at ${commit}:`,
-      test.error,
-      `Traces and screenshots: ${keptCopy}/test-results. The test hosts' logs: ${keptCopy}/host-logs.`,
-    ].join("\n\n"),
-  );
+function whatHappened({ alone }: FailedTest, { commit, date }: GateRun) {
+  const inTheGate = `in the release gate on ${date}, at ${commit}`;
+  if (alone === "passed alone") return `Failed ${inTheGate}, then passed when its file ran again alone, so the gate went on. A flake:`;
+  if (alone === "failed alone too") return `Failed ${inTheGate}, and again when its file ran alone:`;
+  if (alone === "failed only alone") return `Passed ${inTheGate}, then failed when its file ran again alone:`;
+  return `Failed ${inTheGate}:`;
+}
+
+const keptFilesIn = (copy: string) => `Traces and screenshots: ${copy}/test-results. The test hosts' logs: ${copy}/host-logs.`;
+
+function keptFilesOf(test: FailedTest, { keptCopy, aloneCopy }: GateRun) {
+  if (test.alone === "failed only alone") return keptFilesIn(aloneCopy ?? keptCopy);
+  const ofTheRunAlone = test.alone === "failed alone too" && aloneCopy ? ` Its run alone: ${aloneCopy}.` : "";
+  return `${keptFilesIn(keptCopy)}${ofTheRunAlone}`;
+}
+
+const failureNote = (test: FailedTest, run: GateRun) => withoutSecrets([whatHappened(test, run), test.error, keptFilesOf(test, run)].join("\n\n"));
 
 export type BeadOutcome = { id: string; test: FailedTest; was: "filed" | "added to" | "reopened" } | { test: FailedTest; was: "not kept"; problem: string };
 
