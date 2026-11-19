@@ -237,7 +237,8 @@ export async function startConversation(page: Page, { withModels = true } = {}) 
   await page.getByRole("button", { name: "+ New conversation" }).click();
   await expect(page).not.toHaveURL(previousUrl);
   await expect(page.locator(".chat-header:visible h2")).toHaveText("New conversation");
-  if (withModels) await expect(page.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: 60_000 });
+  // An agent's very first start on a loaded Windows runner was seen to take over a minute before it listed its models.
+  if (withModels) await expect(page.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: process.platform === "win32" ? 120_000 : 60_000 });
   return page.url().match(/#\/c\/(.+)$/)![1]!;
 }
 
