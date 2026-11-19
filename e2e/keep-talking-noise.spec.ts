@@ -74,7 +74,9 @@ test("with Keep talking, rounds that hear only noise don't start its two minutes
   const dictate = composer.getByRole("button", { name: "Dictate" });
 
   await test.step("after the reply has been read, a round that hears only noise listens on", async () => {
-    await dictateInto(composer, DICTATED, () => heard);
+    // Playwright's clock times an event when a handler first reads its timeStamp, not when the input came, so a click's
+    // release is timed after its press started listening, slow on a busy machine, and looks held. A key taps at one moment.
+    await dictateInto(composer, DICTATED, () => heard, (button) => button.press("Enter"));
     await composer.locator("textarea").press("Enter");
     await expect.poll(() => heard, { timeout: 30_000 }).toBe(3);
   });

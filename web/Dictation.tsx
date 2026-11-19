@@ -174,7 +174,10 @@ export function useDictation({
     setPhase("idle");
   };
 
-  /** Timed at when the input happened, not when its handler ran: a busy page would make a tap look held. */
+  /**
+   * Timed at when the input happened, not when its handler ran: a busy page would make a tap look held. A tap from a key
+   * presses and releases at one moment, as starting to listen, which the press does, takes long on a busy machine.
+   */
   const onPress = (at = performance.now()) => {
     if (!available) return setProblem(RECOGNITION_OFF);
     if (phase === "transcribing") return;
@@ -239,8 +242,9 @@ export function useDictation({
       textarea.current?.focus();
     };
     const tapFromKeys = () => {
-      pressFromKeys();
-      latest.current.onRelease();
+      const at = performance.now();
+      pressFromKeys(at);
+      latest.current.onRelease(at);
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && listening.current) {
@@ -336,8 +340,9 @@ export function DictateButton({ dictation }: { dictation: DictationControls }) {
       onPointerCancel={(event) => onRelease(event.timeStamp)}
       onClick={(event) => {
         if (event.detail !== 0) return;
-        onPress();
-        onRelease();
+        const at = performance.now();
+        onPress(at);
+        onRelease(at);
       }}
     >
       <MicIcon />
