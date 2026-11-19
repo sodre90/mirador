@@ -24,7 +24,23 @@ import { buildMachineBun, definedBunVersion, requireDefinedBun } from "../deskto
 import type { Platform } from "../desktop/scripts/update-files.ts";
 import { isNewerVersion, RELEASES_REPOSITORY } from "../shared/newer-version.ts";
 import { answersWithin, modelServerStatus } from "../e2e/model-server.ts";
-import { errorsOutsideTests, failedTests, keepBeadsFor, specFilesOf, stopsTheGate, withRunAlone, type Beads, type E2eReport, type FailedTest, type GateRun } from "./e2e-failure-beads.ts";
+import {
+  errorCountIn,
+  errorsBetweenTestsIn,
+  errorsOutsideTests,
+  failedTests,
+  failedUnitTests,
+  keepBeadsFor,
+  placeOf,
+  stopsTheGate,
+  testFilesOf,
+  unitFilesIn,
+  withRunAlone,
+  type Beads,
+  type E2eReport,
+  type FailedTest,
+  type GateRun,
+} from "./gate-failure-beads.ts";
 
 const CHECKOUT = join(import.meta.dir, "..");
 const VERSION_FILE = join("shared", "version.ts");
@@ -346,7 +362,7 @@ const modelServerAnswers = () => answersWithin(modelServerStatus, 3 * 60_000, 5_
  * that wait for a real reply fail while the owner's model server doesn't answer, so the gate needs it to start, and
  * files no beads for a run it stopped answering in: they would be its outage, and the run again finds what isn't.
  * A red run's failed files run again alone, at one worker: when they pass, the failures were the load's, so the gate
- * goes on and their beads say so, rather than holding the release for a whole run again.
+ * goes on and their beads say so, rather than holding the release for a whole run again. Unit tests go the same way.
  */
 async function gate(release: Release) {
   if (Bun.spawnSync(["pgrep", "-f", "mirador-mobile/e2e/run.ts"]).exitCode === 0) throw new Error("A mirador-mobile e2e run is going on; wait for it to end");
@@ -354,9 +370,9 @@ async function gate(release: Release) {
   requireDefinedBun(buildMachineBun(), definedBunVersion(release.worktree));
   if (release.windows) startWindowsRunAtTheGate(release);
   run(["bunx", "tsc", "--noEmit", "-p", "."], release.worktree);
-  run(["bun", "run", "test"], release.worktree);
   // Not in release.dist, whose every file the draft takes for an asset.
   const results = mkdtempSync(join(tmpdir(), "mirador-gate-"));
+  unitTests(release, results);
   const wholeRun = join(results, "e2e-results.json");
   try {
     run(["scripts/e2e.sh"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: wholeRun });
@@ -374,7 +390,7 @@ async function gate(release: Release) {
     if ((!alone || alone.failed.length > 0) && !(await modelServerAnswers())) throw outage();
     const tests = alone ? withRunAlone(failedInTheRun, alone.failed) : failedInTheRun;
     try {
-      keepBeadsForFailedTests(tests, { ...gateRunOf(release, report), aloneCopy: alone?.keptCopy });
+      keepBeadsForFailedTests(tests, { ...gateRunOf(release, dirname(report.config.rootDir)), aloneCopy: alone?.keptCopy });
     } catch (error) {
       console.error(`Keeping beads for the failed tests failed: ${messageOf(error)}`);
     }
@@ -387,9 +403,9 @@ const reportAt = (path: string) => (existsSync(path) ? (JSON.parse(readFileSync(
 
 /** The tests that failed when the failed tests' files ran again, alone at one worker, or nothing when that run wrote no report. */
 function runAlone(failedInTheRun: FailedTest[], release: Release, results: string) {
-  console.log(`\nRunning the failed tests' files again, alone: ${specFilesOf(failedInTheRun).join(" ")}`);
+  console.log(`\nRunning the failed tests' files again, alone: ${testFilesOf(failedInTheRun).join(" ")}`);
   try {
-    run(["scripts/e2e.sh", ...specFilesOf(failedInTheRun), "--workers=1"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: results });
+    run(["scripts/e2e.sh", ...testFilesOf(failedInTheRun), "--workers=1"], release.worktree, { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: results });
     return { failed: [] };
   } catch {
     const report = reportAt(results);
@@ -400,11 +416,91 @@ function runAlone(failedInTheRun: FailedTest[], release: Release, results: strin
   }
 }
 
-const gateRunOf = (release: Release, report: E2eReport): GateRun => ({
+const gateRunOf = (release: Release, keptCopy: string): GateRun => ({
   commit: read(["git", "rev-parse", "--short", "HEAD"], release.worktree),
   date: new Date().toISOString().slice(0, 10),
-  keptCopy: dirname(report.config.rootDir),
+  keptCopy,
 });
+
+/** Where a unit run writes its JUnit report, and its output, which alone tells the errors between a file's tests. */
+interface UnitRun {
+  report: string;
+  output: string;
+}
+
+const unitRunIn = (results: string, name: string): UnitRun => ({ report: join(results, `${name}-results.xml`), output: join(results, `${name}-output.txt`) });
+
+function runBunTest({ report, output }: UnitRun, args: string[], cwd: string) {
+  const command = ["bun", "test", ...args, "--reporter=junit", `--reporter-outfile=${report}`];
+  console.log(`$ ${command.join(" ")}`);
+  const { exitCode } = Bun.spawnSync(["bash", "-c", 'set -o pipefail; "$@" 2>&1 | tee "$0"', output, ...command], { cwd, stdio: ["inherit", "inherit", "inherit"] });
+  if (exitCode !== 0) throw new Error(`${command.join(" ")} failed with exit code ${exitCode}; its output: ${output}`);
+}
+
+const textAt = (path: string) => (existsSync(path) ? readFileSync(path, "utf8") : "");
+
+/** bun tells each failure among the tests' own output, so the gate lists them together. */
+const tellFailures = (tests: FailedTest[]) => tests.forEach((test) => console.error(`✗ ${placeOf(test)} ${test.title}\n${test.error.replace(/^/gm, "    ")}`));
+
+/** The run's failed tests and errors between a file's tests, or nothing, told why, when bun counted errors the gate can't tie to a file. */
+function unitFailuresOf({ report, output }: UnitRun) {
+  const printed = textAt(output);
+  const errorsBetweenTests = errorsBetweenTestsIn(printed);
+  const errors = errorCountIn(printed);
+  if (errors > errorsBetweenTests.length) return console.error(`bun counted ${errors} errors outside the tests, ${errors - errorsBetweenTests.length} of them under no test file's name; see ${output}`);
+  const failed = [...failedUnitTests(textAt(report)), ...errorsBetweenTests];
+  tellFailures(failed);
+  return failed;
+}
+
+const unitTestFiles = (worktree: string) => [...new Bun.Glob("tests/**/*.test.{ts,tsx}").scanSync({ cwd: worktree })].map((file) => file.replaceAll("\\", "/"));
+
+/**
+ * The unit test files run in parallel, each in a fresh global. A red run's failed files run again, one after another,
+ * each still in a fresh global: when they pass, the gate goes on and their beads call them flakes. A file the run has no
+ * results for, as one that failed to load, stops the gate, as do a run that failed with no test failing and an error
+ * the gate can't tie to a file.
+ */
+function unitTests(release: Release, results: string) {
+  const wholeRun = unitRunIn(results, "unit");
+  try {
+    runBunTest(wholeRun, ["./tests", "--parallel"], release.worktree);
+    return;
+  } catch (failed) {
+    const reported = new Set(unitFilesIn(textAt(wholeRun.report)));
+    const unreported = unitTestFiles(release.worktree).filter((file) => !reported.has(file));
+    if (reported.size === 0) throw new Error(`${messageOf(failed)}\nbun wrote no report; see ${wholeRun.output}`);
+    if (unreported.length > 0) throw new Error(`${messageOf(failed)}\nThe run has no results for ${unreported.join(" ")}: run them with bun test to see why.`);
+    const failedInTheRun = unitFailuresOf(wholeRun);
+    if (!failedInTheRun) throw failed;
+    if (failedInTheRun.length === 0) throw new Error(`${messageOf(failed)}\nNo unit test failed on its own, so something outside the tests failed the run.`);
+    const aloneRun = unitRunIn(results, "unit-alone");
+    const failedAlone = unitFilesRunAlone(testFilesOf(failedInTheRun), release, aloneRun);
+    const tests = failedAlone ? withRunAlone(failedInTheRun, failedAlone) : failedInTheRun;
+    try {
+      keepBeadsForFailedTests(tests, { ...gateRunOf(release, wholeRun.output), aloneCopy: failedAlone?.length ? aloneRun.output : undefined });
+    } catch (error) {
+      console.error(`Keeping beads for the failed unit tests failed: ${messageOf(error)}`);
+    }
+    if (!failedAlone || stopsTheGate(tests)) throw failed;
+    console.log(`\n${tests.length === 1 ? "The unit test that failed passed when its file ran" : `The ${tests.length} unit tests that failed passed when their files ran`} again, so the gate goes on.`);
+  }
+}
+
+/** The tests that failed when the failed tests' files ran again, or nothing when that run failed in a way the gate can't tell. */
+function unitFilesRunAlone(files: string[], release: Release, aloneRun: UnitRun) {
+  console.log(`\nRunning the failed unit test files again, one after another: ${files.join(" ")}`);
+  try {
+    runBunTest(aloneRun, ["--isolate", ...files.map((file) => `./${file}`)], release.worktree);
+    return [];
+  } catch {
+    const reported = new Set(unitFilesIn(textAt(aloneRun.report)));
+    const failed = unitFailuresOf(aloneRun);
+    if (!failed) return;
+    if (failed.length > 0 && files.every((file) => reported.has(file))) return failed;
+    return console.error(`Running ${files.join(" ")} again failed with ${failed.length === 0 ? "no test failing" : "a file without results"}; see ${aloneRun.output}`);
+  }
+}
 
 /** Beads through bd in the checkout, which holds the project's beads. */
 const beadsOfTheCheckout: Beads = {
