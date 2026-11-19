@@ -138,6 +138,11 @@ export function canvasWaitingMarksMessage(marks: WaitingMark[]) {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "waiting-marks", marks };
 }
 
+/** The width of the column a page sized to its content shows in, which it takes as its window's width. */
+export function canvasRoomMessage(width: number) {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "room", width };
+}
+
 /** Tells a canvas page it went out of sight behind another conversation's canvas, where its videos and sounds must not play on. */
 export function canvasHiddenMessage() {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "hidden" };
@@ -1197,31 +1202,34 @@ const WINDOW_SIZED_CANVAS_MARKING = `
   addEventListener("resize", markWindowSizedCanvases);
 `;
 
-// A frame as tall as its page would grow with a page as tall as the window, and the window with it, without end: there
-// the window keeps the first height the frame had, for innerHeight and the page's vh alike. The first one not 0, as a
-// frame that loaded hidden has none; its resize handler comes before the page's, which then read the pinned height.
-const WINDOW_HEIGHT_PINNING = `
-  const pinWindowHeight = () => {
+// A frame sized to its page would grow with a page as large as the window, and the window with it, without end: there
+// the window keeps the first size the frame had, for innerWidth, innerHeight and the page's vw and vh alike, and later
+// the width of its column as the panel posts it. The first size not 0, as a frame that loaded hidden has none; its
+// resize handler comes before the page's, which then read the pinned size.
+const WINDOW_SIZE_PINNING = `
+  const pinWindowSize = () => {
     if (pinnedHeight) return;
     pinnedHeight = frameHeight();
+    pinnedWidth = frameWidth();
     showZoom();
     if (pinnedHeight) requestAnimationFrame(() => reportSize());
   };
-  pinWindowHeight();
-  addEventListener("resize", pinWindowHeight);
+  pinWindowSize();
+  addEventListener("resize", pinWindowSize);
   Object.defineProperty(window, "innerHeight", { get: () => pinnedHeight || frameHeight(), configurable: true });
+  Object.defineProperty(window, "innerWidth", { get: () => pinnedWidth || frameWidth(), configurable: true });
 `;
 
-function frameReporter(
-  itemId: string,
-  theme: CanvasTheme,
-  textScale: number,
-  assetsOrigin: string,
-  measuresNaturalWidth: boolean,
-  findsOnPage: boolean,
-  followsTextSize: boolean,
-  pinsWindowHeight: boolean,
-) {
+interface FrameReporting {
+  textScale: number;
+  measuresNaturalWidth: boolean;
+  findsOnPage: boolean;
+  followsTextSize: boolean;
+  fitsContent: boolean;
+}
+
+function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, { textScale, measuresNaturalWidth, findsOnPage, followsTextSize, fitsContent }: FrameReporting) {
+  const pinsWindowSize = followsTextSize && fitsContent;
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
@@ -1236,11 +1244,14 @@ function frameReporter(
   // and scrollX include the zoom, as do the root's scrollWidth and scrollHeight. vh and vw take the zoom too.
   const textZoom = document.createElement("style");
   let zoom = 1;
+  const frameWidth = Object.getOwnPropertyDescriptor(window, "innerWidth").get.bind(window);
   const frameHeight = Object.getOwnPropertyDescriptor(window, "innerHeight").get.bind(window);
+  let pinnedWidth = 0;
   let pinnedHeight = 0;
   const frameViewportUnits = () => {
+    const vw = pinnedWidth ? pinnedWidth / zoom / 100 + "px" : "calc(1vw / " + zoom + ")";
     const vh = pinnedHeight ? pinnedHeight / zoom / 100 + "px" : "calc(1vh / " + zoom + ")";
-    return ":root{--mirador-vw:calc(1vw / " + zoom + ");--mirador-vh:" + vh + "}";
+    return ":root{--mirador-vw:" + vw + ";--mirador-vh:" + vh + "}";
   };
   const showZoom = () => {
     textZoom.textContent = (zoom === 1 ? "" : ":root{zoom:" + zoom + "}" + ${JSON.stringify(WINDOW_SIZED_CANVAS_FIT)}) + frameViewportUnits();
@@ -1252,7 +1263,30 @@ function frameReporter(
   };
   zoomTo(${JSON.stringify(textScale)});
   document.head.append(textZoom);
-${pinsWindowHeight ? WINDOW_HEIGHT_PINNING : ""}${TEXT_CONTRAST_SCRIPT}
+${pinsWindowSize ? WINDOW_SIZE_PINNING : ""}
+  // Content grown wider at the same height leaves the root's box as it was, so the observer below misses it: what the
+  // page changes in its body has it measured again, and so do transitions and animations as they end. Not Mirador's
+  // own marks and colours on the page, or a check would measure the page, and the measuring set off the next check.
+  let reportScheduled = false;
+  const scheduleReport = () => {
+    if (reportScheduled) return;
+    reportScheduled = true;
+    requestAnimationFrame(() => {
+      reportScheduled = false;
+      reportSize();
+    });
+  };
+  const contentWatcher = ${fitsContent}
+    ? new MutationObserver((records) => {
+        if (records.some((record) => !record.attributeName?.startsWith("data-mirador"))) scheduleReport();
+      })
+    : null;
+  if (contentWatcher) {
+    addEventListener("DOMContentLoaded", () => contentWatcher.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true }));
+    addEventListener("transitionend", scheduleReport, true);
+    addEventListener("animationend", scheduleReport, true);
+  }
+${TEXT_CONTRAST_SCRIPT}
   // Pages often pick colours for one theme only. Text that all but vanishes on its own background takes the theme
   // text colour that reads there; each check gives the text its own colour back first, so a theme change starts afresh.
   const fixedText = new Map();
@@ -1308,6 +1342,7 @@ ${pinsWindowHeight ? WINDOW_HEIGHT_PINNING : ""}${TEXT_CONTRAST_SCRIPT}
     textWatcher.disconnect();
     restoreTextColours();
     keepTextReadable();
+    contentWatcher?.takeRecords();
     textWatcher.observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ["class", "style"] });
   };
   addEventListener("DOMContentLoaded", checkText);
@@ -1337,9 +1372,19 @@ ${PAGE_FIND_SCRIPT}
     if (data.kind === "text-scale") {
       const zoomBefore = zoom;
       zoomTo(data.scale);
+      lastSizePosted = "";
       reportSize();
       // A zoom change fires no resize of its own, and resize is when canvas code asks for the pixel ratio again.
       if (zoom !== zoomBefore) dispatchEvent(new Event("resize"));
+    }
+    if (data.kind === "room" && ${pinsWindowSize} && data.width > 0) {
+      if (data.width !== pinnedWidth) {
+        pinnedWidth = data.width;
+        showZoom();
+        dispatchEvent(new Event("resize"));
+      }
+      lastSizePosted = "";
+      scheduleReport();
     }
     if (data.kind === "capture") capture(data.requestId);
     if (data.kind === "hidden") document.querySelectorAll("video, audio").forEach((media) => media.pause());
@@ -1391,28 +1436,21 @@ ${HIDDEN_ERROR_SCRIPT}
     consoleError.apply(console, args);
   };
   addEventListener("load", () => setTimeout(() => post({ kind: "rendered", errors }), 1500));
-  // Content sized to the viewport, as 100vw is, overflows by as much however wide the frame grows. Once the frame grew for
-  // an overflow and the page still overflows as far, asking again would only widen it round after round.
-  let lastWidthAsked = null;
-  const widthToAskFor = (root, bodyLeft) => {
-    const overflow = root.scrollWidth - root.clientWidth;
-    if (overflow <= 0) {
-      lastWidthAsked = null;
-      return null;
-    }
-    const followsTheFrame = lastWidthAsked && root.clientWidth > lastWidthAsked.frameWidth && overflow >= lastWidthAsked.overflow - 1;
-    if (followsTheFrame) return null;
-    lastWidthAsked = { frameWidth: root.clientWidth, overflow };
-    return Math.ceil(root.scrollWidth + bodyLeft);
-  };
+  // Only a size that changed goes to the panel, so a page busy with changes that keep its size costs it nothing. The
+  // panel forgets the width a page asked for when the text size or the column changes, so those post again.
+  let lastSizePosted = "";
   const reportSize = () => {
-    // Hidden, the page is laid out in no room at all; the frame keeps its first height to pin when it shows.
-    if (${pinsWindowHeight} && !pinnedHeight) return;
+    // Hidden, the page is laid out in no room at all; the frame keeps its first size to pin when it shows.
+    if (${pinsWindowSize} && !pinnedHeight) return;
     const root = document.documentElement;
     const bodyLeft = document.body ? document.body.getBoundingClientRect().left + scrollX : 0;
-    const overflowWidth = widthToAskFor(root, bodyLeft);
+    const overflowWidth = root.scrollWidth > root.clientWidth ? Math.ceil(root.scrollWidth + bodyLeft) : null;
     const height = Math.ceil(root.getBoundingClientRect().height);
-    post({ kind: "size", height, overflowWidth, naturalWidth: ${measuresNaturalWidth} ? naturalWidthOf(root) : null });
+    const size = { kind: "size", height, overflowWidth, naturalWidth: ${measuresNaturalWidth} ? naturalWidthOf(root) : null };
+    const sizeKey = JSON.stringify(size);
+    if (sizeKey === lastSizePosted) return;
+    lastSizePosted = sizeKey;
+    post(size);
   };
   const naturalWidthOf = (root) => {
     const inlineWidth = root.style.width;
@@ -1567,7 +1605,7 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, textScale, assetsOrigin, measuresNaturalWidth, markable, followsTextSize, followsTextSize && fitsContent)}</script>`,
+    `<script>${frameReporter(itemId, theme, assetsOrigin, { textScale, measuresNaturalWidth, findsOnPage: markable, followsTextSize, fitsContent })}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),
