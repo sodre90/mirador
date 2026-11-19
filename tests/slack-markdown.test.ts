@@ -196,20 +196,26 @@ describe("what the box writes", () => {
   });
 });
 
-/** The fastest of a few reads, so a pause of the runner doesn't count. */
-function fastestRead(line: string) {
+/** The cheapest of a few reads in this process's own CPU time, so a pause of the machine doesn't count. */
+function cheapestRead(line: string) {
   const times = [1, 2, 3].map(() => {
-    const start = performance.now();
+    const before = process.cpuUsage();
     expect(markdownOf(parseMessage(line))).toBe(line);
-    return performance.now() - start;
+    const { user, system } = process.cpuUsage(before);
+    return (user + system) / 1000;
   });
   return Math.min(...times);
 }
 
+/** Eight times the text in under four times what eight times its time per character would be: quadratic reading would be 64. */
+const ONE_PASS_RATIO = 32;
+/** How many pairs to read while noise keeps them over the bound: a busy machine can slow one read and not the other, but a quadratic read is slow every time. */
+const PAIR_ATTEMPTS = 5;
+
 test("a long line of openers that never close, or of ordinary formatting, is read in one pass", () => {
-  for (const [piece, times] of [["x *a ", 2_500], [" **a", 2_500], ["some **bold** and *it* text ", 400]] as const) {
-    const short = fastestRead(piece.repeat(times));
-    const eightTimesLonger = fastestRead(piece.repeat(times * 8));
-    expect(eightTimesLonger / Math.max(short, 0.5)).toBeLessThan(24);
+  for (const [piece, times] of [["x *a ", 20_000], [" **a", 20_000], ["some **bold** and *it* text ", 3_200]] as const) {
+    let ratio = Infinity;
+    for (let attempt = 0; attempt < PAIR_ATTEMPTS && ratio >= ONE_PASS_RATIO; attempt++) ratio = cheapestRead(piece.repeat(times * 8)) / cheapestRead(piece.repeat(times));
+    expect(ratio).toBeLessThan(ONE_PASS_RATIO);
   }
 });
