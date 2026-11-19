@@ -9,7 +9,9 @@ import { TestHost, writeBunProgram } from "./test-host.ts";
  * used to carry that turn past a question the user had not answered yet, leaving the question open on a canvas whose
  * agent had moved on. The host now lets a turn whose session kept its request rest until the answer comes, which then
  * reaches the agent as the user's next message; a session that came back without its history gets the request again,
- * and the question its agent never asked is withdrawn.
+ * and the question its agent never asked is withdrawn. A turn can also end on its own while its `ask` call still waits,
+ * as Codex's code mode does when it hands the model back the script running the ask after 30 s: that call hears the
+ * answer comes as the user's next message, and so it does.
  *
  * `opencode` here is a `WRITE [{"waitFor": path}]` turn, which holds until the file shows up. The question comes from
  * the test's own canvas `ask` call, closed the moment the profile change takes the asking process down with it: what
@@ -17,6 +19,7 @@ import { TestHost, writeBunProgram } from "./test-host.ts";
  */
 const keeping = new TestHost({ fakePrograms: true });
 const freshening = new TestHost({ fakePrograms: true });
+const endingOnItsOwn = new TestHost({ fakePrograms: true });
 
 const holdFileOf = (host: TestHost) => join(host.root, "hold-the-turn");
 const promptsOf = (host: TestHost) => join(host.root, "prompts");
@@ -74,14 +77,18 @@ async function heldTurnOn(host: TestHost, page: Page, name: string) {
 test.beforeAll(async () => {
   writeBunProgram(keeping.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsOf(keeping), FAKE_ACP_RESUMES: "1" });
   writeBunProgram(freshening.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsOf(freshening), FAKE_ACP_RESUME_FAILS: "1" });
+  writeBunProgram(endingOnItsOwn.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsOf(endingOnItsOwn) });
   await keeping.start();
   await freshening.start();
+  await endingOnItsOwn.start();
 });
 test.afterAll(async () => {
   await keeping.stop();
   await keeping.cleanUp();
   await freshening.stop();
   await freshening.cleanUp();
+  await endingOnItsOwn.stop();
+  await endingOnItsOwn.cleanUp();
 });
 
 test("the question a stopped turn was waiting on stays open, and its answer takes the turn on", async ({ page }) => {
@@ -126,4 +133,26 @@ test("a session that comes back without its history gets the request again, and 
   await expect.poll(() => promptsSentTo(freshening).split(heldTurn(freshening)).length - 1, { timeout: 60_000 }).toBe(2);
   writeFileSync(holdFileOf(freshening), "");
   await waitForTurnToEnd(page);
+});
+
+test("a question whose turn ends while its tool call still waits gets its answer as the next message", async ({ page }) => {
+  const { conversationId } = await heldTurnOn(endingOnItsOwn, page, "ending");
+  const asked = askAndWait(endingOnItsOwn, conversationId, "Which colour?");
+  await expect(outcome(page)).toHaveText("needs your answer");
+
+  writeFileSync(holdFileOf(endingOnItsOwn), "");
+  await waitForTurnToEnd(page);
+
+  await test.step("the tool call hears the answer comes as the next message, and the question stays open", async () => {
+    const toolResult = await (await asked.answered)?.text();
+    expect(toolResult).toContain("The turn that asked this question ended before the user answered");
+    await expect(outcome(page)).toHaveText("needs your answer");
+  });
+
+  await test.step("answering it is the message the agent goes on with", async () => {
+    await answerCanvasQuestion(page, "Restart");
+    await expect(page.locator(".timeline:visible .message.user").last()).toHaveText('My answer to your question "Which colour?": Restart', { timeout: 60_000 });
+    await waitForTurnToEnd(page);
+    expect(promptsSentTo(endingOnItsOwn)).toContain('My answer to your question "Which colour?": Restart');
+  });
 });
