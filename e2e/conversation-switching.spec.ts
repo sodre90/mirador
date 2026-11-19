@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { expect, test, type Page, type WebSocket } from "@playwright/test";
-import { addWorkspace, reloadFromRestartedHost, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -39,11 +39,14 @@ test("a recently opened conversation shows again at once, where it was left, wit
   await addWorkspace(page, host.projectDir);
   const other = await startConversation(page);
   const long = await startConversation(page);
+  const conversationUrl = page.url();
+  // Left on the page, it would reach the restarted host by itself and fetch the history once more before it reloads.
+  await page.goto("about:blank");
   await host.stop();
   execFileSync("bun", [join(import.meta.dirname, "seed-long-conversation.ts"), join(host.dataDir, "state.sqlite"), long, "225"]);
   await host.start();
   const received = framesReceived(page);
-  await reloadFromRestartedHost(page);
+  await page.goto(conversationUrl);
   await expect(timeline(page).locator(".timeline-entry").last()).toContainText("answer 224");
 
   await test.step("output of a command that finishes while another conversation is shown is there on return, at the bottom where the reader was", async () => {
