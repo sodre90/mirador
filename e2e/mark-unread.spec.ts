@@ -44,6 +44,9 @@ test("Mark as unread keeps a conversation to come back to, until it is opened ag
 
   await test.step("right-clicking a conversation marks it unread without opening it, and the workspace and the tab title count it", async () => {
     await row(first).click({ button: "right" });
+    await expect(menuEntry("Mark as unread")).toBeVisible();
+    const entries = page.getByRole("menu").getByRole("menuitem");
+    await expect(entries.locator("svg")).toHaveCount(await entries.count());
     await menuEntry("Mark as unread").click();
     await expect(pill(first)).toHaveText("Unread");
     await expect(pill(first)).toHaveAttribute("data-hint", /you marked it/);

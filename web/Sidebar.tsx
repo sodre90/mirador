@@ -12,6 +12,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
+import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
@@ -36,7 +37,7 @@ import { shownTitle } from "./shown-title.ts";
 import { statusDetailOf } from "./status-detail.ts";
 import type { AppAction, AppState, DevicesListed, Overlay } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
-import { WorktreeMark } from "./Worktrees.tsx";
+import { WorktreeIcon, WorktreeMark } from "./Worktrees.tsx";
 import { canMarkUnread, markRead, markUnread } from "./unread.ts";
 import { lastsUntilOpened, waitingByUrgency, waitingLabels, waitingShowsOnDot, waitingTones } from "./waiting.ts";
 import { scrollToNearestWaiting, useWaitingOutOfView, waitingInFoldedGroup, type HiddenWaiting } from "./waiting-edges.ts";
@@ -312,16 +313,16 @@ function WaitingList({ state, dispatch }: { state: AppState; dispatch: Dispatch<
 /** Outside the row, so choosing an entry does not also click the row and open the conversation, which would clear its mark. */
 function ConversationMenu({ conversation, at, dispatch, onClose }: { conversation: Conversation; at: { x: number; y: number }; dispatch: Dispatch<AppAction>; onClose: () => void }) {
   const forkable = useHostSaysForkable(conversation.id);
-  const readEntry = lastsUntilOpened(conversation.waitingFor)
-    ? { label: words.markRead, onChoose: () => markRead(conversation.id) }
-    : { label: words.markUnread, onChoose: () => markUnread(conversation.id, dispatch), disabled: !canMarkUnread(conversation) };
-  const forkEntry = { label: t.shell.palette.forkConversation, onChoose: () => forkConversation(conversation, dispatch), disabled: !forkable };
+  const readEntry: ContextMenuEntry = lastsUntilOpened(conversation.waitingFor)
+    ? { label: words.markRead, icon: "mailOpen", onChoose: () => markRead(conversation.id) }
+    : { label: words.markUnread, icon: "mail", onChoose: () => markUnread(conversation.id, dispatch), disabled: !canMarkUnread(conversation) };
+  const forkEntry: ContextMenuEntry = { label: t.shell.palette.forkConversation, icon: "fork", onChoose: () => forkConversation(conversation, dispatch), disabled: !forkable };
   const pending = isPending(conversation.reminder);
-  const reminderEntries = [
-    { label: pending ? t.reminders.changeReminder : t.reminders.remindMe, onChoose: () => openReminderPicker(conversation.id, dispatch) },
-    ...(conversation.reminder ? [{ label: conversation.reminder.due ? t.reminders.dismiss : t.reminders.remove, onChoose: () => removeReminder(conversation.id) }] : []),
+  const reminderEntries: ContextMenuEntry[] = [
+    { label: pending ? t.reminders.changeReminder : t.reminders.remindMe, icon: "bell", onChoose: () => openReminderPicker(conversation.id, dispatch) },
+    ...(conversation.reminder ? [{ label: conversation.reminder.due ? t.reminders.dismiss : t.reminders.remove, icon: "bellOff" as const, onChoose: () => removeReminder(conversation.id) }] : []),
   ];
-  const favouriteEntry = { label: favouriteLabel(conversation), onChoose: () => setFavourite(conversation.id, !conversation.favourite) };
+  const favouriteEntry: ContextMenuEntry = { label: favouriteLabel(conversation), icon: "star", onChoose: () => setFavourite(conversation.id, !conversation.favourite) };
   return <ContextMenu name={shownTitle(conversation)} at={at} entries={[readEntry, favouriteEntry, ...reminderEntries, forkEntry]} onClose={onClose} />;
 }
 
@@ -497,11 +498,7 @@ function WorkspaceSection({
     setMenuAt({ x: left, y: bottom + 2 });
   };
   const [askingToRemove, setAskingToRemove] = useState(false);
-  const menuEntries: ContextMenuEntry[] = [
-    { label: words.continueSessionLabel, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } }) },
-    { label: `${t.shell.worktrees.open}…`, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } }) },
-    { label: `${words.removeWorkspace}…`, onChoose: () => setAskingToRemove(true) },
-  ];
+  const menuEntries: ContextMenuEntry[] = [{ label: `${words.removeWorkspace}…`, icon: "trash", destructive: true, onChoose: () => setAskingToRemove(true) }];
   const deleteWorkspace = () => connection.send({ type: "workspace.delete", workspaceId: workspace.id });
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
   const deleteOlder = (older: Conversation[]) => connection.send({ type: "conversations.delete", conversationIds: older.map(({ id }) => id) });
@@ -605,6 +602,24 @@ function WorkspaceSection({
           </ConfirmButton>
         ) : (
           <>
+            <button
+              type="button"
+              className="icon workspace-action"
+              aria-label={words.continueSessionLabel}
+              data-hint={hints.continueSession}
+              onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } })}
+            >
+              <LineIcon shape="history" />
+            </button>
+            <button
+              type="button"
+              className="icon workspace-action"
+              aria-label={`${t.shell.worktrees.open}…`}
+              data-hint={hints.whereConversationsWork}
+              onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } })}
+            >
+              <WorktreeIcon />
+            </button>
             <button
               type="button"
               className="icon workspace-new"

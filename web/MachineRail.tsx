@@ -125,7 +125,7 @@ function MachineToJoinButton({ machine, hint, onAdd }: { machine: MachineToJoin;
       <button type="button" className="rail-machine away" aria-label={machine.name} data-hint={hint} onClick={() => onAdd(machine)} onContextMenu={openMenu}>
         {markInitials(machine.name)}
       </button>
-      {menuAt && <ContextMenu name={machine.name} at={menuAt} entries={[{ label: words.hideFromRail, onChoose: hide }]} onClose={() => setMenuAt(null)} />}
+      {menuAt && <ContextMenu name={machine.name} at={menuAt} entries={[{ label: words.hideFromRail, icon: "eyeOff", onChoose: hide }]} onClose={() => setMenuAt(null)} />}
     </>
   );
 }

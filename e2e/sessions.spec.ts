@@ -7,7 +7,7 @@ import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { FakeGateway, gatewayEnvironment } from "./fake-gateway.ts";
-import { addWorkspace, chooseInWorkspaceMenu, conversationSettings, createProfile, pickProfileIfAsked, reloadFromRestartedHost, sendMessage, signIn, workspaceCard } from "./helpers.ts";
+import { addWorkspace, clickWorkspaceButton, conversationSettings, createProfile, pickProfileIfAsked, reloadFromRestartedHost, sendMessage, signIn, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -41,7 +41,7 @@ test.afterAll(async () => {
 });
 
 async function openSessionsDialog(page: Page, card?: Locator) {
-  await chooseInWorkspaceMenu(page, "Continue a session…", card);
+  await clickWorkspaceButton(card ?? page.locator(".workspace"), "Continue a session…");
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   await expect(dialog.locator(".session-list")).toBeVisible({ timeout: 30_000 });
   return dialog;

@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, callCanvasTool, chooseInWorkspaceMenu, createProfile, openSettings, signIn } from "./helpers.ts";
+import { addWorkspace, callCanvasTool, clickWorkspaceButton, createProfile, openSettings, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -42,7 +42,7 @@ test.afterAll(async () => {
 });
 
 async function continueTheRecordedSession(page: Page) {
-  await chooseInWorkspaceMenu(page, "Continue a session…");
+  await clickWorkspaceButton(page.locator(".workspace"), "Continue a session…");
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   await dialog.locator(".session-list li", { hasText: "Earlier canvas work" }).getByRole("button", { name: "Continue" }).click();
   await expect(page.locator(".timeline")).toContainText("Going right.", { timeout: 30_000 });
