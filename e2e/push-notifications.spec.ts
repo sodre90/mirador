@@ -1,8 +1,8 @@
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { openedPushBlob, type ClearMessage, type PushKey, type PushRequest } from "../shared/push.ts";
+import { traceEachTest, type DescribeMessage } from "./app-trace.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, answerCanvasQuestion, callCanvasTool, openSettings, sendMessage, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
@@ -31,7 +31,7 @@ test.beforeAll(async () => {
     request.on("data", (chunk) => (body += chunk));
     request.on("end", () => {
       relayed.push({ authorization: request.headers.authorization, push: JSON.parse(body) });
-      trace.add(`relay got push ${relayed.length}: ${relayed.at(-1)!.push.kind}`);
+      trace().add(`relay got push ${relayed.length}: ${relayed.at(-1)!.push.kind}`);
       response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ outcome: "sent" }));
     });
   });
@@ -45,63 +45,15 @@ test.afterAll(async () => {
   relay.close();
 });
 
-/**
- * What the Mac's page and the phone sent and heard, what reached the relay and where the spec was, written to
- * app-trace.txt in a failed test's results: for the push that on Windows sometimes never comes (vcs-0p0qr.3).
- */
-class PushTrace {
-  private readonly started = Date.now();
-  private readonly lines: string[] = [];
-  private readonly conversationStates = new Map<string, string>();
-
-  record(page: Page, who: string) {
-    page.on("websocket", (socket) => {
-      this.add(`${who} socket opening`);
-      socket.on("close", () => this.add(`${who} socket closed`));
-      socket.on("socketerror", (error) => this.add(`${who} socket error: ${error}`));
-      socket.on("framesent", ({ payload }) => this.message(who, "sent", String(payload)));
-      socket.on("framereceived", ({ payload }) => this.message(who, "got", String(payload)));
-    });
-    page.on("framenavigated", (frame) => {
-      if (frame === page.mainFrame()) this.add(`${who} shows ${new URL(frame.url()).hash || "/"}`);
-    });
-  }
-
-  add(line: string) {
-    this.lines.push(`${String(Date.now() - this.started).padStart(6)} ms  ${line}`);
-  }
-
-  text() {
-    return this.lines.join("\n");
-  }
-
-  private message(who: string, direction: string, payload: string) {
-    const message = JSON.parse(payload);
-    if (message.type === "presence") this.add(`${who} ${direction} presence: ${message.conversationId}, ${message.attentive ? "attentive" : "not attentive"}`);
-    if (message.type === "system-notification") this.add(`${who} ${direction} notification: ${message.notification.kind} of ${message.notification.conversationId}`);
-    if (message.type === "notification.shown" || message.type === "push.register") this.add(`${who} ${direction} ${message.type}`);
-    if (message.type === "conversation.upserted") this.conversationState(who, message.conversation);
-  }
-
-  private conversationState(who: string, { id, status, waitingFor }: { id: string; status: string; waitingFor: string | null }) {
-    const state = `${status}, waiting for ${waitingFor}`;
-    if (this.conversationStates.get(`${who} ${id}`) === state) return;
-    this.conversationStates.set(`${who} ${id}`, state);
-    this.add(`${who} got ${id}: ${state}`);
-  }
-}
-
-let trace = new PushTrace();
-test.beforeEach(async ({ page }) => {
-  trace = new PushTrace();
-  trace.record(page, "Mac page");
-});
-test.afterEach(async ({}, testInfo) => {
-  if (testInfo.status === testInfo.expectedStatus) return;
-  const tracePath = testInfo.outputPath("app-trace.txt");
-  writeFileSync(tracePath, trace.text());
-  await testInfo.attach("app-trace", { path: tracePath, contentType: "text/plain" });
-});
+/** What of the Mac page's and the phone's messages bears on the push that on Windows sometimes never comes (vcs-0p0qr.3). */
+const describePushMessage: DescribeMessage = (message) => {
+  const { kind, conversationId } = (message.notification ?? {}) as { kind?: string; conversationId?: string };
+  if (message.type === "presence") return `presence: ${message.conversationId}, ${message.attentive ? "attentive" : "not attentive"}`;
+  if (message.type === "system-notification") return `notification: ${kind} of ${conversationId}`;
+  if (message.type === "notification.shown" || message.type === "push.register") return message.type;
+  return null;
+};
+const trace = traceEachTest(describePushMessage);
 
 const pushKey: PushKey = { keyId: Buffer.alloc(16, 4).toString("base64url"), key: Buffer.alloc(32, 5).toString("base64url") };
 const grant = `1795000000.${"g".repeat(43)}`;
@@ -138,7 +90,7 @@ async function joinedPhone(page: Page, browser: Browser) {
   const link = (await settings.locator(".invite-link").textContent())!;
   await page.keyboard.press("Escape");
   const phone = await browser.newPage({ ignoreHTTPSErrors: true });
-  trace.record(phone, "phone");
+  trace().record(phone, "phone");
   await phone.goto(link);
   await expect(workspaceCard(phone, host.projectDir)).toBeVisible();
   return phone;
@@ -152,7 +104,7 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
   await addWorkspace(page, host.projectDir);
   const asking = await startConversation(page);
   const answerLater = await startConversation(page);
-  trace.add(`asking is ${asking}, answerLater is ${answerLater}`);
+  trace().add(`asking is ${asking}, answerLater is ${answerLater}`);
 
   await test.step("Settings take the relay's address and this Mac's token, and never show the token again", async () => {
     const settings = await openSettings(page, "Notifications");
@@ -193,7 +145,7 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
   await test.step("one that says nothing gets the push, which opens with its own key", async () => {
     await registerForPushes(phone, { answerShown: false });
     another = await startConversation(page);
-    trace.add(`another is ${another}`);
+    trace().add(`another is ${another}`);
     await page.goto(`${host.origin}/#/c/${answerLater}`);
     askInBackground(another, "Pushed to the phone?");
     await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(1);
@@ -215,11 +167,11 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 
   await test.step("a turn that ended while you looked elsewhere is cleared on the phone once you open its conversation", async () => {
     const tidying = await startConversation(page);
-    trace.add(`tidying is ${tidying}`);
+    trace().add(`tidying is ${tidying}`);
     api.hold();
     await sendMessage(page, "Tidy the config");
     await page.goto(`${host.origin}/#/c/${answerLater}`);
-    trace.add("the model answers the held request");
+    trace().add("the model answers the held request");
     api.answerHeld();
     await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(3);
     expect(relayed[2].push.kind).toBe("alert");
@@ -232,11 +184,11 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 
   await test.step("a notification pushed before a host restart is still cleared once its conversation is read", async () => {
     const acrossRestart = await startConversation(page);
-    trace.add(`acrossRestart is ${acrossRestart}`);
+    trace().add(`acrossRestart is ${acrossRestart}`);
     api.hold();
     await sendMessage(page, "Survive the restart");
     await page.goto(`${host.origin}/#/c/${answerLater}`);
-    trace.add("the model answers the held request");
+    trace().add("the model answers the held request");
     api.answerHeld();
     await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(5);
     expect(relayed[4].push.kind).toBe("alert");

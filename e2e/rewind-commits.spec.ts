@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { describeGoingBack, traceEachTest } from "./app-trace.ts";
 import { FakeClaudeApi, subscriptionEnvironment } from "./fake-claude-api.ts";
 import { addWorkspace, createProfile, lastAgentMessage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
@@ -30,6 +31,7 @@ test.afterAll(async () => {
   await host.cleanUp();
   api.stop();
 });
+traceEachTest(describeGoingBack);
 
 const turn = (page: Page, text: string) => page.locator(".timeline:visible .timeline-entry").filter({ has: page.locator(".message.user").getByText(text, { exact: true }) });
 
