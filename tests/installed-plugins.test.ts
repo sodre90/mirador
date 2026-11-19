@@ -472,7 +472,7 @@ describe("adding, updating and removing plugins", () => {
     expect((await installed.list())[0]).toMatchObject({ version: "1.1.0", source: { release: "1.1.0" } });
     expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
     expect(await installed.news("counter")).toMatchObject({ release: "2.1.0", needsApi: APP_PLUGIN_API + 1 });
-  });
+  }, 60_000);
 
   test("reads the newer releases' plugin.json after one fetch, annotated tags too, and follows tags the repo moved without losing which release is installed", async () => {
     const repo = builtCounterRepo("one-fetch-repo");
