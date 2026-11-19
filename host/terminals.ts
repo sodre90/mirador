@@ -277,6 +277,7 @@ export class TerminalService {
   private existingFolderOf(conversationId: string) {
     const folder = this.folderOf(conversationId);
     if (!folder) throw new HostProblemError({ code: "conversation-gone" });
+    if (!existsSync(folder)) throw new HostProblemError({ code: "folder-gone", path: folder });
     return folder;
   }
 
