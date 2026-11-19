@@ -128,8 +128,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.fileLeadsOutsideWorkspace(problem.path);
     case "agent-did-not-change-file":
       return words.agentDidNotChangeFile(problem.path);
-    case "folder-gone":
-      return words.folderGone(problem.path);
+    case "terminal-folder-gone":
+      return words.terminalFolderGone(problem.path);
     case "not-a-workspace-file":
       return words.notAWorkspaceFile(problem.path);
     case "not-a-line-number":
