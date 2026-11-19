@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, checkedOutText, clickWorkspaceButton, createProfile, lastAgentMessage, removeWorkspace as removeWorkspaceCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -60,6 +60,15 @@ async function expectNewConversationsIn(page: Page, directory: string, place: Re
 const selectedRow = (page: Page) => page.locator(".workspace li.selected");
 const deleteQuestion = (page: Page) => page.getByRole("alertdialog", { name: "Delete the conversation and its worktree?" });
 const commitDialog = (page: Page) => page.getByRole("dialog", { name: "Commit changes" });
+
+async function expectRightNextTo(prompt: Locator, sidebarEntry: Locator) {
+  const [promptBox, entryBox] = await Promise.all([prompt.boundingBox(), sidebarEntry.boundingBox()]);
+  const gapBelow = Math.abs(promptBox!.y - (entryBox!.y + entryBox!.height));
+  const gapAbove = Math.abs(entryBox!.y - (promptBox!.y + promptBox!.height));
+  expect(Math.min(gapBelow, gapAbove)).toBeLessThan(10);
+  expect(promptBox!.x).toBeLessThan(entryBox!.x + entryBox!.width);
+  expect(promptBox!.x + promptBox!.width).toBeGreaterThan(entryBox!.x);
+}
 
 async function startNewConversation(page: Page, directory: string) {
   const previousUrl = page.url();
@@ -144,6 +153,7 @@ test("a workspace set to start conversations in worktrees gives each its own, se
     await deleteSelectedConversation(page);
     await expect(deleteQuestion(page)).toContainText("Its worktree holds 1 uncommitted file, which is deleted with it.");
     await expect(deleteQuestion(page)).toContainText(`Commits made there stay, on the branch ${branch}.`);
+    await expectRightNextTo(deleteQuestion(page), selectedRow(page));
     await deleteQuestion(page).getByRole("button", { name: "Cancel" }).click();
     await expect(deleteQuestion(page)).toHaveCount(0);
     await expect(selectedRow(page)).toHaveCount(1);
@@ -303,6 +313,7 @@ test("deleting a workspace's older conversations together asks once before their
   await test.step("Cancel keeps them all, with the uncommitted file", async () => {
     await deleteOlder();
     await expect(question).toContainText(/Their worktrees hold \d+ uncommitted files?, which (?:is|are) deleted with them\./);
+    await expectRightNextTo(question, older.locator(".older-heading"));
     await expect(question.getByRole("button", { name: "Cancel" })).toBeFocused();
     await question.getByRole("button", { name: "Cancel" }).click();
     await expect(question).toHaveCount(0);
@@ -333,6 +344,7 @@ test("removing a workspace asks before its worktrees' uncommitted files go, and 
   await test.step("Cancel keeps the workspace, its worktree and the uncommitted file", async () => {
     await removeWorkspace(host.projectDir);
     await expect(question).toContainText(/Its worktrees hold at least \d+ uncommitted files?, which (?:is|are) deleted with them\./);
+    await expectRightNextTo(question, workspaceCard(page, host.projectDir).locator(":scope > header"));
     await expect(question.getByRole("button", { name: "Cancel" })).toBeFocused();
     await question.getByRole("button", { name: "Cancel" }).click();
     await expect(question).toHaveCount(0);

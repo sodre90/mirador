@@ -4,6 +4,7 @@ import { startConversationIn } from "./actions.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
+import { usePlacedBeside } from "./placed-beside.ts";
 import type { AppAction, AppState } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 
@@ -15,6 +16,10 @@ const placeWords: Record<ConversationPlace, { label: string; detail: string }> =
 };
 
 const otherPlace = (place: ConversationPlace): ConversationPlace => (place === "folder" ? "worktree" : "folder");
+
+const inSidebar = (selector: string) => document.querySelector(`.sidebar ${selector}`);
+const conversationRow = (conversationId: string) => `li[data-reorder-id="${CSS.escape(conversationId)}"]`;
+const workspaceCard = (workspaceId: string) => `section.workspace[data-reorder-id="${CSS.escape(workspaceId)}"]`;
 
 /** A branch leaving a trunk, drawn rather than typed: few fonts hold a glyph for it. */
 export function WorktreeIcon() {
@@ -109,6 +114,7 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
 export function WorktreeDeletePrompt({ worktreeToDelete, dispatch }: { worktreeToDelete: AppState["worktreeToDelete"]; dispatch: Dispatch<AppAction> }) {
   const cancelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => cancelButton.current?.focus(), [worktreeToDelete]);
+  const prompt = usePlacedBeside<HTMLElement>(worktreeToDelete, () => worktreeToDelete && inSidebar(conversationRow(worktreeToDelete.conversationId)));
   if (!worktreeToDelete) return null;
   const cancel = () => dispatch({ type: "dismiss-worktree-to-delete" });
   const deleteBoth = () => {
@@ -116,7 +122,7 @@ export function WorktreeDeletePrompt({ worktreeToDelete, dispatch }: { worktreeT
     cancel();
   };
   return (
-    <section className="file-to-open worktree-to-delete" role="alertdialog" aria-label={words.deleteTitle} onKeyDown={(event) => event.key === "Escape" && cancel()}>
+    <section ref={prompt} className="file-to-open worktree-to-delete" role="alertdialog" aria-label={words.deleteTitle} onKeyDown={(event) => event.key === "Escape" && cancel()}>
       <h2>{words.deleteTitle}</h2>
       <p>
         {words.deleteLoses(worktreeToDelete.uncommittedFiles, worktreeToDelete.branches.length)} {words.deleteKeeps(worktreeToDelete.branches)}
@@ -140,6 +146,7 @@ export function WorktreeDeletePrompt({ worktreeToDelete, dispatch }: { worktreeT
 export function WorkspaceDeletePrompt({ workspaceToDelete, dispatch }: { workspaceToDelete: AppState["workspaceToDelete"]; dispatch: Dispatch<AppAction> }) {
   const cancelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => cancelButton.current?.focus(), [workspaceToDelete]);
+  const prompt = usePlacedBeside<HTMLElement>(workspaceToDelete, () => workspaceToDelete && inSidebar(`${workspaceCard(workspaceToDelete.workspaceId)} > header`));
   if (!workspaceToDelete) return null;
   const promptWords = t.shell.workspaceDelete;
   const cancel = () => dispatch({ type: "dismiss-workspace-to-delete" });
@@ -148,7 +155,7 @@ export function WorkspaceDeletePrompt({ workspaceToDelete, dispatch }: { workspa
     cancel();
   };
   return (
-    <section className="file-to-open worktree-to-delete" role="alertdialog" aria-label={promptWords.title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
+    <section ref={prompt} className="file-to-open worktree-to-delete" role="alertdialog" aria-label={promptWords.title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
       <h2>{promptWords.title}</h2>
       <p>{promptWords.loses(workspaceToDelete.uncommittedFiles)}</p>
       <p>{promptWords.keeps}</p>
@@ -168,9 +175,18 @@ export function WorkspaceDeletePrompt({ workspaceToDelete, dispatch }: { workspa
  * Before a workspace's older conversations are deleted together whose worktrees hold uncommitted files, which go with
  * them. It takes the focus on Cancel, so a stray Enter deletes nothing.
  */
-export function OlderDeletePrompt({ conversationsToDelete, dispatch }: { conversationsToDelete: AppState["conversationsToDelete"]; dispatch: Dispatch<AppAction> }) {
+export function OlderDeletePrompt({
+  conversationsToDelete,
+  workspaceId,
+  dispatch,
+}: {
+  conversationsToDelete: AppState["conversationsToDelete"];
+  workspaceId: string | undefined;
+  dispatch: Dispatch<AppAction>;
+}) {
   const cancelButton = useRef<HTMLButtonElement>(null);
   useEffect(() => cancelButton.current?.focus(), [conversationsToDelete]);
+  const prompt = usePlacedBeside<HTMLElement>(conversationsToDelete, () => (workspaceId ? inSidebar(`${workspaceCard(workspaceId)} .older-heading`) : null));
   if (!conversationsToDelete) return null;
   const promptWords = t.shell.olderDelete;
   const cancel = () => dispatch({ type: "dismiss-conversations-to-delete" });
@@ -179,7 +195,7 @@ export function OlderDeletePrompt({ conversationsToDelete, dispatch }: { convers
     cancel();
   };
   return (
-    <section className="file-to-open worktree-to-delete" role="alertdialog" aria-label={promptWords.title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
+    <section ref={prompt} className="file-to-open worktree-to-delete" role="alertdialog" aria-label={promptWords.title} onKeyDown={(event) => event.key === "Escape" && cancel()}>
       <h2>{promptWords.title}</h2>
       <p>
         {promptWords.loses(conversationsToDelete.uncommittedFiles)} {words.deleteKeeps(conversationsToDelete.branches)}
