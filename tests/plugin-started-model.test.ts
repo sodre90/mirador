@@ -67,8 +67,12 @@ interface StubAgentOptions {
   harness?: HarnessId;
   /** The model a new session opens on. */
   onModel?: string;
-  /** How many of its first sessions fail to open, once the first message waits for them. */
-  failedOpens?: number;
+  /**
+   * Whether a session fails to open now. Opens fail by a flag rather than by count: the conversation opens one as it
+   * is made, and its first message, which first keeps the turn's files with git, joins that open or, when git took
+   * longer than the open, opens another.
+   */
+  opensFail?: () => boolean;
   /** How its turns end. */
   stopReason?: "end_turn" | "cancelled";
   /** Holds the agent's answer to a model change until it settles. */
@@ -83,7 +87,7 @@ interface StubAgentOptions {
 function stubAgent({
   harness = "opencode",
   onModel = "default",
-  failedOpens = 0,
+  opensFail = () => false,
   stopReason = "end_turn",
   modelChangeAnswered = Promise.resolve(),
   opened = () => {},
@@ -91,14 +95,13 @@ function stubAgent({
 }: StubAgentOptions = {}) {
   const heard: string[] = [];
   let sessions = 0;
-  let opens = 0;
   let model = onModel;
   let effort = "medium";
   const agent = {
     spec: { id: harness, label: harness },
     start: async () => ({}),
     newSession: async () => {
-      if (++opens <= failedOpens) {
+      if (opensFail()) {
         await Bun.sleep(50);
         throw new Error("The agent couldn't open a session.");
       }
@@ -255,13 +258,15 @@ test("on a test host's own Claude Code, a plugin's model and effort win over the
 
 test("a plugin's model and effort hold for the session that opens after a failed open", async () => {
   const prompted = Promise.withResolvers<void>();
-  const { agent, heard } = stubAgent({ failedOpens: 1, prompted: () => prompted.resolve() });
+  let opensFail = true;
+  const { agent, heard } = stubAgent({ opensFail: () => opensFail, prompted: () => prompted.resolve() });
   const { conversations, callerId, replies, replied } = callerBesideHelper({ helper: agent });
 
   const started = conversations.startBeside(callerId, "board", "Helper", "Review the change", undefined, { model: "opus", effort: "high" });
   await replied;
   expect(replies[0], "the open that failed ran on no model").toEqual({ text: null, ended: "failed" });
 
+  opensFail = false;
   await conversations.prompt(started.id, "Try again");
   await prompted.promise;
   expect(heard).toEqual(["set model to opus", "set effort to high", "prompt on opus at high"]);
