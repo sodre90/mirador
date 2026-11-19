@@ -86,7 +86,7 @@ import { miradorCommandEnvironment } from "./acp/environment.ts";
 import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
-import { withReportedToolCall } from "./acp/reported-tool-call.ts";
+import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
 import { agentLogsDirectory, type HostConfig } from "./config.ts";
 import type { Hub } from "./hub.ts";
@@ -131,6 +131,8 @@ const PROMPT_RECORD_WAIT_MS = 3_000;
 const SESSION_CLOSE_TIMEOUT_MS = 5_000;
 const REMINDER_CHECK_MS = 30_000;
 const OPTION_ANSWER_TIMEOUT_MS = 10_000;
+/** On a busy machine Claude Code asks about an edit before its input has reached Mirador; past this the request shows without it. */
+const EDIT_REPORT_WAIT_MS = 5_000;
 const UNUSED_PICTURES_KEPT_MS = 30 * 24 * 60 * 60 * 1000;
 /** A plugin's model and effort hold its conversation's first message back through a model server's load, but not for good. */
 const START_CHOICES_TIMEOUT_MS = 120_000;
@@ -316,6 +318,7 @@ interface Runtime {
   /** Messages taken out of the queue to join the turn, until the agent says whether it took them: a turn ending meanwhile must not send what was queued behind them. */
   steerInFlight?: boolean;
   openToolCalls: OpenToolCalls;
+  toolCallReportsHeard: ToolCallReportsHeard;
   usageLimit?: { wait: UsageLimitWait; timer?: ReturnType<typeof setTimeout> };
   /** How often in a row the agent continued by itself after a usage limit's reset, without a turn that succeeded. */
   automaticContinues: number;
@@ -2798,6 +2801,7 @@ export class ConversationService {
     if (isTurnsOwnToolCall(update)) this.showHeldBackReply(conversationId);
     this.trackReplyProgress(conversationId, update);
     this.append(conversationId, { type: "acp", update: this.withModeName(conversationId, update) });
+    if (update.sessionUpdate === "tool_call" || update.sessionUpdate === "tool_call_update") this.runtime(conversationId).toolCallReportsHeard.heard(update.toolCallId);
     this.followToolCalls(conversationId, update);
   }
 
@@ -3106,11 +3110,10 @@ export class ConversationService {
     }
     if (this.get(conversationId).sideChatOf) return turnedDown(request.options);
     const runtime = this.runtime(conversationId);
-    const toolCall = withReportedToolCall(request.toolCall, reports);
-    const editsRead = this.editsAskedFor(conversationId, toolCall);
-    const inArrivalOrder = (runtime.permissionArriving ?? Promise.resolve()).then(() => editsRead);
+    const askedAbout = this.toolCallAskedAbout(conversationId, request.toolCall, signal).then(async (toolCall) => ({ toolCall, edits: await this.editsAskedFor(conversationId, toolCall) }));
+    const inArrivalOrder = (runtime.permissionArriving ?? Promise.resolve()).then(() => askedAbout);
     runtime.permissionArriving = inArrivalOrder;
-    const edits = await inArrivalOrder;
+    const { toolCall, edits } = await inArrivalOrder;
     if (signal.aborted || !this.store.hasConversation(conversationId)) return { outcome: { outcome: "cancelled" } };
     // YOLO switched on while the files were read approves only the requests already waiting.
     if (allowOptionId && this.get(conversationId).bypassPermissions) return { outcome: { outcome: "selected", optionId: allowOptionId } };
@@ -3135,6 +3138,18 @@ export class ConversationService {
       this.publish(this.get(conversationId));
       signal.addEventListener("abort", () => settle(null), { once: true });
     });
+  }
+
+  /** The tool call a permission asks about, with what the agent reported of it, once the agent has reported an edit's input. */
+  private async toolCallAskedAbout(conversationId: string, requested: acp.ToolCallUpdate, signal: AbortSignal) {
+    const reported = () => withReportedToolCall(requested, this.store.toolCallReports(conversationId, requested.toolCallId));
+    const giveUpAt = Date.now() + EDIT_REPORT_WAIT_MS;
+    let toolCall = reported();
+    while (awaitsItsInput(toolCall) && Date.now() < giveUpAt && !signal.aborted) {
+      await this.runtime(conversationId).toolCallReportsHeard.next(requested.toolCallId, giveUpAt - Date.now(), signal);
+      toolCall = reported();
+    }
+    return toolCall;
   }
 
   /** Read before the user answers, since the file changes once they allow the edit. */
@@ -3316,7 +3331,7 @@ export class ConversationService {
     let runtime = this.runtimes.get(conversationId);
     if (!runtime) {
       const queuedMessages = this.store.findConversation(conversationId)?.queuedMessages ?? [];
-      runtime = { running: false, holdingQueue: false, pendingPermissions: new Map(), queuedMessages, openToolCalls: new OpenToolCalls(), automaticContinues: 0, stallNudges: 0 };
+      runtime = { running: false, holdingQueue: false, pendingPermissions: new Map(), queuedMessages, openToolCalls: new OpenToolCalls(), toolCallReportsHeard: new ToolCallReportsHeard(), automaticContinues: 0, stallNudges: 0 };
       this.runtimes.set(conversationId, runtime);
     }
     return runtime;
