@@ -5,7 +5,8 @@ export default defineConfig({
   timeout: 300_000,
   // A Windows runner under four workers needs more patience than a dev machine for the page to catch up.
   expect: { timeout: process.platform === "win32" ? 60_000 : 20_000 },
-  workers: 4,
+  // The 16-core Mac runs the suite in about 10 minutes with 6, while other work runs on it too. CI runners have 4 cores.
+  workers: process.platform === "darwin" ? 6 : 4,
   fullyParallel: false,
   // With no file named, Playwright's JSON report would go to stdout among the list's lines.
   reporter: process.env.PLAYWRIGHT_JSON_OUTPUT_FILE ? [["list"], ["json"]] : [["list"]],
