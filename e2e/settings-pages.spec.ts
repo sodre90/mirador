@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { openSettings, signIn } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
@@ -77,3 +77,28 @@ test("Settings is resized by dragging its corner, and opens at that size again",
   expect(Math.round(reopened.width)).toBe(Math.round(dragged.width));
   expect(Math.round(reopened.height)).toBe(Math.round(dragged.height));
 });
+
+test("Settings stays within a window too small for it, and its pages scroll", async ({ page }) => {
+  await signIn(page, host);
+  await page.setViewportSize({ width: 900, height: 420 });
+  const settings = await openSettings(page);
+  await expectWithinWindow(settings, page);
+
+  await page.evaluate(() => localStorage.setItem("mirador-settings-size", JSON.stringify({ width: 3000, height: 3000 })));
+  await page.reload();
+  await expectWithinWindow(await openSettings(page), page);
+});
+
+async function expectWithinWindow(settings: Locator, page: Page) {
+  const box = (await settings.boundingBox())!;
+  const window = page.viewportSize()!;
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.x).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(window.height);
+  expect(box.x + box.width).toBeLessThanOrEqual(window.width);
+
+  const pageArea = settings.locator(".settings-page");
+  await pageArea.hover();
+  await page.mouse.wheel(0, 600);
+  await expect.poll(() => pageArea.evaluate((area) => area.scrollTop)).toBeGreaterThan(0);
+}

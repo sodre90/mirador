@@ -1514,6 +1514,8 @@ button.icon.workspace-fold {
   inset: 0;
   z-index: 20;
   display: grid;
+  /* Definite tracks, so a dialog's 100% limits hold whether the window is short or it was dragged taller */
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr);
   place-items: center;
   padding: 24px;
   background: rgb(10 10 14 / 0.4);
