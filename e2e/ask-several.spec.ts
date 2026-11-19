@@ -253,10 +253,28 @@ test("the ask tool advertises one question or several, tells the agent to ask se
   expect(ask.description).toContain("never offer options such as \"Accept all\"");
 
   expect(await callCanvasTool(host, conversationId, "ask", { question: "Only a question" })).toContain("Give question and options, or questions");
-  const oneQuestion = { question: "Q", options: [{ label: "A" }, { label: "B" }] };
-  const both = { ...oneQuestion, questions: [oneQuestion, oneQuestion] };
-  expect(await callCanvasTool(host, conversationId, "ask", both)).toContain("not both");
-  expect(await callCanvasTool(host, conversationId, "ask", { html: "<p>context</p>", questions: [oneQuestion, oneQuestion] })).toContain("on each question");
+});
+
+test("a call that also fills in a single question's fields, as GPT does, asks the questions, with a page given beside them on the first", async ({ page }) => {
+  await signIn(page, host);
+  await page.goto(host.origin);
+  const conversationId = await startConversation(page);
+  const ask = page.locator(".ask");
+  const color = { question: "Which color?", html: "", allowOther: true, optionWidth: 300, options: [{ label: "Red", html: "", recommended: false }, { label: "Blue" }] };
+  const toolResult = callCanvasTool(host, conversationId, "ask", {
+    ...color,
+    html: "<p>The wall is white</p>",
+    questions: [color, { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] }],
+  });
+
+  await expect(ask).toContainText("Question 1 of 2");
+  await expect(page.locator(".ask-context iframe").contentFrame().getByText("The wall is white")).toBeVisible();
+  await ask.getByRole("radio", { name: "Red", exact: true }).check();
+  await ask.getByRole("button", { name: "Next" }).click();
+  await ask.getByRole("radio", { name: "Large" }).check();
+  await ask.getByRole("button", { name: "Next" }).click();
+  await ask.getByRole("button", { name: "Submit" }).click();
+  expect(await toolResult).toBe(["The user answered 2 questions:", "1. Which color?", "   The user chose: Red", "2. Which size?", "   The user chose: Large"].join("\n"));
 });
 
 /** Bun closes a request that goes quiet for longer than its 10 s default, unless the listener says otherwise. */

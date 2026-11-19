@@ -16,7 +16,7 @@ import {
 import { TITLE_CONVERSATION_TOOL } from "./tool-names.ts";
 import type { CanvasPlugins } from "./plugins.ts";
 import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
-import { answerAsToolResult, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
+import { answerAsToolResult, severalQuestionsRequest, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
 import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import type { CanvasUse, HarnessId } from "../../shared/model.ts";
@@ -202,14 +202,11 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
       ...reviewFree,
     },
     async ({ questions, question, options, ...rest }, ctx) => {
-      if (questions && (question || options)) return toolError("Give either question and options, or questions, not both.");
       if (!questions && (!question || !options)) return toolError("Give question and options, or questions.");
-      if (questions && Object.values(rest).some((value) => value !== undefined))
-        return toolError("With questions, give html, allowOther and optionWidth on each question, not next to questions.");
       if ((questions ?? [{ options: options! }]).some((asked) => asked.options.filter((option) => option.recommended).length > 1))
         return toolError("Recommend at most one option of each question.");
       const caller = await callingConversation(ctx);
-      const item = canvas.openAsk(caller, questions ? { questions } : { question: question!, options: options!, ...rest });
+      const item = canvas.openAsk(caller, questions ? severalQuestionsRequest(questions, rest.html) : { question: question!, options: options!, ...rest });
       if (conversations.get(caller).askMode === "next-message") {
         return {
           content: [

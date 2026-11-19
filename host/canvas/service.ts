@@ -30,6 +30,16 @@ export interface ShowRequest {
 /** One question, or several that the user answers page by page and the agent hears all at once. */
 export type AskRequest = AskQuestion | { questions: AskQuestion[] };
 
+/**
+ * GPT models fill in every field a tool takes, so a call with questions can also carry a single question's fields
+ * beside them; the questions win. A context page given only beside them goes to the first question, so it isn't lost.
+ */
+export function severalQuestionsRequest(questions: AskQuestion[], htmlBesideThem: string | undefined): AskRequest {
+  const [first, ...rest] = questions;
+  const firstTakesHtml = first !== undefined && !first.html && !!htmlBesideThem;
+  return { questions: firstTakesHtml ? [{ ...first, html: htmlBesideThem }, ...rest] : questions };
+}
+
 export interface RenderReport {
   errors: string[];
 }
