@@ -187,10 +187,12 @@ export function formattedBoxTests() {
     await expectSent("see @src/server/routes.ts now");
   });
 
-  test("/ suggests the agent's commands: Enter runs one, or writes out one that takes arguments", async () => {
+  test("/ suggests the agent's commands: Enter writes out the one picked, and runs one typed in full", async () => {
     const menu = page.getByRole("listbox", { name: "Slash commands" });
     await page.keyboard.type("/rev");
     await expect(menu.locator('[aria-selected="true"] .slash-command-name')).toHaveText("/review");
+    await page.keyboard.press("Enter");
+    await expect.poll(boxValue).toBe("/review ");
     await expectSent("/review");
     await page.keyboard.type("/comp");
     await expect(menu.locator('[aria-selected="true"] .slash-command-name')).toHaveText("/compact");

@@ -65,6 +65,8 @@ test("/plugin opens a terminal tab running Claude Code itself, with the conversa
   await composer.fill("/plug");
   await expect(page.getByRole("listbox", { name: "Slash commands" }).locator('[aria-selected="true"] .slash-command-name')).toHaveText("/plugin");
   await composer.press("Enter");
+  await expect(composer).toHaveValue("/plugin ");
+  await composer.press("Enter");
 
   await expect(page.locator(".terminal-tab", { hasText: "/plugin" })).toBeVisible();
   await expect(page.locator(".terminal-pane .terminal-splits.shown .xterm-rows")).toContainText("panel /plugin with from-profile");

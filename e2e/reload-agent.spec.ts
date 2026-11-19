@@ -113,6 +113,8 @@ test("/reload has Claude Code pick up an MCP server added with claude mcp add, i
     await composer.fill("/rel");
     await expect(page.getByRole("listbox", { name: "Slash commands" }).locator('[aria-selected="true"] .slash-command-name')).toHaveText("/reload");
     await composer.press("Enter");
+    await expect(composer).toHaveValue("/reload ");
+    await composer.press("Enter");
     await expect(reloadedNotices()).toHaveCount(1);
     await waitForTurnToEnd(page);
   });
