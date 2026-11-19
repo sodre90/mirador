@@ -77,7 +77,6 @@ export const shell = {
     deleteOlderArmed: (count: number) => `Delete ${count}?`,
     newConversationLabel: "+ New conversation",
     continueSessionLabel: "Continue a session…",
-    workspaceMenu: "Workspace menu",
     settings: "Settings…",
     profiles: "Profiles…",
     machines: "Machines…",

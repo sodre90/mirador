@@ -75,7 +75,6 @@ export const shell: Messages["shell"] = {
     deleteOlderArmed: (count) => `¿Eliminar ${count}?`,
     newConversationLabel: "+ Nueva conversación",
     continueSessionLabel: "Continuar una sesión…",
-    workspaceMenu: "Menú del espacio de trabajo",
     settings: "Configuración…",
     profiles: "Perfiles…",
     machines: "Máquinas…",

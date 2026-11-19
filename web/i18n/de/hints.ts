@@ -219,8 +219,8 @@ export const hints: Messages["hints"] = {
   newConversation: "Starte eine Unterhaltung in diesem Arbeitsbereich, mit dem Profil, das in dieser Karte gewählt ist.",
   continueSession: "Setze eine Sitzung, die in einem Terminal gestartet wurde, als Unterhaltung in diesem Arbeitsbereich fort.",
   whereConversationsWork: "Wähle, ob neue Unterhaltungen im Projektordner oder jede in einem eigenen git-Worktree arbeiten.",
-  workspaceMenu:
-    "Mehr für diesen Arbeitsbereich, etwa ihn entfernen. Beim Entfernen gehen seine Unterhaltungen und seine Worktrees im Datenordner von Mirador mit, das Projektverzeichnis bleibt.",
+  removeWorkspace:
+    "Entferne diesen Arbeitsbereich. Seine Unterhaltungen und seine Worktrees im Datenordner von Mirador gehen mit, das Projektverzeichnis bleibt. Ein zweiter Klick bestätigt.",
   addWorkspace: "Füge ein Projektverzeichnis hinzu. Seine Unterhaltungen laufen mit ihm als Arbeitsverzeichnis.",
   hideSidebar: "Blende die Seitenleiste aus, um Unterhaltung, Canvas und Terminal die ganze Breite zu geben. Wird in diesem Browser gespeichert.",
   showSidebar: "Zeige die Seitenleiste mit den Arbeitsbereichen und Unterhaltungen wieder.",

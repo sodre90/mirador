@@ -492,13 +492,6 @@ function WorkspaceSection({
   const toggleFolded = () => setWorkspaceFolded(workspace.id, !folded);
   const toggleFromHeading = (event: ReactMouseEvent<HTMLElement>) => !(event.target as Element).closest("button, input, .agent-chip") && toggleFolded();
   const waitingHere = folded ? waitingInFoldedGroup(conversations) : null;
-  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
-  const openMenuUnder = (button: HTMLElement) => {
-    const { left, bottom } = button.getBoundingClientRect();
-    setMenuAt({ x: left, y: bottom + 2 });
-  };
-  const [askingToRemove, setAskingToRemove] = useState(false);
-  const menuEntries: ContextMenuEntry[] = [{ label: `${words.removeWorkspace}…`, icon: "trash", destructive: true, onChoose: () => setAskingToRemove(true) }];
   const deleteWorkspace = () => connection.send({ type: "workspace.delete", workspaceId: workspace.id });
   const deleteConversation = (conversation: Conversation) => connection.send({ type: "conversation.delete", conversationId: conversation.id });
   const deleteOlder = (older: Conversation[]) => connection.send({ type: "conversations.delete", conversationIds: older.map(({ id }) => id) });
@@ -588,67 +581,49 @@ function WorkspaceSection({
           <div className="workspace-name">{workspace.name}</div>
         </div>
         <WaitingCount conversations={conversations} />
-        {askingToRemove ? (
-          <ConfirmButton
-            className="icon workspace-remove"
-            label={words.removeWorkspace}
-            armedText={words.removeArmed}
-            armedHint={hints.removeWorkspaceArmed}
-            armRequest={workspace}
-            onArmedChange={(armed) => !armed && setAskingToRemove(false)}
-            onConfirm={deleteWorkspace}
-          >
-            ×
-          </ConfirmButton>
-        ) : (
-          <>
-            <button
-              type="button"
-              className="icon workspace-action"
-              aria-label={words.continueSessionLabel}
-              data-hint={hints.continueSession}
-              onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } })}
-            >
-              <LineIcon shape="history" />
-            </button>
-            <button
-              type="button"
-              className="icon workspace-action"
-              aria-label={`${t.shell.worktrees.open}…`}
-              data-hint={hints.whereConversationsWork}
-              onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } })}
-            >
-              <WorktreeIcon />
-            </button>
-            <button
-              type="button"
-              className="icon workspace-new"
-              aria-label={words.newConversationLabel}
-              data-hint={hints.newConversation}
-              data-shortcut={shortcutKeys().newConversation}
-              onClick={() => startConversationIn(workspace, dispatch)}
-            >
-              +
-            </button>
-            <button
-              type="button"
-              className="icon workspace-more"
-              aria-label={words.workspaceMenu}
-              aria-haspopup="menu"
-              aria-expanded={menuAt !== null}
-              data-hint={hints.workspaceMenu}
-              onClick={(event) => openMenuUnder(event.currentTarget)}
-            >
-              ⋯
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          className="icon workspace-action"
+          aria-label={words.continueSessionLabel}
+          data-hint={hints.continueSession}
+          onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "sessions", workspaceId: workspace.id } })}
+        >
+          <LineIcon shape="history" />
+        </button>
+        <button
+          type="button"
+          className="icon workspace-action"
+          aria-label={`${t.shell.worktrees.open}…`}
+          data-hint={hints.whereConversationsWork}
+          onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } })}
+        >
+          <WorktreeIcon />
+        </button>
+        <ConfirmButton
+          className="icon workspace-action workspace-remove"
+          label={words.removeWorkspace}
+          hint={hints.removeWorkspace}
+          armedText={words.removeArmed}
+          armedHint={hints.removeWorkspaceArmed}
+          onConfirm={deleteWorkspace}
+        >
+          <LineIcon shape="trash" />
+        </ConfirmButton>
+        <button
+          type="button"
+          className="icon workspace-new"
+          aria-label={words.newConversationLabel}
+          data-hint={hints.newConversation}
+          data-shortcut={shortcutKeys().newConversation}
+          onClick={() => startConversationIn(workspace, dispatch)}
+        >
+          +
+        </button>
         <div className="workspace-subline">
           <span className="workspace-folder">{parentFolder(workspace.path, homeDir)}</span>
           <LaunchPicker workspace={workspace} profiles={profiles} dispatch={dispatch} />
         </div>
       </header>
-      {menuAt && <ContextMenu name={workspace.name} at={menuAt} entries={menuEntries} onClose={() => setMenuAt(null)} />}
       {pickingColor && <WorkspaceColorPicker workspace={workspace} mark={mark} onClose={closePicker} />}
       {!folded && shown.length > 0 && (
         <ul ref={conversationList}>

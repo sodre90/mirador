@@ -219,8 +219,8 @@ export const hints: Messages["hints"] = {
   newConversation: "Inicia una conversación en este espacio de trabajo, con el perfil elegido en esta tarjeta.",
   continueSession: "Continúa una sesión que se inició en una terminal, como una conversación en este espacio de trabajo.",
   whereConversationsWork: "Elige si las conversaciones nuevas trabajan en la carpeta del proyecto o cada una en su propio worktree de git.",
-  workspaceMenu:
-    "Más para este espacio de trabajo, como quitarlo. Al quitarlo se van sus conversaciones y sus worktrees en la carpeta de datos de Mirador, pero el directorio del proyecto se conserva.",
+  removeWorkspace:
+    "Quita este espacio de trabajo. Se van con él sus conversaciones y sus worktrees en la carpeta de datos de Mirador, pero el directorio del proyecto se conserva. Un segundo clic lo confirma.",
   addWorkspace: "Agrega un directorio de proyecto. Sus conversaciones se ejecutan con él como directorio de trabajo.",
   hideSidebar: "Oculta la barra lateral para dar todo el ancho a la conversación, el lienzo y la terminal. Este navegador lo recuerda.",
   showSidebar: "Vuelve a mostrar la barra lateral con los espacios de trabajo y las conversaciones.",

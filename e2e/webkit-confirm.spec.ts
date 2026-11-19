@@ -17,11 +17,11 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-test("in WebKit, a click on the confirm a menu entry raised removes the workspace", async ({ page }) => {
+test("in WebKit, a second click on the workspace's trash confirms and removes the workspace", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const card = workspaceCard(page, host.projectDir);
-  await removeWorkspace(page, card);
+  await removeWorkspace(card);
   await expect(card).toHaveCount(0);
 });
 
