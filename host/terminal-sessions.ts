@@ -60,10 +60,12 @@ export async function sessionsOpenInTerminals(configDir: string): Promise<Map<st
 export class TerminalSessionWatcher {
   private timer?: ReturnType<typeof setTimeout>;
   private stopped = false;
+  private lastFailure: string | null = null;
 
   constructor(
     private readonly configDirs: () => string[],
     private readonly onChange: (activityBySession: Map<string, TerminalActivity>) => void,
+    private readonly pollIntervalMs = POLL_INTERVAL_MS,
   ) {}
 
   start() {
@@ -78,9 +80,20 @@ export class TerminalSessionWatcher {
   private scheduleNextPoll() {
     if (this.stopped) return;
     this.timer = setTimeout(async () => {
-      await this.poll().catch(() => {});
+      await this.poll().then(
+        () => (this.lastFailure = null),
+        (error: unknown) => this.tellFailure(error),
+      );
       this.scheduleNextPoll();
-    }, POLL_INTERVAL_MS);
+    }, this.pollIntervalMs);
+  }
+
+  /** A failure that lasts comes back at every poll, so it is logged once, until a poll works again. */
+  private tellFailure(error: unknown) {
+    const failure = error instanceof Error ? error.message : String(error);
+    if (failure === this.lastFailure) return;
+    this.lastFailure = failure;
+    console.error("looking for Claude Code sessions open in terminals failed:", error);
   }
 
   private async poll() {

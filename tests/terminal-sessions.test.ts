@@ -1,8 +1,8 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { expect, test } from "bun:test";
-import { sessionsOpenInTerminals } from "../host/terminal-sessions.ts";
+import { expect, spyOn, test } from "bun:test";
+import { sessionsOpenInTerminals, TerminalSessionWatcher } from "../host/terminal-sessions.ts";
 
 async function exitedProcessId() {
   const finished = Bun.spawn([process.execPath, "-e", ""]);
@@ -25,4 +25,33 @@ test("finds sessions open in a running terminal Claude Code, busiest first, igno
 
   expect(Object.fromEntries(await sessionsOpenInTerminals(configDir))).toEqual({ "in-two-terminals": "working", waiting: "waiting" });
   expect(await sessionsOpenInTerminals(join(configDir, "missing"))).toEqual(new Map());
+});
+
+test("a poll that keeps failing is logged once, and again once it fails after a poll that worked", async () => {
+  const logged = spyOn(console, "error").mockImplementation(() => {});
+  const until = async (condition: () => boolean) => {
+    while (!condition()) await Bun.sleep(5);
+  };
+  let failing = true;
+  let polls = 0;
+  let pollsThatWorked = 0;
+  const configDirs = () => {
+    polls += 1;
+    if (failing) throw new Error("the store is closed");
+    return [];
+  };
+  const watcher = new TerminalSessionWatcher(configDirs, () => (pollsThatWorked += 1), 5);
+  try {
+    watcher.start();
+    await until(() => polls >= 4);
+    expect(logged).toHaveBeenCalledTimes(1);
+    failing = false;
+    await until(() => pollsThatWorked > 0);
+    failing = true;
+    await until(() => logged.mock.calls.length === 2);
+    expect(String(logged.mock.calls[1]![1])).toContain("the store is closed");
+  } finally {
+    watcher.stop();
+    logged.mockRestore();
+  }
 });
