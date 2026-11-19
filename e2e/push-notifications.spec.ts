@@ -4,7 +4,7 @@ import type { AddressInfo } from "node:net";
 import { openedPushBlob, type ClearMessage, type PushKey, type PushRequest } from "../shared/push.ts";
 import { traceEachTest, type DescribeMessage } from "./app-trace.ts";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, answerCanvasQuestion, callCanvasTool, openSettings, sendMessage, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { answerCanvasQuestion, callCanvasTool, openSettings, sendMessage, signInWithWorkspace, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const networkOriginAt = (port: number) => `https://127.0.0.1:${port + 2}`;
@@ -99,9 +99,24 @@ async function joinedPhone(page: Page, browser: Browser) {
 const askInBackground = (conversationId: string, question: string) =>
   void callCanvasTool(host, conversationId, "ask", { question, options: [{ label: "Yes" }, { label: "No" }] }).catch(() => {});
 
+/** A turn's end, then the 5 s the Mac gives the phone to say it showed the notification before it pushes. */
+const FINISHED_PUSH_TIMEOUT_MS = 30_000;
+/** A Windows runner was seen to take over a minute and a half to start a conversation's agent. */
+const AGENT_START_TIMEOUT_MS = 120_000;
+
+/** Sends the message and has its turn end while the page shows another conversation: the model keeps its reply until then. */
+async function endTurnWhileShowing(page: Page, elsewhere: string, text: string) {
+  api.hold();
+  await sendMessage(page, text);
+  await expect.poll(() => api.held, { timeout: AGENT_START_TIMEOUT_MS }).toContain(text);
+  trace().add(`the model holds the requests of ${JSON.stringify(api.held)}`);
+  await page.goto(`${host.origin}/#/c/${elsewhere}`);
+  trace().add("the model answers the held request");
+  api.answerHeld();
+}
+
 test("a phone that doesn't show a notification gets it pushed through the relay set in Settings, sealed so only it can read it", async ({ page, browser }) => {
-  await signIn(page, host);
-  await addWorkspace(page, host.projectDir);
+  await signInWithWorkspace(page, host);
   const asking = await startConversation(page);
   const answerLater = await startConversation(page);
   trace().add(`asking is ${asking}, answerLater is ${answerLater}`);
@@ -168,12 +183,8 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
   await test.step("a turn that ended while you looked elsewhere is cleared on the phone once you open its conversation", async () => {
     const tidying = await startConversation(page);
     trace().add(`tidying is ${tidying}`);
-    api.hold();
-    await sendMessage(page, "Tidy the config");
-    await page.goto(`${host.origin}/#/c/${answerLater}`);
-    trace().add("the model answers the held request");
-    api.answerHeld();
-    await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(3);
+    await endTurnWhileShowing(page, answerLater, "Tidy the config");
+    await expect.poll(() => relayed.length, { timeout: FINISHED_PUSH_TIMEOUT_MS }).toBe(3);
     expect(relayed[2].push.kind).toBe("alert");
     expect((await openedPushBlob(pushKey, relayed[2].push.blob!)).notification).toMatchObject({ kind: "finished", conversationId: tidying });
     await page.goto(`${host.origin}/#/c/${tidying}`);
@@ -185,12 +196,8 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
   await test.step("a notification pushed before a host restart is still cleared once its conversation is read", async () => {
     const acrossRestart = await startConversation(page);
     trace().add(`acrossRestart is ${acrossRestart}`);
-    api.hold();
-    await sendMessage(page, "Survive the restart");
-    await page.goto(`${host.origin}/#/c/${answerLater}`);
-    trace().add("the model answers the held request");
-    api.answerHeld();
-    await expect.poll(() => relayed.length, { timeout: 15_000 }).toBe(5);
+    await endTurnWhileShowing(page, answerLater, "Survive the restart");
+    await expect.poll(() => relayed.length, { timeout: FINISHED_PUSH_TIMEOUT_MS }).toBe(5);
     expect(relayed[4].push.kind).toBe("alert");
     expect((await openedPushBlob(pushKey, relayed[4].push.blob!)).notification).toMatchObject({ kind: "finished", conversationId: acrossRestart });
 
@@ -209,7 +216,7 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 });
 
 test("with no relay of its own set, the Mac pushes through Mirador's relay with the grant the phone holds, and no token", async ({ page, browser }) => {
-  await signIn(page, host);
+  await signInWithWorkspace(page, host);
   const settings = await openSettings(page, "Notifications");
   await settings.locator(".push-relay-address").fill("");
   await settings.getByRole("button", { name: "Save" }).click();

@@ -95,6 +95,17 @@ export async function addWorkspace(page: Page, directory: string, profile?: stri
   await enterWorkspaceDirectory(page, directory, profile);
 }
 
+/**
+ * Signs in and adds the host's project folder, unless a test before on the same host added it. A test that failed
+ * leaves the next on a fresh host, so a spec's tests can't count on the one that added it.
+ */
+export async function signInWithWorkspace(page: Page, host: TestHost) {
+  await signIn(page, host);
+  const [newConversation, addProject] = [page.getByRole("button", { name: "+ New conversation" }), page.getByRole("button", { name: "+ Add a project directory" })];
+  await expect(newConversation.or(addProject)).toBeVisible();
+  if (await addProject.isVisible()) await addWorkspace(page, host.projectDir);
+}
+
 async function enterWorkspaceDirectory(page: Page, directory: string, profile: string | undefined) {
   const input = page.getByLabel("Workspace directory");
   await input.fill(directory);
