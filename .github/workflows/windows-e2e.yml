@@ -114,6 +114,22 @@ jobs:
           $env:PLAYWRIGHT_JSON_OUTPUT_NAME = $env:SURVEY
           $env:MIRADOR_E2E_KEEP = "1"
           $env:MIRADOR_E2E_HOST_LOGS = Join-Path $PWD "host-logs"
+          # A runner was seen to stand still for two minutes at a time, every process at once (vcs-0p0qr.3): the machine's
+          # memory, paging, CPU and disk every 5 s, and its biggest processes every 30 s, go out with the host logs.
+          New-Item -ItemType Directory -Force host-logs | Out-Null
+          $runnerLoad = Start-Job -ArgumentList (Join-Path $env:MIRADOR_E2E_HOST_LOGS "runner-load-shard-${{ matrix.shard }}.log") -ScriptBlock {
+            param($log)
+            $counters = '\Memory\Available MBytes', '\Memory\% Committed Bytes In Use', '\Memory\Pages/sec', '\Processor(_Total)\% Processor Time', '\PhysicalDisk(_Total)\Current Disk Queue Length'
+            $samples = 0
+            Get-Counter -Counter $counters -SampleInterval 5 -Continuous | ForEach-Object {
+              $values = $_.CounterSamples | ForEach-Object { "$(($_.Path -split '\\')[-1]) $([math]::Round($_.CookedValue))" }
+              Add-Content $log "$($_.Timestamp.ToUniversalTime().ToString('o'))  $($values -join ', ')"
+              if ((($samples++) % 6) -eq 0) {
+                $biggest = Get-Process | Group-Object ProcessName | ForEach-Object { "$($_.Name) x$($_.Count) $([math]::Round(($_.Group | Measure-Object WorkingSet64 -Sum).Sum / 1MB)) MB" } | Sort-Object { [int](($_ -split ' ')[-2]) } -Descending | Select-Object -First 10
+                Add-Content $log "  biggest: $($biggest -join ', ')"
+              }
+            }
+          }
           $started = Get-Date
           # A loaded runner makes some specs fail once and pass when tried again. One try again tells those apart from a spec that
           # fails every time: the Verdict lists a spec that passed on its retry, but only a spec that fails twice holds the release.
@@ -124,6 +140,9 @@ jobs:
           # Only a release passes a commit. A called workflow's github.event_name is its caller's, never workflow_call.
           cmd /c "bunx playwright test $env:SPECS --repeat-each=$env:REPEAT --pass-with-no-tests --shard=${{ matrix.shard }}/${{ strategy.job-total }} --global-timeout=4500000 --retries=${{ inputs.commit && 2 || 1 }} --reporter=list,json > survey-output.txt 2>&1"
           "playwright exit: $LASTEXITCODE, minutes: $([math]::Round(((Get-Date) - $started).TotalMinutes, 1))"
+          Stop-Job $runnerLoad
+          Receive-Job $runnerLoad 2>&1 | Select-Object -First 5 | ForEach-Object { "runner load: $_" } | Where-Object { $_ -notmatch 'auth\?(token|code)' } | Hide-ModelServer
+          Remove-Job $runnerLoad
           Get-Content survey-output.txt | Where-Object { $_ -notmatch 'auth\?(token|code)' }
           if (Test-Path $env:SURVEY) { (Get-Content -Raw $env:SURVEY) -replace 'auth\?(token|code)=[^"\s\\&]*', 'auth?$1=REDACTED' | Hide-ModelServer | Set-Content $env:SURVEY }
           # GitHub's pwsh wrapper would end the step with Playwright's exit code, failing a release on a known issue; the Verdict gates.
