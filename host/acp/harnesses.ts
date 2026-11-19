@@ -131,7 +131,7 @@ export function harnessSpec(profile: Profile, claudeProgramSetting: string): Har
   return {
     id: harness,
     command: commandFor[harness](environment),
-    startsOneAtATime: harness === "opencode",
+    startsOneAtATime: harness === "opencode" || harness === "codex",
     label: `${harnessLabels[harness]} (${profile.name})`,
     logName: `${harness}-${slug(profile.name) || "profile"}-${profile.id.slice(0, 8)}`,
     environment,
