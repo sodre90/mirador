@@ -89,6 +89,6 @@ test("a terminal asked for in a conversation whose folder is gone says so, rathe
   await expect(page.locator(".chat-header:visible h2")).toHaveText("New conversation");
   rmSync(folder, { recursive: true, force: true });
   await page.getByRole("button", { name: "Show terminal" }).click();
-  await expect(page.getByText(`The folder ${folder} no longer exists, so a terminal can't open in it.`)).toBeVisible();
+  await expect(page.getByText(`The folder ${folder} does not exist, so a terminal can't open in it.`)).toBeVisible();
   await expect(page.getByText("posix_spawn")).toHaveCount(0);
 });
