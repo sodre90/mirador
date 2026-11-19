@@ -298,6 +298,42 @@ test("all option previews are shown whole when columns widen, without right-edge
   await answerCanvasQuestion(page, "Alpha");
 });
 
+test("a preview sized to the viewport keeps about its column's width rather than widening round after round, while one that grows after it loads still widens to show whole", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 1000 });
+  await signIn(page, host);
+  const conversationId = await startConversation(page);
+  const options = page.locator(".ask-option:visible");
+  const growing = `<div id="box" style="width:300px;display:flex;justify-content:space-between;background:#eef;padding:8px"><b>START</b><b>END</b></div>
+<script>
+  const box = document.getElementById("box");
+  setTimeout(() => Object.assign(box.style, { width: "700px", height: "60px" }), 500);
+  setTimeout(() => Object.assign(box.style, { width: "1300px", height: "90px" }), 1500);
+</script>`;
+
+  askInBackground(conversationId, {
+    question: "Which width?",
+    options: [
+      { label: "Viewport", html: `<div style="width:100vw;height:30px;background:#eef">VIEWPORT</div>` },
+      { label: "Growing", html: growing },
+    ],
+  });
+  await expect(options).toHaveCount(2);
+  const viewportSized = preview(options.nth(0));
+  await expect(viewportSized.contentFrame().getByText("VIEWPORT")).toBeAttached();
+  // Chasing its 100vw content, the frame grew a few dozen pixels a round up to 2400px, scaled down to a sliver: give it the time.
+  await page.waitForTimeout(2_000);
+  const scale = await viewportSized.evaluate((node) => {
+    const transform = getComputedStyle(node).transform;
+    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
+  });
+  expect(scale).toBeGreaterThan(0.9);
+
+  const grown = preview(options.nth(1));
+  await expect.poll(() => grown.contentFrame().locator("#box").evaluate((node: HTMLElement) => node.style.width)).toBe("1300px");
+  await expectWhollyShown(grown);
+  await answerCanvasQuestion(page, "Viewport");
+});
+
 test("a question that arrives together with the answer to the one before it takes the canvas", async ({ page }) => {
   let heldAnswer: string | null = null;
   await page.routeWebSocket(/\/ws\?/, (socket) => {

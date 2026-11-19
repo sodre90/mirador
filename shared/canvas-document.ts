@@ -1339,10 +1339,24 @@ ${HIDDEN_ERROR_SCRIPT}
     consoleError.apply(console, args);
   };
   addEventListener("load", () => setTimeout(() => post({ kind: "rendered", errors }), 1500));
+  // Content sized to the viewport, as 100vw is, overflows by as much however wide the frame grows. Once the frame grew for
+  // an overflow and the page still overflows as far, asking again would only widen it round after round.
+  let lastWidthAsked = null;
+  const widthToAskFor = (root, bodyLeft) => {
+    const overflow = root.scrollWidth - root.clientWidth;
+    if (overflow <= 0) {
+      lastWidthAsked = null;
+      return null;
+    }
+    const followsTheFrame = lastWidthAsked && root.clientWidth > lastWidthAsked.frameWidth && overflow >= lastWidthAsked.overflow - 1;
+    if (followsTheFrame) return null;
+    lastWidthAsked = { frameWidth: root.clientWidth, overflow };
+    return Math.ceil(root.scrollWidth + bodyLeft);
+  };
   const reportSize = () => {
     const root = document.documentElement;
     const bodyLeft = document.body ? document.body.getBoundingClientRect().left + scrollX : 0;
-    const overflowWidth = root.scrollWidth > root.clientWidth ? Math.ceil(root.scrollWidth + bodyLeft) : null;
+    const overflowWidth = widthToAskFor(root, bodyLeft);
     const height = Math.ceil(root.getBoundingClientRect().height);
     post({ kind: "size", height, overflowWidth, naturalWidth: ${measuresNaturalWidth} ? naturalWidthOf(root) : null });
   };
