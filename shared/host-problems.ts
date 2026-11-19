@@ -67,6 +67,7 @@ export type HostProblem =
   | { code: "file-leads-outside-workspace"; path: string }
   | { code: "agent-did-not-change-file"; path: string }
   | { code: "not-a-workspace-file"; path: string }
+  | { code: "folder-gone"; path: string }
   | { code: "not-a-line-number"; line: string }
   | { code: "file-does-not-exist"; path: string }
   | { code: "file-does-not-exist-in"; path: string; workspace: string }

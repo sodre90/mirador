@@ -1,6 +1,7 @@
-import { sep } from "node:path";
+import { mkdirSync, rmSync } from "node:fs";
+import { join, sep } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, signIn, startConversation } from "./helpers.ts";
 import { echo, setVariable, shellPid, sum, variableOr } from "./terminal-shell.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -77,4 +78,17 @@ test("each conversation of a workspace has terminals of its own, which keep runn
     await expect(screen(page)).toContainText("first-21");
     await expect(screen(page)).toContainText("mark-first-shell");
   });
+});
+
+test("a terminal asked for in a conversation whose folder is gone says so, rather than that the shell is missing", async ({ page }) => {
+  const folder = join(host.root, "removed-project");
+  mkdirSync(folder, { recursive: true });
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, folder);
+  await page.getByRole("region", { name: "removed-project" }).getByRole("button", { name: "+ New conversation" }).click();
+  await expect(page.locator(".chat-header:visible h2")).toHaveText("New conversation");
+  rmSync(folder, { recursive: true, force: true });
+  await page.getByRole("button", { name: "Show terminal" }).click();
+  await expect(page.getByText(`The folder ${folder} no longer exists, so a terminal can't open in it.`)).toBeVisible();
+  await expect(page.getByText("posix_spawn")).toHaveCount(0);
 });
