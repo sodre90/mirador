@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import type { PluginActivity } from "../shared/canvas-plugins.ts";
 import { activityOf, turnEndedAs } from "../shared/plugin-activity.ts";
+import { canvasToolName, toolNameOf } from "../shared/tool-title.ts";
 import { isDeepStrictEqual } from "node:util";
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import {
@@ -83,7 +84,7 @@ import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { miradorCommandEnvironment } from "./acp/environment.ts";
 import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
-import { canvasFollowUp, canvasUseOf, isCanvasFollowUp } from "./canvas/reply-check.ts";
+import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
@@ -244,8 +245,8 @@ interface TurnInProgress {
   reply: string;
   /** The text of the turn's last message on its own, which is Claude Code's words when a usage limit ended the turn as if it ended by itself. */
   lastMessage: string;
-  /** When each of the turn's own tool calls started, to tell whether a page it showed was its last step. */
-  toolCallsAt: number[];
+  /** The turn's own tool calls, to tell whether a page it showed was its last step. */
+  toolCalls: TurnToolCall[];
   /** What kept queued messages out of the turn when the host last tried to steer them in, as the host log says it. */
   queuedMessagesKeptOutBy?: string | null;
   /**
@@ -288,7 +289,8 @@ export function cancelledReplyChunks(
 }
 
 /** A tool call the running turn makes, not one of its subagents': the reply streaming before it is the turn's own. */
-const isTurnsOwnToolCall = (update: acp.SessionUpdate) => update.sessionUpdate === "tool_call" && !isSubagentReport(update);
+const isTurnsOwnToolCall = (update: acp.SessionUpdate): update is Extract<acp.SessionUpdate, { sessionUpdate: "tool_call" }> =>
+  update.sessionUpdate === "tool_call" && !isSubagentReport(update);
 
 interface Runtime {
   sessionId?: Promise<string>;
@@ -1456,7 +1458,7 @@ export class ConversationService {
     this.endUsageLimitWait(runtime);
     let endTurn = () => {};
     runtime.turnEnded = new Promise((resolve) => (endTurn = resolve));
-    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", toolCallsAt: [] };
+    const turn: TurnInProgress = { steered: [], ended: false, lastReplyMessageId: null, awaitedUser: false, fromScript, reply: "", lastMessage: "", toolCalls: [] };
     runtime.turn = turn;
     runtime.openToolCalls.clear();
     this.forgetUnseenTurnEnd(conversationId);
@@ -1578,7 +1580,7 @@ export class ConversationService {
       reply: turn.reply,
       ...canvasUseOf({
         startedAt: promptSent.sentAt,
-        toolCallsAt: turn.toolCallsAt,
+        toolCalls: turn.toolCalls,
         items: this.store.listCanvasItems(conversationId),
         jobWaitsSince: this.jobWaits.in(conversationId).map(({ since }) => since),
       }),
@@ -2804,7 +2806,7 @@ export class ConversationService {
     const reported = this.contextUsage.get(conversationId);
     return {
       ...(turn.promptSent && { startedAt: turn.promptSent.sentAt }),
-      toolCalls: turn.toolCallsAt.length,
+      toolCalls: turn.toolCalls.length,
       ...(reported && reported.size > 0 && { context: { used: reported.used, size: reported.size } }),
       ...(reported?.cost && { costSoFar: reported.cost }),
     };
@@ -2915,7 +2917,7 @@ export class ConversationService {
     if (isTurnsOwnToolCall(update)) {
       turn.reply = "";
       turn.lastMessage = "";
-      turn.toolCallsAt.push(Date.now());
+      turn.toolCalls.push({ at: Date.now(), canvasTool: canvasToolName(toolNameOf(update)) });
     }
     if (!isAgentReplyChunk(update) || isSubagentReport(update)) return;
     turn.awaitedUser = false;

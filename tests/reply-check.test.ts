@@ -64,22 +64,31 @@ describe("repeatsPageInChat", () => {
 
 describe("canvasUseOf", () => {
   const startedAt = 100;
+  const calls = (...times: number[]) => times.map((at) => ({ at, canvasTool: null }));
   test("a page the turn ended on, with only canvas steps after it, is what the reply sums up", () => {
     const items = [show(110), ask(120), pluginItem("tab", 50, 130)];
-    expect(canvasUseOf({ startedAt, toolCallsAt: [105, 115, 125], items, jobWaitsSince: [] })).toEqual({ asked: true, showedPage: true });
+    expect(canvasUseOf({ startedAt, toolCalls: calls(105, 115, 125), items, jobWaitsSince: [] })).toEqual({ asked: true, showedPage: true });
   });
 
   test("a page followed by other work is not", () => {
-    expect(canvasUseOf({ startedAt, toolCallsAt: [105, 115, 125], items: [show(110)], jobWaitsSince: [] })).toEqual({ asked: false, showedPage: false });
+    expect(canvasUseOf({ startedAt, toolCalls: calls(105, 115, 125), items: [show(110)], jobWaitsSince: [] })).toEqual({ asked: false, showedPage: false });
   });
 
   test("a job wait after the page counts as a canvas step", () => {
-    expect(canvasUseOf({ startedAt, toolCallsAt: [105, 115], items: [show(110)], jobWaitsSince: [116] }).showedPage).toBe(true);
+    expect(canvasUseOf({ startedAt, toolCalls: calls(105, 115), items: [show(110)], jobWaitsSince: [116] }).showedPage).toBe(true);
+  });
+
+  test("the call that made the page, heard of only after the page was there, is the page and not work after it", () => {
+    expect(canvasUseOf({ startedAt, toolCalls: [...calls(105), { at: 112, canvasTool: "show" }], items: [show(110)], jobWaitsSince: [] }).showedPage).toBe(true);
+    expect(canvasUseOf({ startedAt, toolCalls: [{ at: 112, canvasTool: "show" }, ...calls(115)], items: [show(110)], jobWaitsSince: [] }).showedPage).toBe(false);
+    const pluginPage = [pluginItem("page", 10, 110)];
+    expect(canvasUseOf({ startedAt, toolCalls: [{ at: 112, canvasTool: "use_tool" }], items: pluginPage, jobWaitsSince: [] }).showedPage).toBe(true);
+    expect(canvasUseOf({ startedAt, toolCalls: [{ at: 112, canvasTool: "use_tool" }], items: [show(110)], jobWaitsSince: [] }).showedPage).toBe(false);
   });
 
   test("items from earlier turns don't count, and a plugin page edited in the turn does", () => {
-    expect(canvasUseOf({ startedAt, toolCallsAt: [], items: [show(10), ask(20)], jobWaitsSince: [] })).toEqual({ asked: false, showedPage: false });
-    expect(canvasUseOf({ startedAt, toolCallsAt: [105], items: [pluginItem("page", 10, 110)], jobWaitsSince: [] }).showedPage).toBe(true);
+    expect(canvasUseOf({ startedAt, toolCalls: [], items: [show(10), ask(20)], jobWaitsSince: [] })).toEqual({ asked: false, showedPage: false });
+    expect(canvasUseOf({ startedAt, toolCalls: calls(105), items: [pluginItem("page", 10, 110)], jobWaitsSince: [] }).showedPage).toBe(true);
   });
 });
 
