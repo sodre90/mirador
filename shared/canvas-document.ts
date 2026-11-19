@@ -773,13 +773,15 @@ const PAGE_FIND_SCRIPT = `
 
 /**
  * `drawnPage()` draws the whole page, not only what the frame shows, in the colours it is shown in and without Mirador's
- * marks on it, as plain JS for the frame: it resolves to a canvas at the screen's pixel density.
+ * marks on it, as plain JS for the frame: it resolves to a canvas at the screen's pixel density. It must run before the
+ * frame reporter tells the page a pixel ratio that follows the text size, as it keeps the screen's own.
  */
 function pageDrawing(assetsOrigin: string) {
   return `
   // The text size Settings chose zooms the root. Its scrollWidth and scrollHeight, rectangles and pointer positions all
   // have the zoom in; only marks, which sit in the zoomed root, undo it.
   const rootZoom = () => parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+  const screenPixelRatio = Object.getOwnPropertyDescriptor(window, "devicePixelRatio").get.bind(window);
   // The library puts a bare copy of each <use> target, without the page's styles, in front of the page, where it wins
   // over the page's own copy. That copy has all its computed styles written out, so the bare one goes, and the page's copy
   // gives up the values it only inherited where it sits, to inherit them from each <use> as the browser does.
@@ -835,7 +837,7 @@ function pageDrawing(assetsOrigin: string) {
       return await domToCanvas(root, {
         width: root.scrollWidth,
         height: root.scrollHeight,
-        scale: devicePixelRatio,
+        scale: screenPixelRatio(),
         backgroundColor: getComputedStyle(root).backgroundColor,
         font: false,
         filter: (node) => !isMiradorMarks(node),
@@ -1191,8 +1193,9 @@ function frameReporter(itemId: string, theme: CanvasTheme, textScale: number, as
   // frame, which a 1x screen shows blurred. Measured in the frame's own pixels, getBoundingClientRect, client coordinates
   // and scrollX include the zoom, as do the root's scrollWidth and scrollHeight. vh and vw take the zoom too.
   const textZoom = document.createElement("style");
+  let zoom = 1;
   const zoomTo = (scale) => {
-    const zoom = scale > 0 ? scale : 1;
+    zoom = scale > 0 ? scale : 1;
     textZoom.textContent = zoom === 1 ? "" : ":root{zoom:" + zoom + "}";
     dispatchEvent(new Event("mirador-zoom"));
   };
@@ -1259,6 +1262,9 @@ ${TEXT_CONTRAST_SCRIPT}
   addEventListener("DOMContentLoaded", checkText);
   addEventListener("load", checkText);
 ${pageDrawing(assetsOrigin)}
+  // Canvas code sizes its bitmap as clientWidth × devicePixelRatio, and clientWidth leaves the root's zoom out: told the
+  // ratio times the zoom, it draws at the screen's resolution rather than being stretched blurry.
+  Object.defineProperty(window, "devicePixelRatio", { get: () => screenPixelRatio() * zoom, configurable: true });
   const capture = async (requestId) => {
     try {
       const drawn = await drawnPage();
@@ -1277,8 +1283,11 @@ ${PAGE_FIND_SCRIPT}
       checkText();
     }
     if (data.kind === "text-scale") {
+      const zoomBefore = zoom;
       zoomTo(data.scale);
       reportSize();
+      // A zoom change fires no resize of its own, and resize is when canvas code asks for the pixel ratio again.
+      if (zoom !== zoomBefore) dispatchEvent(new Event("resize"));
     }
     if (data.kind === "capture") capture(data.requestId);
     if (data.kind === "hidden") document.querySelectorAll("video, audio").forEach((media) => media.pause());
