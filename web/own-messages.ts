@@ -38,7 +38,8 @@ const flash = (entry: HTMLElement) => entry.animate([{ background: "var(--accent
 
 /**
  * Lets the keyboard step through the user's own messages in the conversation on screen: back past the entries drawn,
- * to those the page holds and then those only the host holds, and forward to the latest once no message is left.
+ * to those the page holds and then those only the host holds, drawing the rest of the conversation once no message is
+ * left above, and forward to the latest once no message is left below.
  */
 export function useOwnMessageSteps({
   timeline,
@@ -86,9 +87,9 @@ export function useOwnMessageSteps({
       return loadFrom(target.index);
     }
     if (direction === 1) return jumpToLatest();
-    if (earlier.load()) return;
-    // A part is already on its way: the step is taken once it lands.
-    if (earlier.loading) pendingStep.current = direction;
+    const partOnItsWay = earlier.load() || earlier.loading;
+    if (partOnItsWay) pendingStep.current = direction;
+    else loadFrom(0);
   };
   const latestStep = useRef(step);
   latestStep.current = step;
