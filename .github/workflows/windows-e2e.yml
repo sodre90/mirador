@@ -159,7 +159,9 @@ jobs:
           # The 75-minute suite budget stays inside the job's 120 even after a slow setup, so an overrun ends as a reported
           # interrupted suite rather than a cancelled job whose JSON reporter wrote nothing for the Verdict to read.
           # Only a release passes a commit. A called workflow's github.event_name is its caller's, never workflow_call.
-          cmd /c "bunx playwright test $env:SPECS --repeat-each=$env:REPEAT --pass-with-no-tests --shard=${{ matrix.shard }}/${{ strategy.job-total }} --global-timeout=4500000 --retries=${{ inputs.commit && 2 || 1 }} --reporter=list,json > survey-output.txt 2>&1"
+          # The artifact keeps no Playwright trace, and recording one for every test kept Chrome busy on most of the 4 cores
+          # (vcs-0p0qr.3): app-trace.txt and error-context.md tell what a failed test saw.
+          cmd /c "bunx playwright test $env:SPECS --repeat-each=$env:REPEAT --pass-with-no-tests --shard=${{ matrix.shard }}/${{ strategy.job-total }} --global-timeout=4500000 --retries=${{ inputs.commit && 2 || 1 }} --trace=off --reporter=list,json > survey-output.txt 2>&1"
           "playwright exit: $LASTEXITCODE, minutes: $([math]::Round(((Get-Date) - $started).TotalMinutes, 1))"
           Stop-Job $runnerLoad
           Receive-Job $runnerLoad 2>&1 | Select-Object -First 5 | ForEach-Object { "runner load: $_" } | Where-Object { $_ -notmatch 'auth\?(token|code)' } | Hide-ModelServer
