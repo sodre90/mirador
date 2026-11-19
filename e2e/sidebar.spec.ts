@@ -51,17 +51,42 @@ test("a card's heading holds + and the profile chip, and its ⋯ menu holds what
   await expect(heading.locator(".agent-chip")).toBeVisible();
   await expect(card.locator(":scope > :not(header, ul)")).toHaveCount(0);
 
+  await test.step("Continue and worktrees are icons in the heading, shown while the pointer or the keyboard is on the card", async () => {
+    const continueButton = heading.getByRole("button", { name: "Continue a session…", exact: true });
+    const worktreesButton = heading.getByRole("button", { name: "Where conversations work…", exact: true });
+    const blurFocus = () => page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await expect(continueButton).toBeHidden();
+    await expect(worktreesButton).toBeHidden();
+    await card.getByRole("button", { name: `Fold ${basename(directory)}` }).focus();
+    await page.keyboard.press("Tab");
+    await expect(continueButton).toBeVisible();
+    await blurFocus();
+    await expect(continueButton).toBeHidden();
+    await heading.hover();
+    await expect(continueButton.locator("svg")).toBeVisible();
+    await expect(worktreesButton.locator("svg")).toBeVisible();
+    await expect(continueButton).toHaveAttribute("data-hint", /^Continue a session that was started in a terminal/);
+    await expect(worktreesButton).toHaveAttribute("data-hint", /^Choose whether new conversations work in the project folder/);
+    await worktreesButton.click();
+    const worktrees = page.getByRole("dialog", { name: `Where conversations work in ${basename(directory)}` });
+    await expect(worktrees).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(worktrees).toHaveCount(0);
+  });
+
   await test.step("choosing the profile in the heading leaves the card unfolded", async () => {
     await heading.locator(".agent-chip").click();
     await page.keyboard.press("Escape");
     await expect(card.getByRole("button", { name: `Fold ${basename(directory)}` })).toHaveAttribute("aria-expanded", "true");
   });
 
-  await test.step("the menu lists Continue, worktrees and Remove", async () => {
+  await test.step("the menu holds Remove, drawn with its icon", async () => {
     const menuButton = heading.getByRole("button", { name: "Workspace menu" });
-    await expect(menuButton).toHaveAttribute("data-hint", /^More for this workspace/);
+    await expect(menuButton).toHaveAttribute("data-hint", /^More for this workspace, such as removing it/);
     await menuButton.click();
-    await expect(page.getByRole("menu", { name: basename(directory) }).getByRole("menuitem")).toHaveText(["Continue a session…", "Where conversations work…", "Remove workspace…"]);
+    const entries = page.getByRole("menu", { name: basename(directory) }).getByRole("menuitem");
+    await expect(entries).toHaveText(["Remove workspace…"]);
+    await expect(entries.locator("svg")).toHaveCount(1);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("menu")).toHaveCount(0);
   });

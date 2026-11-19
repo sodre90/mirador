@@ -1,7 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
-import { addWorkspace, answerCanvasQuestion, chooseFromCanvasMore, chooseInWorkspaceMenu, conversationSettings, createProfile, dragOnto, lastAgentMessage, openCanvasHistory, openCanvasMore, openFromCanvasHistory, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, chooseFromCanvasMore, clickWorkspaceButton, conversationSettings, createProfile, dragOnto, lastAgentMessage, openCanvasHistory, openCanvasMore, openFromCanvasHistory, pasteImage, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { SPARE_MODELS, ScriptedModel, opencodeProgram, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost, spawnProgram } from "./test-host.ts";
 
@@ -137,7 +137,7 @@ test("continuing an opencode session from a terminal gives the agent its earlier
   await signIn(page, host);
   await expect(page.getByLabel("Agent", { exact: true })).toHaveValue(/.+/);
   await chooseScriptedOpencode(page);
-  await chooseInWorkspaceMenu(page, "Continue a session…");
+  await clickWorkspaceButton(page.locator(".workspace"), "Continue a session…");
   const dialog = page.getByRole("dialog", { name: "Continue a session" });
   await expect(dialog).toContainText("opencode sessions started in");
   const terminalSession = dialog.locator(".session-list li", { has: page.getByRole("button", { name: "Continue" }) });

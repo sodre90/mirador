@@ -5,7 +5,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { agentEnvironment } from "../host/acp/environment.ts";
 import type { UsageReport } from "../host/usage-stats.ts";
 import { applyEnvironment, parseEnvironment } from "../shared/profile-environment.ts";
-import { addWorkspace, answerCanvasQuestion, chooseInWorkspaceMenu, conversationSettings, createProfile, eventsInOrderOn, lastAgentMessage, pasteImage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, answerCanvasQuestion, clickWorkspaceButton, conversationSettings, createProfile, eventsInOrderOn, lastAgentMessage, pasteImage, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { SCRIPTED_COMPLETION_TOKENS, SCRIPTED_PROMPT_TOKENS, ScriptedModel, forgetPiAcpSessionsUnder, piProgram, piSessionIdsUnder, scriptedPiEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -207,7 +207,7 @@ test("deleting a pi conversation while its session opens ends the pi that sessio
 test("deleting a pi conversation while the session it continues loads ends the pi that session starts", async () => {
   await runPiInTerminal(SLOWLY_CONTINUED_MARKER);
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${SLOW_PROFILE} · pi` });
-  await chooseInWorkspaceMenu(page, "Continue a session…");
+  await clickWorkspaceButton(page.locator(".workspace"), "Continue a session…");
   const session = page.getByRole("dialog", { name: "Continue a session" }).locator(".session-list li", { hasText: SLOWLY_CONTINUED_MARKER });
   await session.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator(".workspace li.selected")).toContainText(SLOWLY_CONTINUED_MARKER);
@@ -441,7 +441,7 @@ test("a pi session started in a terminal can be forked and continued, and each g
   await runPiInTerminal(TERMINAL_MARKER);
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · pi` });
   const terminalSession = async () => {
-    await chooseInWorkspaceMenu(page, "Continue a session…");
+    await clickWorkspaceButton(page.locator(".workspace"), "Continue a session…");
     const dialog = page.getByRole("dialog", { name: "Continue a session" });
     const session = dialog.locator(".session-list li", { hasText: TERMINAL_MARKER, has: page.getByRole("button", { name: "Continue" }) });
     await expect(session).toHaveCount(1, { timeout: 30_000 });

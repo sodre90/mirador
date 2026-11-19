@@ -197,8 +197,10 @@ export const hints = {
   workspaceColorStyle:
     "How a workspace you gave a colour shows it: on its whole card, on its heading only, or as a stripe down its edge over a softer tint. Click a workspace's initials to give it a colour.",
   newConversation: "Start a conversation in this workspace, on the profile picked in this card.",
+  continueSession: "Continue a session that was started in a terminal, as a conversation in this workspace.",
+  whereConversationsWork: "Choose whether new conversations work in the project folder or each in a git worktree of its own.",
   workspaceMenu:
-    "More for this workspace: continue a session that was started in a terminal, choose whether new conversations work in the project folder or each in a git worktree of its own, or remove the workspace. Removing it takes its conversations and its worktrees under Mirador's data folder, but the project directory stays.",
+    "More for this workspace, such as removing it. Removing it takes its conversations and its worktrees under Mirador's data folder, but the project directory stays.",
   addWorkspace: "Add a project directory. Its conversations run with it as the working directory.",
   hideSidebar: "Hide the sidebar, to give the conversation, canvas and terminal the whole width. Remembered in this browser.",
   showSidebar: "Show the sidebar with the workspaces and conversations again.",

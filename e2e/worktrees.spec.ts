@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, checkedOutText, chooseInWorkspaceMenu, createProfile, lastAgentMessage, removeWorkspace as removeWorkspaceCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, checkedOutText, clickWorkspaceButton, createProfile, lastAgentMessage, removeWorkspace as removeWorkspaceCard, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { scratchPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const home = scratchPath("worktrees-home");
@@ -43,7 +43,7 @@ test.afterAll(async () => {
   rmSync(notARepository, { recursive: true, force: true });
 });
 
-const openWorktrees = (page: Page, directory: string) => chooseInWorkspaceMenu(page, "Where conversations work…", workspaceCard(page, directory));
+const openWorktrees = (page: Page, directory: string) => clickWorkspaceButton(workspaceCard(page, directory), "Where conversations work…");
 const worktreesDialog = (page: Page, workspace: string) => page.getByRole("dialog", { name: `Where conversations work in ${workspace}` });
 /** The dialog shows the choice as it was when it opened, so it is opened again until the saved one has arrived. */
 async function expectNewConversationsIn(page: Page, directory: string, place: RegExp) {

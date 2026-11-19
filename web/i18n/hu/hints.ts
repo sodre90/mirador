@@ -208,8 +208,10 @@ export const hints: Messages["hints"] = {
   workspaceColorStyle:
     "Hogyan mutatja a színét egy munkaterület, amelynek színt adtál: az egész kártyáján, csak a fejlécén, vagy csíkként a szélén egy halványabb árnyalat fölött. Kattints egy munkaterület monogramjára, hogy színt adj neki.",
   newConversation: "Beszélgetés indítása ezen a munkaterületen, a kártyán kiválasztott profilon.",
+  continueSession: "Egy terminálban indított munkamenet folytatása beszélgetésként ezen a munkaterületen.",
+  whereConversationsWork: "Annak megadása, hogy az új beszélgetések a projektmappában vagy mindegyik saját git worktree-ben dolgozzon.",
   workspaceMenu:
-    "Továbbiak ehhez a munkaterülethez: egy terminálban indított munkamenet folytatása, annak megadása, hogy az új beszélgetések a projektmappában vagy mindegyik saját git worktree-ben dolgozzon, vagy a munkaterület eltávolítása. Az eltávolítás a beszélgetéseit és a Mirador adatmappájában lévő worktree-jeit is törli, de a projektkönyvtár megmarad.",
+    "Továbbiak ehhez a munkaterülethez, például az eltávolítása. Az eltávolítás a beszélgetéseit és a Mirador adatmappájában lévő worktree-jeit is törli, de a projektkönyvtár megmarad.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",
   hideSidebar: "Elrejti az oldalsávot, hogy a beszélgetés, a vászon és a terminál kapja a teljes szélességet. Ez a böngésző megjegyzi.",
   showSidebar: "Újra megjeleníti az oldalsávot a munkaterületekkel és a beszélgetésekkel.",

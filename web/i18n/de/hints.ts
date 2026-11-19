@@ -217,8 +217,10 @@ export const hints: Messages["hints"] = {
   workspaceColorStyle:
     "Wie ein Arbeitsbereich, dem du eine Farbe gegeben hast, sie zeigt: auf seiner ganzen Karte, nur an seiner Überschrift oder als Streifen an seinem Rand über einer zarteren Tönung. Klicke auf die Initialen eines Arbeitsbereichs, um ihm eine Farbe zu geben.",
   newConversation: "Starte eine Unterhaltung in diesem Arbeitsbereich, mit dem Profil, das in dieser Karte gewählt ist.",
+  continueSession: "Setze eine Sitzung, die in einem Terminal gestartet wurde, als Unterhaltung in diesem Arbeitsbereich fort.",
+  whereConversationsWork: "Wähle, ob neue Unterhaltungen im Projektordner oder jede in einem eigenen git-Worktree arbeiten.",
   workspaceMenu:
-    "Mehr für diesen Arbeitsbereich: Setze eine Sitzung fort, die in einem Terminal gestartet wurde, wähle, ob neue Unterhaltungen im Projektordner oder jede in einem eigenen git-Worktree arbeiten, oder entferne den Arbeitsbereich. Beim Entfernen gehen seine Unterhaltungen und seine Worktrees im Datenordner von Mirador mit, das Projektverzeichnis bleibt.",
+    "Mehr für diesen Arbeitsbereich, etwa ihn entfernen. Beim Entfernen gehen seine Unterhaltungen und seine Worktrees im Datenordner von Mirador mit, das Projektverzeichnis bleibt.",
   addWorkspace: "Füge ein Projektverzeichnis hinzu. Seine Unterhaltungen laufen mit ihm als Arbeitsverzeichnis.",
   hideSidebar: "Blende die Seitenleiste aus, um Unterhaltung, Canvas und Terminal die ganze Breite zu geben. Wird in diesem Browser gespeichert.",
   showSidebar: "Zeige die Seitenleiste mit den Arbeitsbereichen und Unterhaltungen wieder.",

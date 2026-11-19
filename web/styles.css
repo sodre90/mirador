@@ -1057,22 +1057,46 @@ body.resizing iframe {
   visibility: visible;
 }
 
-.workspace > header button.icon:is(.workspace-fold, .workspace-new, .workspace-more, .armed) {
+.workspace > header button.icon:is(.workspace-fold, .workspace-action, .workspace-new, .workspace-more, .armed) {
   visibility: visible;
 }
 
-.workspace > header button.icon:is(.workspace-new, .workspace-more) {
+.workspace > header button.icon:is(.workspace-action, .workspace-new, .workspace-more) {
   flex: none;
   color: color-mix(in srgb, var(--text) 60%, transparent);
 }
 
 /* A tint lowers the grey's contrast, as it does for the folder line (4.5:1 or more on every pastel). */
-.workspace[data-color] > header button.icon:is(.workspace-new, .workspace-more) {
+.workspace[data-color] > header button.icon:is(.workspace-action, .workspace-new, .workspace-more) {
   color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
-.workspace > header button.icon:is(.workspace-new, .workspace-more):hover {
+.workspace > header button.icon:is(.workspace-action, .workspace-new, .workspace-more):hover {
   color: var(--text);
+}
+
+/* Takes no room until the pointer or the keyboard is on the workspace, so its name keeps its width. Not :focus-within:
+   a click leaves focus behind, on the profile chip say, which would keep the buttons out after the pointer left. */
+.workspace > header button.icon.workspace-action {
+  display: none;
+  padding: 0 3px;
+}
+
+.workspace:is(:hover, :has(:focus-visible)) > header button.icon.workspace-action {
+  display: grid;
+  place-items: center;
+}
+
+@media (hover: none) {
+  .workspace > header button.icon.workspace-action {
+    display: grid;
+    place-items: center;
+  }
+}
+
+.workspace-action svg {
+  width: calc(15px * var(--font-scale));
+  height: calc(15px * var(--font-scale));
 }
 
 .conversation-title {
@@ -4677,7 +4701,22 @@ button.jump-to-latest svg {
 }
 
 .context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
   padding-left: 10px;
+}
+
+.context-menu .line-icon {
+  flex: none;
+  width: calc(15px * var(--font-scale));
+  height: calc(15px * var(--font-scale));
+  color: var(--muted);
+}
+
+.context-menu button.destructive:is(:hover, :focus-visible):not(:disabled),
+.context-menu button.destructive:is(:hover, :focus-visible):not(:disabled) .line-icon {
+  color: var(--danger);
 }
 
 .bar-menu [role="menu"] button:has(kbd) {
