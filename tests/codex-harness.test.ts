@@ -30,7 +30,10 @@ test("Codex runs as codex-acp on the host's Bun, with the profile's environment 
   expect(spec.environment.CODEX_HOME).toBe("/tmp/codex-work");
   expect(spec.environment.CODEX_PATH).toBe(program);
   expect(spec.label).toBe("Codex (Codex)");
-  expect(spec.startsOneAtATime).toBe(false);
+});
+
+test("Codex agents start one at a time, as app-servers starting together on a fresh CODEX_HOME race to set up its state database", () => {
+  expect(harnessSpec(codexProfile, "").startsOneAtATime).toBe(true);
 });
 
 test("a profile's own CODEX_PATH picks the Codex codex-acp runs", () => {

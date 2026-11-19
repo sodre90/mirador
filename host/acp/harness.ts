@@ -104,7 +104,11 @@ export interface HarnessSpec {
   environment: Record<string, string>;
   /** Shell command run before the agent starts, e.g. to bring up a local proxy. */
   prelaunch: string;
-  /** Two opencode processes starting at the same moment fail with "database is locked"; their pre-launch commands need not wait. */
+  /**
+   * Two opencode processes starting at the same moment fail with "database is locked", and of Codex app-servers starting
+   * together on a CODEX_HOME none has set up yet, all but one fail to set up its SQLite state. Their pre-launch commands
+   * need not wait.
+   */
   startsOneAtATime: boolean;
 }
 
