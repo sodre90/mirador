@@ -74,7 +74,7 @@ export const problems: Messages["problems"] = {
     "push-relay-not-web-address": "A push-továbbító címe nem webcím.",
     "push-relay-needs-https": "A push-továbbító címének https://-sel kell kezdődnie.",
     "push-relay-is-origin": "A push-továbbító címe csak az originje, például https://push.example.com.",
-    "push-relay-needs-token": "A push-továbbítónak kell ennek a Macnek a tokenje.",
+    "push-relay-needs-token": "A push-továbbítónak kell ennek a gépnek a tokenje.",
     "join-number-wrong": "Nem ezt a számot mutatja a készülék, ezért a Mirador elutasította a kérését. Újra kérheti.",
     "plugin-update-not-undoable":
       "Ezt a frissítést már nem lehet visszavonni: a bővítmény a Mirador indulása óta megváltozott, vagy a frissítést már visszavontad.",

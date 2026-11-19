@@ -72,7 +72,7 @@ export const problems = {
     "push-relay-not-web-address": "The push relay's address isn't a web address.",
     "push-relay-needs-https": "The push relay's address must start with https://.",
     "push-relay-is-origin": "The push relay's address is just its origin, like https://push.example.com.",
-    "push-relay-needs-token": "The push relay needs this Mac's token.",
+    "push-relay-needs-token": "The push relay needs this machine's token.",
     "join-number-wrong": "That is not the number the device shows, so its request was denied. It can ask again.",
     "plugin-update-not-undoable":
       "That update can't be undone anymore: the plugin has changed since Mirador started, or the update was already undone.",

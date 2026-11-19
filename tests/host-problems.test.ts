@@ -449,7 +449,7 @@ const englishBeforeCodes = [
   "The push relay's address isn't a web address.",
   "The push relay's address must start with https://.",
   "The push relay's address is just its origin, like https://push.example.com.",
-  "The push relay needs this Mac's token.",
+  "The push relay needs this machine's token.",
   "tailscale serve exited with 1",
   "https://box:4600's certificate is not from its own certificate authority, or does not name box.tail.ts.net.",
   "https://box:4600 did not answer. Is its Mirador running?",

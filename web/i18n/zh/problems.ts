@@ -74,7 +74,7 @@ export const problems: Messages["problems"] = {
     "push-relay-not-web-address": "推送中继的地址不是网址。",
     "push-relay-needs-https": "推送中继的地址必须以 https:// 开头。",
     "push-relay-is-origin": "推送中继的地址只是它的源（origin），例如 https://push.example.com。",
-    "push-relay-needs-token": "推送中继需要这台 Mac 的令牌。",
+    "push-relay-needs-token": "推送中继需要这台机器的令牌。",
     "join-number-wrong": "这不是设备显示的数字，因此它的请求已被拒绝。它可以重新请求。",
     "plugin-update-not-undoable": "这次更新已无法撤销：Mirador 启动后插件已有变化，或者已经撤销过了。",
     "plugin-clone-gone": "Mirador 已经没有那个插件的克隆了（例如重启之后）；请重新添加它，看看它包含什么。",

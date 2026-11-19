@@ -74,7 +74,7 @@ export const problems: Messages["problems"] = {
     "push-relay-not-web-address": "Die Adresse des Push-Relays ist keine Webadresse.",
     "push-relay-needs-https": "Die Adresse des Push-Relays muss mit https:// beginnen.",
     "push-relay-is-origin": "Die Adresse des Push-Relays ist nur sein Origin, etwa https://push.example.com.",
-    "push-relay-needs-token": "Das Push-Relay braucht das Token dieses Macs.",
+    "push-relay-needs-token": "Das Push-Relay braucht das Token dieses Rechners.",
     "join-number-wrong": "Das ist nicht die Zahl, die das Gerät anzeigt, daher wurde seine Anfrage abgelehnt. Es kann erneut fragen.",
     "plugin-update-not-undoable":
       "Dieses Update lässt sich nicht mehr rückgängig machen: Das Plugin hat sich seit dem Start von Mirador geändert, oder das Update wurde bereits rückgängig gemacht.",

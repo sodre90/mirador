@@ -341,8 +341,8 @@ export const hints: Messages["hints"] = {
     "Was Enter mit einer Nachricht macht, während der Agent arbeitet; ⌥Enter (Alt+Enter) macht das andere. Mit opencode warten Nachrichten immer auf das Ende der Runde.",
   openFile:
     "Öffnet die Datei in dem Programm, das das System des Hosts dafür nutzt, auf dem Rechner, auf dem Mirador läuft. Ein Skript öffnet sich als Text, in dem Programm, das unter Einstellungen › Unterhaltungen gewählt ist. Ein ausführbares Programm wird nicht geöffnet.",
-  pushRelayAddress: "Ein eigenes Relay statt Miradors: wohin dieser Mac Pushes für deine Handys schickt. Leer schickt der Mac über Miradors Relay. Handys bekommen Pushes erst, wenn sie sich bei diesem Mac registriert haben.",
-  pushRelayToken: "Das Token, das der Betreiber des Relays für diesen Mac erstellt hat. Mirador speichert es und zeigt es nie wieder; lass das Feld leer, um das gesetzte zu behalten.",
+  pushRelayAddress: "Ein eigenes Relay statt Miradors: wohin dieser Rechner Pushes für deine Handys schickt. Leer schickt der Rechner über Miradors Relay. Handys bekommen Pushes erst, wenn sie sich bei diesem Rechner registriert haben.",
+  pushRelayToken: "Das Token, das der Betreiber des Relays für diesen Rechner erstellt hat. Mirador speichert es und zeigt es nie wieder; lass das Feld leer, um das gesetzte zu behalten.",
   machineName:
     "Wie Handys diesen Rechner nennen: Sie übernehmen den Namen beim Verbinden, und ein Handy kann ihm trotzdem einen eigenen geben. Unter diesem Namen tritt er auch anderen Rechnern als Mirador bei. Bleibt es leer, heißt er wie sein Computer.",
   scriptProgram:

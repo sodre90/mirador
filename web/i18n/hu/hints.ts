@@ -330,8 +330,8 @@ export const hints: Messages["hints"] = {
   enterWhileBusy: "Mit tesz az Enter egy üzenettel, amíg az ágens dolgozik; az ⌥Enter (Alt+Enter) a másikat teszi. Az opencode-dal az üzenetek mindig a kör végéig várnak.",
   openFile:
     "Megnyitja a fájlt abban a programban, amelyet a host rendszere használ hozzá, azon a gépen, amelyen a Mirador fut. Egy szkript szövegként nyílik meg, abban a programban, amelyet a Beállítások › Beszélgetések részben választasz. Egy programfájl nem nyílik meg.",
-  pushRelayAddress: "Saját továbbító a Miradoré helyett: ahová ez a Mac a telefonjaidnak szóló push-értesítéseket küldi. Üresen a Mirador továbbítóján keresztül küld. A telefonok csak akkor kapnak értesítést, ha regisztráltak ennél a Macnél.",
-  pushRelayToken: "A token, amelyet a továbbító gazdája készített ennek a Macnek. A Mirador megőrzi, és többé nem mutatja; hagyd üresen, hogy a beállított megmaradjon.",
+  pushRelayAddress: "Saját továbbító a Miradoré helyett: ahová ez a gép a telefonjaidnak szóló push-értesítéseket küldi. Üresen a Mirador továbbítóján keresztül küld. A telefonok csak akkor kapnak értesítést, ha regisztráltak ennél a gépnél.",
+  pushRelayToken: "A token, amelyet a továbbító gazdája készített ennek a gépnek. A Mirador megőrzi, és többé nem mutatja; hagyd üresen, hogy a beállított megmaradjon.",
   machineName:
     "Ahogy a telefonok hívják ezt a gépet: csatlakozáskor átveszik, és egy telefon saját nevet is adhat neki. Más gépekhez is ezen a néven csatlakozik Miradorként. Üresen a számítógép nevét viseli.",
   scriptProgram:
