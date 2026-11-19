@@ -181,30 +181,62 @@ export async function useOwnVoiceServer(
 }
 
 /**
- * Clicks Dictate and waits until the box holds what the voice server heard. When it doesn't, the error says where
- * dictation stopped, how many recordings reached the voice server and how busy the machine was: the release gate keeps
- * only the error's text in its bead, and this failure has come and gone with the machine rather than the code.
+ * Presses Dictate, with a click unless `press` says another way, and waits until the box holds what the voice server heard.
+ * When it doesn't, the error says where dictation stopped and what it went through, the problem it showed, how many
+ * recordings reached the voice server and how busy the machine was: the release gate keeps only the error's text in its
+ * bead, and this failure has come and gone with the machine rather than the code.
  */
-export async function dictateInto(composer: Locator, expected: string, transcriptions: () => number) {
+export async function dictateInto(composer: Locator, expected: string, transcriptions: () => number, press = (dictate: Locator) => dictate.click()) {
   const before = transcriptions();
   const dictate = composer.getByRole("button", { name: "Dictate" });
-  await dictate.click();
+  const phasesSoFar = await watchPhasesOf(dictate);
+  await press(dictate);
   try {
     await expect(composer.locator("textarea")).toHaveValue(expected, { timeout: 30_000 });
   } catch (error) {
-    throw new Error(`${await whyDictationStopped(composer.page(), dictate, transcriptions() - before)}\n${(error as Error).message}`);
+    throw new Error(`${await whyDictationStopped(composer.page(), dictate, transcriptions() - before, await phasesSoFar())}\n${(error as Error).message}`);
   }
 }
 
-async function whyDictationStopped(page: Page, dictate: Locator, transcriptions: number) {
+type WatchedButton = HTMLElement & { phasesSeen?: string[] };
+
+/** The phases the Dictate button goes through from now on, with when: whether it ever listened, for how long, and whether it left the page. */
+async function watchPhasesOf(dictate: Locator) {
+  const button = await dictate.elementHandle();
+  await button?.evaluate((element: WatchedButton) => {
+    const startedAt = performance.now();
+    const phaseNow = () => element.className.match(/\bdictate-(\w+)/)?.[1] ?? "unknown";
+    let phase = phaseNow();
+    element.phasesSeen = [`${phase} at 0 ms`];
+    new MutationObserver(() => {
+      if (phaseNow() === phase) return;
+      phase = phaseNow();
+      element.phasesSeen!.push(`${phase} at ${Math.round(performance.now() - startedAt)} ms`);
+    }).observe(element, { attributes: true, attributeFilter: ["class"] });
+  });
+  return async () =>
+    (await button
+      ?.evaluate((element: WatchedButton) => `${element.phasesSeen!.join(", ")}${element.isConnected ? "" : ", then the button left the page"}`)
+      .catch(() => null)) ?? "unknown";
+}
+
+async function whyDictationStopped(page: Page, dictate: Locator, transcriptions: number, phasesSeen: string) {
   const phase = (await dictate.getAttribute("class", { timeout: 1_000 }).catch(() => null))?.match(/\bdictate-(\w+)/)?.[1] ?? "unknown";
   const status = await page.locator(".dictation-status:visible").first().textContent({ timeout: 1_000 }).catch(() => null);
-  const [lastMinute, lastFiveMinutes] = loadavg();
+  const problem = await page.locator(".composer-problem:visible").first().textContent({ timeout: 1_000 }).catch(() => null);
   return [
-    `Dictation never filled in the box: it is ${phase}, its status ${status === null ? "shows nothing" : `says "${status}"`},`,
+    `Dictation never filled in the box: it is ${phase} (${phasesSeen}), its status ${status === null ? "shows nothing" : `says "${status}"`},`,
+    `its problem ${problem === null ? "shows nothing" : `says "${problem}"`},`,
     `and the voice server got ${transcriptions} transcription request${transcriptions === 1 ? "" : "s"} since the click.`,
-    `The machine's load: ${lastMinute!.toFixed(1)} over the last minute and ${lastFiveMinutes!.toFixed(1)} over five.`,
+    machineLoad(),
   ].join(" ");
+}
+
+/** Windows has no load average: Node gives it as 0. */
+function machineLoad() {
+  if (process.platform === "win32") return "The machine's load isn't known on Windows.";
+  const [lastMinute, lastFiveMinutes] = loadavg();
+  return `The machine's load: ${lastMinute!.toFixed(1)} over the last minute and ${lastFiveMinutes!.toFixed(1)} over five.`;
 }
 
 /** One of the pictures in a choice of Settings, e.g. Light under Theme. */
