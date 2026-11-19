@@ -71,6 +71,37 @@ const canvasDrawing = {
 </script>`,
 };
 
+const fullHeight = {
+  title: "Full height",
+  html: `<style>body { margin: 0; } #screen { height: 100vh; box-sizing: border-box; border: 4px solid #333; } #ruler { height: 10px; }</style>
+<div id="screen"><div id="ruler"></div>One screen</div>`,
+};
+
+const windowSizedScene = {
+  title: "Window-sized scene",
+  html: `<style>body { margin: 0; } canvas { display: block; }</style>
+<canvas id="scene"></canvas>
+<canvas id="strip" style="width: 1200px; height: 200px"></canvas>
+<script>
+  const scene = document.getElementById("scene");
+  const fitToWindow = () => {
+    scene.style.width = innerWidth + "px";
+    scene.style.height = innerHeight + "px";
+  };
+  fitToWindow();
+  addEventListener("resize", fitToWindow);
+  addEventListener("pointermove", (event) => (window.pointedAt = [event.clientX / innerWidth, event.clientY / innerHeight]));
+</script>`,
+};
+
+const frameOnScreen = (page: Page) => shownFrame(page).evaluate((node) => node.getBoundingClientRect().toJSON() as DOMRect);
+
+const scaleOf = (frame: Locator) =>
+  frame.evaluate((node) => {
+    const transform = getComputedStyle(node).transform;
+    return transform === "none" ? 1 : new DOMMatrixReadOnly(transform).a;
+  });
+
 /** How much of a picture is clearly green, as the page's field is. */
 const greenShare = (picture: Locator) =>
   picture.evaluate(async (image: HTMLImageElement) => {
@@ -274,5 +305,58 @@ test("pages the agent shows or asks with follow the text size chosen in Settings
     await expect.poll(bitmapAndScreenWidths).toEqual([screenWidthAt(1.4), screenWidthAt(1.4)]);
     await chooseInSettings(page, "Text size", "200%");
     await expect.poll(bitmapAndScreenWidths).toEqual([screenWidthAt(2), screenWidthAt(2)]);
+  });
+
+  await test.step("an option preview sized to the viewport keeps about its column's width at 140%, and a plain one isn't scaled", async () => {
+    await chooseInSettings(page, "Text size", "140%");
+    const options = [
+      { label: "Viewport", html: `<div style="width:100vw;height:30px;background:#eef">VIEWPORT</div>` },
+      { label: "Short", html: "<p>Short</p>" },
+    ];
+    void callCanvasTool(host, conversationId, "ask", { question: "Which width?", options }).catch(() => {});
+    await expect(page.getByRole("heading", { name: "Which width?" })).toBeVisible();
+    const previews = page.locator(".ask-option:visible iframe");
+    await expect(previews.nth(0).contentFrame().getByText("VIEWPORT")).toBeAttached();
+    await expect(previews.nth(1).contentFrame().getByText("Short")).toBeAttached();
+    // Chasing its content, a preview sized to the viewport grew a few dozen pixels a round: give it the time.
+    await page.waitForTimeout(2_000);
+    expect(await scaleOf(previews.nth(0))).toBeGreaterThan(0.9);
+    expect(await scaleOf(previews.nth(1))).toBe(1);
+    await answerCanvasQuestion(page, "Short");
+  });
+
+  await test.step("a page one screen tall fits the panel at any text size, without scrolling", async () => {
+    await callCanvasTool(host, conversationId, "show", fullHeight);
+    const screen = shownPage(page).locator("#screen");
+    const ruler = shownPage(page).locator("#ruler");
+    await expect(screen).toBeVisible();
+    for (const [size, factor] of [["140%", 1.4], ["200%", 2], ["50%", 0.5]] as const) {
+      await chooseInSettings(page, "Text size", size);
+      await expect.poll(async () => (await onScreen(shownFrame(page), ruler)).height).toBeCloseTo(10 * factor, 0);
+      expect(await shownPage(page).locator("html").evaluate((root) => root.scrollHeight - root.clientHeight)).toBe(0);
+      expect(Math.abs((await onScreen(shownFrame(page), screen)).height - (await frameOnScreen(page)).height)).toBeLessThanOrEqual(2);
+    }
+  });
+
+  await test.step("a canvas the page sizes to the window fits the panel at any text size, and the pointer lands where it points on it, while another canvas keeps its shape", async () => {
+    await chooseInSettings(page, "Text size", "140%");
+    await callCanvasTool(host, conversationId, "show", windowSizedScene);
+    const scene = shownPage(page).locator("#scene");
+    const strip = shownPage(page).locator("#strip");
+    await expect(scene).toHaveAttribute("data-mirador-window-sized", "");
+    await expect(strip).not.toHaveAttribute("data-mirador-window-sized");
+    await expect(pointToggle(page)).toHaveAttribute("aria-pressed", "false");
+    const pointedAt = () => scene.evaluate(() => (window as unknown as { pointedAt?: number[] }).pointedAt?.map((share) => Math.round(share * 20) / 20));
+    for (const [size, factor] of [["140%", 1.4], ["50%", 0.5]] as const) {
+      await chooseInSettings(page, "Text size", size);
+      await expect.poll(async () => (await onScreen(shownFrame(page), strip)).width).toBeCloseTo(1200 * factor, 0);
+      expect((await onScreen(shownFrame(page), strip)).height).toBeCloseTo(200 * factor, 0);
+      const frameBox = await frameOnScreen(page);
+      const sceneBox = await onScreen(shownFrame(page), scene);
+      expect(Math.abs(sceneBox.width - frameBox.width)).toBeLessThanOrEqual(2);
+      expect(Math.abs(sceneBox.height - frameBox.height)).toBeLessThanOrEqual(2);
+      await page.mouse.move(sceneBox.x + sceneBox.width * 0.9, sceneBox.y + sceneBox.height * 0.5);
+      await expect.poll(pointedAt).toEqual([0.9, 0.5]);
+    }
   });
 });
