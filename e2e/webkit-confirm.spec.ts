@@ -25,6 +25,22 @@ test("in WebKit, a second click on the workspace's trash confirms and removes th
   await expect(card).toHaveCount(0);
 });
 
+test("in WebKit, Esc takes back the Remove? a click on a workspace's trash raised, and the focus stays on the trash", async ({ page }) => {
+  await signIn(page, host);
+  await addWorkspace(page, host.projectDir);
+  const card = workspaceCard(page, host.projectDir);
+  const trash = card.getByRole("button", { name: "Remove workspace", exact: true });
+  const confirm = card.getByRole("button", { name: "Confirm: Remove workspace" });
+  await card.locator(":scope > header").hover();
+  await trash.click();
+  await expect(confirm).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(confirm).toHaveCount(0);
+  await expect(trash).toBeFocused();
+  await removeWorkspace(card);
+  await expect(card).toHaveCount(0);
+});
+
 test("in WebKit, a click on the confirm ⌘W raised on a busy terminal closes that shell", async ({ page }) => {
   await actAsDesktopApp(page, { nonce: "nonce-1", items: [] });
   await signIn(page, host);

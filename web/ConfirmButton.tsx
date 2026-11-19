@@ -52,6 +52,11 @@ export function ConfirmButton({
     setArmedBy(null);
     onConfirm();
   };
+  /** macOS WebKit leaves a clicked button unfocused, where Esc and Enter would never reach it. */
+  const armByClick = () => {
+    setArmedBy("click");
+    if (!hasFocus()) button.current?.focus({ preventScroll: true });
+  };
   const cancel = () => {
     const givesFocusBack = armedBy === "request" && hasFocus();
     setArmedBy(null);
@@ -87,7 +92,7 @@ export function ConfirmButton({
       onClick={(event) => {
         event.stopPropagation();
         if (armed) confirm();
-        else setArmedBy("click");
+        else armByClick();
       }}
       // WebKit blurs a focused button on mousedown, before the click lands, which would disarm it first. Keep the
       // focus it already holds; a button not yet focused still takes it on click, as the terminal's ⌘W flow needs.
