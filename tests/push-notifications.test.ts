@@ -239,6 +239,16 @@ describe("pushing notifications", () => {
     expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear"]);
   });
 
+  test("a notified conversation deleted while it waits is cleared on the phones told of it", async () => {
+    const { store, pushes, posted } = pushingHost();
+    pushes.register("phone", registration());
+    await pushes.notify(notification);
+    await pushes.waitingChanged(new Set(["c1"]));
+    store.deleteConversation("c1");
+    await pushes.waitingChanged(new Set());
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear"]);
+  });
+
   test("a conversation read before its push went out isn't pushed", async () => {
     const { pushes, posted } = pushingHost();
     pushes.register("phone", registration());
