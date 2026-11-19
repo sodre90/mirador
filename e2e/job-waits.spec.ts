@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, allowNotifications, createProfile, notificationsShown, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
+import { expect, test } from "@playwright/test";
+import { addWorkspace, agentSessionIdOn, allowNotifications, createProfile, notificationsShown, reloadFromRestartedHost, sendMessage, signIn, startConversation, waitForTurnToEnd, turnOnYolo } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -27,21 +27,10 @@ function startJob() {
   return job;
 }
 
-/** opencode gives the commands it runs no session id, so an agent of it names its session for mirador when-done; Claude Code's commands inherit it. */
-function watchSessionId(page: Page) {
-  let sessionId: string | null = null;
-  page.on("websocket", (socket) =>
-    socket.on("framereceived", ({ payload }) => {
-      const message = JSON.parse(String(payload));
-      sessionId = message.type === "conversation.upserted" ? (message.conversation.acpSessionId ?? sessionId) : sessionId;
-    }),
-  );
-  return () => sessionId;
-}
-
 test("the agent has the host wait for a job it left running, then resume the agent, or only tell you, also after a restart", async ({ page }) => {
   test.setTimeout(180_000);
-  const sessionId = watchSessionId(page);
+  // opencode gives the commands it runs no session id, so an agent of it names its session for mirador when-done; Claude Code's commands inherit it.
+  const sessionId = agentSessionIdOn(page);
   await allowNotifications(page);
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);

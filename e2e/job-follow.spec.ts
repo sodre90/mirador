@@ -1,8 +1,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { openSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, signIn, startConversation } from "./helpers.ts";
+import { expect, test } from "@playwright/test";
+import { addWorkspace, agentSessionIdOn, createProfile, signIn, startConversation } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -44,17 +44,6 @@ function startSilentJob() {
   return job;
 }
 
-function watchSessionId(page: Page) {
-  let sessionId: string | null = null;
-  page.on("websocket", (socket) =>
-    socket.on("framereceived", ({ payload }) => {
-      const message = JSON.parse(String(payload));
-      sessionId = message.type === "conversation.upserted" ? (message.conversation.acpSessionId ?? sessionId) : sessionId;
-    }),
-  );
-  return () => sessionId;
-}
-
 /** What `mirador when-done --pid <pid> --no-resume` sends the host. */
 async function waitForJob(sessionId: string, job: ChildProcess) {
   const response = await fetch(`${host.origin}/sessions/${sessionId}/job-waits`, {
@@ -66,7 +55,7 @@ async function waitForJob(sessionId: string, job: ChildProcess) {
 }
 
 test("clicking a waited-for job follows it in a terminal tab: what it runs, then its output, until it ends", async ({ page }) => {
-  const sessionId = watchSessionId(page);
+  const sessionId = agentSessionIdOn(page);
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const dialog = await createProfile(page, PROFILE, scriptedOpencodeEnvironment(model, host.root), "", "opencode");
