@@ -257,7 +257,7 @@ const sourceWatcher = new SourceWatcher(sourceDir, {
     newerVersion.recount();
   },
 });
-sourceWatcher.start();
+if (config.watchesSource) sourceWatcher.start();
 if (config.checksForNewerVersion) newerVersion.start();
 if (config.checksForPluginUpdates) pluginUpdates.start();
 conversations.resumeAfterRestart(takeTurnsStoppedForRestart(config.dataDir));

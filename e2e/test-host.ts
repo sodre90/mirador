@@ -302,6 +302,7 @@ export class TestHost {
       MIRADOR_STATUSLINE: this.options.runsUserStatusLine ? "on" : "off",
       MIRADOR_NEWER_VERSION_CHECK: "off",
       MIRADOR_PLUGIN_UPDATE_CHECK: "off",
+      MIRADOR_SOURCE_WATCH: this.options.copiesSource ? "on" : "off",
       MIRADOR_PLUGIN_CATALOG: "off",
       MIRADOR_DEFAULT_PLUGINS: "off",
       MIRADOR_PUSH_RELAY: "off",
