@@ -135,10 +135,12 @@ jobs:
             $busySeconds = 0
             $counters = '\Memory\Available MBytes', '\Memory\% Committed Bytes In Use', '\Memory\Pages/sec', '\Processor(_Total)\% Processor Time', '\PhysicalDisk(_Total)\Current Disk Queue Length'
             $samples = 0
+            $previousSample = Get-Date
             Get-Counter -Counter $counters -SampleInterval 5 -Continuous | ForEach-Object {
               $values = $_.CounterSamples | ForEach-Object { "$(($_.Path -split '\\')[-1]) $([math]::Round($_.CookedValue))" }
               Add-Content $log "$($_.Timestamp.ToUniversalTime().ToString('o'))  $($values -join ', ')"
-              $busySeconds += ($_.CounterSamples | Where-Object Path -like '*% processor time').CookedValue / 100 * 5 * $cores
+              $busySeconds += ($_.CounterSamples | Where-Object Path -like '*% processor time').CookedValue / 100 * ($_.Timestamp - $previousSample).TotalSeconds * $cores
+              $previousSample = $_.Timestamp
               if ((($samples++) % 6) -eq 0) {
                 $processes = Get-Process
                 $biggest = $processes | Group-Object ProcessName | ForEach-Object { "$($_.Name) x$($_.Count) $([math]::Round(($_.Group | Measure-Object WorkingSet64 -Sum).Sum / 1MB)) MB" } | Sort-Object { [int](($_ -split ' ')[-2]) } -Descending | Select-Object -First 10
