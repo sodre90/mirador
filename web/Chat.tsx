@@ -1069,15 +1069,21 @@ function useScrollAnchor() {
     anchor.current = null;
     setAwayFromLatest(false);
     timeline.scrollTop = timeline.scrollHeight;
+    if (held.current) holdPlace();
   };
   const onScroll = () => {
     const timeline = ref.current;
     if (!timeline || resizedSinceLastLook(timeline)) return;
     rememberPlaceIn(timeline);
   };
-  /** Where the view was moved on purpose, as to a match, is the reader's place, also while the pane changes size. */
+  /**
+   * Where the view was moved on purpose, as to a match, is the reader's place, also while the pane changes size, and
+   * through a render already on its way, which would otherwise put the view back where it was held before the move.
+   */
   const rememberPlace = () => {
-    if (ref.current) rememberPlaceIn(ref.current);
+    if (!ref.current) return;
+    rememberPlaceIn(ref.current);
+    if (held.current) holdPlace();
   };
   /** Keeps the reader's place through the next render, which adds or removes entries above the view. */
   const holdPlace = () => {
