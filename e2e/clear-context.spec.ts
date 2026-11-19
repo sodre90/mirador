@@ -37,10 +37,12 @@ test("/clear starts the agent afresh while the conversation stays on screen, als
   await expect.poll(context).toContain("remember-2");
   expect(context()).toContain("remember-1");
 
-  await test.step("the menu offers /clear, and Enter runs it: a line marks where the agent starts afresh", async () => {
+  await test.step("the menu offers /clear, and Enter writes it out and then runs it: a line marks where the agent starts afresh", async () => {
     await composer.fill("/cle");
     const menu = page.getByRole("listbox", { name: "Slash commands" });
     await expect(menu.locator('[aria-selected="true"] .slash-command-name')).toHaveText("/clear");
+    await composer.press("Enter");
+    await expect(composer).toHaveValue("/clear ");
     await composer.press("Enter");
     await expect(cleared).toHaveCount(1);
     await expect(composer).toHaveValue("");

@@ -110,6 +110,8 @@ test("Log in runs the agent's sign-in with the conversation's profile in a termi
     await composer.fill("/log");
     await expect(page.getByRole("listbox", { name: "Slash commands" }).locator('[aria-selected="true"] .slash-command-name')).toHaveText("/login");
     await composer.press("Enter");
+    await expect(composer).toHaveValue("/login ");
+    await composer.press("Enter");
     await expect(notice(page, "Signed in. Send your message again.")).toHaveCount(2);
     await expect(composer).toHaveValue("");
     expect(readFileSync(signedInAccount, "utf8")).toBe("second");
