@@ -62,11 +62,7 @@ export interface HostConfig {
   checksForNewerVersion: boolean;
   /** Test hosts turn it off with MIRADOR_PLUGIN_UPDATE_CHECK=off, so they fetch no plugin's repo unless a spec asks. */
   checksForPluginUpdates: boolean;
-  /**
-   * Test hosts that run from the shared checkout turn it off with MIRADOR_SOURCE_WATCH=off: nobody edits it mid-run, yet
-   * macOS under load tells every watcher of it that web/ or shared/ changed, which rebuilt each host's page at once and
-   * showed the host's-code-changed banner in the middle of unrelated tests.
-   */
+  /** Test hosts that run from the shared checkout turn it off with MIRADOR_SOURCE_WATCH=off, as nobody edits it mid-run. */
   watchesSource: boolean;
   /** Where a release finds the latest published release; e2e points it at a fake. */
   latestReleaseUrl: string;

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
@@ -10,7 +10,7 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import { HostRestart, hostCommandLine, relaunchOf, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "../host/restart.ts";
 import { Store } from "../host/store.ts";
 import type { AskMode, CanvasItem, ConversationEvent } from "../shared/model.ts";
-import { isEdit, SourceWatcher } from "../host/source-watcher.ts";
+import { isEdit, namesTheFolderItself, newestChangeIn, SourceWatcher } from "../host/source-watcher.ts";
 
 describe("hostCommandLine", () => {
   /** The desktop app does not run on Windows yet, and knows its host by host/main.ts, which a restart there gives as host\main.ts. */
@@ -591,6 +591,32 @@ describe("SourceWatcher", () => {
     expect(isEdit(sourceDir, null)).toBe(true);
     expect(isEdit(sourceDir, "main.ts")).toBe(true);
     expect(isEdit(sourceDir, "acp")).toBe(false);
+  });
+
+  test("an event naming the watched folder itself, as macOS sends under load, is no edit by its name alone", () => {
+    const sourceDir = mkdtempSync(join(tmpdir(), "mirador-source-"));
+    const web = join(sourceDir, "web");
+    mkdirSync(web);
+    expect(namesTheFolderItself(web, "web")).toBe(true);
+    expect(namesTheFolderItself(web, "App.tsx")).toBe(false);
+    expect(namesTheFolderItself(web, null)).toBe(false);
+    writeFileSync(join(web, "web"), "a file named as its folder\n");
+    expect(namesTheFolderItself(web, "web")).toBe(false);
+  });
+
+  test("a look into a folder finds when anything in it last changed: a file removed, or one edited deep down", async () => {
+    const web = mkdtempSync(join(tmpdir(), "mirador-source-"));
+    mkdirSync(join(web, "chat", "bubbles"), { recursive: true });
+    writeFileSync(join(web, "chat", "bubbles", "Bubble.tsx"), "export {};\n");
+    writeFileSync(join(web, "App.tsx"), "export {};\n");
+    const before = newestChangeIn(web);
+    await Bun.sleep(20);
+    rmSync(join(web, "App.tsx"));
+    expect(newestChangeIn(web)).toBeGreaterThan(before);
+    const later = new Date(Date.now() + 60_000);
+    utimesSync(join(web, "chat", "bubbles", "Bubble.tsx"), later, later);
+    expect(newestChangeIn(web)).toBe(later.getTime());
+    expect(newestChangeIn(join(web, "missing"))).toBe(0);
   });
 
   test("replacing a watched folder, as a deploy can, makes the UI stale, and edits in the new folder are heard", async () => {
