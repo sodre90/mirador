@@ -143,10 +143,10 @@ export const settings = {
     title: "Phones away from Mirador",
     hint: (relay: string | null) =>
       relay
-        ? `A push relay tells your phones when an agent needs you while Mirador isn't open on them. This Mac pushes through Mirador's relay at ${relay}, with a grant each phone gets from it, unless you set a relay of your own below. A relay can't read what it passes on.`
+        ? `A push relay tells your phones when an agent needs you while Mirador isn't open on them. This machine pushes through Mirador's relay at ${relay}, with a grant each phone gets from it, unless you set a relay of your own below. A relay can't read what it passes on.`
         : "A push relay tells your phones when an agent needs you while Mirador isn't open on them. Set one below; it can't read what it passes on.",
     address: "Relay address",
-    token: "This Mac's token",
+    token: "This machine's token",
     tokenSet: "Set",
     save: "Save",
   },

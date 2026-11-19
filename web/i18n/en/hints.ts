@@ -309,8 +309,8 @@ export const hints = {
   enterWhileBusy: "What Enter does with a message while the agent works; ⌥Enter (Alt+Enter) does the other. With opencode, messages always wait for the turn to end.",
   openFile:
     "Opens the file in the program the host's system uses for it, on the machine Mirador runs on. A script opens as text, in the program Settings › Conversations choose. A program does not open.",
-  pushRelayAddress: "A relay of your own, used instead of Mirador's: where this Mac sends pushes for your phones. Empty, the Mac pushes through Mirador's relay. Phones get pushes only once they register with this Mac.",
-  pushRelayToken: "The token the relay's owner made for this Mac. Mirador keeps it and never shows it again; leave it empty to keep the one set.",
+  pushRelayAddress: "A relay of your own, used instead of Mirador's: where this machine sends pushes for your phones. Empty, it pushes through Mirador's relay. Phones get pushes only once they register with this machine.",
+  pushRelayToken: "The token the relay's owner made for this machine. Mirador keeps it and never shows it again; leave it empty to keep the one set.",
   machineName: "What phones call this machine: they pick it up when they connect, and a phone can still give it a name of its own. It also joins other machines as Mirador on this name. Empty, it goes by its computer's name.",
   scriptProgram:
     "Where a file link to a script opens, as text, on the host's computer. The program for its type could run it: Git for Windows runs .sh files, Python's launcher .py files.\n\nThe system's text editor: on macOS the one you chose for text, on Windows Notepad. Linux has none of its own, so there xdg-open picks the program for the script's type, and an executable script, which that program could run, does not open.\n\nA program you name: its name on the host's PATH, such as code or subl, or its full path. It gets the file's path. On Windows name an .exe, such as Code.exe: a .cmd or .bat would run through cmd.exe, which could take part of a file's name for a command.",

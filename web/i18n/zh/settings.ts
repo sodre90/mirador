@@ -145,10 +145,10 @@ export const settings: Messages["settings"] = {
     title: "没打开 Mirador 的手机",
     hint: (relay: string | null) =>
       relay
-        ? `推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。除非你在下方设置自己的中继，这台 Mac 会通过 Mirador 的中继（${relay}）发送推送，并使用每部手机从该中继获得的授权。中继无法读取所转发的内容。`
+        ? `推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。除非你在下方设置自己的中继，这台机器会通过 Mirador 的中继（${relay}）发送推送，并使用每部手机从该中继获得的授权。中继无法读取所转发的内容。`
         : "推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。请在下方设置一个；它无法读取所转发的内容。",
     address: "中继地址",
-    token: "这台 Mac 的令牌",
+    token: "这台机器的令牌",
     tokenSet: "已设置",
     save: "保存",
   },

@@ -121,7 +121,7 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
   const answerLater = await startConversation(page);
   trace().add(`asking is ${asking}, answerLater is ${answerLater}`);
 
-  await test.step("Settings take the relay's address and this Mac's token, and never show the token again", async () => {
+  await test.step("Settings take the relay's address and this machine's token, and never show the token again", async () => {
     const settings = await openSettings(page, "Notifications");
     await settings.locator(".push-relay-address").fill("http://push.example.com");
     await settings.locator(".push-relay-token").fill("relay-token-for-this-mac");
@@ -137,7 +137,7 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
     await expect(settings.locator(".push-relay-token")).toHaveAttribute("placeholder", "Set");
     await settings.locator(".push-relay-address").fill(relayOrigin().replace("127.0.0.1", "localhost"));
     await settings.getByRole("button", { name: "Save" }).click();
-    await expect(settings.locator(".push-relay-problem"), "the token is for its relay alone").toHaveText("The push relay needs this Mac's token.");
+    await expect(settings.locator(".push-relay-problem"), "the token is for its relay alone").toHaveText("The push relay needs this machine's token.");
     await page.reload();
     const reopened = await openSettings(page, "Notifications");
     await expect(reopened.locator(".push-relay-address")).toHaveValue(relayOrigin());
@@ -221,7 +221,7 @@ test("with no relay of its own set, the Mac pushes through Mirador's relay with 
   await settings.locator(".push-relay-address").fill("");
   await settings.getByRole("button", { name: "Save" }).click();
   await expect(settings.locator(".push-relay-token")).toHaveAttribute("placeholder", "");
-  await expect(settings.locator(".push-relay-hint")).toContainText(`This Mac pushes through Mirador's relay at ${new URL(relayOrigin()).host}`);
+  await expect(settings.locator(".push-relay-hint")).toContainText(`This machine pushes through Mirador's relay at ${new URL(relayOrigin()).host}`);
   await page.keyboard.press("Escape");
   const asking = await startConversation(page);
   const elsewhere = await startConversation(page);

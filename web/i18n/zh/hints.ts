@@ -307,8 +307,8 @@ export const hints: Messages["hints"] = {
   enterWhileBusy: "Agent 工作时，Enter 对消息的处理方式；⌥Enter（Alt+Enter）执行另一种。使用 opencode 时，消息始终等到轮次结束。",
   openFile:
     "用 host 的系统为该文件指定的程序打开它，在 Mirador 所运行的机器上。脚本作为文本打开，使用 设置 › 对话 中选定的程序。程序文件不会被打开。",
-  pushRelayAddress: "你自己的中继，用来代替 Mirador 的中继：这台 Mac 把推送发往你手机的地址。留空则通过 Mirador 的中继发送。手机只有在向这台 Mac 注册后才会收到推送。",
-  pushRelayToken: "中继的所有者为这台 Mac 生成的令牌。Mirador 会保存它，之后不再显示；留空则保留已设置的那个。",
+  pushRelayAddress: "你自己的中继，用来代替 Mirador 的中继：这台机器把推送发往你手机的地址。留空则通过 Mirador 的中继发送。手机只有在向这台机器注册后才会收到推送。",
+  pushRelayToken: "中继的所有者为这台机器生成的令牌。Mirador 会保存它，之后不再显示；留空则保留已设置的那个。",
   machineName: "手机对这台机器的称呼：它们连接时会获取这个名称，手机仍可以给它起自己的名字。它也会以这个名称作为 Mirador 加入其他机器。留空则使用电脑的名称。",
   scriptProgram:
     "指向脚本的文件链接在 host 的电脑上以文本打开时所用的程序。该类型对应的程序可能会直接运行它：Git for Windows 会运行 .sh 文件，Python 启动器会运行 .py 文件。\n\n系统的文本编辑器：在 macOS 上是你为文本选定的那个，在 Windows 上是记事本。Linux 没有自己的，所以在那里由 xdg-open 根据脚本类型选择程序，而可执行脚本（该程序可能会运行它）不会被打开。\n\n你指定的程序：它在 host 的 PATH 中的名称，例如 code 或 subl，或者它的完整路径。它会收到文件的路径。在 Windows 上请指定 .exe，例如 Code.exe：.cmd 或 .bat 会通过 cmd.exe 运行，而 cmd.exe 可能把文件名的一部分当作命令。",

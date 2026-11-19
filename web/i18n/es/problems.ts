@@ -74,7 +74,7 @@ export const problems: Messages["problems"] = {
     "push-relay-not-web-address": "La dirección del relé push no es una dirección web.",
     "push-relay-needs-https": "La dirección del relé push tiene que empezar por https://.",
     "push-relay-is-origin": "La dirección del relé push es solo su origen, como https://push.example.com.",
-    "push-relay-needs-token": "El relé push necesita el token de este Mac.",
+    "push-relay-needs-token": "El relé push necesita el token de esta máquina.",
     "join-number-wrong": "Ese no es el número que muestra el dispositivo, así que se rechazó su solicitud. Puede volver a pedirlo.",
     "plugin-update-not-undoable":
       "Esa actualización ya no se puede deshacer: el plugin cambió desde que se inició Mirador, o la actualización ya se deshizo.",

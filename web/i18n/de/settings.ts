@@ -145,10 +145,10 @@ export const settings: Messages["settings"] = {
     title: "Handys ohne offenes Mirador",
     hint: (relay: string | null) =>
       relay
-        ? `Ein Push-Relay sagt deinen Handys Bescheid, wenn ein Agent dich braucht, während Mirador auf ihnen nicht offen ist. Dieser Mac schickt über Miradors Relay unter ${relay}, mit einer Freigabe, die jedes Handy von ihm bekommt, außer du legst unten ein eigenes fest. Ein Relay kann nicht lesen, was es weitergibt.`
+        ? `Ein Push-Relay sagt deinen Handys Bescheid, wenn ein Agent dich braucht, während Mirador auf ihnen nicht offen ist. Dieser Rechner schickt über Miradors Relay unter ${relay}, mit einer Freigabe, die jedes Handy von ihm bekommt, außer du legst unten ein eigenes fest. Ein Relay kann nicht lesen, was es weitergibt.`
         : "Ein Push-Relay sagt deinen Handys Bescheid, wenn ein Agent dich braucht, während Mirador auf ihnen nicht offen ist. Leg unten eines fest; es kann nicht lesen, was es weitergibt.",
     address: "Relay-Adresse",
-    token: "Token dieses Macs",
+    token: "Token dieses Rechners",
     tokenSet: "Gesetzt",
     save: "Speichern",
   },

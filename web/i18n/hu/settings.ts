@@ -145,10 +145,10 @@ export const settings: Messages["settings"] = {
     title: "Telefonok, amikor nincs nyitva a Mirador",
     hint: (relay: string | null) =>
       relay
-        ? `Egy push-továbbító szól a telefonjaidnak, ha egy ágensnek szüksége van rád, miközben nincs nyitva rajtuk a Mirador. Ez a Mac a Mirador továbbítóján (${relay}) keresztül küld, azzal az engedéllyel, amelyet minden telefon tőle kap, hacsak lent nem állítasz be sajátot. A továbbító nem tudja elolvasni, amit továbbít.`
+        ? `Egy push-továbbító szól a telefonjaidnak, ha egy ágensnek szüksége van rád, miközben nincs nyitva rajtuk a Mirador. Ez a gép a Mirador továbbítóján (${relay}) keresztül küld, azzal az engedéllyel, amelyet minden telefon tőle kap, hacsak lent nem állítasz be sajátot. A továbbító nem tudja elolvasni, amit továbbít.`
         : "Egy push-továbbító szól a telefonjaidnak, ha egy ágensnek szüksége van rád, miközben nincs nyitva rajtuk a Mirador. Állíts be egyet lent; nem tudja elolvasni, amit továbbít.",
     address: "Továbbító címe",
-    token: "Ennek a Macnek a tokenje",
+    token: "Ennek a gépnek a tokenje",
     tokenSet: "Beállítva",
     save: "Mentés",
   },
