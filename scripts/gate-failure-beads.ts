@@ -1,13 +1,17 @@
 /**
- * The e2e tests a run failed, read from Playwright's JSON report, and the bead the release gate keeps for each: one per
- * test, found again by its external ref, so a test that fails again adds to its bead rather than filing another.
+ * The tests a release gate run failed, e2e tests from Playwright's JSON report and unit tests from bun's JUnit report,
+ * and the bead the gate keeps for each: one per test, found again by its external ref, so a test that fails again adds
+ * to its bead rather than filing another.
  */
 
+export type Suite = "e2e" | "unit";
+
 export interface FailedTest {
+  suite: Suite;
   /** Where the test is written, which may be a file of tests several spec files share. */
   file: string;
-  /** The spec file that ran it, the one to run again. */
-  specFile: string;
+  /** The test file that ran it, from the checkout's root: the one to run again. */
+  testFile: string;
   line: number;
   /** The test's title under its describe blocks, joined as Playwright's list shows it. */
   title: string;
@@ -61,9 +65,10 @@ function failedIn(suite: ReportSuite, specFile: string, describedAs: string[]): 
   const failedSpecs = (suite.specs ?? []).flatMap((spec) =>
     spec.tests
       .filter(({ status }) => status === "unexpected")
-      .map(({ results }) => ({
+      .map(({ results }): FailedTest => ({
+        suite: "e2e",
         file: spec.file,
-        specFile,
+        testFile: `e2e/${specFile}`,
         line: spec.line,
         title: [...describedAs, spec.title].join(" › "),
         error: firstLinesOf(results.find(({ error }) => error?.message)?.error?.message ?? "no error message"),
@@ -78,10 +83,82 @@ export const failedTests = (report: E2eReport): FailedTest[] => report.suites.fl
 export const errorsOutsideTests = (report: E2eReport) =>
   withoutSecrets((report.errors ?? []).map(({ message }) => firstLinesOf(message ?? "")).join("\n\n") || "none");
 
-export const externalRefOf = ({ file, title }: Pick<FailedTest, "file" | "title">) => `e2e:${file} › ${title}`;
+const xmlEntities: Record<string, string> = { lt: "<", gt: ">", amp: "&", quot: '"', apos: "'" };
 
-/** The spec file that ran each failed test, once: serial specs only run whole. */
-export const specFilesOf = (tests: FailedTest[]) => [...new Set(tests.map(({ specFile }) => `e2e/${specFile}`))];
+const fromXml = (text: string) =>
+  text.replace(/&(#x[0-9a-f]+|#[0-9]+|[a-z]+);/gi, (entity, name: string) =>
+    name.startsWith("#x") ? String.fromCodePoint(parseInt(name.slice(2), 16)) : name.startsWith("#") ? String.fromCodePoint(Number(name.slice(1))) : (xmlEntities[name] ?? entity),
+  );
+
+const attributesOf = (tag: string) => Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, name, value]) => [name!, fromXml(value!)]));
+
+/** The suites, test cases and failures of a JUnit report, in order, each with whether it opens or closes. */
+const junitTags = (junit: string) =>
+  [...junit.matchAll(/<(\/?)(testsuite|testcase|failure|error)\b([^>]*?)(\/?)>/g)].map(([, closing, tag, attributes, selfClosing]) => ({
+    tag: tag!,
+    opens: !closing,
+    closes: Boolean(closing || selfClosing),
+    attributes: attributesOf(attributes!),
+  }));
+
+/** The unit tests bun's JUnit report says failed, under their describe blocks, which it nests as suites in each file's own. */
+export function failedUnitTests(junit: string): FailedTest[] {
+  const suites: string[] = [];
+  const failed: FailedTest[] = [];
+  let testCase: Record<string, string> | null = null;
+  for (const { tag, opens, closes, attributes } of junitTags(junit)) {
+    if (tag === "testsuite" && opens) suites.push(attributes.name ?? "");
+    if (tag === "testsuite" && closes) suites.pop();
+    if (tag === "testcase") testCase = opens && !closes ? attributes : null;
+    if ((tag === "failure" || tag === "error") && opens && testCase) {
+      const file = testCase.file ?? suites[0] ?? "";
+      failed.push({
+        suite: "unit",
+        file,
+        testFile: file,
+        line: Number(testCase.line ?? 0),
+        title: [...suites.slice(1), testCase.name ?? ""].join(" › "),
+        error: firstLinesOf(attributes.message || attributes.type || "no error message"),
+      });
+      testCase = null;
+    }
+  }
+  return failed;
+}
+
+/** The files bun's JUnit report holds, one suite each: a file that failed to load, or whose worker died, has none. */
+export const unitFilesIn = (junit: string) => [...new Set([...junit.matchAll(/<testsuite\b[^>]*?\bfile="([^"]*)"/g)].map(([, file]) => fromXml(file!)))];
+
+const ERROR_BETWEEN_TESTS = "# Unhandled error between tests";
+const TEST_FILE_HEADING = /^(tests\/.+\.test\.tsx?):$/;
+const BLOCK_RULE = /^-{5,}$/;
+
+function errorOfBlock(linesAfterItsRule: string[]) {
+  const end = linesAfterItsRule.findIndex((line) => BLOCK_RULE.test(line));
+  const block = linesAfterItsRule.slice(0, end === -1 ? undefined : end);
+  const errorLine = block.findIndex((line) => line.startsWith("error: "));
+  return firstLinesOf(block.slice(Math.max(errorLine, 0)).join("\n").replace(/^error: /, "")) || "no error message";
+}
+
+/**
+ * The errors between a file's tests, as from work a timed-out test left going, which bun's JUnit report leaves out: its
+ * output tells each under the heading of the file it was printing for. One under no heading is left out too.
+ */
+export function errorsBetweenTestsIn(output: string): FailedTest[] {
+  const lines = withoutTerminalColours(output).split("\n");
+  return lines.flatMap((line, at): FailedTest[] => {
+    const file = line === ERROR_BETWEEN_TESTS ? lines.slice(0, at).findLast((before) => TEST_FILE_HEADING.test(before))?.slice(0, -1) : undefined;
+    return file ? [{ suite: "unit", file, testFile: file, line: 0, title: "an error between its tests", error: errorOfBlock(lines.slice(at + 2)) }] : [];
+  });
+}
+
+/** The errors outside any test that bun counted in its closing summary. */
+export const errorCountIn = (output: string) => Number([...withoutTerminalColours(output).matchAll(/^\s*(\d+) errors?$/gm)].at(-1)?.[1] ?? 0);
+
+export const externalRefOf = ({ suite, file, title }: Pick<FailedTest, "suite" | "file" | "title">) => `${suite}:${file} › ${title}`;
+
+/** The test file that ran each failed test, once: serial specs only run whole. */
+export const testFilesOf = (tests: FailedTest[]) => [...new Set(tests.map(({ testFile }) => testFile))];
 
 /** The run's failed tests with what their files' run alone made of them, then the tests that failed only alone. */
 export function withRunAlone(failedInTheRun: FailedTest[], failedAlone: FailedTest[]): FailedTest[] {
@@ -97,7 +174,10 @@ export const stopsTheGate = (tests: FailedTest[]) => tests.some(({ alone }) => a
 
 const cut = (text: string, length: number) => (text.length > length ? `${text.slice(0, length - 1)}…` : text);
 
-export const beadTitleOf = ({ file, line, title }: FailedTest) => `E2E ${file}:${line} failed: ${cut(title, TITLE_LENGTH)}`;
+/** An error between a file's tests has no line of its own. */
+export const placeOf = ({ file, line }: Pick<FailedTest, "file" | "line">) => (line ? `${file}:${line}` : file);
+
+export const beadTitleOf = (test: FailedTest) => `${test.suite === "e2e" ? "E2E" : "Unit test"} ${placeOf(test)} failed: ${cut(test.title, TITLE_LENGTH)}`;
 
 export interface FoundBead {
   id: string;
@@ -114,9 +194,9 @@ export interface Beads {
 export interface GateRun {
   commit: string;
   date: string;
-  /** The folder of the run's kept copy, whose test-results and host-logs hold what the failures left. */
+  /** What the run left of its failures: the e2e run's kept copy, whose test-results and host-logs hold them, or the unit run's output. */
   keptCopy: string;
-  /** The kept copy of the run of the failed tests' files alone, when that failed too. */
+  /** The same of the run of the failed tests' files alone, when that failed too. */
   aloneCopy?: string;
 }
 
@@ -128,12 +208,13 @@ function whatHappened({ alone }: FailedTest, { commit, date }: GateRun) {
   return `Failed ${inTheGate}:`;
 }
 
-const keptFilesIn = (copy: string) => `Traces and screenshots: ${copy}/test-results. The test hosts' logs: ${copy}/host-logs.`;
+const keptFilesIn = (suite: Suite, kept: string) =>
+  suite === "e2e" ? `Traces and screenshots: ${kept}/test-results. The test hosts' logs: ${kept}/host-logs.` : `The run's output: ${kept}.`;
 
 function keptFilesOf(test: FailedTest, { keptCopy, aloneCopy }: GateRun) {
-  if (test.alone === "failed only alone") return keptFilesIn(aloneCopy ?? keptCopy);
+  if (test.alone === "failed only alone") return keptFilesIn(test.suite, aloneCopy ?? keptCopy);
   const ofTheRunAlone = test.alone === "failed alone too" && aloneCopy ? ` Its run alone: ${aloneCopy}.` : "";
-  return `${keptFilesIn(keptCopy)}${ofTheRunAlone}`;
+  return `${keptFilesIn(test.suite, keptCopy)}${ofTheRunAlone}`;
 }
 
 const failureNote = (test: FailedTest, run: GateRun) => withoutSecrets([whatHappened(test, run), test.error, keptFilesOf(test, run)].join("\n\n"));
