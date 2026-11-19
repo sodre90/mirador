@@ -1699,6 +1699,9 @@ export class ConversationService {
    * claude-agent-acp asks for it, in `_meta.jetbrains.air.fork`; an agent that ignores it forks the whole session, so
    * `harnessRewinds` keeps those agents out of here. `atSteeredMessage` tells pi, which keeps the rest of the point's
    * turn, that the message gone back to joined that turn, so the copy ends where that message came in.
+   *
+   * The session-defining fields ride along as the resume sends them: claude-agent-acp keeps its Claude Code process
+   * when a resume asks for what the fork asked for, and starts another one when it doesn't (vcs-awsl9).
    */
   private async forkSessionAt(conversationId: string, point: string, atSteeredMessage: boolean) {
     const conversation = this.get(conversationId);
@@ -1706,10 +1709,11 @@ export class ConversationService {
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
     if (!capabilities.agentCapabilities?.sessionCapabilities?.fork) throw new HostProblemError({ code: "agent-cannot-go-back-in-session" });
+    const sessionRequest = await this.sessionRequest(conversationId);
     const { sessionId } = await harness.forkSession({
+      ...sessionRequest,
       sessionId: conversation.acpSessionId!,
-      cwd: await recordedDirectory(this.workspaceOf(conversationId)),
-      _meta: forkPointMeta(point, atSteeredMessage),
+      _meta: { ...sessionRequest._meta, ...forkPointMeta(point, atSteeredMessage) },
     });
     return sessionId;
   }
@@ -2467,7 +2471,9 @@ export class ConversationService {
     this.setBusy(conversationId, "loading-history");
     const sessionRequest = await this.sessionRequest(conversationId);
     const loadedId =
-      mode === "fork" ? (await harness.forkSession({ sessionId, cwd: sessionRequest.cwd, ...(forkPoint && { _meta: forkPointMeta(forkPoint.messageId) }) })).sessionId : sessionId;
+      mode === "fork"
+        ? (await harness.forkSession({ ...sessionRequest, sessionId, ...(forkPoint && { _meta: { ...sessionRequest._meta, ...forkPointMeta(forkPoint.messageId) } }) })).sessionId
+        : sessionId;
     this.muteNotifier(conversation, loadedId);
     this.save({ ...this.get(conversationId), acpSessionId: loadedId });
     this.sessions.bind(conversationId, loadedId);
