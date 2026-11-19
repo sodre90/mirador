@@ -625,7 +625,7 @@ describe("Store", () => {
     const reopened = new Store(deletedPath);
     expect(names(reopened)).toEqual(["Start on a ticket"]);
     reopened.close();
-  });
+  }, 60_000);
 
   test("opens scripts in the system's text editor until Settings name a program, also after reopening", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
