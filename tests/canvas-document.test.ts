@@ -37,24 +37,31 @@ describe("buildCanvasDocument", () => {
   test("only a page that follows the text size has its viewport units read the frame's and its window-sized canvases marked", () => {
     const page = '<style>#screen{height:100vh}</style><div style="width:100vw"></div>';
     const following = buildCanvasDocument(page, "item", assetsOrigin, "light", { followsTextSize: true });
-    expect(following).toContain("#screen{height:calc(100 * var(--mirador-vh, 1vh))}");
-    expect(following).toContain('<div style="width:calc(100 * var(--mirador-vw, 1vw))"></div>');
+    expect(following).toContain("#screen{height:calc(100 * var(--mirador-vh))}");
+    expect(following).toContain('<div style="width:calc(100 * var(--mirador-vw))"></div>');
     expect(following).toContain("markWindowSizedCanvases");
+    const sized = buildCanvasDocument(page, "item", assetsOrigin, "light", { fitsContent: true });
+    expect(sized).toContain("#screen{height:calc(100 * var(--mirador-vh))}");
     const own = buildCanvasDocument(page, "item", assetsOrigin, "light");
     expect(own).toContain(page);
     expect(own).not.toContain("markWindowSizedCanvases");
   });
 
-  test("only a page that follows the text size in a frame sized to its content keeps the window's first size", () => {
+  test("only a frame sized to its content keeps the window's first size, also one that doesn't follow the text size", () => {
     const pinning = "pinWindowSize";
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true, fitsContent: true })).toContain(pinning);
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).toContain(pinning);
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).not.toContain(pinning);
-    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).not.toContain(pinning);
   });
 
   test("only a page in a frame sized to its content is measured again as it changes, not only as its box resizes", () => {
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).toContain("const contentWatcher = true");
     expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).toContain("const contentWatcher = false");
+  });
+
+  test("only a page in a frame sized to its content has the viewport lengths it writes after load rewritten", () => {
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { fitsContent: true })).toContain("rewriteViewportUnits(changes)");
+    expect(buildCanvasDocument("<p>", "item", assetsOrigin, "light", { followsTextSize: true })).not.toContain("rewriteViewportUnits(changes)");
   });
 
   test("puts the CSP before any agent markup, even for a full document with its own doctype", () => {

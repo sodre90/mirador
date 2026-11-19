@@ -317,7 +317,7 @@ test("all option previews are shown whole when columns widen, without right-edge
   await answerCanvasQuestion(page, "Alpha");
 });
 
-test("a preview sized to the viewport keeps its column's width as the window changes, rather than widening round after round, while one that grows or animates wider after it loads still widens to show whole", async ({ page }) => {
+test("a preview sized to the viewport, in its markup or from its script, keeps its column's width as the window changes rather than widening round after round, while one that grows or animates wider after it loads still widens to show whole", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 1000 });
   await signIn(page, host);
   const conversationId = await startConversation(page);
@@ -330,6 +330,10 @@ test("a preview sized to the viewport keeps its column's width as the window cha
   setTimeout(() => (box.style.width = "1300px"), 1500);
 </script>`;
   const animatedWide = `<div id="wide" style="width:300px;transition:width 1s ease-in;display:flex;justify-content:space-between;background:#eef;padding:8px"><b>START</b><b>END</b></div>`;
+  const scriptedWide = `<div id="set" style="height:30px;background:#eef">VIEWPORT</div>
+<script>
+  setTimeout(() => (document.getElementById("set").style.width = "100vw"), 500);
+</script>`;
 
   askInBackground(conversationId, {
     question: "Which width?",
@@ -337,9 +341,10 @@ test("a preview sized to the viewport keeps its column's width as the window cha
       { label: "Viewport", html: viewportWide },
       { label: "Growing", html: growing },
       { label: "Animated", html: animatedWide },
+      { label: "Scripted", html: scriptedWide },
     ],
   });
-  await expect(options).toHaveCount(3);
+  await expect(options).toHaveCount(4);
   const viewportSized = options.nth(0);
   await expect(preview(viewportSized).contentFrame().getByText("VIEWPORT")).toBeAttached();
   // Chasing its 100vw content, the frame grew a few dozen pixels a round up to 2400px, scaled down to a sliver: give it the time.
@@ -363,6 +368,8 @@ test("a preview sized to the viewport keeps its column's width as the window cha
   await animatedBox.evaluate((node: HTMLElement) => (node.style.width = "1300px"));
   await expect.poll(() => animatedBox.evaluate((node: HTMLElement) => node.offsetWidth)).toBe(1316);
   await expectWhollyShown(animated);
+  // Its script set its width in vw after it loaded, which would chase the frame it is shown in as well.
+  await expectAsWideAsItsColumn(options.nth(3));
   await answerCanvasQuestion(page, "Viewport");
 });
 

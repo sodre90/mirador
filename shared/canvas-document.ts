@@ -1,7 +1,7 @@
 import { APP_MEDIA_PATH, APP_STORAGE_CHARACTERS, type AppStorageItems } from "./apps.ts";
 import type { PluginItem } from "./canvas-plugins.ts";
 import { MAX_AREA_SIDE, MAX_BATCH_COMMENTS, MAX_MARKED_HTML, MAX_MARKED_TEXT, type WaitingMark } from "./page-marks.ts";
-import { viewportUnitsFromFrame } from "./viewport-units.ts";
+import { viewportUnitsFromFrame, viewportUnitsInDeclarations } from "./viewport-units.ts";
 
 export const CANVAS_MESSAGE_SOURCE = "mirador-canvas";
 
@@ -1220,6 +1220,41 @@ const WINDOW_SIZE_PINNING = `
   Object.defineProperty(window, "innerWidth", { get: () => pinnedWidth || frameWidth(), configurable: true });
 `;
 
+// Viewport lengths a page writes after it loads are rewritten in the frame, as buildCanvasDocument rewrote its markup:
+// an inline style and a style block alike. A record of the rewrite is dropped, so it starts no check of its own.
+const STYLE_VIEWPORT_UNITS = `
+  const hasViewportLength = (text) => /(?<![\\w.-])-?(?:\\d+\\.?\\d*|\\.\\d+)[dsl]?v(?:h|w|min|max)\\b/i.test(text);
+  const viewportUnitsInDeclarations = ${viewportUnitsInDeclarations};
+  const rewriteStyleAttribute = (element) => {
+    const attribute = element.getAttribute("style");
+    if (!attribute || !hasViewportLength(attribute)) return;
+    const rewritten = viewportUnitsInDeclarations(attribute);
+    if (rewritten !== attribute) element.setAttribute("style", rewritten);
+  };
+  const rewriteStyleBlock = (style) => {
+    const text = style.textContent;
+    if (!text || !hasViewportLength(text)) return;
+    const rewritten = viewportUnitsInDeclarations(text);
+    if (rewritten !== text) style.textContent = rewritten;
+  };
+  const rewriteViewportUnits = (records) => {
+    for (const record of records) {
+      if (record.type === "attributes") {
+        if (record.attributeName === "style") rewriteStyleAttribute(record.target);
+      } else if (record.type === "childList") {
+        if (record.target instanceof HTMLStyleElement) rewriteStyleBlock(record.target);
+        for (const node of record.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          if (node instanceof HTMLStyleElement) rewriteStyleBlock(node);
+          node.querySelectorAll("style").forEach(rewriteStyleBlock);
+        }
+      } else if (record.target.parentNode instanceof HTMLStyleElement) {
+        rewriteStyleBlock(record.target.parentNode);
+      }
+    }
+  };
+`;
+
 interface FrameReporting {
   textScale: number;
   measuresNaturalWidth: boolean;
@@ -1229,13 +1264,15 @@ interface FrameReporting {
 }
 
 function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string, { textScale, measuresNaturalWidth, findsOnPage, followsTextSize, fitsContent }: FrameReporting) {
-  const pinsWindowSize = followsTextSize && fitsContent;
+  // Any frame sized to its content can have content sized in viewport units chase it, zoomed by the text size or not.
+  const pinsWindowSize = fitsContent;
   return `(() => {
   const itemId = ${JSON.stringify(itemId)};
   const errors = [];
   const post = (message) => parent.postMessage({ source: ${JSON.stringify(CANVAS_MESSAGE_SOURCE)}, itemId, ...message }, "*");
   // Important, so the panel's theme wins over a page's own color-scheme (often "light dark", which follows the system) from the first paint.
   const colorScheme = document.createElement("style");
+  colorScheme.dataset.mirador = "theme";
   const showIn = (theme) => { colorScheme.textContent = ":root{color-scheme:" + (theme === "dark" ? "dark" : "light") + " !important}"; };
   showIn(${JSON.stringify(theme)});
   document.head.append(colorScheme);
@@ -1243,6 +1280,7 @@ function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string,
   // frame, which a 1x screen shows blurred. Measured in the frame's own pixels, getBoundingClientRect, client coordinates
   // and scrollX include the zoom, as do the root's scrollWidth and scrollHeight. vh and vw take the zoom too.
   const textZoom = document.createElement("style");
+  textZoom.dataset.mirador = "zoom";
   let zoom = 1;
   const frameWidth = Object.getOwnPropertyDescriptor(window, "innerWidth").get.bind(window);
   const frameHeight = Object.getOwnPropertyDescriptor(window, "innerHeight").get.bind(window);
@@ -1265,8 +1303,11 @@ function frameReporter(itemId: string, theme: CanvasTheme, assetsOrigin: string,
   document.head.append(textZoom);
 ${pinsWindowSize ? WINDOW_SIZE_PINNING : ""}
   // Content grown wider at the same height leaves the root's box as it was, so the observer below misses it: what the
-  // page changes in its body has it measured again, and so do transitions and animations as they end. Not Mirador's
-  // own marks and colours on the page, or a check would measure the page, and the measuring set off the next check.
+  // page changes has it measured again, and so do transitions and animations as they end. Not Mirador's own marks and
+  // colours on the page, or a check would measure the page, and the measuring set off the next check. A viewport length
+  // a script writes after load, in an inline style or a style block, would read the frame's own size and chase it, as
+  // its markup would have before buildCanvasDocument rewrote it: it is rewritten as it comes, once, as what is rewritten
+  // holds no viewport length to rewrite again.
   let reportScheduled = false;
   const scheduleReport = () => {
     if (reportScheduled) return;
@@ -1276,13 +1317,19 @@ ${pinsWindowSize ? WINDOW_SIZE_PINNING : ""}
       reportSize();
     });
   };
+  ${pinsWindowSize ? STYLE_VIEWPORT_UNITS : ""}
+  const madeByMirador = (node) => !!(node.nodeType === 1 ? node : node.parentNode)?.closest?.("[data-mirador]");
   const contentWatcher = ${fitsContent}
     ? new MutationObserver((records) => {
-        if (records.some((record) => !record.attributeName?.startsWith("data-mirador"))) scheduleReport();
+        const changes = records.filter((record) => !record.attributeName?.startsWith("data-mirador") && !madeByMirador(record.target));
+        if (!changes.length) return;
+        ${pinsWindowSize ? `rewriteViewportUnits(changes);
+        contentWatcher.takeRecords();` : ""}
+        scheduleReport();
       })
     : null;
   if (contentWatcher) {
-    addEventListener("DOMContentLoaded", () => contentWatcher.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true }));
+    contentWatcher.observe(document.documentElement, { subtree: true, childList: true, characterData: true, attributes: true });
     addEventListener("transitionend", scheduleReport, true);
     addEventListener("animationend", scheduleReport, true);
   }
@@ -1457,6 +1504,7 @@ ${HIDDEN_ERROR_SCRIPT}
     root.style.width = "max-content";
     const width = Math.ceil(root.getBoundingClientRect().width);
     root.style.width = inlineWidth;
+    contentWatcher?.takeRecords();
     return width;
   };
   // Measuring the natural width resizes the page for a moment, which inside the observer's own callback is a resize loop.
@@ -1609,6 +1657,6 @@ export function buildCanvasDocument(
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),
-    followsTextSize ? viewportUnitsFromFrame(withoutDoctype) : withoutDoctype,
+    followsTextSize || fitsContent ? viewportUnitsFromFrame(withoutDoctype) : withoutDoctype,
   ].join("\n");
 }
