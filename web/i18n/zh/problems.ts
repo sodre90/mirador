@@ -33,6 +33,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "Mirador 已不再等待该作业。",
     "conversation-workspace-gone": "此对话的工作区已不存在。",
     "permission-no-longer-pending": "此权限请求已不再等待处理。",
+    "room-approval-not-yours": "只有房间的所有者才能回应其 Agent 的请求。",
     "reminder-needs-time": "请说明时间，例如 /later tomorrow 9 或 /remind 3h。",
     "reminder-not-valid": "该提醒需要一个时间，以及是否将对话先放一边。",
     "morning-not-valid": "早上需要一个具体时间，例如 09:00。",

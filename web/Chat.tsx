@@ -12,6 +12,7 @@ import {
   type DelegatedReply,
   type HarnessId,
   type JobWait,
+  type PendingPermissionRequest,
   type Person,
   type Profile,
   type PromptTemplate,
@@ -644,6 +645,10 @@ function permissionSubject(toolCall: PermissionBlock["toolCall"]) {
   return typeof description === "string" ? description : words.permission.runShellCommand;
 }
 
+/** A waiting request's title as its conversation shows it. */
+export const pendingPermissionNeeded = ({ toolKind, title, description }: PendingPermissionRequest) =>
+  words.permission.needed(toolKind === "execute" ? (description ?? words.permission.runShellCommand) : title);
+
 function InfoLine({ text }: { text: string }) {
   return (
     <div className="info-line">
@@ -784,8 +789,10 @@ export function PersonAvatar({ personId }: { personId: string | null }) {
   );
 }
 
+export const usePersonName = (personId: string | null) => usePerson(personId)?.name || words.author.you;
+
 export function PersonName({ personId }: { personId: string | null }) {
-  return <span className="person-name">{usePerson(personId)?.name || words.author.you}</span>;
+  return <span className="person-name">{usePersonName(personId)}</span>;
 }
 
 function Avatar({ author, harness }: { author: Author; harness: HarnessId }) {

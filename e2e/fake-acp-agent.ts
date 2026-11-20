@@ -52,7 +52,11 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * last line, the message it is asked. `CANVAS ` there, a canvas tool's name and its JSON arguments call that tool of
  * the canvas server the session was given, and answer with its result. `PINGPONG ` and two agents' names, another's
  * and its own, tag the other with room_tag and answer `PINGPONG ` with the names swapped, so two agents tag each other
- * for as long as the room lets them. `My answer to your question` is answered with "Going with " and the answer.
+ * for as long as the room lets them. `ASK ` there and a JSON array of steps asks permission for one tool after another,
+ * each once the one before was answered: `{"kind": toolKind, "title": text}` with a `"command"` it would run or a
+ * `"path"` it would read or change (an edit's comes with its diff), or `{"waitFor": path}`, which holds the turn until
+ * that file exists; `{{folder}}` in them is the session's folder. It answers with what each request got, or "Done."
+ * when none asked. `My answer to your question` is answered with "Going with " and the answer.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
  * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
@@ -418,6 +422,8 @@ async function answerInRoom(client: acp.AgentContext, sessionId: string, prompt:
     const [tool, ...input] = canvasCall.split(" ");
     return sayText(client, sessionId, await callCanvasTool(sessionId, tool!, JSON.parse(input.join(" "))));
   }
+  const steps = after("ASK ");
+  if (steps !== null) return askOneByOne(client, sessionId, JSON.parse(steps));
   const pingPong = after("PINGPONG ");
   if (pingPong !== null) {
     const [other, itself] = pingPong.split(" ");
@@ -425,6 +431,33 @@ async function answerInRoom(client: acp.AgentContext, sessionId: string, prompt:
     return sayText(client, sessionId, `PINGPONG ${itself} ${other}`);
   }
   return sayText(client, sessionId, after("SAY ") ?? "Noted.");
+}
+
+type AskStep = { kind: acp.ToolKind; title: string; command?: string; path?: string } | { waitFor: string };
+
+async function askOneByOne(client: acp.AgentContext, sessionId: string, steps: AskStep[]) {
+  const folder = sessionFolders.get(sessionId) ?? "";
+  const expand = (text: string) => text.replaceAll("{{folder}}", folder);
+  const answers: string[] = [];
+  for (const step of steps) {
+    if ("waitFor" in step) {
+      while (!existsSync(expand(step.waitFor))) await Bun.sleep(50);
+      continue;
+    }
+    const path = step.path && expand(step.path);
+    const toolCall: acp.ToolCallUpdate = {
+      toolCallId: `ask-${++nextToolCall}`,
+      title: expand(step.title),
+      kind: step.kind,
+      status: "pending",
+      ...(step.command && { rawInput: { command: expand(step.command) } }),
+      ...(path && { locations: [{ path }] }),
+      ...(path && step.kind === "edit" && { content: [{ type: "diff" as const, path, oldText: null, newText: "changed\n" }] }),
+    };
+    const response = await client.request(acp.methods.client.session.requestPermission, { sessionId, toolCall, options: permissionOptions });
+    answers.push(`${toolCall.title}: ${response.outcome.outcome === "selected" ? response.outcome.optionId : "cancelled"}`);
+  }
+  return sayText(client, sessionId, answers.join("; ") || "Done.");
 }
 
 /** The canvas server each session was given, which it calls as an agent calls its tools. */

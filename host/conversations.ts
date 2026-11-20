@@ -64,7 +64,8 @@ import type { ConversationChoices, ConversationReply, ConversationUsage, RanOn, 
 import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
-import { pendingAsk, pendingPermission } from "./pending-requests.ts";
+import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
+import { presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
@@ -211,7 +212,22 @@ interface PendingPermission {
   settle: PermissionResolver;
   allowOptionId: string | null;
   request: PendingPermissionRequest;
+  asked: AskedPermission;
+  /** When it began waiting. */
+  at: number;
 }
+
+export type WaitingPermission = Pick<PendingPermission, "request" | "asked" | "at">;
+
+/** What the rooms decide of their agents' permission requests. */
+export interface RoomPermissionRules {
+  /** Whether the host lets the request of a room's agent through without asking anyone. */
+  allowsByItself(conversationId: string, asked: AskedPermission): boolean;
+  /** A request of one of the room's agents started or stopped waiting. */
+  waitingChanged(roomId: string): void;
+}
+
+const NO_ROOM_PERMISSION_RULES: RoomPermissionRules = { allowsByItself: () => false, waitingChanged: () => {} };
 
 interface PromptStart {
   imageIds?: string[];
@@ -418,6 +434,7 @@ export class ConversationService {
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   private hearTurnEnd: (conversationId: string, turnSeq: number) => void = () => {};
+  private roomPermissions = NO_ROOM_PERMISSION_RULES;
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
   private deleteWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
@@ -745,6 +762,11 @@ export class ConversationService {
     this.hearTurnEnd = hearTurnEnd;
   }
 
+  /** A room's agent asks its room's rules first, and the room hears whenever one of its agents' requests starts or stops waiting. */
+  followsRoomPermissionsOf(rules: RoomPermissionRules) {
+    this.roomPermissions = rules;
+  }
+
   /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
   hearActivityWith(hearActivity: (conversationId: string, activity: PluginActivity) => void) {
     this.hearActivity = hearActivity;
@@ -973,6 +995,22 @@ export class ConversationService {
     return { sessionId: copyId, configOptions };
   }
 
+  /** The mode its room's preset runs a room's conversation in, where its agent has one for it; null for any other conversation. */
+  private roomPresetMode(conversation: Conversation) {
+    const room = conversation.roomId ? this.store.findRoom(conversation.roomId) : undefined;
+    return room ? presetModeOf(conversation.harness, room.permissions) : null;
+  }
+
+  /**
+   * A room's session goes to its room's mode as it opens, new or resumed, and as the preset changes. A mode the agent
+   * switches to in between, as an option on its request can, holds until then.
+   */
+  private async keepToRoomPreset(conversationId: string, sessionId: string) {
+    const mode = this.roomPresetMode(this.get(conversationId));
+    const modeOption = this.get(conversationId).configOptions.find(({ category }) => category === "mode");
+    if (mode && modeOption && offersValue(modeOption, mode)) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
+  }
+
   private async keepSideChatReadOnly(sideChatId: string, sessionId: string) {
     const mode = sideChatModeOf(this.get(sideChatId).harness);
     const modeOption = this.get(sideChatId).configOptions.find(({ category }) => category === "mode");
@@ -991,7 +1029,10 @@ export class ConversationService {
     if (mode !== undefined && mode !== null && modeOption) await this.setConfigOption(sideChatId, modeOption.id, mode);
   }
 
-  /** An agent's conversation in a room, which no list of conversations shows: it works in the room's workspace, and its agent's questions don't wait for an answer. */
+  /**
+   * An agent's conversation in a room, which no list of conversations shows: it works in the room's workspace, its agent's
+   * questions don't wait for an answer, and it never runs in YOLO, whatever its profile says: the room's preset rules it.
+   */
   startInRoom(roomId: string, workspaceId: string, launch: Launch, title: string): Conversation {
     return this.insertConversation(workspaceId, launch, title, true, undefined, undefined, roomId);
   }
@@ -1017,7 +1058,7 @@ export class ConversationService {
       titleSetByUser,
       acpSessionId: null,
       askMode: roomId ? "next-message" : profile.askMode,
-      bypassPermissions: sideChatOf === undefined && profile.bypassPermissions,
+      bypassPermissions: sideChatOf === undefined && roomId === undefined && profile.bypassPermissions,
       status: "idle",
       statusDetail: null,
       openInTerminal: null,
@@ -2183,6 +2224,24 @@ export class ConversationService {
     pending.settle(optionId);
   }
 
+  /** Allows a waiting request with the agent's option that allows it once, or turns it down with its option that rejects it. */
+  answerPermission(conversationId: string, permissionId: string, allowed: boolean) {
+    const pending = this.runtime(conversationId).pendingPermissions.get(permissionId);
+    if (!pending) throw new HostProblemError({ code: "permission-no-longer-pending" });
+    pending.settle(allowed ? pending.allowOptionId : optionThatRejects(pending.request.options));
+  }
+
+  /** The permission requests the conversation's agent waits on, oldest first. */
+  waitingPermissions(conversationId: string): WaitingPermission[] {
+    return [...(this.runtimes.get(conversationId)?.pendingPermissions.values() ?? [])].map(({ request, asked, at }) => ({ request, asked, at }));
+  }
+
+  /** A room's changed preset reaches its agent's open session at once; a closed one takes it as it opens again. */
+  async followRoomPreset(conversationId: string) {
+    const sessionId = await this.runtimes.get(conversationId)?.sessionId?.catch(() => null);
+    if (sessionId) await this.keepToRoomPreset(conversationId, sessionId);
+  }
+
   /** Where the conversations' Claude Code sessions are registered; a profile may set its own config directory. */
   claudeConfigDirs(): string[] {
     return this.store
@@ -2489,6 +2548,7 @@ export class ConversationService {
         this.bindSession(conversationId, conversation.acpSessionId, resumed.configOptions);
         replay.filter(({ update }) => SESSION_STATE_UPDATES.has(update.sessionUpdate)).forEach((notification) => this.handleSessionUpdate(notification));
         await this.restoreConfigChoices(conversationId, conversation.acpSessionId, conversation.configOptions);
+        await this.keepToRoomPreset(conversationId, conversation.acpSessionId);
         return conversation.acpSessionId;
       } catch (reopenError) {
         this.closeSessionIfConversationDeleted(conversationId, harness, conversation.acpSessionId);
@@ -2505,6 +2565,7 @@ export class ConversationService {
     await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
     if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
     else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
+    await this.keepToRoomPreset(conversationId, created.sessionId);
     runtime.startChoices = undefined;
     if (isFirstSession && conversation.harness === "pi" && !conversation.sideChatOf) this.offerNewerPi(conversationId, harness).catch(() => {});
     return created.sessionId;
@@ -2663,12 +2724,16 @@ export class ConversationService {
     if (model) await this.applyChosenModel(conversationId, sessionId, model, holdUntil);
   }
 
-  /** A conversation takes its profile's mode and effort when it starts with the profile or moves to it; after that its own choice stands. */
+  /**
+   * A conversation takes its profile's mode and effort when it starts with the profile or moves to it; after that its own
+   * choice stands. A room's conversation takes its room's mode instead, where the agent has one for the room's preset.
+   */
   private async applyProfileChoices(conversationId: string, sessionId: string) {
     const { profileId } = this.get(conversationId);
     const profile = profileId === null ? undefined : this.store.findProfile(profileId);
+    const mode = this.roomPresetMode(this.get(conversationId)) ?? profile?.mode;
     const modeOption = this.get(conversationId).configOptions.find(({ category }) => category === "mode");
-    if (profile?.mode && modeOption) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, profile.mode);
+    if (mode && modeOption) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
     const effortOption = this.get(conversationId).configOptions.find(({ category }) => category === "thought_level");
     if (profile?.effort && effortOption && offersValue(effortOption, profile.effort)) {
       await this.trySetConfigOption(conversationId, sessionId, effortOption.id, profile.effort);
@@ -3192,7 +3257,7 @@ export class ConversationService {
     const conversationId = this.sessions.conversationOf(request.sessionId);
     if (!conversationId) return { outcome: { outcome: "cancelled" } };
     const allowOptionId = optionThatAllows(request.options);
-    if (allowOptionId && this.get(conversationId).bypassPermissions) {
+    if (allowOptionId && approvesEverything(this.get(conversationId))) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
     const reports = this.store.toolCallReports(conversationId, request.toolCall.toolCallId);
@@ -3207,7 +3272,11 @@ export class ConversationService {
     const { toolCall, edits } = await inArrivalOrder;
     if (signal.aborted || !this.store.hasConversation(conversationId)) return { outcome: { outcome: "cancelled" } };
     // YOLO switched on while the files were read approves only the requests already waiting.
-    if (allowOptionId && this.get(conversationId).bypassPermissions) return { outcome: { outcome: "selected", optionId: allowOptionId } };
+    if (allowOptionId && approvesEverything(this.get(conversationId))) return { outcome: { outcome: "selected", optionId: allowOptionId } };
+    const kindSeenBefore = runtime.openToolCalls.kindOf(request.toolCall.toolCallId);
+    const asked = askedPermissionOf(toolCall, kindSeenBefore);
+    const { roomId } = this.get(conversationId);
+    if (allowOptionId && roomId && this.roomPermissions.allowsByItself(conversationId, asked)) return { outcome: { outcome: "selected", optionId: allowOptionId } };
     const permissionId = crypto.randomUUID();
     if (runtime.turn && !runtime.turn.ended) runtime.turn.awaitedUser = true;
     this.append(conversationId, {
@@ -3223,10 +3292,12 @@ export class ConversationService {
         if (!runtime.pendingPermissions.delete(permissionId)) return;
         this.append(conversationId, { type: "permission-resolved", permissionId, optionId });
         if (this.store.hasConversation(conversationId)) this.publish(this.get(conversationId));
+        if (roomId) this.roomPermissions.waitingChanged(roomId);
         resolve(optionId ? { outcome: { outcome: "selected", optionId } } : { outcome: { outcome: "cancelled" } });
       };
-      runtime.pendingPermissions.set(permissionId, { settle, allowOptionId, request: pendingPermission(permissionId, request, runtime.openToolCalls.kindOf(request.toolCall.toolCallId)) });
+      runtime.pendingPermissions.set(permissionId, { settle, allowOptionId, request: pendingPermission(permissionId, request, kindSeenBefore), asked, at: Date.now() });
       this.publish(this.get(conversationId));
+      if (roomId) this.roomPermissions.waitingChanged(roomId);
       signal.addEventListener("abort", () => settle(null), { once: true });
     });
   }
@@ -3762,8 +3833,17 @@ export const queuedBeforeSessionChange = (queue: QueuedMessage[]) => {
 
 /** A side chat's agent is told no once, so it can still ask for something else. */
 function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionResponse {
+  const rejecting = optionThatRejects(options);
+  return rejecting ? { outcome: { outcome: "selected", optionId: rejecting } } : { outcome: { outcome: "cancelled" } };
+}
+
+/** YOLO, which a room's conversation never runs in, whatever its profile says: its room's preset decides. */
+const approvesEverything = ({ bypassPermissions, roomId }: Conversation) => bypassPermissions && !roomId;
+
+/** No once, so the agent can still ask for something else. */
+function optionThatRejects(options: acp.PermissionOption[]): string | null {
   const rejecting = options.find(({ kind }) => kind === "reject_once") ?? options.find(({ kind }) => kind === "reject_always");
-  return rejecting ? { outcome: { outcome: "selected", optionId: rejecting.optionId } } : { outcome: { outcome: "cancelled" } };
+  return rejecting?.optionId ?? null;
 }
 
 /**

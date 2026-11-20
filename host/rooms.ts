@@ -1,6 +1,16 @@
+import { lstatSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
+import {
+  allowedByPreset,
+  isPermissionPreset,
+  taskAllowanceOf,
+  type AskedPermission,
+  type PermissionPreset,
+  type RoomApprovalAnswer,
+} from "../shared/room-permissions.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   agentTaggedTurnsAfter,
@@ -8,16 +18,20 @@ import {
   personMessageBehind,
   roomHistory,
   shownOnRoomCanvas,
+  taskOf,
   writtenByAgent,
   type Room,
+  type RoomApproval,
   type RoomAuthor,
   type RoomHistoryQuery,
   type RoomMessage,
   type RoomThread,
   type RoomTimeline,
 } from "../shared/rooms.ts";
+import type { RoomPermissionRules, WaitingPermission } from "./conversations.ts";
 import type { Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
+import type { SystemNotifications } from "./system-notifications.ts";
 
 /** What a room needs of the conversations its agents work in. */
 export interface RoomSessions {
@@ -25,6 +39,9 @@ export interface RoomSessions {
   /** `authorId` is the person who wrote the message; none when an agent's answer tagged the agent. */
   send(conversationId: string, text: string, imageIds: string[], options: { authorId?: string; afterTurn: boolean; roomMessageId: string }): Promise<void>;
   delete(conversationId: string): void;
+  waitingPermissions(conversationId: string): WaitingPermission[];
+  answerPermission(conversationId: string, permissionId: string, allowed: boolean): void;
+  followRoomPreset(conversationId: string): Promise<void>;
 }
 
 /** What came of an agent naming agents to tag in its answer: those it will tag, and those it can't, by name. */
@@ -43,33 +60,60 @@ const distinct = (ids: string[]) => [...new Set(ids)];
 const hasAgent = (room: Room, profileId: string) => room.agents.some((agent) => agent.profileId === profileId);
 const sameName = (named: string, name: string) => named.trim().replace(/^@/, "").toLowerCase() === name.toLowerCase();
 
+const leadsOut = (relativePath: string) => relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath);
+
+function realPathOrNull(path: string) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/** A link on the way can lead out of the workspace, so the real place of the nearest existing entry decides; null where none can be read. */
+function realPlaceOf(path: string): string | null {
+  try {
+    lstatSync(path);
+  } catch {
+    return dirname(path) === path ? null : realPlaceOf(dirname(path));
+  }
+  return realPathOrNull(path);
+}
+
 /**
  * The rooms of this machine: their messages go to every page that shows the room and cost no tokens, until one tags an
  * agent or follows up in its thread. Then the agent's conversation in the room is sent what it has not seen of the room,
  * and the final answer of the turn that takes is posted to the room, in the thread. An agent's answer can tag other agents
  * of the room as a person's message does, a few turns at most after a person last wrote.
+ *
+ * What the agents may do without asking is the room's permission preset; whatever else they ask waits for an approver,
+ * who can let the same kind of request through for the rest of the task's turn.
  */
-export class RoomService {
+export class RoomService implements RoomPermissionRules {
   /** The agents each conversation's answer tags, named while its turn on a room message runs. */
   private readonly tagsForAnswers = new Map<string, { answering: string; profileIds: string[] }>();
+  /** What an approver let through for the rest of each conversation's turn, by `taskAllowanceOf`. */
+  private readonly allowedForTurn = new Map<string, Set<string>>();
 
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly sessions: RoomSessions,
+    private readonly notifications: Pick<SystemNotifications, "notify">,
   ) {}
 
   list(): Room[] {
     return this.store.listRooms();
   }
 
-  create(name: string, workspaceId: string, profileIds: string[]): Room {
+  create(name: string, workspaceId: string, profileIds: string[], permissions: PermissionPreset): Room {
     if (!this.store.findWorkspace(workspaceId)) throw new HostProblemError({ code: "workspace-gone" });
     const room = {
       id: crypto.randomUUID(),
       name: this.roomName(name),
       workspaceId,
       agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null })),
+      permissions: knownPreset(permissions),
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -90,12 +134,65 @@ export class RoomService {
       .forEach(({ conversationId }) => this.sessions.delete(conversationId!));
     this.store.setRoomAgents(roomId, [...staying]);
     this.publish(roomId);
+    this.waitingChanged(roomId);
+  }
+
+  /** Holds from the agents' next requests on; an agent's open session switches to the preset's mode at once. */
+  setPermissions(roomId: string, permissions: PermissionPreset) {
+    const room = this.existingRoom(roomId);
+    this.store.setRoomPermissions(roomId, knownPreset(permissions));
+    this.publish(roomId);
+    room.agents.forEach(({ conversationId }) => conversationId && void this.sessions.followRoomPreset(conversationId).catch(() => {}));
   }
 
   delete(roomId: string) {
     this.existingRoom(roomId).agents.forEach(({ conversationId }) => conversationId && this.sessions.delete(conversationId));
     this.store.deleteRoom(roomId);
     this.hub.broadcast({ type: "room.deleted", roomId });
+  }
+
+  /** Whether the room's preset, or what an approver let through for the rest of the turn, lets the request through without asking. */
+  allowsByItself(conversationId: string, asked: AskedPermission): boolean {
+    const room = this.roomOf(conversationId);
+    if (!room) return false;
+    return this.allowedForTurn.get(conversationId)?.has(taskAllowanceOf(asked)) === true || allowedByPreset(room.permissions, asked, (path) => this.insideWorkspace(room, path));
+  }
+
+  waitingChanged(roomId: string) {
+    this.hub.broadcast({ type: "room.approvals", roomId, approvals: this.approvals(roomId) });
+  }
+
+  /** The requests the room's agents wait on, oldest first. */
+  approvals(roomId: string): RoomApproval[] {
+    const room = this.store.findRoom(roomId);
+    if (!room) return [];
+    const messagesById = new Map(this.store.listRoomMessages(roomId).map((message) => [message.id, message]));
+    return room.agents
+      .flatMap(({ profileId, conversationId }) =>
+        conversationId ? this.sessions.waitingPermissions(conversationId).map((waiting) => this.approvalOf(room, profileId, conversationId, waiting, messagesById)) : [],
+      )
+      .toSorted((a, b) => a.at - b.at);
+  }
+
+  allApprovals(): RoomApproval[] {
+    return this.list().flatMap(({ id }) => this.approvals(id));
+  }
+
+  /** Allowing for the task lets the same kind of request through until the turn ends, the ones already waiting in it too. */
+  approve(conversationId: string, permissionId: string, answer: RoomApprovalAnswer, personId: string) {
+    const room = this.roomOf(conversationId);
+    if (!room) throw new HostProblemError({ code: "room-gone" });
+    this.assertMayApprove(room, personId);
+    const waiting = this.sessions.waitingPermissions(conversationId).find(({ request }) => request.permissionId === permissionId);
+    if (!waiting) throw new HostProblemError({ code: "permission-no-longer-pending" });
+    if (answer === "allow-for-task") this.allowForTurn(conversationId, waiting.asked);
+    else this.sessions.answerPermission(conversationId, permissionId, answer === "allow");
+  }
+
+  /** Who may answer a room's agents' requests, on the room's thread view as on its strip. */
+  assertMayApproveIn(conversationId: string, personId: string) {
+    const room = this.roomOf(conversationId);
+    if (room) this.assertMayApprove(room, personId);
   }
 
   timeline(roomId: string): RoomTimeline {
@@ -133,6 +230,7 @@ export class RoomService {
    * other's tags since a person wrote: then it names them as dropped.
    */
   turnEnded(conversationId: string, turnSeq: number) {
+    this.allowedForTurn.delete(conversationId);
     const conversation = this.store.findConversation(conversationId);
     if (!conversation?.roomId || conversation.profileId === null) return;
     const room = this.store.findRoom(conversation.roomId);
@@ -158,6 +256,7 @@ export class RoomService {
     const posted = unfinished ? this.store.rewriteRoomMessage({ ...answer, id: unfinished.id }) : this.store.appendRoomMessage({ ...answer, id: crypto.randomUUID() });
     this.post(posted, passedOn);
     passedOn.forEach((profileId) => this.ask(room, profileId, posted, undefined));
+    if (finished && this.writtenByAnApprover(room, asked)) this.notifications.notify(conversationId, { kind: "finished" });
   }
 
   /**
@@ -184,6 +283,56 @@ export class RoomService {
     if (!conversation?.roomId || conversation.profileId === null || !this.store.findRoom(conversation.roomId)) return null;
     const sent = this.store.listRoomMessagesBetween(conversation.roomId, 0, this.store.roomSeenThrough(conversation.roomId, conversation.profileId));
     return roomHistory(sent, query, (author) => this.nameOf(author));
+  }
+
+  private approvalOf(room: Room, profileId: string, conversationId: string, { request, asked: { toolKind, paths }, at }: WaitingPermission, messagesById: Map<string, RoomMessage>): RoomApproval {
+    const asked = this.askedIn(conversationId, Number.MAX_SAFE_INTEGER);
+    return {
+      roomId: room.id,
+      conversationId,
+      profileId,
+      request,
+      file: toolKind === "execute" ? null : (paths[0] ?? null),
+      at,
+      threadId: (asked && this.threadOf(asked, profileId)?.id) ?? null,
+      task: asked ? taskOf(asked, messagesById) : null,
+      approvers: this.approversOf(room),
+    };
+  }
+
+  /** Today the owner alone answers what a room's agents ask. */
+  private approversOf(_room: Room) {
+    return [this.store.ownerId()];
+  }
+
+  private assertMayApprove(room: Room, personId: string) {
+    if (!this.approversOf(room).includes(personId)) throw new HostProblemError({ code: "room-approval-not-yours" });
+  }
+
+  /** Someone waits for the answer: an approver who tagged the agent, or followed up in its thread. */
+  private writtenByAnApprover(room: Room, asked: RoomMessage) {
+    return !writtenByAgent(asked.author) && this.approversOf(room).includes(asked.author.personId);
+  }
+
+  private allowForTurn(conversationId: string, asked: AskedPermission) {
+    const allowance = taskAllowanceOf(asked);
+    this.allowedForTurn.set(conversationId, new Set([...(this.allowedForTurn.get(conversationId) ?? []), allowance]));
+    this.sessions
+      .waitingPermissions(conversationId)
+      .filter((waiting) => taskAllowanceOf(waiting.asked) === allowance)
+      .forEach(({ request }) => this.sessions.answerPermission(conversationId, request.permissionId, true));
+  }
+
+  private roomOf(conversationId: string) {
+    const roomId = this.store.findConversation(conversationId)?.roomId;
+    return roomId ? this.store.findRoom(roomId) : undefined;
+  }
+
+  private insideWorkspace(room: Room, path: string) {
+    const workspace = this.store.findWorkspace(room.workspaceId);
+    const root = workspace ? realPathOrNull(workspace.path) : null;
+    const place = workspace ? realPlaceOf(resolve(workspace.path, path)) : null;
+    return root !== null && place !== null && !leadsOut(relative(root, place));
   }
 
   private ask(room: Room, profileId: string, message: RoomMessage, personId: string | undefined) {
@@ -296,4 +445,9 @@ export class RoomService {
     this.hub.broadcast({ type: "room.upserted", room });
     return room;
   }
+}
+
+function knownPreset(permissions: PermissionPreset) {
+  if (!isPermissionPreset(permissions)) throw new Error(`There is no permission preset "${permissions}".`);
+  return permissions;
 }

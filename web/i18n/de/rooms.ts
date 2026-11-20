@@ -41,4 +41,21 @@ export const rooms: Messages["rooms"] = {
     `Nicht markiert: ${agents}. Die Agenten wurden angehalten, da sie sich ${turns}-mal gegenseitig markiert haben, seit ein Mensch geschrieben hat. Markiere einen mit @, um weiterzumachen.`,
   madeOnCanvas: (pages, questions) => `Im Canvas: ${listed(pages > 0 && counted(pages, "Seite", "Seiten"), questions > 0 && counted(questions, "Frage", "Fragen"))}`,
   openOnCanvas: "Im Canvas öffnen",
+  permissions: "Was die Agenten ohne Nachfrage dürfen",
+  presets: {
+    "ask-everything": "Bei allem nachfragen",
+    "read-freely": "Lesen ist frei, Änderungen und Befehle fragen nach",
+    "work-freely": "Frei arbeiten im Arbeitsbereich",
+  },
+  permissionsHint:
+    "Gilt ab der nächsten Anfrage der Agenten, auch wenn ein Profil auf YOLO steht. Ein Agent, der seine Tools ohne Nachfrage ausführt, wie pi und standardmäßig opencode, ist nicht daran gebunden.",
+  approvalsWaiting: "Anfragen, die auf Genehmigung warten",
+  asks: (agent) => `${agent} fragt an`,
+  approvalTask: (person, text) => `Aufgabe von ${person}: „${text}“`,
+  yourTask: (text) => `Deine Aufgabe: „${text}“`,
+  approvalPosition: (count) => `1 von ${count}`,
+  allow: "Erlauben",
+  allowForTask: "Für diese Aufgabe erlauben",
+  deny: "Ablehnen",
+  waitingForApproval: (agent) => `${agent} wartet auf Genehmigung…`,
 };

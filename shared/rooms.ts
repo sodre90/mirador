@@ -1,4 +1,6 @@
-import type { CanvasItem, StoredEvent } from "./model.ts";
+import type { CanvasItem, PendingPermissionRequest, StoredEvent } from "./model.ts";
+import type { PermissionPreset } from "./room-permissions.ts";
+import { cutWithEllipsis } from "./text-cut.ts";
 
 /** An agent of a room, by its profile, and the conversation it works on the room's tasks in, made the first time it is tagged. */
 export interface RoomAgent {
@@ -13,6 +15,8 @@ export interface Room {
   /** The workspace its agents work in. */
   workspaceId: string;
   agents: RoomAgent[];
+  /** What its agents may do without asking. */
+  permissions: PermissionPreset;
   createdAt: number;
 }
 
@@ -51,6 +55,28 @@ export interface RoomThread {
 export interface RoomTimeline {
   messages: RoomMessage[];
   threads: RoomThread[];
+}
+
+/** Whose task an agent's turn works on: the person whose message it goes back to, with how that message begins. */
+export interface RoomTask {
+  personId: string;
+  text: string;
+}
+
+/** A permission request an agent of the room waits on, for the people the host says may answer it. */
+export interface RoomApproval {
+  roomId: string;
+  conversationId: string;
+  profileId: string;
+  request: PendingPermissionRequest;
+  /** The file it would change, as the agent names it; null for a tool that names none. */
+  file: string | null;
+  /** When it began waiting. */
+  at: number;
+  /** The thread of the turn it waits in; null when no room message began the turn. */
+  threadId: string | null;
+  task: RoomTask | null;
+  approvers: string[];
 }
 
 export const ROOM_HISTORY_TOOL = "room_history";
@@ -121,6 +147,15 @@ export const AGENT_TAGGED_TURNS_AFTER_A_PERSON = 8;
 export function personMessageBehind(message: RoomMessage, messagesById: Map<string, RoomMessage>): RoomMessage {
   const answered = message.answers === undefined ? undefined : messagesById.get(message.answers);
   return writtenByAgent(message.author) && answered ? personMessageBehind(answered, messagesById) : message;
+}
+
+const TASK_TEXT_SHOWN = 80;
+
+/** The task a turn on this message works on: the person behind a chain of agents' answers is the one it is for. */
+export function taskOf(asked: RoomMessage, messagesById: Map<string, RoomMessage>): RoomTask | null {
+  const { author, text } = personMessageBehind(asked, messagesById);
+  if (writtenByAgent(author)) return null;
+  return { personId: author.personId, text: cutWithEllipsis(text.replace(/\s+/g, " ").trim(), TASK_TEXT_SHOWN) };
 }
 
 /** The turns agents took on other agents' tags after this message of a person: one for each thread started on an agent's answer that goes back to it. */

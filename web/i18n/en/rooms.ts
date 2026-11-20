@@ -1,3 +1,5 @@
+import type { PermissionPreset } from "../../../shared/room-permissions.ts";
+
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
 
@@ -39,4 +41,21 @@ export const rooms = {
     `Not tagged: ${agents}. The agents were stopped, as they had tagged each other ${turns} times since a person wrote. Tag one with @ to go on.`,
   madeOnCanvas: (pages: number, questions: number) => `On the canvas: ${listed(pages > 0 && counted(pages, "page", "pages"), questions > 0 && counted(questions, "question", "questions"))}`,
   openOnCanvas: "Open on canvas",
+  permissions: "What the agents may do without asking",
+  presets: {
+    "ask-everything": "Ask for everything",
+    "read-freely": "Reading is free, edits and commands ask",
+    "work-freely": "Work freely inside the workspace",
+  } satisfies Record<PermissionPreset, string>,
+  permissionsHint:
+    "Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default, isn't held to it.",
+  approvalsWaiting: "Requests waiting for approval",
+  asks: (agent: string) => `${agent} asks`,
+  approvalTask: (person: string, text: string) => `Task of ${person}: “${text}”`,
+  yourTask: (text: string) => `Your task: “${text}”`,
+  approvalPosition: (count: number) => `1 of ${count}`,
+  allow: "Allow",
+  allowForTask: "Allow for this task",
+  deny: "Deny",
+  waitingForApproval: (agent: string) => `${agent} is waiting for approval…`,
 };

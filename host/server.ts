@@ -68,6 +68,7 @@ import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import { RoomService } from "./rooms.ts";
+import type { SystemNotifications } from "./system-notifications.ts";
 import { machineAddress } from "../shared/machines.ts";
 import { personName } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
@@ -139,6 +140,7 @@ export interface HostServices {
   /** Null unless the environment turns peer to peer on. */
   p2p: PeerToPeer | null;
   pushes: PushNotifications;
+  notifications: SystemNotifications;
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
@@ -225,15 +227,25 @@ export function startServer(services: HostServices) {
     keepAwake,
     p2p,
     pushes,
+    notifications,
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
-  const rooms = new RoomService(store, hub, {
-    startInRoom: (roomId, workspaceId, launch, title) => conversations.startInRoom(roomId, workspaceId, launch, title),
-    send: (conversationId, text, imageIds, options) => conversations.send(conversationId, text, imageIds, options),
-    delete: (conversationId) => deleteConversation(conversationId),
-  });
+  const rooms = new RoomService(
+    store,
+    hub,
+    {
+      startInRoom: (roomId, workspaceId, launch, title) => conversations.startInRoom(roomId, workspaceId, launch, title),
+      send: (conversationId, text, imageIds, options) => conversations.send(conversationId, text, imageIds, options),
+      delete: (conversationId) => deleteConversation(conversationId),
+      waitingPermissions: (conversationId) => conversations.waitingPermissions(conversationId),
+      answerPermission: (conversationId, permissionId, allowed) => conversations.answerPermission(conversationId, permissionId, allowed),
+      followRoomPreset: (conversationId) => conversations.followRoomPreset(conversationId),
+    },
+    notifications,
+  );
   conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
+  conversations.followsRoomPermissionsOf(rooms);
   mcp.offersRoomToolsFrom(rooms);
   const { network } = config.reachability;
   const localHosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
@@ -1459,6 +1471,7 @@ export function startServer(services: HostServices) {
       case "conversation.set-config":
         return conversations.setConfigOption(message.conversationId, message.configId, message.value);
       case "permission.respond":
+        rooms.assertMayApproveIn(message.conversationId, socket.data.personId);
         return conversations.respondToPermission(message.conversationId, message.permissionId, message.optionId);
       case "ask.answer":
         return canvas.answer(message.itemId, message.label, message.note, message.answers, socket.data.personId);
@@ -1674,8 +1687,8 @@ export function startServer(services: HostServices) {
       case "page.error":
         return console.log(`page error: ${message.message.slice(0, PAGE_ERROR_LOG_LIMIT)}\n${message.stack.slice(0, PAGE_ERROR_LOG_LIMIT)}`);
       case "presence": {
-        const { conversationId, attentive, sideChatId = null } = message;
-        socket.data.presence = { conversationId, attentive, sideChatId };
+        const { conversationId, attentive, sideChatId = null, roomId = null } = message;
+        socket.data.presence = { conversationId, attentive, sideChatId, roomId };
         if (attentive) [conversationId, sideChatId].forEach((seen) => seen && conversations.markSeen(seen));
         return;
       }
@@ -1803,11 +1816,15 @@ export function startServer(services: HostServices) {
       case "search":
         return reply({ type: "search.results", requestId: message.requestId, conversations: search.find(message.query) });
       case "room.create":
-        return reply({ type: "room.created", requestId: message.requestId, roomId: rooms.create(message.name, message.workspaceId, message.profileIds).id });
+        return reply({ type: "room.created", requestId: message.requestId, roomId: rooms.create(message.name, message.workspaceId, message.profileIds, message.permissions).id });
       case "room.rename":
         return rooms.rename(message.roomId, message.name);
       case "room.set-agents":
         return rooms.setAgents(message.roomId, message.profileIds);
+      case "room.set-permissions":
+        return rooms.setPermissions(message.roomId, message.permissions);
+      case "room.approve":
+        return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
       case "room.delete":
         return rooms.delete(message.roomId);
       case "room.subscribe": {
@@ -1871,6 +1888,7 @@ export function startServer(services: HostServices) {
       workspaceGroups: store.listWorkspaceGroups(),
       conversations: conversations.list(),
       rooms: rooms.list(),
+      roomApprovals: rooms.allApprovals(),
       profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),

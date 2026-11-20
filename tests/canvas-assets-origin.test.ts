@@ -14,6 +14,7 @@ function connectedAt(canvasAssetsOrigin: string): AppState {
     workspaceGroups: [],
     conversations: [],
     rooms: [],
+    roomApprovals: [],
     profiles: [],
     promptTemplates: [],
     canvasUse: "often",

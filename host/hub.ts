@@ -13,6 +13,7 @@ export interface Presence {
   conversationId: string | null;
   attentive: boolean;
   sideChatId: string | null;
+  roomId: string | null;
 }
 
 const showsIn = (presence: Presence, conversationId: string) => presence.conversationId === conversationId || presence.sideChatId === conversationId;
@@ -88,7 +89,7 @@ export const socketData = (
   lowDataSubscriptions: new Set<string>(),
   roomSubscriptions: new Set<string>(),
   terminalConversationId: null,
-  presence: { conversationId: null, attentive: false, sideChatId: null },
+  presence: { conversationId: null, attentive: false, sideChatId: null, roomId: null },
 });
 
 export type BrowserSocket = ServerWebSocket<SocketData>;
@@ -139,6 +140,10 @@ export class Hub {
 
   isWatched(conversationId: string) {
     return [...this.sockets].some(({ data: { presence } }) => presence.attentive && showsIn(presence, conversationId));
+  }
+
+  isRoomWatched(roomId: string) {
+    return [...this.sockets].some(({ data: { presence } }) => presence.attentive && presence.roomId === roomId);
   }
 
   /**

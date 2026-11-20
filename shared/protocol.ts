@@ -1,6 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
-import type { Room, RoomMessage, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
+import type { Room, RoomApproval, RoomMessage, RoomThread, RoomTimeline } from "./rooms.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -338,6 +339,8 @@ export type ClientMessage =
       attentive: boolean;
       /** The side chat the page shows beside the conversation, which you see as much as the conversation itself. */
       sideChatId?: string;
+      /** The room the page shows instead of a conversation. */
+      roomId?: string;
     }
   /** Asks the host to answer with pong, so a device can tell a socket that went quiet from one that died on the way. */
   | { type: "ping" }
@@ -391,9 +394,13 @@ export type ClientMessage =
   | { type: "machine.join"; requestId: string; machineId: string; code: string; authorityFingerprint: string | null }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
   | { type: "search"; requestId: string; query: string }
-  | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[] }
+  | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[]; permissions: PermissionPreset }
   | { type: "room.rename"; roomId: string; name: string }
   | { type: "room.set-agents"; roomId: string; profileIds: string[] }
+  /** Its agents' conversations follow the preset from their next permission request on. */
+  | { type: "room.set-permissions"; roomId: string; permissions: PermissionPreset }
+  /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
+  | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
   /** Deletes the room with its agents' conversations in it. */
   | { type: "room.delete"; roomId: string }
   /** The host answers `room.timeline`, then sends the room's new messages as `room.message` until `room.unsubscribe`. */
@@ -410,6 +417,8 @@ export type ServerMessage =
       /** Agents' conversations in rooms too, which carry their `roomId`. */
       conversations: Conversation[];
       rooms: Room[];
+      /** The permission requests the rooms' agents wait on, oldest first. */
+      roomApprovals: RoomApproval[];
       profiles: Profile[];
       promptTemplates: PromptTemplate[];
       canvasUse: CanvasUse;
@@ -543,6 +552,8 @@ export type ServerMessage =
   | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[] } & RoomTimeline)
   /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, and moves to the end. */
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
+  /** All the room's agents wait on, oldest first, each time a request starts or stops waiting. */
+  | { type: "room.approvals"; roomId: string; approvals: RoomApproval[] }
   | {
       type: "conversation.history";
       conversationId: string;

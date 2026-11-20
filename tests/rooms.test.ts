@@ -1,14 +1,20 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
 import { CanvasMcpEndpoints } from "../host/canvas/mcp.ts";
 import { CanvasService } from "../host/canvas/service.ts";
-import type { ConversationService } from "../host/conversations.ts";
+import type { ConversationService, WaitingPermission } from "../host/conversations.ts";
 import { Hub, socketData, type BrowserSocket } from "../host/hub.ts";
 import { RoomService, type RoomSessions } from "../host/rooms.ts";
 import { Store } from "../host/store.ts";
-import type { SystemNotifications } from "../host/system-notifications.ts";
+import { SystemNotifications } from "../host/system-notifications.ts";
+import type { HostProblemError } from "../shared/host-problems.ts";
 import type { CanvasItem, Conversation, ConversationEvent, Launch, Profile, StoredEvent } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
+import { DEFAULT_PERMISSION_PRESET, type AskedPermission } from "../shared/room-permissions.ts";
+import type { NotificationReason } from "../shared/system-notifications.ts";
 import { initialState, reducer, type AppState } from "../web/state.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
@@ -22,7 +28,9 @@ import {
   ROOM_TAG_TOOL,
   roomMessageAnsweredAt,
   roomTimeOf,
+  taskOf,
   unanswered,
+  type RoomApproval,
   type RoomMessage,
 } from "../shared/rooms.ts";
 
@@ -97,6 +105,10 @@ function machineWithRooms() {
   hub.add(page as unknown as BrowserSocket);
   const sent: Sent[] = [];
   const deleted: string[] = [];
+  const waiting = new Map<string, WaitingPermission[]>();
+  const answered: { conversationId: string; permissionId: string; allowed: boolean }[] = [];
+  const presetsFollowed: string[] = [];
+  const notified: { conversationId: string; reason: NotificationReason }[] = [];
   const sessions: RoomSessions = {
     startInRoom: (roomId, workspaceId, launch, title) => ({ ...store.insertConversation(conversationIn(roomId, workspaceId, launch, title)) }),
     send: async (conversationId, text, _, options) => void sent.push({ conversationId, text, options }),
@@ -104,9 +116,15 @@ function machineWithRooms() {
       deleted.push(conversationId);
       store.deleteConversation(conversationId);
     },
+    waitingPermissions: (conversationId) => waiting.get(conversationId) ?? [],
+    answerPermission: (conversationId, permissionId, allowed) => {
+      answered.push({ conversationId, permissionId, allowed });
+      waiting.set(conversationId, (waiting.get(conversationId) ?? []).filter(({ request }) => request.permissionId !== permissionId));
+    },
+    followRoomPreset: async (conversationId) => void presetsFollowed.push(conversationId),
   };
-  const rooms = new RoomService(store, hub, sessions);
-  const room = rooms.create(" Launch ", "w1", ["p1", "p2"]);
+  const rooms = new RoomService(store, hub, sessions, { notify: (conversationId, reason) => void notified.push({ conversationId, reason }) });
+  const room = rooms.create(" Launch ", "w1", ["p1", "p2"], DEFAULT_PERMISSION_PRESET);
   page.data.roomSubscriptions.add(room.id);
   const turnOn = (conversationId: string, roomMessageId?: string) =>
     store.appendEvent(conversationId, { type: "user-message", text: "catch-up", ...(roomMessageId && { roomMessageId }) }).seq;
@@ -138,7 +156,30 @@ function machineWithRooms() {
     const result = await mcpRequest(conversationId, "tools/call", { name, arguments: args });
     return { text: result.content[0].text as string, isError: result.isError === true };
   };
-  return { store, hub, rooms, room, ownerId, sent, deleted, received, posted, turnOn, endTurn, answer, turnOnLastSent, lastSentTo, conversationOf, toolNames, callTool };
+  return {
+    store,
+    hub,
+    page,
+    rooms,
+    room,
+    ownerId,
+    sent,
+    deleted,
+    received,
+    posted,
+    turnOn,
+    endTurn,
+    answer,
+    turnOnLastSent,
+    lastSentTo,
+    conversationOf,
+    toolNames,
+    callTool,
+    waiting,
+    answered,
+    presetsFollowed,
+    notified,
+  };
 }
 
 const message = (seq: number, text: string, author: RoomMessage["author"] = { personId: OWNER }): RoomMessage => ({
@@ -349,7 +390,7 @@ describe("a room", () => {
 
   test("turns down tags of agents outside it or whose profile is gone, and follow-ups in threads of other rooms", () => {
     const { store, rooms, room, ownerId, sent, posted } = machineWithRooms();
-    const other = rooms.create("Other", "w1", ["p1"]);
+    const other = rooms.create("Other", "w1", ["p1"], DEFAULT_PERMISSION_PRESET);
     rooms.write(other.id, ownerId, "@Builder hi", ["p1"], null);
     const otherThread = rooms.timeline(other.id).threads[0]!;
     store.deleteProfile("p2");
@@ -579,6 +620,33 @@ describe("a page that shows a room", () => {
     expect(after.roomTimeline!.messages.map(({ text }) => text)).toEqual(["@Builder go", "anyone?", "Shipped."]);
     expect(after.roomTimeline!.threads).toHaveLength(1);
   });
+
+  test("opens the room of an agent's conversation there when that conversation is picked, as a notification about it does", () => {
+    const state = reducer({ ...initialState, roomConversations: [builderInRoom] }, { type: "select", conversationId: builderInRoom.id });
+    expect([state.selectedRoomId, state.selectedConversationId]).toEqual(["r1", null]);
+  });
+
+  test("keeps each room's waiting requests as the host last sent them, and drops those of a room deleted", () => {
+    const approval = (permissionId: string, roomId: string): RoomApproval => ({
+      roomId,
+      conversationId: builderInRoom.id,
+      profileId: "p1",
+      request: waitingRequest(permissionId, runs("ls")).request,
+      file: null,
+      at: 1,
+      threadId: "t1",
+      task: null,
+      approvers: [OWNER],
+    });
+    const waiting = [
+      { type: "room.approvals", roomId: "r1", approvals: [approval("q1", "r1"), approval("q2", "r1")] },
+      { type: "room.approvals", roomId: "r2", approvals: [approval("q3", "r2")] },
+      { type: "room.approvals", roomId: "r1", approvals: [approval("q2", "r1")] },
+    ] satisfies ServerMessage[];
+    const state = waiting.reduce(serverSent, initialState);
+    expect(state.roomApprovals.map(({ request }) => request.permissionId)).toEqual(["q3", "q2"]);
+    expect(serverSent(state, { type: "room.deleted", roomId: "r2" }).roomApprovals.map(({ request }) => request.permissionId)).toEqual(["q2"]);
+  });
 });
 
 describe("a thread's view of its agent's work", () => {
@@ -600,5 +668,187 @@ describe("a thread's view of its agent's work", () => {
     expect(eventsAnswering(events, "a").map(({ seq }) => seq)).toEqual([2, 3, 8, 9]);
     expect(eventsAnswering(events, "b").map(({ seq }) => seq)).toEqual([5, 6, 7]);
     expect(eventsAnswering(events, "c")).toEqual([]);
+  });
+});
+
+const runs = (command: string): AskedPermission => ({ toolKind: "execute", title: `Run ${command}`, command, paths: [] });
+const edits = (...paths: string[]): AskedPermission => ({ toolKind: "edit", title: `Edit ${paths.join(", ")}`, command: null, paths });
+const reads = (path: string): AskedPermission => ({ toolKind: "read", title: `Read ${path}`, command: null, paths: [path] });
+
+function problemOf(run: () => void) {
+  try {
+    run();
+    return null;
+  } catch (error) {
+    return (error as HostProblemError).problem.code;
+  }
+}
+
+const waitingRequest = (permissionId: string, asked: AskedPermission, at = 1): WaitingPermission => ({
+  request: { kind: "permission", permissionId, title: asked.title, toolKind: asked.toolKind, command: asked.command, description: null, options: [] },
+  asked,
+  at,
+});
+
+describe("a room's agents' requests", () => {
+  test("allowed for the task, let the same command through by themselves, those already waiting too, until the turn ends", () => {
+    const { rooms, room, ownerId, waiting, answered, conversationOf, answer } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const builder = conversationOf("p1");
+    waiting.set(builder, [waitingRequest("q1", runs("bun run test")), waitingRequest("q2", runs("bun run test")), waitingRequest("q3", runs("bun run build"))]);
+    rooms.approve(builder, "q1", "allow-for-task", ownerId);
+    expect(answered).toEqual([
+      { conversationId: builder, permissionId: "q1", allowed: true },
+      { conversationId: builder, permissionId: "q2", allowed: true },
+    ]);
+    expect(rooms.allowsByItself(builder, runs("bun run test"))).toBe(true);
+    expect(rooms.allowsByItself(builder, runs("bun run test; rm -rf ~"))).toBe(false);
+    expect(rooms.allowsByItself(builder, edits("/tmp/project/a.ts"))).toBe(false);
+    answer(builder, "Built.");
+    expect(rooms.allowsByItself(builder, runs("bun run test"))).toBe(false);
+  });
+
+  test("allowed for the task, let edits of any file through, and only for the agent that asked", () => {
+    const { rooms, room, ownerId, waiting, conversationOf, turnOnLastSent } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder @Reviewer fix it", ["p1", "p2"], null);
+    const [builder, reviewer] = [conversationOf("p1"), conversationOf("p2")];
+    turnOnLastSent(builder);
+    waiting.set(builder, [waitingRequest("q1", edits("/tmp/project/a.ts"))]);
+    rooms.approve(builder, "q1", "allow-for-task", ownerId);
+    expect(rooms.allowsByItself(builder, edits("/tmp/project/b.ts"))).toBe(true);
+    expect(rooms.allowsByItself(reviewer, edits("/tmp/project/b.ts"))).toBe(false);
+  });
+
+  test("allowed or denied once, leave the next request of the kind to ask again", () => {
+    const { rooms, room, ownerId, waiting, answered, conversationOf } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const builder = conversationOf("p1");
+    waiting.set(builder, [waitingRequest("q1", runs("ls")), waitingRequest("q2", runs("ls"))]);
+    rooms.approve(builder, "q1", "allow", ownerId);
+    rooms.approve(builder, "q2", "deny", ownerId);
+    expect(answered.map(({ permissionId, allowed }) => [permissionId, allowed])).toEqual([
+      ["q1", true],
+      ["q2", false],
+    ]);
+    expect(rooms.allowsByItself(builder, runs("ls"))).toBe(false);
+  });
+
+  test("are answered only by those the host lets approve, on the strip as in the thread", () => {
+    const { store, rooms, room, ownerId, waiting, answered, conversationOf } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const builder = conversationOf("p1");
+    waiting.set(builder, [waitingRequest("q1", runs("ls"))]);
+    expect(problemOf(() => rooms.approve(builder, "q1", "allow", "someone-else"))).toBe("room-approval-not-yours");
+    expect(problemOf(() => rooms.assertMayApproveIn(builder, "someone-else"))).toBe("room-approval-not-yours");
+    expect(problemOf(() => rooms.assertMayApproveIn(builder, ownerId))).toBeNull();
+    const ownConversation = store.insertConversation(conversationIn(undefined, "w1", { harness: "opencode", profileId: "p1" }, "Mine"));
+    expect(problemOf(() => rooms.assertMayApproveIn(ownConversation.id, "someone-else"))).toBeNull();
+    expect(answered).toEqual([]);
+    expect(problemOf(() => rooms.approve(builder, "gone", "allow", ownerId))).toBe("permission-no-longer-pending");
+  });
+
+  test("wait oldest first across the agents, each with its file or command, its thread, and whose task it is", () => {
+    const { rooms, room, ownerId, waiting, received, conversationOf, turnOnLastSent } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder @Reviewer fix   the\nlogin bug", ["p1", "p2"], null);
+    const [builder, reviewer] = [conversationOf("p1"), conversationOf("p2")];
+    [builder, reviewer].forEach(turnOnLastSent);
+    waiting.set(builder, [waitingRequest("q1", runs("bun run test"), 20)]);
+    waiting.set(reviewer, [waitingRequest("q2", edits("/tmp/project/login.ts"), 10)]);
+    rooms.waitingChanged(room.id);
+    const threadOf = (profileId: string) => rooms.timeline(room.id).threads.find((thread) => thread.profileId === profileId)!.id;
+    const task = { personId: ownerId, text: "@Builder @Reviewer fix the login bug" };
+    const approvals = rooms.approvals(room.id);
+    expect(approvals.map(({ conversationId, profileId, file, threadId, task, approvers, request }) => ({ conversationId, profileId, file, threadId, task, approvers, permissionId: request.permissionId }))).toEqual([
+      { conversationId: reviewer, profileId: "p2", file: "/tmp/project/login.ts", threadId: threadOf("p2"), task, approvers: [ownerId], permissionId: "q2" },
+      { conversationId: builder, profileId: "p1", file: null, threadId: threadOf("p1"), task, approvers: [ownerId], permissionId: "q1" },
+    ]);
+    expect(received.findLast((message) => message.type === "room.approvals")).toEqual({ type: "room.approvals", roomId: room.id, approvals });
+    expect(rooms.allApprovals()).toEqual(approvals);
+  });
+
+  test("of an agent another agent tagged belong to the task of the person behind the chain", () => {
+    const asked = new Map([message(1, "@Builder build it"), { ...message(2, "Built. @Reviewer look", { profileId: "p1" }), answers: "m1" }].map((each) => [each.id, each]));
+    expect(taskOf(asked.get("m2")!, asked)).toEqual({ personId: OWNER, text: "@Builder build it" });
+    expect(taskOf(message(3, "lost", { profileId: "p1" }), asked)).toBeNull();
+    expect(taskOf(message(4, "x".repeat(200)), asked)!.text).toBe(`${"x".repeat(80)}…`);
+  });
+});
+
+describe("a room's permission preset", () => {
+  function roomInFolder() {
+    const machine = machineWithRooms();
+    const folder = mkdtempSync(join(tmpdir(), "room-preset-"));
+    const outside = mkdtempSync(join(tmpdir(), "room-outside-"));
+    mkdirSync(join(folder, "src"));
+    symlinkSync(outside, join(folder, "leads-out"));
+    machine.store.insertWorkspace({ id: "w2", name: "folder", path: folder, defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 1 });
+    const room = machine.rooms.create("Work", "w2", ["p1"], "work-freely");
+    machine.rooms.write(room.id, machine.ownerId, "@Builder go", ["p1"], null);
+    const builder = machine.store.findRoom(room.id)!.agents[0]!.conversationId!;
+    return { ...machine, room, folder, outside, builder };
+  }
+
+  test("lets changes through by itself only to files that really lie inside the room's workspace", () => {
+    const { rooms, folder, outside, builder } = roomInFolder();
+    expect(rooms.allowsByItself(builder, edits(join(folder, "src", "a.ts"), join(folder, "new", "b.ts")))).toBe(true);
+    expect(rooms.allowsByItself(builder, edits("src/relative.ts"))).toBe(true);
+    expect(rooms.allowsByItself(builder, edits(join(outside, "a.ts")))).toBe(false);
+    expect(rooms.allowsByItself(builder, edits(join(folder, "leads-out", "a.ts")))).toBe(false);
+    expect(rooms.allowsByItself(builder, edits(join(folder, "..", "elsewhere.ts")))).toBe(false);
+    expect(rooms.allowsByItself(builder, runs("ls"))).toBe(false);
+  });
+
+  test("changed, holds from the next request on, and reaches the agents' open sessions", () => {
+    const { store, rooms, room, folder, builder, presetsFollowed, received } = roomInFolder();
+    rooms.setPermissions(room.id, "ask-everything");
+    expect(store.findRoom(room.id)!.permissions).toBe("ask-everything");
+    expect(received.findLast((message) => message.type === "room.upserted")).toMatchObject({ room: { id: room.id, permissions: "ask-everything" } });
+    expect(presetsFollowed).toEqual([builder]);
+    expect(rooms.allowsByItself(builder, reads(join(folder, "src", "a.ts")))).toBe(false);
+    rooms.setPermissions(room.id, "read-freely");
+    expect(rooms.allowsByItself(builder, reads("/etc/hosts"))).toBe(true);
+    expect(rooms.allowsByItself(builder, edits(join(folder, "src", "a.ts")))).toBe(false);
+    expect(() => rooms.setPermissions(room.id, "anything" as never)).toThrow();
+  });
+
+  test("lets nothing through for a conversation in no room", () => {
+    const { store, rooms } = machineWithRooms();
+    const ownConversation = store.insertConversation(conversationIn(undefined, "w1", { harness: "opencode", profileId: "p1" }, "Mine"));
+    expect(rooms.allowsByItself(ownConversation.id, reads("/etc/hosts"))).toBe(false);
+  });
+});
+
+describe("telling the owner of a room's answers", () => {
+  test("a finished answer to a message the owner wrote tells as a conversation's would; one cut short, or to an agent's tag, does not", async () => {
+    const { rooms, room, ownerId, notified, answer, turnOnLastSent, endTurn, callTool, conversationOf } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const builder = conversationOf("p1");
+    answer(builder, "Half", { type: "turn-end", stopReason: "cancelled" });
+    expect(notified).toEqual([]);
+    const turn = turnOnLastSent(builder);
+    await callTool(builder, ROOM_TAG_TOOL, { agents: ["Reviewer"] });
+    endTurn(builder, turn, "Built. Reviewer, have a look.");
+    expect(notified).toEqual([{ conversationId: builder, reason: { kind: "finished" } }]);
+    answer(conversationOf("p2"), "Looks good.");
+    expect(notified).toHaveLength(1);
+  });
+
+  test("an agent's conversation in a room tells only of a request waiting and an answer finished, and not while a focused page shows the room", () => {
+    const { store, hub, page, rooms, room, ownerId, received, conversationOf } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const builder = conversationOf("p1");
+    const notifications = new SystemNotifications(store, hub);
+    const told = () => received.flatMap((message) => (message.type === "system-notification" ? [message.notification.kind] : []));
+    notifications.notify(builder, { kind: "permission", tool: "ls" });
+    notifications.notify(builder, { kind: "finished" });
+    notifications.notify(builder, { kind: "error", message: "boom" });
+    notifications.notify(builder, { kind: "question", question: "Which?" });
+    expect(told()).toEqual(["permission", "finished"]);
+    page.data.presence = { conversationId: null, attentive: false, sideChatId: null, roomId: room.id };
+    notifications.notify(builder, { kind: "permission", tool: "ls" });
+    expect(told()).toHaveLength(3);
+    page.data.presence = { conversationId: null, attentive: true, sideChatId: null, roomId: room.id };
+    notifications.notify(builder, { kind: "permission", tool: "ls" });
+    expect(told()).toHaveLength(3);
   });
 });

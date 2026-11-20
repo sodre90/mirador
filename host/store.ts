@@ -35,6 +35,7 @@ import type { PushRegistration, PushRelaySetting } from "../shared/push.ts";
 import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checklists.ts";
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
+import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomThread } from "../shared/rooms.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
@@ -203,6 +204,7 @@ const addedColumns = [
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
   { table: "conversations", column: "room_id", definition: "TEXT" },
   { table: "room_messages", column: "tags_dropped", definition: "TEXT" },
+  { table: "rooms", column: "permissions", definition: `TEXT NOT NULL DEFAULT '${DEFAULT_PERMISSION_PRESET}'` },
   { table: "conversations", column: "agent_commands", definition: "TEXT" },
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
   { table: "workspace_groups", column: "parent_id", definition: "TEXT" },
@@ -389,6 +391,7 @@ interface RoomRow {
   id: string;
   name: string;
   workspace_id: string;
+  permissions: PermissionPreset;
   created_at: number;
 }
 
@@ -997,7 +1000,7 @@ export class Store {
   }
 
   insertRoom(room: Room) {
-    this.db.query("INSERT INTO rooms (id, name, workspace_id, created_at) VALUES (?, ?, ?, ?)").run(room.id, room.name, room.workspaceId, room.createdAt);
+    this.db.query("INSERT INTO rooms (id, name, workspace_id, permissions, created_at) VALUES (?, ?, ?, ?, ?)").run(room.id, room.name, room.workspaceId, room.permissions, room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
   }
 
@@ -1011,13 +1014,24 @@ export class Store {
     return row ? this.toRoom(row) : undefined;
   }
 
-  private toRoom({ id, name, workspace_id, created_at }: RoomRow): Room {
+  private toRoom({ id, name, workspace_id, permissions, created_at }: RoomRow): Room {
     const agents = this.db.query("SELECT profile_id, conversation_id FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as { profile_id: string; conversation_id: string | null }[];
-    return { id, name, workspaceId: workspace_id, agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })), createdAt: created_at };
+    return {
+      id,
+      name,
+      workspaceId: workspace_id,
+      agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })),
+      permissions,
+      createdAt: created_at,
+    };
   }
 
   renameRoom(id: string, name: string) {
     this.db.query("UPDATE rooms SET name = ? WHERE id = ?").run(name, id);
+  }
+
+  setRoomPermissions(id: string, permissions: PermissionPreset) {
+    this.db.query("UPDATE rooms SET permissions = ? WHERE id = ?").run(permissions, id);
   }
 
   /** The agents stay in the order they joined; those that stay keep their conversations and what they have read. */

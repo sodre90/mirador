@@ -71,11 +71,11 @@ const isLookedAt = () => document.visibilityState === "visible" && document.hasF
  * notifications the host sends about the others. Focus moving into the canvas frame blurs the window for a moment, so
  * the report waits for focus to settle.
  */
-export function useSystemNotifications(selectedConversationId: string | null, sideChatId: string | null, connected: boolean, open: OpenConversation) {
+export function useSystemNotifications(selectedConversationId: string | null, sideChatId: string | null, roomId: string | null, connected: boolean, open: OpenConversation) {
   useEffect(() => {
     if (!connected) return;
     const report = () =>
-      connection.send({ type: "presence", conversationId: selectedConversationId, attentive: isLookedAt(), ...(sideChatId && { sideChatId }) });
+      connection.send({ type: "presence", conversationId: selectedConversationId, attentive: isLookedAt(), ...(sideChatId && { sideChatId }), ...(roomId && { roomId }) });
     const reportOnceSettled = () => setTimeout(report);
     report();
     window.addEventListener("focus", reportOnceSettled);
@@ -86,7 +86,7 @@ export function useSystemNotifications(selectedConversationId: string | null, si
       window.removeEventListener("blur", reportOnceSettled);
       document.removeEventListener("visibilitychange", reportOnceSettled);
     };
-  }, [selectedConversationId, sideChatId, connected]);
+  }, [selectedConversationId, sideChatId, roomId, connected]);
 
   useEffect(
     () =>

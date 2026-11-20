@@ -40,4 +40,21 @@ export const rooms: Messages["rooms"] = {
     `Nincs megjelölve: ${agents}. Az ágensek nem folytathatják, mert ${turns} alkalommal jelölték meg egymást, mióta valaki utoljára írt. A folytatáshoz jelölj meg egyet @-cal.`,
   madeOnCanvas: (pages, questions) => `A vásznon: ${listed(pages > 0 && `${pages} oldal`, questions > 0 && `${questions} kérdés`)}`,
   openOnCanvas: "Megnyitás a vásznon",
+  permissions: "Mit tehetnek az ágensek kérdezés nélkül",
+  presets: {
+    "ask-everything": "Mindenre engedélyt kérnek",
+    "read-freely": "Olvasni szabad, szerkesztéshez és parancshoz engedélyt kérnek",
+    "work-freely": "Szabadon dolgozhatnak a munkaterületen belül",
+  },
+  permissionsHint:
+    "Az ágensek következő kérésétől érvényes, akkor is, ha egy profilban YOLO van beállítva. Arra az ágensre, amely kérdezés nélkül futtatja az eszközeit, ahogy a pi és alapból az opencode, nem vonatkozik.",
+  approvalsWaiting: "Jóváhagyásra váró kérések",
+  asks: (agent) => `${agent} kéri`,
+  approvalTask: (person, text) => `${person} feladata: „${text}”`,
+  yourTask: (text) => `A te feladatod: „${text}”`,
+  approvalPosition: (count) => `1 / ${count}`,
+  allow: "Engedélyezés",
+  allowForTask: "Engedélyezés erre a feladatra",
+  deny: "Elutasítás",
+  waitingForApproval: (agent) => `${agent} jóváhagyásra vár…`,
 };

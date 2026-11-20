@@ -575,6 +575,7 @@ export function App() {
   useSystemNotifications(
     shownMachine ? null : state.selectedConversationId,
     !shownMachine && sideChatShownBesideSelected && "sideChatId" in sideChatShownBesideSelected ? sideChatShownBesideSelected.sideChatId : null,
+    shownMachine ? null : state.selectedRoomId,
     status === "open",
     openConversation,
   );
@@ -758,6 +759,8 @@ export function App() {
             people={state.people}
             ownerId={state.ownerId}
             ownerPicture={state.avatar}
+            approvals={state.roomApprovals.filter(({ roomId }) => roomId === shownRoom.id)}
+            you={state.you}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnRoomCanvas(shownRoom.id, itemId)}
           />

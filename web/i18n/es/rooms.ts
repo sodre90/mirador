@@ -41,4 +41,21 @@ export const rooms: Messages["rooms"] = {
     `Sin etiquetar: ${agents}. Los agentes se detuvieron, porque se etiquetaron entre sí ${turns} veces desde que una persona escribió. Etiqueta a uno con @ para seguir.`,
   madeOnCanvas: (pages, questions) => `En el lienzo: ${listed(pages > 0 && counted(pages, "página", "páginas"), questions > 0 && counted(questions, "pregunta", "preguntas"))}`,
   openOnCanvas: "Abrir en el lienzo",
+  permissions: "Qué pueden hacer los agentes sin preguntar",
+  presets: {
+    "ask-everything": "Preguntar por todo",
+    "read-freely": "Leer es libre, las ediciones y los comandos preguntan",
+    "work-freely": "Trabajar libremente dentro del espacio de trabajo",
+  },
+  permissionsHint:
+    "Se aplica desde la siguiente solicitud de los agentes, aunque un perfil tenga YOLO activado. Un agente que ejecuta sus herramientas sin preguntar, como pi y opencode por defecto, no queda sujeto a ello.",
+  approvalsWaiting: "Solicitudes en espera de aprobación",
+  asks: (agent) => `${agent} pide`,
+  approvalTask: (person, text) => `Tarea de ${person}: “${text}”`,
+  yourTask: (text) => `Tu tarea: “${text}”`,
+  approvalPosition: (count) => `1 de ${count}`,
+  allow: "Permitir",
+  allowForTask: "Permitir para esta tarea",
+  deny: "Denegar",
+  waitingForApproval: (agent) => `${agent} espera aprobación…`,
 };

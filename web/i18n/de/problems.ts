@@ -33,6 +33,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "Mirador wartet nicht mehr auf diesen Job.",
     "conversation-workspace-gone": "Der Arbeitsbereich dieser Unterhaltung existiert nicht mehr.",
     "permission-no-longer-pending": "Diese Genehmigungsanfrage steht nicht mehr aus.",
+    "room-approval-not-yours": "Nur der Besitzer des Raums kann die Anfragen seiner Agenten beantworten.",
     "reminder-needs-time": "Sag, wann, etwa /later tomorrow 9 oder /remind 3h.",
     "reminder-not-valid": "Diese Erinnerung braucht eine Uhrzeit und ob die Unterhaltung beiseitegelegt wird.",
     "morning-not-valid": "Der Morgen braucht eine Uhrzeit, etwa 09:00.",

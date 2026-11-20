@@ -31,6 +31,7 @@ export const problems = {
     "job-wait-gone": "Mirador no longer waits for that job.",
     "conversation-workspace-gone": "This conversation's workspace no longer exists.",
     "permission-no-longer-pending": "This permission request is no longer pending.",
+    "room-approval-not-yours": "Only the room's owner can answer its agents' requests.",
     "reminder-needs-time": "Say when, such as /later tomorrow 9 or /remind 3h.",
     "reminder-not-valid": "That reminder needs a time and whether to put the conversation away.",
     "morning-not-valid": "Morning needs a time of day, such as 09:00.",

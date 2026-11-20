@@ -1,6 +1,7 @@
 import type * as acp from "@agentclientprotocol/sdk/unstable";
 import { questionsOf } from "../shared/ask.ts";
 import type { AskItem, PendingAsk, PendingPermissionRequest } from "../shared/model.ts";
+import type { AskedPermission } from "../shared/room-permissions.ts";
 import { cutWithEllipsis } from "../shared/text-cut.ts";
 
 /** As much of a command as a list of waiting conversations shows; the conversation has all of it. */
@@ -30,6 +31,19 @@ export function pendingPermission(
     command: runsCommand ? shortened(stringField(toolCall.rawInput, "command") ?? title) : null,
     description: runsCommand ? stringField(toolCall.rawInput, "description") : null,
     options,
+  };
+}
+
+/** The request as the host judges it by itself: with the whole command, and every path its locations and diffs name. */
+export function askedPermissionOf(toolCall: acp.ToolCallUpdate, kindSeenBefore: acp.ToolKind | null): AskedPermission {
+  const toolKind = toolCall.kind ?? kindSeenBefore;
+  const title = toolCall.title ?? "a tool";
+  const diffPaths = (toolCall.content ?? []).flatMap((content) => (content.type === "diff" ? [content.path] : []));
+  return {
+    toolKind,
+    title,
+    command: toolKind === "execute" ? (stringField(toolCall.rawInput, "command") ?? title) : null,
+    paths: [...new Set([...(toolCall.locations ?? []).map(({ path }) => path), ...diffPaths])],
   };
 }
 

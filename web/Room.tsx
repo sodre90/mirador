@@ -2,6 +2,7 @@ import { flushSync } from "react-dom";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
 import type { CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
+import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   askedInThread,
@@ -11,15 +12,17 @@ import {
   unanswered,
   writtenByAgent,
   type Room,
+  type RoomApproval,
   type RoomAuthor,
   type RoomMessage,
   type RoomThread,
   type RoomTimeline,
 } from "../shared/rooms.ts";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
-import { agentMarks, MessageWriters, PersonAvatar, PersonName, TimelineOfEvents, Timestamp } from "./Chat.tsx";
+import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import type { EditRequest } from "./edit-approval.ts";
+import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
@@ -211,12 +214,50 @@ function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; ag
 
 const writeIn = (roomId: string, text: string, tags: string[], threadId: string | null) => connection.send({ type: "room.write", roomId, text, tags, threadId });
 
+const approve = ({ conversationId, request }: RoomApproval, answer: RoomApprovalAnswer) =>
+  connection.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer });
+
+/** The requests of the room's agents that wait for you, oldest first: the first with its answers, and how many wait in all. */
+function ApprovalStrip({ approvals, agentsById, you }: { approvals: RoomApproval[]; agentsById: Map<string, RoomAgentShown>; you: string | null }) {
+  const first = approvals[0];
+  const personName = usePersonName(first?.task?.personId ?? null);
+  if (!first) return null;
+  const detail = first.request.command ?? first.file;
+  return (
+    <section className="room-approvals" aria-label={words.approvalsWaiting} data-permission-id={first.request.permissionId}>
+      <div className="room-approval-head">
+        <span className="room-approval-asker">{words.asks(agentsById.get(first.profileId)?.name ?? words.agentGone)}</span>
+        <span className="room-approval-subject">{pendingPermissionNeeded(first.request)}</span>
+        {approvals.length > 1 && <span className="room-approval-count">{words.approvalPosition(approvals.length)}</span>}
+      </div>
+      {detail && <code className="room-approval-detail">{detail}</code>}
+      {first.task && <div className="room-approval-task">{first.task.personId === you ? words.yourTask(first.task.text) : words.approvalTask(personName, first.task.text)}</div>}
+      <div className="permission-options">
+        <button type="button" className="option-allow_once" onClick={() => approve(first, "allow")}>
+          {words.allow}
+        </button>
+        <button type="button" data-hint={hints.roomAllowForTask} onClick={() => approve(first, "allow-for-task")}>
+          {words.allowForTask}
+        </button>
+        <button type="button" onClick={() => approve(first, "deny")}>
+          {words.deny}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+const waitsInThread = (approvals: RoomApproval[], threadId: string) => approvals.some((approval) => approval.threadId === threadId);
+
 function ThreadColumn({
   thread,
   timeline,
   agent,
   opened,
   agentsById,
+  approvals,
+  waitingForYou,
+  you,
   onClose,
 }: {
   thread: RoomThread;
@@ -224,10 +265,14 @@ function ThreadColumn({
   agent: RoomAgentShown;
   opened: OpenConversation | undefined;
   agentsById: Map<string, RoomAgentShown>;
+  approvals: RoomApproval[];
+  waitingForYou: RoomApproval[];
+  you: string | null;
   onClose: () => void;
 }) {
   const asked = askedInThread(timeline, thread);
   const workingOn = unanswered(timeline).some((pending) => pending.thread.id === thread.id);
+  const workingLine = waitsInThread(approvals, thread.id) ? words.waitingForApproval(agent.name) : isBusy(agent.conversation) ? words.working(agent.name) : words.waiting(agent.name);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -250,21 +295,23 @@ function ThreadColumn({
             {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} />}
           </div>
         ))}
-        {workingOn && <div className="working">{isBusy(agent.conversation) ? words.working(agent.name) : words.waiting(agent.name)}</div>}
+        {workingOn && <div className="working">{workingLine}</div>}
       </div>
+      <ApprovalStrip approvals={waitingForYou.filter(({ threadId }) => threadId === thread.id)} agentsById={agentsById} you={you} />
       <RoomComposer placeholder={words.followUpPlaceholder(agent.name)} agents={[]} onSend={(text) => writeIn(thread.roomId, text, [], thread.id)} />
     </aside>
   );
 }
 
-/** What the room shows of its agents' work under way: a line for each agent with a message to answer, the oldest it works on. */
-function workUnderWay(timeline: RoomTimeline, agentsById: Map<string, RoomAgentShown>) {
+/** What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it works on it, waits for approval in it, or comes to it later. */
+function workUnderWay(timeline: RoomTimeline, agentsById: Map<string, RoomAgentShown>, approvals: RoomApproval[]) {
   const pending = unanswered(timeline);
   return pending.map(({ message, thread }) => {
     const agent = agentsById.get(thread.profileId);
     const name = agent?.name ?? words.agentGone;
     const first = pending.find((each) => each.thread.profileId === thread.profileId)?.message === message;
-    return { key: `${message.id}-${thread.id}`, thread, text: first ? words.working(name) : words.waiting(name) };
+    const text = waitsInThread(approvals, thread.id) ? words.waitingForApproval(name) : first ? words.working(name) : words.waiting(name);
+    return { key: `${message.id}-${thread.id}`, thread, text };
   });
 }
 
@@ -277,6 +324,8 @@ export function RoomView({
   people,
   ownerId,
   ownerPicture,
+  approvals,
+  you,
   dispatch,
   onOpenOnCanvas,
 }: {
@@ -288,6 +337,9 @@ export function RoomView({
   people: Person[];
   ownerId: string | null;
   ownerPicture: string | null;
+  /** The requests the room's agents wait on, oldest first. */
+  approvals: RoomApproval[];
+  you: string | null;
   dispatch: Dispatch<AppAction>;
   onOpenOnCanvas: (itemId: string) => void;
 }) {
@@ -297,6 +349,7 @@ export function RoomView({
     return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId) };
   });
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
+  const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
   const thread = timeline?.threads.find(({ id }) => id === threadId) ?? null;
   const threadAgent = thread ? agentsById.get(thread.profileId) : undefined;
   const threadConversationId = threadAgent?.conversation?.id ?? null;
@@ -338,9 +391,10 @@ export function RoomView({
             </RoomEntry>
           );
         })}
-        {timeline && workUnderWay(timeline, agentsById).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
+        {timeline && workUnderWay(timeline, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <div ref={timelineEnd} />
       </div>
+      <ApprovalStrip approvals={waitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer placeholder={words.placeholder(room.name)} agents={agents.filter(({ profile }) => profile)} onSend={(text, tags) => writeIn(room.id, text, tags, null)} />
     </>
   );
@@ -353,6 +407,9 @@ export function RoomView({
         agent={threadAgent}
         opened={threadConversations.find(({ conversationId }) => conversationId === threadConversationId)}
         agentsById={agentsById}
+        approvals={approvals}
+        waitingForYou={waitingForYou}
+        you={you}
         onClose={() => setThreadId(null)}
       />
     ) : null;

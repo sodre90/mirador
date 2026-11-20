@@ -16,7 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
-import { shownOnRoomCanvas, type Room, type RoomTimeline } from "../shared/rooms.ts";
+import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -72,6 +72,8 @@ export interface AppState {
   rooms: Room[];
   /** The agents' conversations in rooms, which no list of conversations shows. */
   roomConversations: Conversation[];
+  /** The requests the agents of every room wait on, oldest first in each room. */
+  roomApprovals: RoomApproval[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
@@ -192,6 +194,7 @@ export const initialState: AppState = {
   conversations: [],
   rooms: [],
   roomConversations: [],
+  roomApprovals: [],
   selectedRoomId: null,
   roomTimeline: null,
   threadConversations: [],
@@ -293,6 +296,12 @@ function select(state: AppState, conversationId: string | null): AppState {
   return { ...leavingRoom(state), selectedConversationId: conversationId, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
 }
 
+/** An agent's conversation in a room opens as its room, which is where it shows, as a notification about it does; a page loaded on one does so once the snapshot says which room it is in. */
+function selectShowing(state: AppState, conversationId: string | null): AppState {
+  const roomId = state.roomConversations.find(({ id }) => id === conversationId)?.roomId;
+  return roomId ? selectRoom(state, roomId) : select(state, conversationId);
+}
+
 function selectRoom(state: AppState, roomId: string): AppState {
   if (state.selectedRoomId === roomId) return { ...state, selectedConversationId: null };
   return { ...state, selectedConversationId: null, selectedRoomId: roomId, roomTimeline: null, threadConversations: [] };
@@ -363,6 +372,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         conversations: message.conversations.filter(({ roomId }) => !roomId),
         roomConversations: message.conversations.filter(({ roomId }) => roomId),
         rooms: message.rooms,
+        roomApprovals: message.roomApprovals,
         profiles: message.profiles,
         promptTemplates: message.promptTemplates,
         canvasUse: message.canvasUse,
@@ -408,6 +418,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       };
       const roomStays = message.rooms.some(({ id }) => id === state.selectedRoomId);
       const withRoom = roomStays ? next : leavingRoom(next);
+      const roomOfSelected = next.roomConversations.find(({ id }) => id === state.selectedConversationId)?.roomId;
+      if (roomOfSelected) return selectRoom({ ...withRoom, kept: withRoom.kept.filter(({ conversationId }) => conversationId !== state.selectedConversationId) }, roomOfSelected);
       return exists(state.selectedConversationId) ? withRoom : select(withRoom, null);
     }
     case "plugin-tab.state": {
@@ -626,7 +638,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "room.upserted":
       return { ...state, rooms: upsert(state.rooms, message.room) };
     case "room.deleted": {
-      const next = { ...state, rooms: state.rooms.filter(({ id }) => id !== message.roomId) };
+      const next = { ...state, rooms: state.rooms.filter(({ id }) => id !== message.roomId), roomApprovals: state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId) };
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
     case "room.timeline": {
@@ -642,6 +654,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
           threads: [...timeline.threads, ...message.threads.filter(({ id }) => !knownThreads.has(id))],
         };
       });
+    case "room.approvals":
+      return { ...state, roomApprovals: [...state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId), ...message.approvals] };
   }
 }
 
@@ -652,7 +666,7 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case "hold-turn-times":
       return { ...state, heldTurnTimes: action.held ? turnTimesOf(state.conversations) : null };
     case "select":
-      return { ...(action.conversationId === state.selectedConversationId ? state : select(state, action.conversationId)), conversationsPicked: state.conversationsPicked + 1 };
+      return { ...(action.conversationId === state.selectedConversationId ? state : selectShowing(state, action.conversationId)), conversationsPicked: state.conversationsPicked + 1 };
     case "leave-conversation":
       return action.conversationId === state.selectedConversationId ? select(state, conversationToReturnTo(state, action.conversationId)) : state;
     case "keep-side-chats":

@@ -1,15 +1,32 @@
 import { useState, type Dispatch } from "react";
 import type { Profile, Workspace } from "../shared/model.ts";
-import type { Room } from "../shared/rooms.ts";
+import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
+import type { Room, RoomApproval } from "../shared/rooms.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
+import { waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import type { AppAction } from "./state.ts";
+import { waitingLabels } from "./waiting.ts";
 
 const words = t.rooms;
 
-export function RoomsSection({ rooms, selectedRoomId, dispatch }: { rooms: Room[]; selectedRoomId: string | null; dispatch: Dispatch<AppAction> }) {
+/** The rooms where an agent waits for you to answer its request. */
+export const roomsWaitingFor = (you: string | null, approvals: RoomApproval[]) =>
+  new Set(approvals.filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }) => roomId));
+
+export function RoomsSection({
+  rooms,
+  selectedRoomId,
+  waitingRoomIds,
+  dispatch,
+}: {
+  rooms: Room[];
+  selectedRoomId: string | null;
+  waitingRoomIds: Set<string>;
+  dispatch: Dispatch<AppAction>;
+}) {
   const openSettings = (roomId: string | null) => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId } });
   return (
     <section className="rooms" aria-label={words.rooms}>
@@ -22,28 +39,42 @@ export function RoomsSection({ rooms, selectedRoomId, dispatch }: { rooms: Room[
         </button>
       </header>
       <ul>
-        {rooms.map((room) => (
-          <li key={room.id} className={room.id === selectedRoomId ? "selected" : ""} onClick={() => dispatch({ type: "select-room", roomId: room.id })}>
-            <span className="conversation-title"># {room.name}</span>
-            <button
-              type="button"
-              className="icon"
-              aria-label={words.roomSettings(room.name)}
-              onClick={(event) => {
-                event.stopPropagation();
-                openSettings(room.id);
-              }}
+        {rooms.map((room) => {
+          const waiting = waitingRoomIds.has(room.id);
+          return (
+            <li
+              key={room.id}
+              className={[room.id === selectedRoomId && "selected", waiting && "waiting"].filter(Boolean).join(" ")}
+              data-waiting-tone={waiting ? "decision" : undefined}
+              onClick={() => dispatch({ type: "select-room", roomId: room.id })}
             >
-              ⋯
-            </button>
-          </li>
-        ))}
+              {waiting && <span className="dot waiting tone-decision" data-hint={waitingHints.permission} />}
+              <span className="conversation-title"># {room.name}</span>
+              {waiting && (
+                <span className="waiting-pill tone-decision" data-hint={waitingHints.permission}>
+                  {waitingLabels.decision}
+                </span>
+              )}
+              <button
+                type="button"
+                className="icon"
+                aria-label={words.roomSettings(room.name)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openSettings(room.id);
+                }}
+              >
+                ⋯
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
 }
 
-/** Makes a room, or changes one: its name and agents; a room's workspace stays the one it was made in. */
+/** Makes a room, or changes one: its name, agents and what they may do without asking; a room's workspace stays the one it was made in. */
 export function RoomDialog({
   room,
   workspaces,
@@ -60,6 +91,7 @@ export function RoomDialog({
   const [name, setName] = useState(room?.name ?? "");
   const [workspaceId, setWorkspaceId] = useState(room?.workspaceId ?? workspaces[0]?.id ?? "");
   const [agentIds, setAgentIds] = useState<string[]>(room?.agents.map(({ profileId }) => profileId) ?? []);
+  const [permissions, setPermissions] = useState<PermissionPreset>(room?.permissions ?? DEFAULT_PERMISSION_PRESET);
   const toggle = (profileId: string) => setAgentIds((ticked) => (ticked.includes(profileId) ? ticked.filter((id) => id !== profileId) : [...ticked, profileId]));
   const canSave = name.trim() !== "" && workspaceId !== "";
   const save = () => {
@@ -67,6 +99,7 @@ export function RoomDialog({
     if (room) {
       if (name.trim() !== room.name) connection.send({ type: "room.rename", roomId: room.id, name });
       connection.send({ type: "room.set-agents", roomId: room.id, profileIds: agentIds });
+      if (permissions !== room.permissions) connection.send({ type: "room.set-permissions", roomId: room.id, permissions });
       return onClose();
     }
     const requestId = crypto.randomUUID();
@@ -75,7 +108,7 @@ export function RoomDialog({
       unsubscribe();
       dispatch({ type: "select-room", roomId: message.roomId });
     });
-    connection.send({ type: "room.create", requestId, name, workspaceId, profileIds: agentIds });
+    connection.send({ type: "room.create", requestId, name, workspaceId, profileIds: agentIds, permissions });
     onClose();
   };
   const deleteRoom = () => {
@@ -117,6 +150,16 @@ export function RoomDialog({
             </label>
           ))}
           <span className="hint">{words.agentsHint}</span>
+        </fieldset>
+        <fieldset className="room-field room-permissions-field">
+          <legend>{words.permissions}</legend>
+          {PERMISSION_PRESETS.map((preset) => (
+            <label key={preset} className="room-agent-choice">
+              <input type="radio" name="room-permissions" checked={permissions === preset} onChange={() => setPermissions(preset)} />
+              {words.presets[preset]}
+            </label>
+          ))}
+          <span className="hint">{words.permissionsHint}</span>
         </fieldset>
         <div className="form-actions">
           {room && (

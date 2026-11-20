@@ -33,6 +33,7 @@ export const problems: Messages["problems"] = {
     "job-wait-gone": "A Mirador már nem vár erre a feladatra.",
     "conversation-workspace-gone": "Ennek a beszélgetésnek a munkaterülete már nem létezik.",
     "permission-no-longer-pending": "Ez az engedélykérés már nem vár válaszra.",
+    "room-approval-not-yours": "A szoba ágenseinek kéréseire csak a szoba tulajdonosa válaszolhat.",
     "reminder-needs-time": "Add meg, mikor, például: /later tomorrow 9 vagy /remind 3h.",
     "reminder-not-valid": "Az emlékeztetőhöz kell egy időpont, és hogy félretegye-e a beszélgetést.",
     "morning-not-valid": "A reggelhez egy napszak kell, például 09:00.",

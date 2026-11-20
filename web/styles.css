@@ -9720,6 +9720,49 @@ button.link.more-rows {
   gap: 6px;
 }
 
+.room-approvals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 16px 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  border-radius: 8px;
+  background: var(--warn-soft);
+  font-size: calc(13px * var(--font-scale));
+}
+
+.room-approval-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.room-approval-asker,
+.room-approval-subject {
+  font-weight: 600;
+}
+
+.room-approval-count {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.room-approval-detail {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-approval-task {
+  color: var(--muted);
+}
+
+.room-approvals .permission-options {
+  margin-top: 4px;
+}
+
 .modal.room-dialog {
   width: min(480px, 100%);
 }
