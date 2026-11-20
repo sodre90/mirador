@@ -285,9 +285,9 @@ export interface Workspace {
   defaultLaunch: Launch;
   /** Picked by the user to tell workspaces apart in the sidebar. */
   color: Pastel | null;
-  /** Its place in the sidebar's one order of workspaces and groups: among its group's workspaces, or among the groups and the workspaces in none. */
+  /** Its place in the sidebar's one order of workspaces and groups: among the workspaces and groups in its group, or in none. */
   position: number;
-  /** The group it is shown in, or null for one among the groups. */
+  /** The group it is shown in, or null for one in no group. */
   groupId: string | null;
   /** Where its new conversations work unless one is started otherwise. */
   newConversationsIn: ConversationPlace;
@@ -317,11 +317,13 @@ export interface ConversationWorktree {
 /** The id of the folder a conversation works in: its own worktree's, or its workspace's. */
 export const workingCopyIdOf = ({ workspaceId, worktree }: Pick<Conversation, "workspaceId" | "worktree">) => worktree?.id ?? workspaceId;
 
-/** A folding heading in the sidebar for some of the workspaces, e.g. a project's or a client's. */
+/** A folding heading in the sidebar for some of the workspaces and other groups, e.g. a client's, with a group per project in it. */
 export interface WorkspaceGroup {
   id: string;
   name: string;
-  /** Its place in the order it shares with the workspaces in no group. */
+  /** The group it is in, null for none. */
+  parentId: string | null;
+  /** Its place in the order it shares with the workspaces and groups beside it. */
   position: number;
   createdAt: number;
 }

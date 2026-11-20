@@ -22,7 +22,8 @@ export const shell: Messages["shell"] = {
     groupName: "分组名称",
     renameGroup: "重命名分组",
     deleteGroup: "删除分组",
-    dragHere: "拖动工作区标题到这里",
+    newGroupInside: "在其中新建分组",
+    dragHere: "拖动工作区或分组的标题到这里",
     workspaceDirectory: "工作区目录",
     folderHintHighlighted: (folder, createsDirectory) =>
       `Enter 或 Tab 选用高亮的文件夹，⇧Enter ${createsDirectory ? "创建" : "添加"} ${folder}，Esc 取消`,
@@ -149,6 +150,8 @@ export const shell: Messages["shell"] = {
     nothingMatches: "没有匹配项。",
     moveToGroup: (workspace, group) => `把 ${workspace} 移到分组 ${group}`,
     takeOutOfGroup: (workspace, group) => `把 ${workspace} 移出分组 ${group}`,
+    moveGroupToGroup: (group, into) => `把分组 ${group} 移到分组 ${into}`,
+    takeGroupOutOfGroup: (group, from) => `把分组 ${group} 移出分组 ${from}`,
     newConversationIn: (workspace) => `在 ${workspace} 中新建对话`,
     continueSessionIn: (workspace) => `在 ${workspace} 中继续会话…`,
     colour: (workspace) => `设置 ${workspace} 的颜色…`,

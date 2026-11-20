@@ -23,6 +23,7 @@ import {
   type ReachabilitySettings,
   type StoredEvent,
   type Workspace,
+  type WorkspaceGroup,
   type MachineSeen,
   type Pastel,
   workingCopyIdOf,
@@ -53,6 +54,7 @@ import { OutsideWorkspace } from "./changes.ts";
 import { extensionFor, isImageId } from "../shared/images.ts";
 import { canvasChangedSince, DEFLATED_MESSAGES_HEADER, type LowDataSubscription } from "../shared/low-data.ts";
 import { sidebarIdsAfterMove } from "../shared/sidebar-order.ts";
+import { checkGroupMove, checkLanding, type SidebarNow } from "./sidebar-moves.ts";
 import { withChunksCoalesced } from "../shared/timeline.ts";
 import { authorityFingerprint as fingerprintOf, type ServingCertificate } from "./certificates.ts";
 import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
@@ -959,29 +961,20 @@ export function startServer(services: HostServices) {
     deleteWorkspace(workspaceId, { keepsUncommittedWork: !discardsUncommitted });
   }
 
-  const sidebarNow = () => ({ workspaces: store.listWorkspaces(), groups: store.listWorkspaceGroups() });
+  const sidebarNow = (): SidebarNow => ({ workspaces: store.listWorkspaces(), groups: store.listWorkspaceGroups() });
 
-  /** Tells every window of the workspaces and groups whose place in the sidebar changed since `before`: their position, or a workspace's group. */
+  /** Tells every window of the workspaces and groups whose place in the sidebar changed since `before`: their position, or their group. */
   function broadcastSidebarChanges(before: ReturnType<typeof sidebarNow>) {
     const placeOf = ({ position, groupId }: Workspace) => `${position} ${groupId}`;
+    const groupPlaceOf = ({ position, parentId }: WorkspaceGroup) => `${position} ${parentId}`;
     const workspacePlaces = new Map(before.workspaces.map((workspace) => [workspace.id, placeOf(workspace)]));
-    const groupPositions = new Map(before.groups.map(({ id, position }) => [id, position]));
+    const groupPlaces = new Map(before.groups.map((group) => [group.id, groupPlaceOf(group)]));
     const now = sidebarNow();
     now.workspaces.filter((workspace) => workspacePlaces.get(workspace.id) !== placeOf(workspace)).forEach((workspace) => hub.broadcast({ type: "workspace.upserted", workspace }));
-    now.groups.filter(({ id, position }) => groupPositions.get(id) !== position).forEach((group) => hub.broadcast({ type: "workspace-group.upserted", group }));
+    now.groups.filter((group) => groupPlaces.get(group.id) !== groupPlaceOf(group)).forEach((group) => hub.broadcast({ type: "workspace-group.upserted", group }));
   }
 
-  /** Something lands in a group just before a workspace of it, or among the groups and the workspaces in none before either; or last. */
-  function checkLanding({ workspaces, groups }: ReturnType<typeof sidebarNow>, groupId: string | null, beforeWorkspaceId: string | null, beforeGroupId: string | null) {
-    const groupExists = (id: string) => groups.some((group) => group.id === id);
-    if (groupId !== null && !groupExists(groupId)) throw new HostProblemError({ code: "group-gone" });
-    if (beforeGroupId !== null && groupId !== null) throw new HostProblemError({ code: "only-ungrouped-before-group" });
-    if (beforeGroupId !== null && !groupExists(beforeGroupId)) throw new HostProblemError({ code: "group-gone" });
-    const landsBefore = workspaces.find(({ id }) => id === beforeWorkspaceId);
-    if (landsBefore && landsBefore.groupId !== groupId) throw new HostProblemError({ code: "workspace-lands-in-same-group" });
-  }
-
-  /** Without a group, as the phone app moves it, a workspace keeps its own, and lands near the workspace named if that is in another. */
+  /** Without a group a workspace keeps its own, and lands near the workspace named if that is in another. */
   function moveWorkspace(workspaceId: string, groupId: string | null | undefined, beforeWorkspaceId: string | null, beforeGroupId: string | null) {
     const before = sidebarNow();
     const moving = before.workspaces.find(({ id }) => id === workspaceId);
@@ -1002,8 +995,9 @@ export function startServer(services: HostServices) {
     return trimmed;
   }
 
-  function createWorkspaceGroup(name: string) {
-    const group = store.insertWorkspaceGroup({ id: crypto.randomUUID(), name: groupName(name), createdAt: Date.now() });
+  function createWorkspaceGroup(name: string, parentId: string | null) {
+    if (parentId !== null && !store.findWorkspaceGroup(parentId)) throw new HostProblemError({ code: "group-gone" });
+    const group = store.insertWorkspaceGroup({ id: crypto.randomUUID(), name: groupName(name), parentId, createdAt: Date.now() });
     hub.broadcast({ type: "workspace-group.upserted", group });
   }
 
@@ -1013,11 +1007,12 @@ export function startServer(services: HostServices) {
     if (group) hub.broadcast({ type: "workspace-group.upserted", group });
   }
 
-  function moveWorkspaceGroup(groupId: string, beforeGroupId: string | null, beforeWorkspaceId: string | null) {
+  function moveWorkspaceGroup(groupId: string, parentId: string | null, beforeGroupId: string | null, beforeWorkspaceId: string | null) {
     const before = sidebarNow();
-    if (!before.groups.some(({ id }) => id === groupId)) throw new HostProblemError({ code: "group-gone" });
-    checkLanding(before, null, beforeWorkspaceId, beforeGroupId);
-    store.setSidebarOrder(sidebarIdsAfterMove(before.workspaces, before.groups, groupId, beforeGroupId ?? beforeWorkspaceId));
+    checkGroupMove(before, groupId, parentId, beforeWorkspaceId, beforeGroupId);
+    store.setWorkspaceGroupParent(groupId, parentId);
+    const groups = before.groups.map((group) => (group.id === groupId ? { ...group, parentId } : group));
+    store.setSidebarOrder(sidebarIdsAfterMove(before.workspaces, groups, groupId, beforeGroupId ?? beforeWorkspaceId));
     broadcastSidebarChanges(before);
   }
 
@@ -1180,11 +1175,11 @@ export function startServer(services: HostServices) {
       case "workspace.set-worktree-settings":
         return conversations.setWorktreeSettings(message.workspaceId, message.newConversationsIn, message.worktreeSetup);
       case "workspace-group.create":
-        return createWorkspaceGroup(message.name);
+        return createWorkspaceGroup(message.name, message.parentId);
       case "workspace-group.rename":
         return renameWorkspaceGroup(message.groupId, message.name);
       case "workspace-group.move":
-        return moveWorkspaceGroup(message.groupId, message.beforeGroupId, message.beforeWorkspaceId ?? null);
+        return moveWorkspaceGroup(message.groupId, message.parentId, message.beforeGroupId, message.beforeWorkspaceId ?? null);
       case "workspace-group.delete":
         return deleteWorkspaceGroup(message.groupId);
       case "profile.save":

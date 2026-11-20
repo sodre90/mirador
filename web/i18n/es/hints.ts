@@ -224,19 +224,19 @@ export const hints: Messages["hints"] = {
   addWorkspace: "Agrega un directorio de proyecto. Sus conversaciones se ejecutan con él como directorio de trabajo.",
   hideSidebar: "Oculta la barra lateral para dar todo el ancho a la conversación, el lienzo y la terminal. Este navegador lo recuerda.",
   showSidebar: "Vuelve a mostrar la barra lateral con los espacios de trabajo y las conversaciones.",
-  addWorkspaceGroup:
-    "Agrega un grupo: un encabezado que se contrae, para reunir espacios de trabajo, p. ej. por proyecto o cliente. Arrastra un espacio de trabajo por su encabezado a un grupo, y ordena espacios de trabajo y grupos como quieras.",
+  addWorkspaceGroup: "Agrega un grupo: un encabezado que se contrae, para reunir espacios de trabajo, p. ej. por cliente, con un grupo por proyecto dentro. Arrastra un espacio de trabajo o un grupo por su encabezado a un grupo, y ordena espacios de trabajo y grupos como quieras.",
+  addWorkspaceGroupInside: "Agrega un grupo dentro de este, p. ej. el de un proyecto dentro del de su cliente.",
   foldWorkspace: "Contrae este espacio de trabajo hasta su encabezado. Abrir una de sus conversaciones lo expande.",
   unfoldWorkspace: "Vuelve a mostrar las conversaciones de este espacio de trabajo.",
   olderConversations: (after) =>
     `Conversaciones en las que nadie escribe desde hace ${after}; Ajustes fija cuánto tiempo. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando se quedan en la lista. Escribir en una la trae de vuelta.`,
-  workspaceGroupCount: "Espacios de trabajo de este grupo.",
-  waitingInGroup: "Conversaciones de los espacios de trabajo de este grupo que te esperan.",
+  workspaceGroupCount: "Espacios de trabajo de este grupo, también los de los grupos que contiene.",
+  waitingInGroup: "Conversaciones de los espacios de trabajo de este grupo que te esperan, también las de los grupos que contiene.",
   waitingAbove: "Conversaciones que te esperan, fuera de la vista arriba. Haz clic para mostrar la más cercana.",
   waitingBelow: "Conversaciones que te esperan, fuera de la vista abajo. Haz clic para mostrar la más cercana.",
   renameWorkspaceGroup: "Renombra este grupo.",
-  deleteWorkspaceGroup: "Elimina este grupo. Sus espacios de trabajo se quedan donde está.",
-  deleteWorkspaceGroupArmed: "Haz clic de nuevo para eliminar este grupo. Sus espacios de trabajo se quedan donde está.",
+  deleteWorkspaceGroup: "Elimina este grupo. Sus espacios de trabajo y grupos se quedan donde está.",
+  deleteWorkspaceGroupArmed: "Haz clic de nuevo para eliminar este grupo. Sus espacios de trabajo y grupos se quedan donde está.",
   removeWorkspaceArmed:
     "Haz clic de nuevo para quitar este espacio de trabajo y sus conversaciones de la aplicación. Sus worktrees en la carpeta de datos de Mirador también se eliminan, pero el directorio del proyecto se conserva. Si un worktree tiene archivos sin commitear, se pregunta antes.",
   deleteConversation:

@@ -44,7 +44,7 @@ export type Overlay =
   | { kind: "workspace-color"; workspaceId: string }
   | { kind: "worktrees"; workspaceId: string }
   | { kind: "add-workspace" }
-  | { kind: "add-workspace-group" }
+  | { kind: "add-workspace-group"; parentId: string | null }
   /** `rewind` takes the conversation and the files back; without it only the files are put back. */
   | { kind: "revert"; conversationId: string; turn: Turn; rewind?: boolean }
   | { kind: "settings"; page?: SettingsPage };

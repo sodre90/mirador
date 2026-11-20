@@ -224,19 +224,19 @@ export const hints: Messages["hints"] = {
   addWorkspace: "Füge ein Projektverzeichnis hinzu. Seine Unterhaltungen laufen mit ihm als Arbeitsverzeichnis.",
   hideSidebar: "Blende die Seitenleiste aus, um Unterhaltung, Canvas und Terminal die ganze Breite zu geben. Wird in diesem Browser gespeichert.",
   showSidebar: "Zeige die Seitenleiste mit den Arbeitsbereichen und Unterhaltungen wieder.",
-  addWorkspaceGroup:
-    "Füge eine Gruppe hinzu: eine einklappbare Überschrift, unter der du Arbeitsbereiche sammelst, z. B. pro Projekt oder Kunde. Ziehe einen Arbeitsbereich an seiner Überschrift in eine Gruppe und Arbeitsbereiche und Gruppen in jede beliebige Reihenfolge.",
+  addWorkspaceGroup: "Füge eine Gruppe hinzu: eine einklappbare Überschrift, unter der du Arbeitsbereiche sammelst, z. B. pro Kunde, darin eine Gruppe pro Projekt. Ziehe einen Arbeitsbereich oder eine Gruppe an der Überschrift in eine Gruppe und Arbeitsbereiche und Gruppen in jede beliebige Reihenfolge.",
+  addWorkspaceGroupInside: "Füge eine Gruppe in dieser hinzu, z. B. die eines Projekts in der seines Kunden.",
   foldWorkspace: "Klappe diesen Arbeitsbereich bis auf seine Überschrift ein. Öffnest du eine seiner Unterhaltungen, klappt er wieder auf.",
   unfoldWorkspace: "Zeige die Unterhaltungen dieses Arbeitsbereichs wieder.",
   olderConversations: (after) =>
     `Unterhaltungen, in die so lange niemand geschrieben hat: ${after}; die Einstellungen legen fest, wie lange. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben in der Liste. Schreibst du in eine, kommt sie zurück.`,
-  workspaceGroupCount: "Arbeitsbereiche in dieser Gruppe.",
-  waitingInGroup: "Unterhaltungen in den Arbeitsbereichen dieser Gruppe, die auf dich warten.",
+  workspaceGroupCount: "Arbeitsbereiche in dieser Gruppe, auch die in den Gruppen darin.",
+  waitingInGroup: "Unterhaltungen in den Arbeitsbereichen dieser Gruppe, die auf dich warten, auch in den Gruppen darin.",
   waitingAbove: "Unterhaltungen, die auf dich warten, oben aus dem Blick gescrollt. Klicke, um die nächstgelegene zu zeigen.",
   waitingBelow: "Unterhaltungen, die auf dich warten, unten aus dem Blick gescrollt. Klicke, um die nächstgelegene zu zeigen.",
   renameWorkspaceGroup: "Benenne diese Gruppe um.",
-  deleteWorkspaceGroup: "Lösche diese Gruppe. Ihre Arbeitsbereiche bleiben, wo sie sind.",
-  deleteWorkspaceGroupArmed: "Klicke erneut, um diese Gruppe zu löschen. Ihre Arbeitsbereiche bleiben, wo sie sind.",
+  deleteWorkspaceGroup: "Lösche diese Gruppe. Ihre Arbeitsbereiche und Gruppen bleiben, wo sie sind.",
+  deleteWorkspaceGroupArmed: "Klicke erneut, um diese Gruppe zu löschen. Ihre Arbeitsbereiche und Gruppen bleiben, wo sie sind.",
   removeWorkspaceArmed:
     "Klicke erneut, um diesen Arbeitsbereich und seine Unterhaltungen aus der App zu entfernen. Seine Worktrees im Datenordner von Mirador werden ebenfalls entfernt, das Projektverzeichnis bleibt. Enthält ein Worktree nicht committete Dateien, wird vorher gefragt.",
   deleteConversation:

@@ -190,6 +190,7 @@ const addedColumns = [
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
   { table: "conversations", column: "agent_commands", definition: "TEXT" },
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
+  { table: "workspace_groups", column: "parent_id", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -285,8 +286,8 @@ const toWorkspace = (row: WorkspaceRow): Workspace => ({
 });
 
 const toWorkspaceGroup = (row: unknown): WorkspaceGroup => {
-  const { id, name, position, created_at } = row as { id: string; name: string; position: number; created_at: number };
-  return { id, name, position, createdAt: created_at };
+  const { id, name, parent_id, position, created_at } = row as { id: string; name: string; parent_id: string | null; position: number; created_at: number };
+  return { id, name, parentId: parent_id, position, createdAt: created_at };
 };
 
 const toProfile = (row: ProfileRow): Profile => ({
@@ -525,22 +526,30 @@ export class Store {
     return row ? toWorkspaceGroup(row) : undefined;
   }
 
-  /** Adds the group first in the sidebar. */
+  /** Adds the group first in its group, or in the sidebar. */
   insertWorkspaceGroup(group: Omit<WorkspaceGroup, "position">): WorkspaceGroup {
     const position = this.firstSidebarPosition();
-    this.db.query("INSERT INTO workspace_groups (id, name, position, created_at) VALUES (?, ?, ?, ?)").run(group.id, group.name, position, group.createdAt);
+    this.db
+      .query("INSERT INTO workspace_groups (id, name, parent_id, position, created_at) VALUES (?, ?, ?, ?, ?)")
+      .run(group.id, group.name, group.parentId, position, group.createdAt);
     return { ...group, position };
+  }
+
+  setWorkspaceGroupParent(groupId: string, parentId: string | null) {
+    this.db.query("UPDATE workspace_groups SET parent_id = ? WHERE id = ?").run(parentId, groupId);
   }
 
   renameWorkspaceGroup(groupId: string, name: string) {
     this.db.query("UPDATE workspace_groups SET name = ? WHERE id = ?").run(name, groupId);
   }
 
-  /** Its workspaces stay where it was in the sidebar, in their order, in no group. */
+  /** Its workspaces and groups stay where it was in the sidebar, in their order, in the group it was in. */
   deleteWorkspaceGroup(groupId: string) {
     this.db.transaction(() => {
+      const parentId = this.findWorkspaceGroup(groupId)?.parentId ?? null;
       this.setSidebarOrder(sidebarIds(sidebarItems(this.listWorkspaces(), this.listWorkspaceGroups())).filter((id) => id !== groupId));
-      this.db.query("UPDATE workspaces SET group_id = NULL WHERE group_id = ?").run(groupId);
+      this.db.query("UPDATE workspaces SET group_id = ? WHERE group_id = ?").run(parentId, groupId);
+      this.db.query("UPDATE workspace_groups SET parent_id = ? WHERE parent_id = ?").run(parentId, groupId);
       this.db.query("DELETE FROM workspace_groups WHERE id = ?").run(groupId);
     })();
   }

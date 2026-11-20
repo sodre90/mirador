@@ -99,18 +99,18 @@ export type ClientMessage =
   | { type: "workspace.delete"; workspaceId: string; discardsUncommitted?: boolean }
   | { type: "workspace.set-default-launch"; workspaceId: string; launch: Launch }
   /**
-   * Puts the workspace just before another of the group in the sidebar, or last in it; with a null group, among the
-   * groups and the workspaces in none, where it can land before a group too. Without a group it keeps its own, as the
-   * phone app, which shows no groups, moves it.
+   * Puts the workspace in the group, or in none for null, just before a workspace or group there in the sidebar, or
+   * last there. Without a group it keeps its own.
    */
   | { type: "workspace.move"; workspaceId: string; groupId?: string | null; beforeWorkspaceId: string | null; beforeGroupId?: string | null }
   | { type: "workspace.set-color"; workspaceId: string; color: Pastel | null }
   | { type: "workspace.set-worktree-settings"; workspaceId: string; newConversationsIn: ConversationPlace; worktreeSetup: string }
-  | { type: "workspace-group.create"; name: string }
+  /** Adds the group first in the group named, or in none for null. */
+  | { type: "workspace-group.create"; name: string; parentId: string | null }
   | { type: "workspace-group.rename"; groupId: string; name: string }
-  /** Puts the group just before another, or before a workspace in no group, in the sidebar; or last. */
-  | { type: "workspace-group.move"; groupId: string; beforeGroupId: string | null; beforeWorkspaceId?: string | null }
-  /** Its workspaces stay where it was in the sidebar, in no group. */
+  /** Puts the group in another, or in none for null, just before a group or workspace there in the sidebar, or last there. */
+  | { type: "workspace-group.move"; groupId: string; parentId: string | null; beforeGroupId: string | null; beforeWorkspaceId?: string | null }
+  /** Its workspaces and groups stay where it was in the sidebar, in the group it was in. */
   | { type: "workspace-group.delete"; groupId: string }
   | { type: "profile.save"; requestId: string; profile: ProfileDraft }
   | { type: "profile.delete"; profileId: string }

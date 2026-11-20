@@ -386,8 +386,8 @@ describe("Store", () => {
 
   test("a new group goes first, before the workspaces too, and groups keep the order and names they are given", () => {
     const { store } = seededStore();
-    store.insertWorkspaceGroup({ id: "g1", name: "Clients", createdAt: 1 });
-    store.insertWorkspaceGroup({ id: "g2", name: "Own", createdAt: 2 });
+    store.insertWorkspaceGroup({ id: "g1", name: "Clients", parentId: null, createdAt: 1 });
+    store.insertWorkspaceGroup({ id: "g2", name: "Own", parentId: null, createdAt: 2 });
     expect(sidebarOrder(store)).toEqual(["g2", "g1", "w1"]);
     store.setSidebarOrder(["g1", "w1", "g2"]);
     store.renameWorkspaceGroup("g1", "Customers");
@@ -404,8 +404,8 @@ describe("Store", () => {
     ["w2", "w3", "w4"].forEach((id, index) =>
       store.insertWorkspace({ id, name: id, path: `/tmp/${id}`, defaultLaunch: { harness: "claude", profileId: null }, createdAt: index + 2 }),
     );
-    store.insertWorkspaceGroup({ id: "g1", name: "Gone", createdAt: 1 });
-    store.insertWorkspaceGroup({ id: "g2", name: "Kept", createdAt: 2 });
+    store.insertWorkspaceGroup({ id: "g1", name: "Gone", parentId: null, createdAt: 1 });
+    store.insertWorkspaceGroup({ id: "g2", name: "Kept", parentId: null, createdAt: 2 });
     store.setWorkspaceGroup("w1", "g1");
     store.setWorkspaceGroup("w3", "g1");
     store.setWorkspaceGroup("w4", "g2");
@@ -422,12 +422,32 @@ describe("Store", () => {
     ]);
   });
 
+  test("a group goes into another and keeps it; deleting it leaves its workspaces and groups where it was, in the group it was in", () => {
+    const { store } = seededStore();
+    ["w2", "w3"].forEach((id, index) => store.insertWorkspace({ id, name: id, path: `/tmp/${id}`, defaultLaunch: { harness: "claude", profileId: null }, createdAt: index + 2 }));
+    store.insertWorkspaceGroup({ id: "acme", name: "Acme", parentId: null, createdAt: 1 });
+    store.insertWorkspaceGroup({ id: "billing", name: "Billing", parentId: "acme", createdAt: 2 });
+    store.insertWorkspaceGroup({ id: "old", name: "Old", parentId: null, createdAt: 3 });
+    store.setWorkspaceGroupParent("old", "billing");
+    store.setWorkspaceGroup("w1", "billing");
+    store.setWorkspaceGroup("w2", "old");
+    store.setWorkspaceGroup("w3", "acme");
+    store.setSidebarOrder(["acme", "billing", "w1", "old", "w2", "w3"]);
+    expect(store.findWorkspaceGroup("old")?.parentId).toBe("billing");
+
+    store.deleteWorkspaceGroup("billing");
+    expect(sidebarOrder(store)).toEqual(["acme", "w1", "old", "w2", "w3"]);
+    expect(store.findWorkspaceGroup("old")?.parentId).toBe("acme");
+    expect(store.findWorkspace("w1")?.groupId).toBe("acme");
+    expect(store.findWorkspace("w2")?.groupId).toBe("old");
+  });
+
   test("keeps the sidebar as it looked when the groups had an order of their own, below the workspaces in none, and numbers it only once", () => {
     const path = join(mkdtempSync(join(tmpdir(), "mirador-store-")), "state.sqlite");
     const store = new Store(path);
     ["a", "b", "c", "d", "e"].forEach((id) => store.insertWorkspace({ id, name: id, path: `/tmp/${id}`, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 }));
-    store.insertWorkspaceGroup({ id: "g1", name: "One", createdAt: 1 });
-    store.insertWorkspaceGroup({ id: "g2", name: "Two", createdAt: 2 });
+    store.insertWorkspaceGroup({ id: "g1", name: "One", parentId: null, createdAt: 1 });
+    store.insertWorkspaceGroup({ id: "g2", name: "Two", parentId: null, createdAt: 2 });
     store.close();
     const old = new Database(path);
     old.run("DELETE FROM settings WHERE key = 'sidebar_order'");

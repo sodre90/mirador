@@ -27,7 +27,8 @@ export const shell = {
     groupName: "Group name",
     renameGroup: "Rename group",
     deleteGroup: "Delete group",
-    dragHere: "Drag a workspace here by its heading",
+    newGroupInside: "New group inside",
+    dragHere: "Drag a workspace or group here by its heading",
     workspaceDirectory: "Workspace directory",
     folderHintHighlighted: (folder: string, createsDirectory: boolean) =>
       `Enter or Tab takes the highlighted folder, ⇧Enter ${createsDirectory ? "creates" : "adds"} ${folder}, Esc cancels`,
@@ -166,6 +167,8 @@ export const shell = {
     nothingMatches: "Nothing matches.",
     moveToGroup: (workspace: string, group: string) => `Move ${workspace} to group ${group}`,
     takeOutOfGroup: (workspace: string, group: string) => `Take ${workspace} out of group ${group}`,
+    moveGroupToGroup: (group: string, into: string) => `Move group ${group} to group ${into}`,
+    takeGroupOutOfGroup: (group: string, from: string) => `Take group ${group} out of group ${from}`,
     newConversationIn: (workspace: string) => `New conversation in ${workspace}`,
     continueSessionIn: (workspace: string) => `Continue a session in ${workspace}…`,
     colour: (workspace: string) => `Colour ${workspace}…`,

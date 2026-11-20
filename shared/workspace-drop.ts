@@ -1,40 +1,36 @@
 import type { WorkspaceGroup } from "./model.ts";
-import { movedBefore, sidebarItemId, type SidebarItem } from "./sidebar-order.ts";
+import { groupHolds, itemsIn, movedBefore, shownGroupOf, sidebarItemId, type SidebarItem } from "./sidebar-order.ts";
 
-/** A row of the sidebar a dragged workspace can land by, from top to bottom, with its edges on screen. */
+/** A row of the sidebar a dragged workspace or group can land by, from top to bottom, with its edges on screen. */
 export type SidebarRow =
   | { kind: "workspace"; id: string; groupId: string | null; top: number; bottom: number }
-  | { kind: "group-heading"; groupId: string; top: number; bottom: number }
-  /** The note an unfolded group with no workspace shows in their place. */
+  | { kind: "group-heading"; groupId: string; parentId: string | null; top: number; bottom: number }
+  /** The note an unfolded group with nothing in it shows in its place. */
   | { kind: "group-empty"; groupId: string; top: number; bottom: number };
 
-/**
- * Where a dragged workspace lands: in a group just before a workspace of it, or with a null group among the groups and
- * the workspaces in none, just before either; last when `beforeId` is null.
- */
-export interface WorkspaceDrop {
+/** Where a dragged workspace or group lands: in a group, or in none for null, just before a workspace or group there; last when `beforeId` is null. */
+export interface SidebarLanding {
   groupId: string | null;
   beforeId: string | null;
 }
 
-/** The share of a group's heading, from its top, where a workspace lands above the group rather than in it. */
+/** The share of a group's heading, from its top, where something lands above the group rather than in it. */
 const ABOVE_GROUP_SHARE = 1 / 3;
 
-const landingLast: WorkspaceDrop = { groupId: null, beforeId: null };
+const landingLast: SidebarLanding = { groupId: null, beforeId: null };
 
-function dropAbove(row: SidebarRow | undefined): WorkspaceDrop {
+function landingAbove(row: SidebarRow | undefined): SidebarLanding {
   if (!row) return landingLast;
   if (row.kind === "workspace") return { groupId: row.groupId, beforeId: row.id };
-  if (row.kind === "group-heading") return { groupId: null, beforeId: row.groupId };
+  if (row.kind === "group-heading") return { groupId: row.parentId, beforeId: row.groupId };
   return { groupId: row.groupId, beforeId: null };
 }
 
-/** Just below a workspace: before the next of its group, last in its group when it is the last, or before whatever follows it among the groups. */
-function dropBelow(rows: SidebarRow[], index: number): WorkspaceDrop {
-  const row = rows[index] as Extract<SidebarRow, { kind: "workspace" }>;
-  const next = rows[index + 1];
-  if (row.groupId === null) return dropAbove(next);
-  return next?.kind === "workspace" && next.groupId === row.groupId ? { groupId: row.groupId, beforeId: next.id } : { groupId: row.groupId, beforeId: null };
+const isIn = (row: SidebarRow, groupId: string | null) => (row.kind === "workspace" ? row.groupId === groupId : row.kind === "group-heading" && row.parentId === groupId);
+
+/** Just below a workspace: before what follows it in its group, or last in its group when nothing does. */
+function landingBelow(row: Extract<SidebarRow, { kind: "workspace" }>, next: SidebarRow | undefined): SidebarLanding {
+  return next && isIn(next, row.groupId) ? landingAbove(next) : { groupId: row.groupId, beforeId: null };
 }
 
 /**
@@ -42,44 +38,37 @@ function dropBelow(rows: SidebarRow[], index: number): WorkspaceDrop {
  * group's heading it lands above the group near the heading's top edge, and last in the group, folded or not, below
  * that; in a gap, before what follows; below everything, last of all.
  */
-export function workspaceDropAt(rows: SidebarRow[], y: number): WorkspaceDrop {
+export function sidebarLandingAt(rows: SidebarRow[], y: number): SidebarLanding {
   const index = rows.findIndex(({ bottom }) => y < bottom);
   const row = rows[index];
   if (!row) return landingLast;
-  if (y < row.top) return dropAbove(row);
-  if (row.kind === "group-heading") return y < row.top + (row.bottom - row.top) * ABOVE_GROUP_SHARE ? dropAbove(row) : { groupId: row.groupId, beforeId: null };
+  if (y < row.top) return landingAbove(row);
+  if (row.kind === "group-heading") return y < row.top + (row.bottom - row.top) * ABOVE_GROUP_SHARE ? landingAbove(row) : { groupId: row.groupId, beforeId: null };
   if (row.kind === "group-empty") return { groupId: row.groupId, beforeId: null };
-  return y < (row.top + row.bottom) / 2 ? dropAbove(row) : dropBelow(rows, index);
+  return y < (row.top + row.bottom) / 2 ? landingAbove(row) : landingBelow(row, rows[index + 1]);
 }
 
-const siblingIds = (items: SidebarItem[], groupId: string | null) =>
-  groupId === null
-    ? items.map(sidebarItemId)
-    : items.flatMap((item) => (item.kind === "group" && item.group.id === groupId ? item.workspaces.map(({ id }) => id) : []));
-
-/** The group a workspace shows in, null for none, or undefined when it shows nowhere. */
-const shownGroupOf = (items: SidebarItem[], workspaceId: string) =>
-  items
-    .flatMap((item): { id: string; groupId: string | null }[] =>
-      item.kind === "workspace" ? [{ id: item.workspace.id, groupId: null }] : item.workspaces.map(({ id }) => ({ id, groupId: item.group.id })),
-    )
-    .find(({ id }) => id === workspaceId)?.groupId;
-
-/** Whether landing there changes the workspace's group or its place among the things beside it. */
-export function movesWorkspace(items: SidebarItem[], workspaceId: string, drop: WorkspaceDrop) {
-  const groupId = shownGroupOf(items, workspaceId);
+/**
+ * Whether landing there changes the workspace's or group's group, or its place among the things beside it; a group
+ * never lands in itself or in a group in it.
+ */
+export function landingMoves(items: SidebarItem[], id: string, landing: SidebarLanding) {
+  const groupId = shownGroupOf(items, id);
   if (groupId === undefined) return false;
-  if (groupId !== drop.groupId) return true;
-  const ids = siblingIds(items, groupId);
-  return movedBefore(ids, workspaceId, drop.beforeId).join() !== ids.join();
+  if (landing.groupId !== null && groupHolds(items, id, landing.groupId)) return false;
+  if (groupId !== landing.groupId) return true;
+  const ids = itemsIn(items, groupId).map(sidebarItemId);
+  return movedBefore(ids, id, landing.beforeId).join() !== ids.join();
 }
 
 /** Where to tell the host something lands: just before a workspace or just before a group, or last when neither. */
 export const landingBefore = (groups: WorkspaceGroup[], beforeId: string | null) =>
   beforeId !== null && groups.some(({ id }) => id === beforeId) ? { beforeWorkspaceId: null, beforeGroupId: beforeId } : { beforeWorkspaceId: beforeId, beforeGroupId: null };
 
-/** What follows the group among the groups and the workspaces in none, so a workspace taken out of it lands just below it. */
-export function idBelowGroup(items: SidebarItem[], groupId: string): string | null {
-  const index = items.findIndex((item) => item.kind === "group" && item.group.id === groupId);
-  return index === -1 ? null : (items[index + 1] ? sidebarItemId(items[index + 1]!) : null);
+/** Where something taken out of a group lands: in the group around it, or in none, just below it. */
+export function landingBelowGroup(items: SidebarItem[], groupId: string): SidebarLanding {
+  const around = shownGroupOf(items, groupId) ?? null;
+  const ids = itemsIn(items, around).map(sidebarItemId);
+  const below = ids.indexOf(groupId) + 1;
+  return { groupId: around, beforeId: below === 0 ? null : (ids[below] ?? null) };
 }

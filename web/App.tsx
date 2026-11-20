@@ -3,9 +3,9 @@ import { useMouseSteps } from "./mouse-steps.ts";
 import { EMPTY_TRAIL, stepped, visited } from "./visit-trail.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { isHidden, machinesSeen } from "../shared/machines.ts";
-import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace } from "../shared/model.ts";
+import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace, type WorkspaceGroup } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
-import { sidebarItems } from "../shared/sidebar-order.ts";
+import { groupHolds, groupsWithPaths, shownGroupOf, sidebarItems } from "../shared/sidebar-order.ts";
 import { countWaiting } from "../shared/waiting.ts";
 import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
@@ -62,7 +62,7 @@ import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
-import { idBelowGroup, landingBefore } from "../shared/workspace-drop.ts";
+import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
 
@@ -151,25 +151,34 @@ function paletteEntries(
       run: () => dispatch({ type: "select", conversationId: conversation.id }),
     }),
   );
-  const moveToGroup = (workspace: Workspace, groupId: string) => connection.send({ type: "workspace.move", workspaceId: workspace.id, groupId, beforeWorkspaceId: null });
-  const takeOutOfGroup = (workspace: Workspace, groupId: string) =>
-    connection.send({
-      type: "workspace.move",
-      workspaceId: workspace.id,
-      groupId: null,
-      ...landingBefore(state.workspaceGroups, idBelowGroup(sidebarItems(state.workspaces, state.workspaceGroups), groupId)),
-    });
-  /** A workspace's group, the way the palette moves it: to each other group, last in it, or out of its own, just below it. */
-  const groupMoves = (workspace: Workspace): PaletteEntry[] => {
-    const ownGroup = state.workspaceGroups.find(({ id }) => id === workspace.groupId);
-    const intoOthers = state.workspaceGroups
-      .filter(({ id }) => id !== ownGroup?.id)
-      .map((group): PaletteEntry => ({ id: `group-${workspace.id}-${group.id}`, label: words.moveToGroup(workspace.name, group.name), kind: "action", run: () => moveToGroup(workspace, group.id) }));
-    const outOfOwn: PaletteEntry[] = ownGroup
-      ? [{ id: `ungroup-${workspace.id}`, label: words.takeOutOfGroup(workspace.name, ownGroup.name), kind: "action", run: () => takeOutOfGroup(workspace, ownGroup.id) }]
+  const sidebar = sidebarItems(state.workspaces, state.workspaceGroups);
+  const groupPaths = groupsWithPaths(sidebar).map(({ group, above }) => ({ group, path: [...above, group].map(({ name }) => name).join(" / ") }));
+  const moveWorkspace = (workspace: Workspace, { groupId, beforeId }: SidebarLanding) =>
+    connection.send({ type: "workspace.move", workspaceId: workspace.id, groupId, ...landingBefore(state.workspaceGroups, beforeId) });
+  const moveGroup = (group: WorkspaceGroup, { groupId, beforeId }: SidebarLanding) =>
+    connection.send({ type: "workspace-group.move", groupId: group.id, parentId: groupId, ...landingBefore(state.workspaceGroups, beforeId) });
+  /** Where the palette moves a workspace or group: into each group it may go to, last in it, or out of its own, just below it. */
+  const groupMoves = (id: string, move: (landing: SidebarLanding) => void, labels: { into: (path: string) => string; outOf: (path: string) => string }): PaletteEntry[] => {
+    const own = groupPaths.find(({ group }) => group.id === shownGroupOf(sidebar, id));
+    const intoOthers = groupPaths
+      .filter(({ group }) => group.id !== own?.group.id && !groupHolds(sidebar, id, group.id))
+      .map(({ group, path }): PaletteEntry => ({ id: `group-${id}-${group.id}`, label: labels.into(path), kind: "action", run: () => move({ groupId: group.id, beforeId: null }) }));
+    const outOfOwn: PaletteEntry[] = own
+      ? [{ id: `ungroup-${id}`, label: labels.outOf(own.path), kind: "action", run: () => move(landingBelowGroup(sidebar, own.group.id)) }]
       : [];
     return [...intoOthers, ...outOfOwn];
   };
+  const workspaceGroupMoves = (workspace: Workspace) =>
+    groupMoves(workspace.id, (landing) => moveWorkspace(workspace, landing), {
+      into: (path) => words.moveToGroup(workspace.name, path),
+      outOf: (path) => words.takeOutOfGroup(workspace.name, path),
+    });
+  const groupActions = groupPaths.flatMap(({ group }) =>
+    groupMoves(group.id, (landing) => moveGroup(group, landing), {
+      into: (path) => words.moveGroupToGroup(group.name, path),
+      outOf: (path) => words.takeGroupOutOfGroup(group.name, path),
+    }),
+  );
   const current = currentWorkspace(state);
   const currentFirst = [...state.workspaces].sort((a, b) => Number(b.id === current?.id) - Number(a.id === current?.id));
   const workspaceActions = currentFirst.flatMap((workspace): PaletteEntry[] => [
@@ -200,7 +209,7 @@ function paletteEntries(
       kind: "action",
       run: () => dispatch({ type: "open-overlay", overlay: { kind: "workspace-color", workspaceId: workspace.id } }),
     },
-    ...groupMoves(workspace),
+    ...workspaceGroupMoves(workspace),
   ]);
   const openConversation = state.conversations.find(({ id }) => id === state.selectedConversationId);
   const openHistory = selectedOpen(state);
@@ -291,13 +300,14 @@ function paletteEntries(
     ...reminderEntries,
     ...waitingActions,
     ...workspaceActions,
+    ...groupActions,
     { id: "toggle-sidebar", label: panes.sidebar.visible ? t.shell.sidebar.hideSidebar : t.shell.sidebar.showSidebar, kind: "action", run: panes.sidebar.toggle },
     ...openConversationActions,
     ...machineActions,
     ...pluginWindowActions,
     { id: "search", label: words.searchAll, detail: words.everyConversation, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "search" } }) },
     { id: "add-workspace", label: words.addWorkspace, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "add-workspace" } }) },
-    { id: "add-workspace-group", label: words.newGroup, detail: words.ofWorkspaces, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "add-workspace-group" } }) },
+    { id: "add-workspace-group", label: words.newGroup, detail: words.ofWorkspaces, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "add-workspace-group", parentId: null } }) },
     { id: "profiles", label: words.profiles, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "profiles" } }) },
     { id: "machines", label: words.machines, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "machines" } }) },
     { id: "plugins", label: words.plugins, kind: "action", run: () => dispatch({ type: "open-overlay", overlay: { kind: "plugins" } }) },

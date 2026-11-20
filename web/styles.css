@@ -1273,8 +1273,13 @@ button.icon.favourite-star.on,
   margin-top: 14px;
 }
 
-.workspace-group > .workspace {
+.workspace-group > .workspace,
+.workspace-group > .workspace-group {
   margin-left: 12px;
+}
+
+.workspace-group > .workspace-group {
+  margin-top: 8px;
 }
 
 .workspace-group > header {
@@ -1367,6 +1372,11 @@ button.icon.workspace-fold {
 .sidebar-scroll > .group-name-field {
   flex: none;
   margin: 14px 4px 0;
+}
+
+.workspace-group > .group-name-field {
+  width: calc(100% - 16px);
+  margin: 8px 4px 0 12px;
 }
 
 .hint {

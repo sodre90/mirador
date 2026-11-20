@@ -24,7 +24,8 @@ export const shell: Messages["shell"] = {
     groupName: "Nombre del grupo",
     renameGroup: "Renombrar grupo",
     deleteGroup: "Eliminar grupo",
-    dragHere: "Arrastra aquí un espacio de trabajo por su encabezado",
+    newGroupInside: "Nuevo grupo dentro",
+    dragHere: "Arrastra aquí un espacio de trabajo o un grupo por su encabezado",
     workspaceDirectory: "Directorio del espacio de trabajo",
     folderHintHighlighted: (folder, createsDirectory) =>
       `Enter o Tab toma la carpeta resaltada, ⇧Enter ${createsDirectory ? "crea" : "agrega"} ${folder}, Esc cancela`,
@@ -165,6 +166,8 @@ export const shell: Messages["shell"] = {
     nothingMatches: "No hay coincidencias.",
     moveToGroup: (workspace, group) => `Mover ${workspace} al grupo ${group}`,
     takeOutOfGroup: (workspace, group) => `Sacar ${workspace} del grupo ${group}`,
+    moveGroupToGroup: (group, into) => `Mover el grupo ${group} al grupo ${into}`,
+    takeGroupOutOfGroup: (group, from) => `Sacar el grupo ${group} del grupo ${from}`,
     newConversationIn: (workspace) => `Nueva conversación en ${workspace}`,
     continueSessionIn: (workspace) => `Continuar una sesión en ${workspace}…`,
     colour: (workspace) => `Color de ${workspace}…`,

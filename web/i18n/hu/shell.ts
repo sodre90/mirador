@@ -22,7 +22,8 @@ export const shell: Messages["shell"] = {
     groupName: "Csoportnév",
     renameGroup: "Csoport átnevezése",
     deleteGroup: "Csoport törlése",
-    dragHere: "Húzz ide egy munkaterületet a fejlécénél fogva",
+    newGroupInside: "Új csoport benne",
+    dragHere: "Húzz ide egy munkaterületet vagy csoportot a fejlécénél fogva",
     workspaceDirectory: "A munkaterület könyvtára",
     folderHintHighlighted: (folder, createsDirectory) =>
       `Enter vagy Tab: a kiemelt mappa, ⇧Enter: ${createsDirectory ? "létrehozás" : "hozzáadás"} (${folder}), Esc: mégse`,
@@ -150,6 +151,8 @@ export const shell: Messages["shell"] = {
     nothingMatches: "Nincs egyezés.",
     moveToGroup: (workspace, group) => `Áthelyezés csoportba: ${workspace} → ${group}`,
     takeOutOfGroup: (workspace, group) => `Kivétel a csoportból: ${workspace} ← ${group}`,
+    moveGroupToGroup: (group, into) => `Csoport áthelyezése csoportba: ${group} → ${into}`,
+    takeGroupOutOfGroup: (group, from) => `Csoport kivétele a csoportból: ${group} ← ${from}`,
     newConversationIn: (workspace) => `Új beszélgetés itt: ${workspace}`,
     continueSessionIn: (workspace) => `Munkamenet folytatása itt: ${workspace}…`,
     colour: (workspace) => `Szín: ${workspace}…`,

@@ -19,21 +19,25 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-const group = (page: Page, name: string) => page.locator(".workspace-group", { has: page.locator(".group-name", { hasText: new RegExp(`^${name}$`) }) });
+const group = (page: Page, name: string) => page.locator(".workspace-group", { has: page.locator(":scope > header > .group-name", { hasText: new RegExp(`^${name}$`) }) });
 const heading = (page: Page, name: string) => group(page, name).locator(":scope > header");
 const workspaceHeader = (page: Page, directory: string) => workspaceCard(page, directory).locator(":scope > header");
 const names = (cards: Locator) => cards.locator(".workspace-name").allTextContents();
 const namesIn = (page: Page, groupName: string) => names(group(page, groupName).locator("section.workspace"));
 const groupNames = (page: Page) => page.locator(".workspace-group .group-name").allTextContents();
-/** The sidebar's rows that are in no group, from top to bottom: a workspace by its name, a group as [its name]. */
-const topLevel = (page: Page) =>
-  page
-    .locator(".sidebar-scroll > section.workspace, .sidebar-scroll > section.workspace-group")
+/** The rows of a sidebar or group, from top to bottom: a workspace by its name, a group as [its name]. */
+const rowsIn = (container: Locator) =>
+  container
+    .locator(":scope > section.workspace, :scope > section.workspace-group")
     .evaluateAll((sections) =>
       sections.map((section) =>
-        section.classList.contains("workspace-group") ? `[${section.querySelector(".group-name")!.textContent}]` : section.querySelector(".workspace-name")!.textContent,
+        section.classList.contains("workspace-group") ? `[${section.querySelector(":scope > header > .group-name")!.textContent}]` : section.querySelector(".workspace-name")!.textContent,
       ),
     );
+/** The sidebar's rows that are in no group. */
+const topLevel = (page: Page) => rowsIn(page.locator(".sidebar-scroll"));
+/** The rows in a group, the groups in it by their names alone. */
+const rowsInGroup = (page: Page, name: string) => rowsIn(group(page, name));
 
 async function newGroup(page: Page, name: string) {
   await page.getByRole("button", { name: "New group" }).click();
@@ -61,6 +65,13 @@ async function runFromPalette(page: Page, label: string) {
   await page.keyboard.press("Enter");
 }
 
+/** Clicks the palette's entry with this label, where another has the same words in another order. */
+async function pickFromPalette(page: Page, label: string) {
+  await page.locator(".sidebar").getByRole("button", { name: /^Conversations and actions/ }).click();
+  await page.getByPlaceholder(/Go to a conversation/).fill(label);
+  await page.getByRole("listbox").getByText(label, { exact: true }).click();
+}
+
 test("workspaces and groups share one order: workspaces gather in groups that fold, land between groups, and stay in place when their group goes", async ({ page, browser }) => {
   await signIn(page, host);
   await addWorkspace(page, alphaDir);
@@ -74,7 +85,7 @@ test("workspaces and groups share one order: workspaces gather in groups that fo
     expect(await topLevel(page)).toEqual(["[Own]", "[Clients]", "gamma", "beta", "alpha"]);
     await expect(heading(page, "Clients").locator(".group-name")).toHaveCSS("text-transform", "uppercase");
     await expect(heading(page, "Clients").locator(".group-count")).toHaveText("0");
-    await expect(group(page, "Clients")).toContainText("Drag a workspace here by its heading");
+    await expect(group(page, "Clients")).toContainText("Drag a workspace or group here by its heading");
   });
 
   await test.step("a workspace dragged by its heading low onto a group's heading goes last in it, indented, and onto a workspace's top edge, just before it", async () => {
@@ -184,4 +195,71 @@ test("the palette makes a group and moves a workspace into one or out of its own
   await expect.poll(() => namesIn(page, "Own")).toEqual(["beta"]);
   await runFromPalette(page, "Take beta out of group Own");
   await expect.poll(() => topLevel(page)).toEqual(["[Later]", "[Own]", "beta", "alpha", "gamma"]);
+});
+
+test("groups go in groups: made inside one or dragged into it, never into themselves, folding and counting with it, and staying in place when it goes", async ({ page }) => {
+  await signIn(page, host);
+  expect(await topLevel(page)).toEqual(["[Later]", "[Own]", "beta", "alpha", "gamma"]);
+
+  await test.step("a group's heading makes a group inside it, indented, and a workspace dragged onto that goes in it", async () => {
+    await heading(page, "Own").hover();
+    await heading(page, "Own").getByRole("button", { name: "New group inside" }).click();
+    const field = group(page, "Own").getByLabel("New group name");
+    await field.fill("Billing");
+    await field.press("Enter");
+    await expect.poll(() => rowsInGroup(page, "Own")).toEqual(["[Billing]"]);
+    await expect(group(page, "Billing")).toHaveCSS("margin-left", "12px");
+    await drop(page, workspaceHeader(page, betaDir), heading(page, "Billing"), "bottom");
+    await expect.poll(() => rowsInGroup(page, "Billing")).toEqual(["beta"]);
+    await expect(heading(page, "Own").locator(".group-count")).toHaveText("1");
+  });
+
+  await test.step("a group dragged by its heading low onto another's goes last in it, with what it holds", async () => {
+    await drop(page, workspaceHeader(page, alphaDir), heading(page, "Later"), "bottom");
+    await expect.poll(() => rowsInGroup(page, "Later")).toEqual(["alpha"]);
+    await dragOnto(page, heading(page, "Later"), heading(page, "Own"), "bottom");
+    await expect(group(page, "Billing")).toHaveClass(/drop-after/);
+    await page.mouse.up();
+    await expect.poll(() => rowsInGroup(page, "Own")).toEqual(["[Billing]", "[Later]"]);
+    expect(await rowsInGroup(page, "Later")).toEqual(["alpha"]);
+    expect(await topLevel(page)).toEqual(["[Own]", "gamma"]);
+    await expect(heading(page, "Own").locator(".group-count")).toHaveText("2");
+  });
+
+  await test.step("a group dropped on a group inside it stays where it was", async () => {
+    await dragOnto(page, heading(page, "Own"), heading(page, "Billing"), "bottom");
+    await expect(heading(page, "Billing")).not.toHaveClass(/drop-into/);
+    await page.mouse.up();
+    await page.reload();
+    await expect.poll(() => topLevel(page)).toEqual(["[Own]", "gamma"]);
+    expect(await rowsInGroup(page, "Own")).toEqual(["[Billing]", "[Later]"]);
+    expect(await rowsInGroup(page, "Billing")).toEqual(["beta"]);
+  });
+
+  await test.step("folding a group hides the groups in it, and opening a conversation deep inside unfolds every group around it", async () => {
+    await page.getByRole("button", { name: "Fold Billing" }).click();
+    await page.getByRole("button", { name: "Fold Own" }).click();
+    await expect(group(page, "Own").locator("section.workspace, section.workspace-group")).toHaveCount(0);
+    await expect(heading(page, "Own").locator(".group-count")).toHaveText("2");
+    await runFromPalette(page, "New conversation in beta");
+    await expect(page.getByRole("button", { name: "Fold Own" })).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", { name: "Fold Billing" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  await test.step("the palette moves a group into another by its path, and out of its own to just below it", async () => {
+    await pickFromPalette(page, "Move group Later to group Own / Billing");
+    await expect.poll(() => rowsInGroup(page, "Billing")).toEqual(["beta", "[Later]"]);
+    await pickFromPalette(page, "Take group Later out of group Own / Billing");
+    await expect.poll(() => rowsInGroup(page, "Own")).toEqual(["[Billing]", "[Later]"]);
+  });
+
+  await test.step("deleting a group leaves the groups in it where it was", async () => {
+    await heading(page, "Own").hover();
+    const remove = heading(page, "Own").getByRole("button", { name: "Delete group" });
+    await remove.click();
+    await remove.click();
+    await expect(group(page, "Own")).toHaveCount(0);
+    await expect.poll(() => topLevel(page)).toEqual(["[Billing]", "[Later]", "gamma"]);
+    expect(await rowsInGroup(page, "Billing")).toEqual(["beta"]);
+  });
 });
