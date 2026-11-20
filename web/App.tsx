@@ -642,6 +642,8 @@ export function App() {
           voiceSettings={state.voiceSettings}
           voiceEngine={state.voiceEngine}
           userPicture={state.avatar}
+          people={state.people}
+          ownerId={state.ownerId}
           onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
           open={opened}
           canvasVisible={false}
@@ -680,6 +682,8 @@ export function App() {
                           voiceSettings={state.voiceSettings}
                           voiceEngine={state.voiceEngine}
                           userPicture={state.avatar}
+                          people={state.people}
+                          ownerId={state.ownerId}
                           onManageTemplates={() => dispatch({ type: "open-overlay", overlay: { kind: "settings", page: "conversations" } })}
                           open={kept}
                           canvasVisible={canvasInView}
@@ -865,6 +869,7 @@ export function App() {
           computerName={state.computerName}
           pushRelay={state.pushRelay}
           avatar={state.avatar}
+          you={state.people.find(({ id }) => id === state.you)}
           voiceSettings={state.voiceSettings}
           voiceEngine={state.voiceEngine}
           profiles={state.profiles}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { authorOf, type TimelineBlock } from "../shared/timeline.ts";
+import { authorOf, writtenByAPerson, type TimelineBlock } from "../shared/timeline.ts";
 import type { EarlierHistory } from "./earlier-history.ts";
 
 export type MessageStep = 1 | -1;
@@ -10,7 +10,7 @@ export interface OwnMessagePlace {
   top: number | null;
 }
 
-const isOwn = (block: TimelineBlock) => block.kind === "user" && authorOf(block) === "user";
+const isOwn = (block: TimelineBlock) => block.kind === "user" && writtenByAPerson(authorOf(block));
 
 /** How far under the transcript's top edge a message stepped to is put, and so the line the reader counts as where they are. */
 const READING_LINE = 8;

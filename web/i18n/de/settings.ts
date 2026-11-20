@@ -16,6 +16,12 @@ export const settings: Messages["settings"] = {
     arrangement: "Standardanordnung",
     describe: (left, topRight, bottomRight) => `Links: ${left}, oben rechts: ${topRight}, unten rechts: ${bottomRight}`,
   },
+  ownProfile: {
+    title: "Dein Profil",
+    hint: "Neben den Nachrichten, die du schreibst, in jedem Browser und auf jedem Gerät, das dem Host beitritt. Ohne Namen steht dort „Du“.",
+    name: "Name",
+    colour: "Farbe",
+  },
   profilePicture: {
     title: "Profilbild",
     hint: "Neben deinen Nachrichten, vom Host für jeden Browser und jedes Gerät gespeichert, das ihm beitritt.",

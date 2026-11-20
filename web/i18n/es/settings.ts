@@ -16,6 +16,12 @@ export const settings: Messages["settings"] = {
     arrangement: "Disposición predeterminada",
     describe: (left, topRight, bottomRight) => `A la izquierda: ${left.toLowerCase()}; arriba a la derecha: ${topRight.toLowerCase()}; abajo a la derecha: ${bottomRight.toLowerCase()}`,
   },
+  ownProfile: {
+    title: "Tu perfil",
+    hint: "Aparece con los mensajes que escribes, en todos los navegadores y dispositivos que se conectan al host. Sin nombre, dicen “Tú”.",
+    name: "Nombre",
+    colour: "Color",
+  },
   profilePicture: {
     title: "Foto de perfil",
     hint: "Aparece junto a tus mensajes. El host la guarda para todos los navegadores y dispositivos que se conectan a él.",

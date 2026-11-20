@@ -199,7 +199,8 @@ export class CanvasService {
     });
   }
 
-  answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[]) {
+  /** An answer the agent no longer waits on goes to it as the next message, written by the person who answered. */
+  answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[], authorId?: string) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
     if (item.status !== "waiting") throw new HostProblemError({ code: "question-already-answered" });
@@ -208,8 +209,8 @@ export class CanvasService {
     this.answerWaiters.delete(itemId);
     this.save({ ...item, status: "answered", answer: { ...given, deliveredAs: waiter ? "tool-result" : "next-message" } });
     if (waiter) waiter.answered(given);
-    else if (item.installsPluginOffer) void this.installThenTell(item, item.installsPluginOffer, given);
-    else this.conversations.send(item.conversationId, answerAsMessage(item, given)).catch(() => {});
+    else if (item.installsPluginOffer) void this.installThenTell(item, item.installsPluginOffer, given, authorId);
+    else this.conversations.send(item.conversationId, answerAsMessage(item, given), [], { authorId }).catch(() => {});
   }
 
   private pluginInstaller: PluginInstaller = {
@@ -229,9 +230,9 @@ export class CanvasService {
     return this.pluginInstaller.offer(name);
   }
 
-  private async installThenTell(item: AskItem, offerId: string, given: GivenAnswer) {
+  private async installThenTell(item: AskItem, offerId: string, given: GivenAnswer, authorId?: string) {
     const outcome = await this.pluginInstaller.settle(offerId, given.label === INSTALL_ANSWER);
-    await this.conversations.send(item.conversationId, `${outcome}\n\n${answerAsMessage(item, given)}`).catch(() => {});
+    await this.conversations.send(item.conversationId, `${outcome}\n\n${answerAsMessage(item, given)}`, [], { authorId }).catch(() => {});
   }
 
   /** What the canvas has for the agent to hear of with the user's next message. */

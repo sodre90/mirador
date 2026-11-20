@@ -8,7 +8,7 @@ const phoneAddress: ClientAddress = { fromAddress: "100.101.5.7", tailscaleUser:
 const laptopAddress: ClientAddress = { fromAddress: "192.168.1.23", tailscaleUser: null };
 
 function connect(hub: Hub, role: SocketData["role"], deviceId: string | null, from: ClientAddress = laptopAddress) {
-  const socket = { data: socketData(role, deviceId, "", from), send: () => {} } as unknown as BrowserSocket;
+  const socket = { data: socketData(role, { deviceId, personId: "owner" }, "", from), send: () => {} } as unknown as BrowserSocket;
   hub.add(socket);
   return socket;
 }
@@ -39,7 +39,7 @@ describe("Hub.deviceConnections", () => {
 });
 
 describe("device wording", () => {
-  const device = (id: string, connection: DeviceConnection | null): ListedDevice => ({ id, name: id, joinedAt: 0, lastSeenAt: Date.now() - 3 * 3_600_000, connection });
+  const device = (id: string, connection: DeviceConnection | null): ListedDevice => ({ id, name: id, personId: "owner", joinedAt: 0, lastSeenAt: Date.now() - 3 * 3_600_000, connection });
 
   test("a connected device says how many pages it has open, or that it listens in the background; another when it was last seen", () => {
     expect(deviceStatus(device("a", { ...laptopAddress, pages: 1 }))).toBe("connected now, 1 page open");

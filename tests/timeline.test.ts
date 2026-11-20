@@ -5,7 +5,7 @@ import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { lineDiff } from "../web/diff.ts";
 import { pageEvent } from "../host/low-data.ts";
 import { canTryAgain } from "../shared/try-again.ts";
-import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
+import { approvalsWaiting, authorOf, buildTimeline, latestPlan, runsInBackground, spokenSeverity, startsAuthorGroup, stepsAtWork, stepsRunning, subagentAsking, subagentEndedAt, subagentsIn, subagentState, timelineWithStreamedText, toolCallsAwaitingPermission, withStreamedEvent, writtenByAPerson, type SubagentBlock, type TimelineBlock } from "../shared/timeline.ts";
 
 function stored(events: ConversationEvent[]): StoredEvent[] {
   return events.map((event, index) => ({ seq: index + 1, at: (index + 1) * 1000, event }));
@@ -442,7 +442,7 @@ describe("startsAuthorGroup", () => {
         { type: "user-message", text: "and then?" },
       ]),
     );
-    expect(timeline.map(authorOf)).toEqual(["user", "script", "user"]);
+    expect(timeline.map(authorOf)).toEqual([{ personId: null }, "script", { personId: null }]);
     expect(timeline.map((_, index) => startsAuthorGroup(timeline, index))).toEqual([true, true, true]);
   });
 
@@ -466,8 +466,46 @@ describe("startsAuthorGroup", () => {
         { type: "user-message", text: "The user pressed the card.", fromPlugin: "Board" },
       ]),
     );
-    expect(timeline.map(authorOf)).toEqual(["user", { plugin: "Delegate" }, { plugin: "Delegate" }, { plugin: "Board" }]);
+    expect(timeline.map(authorOf)).toEqual([{ personId: null }, { plugin: "Delegate" }, { plugin: "Delegate" }, { plugin: "Board" }]);
     expect(timeline.map((_, index) => startsAuthorGroup(timeline, index))).toEqual([true, true, false, true]);
+  });
+
+  test("a person's messages are theirs and group together, apart from another person's and from messages that name nobody", () => {
+    const timeline = buildTimeline(
+      stored([
+        { type: "user-message", text: "first", authorId: "ada" },
+        { type: "user-message", text: "second", authorId: "ada" },
+        { type: "user-message", text: "mine", authorId: "grace" },
+        { type: "user-message", text: "Continue where you left off." },
+        { type: "user-command", commandId: "c1", command: "ls" },
+      ]),
+    );
+    expect(timeline.map(authorOf)).toEqual([{ personId: "ada" }, { personId: "ada" }, { personId: "grace" }, { personId: null }, { personId: null }]);
+    expect(timeline.map((_, index) => startsAuthorGroup(timeline, index))).toEqual([true, false, true, true, false]);
+  });
+
+  test("a command a person runs between their messages stays in their group", () => {
+    const timeline = buildTimeline(
+      stored([
+        { type: "user-message", text: "look at the files", authorId: "ada" },
+        { type: "user-command", commandId: "c1", command: "ls", authorId: "ada" },
+        { type: "user-message", text: "and fix them", authorId: "ada" },
+        { type: "user-command", commandId: "c2", command: "git status", authorId: "grace" },
+      ]),
+    );
+    expect(timeline.map(authorOf)).toEqual([{ personId: "ada" }, { personId: "ada" }, { personId: "ada" }, { personId: "grace" }]);
+    expect(timeline.map((_, index) => startsAuthorGroup(timeline, index))).toEqual([true, false, false, true]);
+  });
+
+  test("a message from a script, Mirador or a plugin is never a person's", () => {
+    const authors = buildTimeline(
+      stored([
+        { type: "user-message", text: "build finished", fromScript: true },
+        { type: "user-message", text: "go on", fromScript: true, fromMirador: true },
+        { type: "user-message", text: "done", fromPlugin: "Delegate" },
+      ]),
+    ).map(authorOf);
+    expect(authors.filter(writtenByAPerson)).toEqual([]);
   });
 });
 

@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 import type { DeviceService } from "./devices.ts";
+import type { SignedIn } from "./hub.ts";
 
 export function sameSecret(candidate: string | null | undefined, secret: string) {
   if (!candidate) return false;
@@ -16,12 +17,12 @@ export function cookieValue(request: Request, name: string) {
     .find(([key]) => key === name)?.[1];
 }
 
-/** Whom a request's cookie signs in: the host's own link (no device), a joined device, or nobody. */
+/** Whom a request's cookie signs in: the owner through the host's own link (no device), a joined device's person, or nobody. */
 export const signedInWith =
-  (browserToken: string, devices: DeviceService) =>
-  (request: Request): { deviceId: string | null } | null => {
+  (browserToken: string, devices: DeviceService, ownerId: string) =>
+  (request: Request): SignedIn | null => {
     const token = cookieValue(request, TOKEN_COOKIE);
-    if (sameSecret(token, browserToken)) return { deviceId: null };
+    if (sameSecret(token, browserToken)) return { deviceId: null, personId: ownerId };
     const device = token ? devices.deviceWithToken(token) : undefined;
-    return device ? { deviceId: device.id } : null;
+    return device ? { deviceId: device.id, personId: device.personId } : null;
   };

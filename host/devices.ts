@@ -41,11 +41,11 @@ export class DeviceService {
     return this.store.takeInvite(inviteKey(code), this.now()) ? this.admit(name) : null;
   }
 
-  /** Lets a new device in, with the token it signs in with from now on; only its hash is kept. */
+  /** Lets a new device of the owner's in, with the token it signs in with from now on; only its hash is kept. */
   admit(name: string): { device: Device; token: string } {
     const now = this.now();
     const token = newToken();
-    const device = { id: crypto.randomUUID(), name, joinedAt: now, lastSeenAt: now };
+    const device = { id: crypto.randomUUID(), name, personId: this.store.ownerId(), joinedAt: now, lastSeenAt: now };
     this.store.insertDevice(device, hashed(token));
     return { device, token };
   }

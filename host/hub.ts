@@ -22,6 +22,8 @@ export interface SocketData {
   role: "page" | "notifier";
   /** The joined device the socket signed in as; null for the host's own link. */
   deviceId: string | null;
+  /** Who writes the messages the socket sends. */
+  personId: string;
   subscriptions: Set<string>;
   /** The documents the socket's page shows, by their ids: only these pages get their documents, which can be large. */
   appSubscriptions: Set<string>;
@@ -56,9 +58,11 @@ export const pageOnHost = ({ deviceId, from }: Pick<SocketData, "deviceId" | "fr
 
 export const isLoopback = (address: string) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address);
 
+export type SignedIn = Pick<SocketData, "deviceId" | "personId">;
+
 export const socketData = (
   role: SocketData["role"],
-  deviceId: string | null = null,
+  { deviceId, personId }: SignedIn,
   canvasAssetsOrigin = "",
   from = thisMachine,
   readsDeflatedMessages = false,
@@ -67,6 +71,7 @@ export const socketData = (
 ): SocketData => ({
   role,
   deviceId,
+  personId,
   canvasAssetsOrigin,
   from,
   readsDeflatedMessages,

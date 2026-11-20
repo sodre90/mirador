@@ -18,6 +18,7 @@ import type {
   JobWait,
   JoinRequest,
   Launch,
+  Person,
   Profile,
   PromptTemplate,
   PublicAddress,
@@ -44,7 +45,7 @@ const TEMPLATES_OFFERED_BEFORE_TRACKING = ["default-deep-pr-review"];
 /** Set once the conversations from before they kept their agent's commands have them filled in from their events. */
 const AGENT_COMMANDS_FILLED = "agent_commands_filled";
 
-const deviceColumns = "id, name, joined_at AS joinedAt, last_seen_at AS lastSeenAt";
+const deviceColumns = "id, name, person_id AS personId, joined_at AS joinedAt, last_seen_at AS lastSeenAt";
 const joinRequestColumns = `id, secret_hash AS secretHash, name, from_address AS fromAddress, tailscale_user AS tailscaleUser,
   authority_fingerprint AS authorityFingerprint, commitment, machine_nonce AS machineNonce, requester_nonce AS requesterNonce, answer, device_id AS deviceId, expires_at AS expiresAt`;
 
@@ -89,6 +90,7 @@ const schema = `
     id TEXT PRIMARY KEY, name TEXT NOT NULL, text TEXT NOT NULL, created_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS offered_prompt_templates (id TEXT PRIMARY KEY);
   CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS people (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT);
   CREATE TABLE IF NOT EXISTS devices (
     id TEXT PRIMARY KEY, name TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, joined_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS push_registrations (
@@ -191,6 +193,7 @@ const addedColumns = [
   { table: "conversations", column: "agent_commands", definition: "TEXT" },
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
   { table: "workspace_groups", column: "parent_id", definition: "TEXT" },
+  { table: "devices", column: "person_id", definition: "TEXT REFERENCES people(id)" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -386,7 +389,10 @@ export class Store {
     const keptTrackOfOfferedTemplates = this.hasTable("offered_prompt_templates");
     this.db.run(schema);
     const hasTurnTimes = this.hasColumn("conversations", "last_message_at");
+    const devicesHadPeople = this.hasColumn("devices", "person_id");
     this.addMissingColumns();
+    if (!this.hasPeople()) this.addOwner();
+    if (!devicesHadPeople) this.giveDevicesToTheOwner();
     this.keyAppsByFolder();
     this.keyOpenAppsByConversation();
     if (!hasTurnTimes) this.fillTurnTimesFromEvents();
@@ -1430,6 +1436,34 @@ export class Store {
     this.db.query("DELETE FROM join_requests WHERE id = ?").run(id);
   }
 
+  /** The owner first. */
+  listPeople(): Person[] {
+    const rows = this.db.query("SELECT id, name, color FROM people ORDER BY rowid").all() as { id: string; name: string; color: string | null }[];
+    return rows.map(({ id, name, color }) => ({ id, name, color: isPastel(color) ? color : null }));
+  }
+
+  /** The first person, made with the database. */
+  ownerId(): string {
+    return (this.db.query("SELECT id FROM people ORDER BY rowid LIMIT 1").get() as { id: string }).id;
+  }
+
+  setPersonProfile(id: string, { name, color }: Pick<Person, "name" | "color">) {
+    this.db.query("UPDATE people SET name = ?, color = ? WHERE id = ?").run(name, color, id);
+  }
+
+  private hasPeople() {
+    return this.db.query("SELECT 1 FROM people LIMIT 1").get() !== null;
+  }
+
+  private addOwner() {
+    this.db.query("INSERT INTO people (id, name, color) VALUES (?, '', NULL)").run(crypto.randomUUID());
+  }
+
+  /** Every device that joined before devices belonged to people is the owner's. */
+  private giveDevicesToTheOwner() {
+    this.db.query("UPDATE devices SET person_id = ?").run(this.ownerId());
+  }
+
   listDevices(): Device[] {
     return this.db.query(`SELECT ${deviceColumns} FROM devices ORDER BY joined_at`).all() as Device[];
   }
@@ -1438,10 +1472,10 @@ export class Store {
     return (this.db.query(`SELECT ${deviceColumns} FROM devices WHERE token_hash = ?`).get(tokenHash) as Device | null) ?? undefined;
   }
 
-  insertDevice({ id, name, joinedAt, lastSeenAt }: Device, tokenHash: string) {
+  insertDevice({ id, name, personId, joinedAt, lastSeenAt }: Device, tokenHash: string) {
     this.db
-      .query("INSERT INTO devices (id, name, token_hash, joined_at, last_seen_at) VALUES (?, ?, ?, ?, ?)")
-      .run(id, name, tokenHash, joinedAt, lastSeenAt);
+      .query("INSERT INTO devices (id, name, person_id, token_hash, joined_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(id, name, personId, tokenHash, joinedAt, lastSeenAt);
   }
 
   /** Whether the device is still there to take it. */

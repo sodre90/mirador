@@ -1,6 +1,6 @@
 import type { EditorState } from "../shared/editors.ts";
 import { DEFAULT_OLDER_AFTER, type OlderAfter } from "../shared/model.ts";
-import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineSeen, MachineStatus, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
+import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineSeen, MachineStatus, Person, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
 import { DEFAULT_MORNING_MINUTES, type ReminderMode } from "../shared/reminders.ts";
 import type { ReminderUndo } from "./reminders.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
@@ -89,6 +89,12 @@ export interface AppState {
   pushRelay: PushRelaySetting;
   /** The user's profile picture as a small square PNG data URL; null when they set none. */
   avatar: string | null;
+  /** Everyone who writes in the host's conversations, the owner first. */
+  people: Person[];
+  /** Whose picture `avatar` is; null until the snapshot. */
+  ownerId: string | null;
+  /** The person this page signed in as; null until the snapshot. */
+  you: string | null;
   voiceSettings: VoiceSettings;
   voiceEngine: VoiceEngineStatus;
   /** The agents the host's machine has a program for, which a new profile can run. */
@@ -186,6 +192,9 @@ export const initialState: AppState = {
   computerName: "",
   pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
   avatar: null,
+  people: [],
+  ownerId: null,
+  you: null,
   voiceSettings: defaultVoiceSettings,
   voiceEngine: { setup: { state: "unsupported", reason: "" }, servers: { speech: "stopped", voiceModel: "stopped", speaking: "stopped" }, onDisk: [], memoryBytes: 0 },
   installedAgents: [],
@@ -321,6 +330,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         computerName: message.computerName ?? "",
         pushRelay: message.pushRelay,
         avatar: message.avatar,
+        people: message.people,
+        ownerId: message.ownerId,
+        you: message.you,
         installedAgents: message.installedAgents,
         version: message.version,
         canvasAssetsOrigin: message.canvasAssetsOrigin,
@@ -442,6 +454,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, pushRelay: message.pushRelay };
     case "settings.avatar":
       return { ...state, avatar: message.image };
+    case "people.listed":
+      return { ...state, people: message.people };
     case "voice.settings":
       return { ...state, voiceSettings: message.settings };
     case "voice.engine":

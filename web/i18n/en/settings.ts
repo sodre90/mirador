@@ -14,6 +14,12 @@ export const settings = {
     arrangement: "Default arrangement",
     describe: (left: string, topRight: string, bottomRight: string) => `${left} on the left, ${topRight.toLowerCase()} top right, ${bottomRight.toLowerCase()} bottom right`,
   },
+  ownProfile: {
+    title: "Your profile",
+    hint: "Shown with the messages you write, on every browser and device that joins the host. Without a name, they say You.",
+    name: "Name",
+    colour: "Colour",
+  },
   profilePicture: {
     title: "Profile picture",
     hint: "Next to your messages, kept by the host for every browser and device that joins it.",

@@ -21,6 +21,7 @@ These terms stay the same everywhere:
 | side chat (a question about a conversation, beside it) | mellékszál | chat lateral | 旁聊 | Nebenchat |
 | session | munkamenet | sesión | 会话 | Sitzung |
 | profile | profil | perfil | 配置 | Profil |
+| your profile (your name and colour in Settings, not an agent profile) | profilod | tu perfil | 个人资料 | dein Profil |
 | turn | kör | turno | 轮次 | Runde |
 | tour | bejárás | recorrido | 导览 | Rundgang |
 | review (code) | átnézés | revisión | 审查 | Review |

@@ -2,13 +2,15 @@ import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { PUSH_RELAY_CHOICES, pushRelayChoiceOf, pushRelayHost, type PushRelayChoice, type PushRelayRequest, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
-import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
+import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ClaudeProgram, type Person, type Profile, type PromptTemplate } from "../shared/model.ts";
+import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
 import { FontSizePreview, MachineColorPreview, ShellLookPreview, ShellOutputPreview, ThemePreview, WaitingPreview, WorkspaceColorPreview } from "./appearance-previews.tsx";
 import { enterWhileBusyLabels, setEnterWhileBusy, useEnterWhileBusy, type EnterWhileBusy } from "./busy-sending.ts";
 import { formatBarLabels, messageBoxLabels, setFormatBar, setMessageBox, useFormatBar, useMessageBox, type FormatBarChoice, type MessageBox } from "./message-box.ts";
+import { ColorSwatches } from "./ColorSwatches.tsx";
 import { connection } from "./connection.ts";
 import { inDesktopApp } from "./desktop-bridge.ts";
 import { DeviceSettings } from "./Devices.tsx";
@@ -112,6 +114,7 @@ export function SettingsDialog({
   computerName,
   pushRelay,
   avatar,
+  you,
   voiceSettings,
   voiceEngine,
   profiles,
@@ -136,6 +139,8 @@ export function SettingsDialog({
   computerName: string;
   pushRelay: PushRelaySetting;
   avatar: string | null;
+  /** The person this page signed in as; undefined until the host said who. */
+  you: Person | undefined;
   voiceSettings: VoiceSettingsValue;
   voiceEngine: VoiceEngineStatus;
   profiles: Profile[];
@@ -155,6 +160,7 @@ export function SettingsDialog({
   const pages: Record<SettingsPage, () => ReactNode> = {
     appearance: () => (
       <>
+        {you && <OwnProfileSettings person={you} />}
         <ProfilePictureSettings picture={avatar} />
         <AppearanceSettings />
       </>
@@ -334,6 +340,39 @@ function PictureChoice<Option extends string>({
         ))}
       </div>
     </div>
+  );
+}
+
+function OwnProfileSettings({ person }: { person: Person }) {
+  const [name, setName] = useState(person.name);
+  useEffect(() => setName(person.name), [person.name]);
+  const save = (profile: Pick<Person, "name" | "color">) => connection.send({ type: "person.set-own-profile", ...profile });
+  const saveName = () => {
+    if (personName(name) !== person.name) save({ name, color: person.color });
+  };
+  return (
+    <section className="own-profile">
+      <h3>{text.ownProfile.title}</h3>
+      <p className="hint">{text.ownProfile.hint}</p>
+      <div className="sending-settings">
+        <label>
+          {text.ownProfile.name}
+          <input
+            type="text"
+            value={name}
+            maxLength={LONGEST_PERSON_NAME}
+            spellCheck={false}
+            onChange={(event) => setName(event.target.value)}
+            onBlur={saveName}
+            onKeyDown={(event) => event.key === "Enter" && saveName()}
+          />
+        </label>
+        <div className="own-profile-colour">
+          {text.ownProfile.colour}
+          <ColorSwatches label={text.ownProfile.colour} chosen={person.color} focusChosen={false} onChoose={(color) => save({ name, color })} />
+        </div>
+      </div>
+    </section>
   );
 }
 

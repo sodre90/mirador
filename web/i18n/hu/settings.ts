@@ -16,6 +16,12 @@ export const settings: Messages["settings"] = {
     arrangement: "Alapértelmezett elrendezés",
     describe: (left, topRight, bottomRight) => `Bal oldalt: ${left.toLowerCase()}, jobbra fent: ${topRight.toLowerCase()}, jobbra lent: ${bottomRight.toLowerCase()}`,
   },
+  ownProfile: {
+    title: "A profilod",
+    hint: "Az üzeneteid mellett látszik minden böngészőben és készüléken, amely csatlakozik a hosthoz. Név nélkül az üzeneteiden „Te” áll.",
+    name: "Név",
+    colour: "Szín",
+  },
   profilePicture: {
     title: "Profilkép",
     hint: "Az üzeneteid mellett látszik. A host őrzi meg minden böngészőnek és készüléknek, amely csatlakozik hozzá.",

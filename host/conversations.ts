@@ -213,12 +213,17 @@ interface PendingPermission {
 
 interface PromptStart {
   imageIds?: string[];
+  /** The person who wrote it. */
+  authorId?: string;
   fromScript?: boolean;
   fromMirador?: boolean;
   fromPlugin?: string;
   /** A message of the user's starts a turn of its own, so the files are snapshotted and that turn can be undone. */
   startsTurn?: boolean;
 }
+
+/** Who wrote a new conversation's first message: a person, or a plugin by its title. */
+type WrittenBy = Pick<PromptStart, "authorId" | "fromPlugin">;
 
 /** Messages that joined a turn together, and what of the user's went to the agent with them. */
 export interface SteeredMessages {
@@ -513,7 +518,7 @@ export class ConversationService {
    * Without a launch, on the workspace's default as the host has it, which a browser may not have heard of yet; with a
    * prompt, working on it at once; with a title that isn't blank, named as if by the user, so neither its first message
    * nor its agent renames it; with `choices`, on that model and effort from its first message on; with a `worktree`,
-   * working there rather than in the workspace's folder; with `fromPlugin`, its first message shown as that plugin's.
+   * working there rather than in the workspace's folder; `writtenBy` a person or a plugin, its first message shown as theirs.
    */
   create(
     workspaceId: string,
@@ -522,14 +527,14 @@ export class ConversationService {
     title?: string,
     choices: ConversationChoices = {},
     worktree?: ConversationWorktree,
-    fromPlugin?: string,
+    writtenBy: WrittenBy = {},
   ): Conversation {
     const givenTitle = titleFrom(title ?? "");
     const conversation = this.insertConversation(workspaceId, launch, givenTitle || UNTITLED, givenTitle !== "", worktree);
     if (choices.model || choices.effort) this.runtime(conversation.id).startChoices = choices;
     const opened = this.ensureSession(conversation.id);
     if (prompt?.trim()) {
-      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true, ...(fromPlugin && { fromPlugin }) });
+      const startTurn = () => this.prompt(conversation.id, prompt, { startsTurn: true, ...writtenBy });
       if (worktree) opened.then(startTurn).catch(() => {});
       else {
         opened.catch(() => {});
@@ -540,10 +545,10 @@ export class ConversationService {
   }
 
   /** Like `create`, where the workspace starts its conversations unless `startsIn` names the other place. */
-  async start(workspaceId: string, launch?: Launch, prompt?: string, startsIn?: ConversationPlace): Promise<Conversation> {
+  async start(workspaceId: string, launch?: Launch, prompt?: string, startsIn?: ConversationPlace, authorId?: string): Promise<Conversation> {
     const workspace = this.existingWorkspace(workspaceId);
     const worktree = (startsIn ?? workspace.newConversationsIn) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
-    return this.create(workspaceId, launch, prompt, undefined, {}, worktree);
+    return this.create(workspaceId, launch, prompt, undefined, {}, worktree, { authorId });
   }
 
   /** Where the workspace's new conversations work, and the command that sets each new worktree up. */
@@ -616,7 +621,7 @@ export class ConversationService {
     const workspace = this.existingWorkspace(workspaceId);
     const profile = this.profileWithId(profileId);
     const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
-    return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle));
+    return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, { fromPlugin: pluginTitle }));
   }
 
   private profileNamed(profileName: string) {
@@ -915,14 +920,14 @@ export class ConversationService {
    * where the conversation does, on the same profile, in its agent's read-only mode, and whatever its agent asks
    * permission for is turned down. Asked from a side chat, it is about the conversation that one is beside.
    */
-  startSideChat(conversationId: string, text: string): Conversation {
+  startSideChat(conversationId: string, text: string, authorId?: string): Conversation {
     const asked = this.get(conversationId);
     const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
     const { workspaceId, harness, profileId, worktree } = parent;
     const sideChat = this.insertConversation(workspaceId, { harness, profileId }, titleFrom(askedOutsideQuotes(text)) || UNTITLED, true, worktree, parent.id);
     this.store.copyLoadedPlugins(parent.id, sideChat.id);
     this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
-    this.send(sideChat.id, text).catch(() => {});
+    this.send(sideChat.id, text, [], { authorId }).catch(() => {});
     return sideChat;
   }
 
@@ -1458,7 +1463,7 @@ export class ConversationService {
     }
   }
 
-  async prompt(conversationId: string, text: string, { imageIds = [], fromScript = false, fromMirador = false, fromPlugin, startsTurn = false }: PromptStart = {}) {
+  async prompt(conversationId: string, text: string, { imageIds = [], authorId, fromScript = false, fromMirador = false, fromPlugin, startsTurn = false }: PromptStart = {}) {
     const runtime = this.runtime(conversationId);
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
@@ -1478,7 +1483,11 @@ export class ConversationService {
     this.store.turnStarted(conversationId);
     this.hearActivity(conversationId, { kind: "turn-started" });
     if (runtime.heldCodexSession) await this.ensureSession(conversationId).catch(() => {});
-    const turnSeq = this.appendUserMessage(conversationId, { text, imageIds, ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) }, notes);
+    const turnSeq = this.appendUserMessage(
+      conversationId,
+      { text, imageIds, ...(authorId && { authorId }), ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) },
+      notes,
+    );
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
     let endedOnItsOwn: acp.PromptResponse | undefined;
@@ -1612,15 +1621,24 @@ export class ConversationService {
     conversationId: string,
     text: string,
     imageIds: string[] = [],
-    { fromScript = false, fromMirador = false, fromPlugin, afterTurn = false }: { fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean } = {},
+    { authorId, fromScript = false, fromMirador = false, fromPlugin, afterTurn = false }: { authorId?: string; fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean } = {},
   ) {
     const fromUser = !fromScript && !fromMirador && !fromPlugin;
     if (fromUser && this.tookReminderCommand(conversationId, text)) return;
     if (fromUser && this.get(conversationId).reminder) this.setReminder(conversationId, null);
     const runtime = this.runtime(conversationId);
     const sendsAtOnce = !runtime.running && !this.holdsQueue(runtime) && runtime.queuedMessages.length === 0;
-    if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, fromScript, fromMirador, fromPlugin, startsTurn: true });
-    const message: QueuedMessage = { id: crypto.randomUUID(), text, imageIds, ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }), ...(afterTurn && { afterTurn }) };
+    if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, authorId, fromScript, fromMirador, fromPlugin, startsTurn: true });
+    const message: QueuedMessage = {
+      id: crypto.randomUUID(),
+      text,
+      imageIds,
+      ...(authorId && { authorId }),
+      ...(fromScript && { fromScript }),
+      ...(fromMirador && { fromMirador }),
+      ...(fromPlugin && { fromPlugin }),
+      ...(afterTurn && { afterTurn }),
+    };
     this.setQueue(conversationId, runtime, [...runtime.queuedMessages, message]);
     this.publish(this.get(conversationId));
     if (!runtime.running) this.sendNextQueuedMessage(conversationId);
@@ -1760,19 +1778,22 @@ export class ConversationService {
     }
   }
 
-  /** Continues before the usage limit's reset, e.g. after switching to a profile that signs in to another account. */
-  continueAfterUsageLimit(conversationId: string, { automatically = false } = {}) {
+  /**
+   * Continues before the usage limit's reset, e.g. after switching to a profile that signs in to another account. Asked
+   * for by a person, the message to continue is theirs; one that continues by itself at the reset is nobody's.
+   */
+  continueAfterUsageLimit(conversationId: string, { automatically = false, authorId }: { automatically?: boolean; authorId?: string } = {}) {
     const runtime = this.runtime(conversationId);
     if (!runtime.usageLimit || this.stopping) return;
     runtime.automaticContinues = automatically ? runtime.automaticContinues + 1 : 0;
-    this.prompt(conversationId, CONTINUE_AFTER_INTERRUPTION).catch(() => {});
+    this.prompt(conversationId, CONTINUE_AFTER_INTERRUPTION, { authorId }).catch(() => {});
   }
 
-  /** The agent still holds the message its failed turn began with, so trying again asks it to continue. */
-  tryAgainAfterError(conversationId: string, errorSeq: number) {
+  /** The agent still holds the message its failed turn began with, so trying again asks it to continue, as the person who tries again. */
+  tryAgainAfterError(conversationId: string, errorSeq: number, authorId?: string) {
     if (this.runtime(conversationId).running || this.stopping) return;
     if (!canTryAgain(this.store.listEventsFrom(conversationId, errorSeq), errorSeq)) return;
-    this.prompt(conversationId, CONTINUE_AFTER_INTERRUPTION).catch(() => {});
+    this.prompt(conversationId, CONTINUE_AFTER_INTERRUPTION, { authorId }).catch(() => {});
   }
 
   /** The agent does not continue by itself after all; messages queued meanwhile go out now. */
@@ -1954,12 +1975,12 @@ export class ConversationService {
   }
 
   /** Runs a `!` command from the message box where the conversation works, with the environment its agent gets. */
-  runCommand(conversationId: string, command: string) {
+  runCommand(conversationId: string, command: string, authorId?: string) {
     const conversation = this.get(conversationId);
     const workspace = this.store.findWorkspace(conversation.workspaceId);
     if (!workspace) throw new HostProblemError({ code: "conversation-workspace-gone" });
     const environment = profileEnvironment(this.profileOf(conversation));
-    void this.commands.run(command, workingCopyOf(workspace, conversation).path, environment, (event) => this.append(conversationId, event));
+    void this.commands.run(command, workingCopyOf(workspace, conversation).path, environment, (event) => this.append(conversationId, event), authorId);
   }
 
   /** A command the host no longer runs (it was restarted meanwhile) is marked as stopped, so its card stops waiting. */
@@ -2349,7 +2370,7 @@ export class ConversationService {
     // session that starts afresh never asked it, so the question goes and the whole request comes back instead.
     if (waitedOnAnswer && continuation.keptItsPlace) return this.letTheTurnRest(conversationId);
     if (waitedOnAnswer) this.withdrawWaitingAsks(conversationId);
-    return this.prompt(conversationId, continuation.text, { imageIds: continuation.imageIds });
+    return this.prompt(conversationId, continuation.text, { imageIds: continuation.imageIds, authorId: request.authorId });
   }
 
   /** The turn a stop cut short gets no message of the host's: it waits for the user, whose next one carries it on. */
@@ -3310,12 +3331,19 @@ export class ConversationService {
     const [next, ...rest] = runtime?.queuedMessages ?? [];
     if (!runtime || !next || runtime.running || this.holdsQueue(runtime)) return;
     this.setQueue(conversationId, runtime, rest);
-    this.prompt(conversationId, next.text, { imageIds: next.imageIds, fromScript: next.fromScript, fromMirador: next.fromMirador, fromPlugin: next.fromPlugin, startsTurn: true }).catch(() => {});
+    this.prompt(conversationId, next.text, {
+      imageIds: next.imageIds,
+      authorId: next.authorId,
+      fromScript: next.fromScript,
+      fromMirador: next.fromMirador,
+      fromPlugin: next.fromPlugin,
+      startsTurn: true,
+    }).catch(() => {});
   }
 
   private appendUserMessage(
     conversationId: string,
-    { text, imageIds, fromScript, fromMirador, fromPlugin }: Omit<QueuedMessage, "id">,
+    { text, imageIds, authorId, fromScript, fromMirador, fromPlugin }: Omit<QueuedMessage, "id">,
     { commands, reverts, canvas }: NotesForAgent,
   ) {
     canvas.forEach((note) => note.heard());
@@ -3324,6 +3352,7 @@ export class ConversationService {
     return this.append(conversationId, {
       type: "user-message",
       text,
+      ...(authorId && { authorId }),
       ...(attachedCommandIds.length > 0 && { attachedCommandIds }),
       ...(attachedRevertIds.length > 0 && { attachedRevertIds }),
       ...(imageIds.length > 0 && { imageIds }),
@@ -3495,6 +3524,8 @@ interface TurnRequest {
   /** The message that started the turn and those that joined it, as one. */
   text: string;
   firstText: string;
+  /** Who wrote the message that started the turn, so the request made again is theirs too. */
+  authorId?: string;
   imageIds: string[];
   /** When the message that started the turn went out, so what the turn was waiting on can be told from what an earlier one left behind. */
   beganAt: number;
@@ -3616,6 +3647,7 @@ function turnRequestWithin(events: StoredEvent[], wholeLog: StoredEvent[]): Turn
   return {
     text: messages.map(({ text }) => text).join("\n\n"),
     firstText: first.text,
+    ...(first.authorId && { authorId: first.authorId }),
     imageIds: messages.flatMap(({ imageIds = [] }) => imageIds),
     beganAt: first.at,
   };

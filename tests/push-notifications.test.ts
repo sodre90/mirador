@@ -72,7 +72,7 @@ function pushingHost(answer: { status: number; outcome: string } = { status: 200
     return Response.json({ outcome: answer.outcome }, { status: answer.status });
   }) as unknown as typeof fetch;
   const pushes = new PushNotifications(store, { shownWaitMs: 10, post, grantRelay: GRANT_RELAY });
-  store.insertDevice({ id: "phone", name: "Peter's iPhone", joinedAt: 1, lastSeenAt: 1 }, "hash");
+  store.insertDevice({ id: "phone", name: "Peter's iPhone", personId: store.ownerId(), joinedAt: 1, lastSeenAt: 1 }, "hash");
   if (ownRelay) store.setPushRelay("https://push.example.com", "relay-token");
   return { store, pushes, posted, post };
 }

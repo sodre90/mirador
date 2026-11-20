@@ -84,10 +84,19 @@ export interface JoinRequest {
   expiresAt: number;
 }
 
+/** Someone who writes in conversations. The owner of the machine is the first; their name is empty until they give one. */
+export interface Person {
+  id: string;
+  name: string;
+  color: Pastel | null;
+}
+
 /** Another browser or app that joined this machine with an invite; it signs in with a token of its own, which revoking it ends. */
 export interface Device {
   id: string;
   name: string;
+  /** Whose device it is. */
+  personId: string;
   joinedAt: number;
   /** When it last connected or left. */
   lastSeenAt: number;
@@ -367,6 +376,8 @@ export interface QueuedMessage {
   id: string;
   text: string;
   imageIds: string[];
+  /** The person who wrote it; none when nobody did, as for a message from a script, Mirador or a plugin. */
+  authorId?: string;
   /** Posted by a script the agent started (mirador message) rather than typed by the user. */
   fromScript?: true;
   /** Sent by Mirador itself, such as a nudge to go on or to use the canvas; also fromScript, as nobody may be watching. */
@@ -682,6 +693,8 @@ export type ConversationEvent =
   | {
       type: "user-message";
       text: string;
+      /** The person who wrote it; none when nobody did, as for a message from a script, Mirador or a plugin. */
+      authorId?: string;
       attachedCommandIds?: string[];
       /** Revert notes that went to the agent ahead of this message, so they are not sent again. */
       attachedRevertIds?: string[];
@@ -694,7 +707,13 @@ export type ConversationEvent =
     }
   /** The workspace's files as they were when the turn that began with the message at `turnSeq` started, so it can be undone. */
   | { type: "files-kept"; turnSeq: number; checkpoint: string }
-  | { type: "user-command"; commandId: string; command: string }
+  | {
+      type: "user-command";
+      commandId: string;
+      command: string;
+      /** The person who ran it. */
+      authorId?: string;
+    }
   | { type: "user-command-output"; commandId: string; stream: CommandStream; text: string }
   | { type: "user-command-ended"; commandId: string; exitCode: number | null }
   | { type: "user-command-dropped"; commandIds: string[] }

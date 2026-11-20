@@ -66,6 +66,7 @@ import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import { machineAddress } from "../shared/machines.ts";
+import { personName } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SocketData } from "./hub.ts";
 import { newestOnly } from "./newest-only.ts";
@@ -272,7 +273,7 @@ export function startServer(services: HostServices) {
       ? new Response(certificate.authority, { headers: { "Content-Type": "application/x-pem-file", "Content-Disposition": 'attachment; filename="mirador-ca.pem"' } })
       : new Response("This Mirador has no certificate authority of its own.", { status: 404 });
 
-  const signedInWithCookie = signedInWith(config.browserToken, devices);
+  const signedInWithCookie = signedInWith(config.browserToken, devices, store.ownerId());
   /** Through the tunnel, only the device whose socket a request arrived on signs in, and never with this machine's own token. */
   const signedInAs = (request: Request) => {
     const end = tunnelEnds.get(request);
@@ -911,7 +912,7 @@ export function startServer(services: HostServices) {
     const readsProfileLaunch = searchParams.has(PROFILE_LAUNCH_PARAMETER);
     const desktopAppCode = role === "notifier" ? searchParams.get(DESKTOP_APP_CODE_PARAMETER) : null;
     if (!tunnelEnds.has(request)) rememberAddressUsed(request.headers.get("host"));
-    const data = socketData(role, signedIn.deviceId, canvasAssetsOriginFor(request), clientAddressOf(request, server), readsDeflatedMessages, readsProfileLaunch, desktopAppCode);
+    const data = socketData(role, signedIn, canvasAssetsOriginFor(request), clientAddressOf(request, server), readsDeflatedMessages, readsProfileLaunch, desktopAppCode);
     const upgraded = server.upgrade(request, { data });
     return upgraded ? undefined : new Response("upgrade failed", { status: 400 });
   }
@@ -1065,6 +1066,12 @@ export function startServer(services: HostServices) {
   function setScriptProgram(program: string) {
     store.setScriptProgramSetting(program.trim());
     hub.broadcast({ type: "settings.script-program", scriptProgram: store.scriptProgramSetting() });
+  }
+
+  function setOwnProfile(personId: string, name: string, color: Pastel | null) {
+    if (color !== null && !isPastel(color)) throw new HostProblemError({ code: "unknown-colour", value: color });
+    store.setPersonProfile(personId, { name: personName(name), color });
+    hub.broadcast({ type: "people.listed", people: store.listPeople() });
   }
 
   /** The picture every page shows next to the user's messages; null leaves the person icon. */
@@ -1248,8 +1255,10 @@ export function startServer(services: HostServices) {
         return;
       case "settings.set-avatar":
         return setAvatar(message.image);
+      case "person.set-own-profile":
+        return setOwnProfile(socket.data.personId, message.name, message.color);
       case "conversation.create":
-        await conversations.start(message.workspaceId, message.launch, message.prompt, message.startsIn);
+        await conversations.start(message.workspaceId, message.launch, message.prompt, message.startsIn, socket.data.personId);
         return;
       case "sessions.list":
         conversations
@@ -1293,7 +1302,7 @@ export function startServer(services: HostServices) {
       case "conversation.check-fork":
         return reply({ type: "conversation.fork-checked", requestId: message.requestId, forkable: conversations.canFork(message.conversationId) });
       case "conversation.side-chat.start":
-        return reply({ type: "conversation.side-chat.started", requestId: message.requestId, sideChatId: conversations.startSideChat(message.conversationId, message.text).id });
+        return reply({ type: "conversation.side-chat.started", requestId: message.requestId, sideChatId: conversations.startSideChat(message.conversationId, message.text, socket.data.personId).id });
       case "conversation.side-chat.promote":
         return conversations.promoteSideChat(message.conversationId);
       case "conversation.delete":
@@ -1332,10 +1341,12 @@ export function startServer(services: HostServices) {
         return reply({ type: "tool-output.got", requestId: message.requestId, content: stored ? wholeToolOutput(message.conversationId, stored) : [] });
       }
       case "conversation.prompt":
-        conversations.send(message.conversationId, message.text, message.imageIds, { afterTurn: message.afterTurn }).catch((error) => reply({ type: "error", ...failure(error) }));
+        conversations
+          .send(message.conversationId, message.text, message.imageIds, { authorId: socket.data.personId, afterTurn: message.afterTurn })
+          .catch((error) => reply({ type: "error", ...failure(error) }));
         return;
       case "conversation.run-command":
-        return conversations.runCommand(message.conversationId, message.command);
+        return conversations.runCommand(message.conversationId, message.command, socket.data.personId);
       case "conversation.stop-command":
         return conversations.stopCommand(message.conversationId, message.commandId);
       case "conversation.drop-command-outputs":
@@ -1349,9 +1360,9 @@ export function startServer(services: HostServices) {
       case "conversation.queue.set-after-turn":
         return conversations.setQueuedMessageAfterTurn(message.conversationId, message.messageId, message.afterTurn);
       case "conversation.usage-limit.continue":
-        return conversations.continueAfterUsageLimit(message.conversationId);
+        return conversations.continueAfterUsageLimit(message.conversationId, { authorId: socket.data.personId });
       case "conversation.try-again":
-        return conversations.tryAgainAfterError(message.conversationId, message.errorSeq);
+        return conversations.tryAgainAfterError(message.conversationId, message.errorSeq, socket.data.personId);
       case "conversation.usage-limit.stop-waiting":
         return conversations.stopWaitingForUsageLimit(message.conversationId);
       case "conversation.job-wait.stop":
@@ -1428,7 +1439,7 @@ export function startServer(services: HostServices) {
       case "permission.respond":
         return conversations.respondToPermission(message.conversationId, message.permissionId, message.optionId);
       case "ask.answer":
-        return canvas.answer(message.itemId, message.label, message.note, message.answers);
+        return canvas.answer(message.itemId, message.label, message.note, message.answers, socket.data.personId);
       case "app.subscribe": {
         const documentId = message.documentId ?? apps.lastShownIn(message.workspaceId, message.app);
         if (message.documentId === undefined && documentId !== null) socket.data.appViewsNamingNoDocument.set(appKey(message), documentId);
@@ -1834,6 +1845,9 @@ export function startServer(services: HostServices) {
       computerName: computerName(),
       pushRelay: pushes.relaySetting(),
       avatar: store.avatarSetting(),
+      people: store.listPeople(),
+      ownerId: store.ownerId(),
+      you: socket.data.personId,
       installedAgents: installedHarnesses(store.claudeProgramSetting()),
       canvasAssetsOrigin: socket.data.canvasAssetsOrigin,
       agentsCanvasAssetsOrigin: config.canvasAssetsOrigin,

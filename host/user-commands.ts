@@ -66,9 +66,9 @@ export class UserCommandRunner {
     return this.running.has(commandId);
   }
 
-  async run(command: string, directory: string, environment: Record<string, string>, record: Recorder) {
+  async run(command: string, directory: string, environment: Record<string, string>, record: Recorder, authorId?: string) {
     const commandId = crypto.randomUUID();
-    record({ type: "user-command", commandId, command });
+    record({ type: "user-command", commandId, command, ...(authorId && { authorId }) });
     const output = new OutputBatcher(commandId, record);
     let exitCode: number | null = null;
     try {

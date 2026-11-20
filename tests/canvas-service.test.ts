@@ -131,6 +131,12 @@ describe("CanvasService", () => {
     expect(asAsk(store.findCanvasItem(item.id))?.answer?.deliveredAs).toBe("next-message");
   });
 
+  test("a late answer goes out as the next message of the person who gave it", () => {
+    const { canvas, sendOptions, ask } = setUp();
+    canvas.answer(ask().id, "Red", undefined, undefined, "ada");
+    expect(sendOptions).toEqual([{ authorId: "ada" }]);
+  });
+
   test("a question waited on for a limited time gives the answer given in time", async () => {
     const { store, canvas, ask } = setUp();
     const item = ask();

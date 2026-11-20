@@ -199,7 +199,7 @@ const signInCodes = new SignInCodes(store);
 const p2pSettings = peerToPeerSettings(process.env, { sidecar: downloadedSidecar(config.dataDir), broker: BUILT_IN_BROKER });
 const p2p = p2pSettings && new PeerToPeer({ ...p2pSettings, canvasAssetsPort: config.canvasAssetsPort }, join(config.dataDir, "p2p"), store);
 const search = new ConversationSearch(store);
-const signedIn = signedInWith(config.browserToken, devices);
+const signedIn = signedInWith(config.browserToken, devices, store.ownerId());
 const watch = new MachineWatch(
   store,
   { id: store.hostId(), origins: ownPageOrigins(config, certificate) },

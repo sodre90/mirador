@@ -12,12 +12,15 @@ import {
   type DelegatedReply,
   type HarnessId,
   type JobWait,
+  type Person,
   type Profile,
   type PromptTemplate,
   type QueuedMessage,
   type StoredEvent,
   type UsageLimitWait,
 } from "../shared/model.ts";
+import { markInitials } from "../shared/marks.ts";
+import { pastelVariables } from "./pastels.ts";
 import { titlesOfPlugins, toolTitlesOfPlugins, usePluginsOff } from "./plugin-settings.ts";
 import { readableToolTitle as readableToolTitleOf } from "../shared/tool-title.ts";
 import { panelCommandLine, refusedPanelCommand } from "../shared/panel-commands.ts";
@@ -100,6 +103,7 @@ import {
   subagentState,
   timelineWithStreamedText,
   toolCallsAwaitingPermission,
+  writtenByAPerson,
   type AgentNoticeBlock,
   type Author,
   type PermissionBlock,
@@ -337,8 +341,13 @@ const CanvasShowsEdits = createContext(false);
 
 /** Whether the agent is at work in the conversation, so a failed turn cannot be tried again yet. */
 const ConversationBusy = createContext(false);
-/** The user's profile picture, or null: the person icon stands in. */
-const UserPicture = createContext<string | null>(null);
+/** Who writes the messages, and the picture the owner set, or null: their initials or the person icon stand in. */
+const MessageWriters = createContext<{ people: Person[]; ownerId: string | null; ownerPicture: string | null }>({ people: [], ownerId: null, ownerPicture: null });
+
+function usePerson(personId: string | null) {
+  const { people } = useContext(MessageWriters);
+  return people.find(({ id }) => id === personId);
+}
 
 const lastPathSegment = (path: string) => path.split("/").filter(Boolean).at(-1) ?? path;
 
@@ -748,8 +757,25 @@ function PluginIcon() {
   );
 }
 
+/** The owner's picture where they set one; else the initials of the person's name on their colour, or the person icon while they have no name. */
+function PersonAvatar({ personId }: { personId: string | null }) {
+  const { ownerId, ownerPicture } = useContext(MessageWriters);
+  const person = usePerson(personId);
+  const showsPicture = ownerPicture !== null && (personId === null || personId === ownerId);
+  const color = person?.color ?? null;
+  return (
+    <span className={`avatar user ${color ? "colored" : ""}`} style={color ? pastelVariables(color) : undefined} data-color={color ?? undefined} aria-hidden="true">
+      {showsPicture ? <img src={ownerPicture} alt="" /> : person?.name ? markInitials(person.name) : <PersonIcon />}
+    </span>
+  );
+}
+
+function PersonName({ personId }: { personId: string | null }) {
+  return <span className="person-name">{usePerson(personId)?.name || words.author.you}</span>;
+}
+
 function Avatar({ author, harness }: { author: Author; harness: HarnessId }) {
-  const picture = useContext(UserPicture);
+  if (writtenByAPerson(author)) return <PersonAvatar personId={author.personId} />;
   if (typeof author === "object") {
     return (
       <span className="avatar plugin" aria-hidden="true">
@@ -771,11 +797,7 @@ function Avatar({ author, harness }: { author: Author; harness: HarnessId }) {
       </span>
     );
   }
-  return author === "user" ? (
-    <span className="avatar user" aria-hidden="true">
-      {picture ? <img src={picture} alt="" /> : <PersonIcon />}
-    </span>
-  ) : (
+  return (
     <span className={`avatar agent-${harness}`} aria-hidden="true">
       {agentMarks[harness]}
     </span>
@@ -791,10 +813,11 @@ function Timestamp({ at }: { at: number }) {
 }
 
 function authorName(author: Author, harness: HarnessId) {
+  if (writtenByAPerson(author)) return <PersonName personId={author.personId} />;
   if (typeof author === "object") return <span data-hint={hints.pluginMessage}>{words.author.fromPlugin(author.plugin)}</span>;
   if (author === "mirador") return <span data-hint={hints.miradorMessage}>{words.author.fromMirador}</span>;
   if (author === "script") return <span data-hint={hints.scriptMessage}>{words.author.fromScript}</span>;
-  return author === "user" ? words.author.you : agentNames[harness];
+  return agentNames[harness];
 }
 
 /** The events' timeline; while a reply streams in, only its last block changes, so the other entries are not rendered again. */
@@ -2149,6 +2172,8 @@ export function ChatPanel({
   voiceSettings,
   voiceEngine,
   userPicture,
+  people,
+  ownerId,
   onManageTemplates,
   open,
   canvasVisible,
@@ -2166,6 +2191,10 @@ export function ChatPanel({
   voiceEngine: VoiceEngineStatus;
   /** The user's profile picture next to their messages; null leaves the person icon. */
   userPicture: string | null;
+  /** Who writes the messages, the owner first. */
+  people: Person[];
+  /** Whose picture `userPicture` is. */
+  ownerId: string | null;
   onManageTemplates: () => void;
   open: OpenConversation;
   canvasVisible: boolean;
@@ -2178,6 +2207,7 @@ export function ChatPanel({
   const timeline = useTimeline(open.events);
   const sideChatShown = conversation.id in useSideChatsShown();
   const readingAs = replyReadingOf(voiceSettings);
+  const messageWriters = useMemo(() => ({ people, ownerId, ownerPicture: userPicture }), [people, ownerId, userPicture]);
   useEffect(() => readWhenSpokenTurnEnds(conversation.id, open.events, timeline, readingAs), [timeline]);
   useEffect(
     () => () => {
@@ -2250,7 +2280,7 @@ export function ChatPanel({
         <StepsAtWork.Provider value={runningSteps}>
           <CanvasShowsEdits.Provider value={canvasShowsEdits}>
             <ConversationBusy.Provider value={busy}>
-              <UserPicture.Provider value={userPicture}>
+              <MessageWriters.Provider value={messageWriters}>
                 <ReadsRepliesAloud.Provider value={readingAs}>
                   <TimelineNow.Provider value={timelineNow}>
                     {side ? (
@@ -2323,7 +2353,7 @@ export function ChatPanel({
                     {!side && <Statusline conversation={conversation} profiles={profiles} />}
                   </TimelineNow.Provider>
                 </ReadsRepliesAloud.Provider>
-              </UserPicture.Provider>
+              </MessageWriters.Provider>
             </ConversationBusy.Provider>
           </CanvasShowsEdits.Provider>
         </StepsAtWork.Provider>

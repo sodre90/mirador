@@ -67,7 +67,7 @@ describe("a turn that ends makes it your move", () => {
 describe("delivery", () => {
   function connect(hub: Hub, role: SocketData["role"], deviceId: string | null = null) {
     const received: ServerMessage[] = [];
-    const socket = { data: socketData(role, deviceId), send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket;
+    const socket = { data: socketData(role, { deviceId, personId: "owner" }), send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket;
     hub.add(socket);
     return { socket, received };
   }

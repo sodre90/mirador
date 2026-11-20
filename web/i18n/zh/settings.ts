@@ -16,6 +16,12 @@ export const settings: Messages["settings"] = {
     arrangement: "默认排布",
     describe: (left, topRight, bottomRight) => `${left}在左侧，${topRight.toLowerCase()}在右上，${bottomRight.toLowerCase()}在右下`,
   },
+  ownProfile: {
+    title: "个人资料",
+    hint: "显示在你写的消息旁，加入这个 host 的每个浏览器和设备都能看到。没有名字时，消息上显示“你”。",
+    name: "名字",
+    colour: "颜色",
+  },
   profilePicture: {
     title: "头像",
     hint: "显示在你的消息旁，由 host 保存，加入它的每个浏览器和设备都能看到。",

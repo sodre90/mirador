@@ -188,12 +188,22 @@ const noticeBlock = (origin: Origin, about: NoticeAbout): NoticeBlock => ({ kind
 export type TimelineBlock =
   | (Origin & { kind: "agent" | "thought" | "info"; text: string; startsTurn?: true } & CarriedImages)
   | NoticeBlock
-  | (Origin & { kind: "user"; text: string; imageIds?: string[]; fromScript?: true; fromMirador?: true; fromPlugin?: string; turnSeq?: number; filesKept?: true } & CarriedImages)
+  | (Origin & {
+      kind: "user";
+      text: string;
+      imageIds?: string[];
+      authorId?: string;
+      fromScript?: true;
+      fromMirador?: true;
+      fromPlugin?: string;
+      turnSeq?: number;
+      filesKept?: true;
+    } & CarriedImages)
   | AgentNoticeBlock
   | ToolBlock
   | PlanBlock
   | PermissionBlock
-  | (Origin & { kind: "command"; command: UserCommand })
+  | (Origin & { kind: "command"; command: UserCommand; authorId?: string })
   | ErrorBlock;
 
 /**
@@ -202,19 +212,27 @@ export type TimelineBlock =
  */
 type ErrorBlock = Origin & { kind: "error"; message: string; problem?: HostProblem; usageLimit?: true; authRequired?: true; signedInSince?: true; tryAgainSeq?: number };
 
+/** A person's message or command names them by their id, unless it names nobody, as a message replayed from an agent's session does. */
+export type PersonAuthor = { personId: string | null };
+
 /** A plugin is named by its title. */
-export type Author = "user" | "script" | "mirador" | "agent" | { plugin: string };
+export type Author = PersonAuthor | "script" | "mirador" | "agent" | { plugin: string };
+
+export const writtenByAPerson = (author: Author | null): author is PersonAuthor => typeof author === "object" && author !== null && "personId" in author;
 
 export function authorOf(block: TimelineBlock | undefined): Author | null {
   if (!block || block.kind === "notice" || block.kind === "agent-notice") return null;
   if (block.kind === "user" && block.fromPlugin) return { plugin: block.fromPlugin };
   if (block.kind === "user" && block.fromMirador) return "mirador";
   if (block.kind === "user" && block.fromScript) return "script";
-  return block.kind === "user" || block.kind === "command" ? "user" : "agent";
+  return block.kind === "user" || block.kind === "command" ? { personId: block.authorId ?? null } : "agent";
 }
 
-const sameAuthor = (one: Author | null, other: Author | null) =>
-  typeof one === "object" && one !== null && typeof other === "object" && other !== null ? one.plugin === other.plugin : one === other;
+function sameAuthor(one: Author | null, other: Author | null) {
+  if (writtenByAPerson(one) || writtenByAPerson(other)) return writtenByAPerson(one) && writtenByAPerson(other) && one.personId === other.personId;
+  if (typeof one === "object" && one !== null && typeof other === "object" && other !== null) return one.plugin === other.plugin;
+  return one === other;
+}
 
 export function startsAuthorGroup(timeline: TimelineBlock[], index: number) {
   const author = authorOf(timeline[index]);
@@ -410,7 +428,7 @@ class TimelineBuilder {
     if (leavesFailedTurnBehind(event)) this.leaveFailedTurnBehind();
     switch (event.type) {
       case "user-command":
-        return this.push({ kind: "command", ...origin, command: this.commands.get(event.commandId)! });
+        return this.push({ kind: "command", ...origin, command: this.commands.get(event.commandId)!, ...(event.authorId && { authorId: event.authorId }) });
       case "user-command-output":
       case "user-command-ended":
       case "user-command-dropped":
@@ -426,6 +444,7 @@ class TimelineBuilder {
           ...origin,
           text: event.text,
           ...(event.imageIds && { imageIds: event.imageIds }),
+          ...(event.authorId && { authorId: event.authorId }),
           ...(event.fromScript && { fromScript: event.fromScript }),
           ...(event.fromMirador && { fromMirador: event.fromMirador }),
           ...(event.fromPlugin && { fromPlugin: event.fromPlugin }),

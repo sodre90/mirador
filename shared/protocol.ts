@@ -24,6 +24,7 @@ import type {
   MachineSeen,
   MachineStatus,
   Launch,
+  Person,
   Profile,
   PromptTemplate,
   PublicAddress,
@@ -152,6 +153,8 @@ export type ClientMessage =
   | { type: "notification.shown"; notificationId: string }
   /** The user's picture as a small square PNG data URL the page drew; null takes it away, leaving the person icon. */
   | { type: "settings.set-avatar"; image: string | null }
+  /** The name and colour of the person the socket signed in as, shown with every message they write. */
+  | { type: "person.set-own-profile"; name: string; color: Pastel | null }
   /** Without a launch, the conversation starts on the workspace's default as the host has it when the message arrives. */
   /** With a prompt, the new conversation's agent starts on it at once. */
   /** Without `startsIn`, where the workspace starts its conversations. */
@@ -406,6 +409,12 @@ export type ServerMessage =
       pushRelay: PushRelaySetting;
       /** The user's profile picture as a small square PNG data URL; null when they set none. */
       avatar: string | null;
+      /** Everyone who writes in this machine's conversations, the owner first. */
+      people: Person[];
+      /** Whose picture `avatar` is. */
+      ownerId: string;
+      /** The person this page signed in as. */
+      you: string;
       /** The agents this machine has a program for, which a new profile can run. */
       installedAgents: HarnessId[];
       /** Where this page loads canvas libraries from: the address it reached the host at may differ from the one agents were given. */
@@ -498,6 +507,8 @@ export type ServerMessage =
   | { type: "settings.push-relay"; pushRelay: PushRelaySetting }
   /** The user's picture next to every page; null when they set none, leaving the person icon. */
   | { type: "settings.avatar"; image: string | null }
+  /** Everyone again, the owner first, whenever someone's name or colour changes. */
+  | { type: "people.listed"; people: Person[] }
   /** Sent after the snapshot and on every change; API keys are empty for clients that don't get profile environments. */
   | { type: "voice.settings"; settings: VoiceSettings }
   /** Sent after the snapshot, on every change and, while setting up, on its progress. */

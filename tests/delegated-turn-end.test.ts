@@ -32,7 +32,7 @@ function hostWithAgentThatFails({ callerStays = true } = {}) {
   store.recordStartedBy("c3", { conversationId: "c0", plugin: "untold" });
   const hub = new Hub();
   const received: ServerMessage[] = [];
-  hub.add({ data: socketData("page", null), send: (payload: string) => received.push(JSON.parse(payload) as ServerMessage) } as unknown as BrowserSocket);
+  hub.add({ data: socketData("page", { deviceId: null, personId: "owner" }), send: (payload: string) => received.push(JSON.parse(payload) as ServerMessage) } as unknown as BrowserSocket);
   const config = loadConfig({ MIRADOR_DATA_DIR: join(hostDir, "data") });
   const conversations = new ConversationService(store, hub, config, {} as never, {} as never, {} as never, new SystemNotifications(store, hub));
   conversations.hearRepliesWith(
