@@ -102,3 +102,21 @@ test("a plugin turned from outside the Profiles dialog changes only it, by its s
   expect(() => profiles.turnPlugin(id, "theme", false)).toThrow("theme isn't a plugin a profile can turn on or off.");
   expect(() => profiles.turnPlugin("gone", "board", false)).toThrow();
 });
+
+test("a workspace's new default profile is logged with the one it had and where it was chosen, so an unexpected one can be traced", () => {
+  const store = new Store(":memory:");
+  const profileOf = (id: string, name: string) => ({ id, name, harness: "pi" as const, environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait" as const, color: null, pluginsOff: [], createdAt: 1 });
+  store.saveProfile(profileOf("gw", "Pi LLM-GW"));
+  store.saveProfile(profileOf("radiance", "Pi Radiance"));
+  store.insertWorkspace({ id: "w1", name: "log-search", path: "/tmp/log-search", defaultLaunch: { harness: "pi", profileId: "gw" }, createdAt: 1 });
+  const logged: string[] = [];
+  const log = console.log;
+  console.log = (line: string) => void logged.push(line);
+  try {
+    new ProfileService(store, new Hub(), {} as ConversationService, {}, () => undefined).setWorkspaceDefault("w1", { harness: "pi", profileId: "radiance" }, "device Pixel");
+  } finally {
+    console.log = log;
+  }
+  expect(store.findWorkspace("w1")!.defaultLaunch.profileId).toBe("radiance");
+  expect(logged).toEqual(["workspace log-search now starts its conversations on Pi Radiance (was Pi LLM-GW), chosen on device Pixel"]);
+});

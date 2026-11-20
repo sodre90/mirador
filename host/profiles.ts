@@ -32,8 +32,10 @@ export function giveEveryWorkspaceAProfile(store: Store): Workspace[] {
   return store
     .listWorkspaces()
     .filter((workspace) => !hasOne(workspace))
-    .map(({ id, defaultLaunch }) => {
-      store.setWorkspaceDefaultLaunch(id, launchOn(profiles.find(({ harness }) => harness === defaultLaunch.harness) ?? profiles[0]!));
+    .map(({ id, name, defaultLaunch }) => {
+      const given = profiles.find(({ harness }) => harness === defaultLaunch.harness) ?? profiles[0]!;
+      store.setWorkspaceDefaultLaunch(id, launchOn(given));
+      console.log(`workspace ${name} had no profile to start its conversations on, so it was given ${given.name}`);
       return store.findWorkspace(id)!;
     });
 }
@@ -178,10 +180,15 @@ export class ProfileService {
     workspaces.forEach((workspace) => this.hub.broadcast({ type: "workspace.upserted", workspace }));
   }
 
-  setWorkspaceDefault(workspaceId: string, launch: Launch) {
-    profileToLaunch(this.store, launch);
+  /** Logs the change, with where it was chosen, so a workspace found on an unexpected profile can be traced. */
+  setWorkspaceDefault(workspaceId: string, launch: Launch, chosenOn: string) {
+    const profile = profileToLaunch(this.store, launch);
+    const before = this.store.findWorkspace(workspaceId)?.defaultLaunch.profileId;
     this.store.setWorkspaceDefaultLaunch(workspaceId, launch);
     const workspace = this.store.findWorkspace(workspaceId);
-    if (workspace) this.hub.broadcast({ type: "workspace.upserted", workspace });
+    if (!workspace) return;
+    const was = (before && this.store.findProfile(before)?.name) ?? "none";
+    console.log(`workspace ${workspace.name} now starts its conversations on ${profile.name} (was ${was}), chosen on ${chosenOn}`);
+    this.hub.broadcast({ type: "workspace.upserted", workspace });
   }
 }

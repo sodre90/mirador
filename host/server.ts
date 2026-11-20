@@ -435,6 +435,10 @@ export function startServer(services: HostServices) {
     const connections = hub.deviceConnections();
     return devices.list().map((device) => ({ ...device, connection: connections.get(device.id) ?? null }));
   };
+  /** The joined device a socket signed in as, by its name, for the host log. */
+  const deviceOf = ({ data: { deviceId } }: BrowserSocket) =>
+    deviceId === null ? "the host's own link" : `device ${store.listDevices().find(({ id }) => id === deviceId)?.name ?? deviceId}`;
+
   const devicesListed = (socket: BrowserSocket): ServerMessage => ({
     type: "devices.listed",
     devices: listedDevices(),
@@ -1173,7 +1177,7 @@ export function startServer(services: HostServices) {
       case "workspace.delete":
         return deleteWorkspaceOrAsk(socket, message.workspaceId, message.discardsUncommitted ?? false);
       case "workspace.set-default-launch":
-        return profiles.setWorkspaceDefault(message.workspaceId, message.launch);
+        return profiles.setWorkspaceDefault(message.workspaceId, message.launch, deviceOf(socket));
       case "workspace.move":
         return moveWorkspace(message.workspaceId, message.groupId, message.beforeWorkspaceId, message.beforeGroupId ?? null);
       case "workspace.set-color":
