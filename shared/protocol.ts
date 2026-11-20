@@ -12,6 +12,7 @@ import type {
   KeepAwake,
   KeepDeletedCanvas,
   OlderAfter,
+  ConversationsShown,
   ClaudeProgram,
   Conversation,
   ConversationMatches,
@@ -133,6 +134,7 @@ export type ClientMessage =
   | { type: "settings.set-conversation-order"; order: ConversationOrder }
   | { type: "settings.set-keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.set-older-after"; olderAfter: OlderAfter }
+  | { type: "settings.set-conversations-shown"; shown: ConversationsShown }
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
   | { type: "newer-version.check"; requestId: string }
@@ -485,6 +487,7 @@ export type ServerMessage =
       /** Missing from a host older than ordering conversations. */
       conversationOrder?: ConversationOrder;
       olderAfter: OlderAfter;
+      conversationsShown: ConversationsShown;
       /** The kinds of notification a phone may register for pushes of. Missing from a host older than reminders, which refuses a registration with a kind it doesn't know. */
       pushKinds?: NotificationKind[];
     }
@@ -513,6 +516,7 @@ export type ServerMessage =
   | { type: "settings.conversation-order"; order: ConversationOrder }
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.older-after"; olderAfter: OlderAfter }
+  | { type: "settings.conversations-shown"; shown: ConversationsShown }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }
   | { type: "settings.editor"; editor: EditorState }

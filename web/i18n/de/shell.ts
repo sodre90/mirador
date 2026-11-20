@@ -43,6 +43,7 @@ export const shell: Messages["shell"] = {
     markRead: "Als gelesen markieren",
     markUnread: "Als ungelesen markieren",
     older: (count) => `Ältere · ${count}`,
+    more: (count) => `Weitere · ${count}`,
     delegated: (count) => `${count} delegiert`,
     sideChats: (count) => `${count} ${plural(count, "Nebenchat", "Nebenchats")}`,
     delegatedWorking: (count) => ` · ${count} aktiv`,

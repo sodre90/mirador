@@ -3,6 +3,7 @@ import type { Conversation, Workspace } from "../shared/model.ts";
 import {
   adjacentConversation,
   adjacentWorkspaceConversation,
+  apartFromMore,
   apartFromOlder,
   conversationsIn,
   currentWorkspace,
@@ -400,6 +401,66 @@ describe("navigation", () => {
       expect(adjacentConversation({ ...folding, selectedConversationId: "fresher" }, 1)).toBe("fresh");
       expect(numberedConversation({ ...folding, selectedConversationId: "fresh" }, 1)).toBe("fresh");
       expect(adjacentConversation({ ...folding, now: undefined, selectedConversationId: "fresher" }, 1)).toBe("stale");
+    });
+  });
+
+  describe("conversations past as many as the setting lists", () => {
+    const DAY = 24 * 60 * 60 * 1000;
+    const now = 100 * DAY;
+    const activeDaysAgo = (id: string, days: number, more: Partial<Conversation> = {}) => ({ ...conversation(id, "a", now - days * DAY), ...more });
+    const idsOf = ({ listed, more }: ReturnType<typeof apartFromMore>) => ({ listed: listed.map(({ id }) => id), more: more.map(({ id }) => id) });
+
+    test("fold under More, the least recently active first, while the list keeps its own order", () => {
+      const current = [
+        activeDaysAgo("three", 3),
+        activeDaysAgo("zero", 0),
+        activeDaysAgo("six", 6),
+        activeDaysAgo("written-in", 6, { lastMessageAt: now - DAY / 2 }),
+        activeDaysAgo("five", 5),
+        activeDaysAgo("answered", 6, { lastReplyAt: now - 2 * DAY }),
+        activeDaysAgo("four", 4),
+      ];
+      expect(idsOf(apartFromMore(current, "5"))).toEqual({ listed: ["three", "zero", "written-in", "answered", "four"], more: ["six", "five"] });
+      expect(idsOf(apartFromMore(current, "8"))).toEqual({ listed: current.map(({ id }) => id), more: [] });
+      expect(idsOf(apartFromMore(current, "all")).more).toEqual([]);
+    });
+
+    test("stay in the list while there is something to come back to them for, and take its places first", () => {
+      const holding = [
+        activeDaysAgo("favourite", 6, { favourite: true }),
+        activeDaysAgo("waiting", 6, { waitingFor: "finished" }),
+        activeDaysAgo("working", 6, { status: "running" }),
+        activeDaysAgo("reminded", 6, { reminder: { at: now + DAY, mode: "keep" } }),
+        activeDaysAgo("waiting-for-a-job", 6, { jobWaits: [{ id: "job", job: { kind: "process", pid: 1 }, sshHost: null, message: "Carry on", resume: true, since: now - DAY }] }),
+        activeDaysAgo("in-terminal", 6, { openInTerminal: "idle" }),
+      ];
+      const current = [...holding, activeDaysAgo("fresh", 0)];
+      expect(idsOf(apartFromMore(current, "5"))).toEqual({ listed: holding.map(({ id }) => id), more: ["fresh"] });
+      expect(idsOf(apartFromMore(current, "8")).more).toEqual([]);
+    });
+
+    test("go with the conversation they are listed under, which is as recent as the latest of them", () => {
+      const under = (id: string, callerId: string, more: Partial<Conversation> = {}) => activeDaysAgo(id, 6, { startedBy: { conversationId: callerId, plugin: "delegate", reply: null, dismissed: false }, ...more });
+      const current = [
+        activeDaysAgo("delegating", 6),
+        under("recent-task", "delegating", { lastReplyAt: now }),
+        activeDaysAgo("one", 1),
+        activeDaysAgo("two", 2),
+        activeDaysAgo("three", 3),
+        activeDaysAgo("resting", 5),
+        under("resting-task", "resting"),
+        activeDaysAgo("four", 4),
+      ];
+      expect(idsOf(apartFromMore(current, "5"))).toEqual({ listed: ["delegating", "recent-task", "one", "two", "three", "four"], more: ["resting", "resting-task"] });
+    });
+
+    test("are stepped past and not numbered, as the sidebar doesn't list them", () => {
+      const ids = ["zero", "one", "two", "three", "four", "five"];
+      const capped: NavigationState = { ...base, now, conversationsShown: "5", conversations: ids.map((id, days) => activeDaysAgo(id, days)) };
+      expect(numberedConversation(capped, 1)).toBe("four");
+      expect(numberedConversation(capped, 6)).toBeNull();
+      expect(adjacentConversation({ ...capped, selectedConversationId: "four" }, -1)).toBe("zero");
+      expect(numberedConversation({ ...capped, conversationsShown: "all" }, 1)).toBe("five");
     });
   });
 

@@ -27,7 +27,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "../shared/model.ts";
-import { DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
+import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isConversationsShown, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationsShown, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
 import { computerName } from "./machine-name.ts";
@@ -1206,6 +1206,15 @@ export class Store {
 
   setOlderAfter(olderAfter: OlderAfter) {
     this.setSetting("older_after", olderAfter);
+  }
+
+  conversationsShown(): ConversationsShown {
+    const saved = this.setting("conversations_shown");
+    return isConversationsShown(saved) ? saved : DEFAULT_CONVERSATIONS_SHOWN;
+  }
+
+  setConversationsShown(shown: ConversationsShown) {
+    this.setSetting("conversations_shown", shown);
   }
 
   chosenConversationOrder(): ConversationOrder {

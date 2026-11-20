@@ -209,6 +209,8 @@ export const hints: Messages["hints"] = {
   unfoldWorkspace: "再次显示这个工作区的对话。",
   olderConversations: (after) =>
     `${after}内没有人写过消息的对话；时长在设置中调整。收藏的、等你处理的、设了提醒的和仍在工作的对话留在列表里。在其中写消息会把它带回来。`,
+  moreConversations: (atMost) =>
+    `此工作区的其余对话：列表只保留最近有活动的 ${atMost} 个；数量在设置中调整。收藏的、等你处理的、设了提醒的和仍在工作的对话始终留在列表里。在其中写消息会把它带回来。`,
   workspaceGroupCount: "这个分组中的工作区，包括其中各分组里的。",
   waitingInGroup: "这个分组的工作区中等你处理的对话，包括其中各分组里的。",
   waitingAbove: "上方已滚出视野的、等你处理的对话。点击显示最近的一个。",

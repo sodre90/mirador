@@ -230,6 +230,8 @@ export const hints: Messages["hints"] = {
   unfoldWorkspace: "Vuelve a mostrar las conversaciones de este espacio de trabajo.",
   olderConversations: (after) =>
     `Conversaciones en las que nadie escribe desde hace ${after}; Ajustes fija cuánto tiempo. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando se quedan en la lista. Escribir en una la trae de vuelta.`,
+  moreConversations: (atMost) =>
+    `Más conversaciones de este espacio de trabajo: su lista muestra las ${atMost} con actividad más reciente; Configuración fija cuántas. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando siempre se quedan en la lista. Escribir en una la trae de vuelta.`,
   workspaceGroupCount: "Espacios de trabajo de este grupo, también los de los grupos que contiene.",
   waitingInGroup: "Conversaciones de los espacios de trabajo de este grupo que te esperan, también las de los grupos que contiene.",
   waitingAbove: "Conversaciones que te esperan, fuera de la vista arriba. Haz clic para mostrar la más cercana.",

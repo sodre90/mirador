@@ -41,6 +41,7 @@ export const shell: Messages["shell"] = {
     markRead: "标为已读",
     markUnread: "标为未读",
     older: (count) => `更早 · ${count}`,
+    more: (count) => `更多 · ${count}`,
     delegated: (count) => `${count} 个已委派`,
     sideChats: (count) => `${count} 个旁聊`,
     delegatedWorking: (count) => ` · ${count} 个进行中`,

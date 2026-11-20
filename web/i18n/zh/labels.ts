@@ -27,6 +27,7 @@ export const labels: Messages["labels"] = {
   keepAwake: { never: "从不", "while-working": "Agent 工作时", always: "始终" },
   keepDeletedCanvas: { "7-days": "7 天", "30-days": "30 天", forever: "永久" },
   olderAfter: { off: "从不", "1-day": "1 天", "3-days": "3 天", "1-week": "1 周", "2-weeks": "2 周", "1-month": "1 个月" },
+  conversationsShown: { "5": "5", "8": "8", "12": "12", all: "全部" },
   pageLibraries: {
     cdn: "来自公共 CDN：文件很小，但绘制时需要联网",
     inline: "内嵌在文件里：可离线使用，但 Mermaid 会增加约 3 MB",

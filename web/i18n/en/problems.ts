@@ -168,6 +168,7 @@ export const problems = {
   unknownPluginUpdateMode: (value: string) => `Unknown plugin update setting ${value}`,
   unknownKeepDeletedCanvas: (value: string) => `Unknown setting for keeping deleted canvases: ${value}`,
   unknownOlderAfter: (value: string) => `Unknown setting for folding older conversations: ${value}`,
+  unknownConversationsShown: (value: string) => `Unknown setting for how many conversations a workspace lists: ${value}`,
   unknownWorkspaceColour: (value: string) => `Unknown workspace colour ${value}`,
   notAMachineAddress: (address: string) => `"${address}" is not a machine's address.`,
   machineAlreadyAdded: (origin: string) => `${origin} is already among your machines.`,

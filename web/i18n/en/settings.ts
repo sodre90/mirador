@@ -84,6 +84,11 @@ export const settings = {
     hint: "Conversations nobody wrote in for this long fold under Older in their workspace, here and on your phones. Favourites, ones waiting for you, ones with a reminder and ones still at work stay in the list.",
     after: "Fold under Older after",
   },
+  conversationsShown: {
+    title: "Long lists",
+    hint: "Each workspace lists its most recently active conversations and folds the rest under More. Favourites, ones waiting for you, ones with a reminder and ones still at work stay in the list, and count towards this many.",
+    atMost: "Conversations per workspace",
+  },
   sleep: {
     title: "Sleep",
     hint: "Kept by the host. Its computer can still sleep when you close a laptop's lid, and its display still turns off.",

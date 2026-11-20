@@ -221,6 +221,8 @@ export const hints: Messages["hints"] = {
   unfoldWorkspace: "A munkaterület beszélgetéseinek újbóli megjelenítése.",
   olderConversations: (after) =>
     `Beszélgetések, amelyekbe ennyi ideje senki sem írt: ${after}; az időt a Beállítások adja meg. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak. Ha írsz valamelyikbe, visszakerül.`,
+  moreConversations: (atMost) =>
+    `A munkaterület további beszélgetései: a listájában a ${atMost} legutóbb aktív marad; hogy hány, azt a Beállítások adja meg. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók mindig a listában maradnak. Ha írsz valamelyikbe, visszakerül.`,
   workspaceGroupCount: "A csoport munkaterületei, a benne lévő csoportokéi is.",
   waitingInGroup: "A csoport munkaterületeinek rád váró beszélgetései, a benne lévő csoportokéi is.",
   waitingAbove: "Rád váró beszélgetések, fent kigördülve a látómezőből. Kattints a legközelebbi megjelenítéséhez.",

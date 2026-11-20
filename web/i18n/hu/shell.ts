@@ -41,6 +41,7 @@ export const shell: Messages["shell"] = {
     markRead: "Megjelölés olvasottként",
     markUnread: "Megjelölés olvasatlanként",
     older: (count) => `Régebbi · ${count}`,
+    more: (count) => `Továbbiak · ${count}`,
     delegated: (count) => `${count} átadott`,
     sideChats: (count) => `${count} mellékszál`,
     delegatedWorking: (count) => ` · ${count} dolgozik`,

@@ -86,6 +86,11 @@ export const settings: Messages["settings"] = {
     hint: "Las conversaciones en las que nadie escribe desde hace este tiempo se pliegan bajo Antiguas en su espacio de trabajo, aquí y en tus teléfonos. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando se quedan en la lista.",
     after: "Plegar bajo Antiguas después de",
   },
+  conversationsShown: {
+    title: "Listas largas",
+    hint: "Cada espacio de trabajo muestra sus conversaciones con actividad más reciente y pliega el resto bajo Más. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando se quedan en la lista y cuentan para este número.",
+    atMost: "Conversaciones por espacio de trabajo",
+  },
   sleep: {
     title: "Suspensión",
     hint: "Lo guarda el host. Su equipo aún puede suspenderse al cerrar la tapa de un portátil, y su pantalla se apaga igualmente.",

@@ -27,6 +27,7 @@ export const labels: Messages["labels"] = {
   keepAwake: { never: "Nunca", "while-working": "Mientras trabajan los agentes", always: "Siempre" },
   keepDeletedCanvas: { "7-days": "7 días", "30-days": "30 días", forever: "Para siempre" },
   olderAfter: { off: "Nunca", "1-day": "1 día", "3-days": "3 días", "1-week": "1 semana", "2-weeks": "2 semanas", "1-month": "1 mes" },
+  conversationsShown: { "5": "5", "8": "8", "12": "12", all: "Todas" },
   pageLibraries: {
     cdn: "Desde una CDN pública: archivos pequeños, pero necesitan conexión de red para dibujarse",
     inline: "Dentro del archivo: funciona sin conexión, pero Mermaid agrega unos 3 MB",

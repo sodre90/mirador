@@ -170,6 +170,7 @@ export const problems: Messages["problems"] = {
   unknownPluginUpdateMode: (value) => `Ajuste desconocido de actualizaciones de plugins: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Ajuste desconocido para conservar lienzos eliminados: ${value}`,
   unknownOlderAfter: (value) => `Ajuste desconocido para plegar las conversaciones antiguas: ${value}`,
+  unknownConversationsShown: (value) => `Ajuste desconocido para cuántas conversaciones muestra un espacio de trabajo: ${value}`,
   unknownWorkspaceColour: (value) => `Color de espacio de trabajo desconocido: ${value}`,
   notAMachineAddress: (address) => `“${address}” no es la dirección de una máquina.`,
   machineAlreadyAdded: (origin) => `${origin} ya está entre tus máquinas.`,

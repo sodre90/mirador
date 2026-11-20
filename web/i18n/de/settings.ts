@@ -86,6 +86,11 @@ export const settings: Messages["settings"] = {
     hint: "Unterhaltungen, in die so lange niemand geschrieben hat, werden in ihrem Arbeitsbereich unter Ältere eingeklappt, hier und auf deinen Telefonen. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben in der Liste.",
     after: "Unter Ältere einklappen nach",
   },
+  conversationsShown: {
+    title: "Lange Listen",
+    hint: "Jeder Arbeitsbereich listet seine zuletzt aktiven Unterhaltungen und klappt den Rest unter Weitere ein. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben in der Liste und zählen mit.",
+    atMost: "Unterhaltungen pro Arbeitsbereich",
+  },
   sleep: {
     title: "Ruhezustand",
     hint: "Vom Host gespeichert. Sein Computer kann trotzdem schlafen, wenn du den Deckel eines Laptops schließt, und sein Bildschirm schaltet sich trotzdem aus.",

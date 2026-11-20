@@ -1,5 +1,5 @@
 import type { EditorState } from "../shared/editors.ts";
-import { DEFAULT_OLDER_AFTER, type OlderAfter } from "../shared/model.ts";
+import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, type ConversationsShown, type OlderAfter } from "../shared/model.ts";
 import type { CanvasItem, CanvasUse, KeepAwake, KeepDeletedCanvas, ClaudeProgram, Conversation, HarnessId, JoinRequest, Machine, MachineSeen, MachineStatus, Person, Profile, PromptTemplate, StoredEvent, Workspace, WorkspaceGroup } from "../shared/model.ts";
 import { DEFAULT_MORNING_MINUTES, type ReminderMode } from "../shared/reminders.ts";
 import type { ReminderUndo } from "./reminders.ts";
@@ -87,6 +87,7 @@ export interface AppState {
   reminderMorning: number;
   conversationOrder: ConversationOrder;
   olderAfter: OlderAfter;
+  conversationsShown: ConversationsShown;
   heldTurnTimes: HeldTurnTimes | null;
   /** The reminder this page set last, until its toast goes. */
   reminderUndo: (ReminderUndo & { id: number }) | null;
@@ -202,6 +203,7 @@ export const initialState: AppState = {
   reminderMorning: DEFAULT_MORNING_MINUTES,
   conversationOrder: CUSTOM_ORDER,
   olderAfter: DEFAULT_OLDER_AFTER,
+  conversationsShown: DEFAULT_CONVERSATIONS_SHOWN,
   heldTurnTimes: null,
   reminderUndo: null,
   claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
@@ -369,6 +371,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         reminderMorning: message.reminderMorning ?? DEFAULT_MORNING_MINUTES,
         conversationOrder: message.conversationOrder ?? CUSTOM_ORDER,
         olderAfter: message.olderAfter,
+        conversationsShown: message.conversationsShown,
         claudeProgram: message.claudeProgram,
         scriptProgram: message.scriptProgram,
         editor: message.editor ?? UNKNOWN_EDITOR,
@@ -495,6 +498,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, conversationOrder: message.order };
     case "settings.older-after":
       return { ...state, olderAfter: message.olderAfter };
+    case "settings.conversations-shown":
+      return { ...state, conversationsShown: message.shown };
     case "settings.keep-deleted-canvas":
       return { ...state, keepDeletedCanvas: message.keep };
     case "settings.claude-program":

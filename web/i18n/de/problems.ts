@@ -171,6 +171,7 @@ export const problems: Messages["problems"] = {
   unknownPluginUpdateMode: (value) => `Unbekannte Einstellung für Plugin-Updates: ${value}`,
   unknownKeepDeletedCanvas: (value) => `Unbekannte Einstellung zum Aufbewahren gelöschter Canvas: ${value}`,
   unknownOlderAfter: (value) => `Unbekannte Einstellung zum Einklappen älterer Unterhaltungen: ${value}`,
+  unknownConversationsShown: (value) => `Unbekannte Einstellung dafür, wie viele Unterhaltungen ein Arbeitsbereich listet: ${value}`,
   unknownWorkspaceColour: (value) => `Unbekannte Arbeitsbereichsfarbe: ${value}`,
   notAMachineAddress: (address) => `„${address}“ ist keine Adresse eines Rechners.`,
   machineAlreadyAdded: (origin) => `${origin} gehört schon zu deinen Rechnern.`,

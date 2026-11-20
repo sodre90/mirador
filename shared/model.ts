@@ -265,6 +265,18 @@ export function olderAfterMs(olderAfter: OlderAfter): number | null {
   return days === null ? null : days * DAY_MS;
 }
 
+/** How many of a workspace's conversations the sidebar lists before it folds the rest under More; all folds none. */
+export const CONVERSATIONS_SHOWN_CHOICES = ["5", "8", "12", "all"] as const;
+
+export type ConversationsShown = (typeof CONVERSATIONS_SHOWN_CHOICES)[number];
+
+export const DEFAULT_CONVERSATIONS_SHOWN: ConversationsShown = "8";
+
+export const isConversationsShown = (value: unknown): value is ConversationsShown => CONVERSATIONS_SHOWN_CHOICES.includes(value as ConversationsShown);
+
+/** That many conversations; null when the list holds them all. */
+export const shownAtMost = (shown: ConversationsShown): number | null => (shown === "all" ? null : Number(shown));
+
 /** How long it is kept, in milliseconds; null to keep it until its session is continued. */
 export const keptForMs = (keep: KeepDeletedCanvas): number | null => ({ "7-days": 7 * DAY_MS, "30-days": 30 * DAY_MS, forever: null })[keep];
 

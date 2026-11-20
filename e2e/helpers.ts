@@ -155,6 +155,13 @@ export async function openSettings(page: Page, pageName = "Appearance") {
   return settings;
 }
 
+/** Settings › Conversations: how many conversations each workspace lists before it folds the rest under More. */
+export async function listConversationsPerWorkspace(page: Page, choice: "5" | "8" | "12" | "All") {
+  const settings = await openSettings(page, "Conversations");
+  await settings.locator("select.conversations-shown").selectOption({ label: choice });
+  await settings.getByRole("button", { name: "Close" }).click();
+}
+
 /** The Plugins dialog, from the sidebar's Plugins… */
 export async function openPlugins(page: Page) {
   await page.getByRole("button", { name: "Plugins…" }).click();

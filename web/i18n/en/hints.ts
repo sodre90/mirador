@@ -210,6 +210,8 @@ export const hints = {
   unfoldWorkspace: "Show this workspace's conversations again.",
   olderConversations: (after: string) =>
     `Conversations nobody wrote in for ${after}; Settings sets how long. Favourites, ones waiting for you, ones with a reminder and ones still at work stay in the list. Writing in one brings it back.`,
+  moreConversations: (atMost: string) =>
+    `More of this workspace's conversations: its list holds the ${atMost} most recently active; Settings sets how many. Favourites, ones waiting for you, ones with a reminder and ones still at work always stay in the list. Writing in one brings it back.`,
   workspaceGroupCount: "Workspaces in this group, those in the groups inside it too.",
   waitingInGroup: "Conversations waiting for you in this group's workspaces, those in the groups inside it too.",
   waitingAbove: "Conversations waiting for you, scrolled out of view above. Click to show the nearest.",

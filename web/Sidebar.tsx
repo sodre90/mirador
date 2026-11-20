@@ -7,6 +7,7 @@ import {
   type Workspace,
   type Pastel,
   type OlderAfter,
+  type ConversationsShown,
 } from "../shared/model.ts";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
@@ -25,7 +26,7 @@ import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
 import { launchLabel } from "./launch-label.ts";
-import { apartFromOlder, callerIdOf, conversationsIn, isUnderCaller, putAwayIn, showsInSidebar } from "./navigation.ts";
+import { callerIdOf, conversationsIn, isUnderCaller, putAwayIn, showsInSidebar, sidebarParts } from "./navigation.ts";
 import { isPending } from "../shared/reminders.ts";
 import { openReminderPicker, removeReminder } from "./reminders.ts";
 import { LaterGroup, ReminderChip } from "./ReminderViews.tsx";
@@ -459,6 +460,7 @@ function WorkspaceSection({
   workspace,
   conversations,
   olderAfter,
+  conversationsShown,
   draggable,
   putAway,
   profiles,
@@ -474,6 +476,7 @@ function WorkspaceSection({
   workspace: Workspace;
   conversations: Conversation[];
   olderAfter: OlderAfter;
+  conversationsShown: ConversationsShown;
   /** Only the custom order has places to drag a conversation to. */
   draggable: boolean;
   putAway: Conversation[];
@@ -499,15 +502,14 @@ function WorkspaceSection({
   const openedDelegations = useOpenedDelegations();
   const listedUnder = (caller: Conversation) => conversations.filter((conversation) => isUnderCaller(conversation, conversations) && callerIdOf(conversation) === caller.id);
   const delegatedTo = (caller: Conversation) => listedUnder(caller).filter(({ startedBy }) => startedBy);
-  const { current, older } = apartFromOlder(conversations, Date.now(), olderAfter);
+  const { listed, more, older } = sidebarParts(conversations, Date.now(), olderAfter, conversationsShown);
   const listedNow = (some: Conversation[]) => some.filter((conversation) => showsInSidebar(conversation, conversations, openedDelegations));
-  const shown = listedNow(current);
-  const olderCount = older.filter((conversation) => !isUnderCaller(conversation, conversations)).length;
-  const olderHoldsSelected = older.some(({ id }) => id === selectedConversationId);
-  const [olderOpen, setOlderOpen] = useState(olderHoldsSelected);
-  useEffect(() => {
-    if (olderHoldsSelected) setOlderOpen(true);
-  }, [olderHoldsSelected]);
+  const shown = listedNow(listed);
+  const rowsOf = (folded: Conversation[]) => folded.filter((conversation) => !isUnderCaller(conversation, conversations)).length;
+  const moreCount = rowsOf(more);
+  const olderCount = rowsOf(older);
+  const [moreOpen, setMoreOpen] = useOpenWhileHolding(more, selectedConversationId);
+  const [olderOpen, setOlderOpen] = useOpenWhileHolding(older, selectedConversationId);
   const conversationList = useRef<HTMLUListElement>(null);
   const conversationDrag = useDragToReorder(
     (conversationId, beforeConversationId) => connection.send({ type: "conversation.move", conversationId, beforeConversationId }),
@@ -637,6 +639,21 @@ function WorkspaceSection({
           )}
         </ul>
       )}
+      {!folded && moreCount > 0 && (
+        <div className="more-group" aria-label={`${workspace.name} · ${words.more(moreCount)}`}>
+          <button
+            type="button"
+            className="section-toggle"
+            aria-expanded={moreOpen}
+            data-hint={hints.moreConversations(t.labels.conversationsShown[conversationsShown])}
+            onClick={() => setMoreOpen(!moreOpen)}
+          >
+            <span className="section-label">{words.more(moreCount)}</span>
+            <span className="section-rule" />
+          </button>
+          {moreOpen && <ul>{listedNow(more).map((conversation) => conversationRow(conversation))}</ul>}
+        </div>
+      )}
       {!folded && putAway.length > 0 && (
         <LaterGroup workspace={workspace} putAway={putAway} selectedConversationId={selectedConversationId} dispatch={dispatch} onConversationMenu={onConversationMenu} />
       )}
@@ -663,6 +680,16 @@ function WorkspaceSection({
       )}
     </section>
   );
+}
+
+/** A fold under a workspace's list starts open when it holds the open conversation, and opens when that moves into it. */
+function useOpenWhileHolding(folded: Conversation[], selectedConversationId: string | null) {
+  const holdsSelected = folded.some(({ id }) => id === selectedConversationId);
+  const [open, setOpen] = useState(holdsSelected);
+  useEffect(() => {
+    if (holdsSelected) setOpen(true);
+  }, [holdsSelected]);
+  return [open, setOpen] as const;
 }
 
 /** A group's name being written: Enter or leaving the field saves, Esc cancels, and an empty name saves nothing. */
@@ -908,6 +935,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
       workspace={workspace}
       conversations={conversationsIn(state, workspace.id)}
       olderAfter={state.olderAfter}
+      conversationsShown={state.conversationsShown}
       draggable={state.conversationOrder.by === "custom"}
       putAway={putAwayIn(state, workspace.id)}
       profiles={state.profiles}

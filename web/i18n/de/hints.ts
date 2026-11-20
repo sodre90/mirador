@@ -230,6 +230,8 @@ export const hints: Messages["hints"] = {
   unfoldWorkspace: "Zeige die Unterhaltungen dieses Arbeitsbereichs wieder.",
   olderConversations: (after) =>
     `Unterhaltungen, in die so lange niemand geschrieben hat: ${after}; die Einstellungen legen fest, wie lange. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben in der Liste. Schreibst du in eine, kommt sie zurück.`,
+  moreConversations: (atMost) =>
+    `Weitere Unterhaltungen dieses Arbeitsbereichs: seine Liste zeigt die ${atMost} zuletzt aktiven; die Einstellungen legen fest, wie viele. Favoriten, solche, die auf dich warten, solche mit einer Erinnerung und solche, die noch arbeiten, bleiben immer in der Liste. Schreibst du in eine, kommt sie zurück.`,
   workspaceGroupCount: "Arbeitsbereiche in dieser Gruppe, auch die in den Gruppen darin.",
   waitingInGroup: "Unterhaltungen in den Arbeitsbereichen dieser Gruppe, die auf dich warten, auch in den Gruppen darin.",
   waitingAbove: "Unterhaltungen, die auf dich warten, oben aus dem Blick gescrollt. Klicke, um die nächstgelegene zu zeigen.",

@@ -926,6 +926,7 @@ export function App() {
           reminderMorning={state.reminderMorning}
           keepDeletedCanvas={state.keepDeletedCanvas}
           olderAfter={state.olderAfter}
+          conversationsShown={state.conversationsShown}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
           editor={state.editor}

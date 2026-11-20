@@ -166,6 +166,7 @@ export const problems: Messages["problems"] = {
   unknownPluginUpdateMode: (value) => `未知的插件更新设置：${value}`,
   unknownKeepDeletedCanvas: (value) => `未知的已删除画布保留设置：${value}`,
   unknownOlderAfter: (value) => `未知的较早对话折叠设置：${value}`,
+  unknownConversationsShown: (value) => `未知的工作区对话显示数量设置：${value}`,
   unknownWorkspaceColour: (value) => `未知的工作区颜色：${value}`,
   notAMachineAddress: (address) => `“${address}”不是机器的地址。`,
   machineAlreadyAdded: (origin) => `${origin} 已在你的机器中。`,

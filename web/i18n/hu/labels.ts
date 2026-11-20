@@ -27,6 +27,7 @@ export const labels: Messages["labels"] = {
   keepAwake: { never: "Soha", "while-working": "Amíg az ágensek dolgoznak", always: "Mindig" },
   keepDeletedCanvas: { "7-days": "7 nap", "30-days": "30 nap", forever: "Örökre" },
   olderAfter: { off: "Soha", "1-day": "1 nap", "3-days": "3 nap", "1-week": "1 hét", "2-weeks": "2 hét", "1-month": "1 hónap" },
+  conversationsShown: { "5": "5", "8": "8", "12": "12", all: "Mind" },
   pageLibraries: {
     cdn: "Nyilvános CDN-ről: kis fájlok, de a rajzoláshoz hálózat kell",
     inline: "A fájlba ágyazva: hálózat nélkül is működik, de a Mermaid kb. 3 MB-tal növeli",

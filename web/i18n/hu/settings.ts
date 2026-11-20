@@ -86,6 +86,11 @@ export const settings: Messages["settings"] = {
     hint: "Azok a beszélgetések, amelyekbe ennyi ideje senki sem írt, a munkaterületükön a Régebbiek alá kerülnek, itt és a telefonjaidon is. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak.",
     after: "Régebbiek alá kerül ennyi idő után",
   },
+  conversationsShown: {
+    title: "Hosszú listák",
+    hint: "Minden munkaterület a legutóbb aktív beszélgetéseit listázza, a többit a Továbbiak alá csukja. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak, és beleszámítanak ebbe a számba.",
+    atMost: "Beszélgetések munkaterületenként",
+  },
   sleep: {
     title: "Alvás",
     hint: "A host őrzi meg. A gépe így is elalszik, ha lecsukod a laptop fedelét, és a kijelzője is kikapcsol.",

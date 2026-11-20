@@ -2,7 +2,7 @@ import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { PUSH_RELAY_CHOICES, pushRelayChoiceOf, pushRelayHost, type PushRelayChoice, type PushRelayRequest, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
-import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ClaudeProgram, type Person, type Profile, type PromptTemplate } from "../shared/model.ts";
+import { CONVERSATIONS_SHOWN_CHOICES, OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ConversationsShown, type ClaudeProgram, type Person, type Profile, type PromptTemplate } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
@@ -107,6 +107,7 @@ export function SettingsDialog({
   reminderMorning,
   keepDeletedCanvas,
   olderAfter,
+  conversationsShown,
   claudeProgram,
   scriptProgram,
   editor,
@@ -132,6 +133,7 @@ export function SettingsDialog({
   reminderMorning: number;
   keepDeletedCanvas: KeepDeletedCanvas;
   olderAfter: OlderAfter;
+  conversationsShown: ConversationsShown;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
   editor: EditorState;
@@ -174,6 +176,7 @@ export function SettingsDialog({
         <EditorSettings editor={editor} />
         {isMac && <TypingSettings />}
         <ReminderSettings morning={reminderMorning} />
+        <ConversationsShownSettings shown={conversationsShown} />
         <OlderConversationSettings olderAfter={olderAfter} />
       </>
     ),
@@ -812,6 +815,27 @@ function ReminderSettings({ morning }: { morning: number }) {
         <label>
           {t.reminders.morning}
           <input type="time" className="reminder-morning" value={timeOfDay(morning)} onChange={(event) => event.target.value && setMorning(event.target.value)} />
+        </label>
+      </div>
+    </>
+  );
+}
+
+function ConversationsShownSettings({ shown }: { shown: ConversationsShown }) {
+  return (
+    <>
+      <h3>{text.conversationsShown.title}</h3>
+      <p className="hint">{text.conversationsShown.hint}</p>
+      <div className="sending-settings">
+        <label>
+          {text.conversationsShown.atMost}
+          <select className="conversations-shown" value={shown} onChange={(event) => connection.send({ type: "settings.set-conversations-shown", shown: event.target.value as ConversationsShown })}>
+            {CONVERSATIONS_SHOWN_CHOICES.map((choice) => (
+              <option key={choice} value={choice}>
+                {t.labels.conversationsShown[choice]}
+              </option>
+            ))}
+          </select>
         </label>
       </div>
     </>

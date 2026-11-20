@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, dragOnto, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, callCanvasTool, dragOnto, listConversationsPerWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -30,6 +30,7 @@ test("a chip at the sidebar's edge shows conversations waiting for you out of vi
   await page.setViewportSize({ width: 1280, height: 480 });
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
+  await listConversationsPerWorkspace(page, "All");
   for (let started = 0; started < 18; started++) await startConversation(page);
   const sidebar = page.locator("nav.sidebar");
   const list = page.locator(".sidebar-scroll");
