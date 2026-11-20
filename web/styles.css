@@ -9632,6 +9632,121 @@ button.link.more-rows {
   color: var(--accent);
 }
 
+/* Rooms */
+
+.sidebar > .workspace.rooms {
+  flex: none;
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 8px 10px 0;
+}
+
+.rooms > header {
+  padding-left: 8px;
+}
+
+.room-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+}
+
+.room-title {
+  margin: 0;
+  font-size: calc(14px * var(--font-scale));
+  font-weight: 600;
+}
+
+.room-agents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-agents .agent-chip::after {
+  content: none;
+}
+
+.room-dialog h2 {
+  margin: 0 0 12px;
+}
+
+.room-quote {
+  margin: 2px 0 4px;
+  display: flex;
+  gap: 6px;
+  padding: 4px 10px;
+  max-height: 4.5em;
+  overflow: hidden;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--accent-soft);
+  font-size: calc(12.5px * var(--font-scale));
+  white-space: pre-wrap;
+}
+
+.room-quote-author {
+  flex: none;
+  font-weight: 600;
+}
+
+.room-thread-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0 0 38px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-entry .room-thread-line {
+  padding-left: 0;
+}
+
+.room-thread-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal.room-dialog {
+  width: min(480px, 100%);
+}
+
+.room-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.room-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  border: none;
+  padding: 0;
+}
+
+.room-field .hint {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-agent-choice {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-delete {
+  margin-right: auto;
+}
+
 /* A bar this narrow keeps its room for the title; ⌥B, /btw and selected text still open a side chat. */
 @container (max-width: 480px) {
   .chat-header button.icon.side-chat-toggle {

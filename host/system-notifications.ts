@@ -10,10 +10,10 @@ export class SystemNotifications {
     private readonly pushes: PushNotifications | null = null,
   ) {}
 
-  /** Stays quiet while a focused page shows the conversation: you are already looking at it. */
+  /** Stays quiet while a focused page shows the conversation, as you are already looking at it, and for an agent's conversation in a room, which no page opens. */
   notify(conversationId: string, reason: NotificationReason) {
     const conversation = this.store.findConversation(conversationId);
-    if (!conversation || this.hub.isWatched(conversationId)) return;
+    if (!conversation || conversation.roomId || this.hub.isWatched(conversationId)) return;
     const workspace = this.store.findWorkspace(conversation.workspaceId)?.name ?? "";
     const notification = { ...systemNotification(conversation, workspace, reason), id: crypto.randomUUID() };
     this.hub.notify(notification);

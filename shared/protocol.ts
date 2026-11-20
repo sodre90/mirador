@@ -1,5 +1,6 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
+import type { Room, RoomMessage, RoomThread, RoomTimeline } from "./rooms.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -387,14 +388,26 @@ export type ClientMessage =
   | { type: "machine.show-again"; machine: MachineSeen }
   | { type: "machine.join"; requestId: string; machineId: string; code: string; authorityFingerprint: string | null }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
-  | { type: "search"; requestId: string; query: string };
+  | { type: "search"; requestId: string; query: string }
+  | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[] }
+  | { type: "room.rename"; roomId: string; name: string }
+  | { type: "room.set-agents"; roomId: string; profileIds: string[] }
+  /** Deletes the room with its agents' conversations in it. */
+  | { type: "room.delete"; roomId: string }
+  /** The host answers `room.timeline`, then sends the room's new messages as `room.message` until `room.unsubscribe`. */
+  | { type: "room.subscribe"; roomId: string }
+  | { type: "room.unsubscribe"; roomId: string }
+  /** `tags` are profile ids of the room's agents; a follow-up in a thread (`threadId`) tags none, as it goes to the thread's agent. */
+  | { type: "room.write"; roomId: string; text: string; tags: string[]; threadId: string | null };
 
 export type ServerMessage =
   | {
       type: "snapshot";
       workspaces: Workspace[];
       workspaceGroups: WorkspaceGroup[];
+      /** Agents' conversations in rooms too, which carry their `roomId`. */
       conversations: Conversation[];
+      rooms: Room[];
       profiles: Profile[];
       promptTemplates: PromptTemplate[];
       canvasUse: CanvasUse;
@@ -519,6 +532,12 @@ export type ServerMessage =
   | { type: "workspace-group.deleted"; groupId: string }
   | { type: "conversation.upserted"; conversation: Conversation }
   | { type: "conversation.deleted"; conversationId: string }
+  | { type: "room.created"; requestId: string; roomId: string }
+  | { type: "room.upserted"; room: Room }
+  | { type: "room.deleted"; roomId: string }
+  | ({ type: "room.timeline"; roomId: string } & RoomTimeline)
+  /** A new message of a subscribed room, with the threads it starts, one for each agent it tags. */
+  | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
   | {
       type: "conversation.history";
       conversationId: string;

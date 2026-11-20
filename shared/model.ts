@@ -386,6 +386,8 @@ export interface QueuedMessage {
   fromPlugin?: string;
   /** Waits for the running turn to end, then goes out as the next message, instead of joining the turn (⌥Enter). */
   afterTurn?: true;
+  /** Only on a room's message to one of its agents: the room message the agent is asked to answer. */
+  roomMessageId?: string;
 }
 
 export interface ContextUsage {
@@ -647,6 +649,8 @@ export interface Conversation {
   startedBy?: StartedBy;
   /** Only on a side chat: the conversation it asks about, beside which it shows and under which the sidebar lists it. */
   sideChatOf?: string;
+  /** Only on an agent's conversation in a room, which no list of conversations shows: the room. */
+  roomId?: string;
   /** What the user chose in its top bar for plugins' profile settings, by plugin and setting id; a setting not here follows the profile. */
   pluginSettings?: Record<string, Record<string, string>>;
   /** When the user wants to come back to it, put away or kept in the list until then. */
@@ -702,6 +706,8 @@ export type ConversationEvent =
       fromScript?: true;
       fromMirador?: true;
       fromPlugin?: string;
+      /** Only on a room's message to one of its agents: the room message the agent is asked to answer. */
+      roomMessageId?: string;
       /** The workspace's files as they were when this turn started, so the turn can be undone. Older logs only: newer ones say it in files-kept. */
       checkpoint?: string;
     }

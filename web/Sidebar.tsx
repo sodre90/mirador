@@ -12,6 +12,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
+import { RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
@@ -945,6 +946,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
         <span>{words.paletteBar}</span>
         <kbd>{shortcutKeys().palette}</kbd>
       </button>
+      <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} dispatch={dispatch} />
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">

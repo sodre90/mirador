@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk/unstable";
 import { isSideChatBrief } from "../shared/side-chats.ts";
+import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
 
 /**
  * An agent that takes every prompt and never finishes it, ignoring `session/cancel`, the way a model request against a
@@ -47,6 +48,8 @@ import { isSideChatBrief } from "../shared/side-chats.ts";
  * after it the task completes on its own too, with ` STUCK` a Stop fails on it with an error, and with ` LONG` it
  * completes with a many-line command as its description. The
  * `_session/async_task/stop` request stops one and says so, logging it.
+ * A room's message reaching it is answered with a look through the room, then the words after the last `SAY ` in the
+ * last line, the message it is asked.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
  * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
@@ -403,6 +406,12 @@ async function replyAroundATool(client: acp.AgentContext, sessionId: string, tex
 }
 
 /** Tool calls that run and finish at once, each with the input given, as Claude Code sends `{}` for a tool that takes no parameters. */
+async function answerInRoom(client: acp.AgentContext, sessionId: string, prompt: string) {
+  const asked = prompt.trimEnd().split("\n").at(-1)!;
+  await runTools(client, sessionId, [{ title: "Read the room", kind: "read", rawInput: {} }]);
+  return sayText(client, sessionId, asked.includes("SAY ") ? asked.slice(asked.lastIndexOf("SAY ") + "SAY ".length) : "Noted.");
+}
+
 async function runTools(client: acp.AgentContext, sessionId: string, tools: { title: string; kind: acp.ToolKind; rawInput: unknown }[]) {
   const notify = (update: acp.SessionUpdate) => client.notify(acp.methods.client.session.update, { sessionId, update });
   for (const { title, kind, rawInput } of tools) {
@@ -590,6 +599,7 @@ acp
     if (startsWith(prompt, "TOOL UNTIL ")) return toolUntil(ctx.client, ctx.params.sessionId, text.slice("TOOL UNTIL ".length));
     if (startsWith(prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
     if (startsWith(prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
+    if (text.includes(ROOM_MESSAGES_HEADING)) return answerInRoom(ctx.client, ctx.params.sessionId, text);
     if (startsWith(prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
     if (startsWith(prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
     return startsWith(prompt, "WEDGE") || startsWith(prompt, "CRASH") ? new Promise(() => {}) : { stopReason: "end_turn" as const };

@@ -16,5 +16,6 @@ import { desktop } from "./desktop.ts";
 import { problems } from "./problems.ts";
 import { reminders } from "./reminders.ts";
 import { sideChat } from "./side-chat.ts";
+import { rooms } from "./rooms.ts";
 
-export const es: Messages = { hints, waitingHints, statusHints, labels, settings, chat, revert, dictation, shell, canvas, terminals, devices, voice, profiles, plugins, desktop, problems, reminders, sideChat };
+export const es: Messages = { hints, waitingHints, statusHints, labels, settings, chat, revert, dictation, shell, canvas, terminals, devices, voice, profiles, plugins, desktop, problems, reminders, sideChat, rooms };

@@ -52,6 +52,7 @@ export class ConversationSearch {
     this.forgetLater();
     return this.store
       .listConversations()
+      .filter(({ roomId }) => !roomId)
       .map(({ id }) => this.matchesIn(id, query))
       .filter((found) => found.matches > 0)
       .toSorted((a, b) => b.hits[0]!.at - a.hits[0]!.at);

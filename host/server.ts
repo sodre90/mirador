@@ -65,6 +65,7 @@ import { deviceName, type DeviceService } from "./devices.ts";
 import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
+import { RoomService } from "./rooms.ts";
 import { machineAddress } from "../shared/machines.ts";
 import { personName } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
@@ -225,6 +226,12 @@ export function startServer(services: HostServices) {
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
+  const rooms = new RoomService(store, hub, {
+    startInRoom: (roomId, workspaceId, launch, title) => conversations.startInRoom(roomId, workspaceId, launch, title),
+    send: (conversationId, text, imageIds, options) => conversations.send(conversationId, text, imageIds, options),
+    delete: (conversationId) => deleteConversation(conversationId),
+  });
+  conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
   const { network } = config.reachability;
   const localHosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
   const publicHost = config.publicOrigin ? [new URL(config.publicOrigin).host] : [];
@@ -946,6 +953,10 @@ export function startServer(services: HostServices) {
   }
 
   function deleteWorkspace(workspaceId: string, { keepsUncommittedWork = false } = {}) {
+    rooms
+      .list()
+      .filter((room) => room.workspaceId === workspaceId)
+      .forEach(({ id }) => rooms.delete(id));
     conversations
       .list()
       .filter((conversation) => conversation.workspaceId === workspaceId)
@@ -1780,6 +1791,25 @@ export function startServer(services: HostServices) {
       }
       case "search":
         return reply({ type: "search.results", requestId: message.requestId, conversations: search.find(message.query) });
+      case "room.create":
+        return reply({ type: "room.created", requestId: message.requestId, roomId: rooms.create(message.name, message.workspaceId, message.profileIds).id });
+      case "room.rename":
+        return rooms.rename(message.roomId, message.name);
+      case "room.set-agents":
+        return rooms.setAgents(message.roomId, message.profileIds);
+      case "room.delete":
+        return rooms.delete(message.roomId);
+      case "room.subscribe": {
+        const timeline = rooms.timeline(message.roomId);
+        socket.data.roomSubscriptions.add(message.roomId);
+        return reply({ type: "room.timeline", roomId: message.roomId, ...timeline });
+      }
+      case "room.unsubscribe":
+        socket.data.roomSubscriptions.delete(message.roomId);
+        return;
+      case "room.write":
+        rooms.write(message.roomId, socket.data.personId, message.text, message.tags, message.threadId);
+        return;
       default:
         return message satisfies never;
     }
@@ -1829,6 +1859,7 @@ export function startServer(services: HostServices) {
       workspaces: store.listWorkspaces(),
       workspaceGroups: store.listWorkspaceGroups(),
       conversations: conversations.list(),
+      rooms: rooms.list(),
       profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),

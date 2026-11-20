@@ -16,6 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
+import type { Room, RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -45,6 +46,8 @@ export type Overlay =
   | { kind: "worktrees"; workspaceId: string }
   | { kind: "add-workspace" }
   | { kind: "add-workspace-group"; parentId: string | null }
+  /** A room's settings, or with no `roomId`, a new room's. */
+  | { kind: "room"; roomId: string | null }
   /** `rewind` takes the conversation and the files back; without it only the files are put back. */
   | { kind: "revert"; conversationId: string; turn: Turn; rewind?: boolean }
   | { kind: "settings"; page?: SettingsPage };
@@ -66,6 +69,15 @@ export interface AppState {
   workspaces: Workspace[];
   workspaceGroups: WorkspaceGroup[];
   conversations: Conversation[];
+  rooms: Room[];
+  /** The agents' conversations in rooms, which no list of conversations shows. */
+  roomConversations: Conversation[];
+  /** The room shown in the main pane instead of a conversation. */
+  selectedRoomId: string | null;
+  /** The shown room's messages and threads, once the host sent them. */
+  roomTimeline: (RoomTimeline & { roomId: string }) | null;
+  /** The agents' conversations whose threads are shown beside their room, subscribed as the kept conversations are. */
+  threadConversations: OpenConversation[];
   profiles: Profile[];
   promptTemplates: PromptTemplate[];
   canvasUse: CanvasUse;
@@ -160,6 +172,8 @@ export type AppAction =
   | { type: "hold-turn-times"; held: boolean }
   | { type: "leave-conversation"; conversationId: string }
   | { type: "keep-side-chats"; conversationIds: string[] }
+  | { type: "select-room"; roomId: string }
+  | { type: "keep-thread-conversations"; conversationIds: string[] }
   | { type: "awaiting-conversation"; workspaceId: string }
   | { type: "open-overlay"; overlay: Overlay }
   | { type: "close-overlay" }
@@ -175,6 +189,11 @@ export const initialState: AppState = {
   workspaces: [],
   workspaceGroups: [],
   conversations: [],
+  rooms: [],
+  roomConversations: [],
+  selectedRoomId: null,
+  roomTimeline: null,
+  threadConversations: [],
   profiles: [],
   promptTemplates: [],
   canvasUse: "often",
@@ -236,8 +255,8 @@ export const initialState: AppState = {
   conversationsToDelete: null,
 };
 
-export function initialStateFor(conversationId: string | null): AppState {
-  return select(initialState, conversationId);
+export function initialStateFor(conversationId: string | null, roomId: string | null = null): AppState {
+  return roomId ? selectRoom(initialState, roomId) : select(initialState, conversationId);
 }
 
 function upsert<T extends { id: string }>(items: T[], item: T) {
@@ -269,7 +288,24 @@ function select(state: AppState, conversationId: string | null): AppState {
   if (conversationId === null) return { ...state, selectedConversationId: null };
   const opened = state.kept.find((open) => open.conversationId === conversationId) ?? state.sideChats.find((open) => open.conversationId === conversationId) ?? notLoaded(conversationId);
   const others = state.kept.filter((open) => open !== opened);
-  return { ...state, selectedConversationId: conversationId, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
+  return { ...leavingRoom(state), selectedConversationId: conversationId, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
+}
+
+function selectRoom(state: AppState, roomId: string): AppState {
+  if (state.selectedRoomId === roomId) return { ...state, selectedConversationId: null };
+  return { ...state, selectedConversationId: null, selectedRoomId: roomId, roomTimeline: null, threadConversations: [] };
+}
+
+const leavingRoom = (state: AppState): AppState => (state.selectedRoomId === null ? state : { ...state, selectedRoomId: null, roomTimeline: null, threadConversations: [] });
+
+function keepingThreadConversations(state: AppState, conversationIds: string[]): AppState {
+  if (conversationIds.join(" ") === state.threadConversations.map(({ conversationId }) => conversationId).join(" ")) return state;
+  const alreadyOpen = (conversationId: string) => state.threadConversations.find((open) => open.conversationId === conversationId);
+  return { ...state, threadConversations: conversationIds.map((conversationId) => alreadyOpen(conversationId) ?? notLoaded(conversationId)) };
+}
+
+function withRoomTimeline(state: AppState, roomId: string, change: (timeline: RoomTimeline) => RoomTimeline): AppState {
+  return state.roomTimeline?.roomId === roomId ? { ...state, roomTimeline: { roomId, ...change(state.roomTimeline) } } : state;
 }
 
 const notLoaded = (conversationId: string): OpenConversation => ({ conversationId, loaded: false, events: [], hasEarlier: false, canvas: [] });
@@ -279,7 +315,8 @@ function withOpen(state: AppState, conversationId: string, change: (open: OpenCo
     opened.some((open) => open.conversationId === conversationId) ? opened.map((open) => (open.conversationId === conversationId ? change(open) : open)) : opened;
   const kept = changed(state.kept);
   const sideChats = changed(state.sideChats);
-  return kept === state.kept && sideChats === state.sideChats ? state : { ...state, kept, sideChats };
+  const threadConversations = changed(state.threadConversations);
+  return kept === state.kept && sideChats === state.sideChats && threadConversations === state.threadConversations ? state : { ...state, kept, sideChats, threadConversations };
 }
 
 /** Keeps the history of these side chats, and lets go of the rest; a conversation already kept brings the history it has. */
@@ -314,7 +351,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         ...state,
         workspaces: [...message.workspaces].sort(inSidebarOrder),
         workspaceGroups: [...message.workspaceGroups].sort(inSidebarOrder),
-        conversations: message.conversations,
+        conversations: message.conversations.filter(({ roomId }) => !roomId),
+        roomConversations: message.conversations.filter(({ roomId }) => roomId),
+        rooms: message.rooms,
         profiles: message.profiles,
         promptTemplates: message.promptTemplates,
         canvasUse: message.canvasUse,
@@ -355,8 +394,11 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         workspaceTabs: message.workspaceTabs ?? {},
         kept: state.kept.filter(({ conversationId }) => exists(conversationId)),
         sideChats: state.sideChats.filter(({ conversationId }) => exists(conversationId)),
+        threadConversations: state.threadConversations.filter(({ conversationId }) => exists(conversationId)),
       };
-      return exists(state.selectedConversationId) ? next : select(next, null);
+      const roomStays = message.rooms.some(({ id }) => id === state.selectedRoomId);
+      const withRoom = roomStays ? next : leavingRoom(next);
+      return exists(state.selectedConversationId) ? withRoom : select(withRoom, null);
     }
     case "plugin-tab.state": {
       const { workspaceId, plugin, seq, shown, state: tabState, problem } = message;
@@ -382,6 +424,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "workspace-group.deleted":
       return { ...state, workspaceGroups: state.workspaceGroups.filter(({ id }) => id !== message.groupId) };
     case "conversation.upserted": {
+      if (message.conversation.roomId) return { ...state, roomConversations: upsert(state.roomConversations, message.conversation) };
       const isNew = !state.conversations.some(({ id }) => id === message.conversation.id);
       const next = { ...state, conversations: upsert(state.conversations, message.conversation) };
       if (isNew && state.awaitingConversationIn === message.conversation.workspaceId) {
@@ -393,8 +436,10 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       const next = {
         ...state,
         conversations: state.conversations.filter(({ id }) => id !== message.conversationId),
+        roomConversations: state.roomConversations.filter(({ id }) => id !== message.conversationId),
         kept: state.kept.filter(({ conversationId }) => conversationId !== message.conversationId),
         sideChats: state.sideChats.filter(({ conversationId }) => conversationId !== message.conversationId),
+        threadConversations: state.threadConversations.filter(({ conversationId }) => conversationId !== message.conversationId),
       };
       return state.selectedConversationId === message.conversationId ? select(next, null) : next;
     }
@@ -561,6 +606,20 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, newerVersion: message.newerVersion };
     case "plugin-updates.found":
       return { ...state, pluginUpdates: message.pluginUpdates };
+    case "room.created":
+      return state;
+    case "room.upserted":
+      return { ...state, rooms: upsert(state.rooms, message.room) };
+    case "room.deleted": {
+      const next = { ...state, rooms: state.rooms.filter(({ id }) => id !== message.roomId) };
+      return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
+    }
+    case "room.timeline":
+      return state.selectedRoomId === message.roomId ? { ...state, roomTimeline: { roomId: message.roomId, messages: message.messages, threads: message.threads } } : state;
+    case "room.message":
+      return withRoomTimeline(state, message.message.roomId, ({ messages, threads }) =>
+        messages.some(({ id }) => id === message.message.id) ? { messages, threads } : { messages: [...messages, message.message], threads: [...threads, ...message.threads] },
+      );
   }
 }
 
@@ -576,6 +635,10 @@ export function reducer(state: AppState, action: AppAction): AppState {
       return action.conversationId === state.selectedConversationId ? select(state, conversationToReturnTo(state, action.conversationId)) : state;
     case "keep-side-chats":
       return keepingSideChats(state, action.conversationIds);
+    case "select-room":
+      return selectRoom(state, action.roomId);
+    case "keep-thread-conversations":
+      return keepingThreadConversations(state, action.conversationIds);
     case "awaiting-conversation":
       return { ...state, awaitingConversationIn: action.workspaceId };
     case "open-overlay":

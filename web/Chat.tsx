@@ -342,7 +342,7 @@ const CanvasShowsEdits = createContext(false);
 /** Whether the agent is at work in the conversation, so a failed turn cannot be tried again yet. */
 const ConversationBusy = createContext(false);
 /** Who writes the messages, and the picture the owner set, or null: their initials or the person icon stand in. */
-const MessageWriters = createContext<{ people: Person[]; ownerId: string | null; ownerPicture: string | null }>({ people: [], ownerId: null, ownerPicture: null });
+export const MessageWriters = createContext<{ people: Person[]; ownerId: string | null; ownerPicture: string | null }>({ people: [], ownerId: null, ownerPicture: null });
 
 function usePerson(personId: string | null) {
   const { people } = useContext(MessageWriters);
@@ -709,7 +709,7 @@ function PermissionCard({ block, conversationId }: { block: PermissionBlock; con
 }
 
 const agentNames: Record<HarnessId, string> = { claude: "Claude", opencode: "opencode", pi: "pi", codex: "Codex", copilot: "Copilot", antigravity: "Antigravity" };
-const agentMarks: Record<HarnessId, string> = { claude: "✳", opencode: "◆", pi: "π", codex: "◎", copilot: "◈", antigravity: "▲" };
+export const agentMarks: Record<HarnessId, string> = { claude: "✳", opencode: "◆", pi: "π", codex: "◎", copilot: "◈", antigravity: "▲" };
 
 function PersonIcon() {
   return (
@@ -758,7 +758,7 @@ function PluginIcon() {
 }
 
 /** The owner's picture where they set one; else the initials of the person's name on their colour, or the person icon while they have no name. */
-function PersonAvatar({ personId }: { personId: string | null }) {
+export function PersonAvatar({ personId }: { personId: string | null }) {
   const { ownerId, ownerPicture } = useContext(MessageWriters);
   const person = usePerson(personId);
   const showsPicture = ownerPicture !== null && (personId === null || personId === ownerId);
@@ -770,7 +770,7 @@ function PersonAvatar({ personId }: { personId: string | null }) {
   );
 }
 
-function PersonName({ personId }: { personId: string | null }) {
+export function PersonName({ personId }: { personId: string | null }) {
   return <span className="person-name">{usePerson(personId)?.name || words.author.you}</span>;
 }
 
@@ -804,7 +804,7 @@ function Avatar({ author, harness }: { author: Author; harness: HarnessId }) {
   );
 }
 
-function Timestamp({ at }: { at: number }) {
+export function Timestamp({ at }: { at: number }) {
   return (
     <time className="timestamp" dateTime={new Date(at).toISOString()} title={formatFullTime(at)}>
       {formatClockTime(at)}
@@ -861,6 +861,44 @@ const TimestampedEntry = memo(function TimestampedEntry({
     </div>
   );
 });
+
+/**
+ * Events of a conversation drawn as its timeline draws them, with its approvals, but without its bars or message box: a
+ * room's thread shows its agent's work so. Its turns cannot be undone from there.
+ */
+export function TimelineOfEvents({ conversation, events }: { conversation: Conversation; events: StoredEvent[] }) {
+  const built = useTimeline(events);
+  const timeline = useMemo(() => built.map((block) => (block.kind === "user" ? { ...block, turnSeq: undefined } : block)), [built]);
+  const timelineNow = useRef(timeline);
+  timelineNow.current = timeline;
+  const awaitingPermission = useMemo(() => toolCallsAwaitingPermission(timeline), [timeline]);
+  const busy = isBusy(conversation);
+  const subagentStates = useMemo(() => new Map(subagentsIn(timeline).map((block) => [block.toolCallId, subagentState(block, busy)])), [timeline, busy]);
+  const runningSteps = useMemo(() => (busy ? stepsRunning(timeline) : new Set<string>()), [timeline, busy]);
+  const endsOfReplies = useMemo(() => replyEnds(timeline), [timeline]);
+  return (
+    <ToolCallsAwaitingPermission.Provider value={awaitingPermission}>
+      <SubagentStates.Provider value={subagentStates}>
+        <StepsAtWork.Provider value={runningSteps}>
+          <ConversationBusy.Provider value={busy}>
+            <TimelineNow.Provider value={timelineNow}>
+              {timeline.map((block, index) => (
+                <TimestampedEntry
+                  key={block.key}
+                  block={block}
+                  startsGroup={index === 0 || startsAuthorGroup(timeline, index)}
+                  harness={conversation.harness}
+                  conversationId={conversation.id}
+                  endsReply={endsOfReplies.has(block.key)}
+                />
+              ))}
+            </TimelineNow.Provider>
+          </ConversationBusy.Provider>
+        </StepsAtWork.Provider>
+      </SubagentStates.Provider>
+    </ToolCallsAwaitingPermission.Provider>
+  );
+}
 
 /** The entries of a long timeline are memoized, so the fork reaches each message as context; null until there is a session to fork. */
 const ForkThroughTurn = createContext<((throughTurnSeq: number) => void) | null>(null);

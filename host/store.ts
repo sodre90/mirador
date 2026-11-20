@@ -35,6 +35,7 @@ import type { PushRegistration, PushRelaySetting } from "../shared/push.ts";
 import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checklists.ts";
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
+import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomThread } from "../shared/rooms.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
 
@@ -129,6 +130,16 @@ const schema = `
     PRIMARY KEY (folder_id, app, key));
   CREATE TABLE IF NOT EXISTS plugin_settings (plugin TEXT NOT NULL, id TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (plugin, id));
   CREATE TABLE IF NOT EXISTS canvas_plugin_storage (plugin TEXT NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL, PRIMARY KEY (plugin, key));
+  CREATE TABLE IF NOT EXISTS rooms (
+    id TEXT PRIMARY KEY, name TEXT NOT NULL, workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE, created_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_agents (
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, profile_id TEXT NOT NULL,
+    conversation_id TEXT REFERENCES conversations(id) ON DELETE SET NULL, seen_through INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (room_id, profile_id));
+  CREATE TABLE IF NOT EXISTS room_messages (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, seq INTEGER NOT NULL, at INTEGER NOT NULL,
+    person_id TEXT, profile_id TEXT, text TEXT NOT NULL, tags TEXT NOT NULL, thread_id TEXT, answers TEXT, ended TEXT, UNIQUE (room_id, seq));
+  CREATE TABLE IF NOT EXISTS room_threads (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, message_id TEXT NOT NULL, profile_id TEXT NOT NULL);
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -190,6 +201,7 @@ const addedColumns = [
   { table: "workspaces", column: "worktree_setup", definition: "TEXT NOT NULL DEFAULT ''" },
   { table: "conversations", column: "worktree", definition: "TEXT" },
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
+  { table: "conversations", column: "room_id", definition: "TEXT" },
   { table: "conversations", column: "agent_commands", definition: "TEXT" },
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
   { table: "workspace_groups", column: "parent_id", definition: "TEXT" },
@@ -265,6 +277,7 @@ type ConversationRow = {
   delegated_reply: string | null;
   delegation_dismissed: number;
   side_chat_of: string | null;
+  room_id: string | null;
   plugin_settings: string | null;
   reminder: string | null;
   favourite: number;
@@ -361,6 +374,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...(row.worktree && { worktree: JSON.parse(row.worktree) as ConversationWorktree }),
   ...startedByOf(row),
   ...(row.side_chat_of && { sideChatOf: row.side_chat_of }),
+  ...(row.room_id && { roomId: row.room_id }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
   ...(row.favourite === 1 && { favourite: true }),
@@ -369,6 +383,49 @@ const toConversation = (row: ConversationRow): Conversation => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+interface RoomRow {
+  id: string;
+  name: string;
+  workspace_id: string;
+  created_at: number;
+}
+
+interface RoomMessageRow {
+  id: string;
+  room_id: string;
+  seq: number;
+  at: number;
+  person_id: string | null;
+  profile_id: string | null;
+  text: string;
+  tags: string;
+  thread_id: string | null;
+  answers: string | null;
+  ended: RoomAnswerEnd | null;
+}
+
+interface RoomThreadRow {
+  id: string;
+  room_id: string;
+  message_id: string;
+  profile_id: string;
+}
+
+const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
+  id: row.id,
+  roomId: row.room_id,
+  seq: row.seq,
+  at: row.at,
+  author: row.profile_id !== null ? { profileId: row.profile_id } : { personId: row.person_id! },
+  text: row.text,
+  tags: JSON.parse(row.tags) as string[],
+  threadId: row.thread_id,
+  ...(row.answers !== null && { answers: row.answers }),
+  ...(row.ended !== null && { ended: row.ended }),
+});
+
+const toRoomThread = ({ id, room_id, message_id, profile_id }: RoomThreadRow): RoomThread => ({ id, roomId: room_id, messageId: message_id, profileId: profile_id });
 
 export class Store {
   private readonly db: Database;
@@ -779,8 +836,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, room_id, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -796,6 +853,7 @@ export class Store {
         position,
         conversation.worktree ? JSON.stringify(conversation.worktree) : null,
         conversation.sideChatOf ?? null,
+        conversation.roomId ?? null,
         conversation.createdAt,
         conversation.updatedAt,
       );
@@ -933,6 +991,92 @@ export class Store {
   deleteConversation(id: string) {
     this.db.query("DELETE FROM conversations WHERE id = ?").run(id);
     this.nextSeq.delete(id);
+  }
+
+  insertRoom(room: Room) {
+    this.db.query("INSERT INTO rooms (id, name, workspace_id, created_at) VALUES (?, ?, ?, ?)").run(room.id, room.name, room.workspaceId, room.createdAt);
+    this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
+  }
+
+  listRooms(): Room[] {
+    const rows = this.db.query("SELECT * FROM rooms ORDER BY created_at, rowid").all() as RoomRow[];
+    return rows.map((row) => this.toRoom(row));
+  }
+
+  findRoom(id: string): Room | undefined {
+    const row = this.db.query("SELECT * FROM rooms WHERE id = ?").get(id) as RoomRow | null;
+    return row ? this.toRoom(row) : undefined;
+  }
+
+  private toRoom({ id, name, workspace_id, created_at }: RoomRow): Room {
+    const agents = this.db.query("SELECT profile_id, conversation_id FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as { profile_id: string; conversation_id: string | null }[];
+    return { id, name, workspaceId: workspace_id, agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })), createdAt: created_at };
+  }
+
+  renameRoom(id: string, name: string) {
+    this.db.query("UPDATE rooms SET name = ? WHERE id = ?").run(name, id);
+  }
+
+  /** The agents stay in the order they joined; those that stay keep their conversations and what they have read. */
+  setRoomAgents(roomId: string, profileIds: string[]) {
+    const kept = JSON.stringify(profileIds);
+    this.db.query("DELETE FROM room_agents WHERE room_id = ? AND profile_id NOT IN (SELECT value FROM json_each(?))").run(roomId, kept);
+    profileIds.forEach((profileId) => this.db.query("INSERT INTO room_agents (room_id, profile_id) VALUES (?, ?) ON CONFLICT DO NOTHING").run(roomId, profileId));
+  }
+
+  deleteRoom(id: string) {
+    this.db.query("DELETE FROM rooms WHERE id = ?").run(id);
+  }
+
+  setRoomAgentConversation(roomId: string, profileId: string, conversationId: string) {
+    this.db.query("UPDATE room_agents SET conversation_id = ? WHERE room_id = ? AND profile_id = ?").run(conversationId, roomId, profileId);
+  }
+
+  /** The seq of the last room message the agent was sent; 0 before its first. */
+  roomSeenThrough(roomId: string, profileId: string): number {
+    const row = this.db.query("SELECT seen_through FROM room_agents WHERE room_id = ? AND profile_id = ?").get(roomId, profileId) as { seen_through: number } | null;
+    return row?.seen_through ?? 0;
+  }
+
+  markRoomSeen(roomId: string, profileId: string, seq: number) {
+    this.db.query("UPDATE room_agents SET seen_through = MAX(seen_through, ?) WHERE room_id = ? AND profile_id = ?").run(seq, roomId, profileId);
+  }
+
+  appendRoomMessage(message: Omit<RoomMessage, "seq">): RoomMessage {
+    const { next: seq } = this.db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM room_messages WHERE room_id = ?").get(message.roomId) as { next: number };
+    const author = writtenByAgent(message.author) ? { personId: null, profileId: message.author.profileId } : { personId: message.author.personId, profileId: null };
+    this.db
+      .query("INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, text, tags, thread_id, answers, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(message.id, message.roomId, seq, message.at, author.personId, author.profileId, message.text, JSON.stringify(message.tags), message.threadId, message.answers ?? null, message.ended ?? null);
+    return { ...message, seq };
+  }
+
+  listRoomMessages(roomId: string): RoomMessage[] {
+    return (this.db.query("SELECT * FROM room_messages WHERE room_id = ? ORDER BY seq").all(roomId) as RoomMessageRow[]).map(toRoomMessage);
+  }
+
+  /** The room's messages after the one at `afterSeq`, through the one at `throughSeq`. */
+  listRoomMessagesBetween(roomId: string, afterSeq: number, throughSeq: number): RoomMessage[] {
+    const rows = this.db.query("SELECT * FROM room_messages WHERE room_id = ? AND seq > ? AND seq <= ? ORDER BY seq").all(roomId, afterSeq, throughSeq) as RoomMessageRow[];
+    return rows.map(toRoomMessage);
+  }
+
+  findRoomMessage(id: string): RoomMessage | undefined {
+    const row = this.db.query("SELECT * FROM room_messages WHERE id = ?").get(id) as RoomMessageRow | null;
+    return row ? toRoomMessage(row) : undefined;
+  }
+
+  insertRoomThread(thread: RoomThread) {
+    this.db.query("INSERT INTO room_threads (id, room_id, message_id, profile_id) VALUES (?, ?, ?, ?)").run(thread.id, thread.roomId, thread.messageId, thread.profileId);
+  }
+
+  listRoomThreads(roomId: string): RoomThread[] {
+    return (this.db.query("SELECT * FROM room_threads WHERE room_id = ? ORDER BY rowid").all(roomId) as RoomThreadRow[]).map(toRoomThread);
+  }
+
+  findRoomThread(id: string): RoomThread | undefined {
+    const row = this.db.query("SELECT * FROM room_threads WHERE id = ?").get(id) as RoomThreadRow | null;
+    return row ? toRoomThread(row) : undefined;
   }
 
   listProfiles(): Profile[] {

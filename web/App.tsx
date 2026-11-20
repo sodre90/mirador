@@ -61,10 +61,13 @@ import { ReminderToast } from "./ReminderViews.tsx";
 import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
+import { RoomView } from "./Room.tsx";
+import { RoomDialog } from "./RoomsSidebar.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
+const roomFromHash = () => location.hash.match(/^#\/r\/(.+)$/)?.[1] ?? null;
 
 export function useConnectionStatus() {
   const [status, setStatus] = useState<ConnectionStatus>(connection.status);
@@ -351,6 +354,15 @@ const RedrawnOnlyWhenShown = memo(
   (_, next) => !next.shown,
 );
 
+/** Subscribes to the room the page shows, and to it again after a reconnect. */
+function useRoomSubscribed(status: ConnectionStatus, roomId: string | null) {
+  useEffect(() => {
+    if (status !== "open" || roomId === null) return;
+    connection.send({ type: "room.subscribe", roomId });
+    return () => void connection.send({ type: "room.unsubscribe", roomId });
+  }, [status, roomId]);
+}
+
 /** Subscribes to each conversation the page starts keeping, and to all of them again after a reconnect; unsubscribes from those it lets go. */
 function useKeptConversationsSubscribed(status: ConnectionStatus, kept: OpenConversation[]) {
   const subscribed = useRef(new Set<string>());
@@ -367,13 +379,13 @@ function useKeptConversationsSubscribed(status: ConnectionStatus, kept: OpenConv
 }
 
 export function App() {
-  const [state, dispatchToState] = useReducer(reducer, conversationFromHash(), initialStateFor);
+  const [state, dispatchToState] = useReducer(reducer, null, () => initialStateFor(conversationFromHash(), roomFromHash()));
   const machines = useShownMachine(state.machines, state.hostRunId !== null);
   const conversationsNow = useRef(state.conversations);
   conversationsNow.current = state.conversations;
   /** Whatever selects a conversation here, from the palette to a notification, brings this computer's own view back. */
   const dispatch = useCallback((action: AppAction) => {
-    if (action.type === "select") machines.show(null);
+    if (action.type === "select" || action.type === "select-room") machines.show(null);
     dispatchToState(selectingBeside(action, conversationsNow.current));
   }, []);
   const showMachine = (machine: Machine) => (showsMachinesHere() ? machines.show(machine.id) : openMachine(machine.origin));
@@ -535,7 +547,8 @@ export function App() {
   useEffect(() => {
     if (state.hostRunId !== null) forgetSideChatsOfDeleted(state.conversations);
   }, [state.hostRunId, conversationIds]);
-  useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats]);
+  useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats, ...state.threadConversations]);
+  useRoomSubscribed(status, state.selectedRoomId);
 
   const openConversation = useCallback(
     (conversationId: string, machineId?: string) => {
@@ -558,7 +571,9 @@ export function App() {
   useEffect(() => {
     const selectFromHash = () => {
       const conversationId = conversationFromHash();
+      const roomId = roomFromHash();
       if (conversationId) dispatch({ type: "select", conversationId });
+      else if (roomId) dispatch({ type: "select-room", roomId });
     };
     window.addEventListener("hashchange", selectFromHash);
     return () => window.removeEventListener("hashchange", selectFromHash);
@@ -574,14 +589,21 @@ export function App() {
   });
 
   useEffect(() => {
-    const hash = machines.shownId ? `#/m/${machines.shownId}` : state.selectedConversationId ? `#/c/${state.selectedConversationId}` : "";
+    const hash = machines.shownId
+      ? `#/m/${machines.shownId}`
+      : state.selectedConversationId
+        ? `#/c/${state.selectedConversationId}`
+        : state.selectedRoomId
+          ? `#/r/${state.selectedRoomId}`
+          : "";
     if (location.hash !== hash) history.replaceState(null, "", hash || location.pathname);
     tellTheRailThePlace(hash);
-  }, [state.selectedConversationId, state.conversationsPicked, machines.shownId]);
+  }, [state.selectedConversationId, state.selectedRoomId, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
 
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
+  const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);
   const showCanvas = canvasVisible && conversation !== null && open !== null;
   const showTerminals = terminalVisible && conversation !== null && workspace !== undefined;
   const keptCanvases = (
@@ -699,7 +721,22 @@ export function App() {
             )
           );
         })}
+        {shownRoom && (
+          <RoomView
+            key={shownRoom.id}
+            room={shownRoom}
+            timeline={state.roomTimeline?.roomId === shownRoom.id ? state.roomTimeline : null}
+            profiles={state.profiles}
+            roomConversations={state.roomConversations}
+            threadConversations={state.threadConversations}
+            people={state.people}
+            ownerId={state.ownerId}
+            ownerPicture={state.avatar}
+            dispatch={dispatch}
+          />
+        )}
         {!(conversation && open) &&
+          !shownRoom &&
           (state.profiles.length === 0 ? (
             <FirstProfile installedAgents={state.installedAgents} conversations={state.conversations} />
           ) : (
@@ -882,6 +919,15 @@ export function App() {
       )}
       {sessionsWorkspace && <SessionsDialog workspace={sessionsWorkspace} profiles={state.profiles} dispatch={dispatch} onClose={closeOverlay} />}
       {worktreesWorkspace && <WorktreesDialog key={worktreesWorkspace.id} workspace={worktreesWorkspace} dispatch={dispatch} onClose={closeOverlay} />}
+      {overlay?.kind === "room" && (
+        <RoomDialog
+          room={state.rooms.find(({ id }) => id === overlay.roomId) ?? null}
+          workspaces={state.workspaces}
+          profiles={state.profiles}
+          dispatch={dispatch}
+          onClose={closeOverlay}
+        />
+      )}
     </div>
   );
 }

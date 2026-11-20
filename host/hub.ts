@@ -37,6 +37,8 @@ export interface SocketData {
   pluginTabSubscriptions: Set<string>;
   /** The subscribed conversations the socket follows in their low-data form, as a phone does. */
   lowDataSubscriptions: Set<string>;
+  /** The rooms whose messages the socket's page shows. */
+  roomSubscriptions: Set<string>;
   /** The socket's client reads long messages deflated, in binary frames. */
   readsDeflatedMessages: boolean;
   /** The socket's page edits profiles, so it gets their environments and prelaunch commands. */
@@ -84,6 +86,7 @@ export const socketData = (
   pluginWindowSubscriptions: new Set<string>(),
   pluginTabSubscriptions: new Set<string>(),
   lowDataSubscriptions: new Set<string>(),
+  roomSubscriptions: new Set<string>(),
   terminalConversationId: null,
   presence: { conversationId: null, attentive: false, sideChatId: null },
 });
@@ -234,6 +237,13 @@ export class Hub {
 
   publishToPluginTabs(workspaceId: string, message: ServerMessage) {
     this.publishWhere((socket) => socket.data.pluginTabSubscriptions.has(workspaceId), message);
+  }
+
+  publishToRoom(roomId: string, message: ServerMessage) {
+    const payload = JSON.stringify(message);
+    this.sockets.forEach((socket) => {
+      if (socket.data.roomSubscriptions.has(roomId)) deliver(socket, payload);
+    });
   }
 
   publishToConversation(conversationId: string, message: ServerMessage) {

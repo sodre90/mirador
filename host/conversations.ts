@@ -218,6 +218,7 @@ interface PromptStart {
   fromScript?: boolean;
   fromMirador?: boolean;
   fromPlugin?: string;
+  roomMessageId?: string;
   /** A message of the user's starts a turn of its own, so the files are snapshotted and that turn can be undone. */
   startsTurn?: boolean;
 }
@@ -414,6 +415,7 @@ export class ConversationService {
   private hearReply: HearReply = () => {};
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
+  private hearTurnEnd: (conversationId: string, turnSeq: number) => void = () => {};
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
   private deleteWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
@@ -736,6 +738,11 @@ export class ConversationService {
     this.pluginTellsItsCaller = tellsItsCaller;
   }
 
+  /** Hears each turn that ends while the host runs on, by the seq of the message that began it. */
+  hearTurnEndsWith(hearTurnEnd: (conversationId: string, turnSeq: number) => void) {
+    this.hearTurnEnd = hearTurnEnd;
+  }
+
   /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
   hearActivityWith(hearActivity: (conversationId: string, activity: PluginActivity) => void) {
     this.hearActivity = hearActivity;
@@ -981,7 +988,20 @@ export class ConversationService {
     if (mode !== undefined && mode !== null && modeOption) await this.setConfigOption(sideChatId, modeOption.id, mode);
   }
 
-  private insertConversation(workspaceId: string, launch: Launch, title: string, titleSetByUser = false, worktree?: ConversationWorktree, sideChatOf?: string): Conversation {
+  /** An agent's conversation in a room, which no list of conversations shows: it works in the room's workspace, and its agent's questions don't wait for an answer. */
+  startInRoom(roomId: string, workspaceId: string, launch: Launch, title: string): Conversation {
+    return this.insertConversation(workspaceId, launch, title, true, undefined, undefined, roomId);
+  }
+
+  private insertConversation(
+    workspaceId: string,
+    launch: Launch,
+    title: string,
+    titleSetByUser = false,
+    worktree?: ConversationWorktree,
+    sideChatOf?: string,
+    roomId?: string,
+  ): Conversation {
     this.existingWorkspace(workspaceId);
     const profile = profileToLaunch(this.store, launch);
     const now = Date.now();
@@ -993,7 +1013,7 @@ export class ConversationService {
       title,
       titleSetByUser,
       acpSessionId: null,
-      askMode: profile.askMode,
+      askMode: roomId ? "next-message" : profile.askMode,
       bypassPermissions: sideChatOf === undefined && profile.bypassPermissions,
       status: "idle",
       statusDetail: null,
@@ -1010,6 +1030,7 @@ export class ConversationService {
       configOptions: [],
       ...(worktree && { worktree }),
       ...(sideChatOf && { sideChatOf }),
+      ...(roomId && { roomId }),
       createdAt: now,
       updatedAt: now,
     });
@@ -1463,7 +1484,7 @@ export class ConversationService {
     }
   }
 
-  async prompt(conversationId: string, text: string, { imageIds = [], authorId, fromScript = false, fromMirador = false, fromPlugin, startsTurn = false }: PromptStart = {}) {
+  async prompt(conversationId: string, text: string, { imageIds = [], authorId, fromScript = false, fromMirador = false, fromPlugin, roomMessageId, startsTurn = false }: PromptStart = {}) {
     const runtime = this.runtime(conversationId);
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
@@ -1485,7 +1506,15 @@ export class ConversationService {
     if (runtime.heldCodexSession) await this.ensureSession(conversationId).catch(() => {});
     const turnSeq = this.appendUserMessage(
       conversationId,
-      { text, imageIds, ...(authorId && { authorId }), ...(fromScript && { fromScript }), ...(fromMirador && { fromMirador }), ...(fromPlugin && { fromPlugin }) },
+      {
+        text,
+        imageIds,
+        ...(authorId && { authorId }),
+        ...(fromScript && { fromScript }),
+        ...(fromMirador && { fromMirador }),
+        ...(fromPlugin && { fromPlugin }),
+        ...(roomMessageId && { roomMessageId }),
+      },
       notes,
     );
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
@@ -1548,6 +1577,7 @@ export class ConversationService {
       endTurn();
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
+    if (!this.stopping && turnSeq !== undefined) this.hearTurnEnd(conversationId, turnSeq);
     this.sendNextQueuedMessage(conversationId);
     if (!this.nudgeAfterStall(conversationId, turn, endedOnItsOwn)) this.followUpOnCanvasUse(conversationId, turn, endedOnItsOwn);
   }
@@ -1592,7 +1622,8 @@ export class ConversationService {
       promptSent !== undefined &&
       !isCanvasFollowUp(promptSent.text) &&
       this.store.canvasUse() === "often" &&
-      !this.get(conversationId).startedBy;
+      !this.get(conversationId).startedBy &&
+      !this.get(conversationId).roomId;
     const carriedOnOtherwise = this.stopping || runtime.running || runtime.queuedMessages.length > 0 || (runtime.steerInFlight ?? false);
     if (!checked || carriedOnOtherwise) return;
     const followUp = canvasFollowUp({
@@ -1621,14 +1652,21 @@ export class ConversationService {
     conversationId: string,
     text: string,
     imageIds: string[] = [],
-    { authorId, fromScript = false, fromMirador = false, fromPlugin, afterTurn = false }: { authorId?: string; fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean } = {},
+    {
+      authorId,
+      fromScript = false,
+      fromMirador = false,
+      fromPlugin,
+      afterTurn = false,
+      roomMessageId,
+    }: { authorId?: string; fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean; roomMessageId?: string } = {},
   ) {
     const fromUser = !fromScript && !fromMirador && !fromPlugin;
     if (fromUser && this.tookReminderCommand(conversationId, text)) return;
     if (fromUser && this.get(conversationId).reminder) this.setReminder(conversationId, null);
     const runtime = this.runtime(conversationId);
     const sendsAtOnce = !runtime.running && !this.holdsQueue(runtime) && runtime.queuedMessages.length === 0;
-    if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, authorId, fromScript, fromMirador, fromPlugin, startsTurn: true });
+    if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, authorId, fromScript, fromMirador, fromPlugin, roomMessageId, startsTurn: true });
     const message: QueuedMessage = {
       id: crypto.randomUUID(),
       text,
@@ -1638,6 +1676,7 @@ export class ConversationService {
       ...(fromMirador && { fromMirador }),
       ...(fromPlugin && { fromPlugin }),
       ...(afterTurn && { afterTurn }),
+      ...(roomMessageId && { roomMessageId }),
     };
     this.setQueue(conversationId, runtime, [...runtime.queuedMessages, message]);
     this.publish(this.get(conversationId));
@@ -3337,13 +3376,14 @@ export class ConversationService {
       fromScript: next.fromScript,
       fromMirador: next.fromMirador,
       fromPlugin: next.fromPlugin,
+      roomMessageId: next.roomMessageId,
       startsTurn: true,
     }).catch(() => {});
   }
 
   private appendUserMessage(
     conversationId: string,
-    { text, imageIds, authorId, fromScript, fromMirador, fromPlugin }: Omit<QueuedMessage, "id">,
+    { text, imageIds, authorId, fromScript, fromMirador, fromPlugin, roomMessageId }: Omit<QueuedMessage, "id">,
     { commands, reverts, canvas }: NotesForAgent,
   ) {
     canvas.forEach((note) => note.heard());
@@ -3359,6 +3399,7 @@ export class ConversationService {
       ...(fromScript && { fromScript }),
       ...(fromMirador && { fromMirador }),
       ...(fromPlugin && { fromPlugin }),
+      ...(roomMessageId && { roomMessageId }),
     });
   }
 
@@ -3399,7 +3440,7 @@ export class ConversationService {
       holdsQueue: runtime.holdingQueue || this.holdsQueue(runtime),
     });
     if (!reason || this.stopping) return;
-    if (this.itsPluginTellsTheCaller(conversationId)) return;
+    if (this.itsPluginTellsTheCaller(conversationId) || this.get(conversationId).roomId) return;
     this.notifications.notify(conversationId, reason);
     if (this.hub.isWatched(conversationId)) return;
     this.unseenTurnEnds.set(conversationId, reason.kind);

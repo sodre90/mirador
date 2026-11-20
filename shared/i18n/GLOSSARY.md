@@ -19,6 +19,9 @@ These terms stay the same everywhere:
 | conversation | beszélgetés | conversación | 对话 | Unterhaltung |
 | favourite (conversation) | kedvenc | favorita | 收藏 | Favorit |
 | side chat (a question about a conversation, beside it) | mellékszál | chat lateral | 旁聊 | Nebenchat |
+| room (where people and agents write together) | szoba | sala | 房间 | Raum |
+| thread (one agent's task in a room) | téma | hilo | 话题 | Thread (der) |
+| tag (an agent, in a room's message) | megjelöl | etiquetar | 标记 | markieren |
 | session | munkamenet | sesión | 会话 | Sitzung |
 | profile | profil | perfil | 配置 | Profil |
 | your profile (your name and colour in Settings, not an agent profile) | profilod | tu perfil | 个人资料 | dein Profil |
