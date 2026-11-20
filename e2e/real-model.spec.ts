@@ -27,7 +27,7 @@ test("a real model streams its reply, asks for permission in the browser and use
     'Use your Write tool to create a file named hello.txt in the current directory whose content is the word "hi". Then call the canvas show tool with title "Greeting" and html "<h1>Hello canvas</h1>". Then reply with the single word DONE.',
   );
   const permission = page.locator(".permission.pending");
-  await expect(permission).toBeVisible({ timeout: 120_000 });
+  await expect(permission).toBeVisible({ timeout: 300_000 });
   await permission.locator("button.option-allow_once").click();
   await waitForTurnToEnd(page, REAL_MODEL_TURN);
   expect(readFileSync(join(host.projectDir, "hello.txt"), "utf8")).toContain("hi");
