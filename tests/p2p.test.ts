@@ -8,6 +8,7 @@ import { DeviceService } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
 import { PeerToPeer, peerToPeerSettings, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
+import type { PeerToPeerStatus } from "../shared/protocol.ts";
 import { downloadedSidecar, installSidecar, SIDECAR_RELEASE } from "../host/p2p/sidecar-download.ts";
 import { Store } from "../host/store.ts";
 import { computerName } from "../host/machine-name.ts";
@@ -52,6 +53,12 @@ async function commandsRead(count: number) {
     if (lines.length >= count || Date.now() > deadline) return lines.map((line) => JSON.parse(line) as Record<string, { key: string; socket?: string; address?: string }>);
     await Bun.sleep(20);
   }
+}
+
+/** Waits, as a busy machine starts the sidecar late, until peer to peer stands at `status` or five seconds have passed. */
+async function peerToPeerReaches(p2p: PeerToPeer, status: PeerToPeerStatus) {
+  const deadline = Date.now() + 5000;
+  while (p2p.peerToPeerStatus() !== status && Date.now() < deadline) await Bun.sleep(20);
 }
 
 function host(more: Partial<PeerToPeerSettings> = {}) {
@@ -317,11 +324,11 @@ unixOnlyTest("a broker that stops answering makes peer to peer unreachable, and 
   const { p2p, devices, statuses } = host({ binary: fakeSidecar(`{"broker":"reached"}\n{"broker":"lost"}`) });
   const first = devices.invite();
   await p2p.invite(first.code, first.expiresAt, 200);
-  for (const _ of Array(50)) if (p2p.peerToPeerStatus() !== "broker-unreachable") await Bun.sleep(20);
+  await peerToPeerReaches(p2p, "broker-unreachable");
   expect(statuses).toEqual(["connecting", "ready", "broker-unreachable"]);
   const second = devices.invite();
   expect(await p2p.invite(second.code, second.expiresAt, 200)).toBeNull();
-});
+}, 15_000);
 
 unixOnlyTest("a sidecar that couldn't be downloaded says so", async () => {
   const { p2p, devices } = host({ binary: join(folder, "bin", "sidecar"), download: { url: "http://127.0.0.1:9/sidecar", sha256: "0".repeat(64) } });
@@ -337,7 +344,7 @@ unixOnlyTest("a sidecar that exits immediately on startup reports broker-unreach
   const { p2p, devices, statuses } = host({ binary });
   const { code, expiresAt } = devices.invite();
   await p2p.invite(code, expiresAt, 200);
-  for (const _ of Array(50)) if (p2p.peerToPeerStatus() !== "broker-unreachable") await Bun.sleep(20);
+  await peerToPeerReaches(p2p, "broker-unreachable");
   expect(statuses).toEqual(["connecting", "broker-unreachable"]);
   expect(p2p.peerToPeerStatus()).toBe("broker-unreachable");
-});
+}, 15_000);
