@@ -12,7 +12,7 @@ const words = t.rooms;
 export function RoomsSection({ rooms, selectedRoomId, dispatch }: { rooms: Room[]; selectedRoomId: string | null; dispatch: Dispatch<AppAction> }) {
   const openSettings = (roomId: string | null) => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId } });
   return (
-    <section className="workspace rooms" aria-label={words.rooms}>
+    <section className="rooms" aria-label={words.rooms}>
       <header>
         <div className="workspace-heading">
           <div className="workspace-name">{words.rooms}</div>

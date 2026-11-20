@@ -818,7 +818,7 @@ body.resizing iframe {
 }
 
 .sidebar-header,
-.workspace > header {
+:is(.workspace, .rooms) > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -844,7 +844,7 @@ body.resizing iframe {
   white-space: nowrap;
 }
 
-.workspace {
+:is(.workspace, .rooms) {
   position: relative;
   margin-top: 10px;
   padding: 8px 6px 4px;
@@ -917,7 +917,7 @@ body.resizing iframe {
   outline-offset: 1px;
 }
 
-.workspace > header {
+:is(.workspace, .rooms) > header {
   flex-wrap: wrap;
   row-gap: 3px;
   padding: 0 2px 6px;
@@ -976,13 +976,13 @@ body.resizing iframe {
   padding-block: 1px;
 }
 
-.workspace ul {
+:is(.workspace, .rooms) ul {
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.workspace li {
+:is(.workspace, .rooms) li {
   position: relative;
   display: flex;
   align-items: center;
@@ -993,15 +993,15 @@ body.resizing iframe {
   color: color-mix(in srgb, var(--text) 82%, transparent);
 }
 
-.workspace li:hover {
+:is(.workspace, .rooms) li:hover {
   background: var(--rail-hover);
 }
 
-.workspace li.under-caller {
+:is(.workspace, .rooms) li.under-caller {
   margin-left: 14px;
 }
 
-.workspace li .delegated-toggle {
+:is(.workspace, .rooms) li .delegated-toggle {
   flex: none;
   font-size: calc(11px * var(--font-scale));
   color: var(--faint);
@@ -1009,7 +1009,7 @@ body.resizing iframe {
   white-space: nowrap;
 }
 
-.workspace li .delegated-toggle:hover {
+:is(.workspace, .rooms) li .delegated-toggle:hover {
   color: var(--text);
 }
 
@@ -1024,12 +1024,12 @@ body.resizing iframe {
   pointer-events: none;
 }
 
-.workspace li.selected {
+:is(.workspace, .rooms) li.selected {
   background: var(--rail-selected);
   color: var(--text);
 }
 
-.workspace li.selected::before {
+:is(.workspace, .rooms) li.selected::before {
   content: "";
   position: absolute;
   left: -7px;
@@ -1040,28 +1040,28 @@ body.resizing iframe {
   background: var(--accent);
 }
 
-.workspace li button.icon {
+:is(.workspace, .rooms) li button.icon {
   visibility: hidden;
 }
 
-.workspace li:hover button.icon,
-.workspace li.selected button.icon {
+:is(.workspace, .rooms) li:hover button.icon,
+:is(.workspace, .rooms) li.selected button.icon {
   visibility: visible;
 }
 
-.workspace > header button.icon {
+:is(.workspace, .rooms) > header button.icon {
   visibility: hidden;
 }
 
-.workspace:hover > header button.icon {
+:is(.workspace, .rooms):hover > header button.icon {
   visibility: visible;
 }
 
-.workspace > header button.icon:is(.workspace-fold, .workspace-action, .workspace-new, .armed) {
+:is(.workspace, .rooms) > header button.icon:is(.workspace-fold, .workspace-action, .workspace-new, .armed) {
   visibility: visible;
 }
 
-.workspace > header button.icon:is(.workspace-action, .workspace-new) {
+:is(.workspace, .rooms) > header button.icon:is(.workspace-action, .workspace-new) {
   flex: none;
   color: color-mix(in srgb, var(--text) 60%, transparent);
 }
@@ -1071,35 +1071,35 @@ body.resizing iframe {
   color: color-mix(in srgb, var(--text) 70%, transparent);
 }
 
-.workspace > header button.icon:is(.workspace-action, .workspace-new):hover {
+:is(.workspace, .rooms) > header button.icon:is(.workspace-action, .workspace-new):hover {
   color: var(--text);
 }
 
-.workspace > header button.icon.workspace-remove:not(.armed):hover {
+:is(.workspace, .rooms) > header button.icon.workspace-remove:not(.armed):hover {
   color: var(--danger);
 }
 
 /* Takes no room until the pointer is on the heading or the keyboard on one of its buttons, so the name keeps its width
    while the pointer moves down the conversations. The profile chip's select counts as keyboard focus even when clicked,
    so only buttons reveal them. */
-.workspace > header button.icon.workspace-action {
+:is(.workspace, .rooms) > header button.icon.workspace-action {
   display: none;
   padding: 0 3px;
 }
 
-.workspace > header:is(:hover, :has(> button:focus-visible)) > button.icon.workspace-action,
-.workspace > header > button.icon.workspace-action.armed {
+:is(.workspace, .rooms) > header:is(:hover, :has(> button:focus-visible)) > button.icon.workspace-action,
+:is(.workspace, .rooms) > header > button.icon.workspace-action.armed {
   display: grid;
   place-items: center;
 }
 
 /* "Remove?" takes the room of the buttons beside it while it asks */
-.workspace > header:has(> .armed) > button.icon:is(.workspace-action:not(.armed), .workspace-new) {
+:is(.workspace, .rooms) > header:has(> .armed) > button.icon:is(.workspace-action:not(.armed), .workspace-new) {
   display: none;
 }
 
 @media (hover: none) {
-  .workspace > header button.icon.workspace-action {
+  :is(.workspace, .rooms) > header button.icon.workspace-action {
     display: grid;
     place-items: center;
   }
@@ -1117,17 +1117,17 @@ body.resizing iframe {
   white-space: nowrap;
 }
 
-.workspace li.waiting .conversation-title {
+:is(.workspace, .rooms) li.waiting .conversation-title {
   font-weight: 600;
   color: var(--text);
 }
 
-.workspace li.waiting:not(:hover, .selected) button.icon {
+:is(.workspace, .rooms) li.waiting:not(:hover, .selected) button.icon {
   display: none;
 }
 
 /* Takes no room in a row until it can be used, so titles keep their width; a favourite always shows its. */
-.workspace li:not(:hover, .selected) .favourite-star {
+:is(.workspace, .rooms) li:not(:hover, .selected) .favourite-star {
   display: none;
 }
 
@@ -1136,8 +1136,8 @@ button.icon.favourite-star {
 }
 
 button.icon.favourite-star.on,
-.workspace li:not(:hover, .selected) .favourite-star.on,
-.workspace li.waiting:not(:hover, .selected) .favourite-star.on {
+:is(.workspace, .rooms) li:not(:hover, .selected) .favourite-star.on,
+:is(.workspace, .rooms) li.waiting:not(:hover, .selected) .favourite-star.on {
   display: inline-block;
   visibility: visible;
   color: var(--accent);
@@ -1273,7 +1273,7 @@ button.icon.favourite-star.on,
   margin-top: 14px;
 }
 
-.workspace-group > .workspace,
+.workspace-group > :is(.workspace, .rooms),
 .workspace-group > .workspace-group {
   margin-left: 12px;
 }
@@ -1311,7 +1311,7 @@ button.icon.workspace-fold {
 }
 
 .workspace-group.folded button.icon.group-fold,
-.workspace.folded button.icon.workspace-fold {
+:is(.workspace, .rooms).folded button.icon.workspace-fold {
   transform: none;
 }
 
@@ -7917,7 +7917,7 @@ button.icon.mark-batch-toggle svg {
   padding: 0;
 }
 
-.workspace > header {
+:is(.workspace, .rooms) > header {
   cursor: grab;
 }
 
@@ -7928,15 +7928,15 @@ body.reordering * {
   user-select: none;
 }
 
-.workspace.dragged,
+:is(.workspace, .rooms).dragged,
 .workspace-group.dragged,
-.workspace li.dragged,
+:is(.workspace, .rooms) li.dragged,
 .queued.dragged {
   opacity: 0.45;
 }
 
-.workspace.drop-before,
-.workspace.drop-after,
+:is(.workspace, .rooms).drop-before,
+:is(.workspace, .rooms).drop-after,
 .queued.drop-before,
 .queued.drop-after {
   position: relative;
@@ -7944,10 +7944,10 @@ body.reordering * {
 
 .workspace-group.drop-before::after,
 .workspace-group.drop-after::after,
-.workspace.drop-before::after,
-.workspace.drop-after::after,
-.workspace li.drop-before::after,
-.workspace li.drop-after::after,
+:is(.workspace, .rooms).drop-before::after,
+:is(.workspace, .rooms).drop-after::after,
+:is(.workspace, .rooms) li.drop-before::after,
+:is(.workspace, .rooms) li.drop-after::after,
 .queued.drop-before::after,
 .queued.drop-after::after {
   content: "";
@@ -7960,11 +7960,11 @@ body.reordering * {
   pointer-events: none;
 }
 
-.workspace.drop-before::after {
+:is(.workspace, .rooms).drop-before::after {
   top: -7px;
 }
 
-.workspace.drop-after::after {
+:is(.workspace, .rooms).drop-after::after {
   bottom: -7px;
 }
 
@@ -7976,12 +7976,12 @@ body.reordering * {
   bottom: -9px;
 }
 
-.workspace li.drop-before::after,
+:is(.workspace, .rooms) li.drop-before::after,
 .queued.drop-before::after {
   top: -1px;
 }
 
-.workspace li.drop-after::after,
+:is(.workspace, .rooms) li.drop-after::after,
 .queued.drop-after::after {
   bottom: -1px;
 }
@@ -9634,7 +9634,7 @@ button.link.more-rows {
 
 /* Rooms */
 
-.sidebar > .workspace.rooms {
+.sidebar > .rooms {
   flex: none;
   max-height: 30vh;
   overflow-y: auto;
@@ -9777,6 +9777,6 @@ button.link.more-rows {
   border-color: transparent;
 }
 
-.workspace li.side-chat-row .conversation-title {
+:is(.workspace, .rooms) li.side-chat-row .conversation-title {
   font-style: italic;
 }
