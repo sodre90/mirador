@@ -333,8 +333,9 @@ export function agentSessionIdOn(page: Page) {
   return () => sessionId;
 }
 
-export async function waitForTurnToEnd(page: Page) {
-  await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle", { timeout: 180_000 });
+/** `timeout` is set for a turn on a real model, which on a shared runner can take minutes. */
+export async function waitForTurnToEnd(page: Page, timeout = 180_000) {
+  await expect(page.locator(".chat-header:visible .badge")).toHaveText("idle", { timeout });
 }
 
 export function lastAgentMessage(page: Page) {

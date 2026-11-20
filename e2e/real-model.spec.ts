@@ -7,6 +7,8 @@ import { TestHost } from "./test-host.ts";
 
 /** The one spec on a real model, the owner's model server; every other spec scripts Claude Code's replies with a fake API. */
 const host = new TestHost();
+/** A turn with a tool call in it answers slowly on a shared runner. */
+const REAL_MODEL_TURN = 420_000;
 
 test.beforeAll(() => host.start());
 test.afterAll(async () => {
@@ -15,7 +17,7 @@ test.afterAll(async () => {
 });
 
 test("a real model streams its reply, asks for permission in the browser and uses a canvas tool", async ({ page }) => {
-  test.setTimeout(660_000);
+  test.setTimeout(900_000);
   await expect.poll(modelServerStatus, { message: "the model server answers", timeout: 180_000, intervals: [5_000] }).toBe(200);
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
@@ -27,7 +29,7 @@ test("a real model streams its reply, asks for permission in the browser and use
   const permission = page.locator(".permission.pending");
   await expect(permission).toBeVisible({ timeout: 120_000 });
   await permission.locator("button.option-allow_once").click();
-  await waitForTurnToEnd(page);
+  await waitForTurnToEnd(page, REAL_MODEL_TURN);
   expect(readFileSync(join(host.projectDir, "hello.txt"), "utf8")).toContain("hi");
   await expect(page.locator(".canvas-panel:visible .canvas-frame.show iframe").contentFrame().getByRole("heading", { name: "Hello canvas" })).toBeVisible();
   await expect(lastAgentMessage(page)).toContainText("DONE");
