@@ -1,12 +1,13 @@
 import { createContext, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type KeyboardEvent, type RefObject } from "react";
 import { focusPane } from "./actions.ts";
-import { ignoringCase, matchCount, matchOffsets, occurrencesIn, type MatchOptions } from "../shared/find.ts";
+import { ignoringCase, matchCount, occurrencesIn, type MatchOptions } from "../shared/find.ts";
 import type { EntryMatchCount } from "../shared/model.ts";
 import { connection } from "./connection.ts";
 import type { EarlierHistory } from "./earlier-history.ts";
 import { FindToggle } from "./FindToggle.tsx";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
+import { joinedText, rangesOver, scrollToMiddle } from "./text-ranges.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
 
 const words = t.canvas.find;
@@ -71,32 +72,7 @@ function textNodesOf(entry: Element) {
   return nodes;
 }
 
-/** The entry's text is read as one string, so a match may span the elements that markdown and code highlighting split it into. */
-function entryText(entry: Element) {
-  let length = 0;
-  const pieces = textNodesOf(entry).map((node) => {
-    const start = length;
-    length += node.data.length;
-    return { node, start };
-  });
-  return { pieces, text: pieces.map(({ node }) => node.data).join("") };
-}
-
-function rangesIn(entry: Element, query: string, options: MatchOptions, limit: number): Range[] {
-  const { pieces, text } = entryText(entry);
-  const at = (offset: number, holds: (start: number) => boolean) => {
-    const piece = pieces.findLast(({ start }) => holds(start))!;
-    return [piece.node, offset - piece.start] as const;
-  };
-  return matchOffsets(text, query, options)
-    .slice(0, limit)
-    .map(([start, end]) => {
-      const range = document.createRange();
-      range.setStart(...at(start, (pieceStart) => pieceStart <= start));
-      range.setEnd(...at(end, (pieceStart) => pieceStart < end));
-      return range;
-    });
-}
+const rangesIn = (entry: Element, query: string, options: MatchOptions, limit: number) => rangesOver(textNodesOf(entry), query, options, limit);
 
 const rangeAt = (entry: Element, query: string, options: MatchOptions, occurrence: number) => rangesIn(entry, query, options, occurrence + 1)[occurrence] ?? null;
 
@@ -119,11 +95,6 @@ function unfoldAround(range: Range) {
   for (let details = node.parentElement?.closest("details"); details; details = details.parentElement?.closest("details")) {
     if (!details.querySelector(":scope > summary")?.contains(node)) details.open = true;
   }
-}
-
-function scrollToMiddle(timeline: HTMLElement, range: Range) {
-  const match = range.getBoundingClientRect();
-  timeline.scrollTop += match.top - timeline.getBoundingClientRect().top - (timeline.clientHeight - match.height) / 2;
 }
 
 const canHighlight = typeof CSS !== "undefined" && "highlights" in CSS;
@@ -270,7 +241,7 @@ export function useFind({
       ...loadedEntries(element).map((entryElement, offset) => ({
         key: timeline[firstLoaded + offset]!.key,
         entry: firstLoaded + offset,
-        count: matchCount(entryText(entryElement).text, query, options),
+        count: matchCount(joinedText(textNodesOf(entryElement)).text, query, options),
         element: entryElement,
       })),
     ].filter(({ count }) => count > 0);
@@ -291,7 +262,7 @@ export function useFind({
     if (placeShown.current !== placeKey) {
       placeShown.current = placeKey;
       unfoldAround(currentRange);
-      scrollToMiddle(element, currentRange);
+      scrollToMiddle(element, currentRange.getBoundingClientRect());
       rememberPlace();
     }
     const highlightVisible = () => highlight(visibleMatches(element, query, options), currentRange);

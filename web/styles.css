@@ -3980,11 +3980,13 @@ button.jump-to-latest svg {
 }
 
 ::highlight(find-match),
+::highlight(question-find-match),
 ::highlight(review-find-match) {
   background-color: var(--find-match);
 }
 
 ::highlight(find-current),
+::highlight(question-find-current),
 ::highlight(review-find-current) {
   background-color: var(--find-current);
   color: #1a1b20;

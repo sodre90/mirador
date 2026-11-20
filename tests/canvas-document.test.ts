@@ -112,14 +112,16 @@ describe("buildCanvasDocument", () => {
   test("carries the text finder, which marks its matches with highlights of their own, not the page's DOM", () => {
     const document = buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light");
     expect(document).toContain('if (data.kind === "find") runFind(data);');
+    expect(document).toContain('if (data.kind === "find-at") runFindAt(data);');
     expect(document).toContain('if (data.kind === "find-clear") clearFind();');
     expect(document).toContain("::highlight(mirador-find){background:#fde68a;color:#000}");
     expect(document).toContain("::highlight(mirador-find-current){background:#f97316;color:#000}");
   });
 
-  test("only a shown page stops the browser's own find, so other frames' find handlers get Ctrl+F and ⌘F uncancelled", () => {
+  test("only a page the panel finds in stops the browser's own find, so other frames' find handlers get Ctrl+F and ⌘F uncancelled", () => {
     const cancelsFind = "if (findKeys(event)) event.preventDefault();";
-    expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light", { markable: true })).toContain(cancelsFind);
+    expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light", { panelFinds: true })).toContain(cancelsFind);
+    expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light", { markable: true })).not.toContain(cancelsFind);
     expect(buildCanvasDocument("<p>plan</p>", "item", assetsOrigin, "light")).not.toContain(cancelsFind);
   });
 });

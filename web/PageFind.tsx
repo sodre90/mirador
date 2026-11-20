@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { canvasFindClearMessage, canvasFindMessage, type CanvasFrameMessage } from "../shared/canvas-document.ts";
-import type { ShowItem } from "../shared/model.ts";
 import { FindToggle, keepsFocusInQuery } from "./FindToggle.tsx";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
+import { QuestionFinder, type FindStep, type FindTally } from "./question-find.ts";
 
 const words = t.canvas.pageFind;
 const matchCaseName = t.canvas.find.matchCase;
@@ -29,11 +29,43 @@ export function useFindOnPageRequests(panel: RefObject<HTMLElement | null>, open
   }, []);
 }
 
+/** What the canvas shows that the find bar finds in: the page the agent showed, or a question with the pages it holds. */
+export type FindTarget =
+  | { kind: "page"; id: string; frame: RefObject<HTMLIFrameElement | null> }
+  | { kind: "question"; id: string; question: RefObject<HTMLElement | null> };
+
+interface Finder {
+  find: (query: string, matchCase: boolean, step: FindStep) => void;
+  clear: () => void;
+  /** Where focus goes back to as Esc closes the bar. */
+  focus: () => void;
+}
+
+/** A shown page finds in its own frame and reports its tally with a "found" message. */
+function pageFinder(frame: RefObject<HTMLIFrameElement | null>): Finder {
+  const postToPage = (message: object) => frame.current?.contentWindow?.postMessage(message, "*");
+  return {
+    find: (query, matchCase, step) => postToPage(canvasFindMessage(query, matchCase, step)),
+    clear: () => postToPage(canvasFindClearMessage()),
+    focus: () => frame.current?.contentWindow?.focus(),
+  };
+}
+
+/** The answer the user picked, else the first they can pick; an answered question has none to focus. */
+function focusAnswer(question: HTMLElement | null) {
+  (question?.querySelector<HTMLElement>("input:checked:enabled") ?? question?.querySelector<HTMLElement>("input:enabled"))?.focus();
+}
+
+function questionFinder(question: RefObject<HTMLElement | null>, report: (tally: FindTally) => void): Finder {
+  const finder = new QuestionFinder(question, report);
+  return { find: (query, matchCase, step) => finder.find(query, matchCase, step), clear: () => finder.clear(), focus: () => focusAnswer(question.current) };
+}
+
 /**
- * Finding text on the page the agent showed: the panel asks the page to search and marks what it finds there,
- * and shows the bar under the canvas header with the tally the page reports back.
+ * Finding text in what the canvas shows: a shown page searches itself and a question is searched with its pages, and
+ * the bar under the canvas header shows the tally they report back.
  */
-export function usePageFind(page: ShowItem | undefined, frame: RefObject<HTMLIFrameElement | null>): {
+export function usePageFind(target: FindTarget | undefined): {
   open: boolean;
   openFind: () => void;
   received: (message: CanvasFrameMessage) => void;
@@ -44,16 +76,19 @@ export function usePageFind(page: ShowItem | undefined, frame: RefObject<HTMLIFr
   const [matchCase, setMatchCase] = useState(false);
   const [tally, setTally] = useState(noTally);
   const inputRef = useRef<HTMLInputElement>(null);
+  const finder = useMemo(
+    () => target && (target.kind === "page" ? pageFinder(target.frame) : questionFinder(target.question, setTally)),
+    [target?.id],
+  );
   useEffect(() => {
     setOpen(false);
     setQuery("");
     setMatchCase(false);
     setTally(noTally);
-  }, [page?.id]);
+    return () => finder?.clear();
+  }, [finder]);
 
-  const postToPage = (message: object) => frame.current?.contentWindow?.postMessage(message, "*");
-  const search = (step: "first" | "next" | "previous", text = query, caseMatters = matchCase) =>
-    postToPage(canvasFindMessage(text, caseMatters, step));
+  const search = (step: FindStep, text = query, caseMatters = matchCase) => finder?.find(text, caseMatters, step);
   const openFind = () => {
     const field = inputRef.current;
     if (field) {
@@ -62,12 +97,12 @@ export function usePageFind(page: ShowItem | undefined, frame: RefObject<HTMLIFr
     } else setOpen(true);
   };
   const close = (backToPage = false) => {
-    postToPage(canvasFindClearMessage());
+    finder?.clear();
     setOpen(false);
     setQuery("");
     setMatchCase(false);
     setTally(noTally);
-    if (backToPage) frame.current?.contentWindow?.focus();
+    if (backToPage) finder?.focus();
   };
   const received = (message: CanvasFrameMessage) => {
     if (message.kind === "found") setTally({ total: message.total, current: message.current });
@@ -83,7 +118,7 @@ export function usePageFind(page: ShowItem | undefined, frame: RefObject<HTMLIFr
     }
   };
 
-  const opened = open && page && (
+  const opened = open && target && (
     <div className="page-find" role="search">
       <input
         ref={inputRef}

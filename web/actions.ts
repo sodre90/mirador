@@ -32,14 +32,15 @@ export function findInOpenConversation() {
   onScreen<HTMLButtonElement>(".chat-header .find-trigger")?.click();
 }
 
-const canvasPanelShowingPage = () => onScreen<HTMLElement>(".canvas-panel[data-page-shown]");
+/** The canvas panel showing a page or a question, which its find bar finds in. */
+const canvasPanelShowingPage = () => onScreen<HTMLElement>(".canvas-panel[data-findable]");
 
 export function findInCanvasPage() {
   const panel = canvasPanelShowingPage();
   if (panel) askToFindOnPage(panel);
 }
 
-/** Whether focus sits in the canvas panel that has a shown page, where ⌘F finds on the page rather than in the conversation. */
+/** Whether focus sits in the canvas panel that shows a page or a question, where ⌘F finds there rather than in the conversation. */
 export const canvasPageHasFocus = () => Boolean(canvasPanelShowingPage()?.contains(document.activeElement));
 
 export function startRenamingOpenConversation() {

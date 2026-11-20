@@ -95,8 +95,11 @@ export type CanvasFrameMessage =
   /** The page drawn as a PNG, as the panel asked for it to copy. */
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "captured"; requestId: string; image: Blob }
   | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "capture-failed"; requestId: string; message: string }
-  /** Matches of the find query on the page: how many there are, and which is current, 1-based, 0 when there are none. */
-  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "found"; total: number; current: number };
+  /**
+   * Matches of the find query on the page: how many there are, and which is current, 1-based, 0 when none is; with the
+   * current match's top and bottom in the page's window, for a panel that scrolls a page sized to its content.
+   */
+  | { source: typeof CANVAS_MESSAGE_SOURCE; itemId: string; kind: "found"; total: number; current: number; box: { top: number; bottom: number } | null };
 
 export function isCanvasFrameMessage(data: unknown): data is CanvasFrameMessage {
   return typeof data === "object" && data !== null && (data as { source?: unknown }).source === CANVAS_MESSAGE_SOURCE;
@@ -151,6 +154,15 @@ export function canvasHiddenMessage() {
 /** Asks a canvas page to find text: "first" searches again and makes the first match current, "next" and "previous" step through the matches, searching again only when the query or its case changed; the page answers each time with a "found" message. */
 export function canvasFindMessage(query: string, matchCase: boolean, step: "first" | "next" | "previous") {
   return { source: CANVAS_MESSAGE_SOURCE, kind: "find", query, matchCase, step };
+}
+
+/**
+ * Asks a canvas page to mark every match of the query and make the match at `current`, counted from 0, the current one,
+ * or none; the page searches again each time, scrolls nowhere, and answers with a "found" message. A panel that finds
+ * across several pages picks the current match itself.
+ */
+export function canvasFindAtMessage(query: string, matchCase: boolean, current: number | null) {
+  return { source: CANVAS_MESSAGE_SOURCE, kind: "find-at", query, matchCase, current };
 }
 
 /** Tells a canvas page to stop finding and take its highlights away. */
@@ -749,13 +761,28 @@ const PAGE_FIND_SCRIPT = `
       CSS.highlights.delete("mirador-find-current");
     } else getSelection().removeAllRanges();
   };
+  const markFound = (ranges, current) => {
+    if (canHighlightFind) {
+      CSS.highlights.set("mirador-find", new Highlight(...ranges));
+      if (current === null) CSS.highlights.delete("mirador-find-current");
+      else CSS.highlights.set("mirador-find-current", new Highlight(ranges[current]));
+    } else {
+      const selection = getSelection();
+      selection.removeAllRanges();
+      if (current !== null) selection.addRange(ranges[current]);
+    }
+  };
+  const postFound = (ranges, current) => {
+    const box = current === null ? null : ranges[current].getBoundingClientRect();
+    post({ kind: "found", total: ranges.length, current: current === null ? 0 : current + 1, box: box && { top: box.top, bottom: box.bottom } });
+  };
   const runFind = (data) => {
     const searchAgain = data.step === "first" || !finding || finding.query !== data.query || finding.matchCase !== data.matchCase;
     if (searchAgain) {
       const ranges = rangesForFind(data.query, data.matchCase);
       if (!ranges.length) {
         clearFind();
-        post({ kind: "found", total: 0, current: 0 });
+        postFound([], null);
         return;
       }
       finding = { query: data.query, matchCase: data.matchCase, ranges, current: 0 };
@@ -764,16 +791,17 @@ const PAGE_FIND_SCRIPT = `
       finding.current = (finding.current + stepTo + finding.ranges.length) % finding.ranges.length;
     }
     const { ranges, current } = finding;
-    if (canHighlightFind) {
-      CSS.highlights.set("mirador-find", new Highlight(...ranges));
-      CSS.highlights.set("mirador-find-current", new Highlight(ranges[current]));
-    } else {
-      const selection = getSelection();
-      selection.removeAllRanges();
-      selection.addRange(ranges[current]);
-    }
+    markFound(ranges, current);
     ranges[current].startContainer.parentElement.scrollIntoView({ block: "center", inline: "nearest" });
-    post({ kind: "found", total: ranges.length, current: current + 1 });
+    postFound(ranges, current);
+  };
+  const runFindAt = (data) => {
+    const ranges = rangesForFind(data.query, data.matchCase);
+    const current = data.current !== null && data.current < ranges.length ? data.current : null;
+    finding = null;
+    if (ranges.length) markFound(ranges, current);
+    else clearFind();
+    postFound(ranges, current);
   };
 `;
 
@@ -1182,7 +1210,7 @@ ${pageDrawing(assetsOrigin)}
 })();`;
 }
 
-/** On a shown page the panel finds instead, so the browser's own find must not open; other frames keep the key for their own find. */
+/** On a page the panel finds in, the browser's own find must not open; other frames keep the key for their own find. */
 const CANCEL_BROWSER_FIND = "if (findKeys(event)) event.preventDefault();";
 
 /** A canvas the page sizes to the window, from innerWidth and innerHeight as three.js scenes are, is zoom times its panel. */
@@ -1436,6 +1464,7 @@ ${PAGE_FIND_SCRIPT}
     if (data.kind === "capture") capture(data.requestId);
     if (data.kind === "hidden") document.querySelectorAll("video, audio").forEach((media) => media.pause());
     if (data.kind === "find") runFind(data);
+    if (data.kind === "find-at") runFindAt(data);
     if (data.kind === "find-clear") clearFind();
   });
   // The frame never leaves its page: a link within it, such as #section, goes where it points there, one to another site
@@ -1632,6 +1661,7 @@ export function buildCanvasDocument(
     padded = false,
     policy = {},
     markable = false,
+    panelFinds = false,
     measuresNaturalWidth = false,
     followsTextSize = false,
     fitsContent = false,
@@ -1640,6 +1670,8 @@ export function buildCanvasDocument(
     padded?: boolean;
     policy?: CanvasPagePolicy;
     markable?: boolean;
+    /** Whether the panel's find bar finds in the page, as on a shown page and a question's pages, so ⌘F there opens it. */
+    panelFinds?: boolean;
     measuresNaturalWidth?: boolean;
     followsTextSize?: boolean;
     fitsContent?: boolean;
@@ -1653,7 +1685,7 @@ export function buildCanvasDocument(
     '<meta charset="utf-8">',
     `<script type="importmap">${JSON.stringify(canvasImportMap(assetsOrigin))}</script>`,
     ...(markable ? [`<script>${pageMarking(itemId, assetsOrigin)}</script>`] : []),
-    `<script>${frameReporter(itemId, theme, assetsOrigin, { textScale, measuresNaturalWidth, findsOnPage: markable, followsTextSize, fitsContent })}</script>`,
+    `<script>${frameReporter(itemId, theme, assetsOrigin, { textScale, measuresNaturalWidth, findsOnPage: panelFinds, followsTextSize, fitsContent })}</script>`,
     "<style>html{background:light-dark(#fff,#111);color:light-dark(#171717,#ececec);font-family:system-ui,sans-serif;overflow-wrap:break-word}</style>",
     DIAGRAM_SOURCE_HIDDEN_STYLE,
     ...(padded ? [PADDED_PAGE_STYLE] : []),

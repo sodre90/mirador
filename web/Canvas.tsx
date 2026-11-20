@@ -16,7 +16,7 @@ import { FRAME_BORDERS, fittedStyles, type ContentSize } from "./frame-fit.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { usePageExport } from "./PageExport.tsx";
-import { useFindOnPageRequests, usePageFind } from "./PageFind.tsx";
+import { useFindOnPageRequests, usePageFind, type FindTarget } from "./PageFind.tsx";
 import { usePageMarks } from "./PageMarks.tsx";
 import { canOpenItemWindows, openItemWindow } from "./item-window.ts";
 import { PluginItemView } from "./PluginItemView.tsx";
@@ -102,6 +102,7 @@ export function CanvasFrame({
   padded = fitsContent,
   policy,
   markable = false,
+  panelFinds = false,
   followsTextSize = false,
   allow,
   onRendered,
@@ -119,6 +120,8 @@ export function CanvasFrame({
   policy?: CanvasPagePolicy;
   /** Whether the user may mark part of the page to ask the agent about; fixed for the frame's life, as a change reloads the page. */
   markable?: boolean;
+  /** Whether the panel's find bar finds in the page, so ⌘F there opens it instead of the browser's; fixed for the frame's life. */
+  panelFinds?: boolean;
   /** Whether the page zooms with the text size Settings chose, as a page the agent wrote does: plugin views and apps size their text themselves. */
   followsTextSize?: boolean;
   /** Browser features the page may use, as the iframe's allow attribute names them. */
@@ -149,12 +152,13 @@ export function CanvasFrame({
         padded,
         policy: { imagesFromOtherSites },
         markable,
+        panelFinds,
         measuresNaturalWidth,
         followsTextSize,
         fitsContent,
         textScale: zoomRef.current,
       }),
-    [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, measuresNaturalWidth, followsTextSize, fitsContent],
+    [html, frameId, assetsOrigin, padded, imagesFromOtherSites, markable, panelFinds, measuresNaturalWidth, followsTextSize, fitsContent],
   );
   const onRenderedRef = useRef(onRendered);
   onRenderedRef.current = onRendered;
@@ -336,7 +340,7 @@ function AskQuestionFields({
 
   return (
     <>
-      {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" fitsContent followsTextSize />}
+      {question.html && <CanvasFrame frameId={`${idPrefix}-context`} html={question.html} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize />}
       <div className="ask-options" role="radiogroup" aria-label={question.question} style={optionsStyle}>
         {question.options.map((option, index) => (
           <label key={option.label} className={`ask-option ${isChosen(option.label) ? "chosen" : ""}`}>
@@ -359,6 +363,7 @@ function AskQuestionFields({
                 html={option.html}
                 assetsOrigin={assetsOrigin}
                 className="ask-preview"
+                panelFinds
                 fitsContent
                 followsTextSize
                 onContentWidth={(width) => setPreviewWidths((current) => ({ ...current, [option.label]: width }))}
@@ -424,7 +429,7 @@ function AnsweredSeveral({ answer }: { answer: NonNullable<AskItem["answer"]> })
   );
 }
 
-function AskView({ item, pagesBefore, assetsOrigin }: { item: AskItem; pagesBefore: ShowItem[]; assetsOrigin: string }) {
+function AskView({ item, pagesBefore, assetsOrigin, formRef }: { item: AskItem; pagesBefore: ShowItem[]; assetsOrigin: string; formRef: RefObject<HTMLFormElement | null> }) {
   const questions = questionsOf(item);
   const several = item.questions !== undefined;
   const waiting = item.status === "waiting";
@@ -455,7 +460,7 @@ function AskView({ item, pagesBefore, assetsOrigin }: { item: AskItem; pagesBefo
   const currentAnswer = answers[questionIndex];
 
   return (
-    <form className="ask" onSubmit={submit}>
+    <form className="ask" ref={formRef} onSubmit={submit}>
       {several && waiting && !onReviewPage && <p className="ask-progress">{words.ask.questionOf(page + 1, questions.length)}</p>}
       {several && waiting && onReviewPage && <p className="ask-progress">{words.ask.review}</p>}
       <h3>{several ? (waiting ? (onReviewPage ? words.ask.isThisRight : shownQuestion.question) : item.title) : item.question}</h3>
@@ -473,7 +478,7 @@ function AskView({ item, pagesBefore, assetsOrigin }: { item: AskItem; pagesBefo
           <div className="ask-page-before-title" data-hint={hints.askPageBefore}>
             {words.ask.shownJustBefore(before.title)}
           </div>
-          <CanvasFrame frameId={`${item.id}-before-${before.id}`} html={before.html ?? ""} assetsOrigin={assetsOrigin} className="ask-context" fitsContent followsTextSize />
+          <CanvasFrame frameId={`${item.id}-before-${before.id}`} html={before.html ?? ""} assetsOrigin={assetsOrigin} className="ask-context" panelFinds fitsContent followsTextSize />
         </section>
       ))}
       {onReviewPage && (
@@ -843,6 +848,7 @@ export function CanvasPanel({
   const selectedIndex = edit.shown ? -1 : newestFirst.findIndex(({ id }) => id === selectedId);
   const selected = newestFirst[selectedIndex];
   const shownPageFrame = useRef<HTMLIFrameElement>(null);
+  const shownQuestionForm = useRef<HTMLFormElement>(null);
   const somethingElseShown = Boolean(selected || edit.shown);
   const changesShown = changesOpen || (!tab && !somethingElseShown);
   const outcome = selected && outcomeOf(selected);
@@ -874,7 +880,11 @@ export function CanvasPanel({
   const shownPage = !tab && selected?.kind === "show" ? selected : undefined;
   const pageExport = usePageExport(shownPage, shownPageFrame);
   const pageMarks = usePageMarks(shownPage, shownPageFrame);
-  const pageFind = usePageFind(shownPage, shownPageFrame);
+  const shownQuestion = !tab && selected?.kind === "ask" ? selected : undefined;
+  const findTarget: FindTarget | undefined = shownPage
+    ? { kind: "page", id: shownPage.id, frame: shownPageFrame }
+    : shownQuestion && { kind: "question", id: shownQuestion.id, question: shownQuestionForm };
+  const pageFind = usePageFind(findTarget);
   const receiveShownPageMessage = (message: CanvasFrameMessage) => {
     pageMarks.received(message);
     pageFind.received(message);
@@ -907,7 +917,7 @@ export function CanvasPanel({
       ]
     : [];
   const pageActions: BarMenuEntry[] = [
-    ...(shownPage ? [{ label: words.bar.findOnPage, shortcut: shortcutKeys().find, onChoose: pageFind.openFind }] : []),
+    ...(findTarget ? [{ label: words.bar.findOnPage, shortcut: shortcutKeys().find, onChoose: pageFind.openFind }] : []),
     ...pageExport.entries,
     ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
   ];
@@ -947,7 +957,7 @@ export function CanvasPanel({
   useFindOnPageRequests(panel, pageFind.openFind);
 
   return (
-    <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape} data-page-shown={shownPage ? "" : undefined}>
+    <aside className="canvas-panel" ref={panel} onKeyDown={closeOnEscape} data-findable={findTarget ? "" : undefined}>
       <div className="canvas-header" data-pane-bar ref={bar} data-fold={foldLevel}>
         <PaneGrip pane="canvas" />
         <button type="button" className="icon canvas-nav" aria-label={words.bar.older} data-hint={hints.canvasOlder} disabled={!older} onClick={() => older && pick(older.id)}>
@@ -1130,6 +1140,7 @@ export function CanvasPanel({
             assetsOrigin={assetsOrigin}
             className="show"
             markable
+            panelFinds
             followsTextSize
             frameRef={shownPageFrame}
             onRendered={reportRender(selected.id)}
@@ -1138,12 +1149,13 @@ export function CanvasPanel({
         )}
         {pageMarks.opened}
         {!tab && selected?.kind === "plugin" && <PluginItemView key={selected.id} item={selected} viewPath={canvasViews[selected.plugin]} assetsOrigin={assetsOrigin} />}
-        {!tab && selected?.kind === "ask" && (
+        {shownQuestion && (
           <AskView
-            key={selected.id}
-            item={selected}
-            pagesBefore={pages.filter((page): page is ShowItem => page.kind === "show" && selected.shownBefore?.includes(page.id) === true)}
+            key={shownQuestion.id}
+            item={shownQuestion}
+            pagesBefore={pages.filter((page): page is ShowItem => page.kind === "show" && shownQuestion.shownBefore?.includes(page.id) === true)}
             assetsOrigin={assetsOrigin}
+            formRef={shownQuestionForm}
           />
         )}
       </div>
