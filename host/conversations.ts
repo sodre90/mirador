@@ -376,8 +376,8 @@ export class ConversationService {
   private readonly startChoicesTimeoutMs = START_CHOICES_TIMEOUT_MS;
   private readonly updatesForUnknownSessions = new UnknownSessionUpdates();
   /** What each profile's agent last said it offers, and the probe asking one now. */
-  private readonly profileChoicesCache = new Map<string, { at: number; options: acp.SessionConfigOption[] }>();
-  private readonly profileChoiceProbes = new Map<string, Promise<acp.SessionConfigOption[] | null>>();
+  private readonly profileChoicesCache = new Map<string, { at: number; model: string | null; options: acp.SessionConfigOption[] }>();
+  private readonly profileChoiceProbes = new Map<string, { model: string | null; probe: Promise<acp.SessionConfigOption[] | null> }>();
   /** The agent each profile's probe runs, so a restart can stop it rather than queue the next probe behind it. */
   private readonly activeProbeHarnesses = new Map<string, HarnessProcess>();
   private readonly statusOverrides = new Map<string, Pick<Conversation, "status" | "statusDetail" | "busyWith" | "statusProblem">>();
@@ -1348,20 +1348,21 @@ export class ConversationService {
   /**
    * What a profile's agent offers, from the agent itself, so a profile editor can list modes and efforts before one of
    * its conversations has run; null when the agent was not there to answer, and the editor keeps what its own
-   * conversations last listed. An answer stands until the profile launches its agent differently.
+   * conversations last listed. An answer stands until the profile launches its agent differently or names another model.
    */
   async profileChoices(profileId: string): Promise<acp.SessionConfigOption[] | null> {
+    const model = this.store.findProfile(profileId)?.model ?? null;
     const remembered = this.profileChoicesCache.get(profileId);
-    if (remembered && Date.now() - remembered.at < PROFILE_CHOICES_TTL_MS) return remembered.options;
+    if (remembered?.model === model && Date.now() - remembered.at < PROFILE_CHOICES_TTL_MS) return remembered.options;
     const asking = this.profileChoiceProbes.get(profileId);
-    if (asking) return asking;
+    if (asking?.model === model) return asking.probe;
     const probe: Promise<acp.SessionConfigOption[] | null> = this.askProfileChoices(profileId).then((options) => {
-      if (options && this.profileChoiceProbes.get(profileId) === probe) this.profileChoicesCache.set(profileId, { at: Date.now(), options });
+      if (options && this.profileChoiceProbes.get(profileId)?.probe === probe) this.profileChoicesCache.set(profileId, { at: Date.now(), model, options });
       return options;
     });
-    this.profileChoiceProbes.set(profileId, probe);
+    this.profileChoiceProbes.set(profileId, { model, probe });
     void probe.finally(() => {
-      if (this.profileChoiceProbes.get(profileId) === probe) this.profileChoiceProbes.delete(profileId);
+      if (this.profileChoiceProbes.get(profileId)?.probe === probe) this.profileChoiceProbes.delete(profileId);
     });
     return probe;
   }
@@ -1412,8 +1413,8 @@ export class ConversationService {
   }
 
   /**
-   * Starts the profile's agent, asks a new session what it offers, and stops it again. `key` names the process for a
-   * profile restart to stop. The agent's answer is null when it listed no options at all.
+   * Starts the profile's agent, asks a new session on the profile's model what it offers, and stops it again. `key`
+   * names the process for a profile restart to stop. The agent's answer is null when it listed no options at all.
    */
   private async probeProfile(
     profile: Profile,
@@ -1442,7 +1443,7 @@ export class ConversationService {
       session.catch(() => {});
       const created = await Promise.race([session, Bun.sleep(timeoutMs).then(() => null)]);
       if (created === null) throw new HostProblemError({ code: "profile-test-unanswered", seconds: timeoutMs / 1000 });
-      return { configOptions: created.configOptions ?? null, tookMs: Date.now() - startedAt };
+      return { configOptions: await offeredOnModel(agent, created, profile.model), tookMs: Date.now() - startedAt };
     } catch (error) {
       return { error };
     } finally {
@@ -3666,6 +3667,28 @@ export const queuedBeforeSessionChange = (queue: QueuedMessage[]) => {
 function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionResponse {
   const rejecting = options.find(({ kind }) => kind === "reject_once") ?? options.find(({ kind }) => kind === "reject_always");
   return rejecting ? { outcome: { outcome: "selected", optionId: rejecting.optionId } } : { outcome: { outcome: "cancelled" } };
+}
+
+/**
+ * What a new session offers once it is on the model a profile names, as the profile's conversations will be: a model
+ * can have effort levels of its own. A model the agent does not offer, refuses, or takes longer than `waitMs` to switch
+ * to leaves what the session started with, so a probe never fails for want of the switch.
+ */
+export async function offeredOnModel(
+  agent: Pick<HarnessProcess, "setConfigOption">,
+  created: acp.NewSessionResponse,
+  model: string | null,
+  waitMs = OPTION_ANSWER_TIMEOUT_MS,
+): Promise<acp.SessionConfigOption[] | null> {
+  const startedWith = created.configOptions ?? null;
+  const modelOption = startedWith?.find(({ category }) => category === "model");
+  const choice = model && startedWith ? modelChoiceFor(startedWith, model) : null;
+  if (!modelOption || choice === null || modelOption.currentValue === choice) return startedWith;
+  const onModel = agent.setConfigOption(created.sessionId, modelOption.id, choice).then(
+    ({ configOptions }) => configOptions ?? startedWith,
+    () => startedWith,
+  );
+  return Promise.race([onModel, Bun.sleep(waitMs).then(() => startedWith)]);
 }
 
 /** Allowing once leaves no trace behind; Claude Code saves an "always" answer into the project's settings. */

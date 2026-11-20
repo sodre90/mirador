@@ -7,7 +7,7 @@ import { TestHost, writeBunProgram } from "./test-host.ts";
 const host = new TestHost({ fakePrograms: true });
 const agentLogFile = join(host.root, "probe-log");
 
-/** Changes the agent was asked to make to its own settings; the probe only ever asks. */
+/** Changes the agent was asked to make to its own settings; the probe changes nothing but its own session's model. */
 const optionChanges = () => agentLogLines().filter((line) => line.includes(" set "));
 
 const agentLogLines = () =>
@@ -69,4 +69,27 @@ test("a profile editor asks its agent again once the profile launches it differe
 
   await editor.getByRole("button", { name: "Close" }).click();
   await expect.poll(() => processAlive(pidFile)).toBe(false);
+});
+
+test("a profile editor lists the efforts of the model the profile names, asking on that model", async ({ page }) => {
+  writeFileSync(agentLogFile, "");
+  await signIn(page, host);
+  const editor = await createProfile(page, "on-model", `FAKE_ACP_MODES=1\nFAKE_ACP_MODELS=1\nFAKE_ACP_NAME=on-model\nFAKE_ACP_LOG=${agentLogFile}`, "", "opencode");
+  await openProfileTab(editor, "Defaults");
+  const models = editor.getByLabel("Profile model");
+  const efforts = editor.getByLabel("Profile effort");
+  const asked = async (model: string) => {
+    await models.selectOption(model);
+    await editor.getByRole("button", { name: "Save" }).click();
+    await expect.poll(optionChanges).toContain(`on-model set model to ${model}`);
+    await expect(models.locator("option"), "the agent itself answered").toHaveText(["Agent's default", "Default (recommended)", "Opus", "Haiku"]);
+  };
+  await expect(efforts.locator("option")).toHaveText(["Agent's default", "Low", "High"]);
+
+  await asked("haiku");
+  await expect(efforts, "Haiku has no effort levels").toHaveCount(0);
+
+  await asked("opus");
+  await expect(efforts.locator("option")).toHaveText(["Agent's default", "Low", "High"]);
+  expect(optionChanges(), "the probe sets nothing but the model, on its own session").toEqual(["on-model set model to haiku", "on-model set model to opus"]);
 });

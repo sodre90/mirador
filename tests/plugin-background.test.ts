@@ -250,7 +250,7 @@ describe("a conversation a plugin starts in a workspace", () => {
   test("tells a plugin what the agent of the profile it names offers, whatever the name's case", async () => {
     const { conversations } = serviceWithHelper();
     const offered: SessionConfigOption[] = [{ id: "effort", name: "Effort", category: "thought_level", type: "select", currentValue: "low", options: [{ value: "low", name: "Low" }] }];
-    (conversations as unknown as { profileChoicesCache: Map<string, { at: number; options: SessionConfigOption[] }> }).profileChoicesCache.set("helper", { at: Date.now(), options: offered });
+    (conversations as unknown as { profileChoicesCache: Map<string, { at: number; model: string | null; options: SessionConfigOption[] }> }).profileChoicesCache.set("helper", { at: Date.now(), model: null, options: offered });
     expect(await conversations.profileChoicesNamed("HELPER")).toEqual(offered);
     await expect(conversations.profileChoicesNamed("Nightly")).rejects.toThrow("There is no profile named Nightly; the profiles are Helper.");
   });

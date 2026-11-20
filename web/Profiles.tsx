@@ -152,10 +152,10 @@ function dropdownChoices(conversations: Conversation[], harness: HarnessId, cate
   return [{ value: AGENTS_OWN_CHOICE, name: words.agentsDefault }, ...known, ...savedButUnknown];
 }
 
-/** What the profile's agent itself says it offers, asked each time its editor opens and each time its saved launch changes; null while it answers or when it did not. */
+/** What the profile's agent itself says it offers on the profile's model, asked each time its editor opens and each time its saved launch or model changes; null while it answers or when it did not. */
 function useAgentChoices(profile: Profile | undefined) {
   const [fetched, setFetched] = useState<SessionConfigOption[] | null>(null);
-  const savedLaunch = profile ? JSON.stringify([profile.environment, profile.prelaunch]) : "";
+  const savedLaunchAndModel = profile ? JSON.stringify([profile.environment, profile.prelaunch, profile.model]) : "";
   useEffect(() => {
     if (!profile?.id) return;
     setFetched(null);
@@ -165,7 +165,7 @@ function useAgentChoices(profile: Profile | undefined) {
     });
     connection.send({ type: "profile.choices.get", requestId, profileId: profile.id });
     return stopListening;
-  }, [profile?.id, savedLaunch]);
+  }, [profile?.id, savedLaunchAndModel]);
   return fetched;
 }
 
