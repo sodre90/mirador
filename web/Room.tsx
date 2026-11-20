@@ -1,16 +1,33 @@
 import { flushSync } from "react-dom";
 import { useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
-import type { Conversation, Person, Profile } from "../shared/model.ts";
+import type { CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
-import { eventsAnswering, messagesOfThread, shownInRoom, unanswered, writtenByAgent, type Room, type RoomAuthor, type RoomMessage, type RoomThread, type RoomTimeline } from "../shared/rooms.ts";
+import {
+  AGENT_TAGGED_TURNS_AFTER_A_PERSON,
+  askedInThread,
+  canvasItemsOfAnswers,
+  eventsAnswering,
+  shownInRoom,
+  unanswered,
+  writtenByAgent,
+  type Room,
+  type RoomAuthor,
+  type RoomMessage,
+  type RoomThread,
+  type RoomTimeline,
+} from "../shared/rooms.ts";
+import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, MessageWriters, PersonAvatar, PersonName, TimelineOfEvents, Timestamp } from "./Chat.tsx";
 import { connection } from "./connection.ts";
+import type { EditRequest } from "./edit-approval.ts";
 import { t } from "./i18n/index.ts";
+import { LayoutToggles } from "./LayoutToggles.tsx";
 import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
 import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
+import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
 const words = t.rooms;
 const TAG_MENU_ID = "room-tags";
@@ -22,7 +39,11 @@ interface RoomAgentShown {
   conversation: Conversation | undefined;
 }
 
+type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[] };
+
 const isBusy = (conversation: Conversation | undefined) => conversation?.status === "running" || conversation?.status === "starting";
+
+const agentNames = (profileIds: string[], agentsById: Map<string, RoomAgentShown>) => profileIds.map((profileId) => agentsById.get(profileId)?.name ?? words.agentGone).join(", ");
 
 function AuthorMark({ author, agentsById }: { author: RoomAuthor; agentsById: Map<string, RoomAgentShown> }) {
   if (!writtenByAgent(author)) return <PersonAvatar personId={author.personId} />;
@@ -67,6 +88,8 @@ function RoomEntry({ message, quoted, agentsById, children }: { message: RoomMes
         )}
         {message.text && <div className={`message ${byAgent ? "agent" : "user"}`}>{byAgent ? <MarkdownText text={message.text} /> : <SlackMessageText text={message.text} />}</div>}
         {ending && <div className="notice-line">{ending}</div>}
+        {byAgent && message.tags.length > 0 && <div className="room-tags-line">{words.tagged(agentNames(message.tags, agentsById))}</div>}
+        {message.tagsDropped && <div className="notice-line room-tags-dropped">{words.tagsDropped(agentNames(message.tagsDropped, agentsById), AGENT_TAGGED_TURNS_AFTER_A_PERSON)}</div>}
         {children}
       </div>
     </div>
@@ -79,6 +102,21 @@ function ThreadLink({ text, onOpen }: { text?: string; onOpen: () => void }) {
       {text && <span>{text}</span>}
       <button type="button" className="link" onClick={onOpen}>
         {words.openThread}
+      </button>
+    </div>
+  );
+}
+
+/** A line under an answer whose turn put pages or questions on the room's canvas, which opens the latest of them there. */
+function CanvasLine({ items, onOpen }: { items: CanvasItem[]; onOpen: (itemId: string) => void }) {
+  const pages = items.filter(({ kind }) => kind === "show").length;
+  const questions = items.filter(({ kind }) => kind === "ask").length;
+  const latest = items.toSorted((a, b) => b.createdAt - a.createdAt)[0]!;
+  return (
+    <div className="room-thread-line room-canvas-line">
+      <span>{words.madeOnCanvas(pages, questions)}</span>
+      <button type="button" className="link" onClick={() => onOpen(latest.id)}>
+        {words.openOnCanvas}
       </button>
     </div>
   );
@@ -188,9 +226,8 @@ function ThreadColumn({
   agentsById: Map<string, RoomAgentShown>;
   onClose: () => void;
 }) {
-  const asked = messagesOfThread(timeline, thread).filter(({ answers }) => answers === undefined);
-  const answeredIds = new Set(timeline.messages.flatMap(({ answers }) => (answers === undefined ? [] : [answers])));
-  const workingOn = asked.find(({ id }) => !answeredIds.has(id));
+  const asked = askedInThread(timeline, thread);
+  const workingOn = unanswered(timeline).some((pending) => pending.thread.id === thread.id);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -241,9 +278,10 @@ export function RoomView({
   ownerId,
   ownerPicture,
   dispatch,
+  onOpenOnCanvas,
 }: {
   room: Room;
-  timeline: RoomTimeline | null;
+  timeline: RoomTimelineWithCanvas | null;
   profiles: Profile[];
   roomConversations: Conversation[];
   threadConversations: OpenConversation[];
@@ -251,6 +289,7 @@ export function RoomView({
   ownerId: string | null;
   ownerPicture: string | null;
   dispatch: Dispatch<AppAction>;
+  onOpenOnCanvas: (itemId: string) => void;
 }) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const agents = room.agents.map(({ profileId, conversationId }): RoomAgentShown => {
@@ -265,6 +304,10 @@ export function RoomView({
   const messageWriters = useMemo(() => ({ people, ownerId, ownerPicture }), [people, ownerId, ownerPicture]);
   const messagesById = new Map(timeline?.messages.map((message) => [message.id, message]));
   const shown = timeline?.messages.filter(shownInRoom) ?? [];
+  const canvasOfAnswers = useMemo(
+    () => (timeline ? canvasItemsOfAnswers(timeline.messages, timeline.canvas, (profileId) => room.agents.find((agent) => agent.profileId === profileId)?.conversationId) : new Map<string, CanvasItem[]>()),
+    [timeline, room.agents],
+  );
   const timelineEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     timelineEnd.current?.scrollIntoView({ block: "end" });
@@ -272,6 +315,7 @@ export function RoomView({
   const main = (
     <>
       <header className="chat-header room-header" data-pane-bar>
+        <LayoutToggles />
         <h2 className="room-title"># {room.name}</h2>
         <ul className="room-agents" aria-label={words.agents}>
           {agents.map((agent) => (
@@ -285,11 +329,15 @@ export function RoomView({
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}
         {timeline && shown.length === 0 && <div className="notice-line">{words.empty}</div>}
-        {shown.map((message) => (
-          <RoomEntry key={message.id} message={message} quoted={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById}>
-            {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} />}
-          </RoomEntry>
-        ))}
+        {shown.map((message) => {
+          const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
+          return (
+            <RoomEntry key={message.id} message={message} quoted={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById}>
+              {madeOnCanvas.length > 0 && <CanvasLine items={madeOnCanvas} onOpen={onOpenOnCanvas} />}
+              {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} />}
+            </RoomEntry>
+          );
+        })}
         {timeline && workUnderWay(timeline, agentsById).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <div ref={timelineEnd} />
       </div>
@@ -314,3 +362,51 @@ export function RoomView({
     </MessageWriters.Provider>
   );
 }
+
+/** The room's canvas: its agents' pages and questions, newest in front, where the owner reads them and answers. */
+export function RoomCanvas({
+  room,
+  items,
+  shown,
+  assetsOrigin,
+  homeDir,
+  canvasViews,
+  itemToShow,
+  onHide,
+}: {
+  room: Room;
+  items: CanvasItem[];
+  shown: boolean;
+  assetsOrigin: string;
+  homeDir: string;
+  canvasViews: Record<string, string>;
+  itemToShow: { itemId: string } | null;
+  onHide: () => void;
+}) {
+  return (
+    <div className="kept-canvas" style={{ display: shown ? "contents" : "none" }}>
+      <CanvasShown.Provider value={shown}>
+        <CanvasPanel
+          conversationId={room.id}
+          items={items}
+          plan={null}
+          edits={NO_EDITS}
+          assetsOrigin={assetsOrigin}
+          homeDir={homeDir}
+          changesRefreshPoint={0}
+          apps={NO_APPS}
+          workspaceTabs={NO_WORKSPACE_TABS}
+          workspaceId={undefined}
+          canvasViews={canvasViews}
+          onHide={onHide}
+          inRoom
+          itemToShow={itemToShow}
+        />
+      </CanvasShown.Provider>
+    </div>
+  );
+}
+
+const NO_EDITS: EditRequest[] = [];
+const NO_APPS: WorkspaceApps = { open: [], elsewhere: [], installed: [], documents: {} };
+const NO_WORKSPACE_TABS: WorkspacePluginTab[] = [];

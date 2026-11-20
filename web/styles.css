@@ -9707,6 +9707,12 @@ button.link.more-rows {
   padding-left: 0;
 }
 
+.room-tags-line {
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .room-thread-turn {
   display: flex;
   flex-direction: column;

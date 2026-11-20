@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, literally, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -21,6 +21,8 @@ test.afterAll(async () => {
 const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Launch, @ tags an agent…" });
 const roomEntries = (page: Page) => page.locator(".room-timeline .room-entry");
 const thread = (page: Page, agent: string) => page.getByRole("complementary", { name: `Thread of ${agent}` });
+/** A message as an agent is sent it: a line with its number, author and time, then its text after "> ". */
+const framed = (author: string, text: string) => `#\\d+ ${author}, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC:\\n> ${literally(text)}\\n`;
 
 async function write(page: Page, text: string) {
   await roomComposer(page).fill(text);
@@ -69,7 +71,8 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await expect(answer.locator(".author")).toContainText("Builder");
     const prompt = recordedPrompts("Builder");
     expect(prompt).toContain('You are an attendee of the room "Launch"');
-    expect(prompt).toMatch(/Owner: Morning all\n.*Owner: The release is Friday\n.*Owner: @Builder SAY Shipped it\n$/);
+    expect(prompt).toContain("The room's other agents are Reviewer.");
+    expect(prompt).toMatch(new RegExp(`${framed("Owner", "Morning all")}${framed("Owner", "The release is Friday")}${framed("Owner", "@Builder SAY Shipped it")}$`));
     expect(recordedPrompts("Reviewer")).toBe("");
     await expect(page.locator(".sidebar .workspace:not(.rooms) li")).toHaveCount(0);
   });
@@ -93,8 +96,16 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await expect(roomEntries(page).locator(".message.agent")).toHaveText(["Shipped it", "Notes written", "Looks good"]);
     const prompt = recordedPrompts("Reviewer");
     expect(prompt).toContain("Owner tagged you there.");
-    for (const line of ["Owner: Morning all", "Owner: The release is Friday", "Owner: @Builder SAY Shipped it", "Builder: Shipped it", "Owner: SAY Notes written", "Builder: Notes written"]) expect(prompt).toContain(line);
-    expect(prompt).toMatch(/Owner: @Reviewer SAY Looks good\n$/);
+    for (const [author, text] of [
+      ["Owner", "Morning all"],
+      ["Owner", "The release is Friday"],
+      ["Owner", "@Builder SAY Shipped it"],
+      ["Builder", "Shipped it"],
+      ["Owner", "SAY Notes written"],
+      ["Builder", "Notes written"],
+    ] as const)
+      expect(prompt).toMatch(new RegExp(framed(author, text)));
+    expect(prompt).toMatch(new RegExp(`${framed("Owner", "@Reviewer SAY Looks good")}$`));
   });
 
   await test.step("after a reload the room shows all of it, and its agents' conversations stay out of the sidebar", async () => {

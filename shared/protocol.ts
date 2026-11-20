@@ -535,8 +535,9 @@ export type ServerMessage =
   | { type: "room.created"; requestId: string; roomId: string }
   | { type: "room.upserted"; room: Room }
   | { type: "room.deleted"; roomId: string }
-  | ({ type: "room.timeline"; roomId: string } & RoomTimeline)
-  /** A new message of a subscribed room, with the threads it starts, one for each agent it tags. */
+  /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on. */
+  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[] } & RoomTimeline)
+  /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, and moves to the end. */
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
   | {
       type: "conversation.history";

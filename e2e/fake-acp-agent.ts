@@ -49,7 +49,10 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * completes with a many-line command as its description. The
  * `_session/async_task/stop` request stops one and says so, logging it.
  * A room's message reaching it is answered with a look through the room, then the words after the last `SAY ` in the
- * last line, the message it is asked.
+ * last line, the message it is asked. `CANVAS ` there, a canvas tool's name and its JSON arguments call that tool of
+ * the canvas server the session was given, and answer with its result. `PINGPONG ` and two agents' names, another's
+ * and its own, tag the other with room_tag and answer `PINGPONG ` with the names swapped, so two agents tag each other
+ * for as long as the room lets them. `My answer to your question` is answered with "Going with " and the answer.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
  * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
@@ -409,7 +412,42 @@ async function replyAroundATool(client: acp.AgentContext, sessionId: string, tex
 async function answerInRoom(client: acp.AgentContext, sessionId: string, prompt: string) {
   const asked = prompt.trimEnd().split("\n").at(-1)!;
   await runTools(client, sessionId, [{ title: "Read the room", kind: "read", rawInput: {} }]);
-  return sayText(client, sessionId, asked.includes("SAY ") ? asked.slice(asked.lastIndexOf("SAY ") + "SAY ".length) : "Noted.");
+  const after = (word: string) => (asked.includes(word) ? asked.slice(asked.lastIndexOf(word) + word.length) : null);
+  const canvasCall = after("CANVAS ");
+  if (canvasCall !== null) {
+    const [tool, ...input] = canvasCall.split(" ");
+    return sayText(client, sessionId, await callCanvasTool(sessionId, tool!, JSON.parse(input.join(" "))));
+  }
+  const pingPong = after("PINGPONG ");
+  if (pingPong !== null) {
+    const [other, itself] = pingPong.split(" ");
+    await callCanvasTool(sessionId, "room_tag", { agents: [other] });
+    return sayText(client, sessionId, `PINGPONG ${itself} ${other}`);
+  }
+  return sayText(client, sessionId, after("SAY ") ?? "Noted.");
+}
+
+/** The canvas server each session was given, which it calls as an agent calls its tools. */
+const canvasServers = new Map<string, { url: string; headers: Record<string, string> }>();
+
+function keepCanvasServer(sessionId: string, servers: acp.McpServer[]) {
+  const canvas = servers.find((server) => "url" in server && server.name === "canvas");
+  if (canvas && "url" in canvas) canvasServers.set(sessionId, { url: canvas.url, headers: Object.fromEntries(canvas.headers.map(({ name, value }) => [name, value])) });
+}
+
+async function callCanvasTool(sessionId: string, name: string, input: unknown) {
+  const server = canvasServers.get(sessionId);
+  if (!server) return "No canvas server was given.";
+  trace(`calls canvas tool ${name} in ${sessionId}`);
+  const response = await fetch(server.url, {
+    method: "POST",
+    headers: { ...server.headers, "Content-Type": "application/json", Accept: "application/json, text/event-stream", "MCP-Protocol-Version": "2025-11-25" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: input } }),
+  });
+  const body = await response.text();
+  const event = body.split("\n").find((line) => line.startsWith("data: "));
+  const reply = JSON.parse(event ? event.slice("data: ".length) : body) as { result?: { content: { text: string }[] }; error?: { message: string } };
+  return reply.result ? reply.result.content.map(({ text }) => text).join("\n") : `The canvas server refused: ${reply.error?.message}`;
 }
 
 async function runTools(client: acp.AgentContext, sessionId: string, tools: { title: string; kind: acp.ToolKind; rawInput: unknown }[]) {
@@ -520,6 +558,7 @@ acp
   .onRequest(acp.methods.agent.session.new, (ctx) => {
     const sessionId = `fake-session-${process.pid}-${++nextSession}`;
     sessionFolders.set(sessionId, ctx.params.cwd);
+    keepCanvasServer(sessionId, ctx.params.mcpServers);
     trace(`new session ${sessionId}`);
     if (resumes) log(`new ${sessionId}`);
     if (availableCommands)
@@ -600,6 +639,7 @@ acp
     if (startsWith(prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
     if (startsWith(prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
     if (text.includes(ROOM_MESSAGES_HEADING)) return answerInRoom(ctx.client, ctx.params.sessionId, text);
+    if (startsWith(prompt, "My answer to your question")) return sayText(ctx.client, ctx.params.sessionId, `Going with ${text.slice(text.lastIndexOf(": ") + ": ".length)}`);
     if (startsWith(prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
     if (startsWith(prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
     return startsWith(prompt, "WEDGE") || startsWith(prompt, "CRASH") ? new Promise(() => {}) : { stopReason: "end_turn" as const };

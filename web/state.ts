@@ -16,7 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
-import type { Room, RoomTimeline } from "../shared/rooms.ts";
+import { shownOnRoomCanvas, type Room, type RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -74,8 +74,8 @@ export interface AppState {
   roomConversations: Conversation[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
-  /** The shown room's messages and threads, once the host sent them. */
-  roomTimeline: (RoomTimeline & { roomId: string }) | null;
+  /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
+  roomTimeline: (RoomTimeline & { roomId: string; canvas: CanvasItem[] }) | null;
   /** The agents' conversations whose threads are shown beside their room, subscribed as the kept conversations are. */
   threadConversations: OpenConversation[];
   profiles: Profile[];
@@ -304,8 +304,15 @@ function keepingThreadConversations(state: AppState, conversationIds: string[]):
   return { ...state, threadConversations: conversationIds.map((conversationId) => alreadyOpen(conversationId) ?? notLoaded(conversationId)) };
 }
 
-function withRoomTimeline(state: AppState, roomId: string, change: (timeline: RoomTimeline) => RoomTimeline): AppState {
+function withRoomTimeline(state: AppState, roomId: string, change: (timeline: RoomTimeline & { canvas: CanvasItem[] }) => RoomTimeline & { canvas: CanvasItem[] }): AppState {
   return state.roomTimeline?.roomId === roomId ? { ...state, roomTimeline: { roomId, ...change(state.roomTimeline) } } : state;
+}
+
+/** An agent's page or question goes on the canvas of the room its conversation is in, while the page shows that room. */
+function withRoomCanvasItem(state: AppState, item: CanvasItem): AppState {
+  const roomId = state.roomConversations.find(({ id }) => id === item.conversationId)?.roomId;
+  if (!roomId || !shownOnRoomCanvas(item)) return state;
+  return withRoomTimeline(state, roomId, (timeline) => ({ ...timeline, canvas: upsert(timeline.canvas, withThisPagesAssetsOrigin(state, item)) }));
 }
 
 const notLoaded = (conversationId: string): OpenConversation => ({ conversationId, loaded: false, events: [], hasEarlier: false, canvas: [] });
@@ -464,7 +471,10 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "conversation.rewind-done":
       return withOpen(state, message.conversationId, (open) => ({ ...open, events: open.events.filter(({ seq }) => seq < message.fromSeq) }));
     case "canvas.upserted":
-      return withOpen(state, message.item.conversationId, (open) => ({ ...open, canvas: upsert(open.canvas, withThisPagesAssetsOrigin(state, message.item)) }));
+      return withRoomCanvasItem(
+        withOpen(state, message.item.conversationId, (open) => ({ ...open, canvas: upsert(open.canvas, withThisPagesAssetsOrigin(state, message.item)) })),
+        message.item,
+      );
     case "profile.upserted":
       return { ...state, profiles: upsert(state.profiles, message.profile).sort((a, b) => a.name.localeCompare(b.name)) };
     case "profile.deleted":
@@ -614,12 +624,19 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       const next = { ...state, rooms: state.rooms.filter(({ id }) => id !== message.roomId) };
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
-    case "room.timeline":
-      return state.selectedRoomId === message.roomId ? { ...state, roomTimeline: { roomId: message.roomId, messages: message.messages, threads: message.threads } } : state;
+    case "room.timeline": {
+      const { roomId, messages, threads, canvas } = message;
+      return state.selectedRoomId === roomId ? { ...state, roomTimeline: { roomId, messages, threads, canvas: canvas.map((item) => withThisPagesAssetsOrigin(state, item)) } } : state;
+    }
     case "room.message":
-      return withRoomTimeline(state, message.message.roomId, ({ messages, threads }) =>
-        messages.some(({ id }) => id === message.message.id) ? { messages, threads } : { messages: [...messages, message.message], threads: [...threads, ...message.threads] },
-      );
+      return withRoomTimeline(state, message.message.roomId, (timeline) => {
+        const knownThreads = new Set(timeline.threads.map(({ id }) => id));
+        return {
+          ...timeline,
+          messages: [...timeline.messages.filter(({ id }) => id !== message.message.id), message.message],
+          threads: [...timeline.threads, ...message.threads.filter(({ id }) => !knownThreads.has(id))],
+        };
+      });
   }
 }
 

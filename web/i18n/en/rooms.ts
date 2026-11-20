@@ -1,3 +1,6 @@
+const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
+const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
+
 export const rooms = {
   rooms: "Rooms",
   newRoom: "New room",
@@ -31,4 +34,9 @@ export const rooms = {
   failed: "The turn failed.",
   noAnswer: "Ended without an answer in words.",
   agentGone: "An agent no longer in the room",
+  tagged: (agents: string) => `Tagged ${agents}`,
+  tagsDropped: (agents: string, turns: number) =>
+    `Not tagged: ${agents}. The agents were stopped, as they had tagged each other ${turns} times since a person wrote. Tag one with @ to go on.`,
+  madeOnCanvas: (pages: number, questions: number) => `On the canvas: ${listed(pages > 0 && counted(pages, "page", "pages"), questions > 0 && counted(questions, "question", "questions"))}`,
+  openOnCanvas: "Open on canvas",
 };

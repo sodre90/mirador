@@ -1,15 +1,39 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
-import type { Conversation, Launch } from "../shared/model.ts";
-import { catchUpPrompt, writtenByAgent, type Room, type RoomAuthor, type RoomMessage, type RoomThread, type RoomTimeline } from "../shared/rooms.ts";
+import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
+import {
+  AGENT_TAGGED_TURNS_AFTER_A_PERSON,
+  agentTaggedTurnsAfter,
+  catchUpPrompt,
+  personMessageBehind,
+  roomHistory,
+  shownOnRoomCanvas,
+  writtenByAgent,
+  type Room,
+  type RoomAuthor,
+  type RoomHistoryQuery,
+  type RoomMessage,
+  type RoomThread,
+  type RoomTimeline,
+} from "../shared/rooms.ts";
 import type { Hub } from "./hub.ts";
 import type { Store } from "./store.ts";
 
 /** What a room needs of the conversations its agents work in. */
 export interface RoomSessions {
   startInRoom(roomId: string, workspaceId: string, launch: Launch, title: string): Conversation;
-  send(conversationId: string, text: string, imageIds: string[], options: { authorId: string; afterTurn: boolean; roomMessageId: string }): Promise<void>;
+  /** `authorId` is the person who wrote the message; none when an agent's answer tagged the agent. */
+  send(conversationId: string, text: string, imageIds: string[], options: { authorId?: string; afterTurn: boolean; roomMessageId: string }): Promise<void>;
   delete(conversationId: string): void;
+}
+
+/** What came of an agent naming agents to tag in its answer: those it will tag, and those it can't, by name. */
+export interface TagsNamed {
+  tagged: string[];
+  itself: boolean;
+  unknown: string[];
+  /** The other agents of the room, by name, for an agent that named one wrong. */
+  others: string[];
 }
 
 const OWNER_WITHOUT_A_NAME = "Owner";
@@ -17,13 +41,18 @@ const AGENT_GONE = "An agent no longer in the room";
 
 const distinct = (ids: string[]) => [...new Set(ids)];
 const hasAgent = (room: Room, profileId: string) => room.agents.some((agent) => agent.profileId === profileId);
+const sameName = (named: string, name: string) => named.trim().replace(/^@/, "").toLowerCase() === name.toLowerCase();
 
 /**
  * The rooms of this machine: their messages go to every page that shows the room and cost no tokens, until one tags an
  * agent or follows up in its thread. Then the agent's conversation in the room is sent what it has not seen of the room,
- * and the final answer of the turn that takes is posted to the room, in the thread.
+ * and the final answer of the turn that takes is posted to the room, in the thread. An agent's answer can tag other agents
+ * of the room as a person's message does, a few turns at most after a person last wrote.
  */
 export class RoomService {
+  /** The agents each conversation's answer tags, named while its turn on a room message runs. */
+  private readonly tagsForAnswers = new Map<string, { answering: string; profileIds: string[] }>();
+
   constructor(
     private readonly store: Store,
     private readonly hub: Hub,
@@ -74,6 +103,14 @@ export class RoomService {
     return { messages: this.store.listRoomMessages(roomId), threads: this.store.listRoomThreads(roomId) };
   }
 
+  /** The pages and questions the room's agents made in their conversations there, oldest first. */
+  canvas(roomId: string): CanvasItem[] {
+    return this.existingRoom(roomId)
+      .agents.flatMap(({ conversationId }) => (conversationId ? this.store.listCanvasItems(conversationId) : []))
+      .filter(shownOnRoomCanvas)
+      .toSorted((a, b) => a.createdAt - b.createdAt);
+  }
+
   /**
    * A person's message, in the room or as a follow-up in a thread. Each agent it tags gets a thread of its own for it,
    * and with the thread's agent of a follow-up, is sent what it has missed of the room.
@@ -84,44 +121,116 @@ export class RoomService {
     const thread = threadId === null ? null : this.followedUp(room, threadId, tagged);
     if (tagged.some((profileId) => !this.answers(room, profileId))) throw new HostProblemError({ code: "room-message-misaddressed" });
     const message = this.store.appendRoomMessage({ id: crypto.randomUUID(), roomId, at: Date.now(), author: { personId }, text: text.trim(), tags: tagged, threadId });
-    const threads = tagged.map((profileId) => ({ id: crypto.randomUUID(), roomId, messageId: message.id, profileId }));
-    threads.forEach((started) => this.store.insertRoomThread(started));
-    this.hub.publishToRoom(roomId, { type: "room.message", message, threads });
+    this.post(message, tagged);
     (thread ? [thread.profileId] : tagged).forEach((profileId) => this.ask(room, profileId, message, personId));
     return message;
   }
 
-  /** Posts the final answer of the agent's turn to the room, in the thread of the message the turn answers. */
+  /**
+   * Posts the final answer of the agent's turn to the room, in the thread of the message the turn answers. It takes the
+   * place of an answer of the same agent to that message whose turn did not finish, as a turn that went on from there
+   * finished it. A finished answer tags the agents the turn named, unless agents already took too many turns on each
+   * other's tags since a person wrote: then it names them as dropped.
+   */
   turnEnded(conversationId: string, turnSeq: number) {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation?.roomId || conversation.profileId === null) return;
+    const room = this.store.findRoom(conversation.roomId);
     const asked = this.askedIn(conversationId, turnSeq);
     const thread = asked && this.threadOf(asked, conversation.profileId);
-    if (!asked || !thread) return;
+    if (!room || !asked || !thread) return;
     const reply = replyOf(this.store.listEventsFrom(conversationId, turnSeq));
-    const answer = this.store.appendRoomMessage({
-      id: crypto.randomUUID(),
-      roomId: conversation.roomId,
+    const finished = reply.ended === "finished";
+    const named = finished ? this.takeTagsFor(conversationId, asked.id).filter((profileId) => this.answers(room, profileId)) : [];
+    const passedOn = this.agentsMayGoOn(room.id, asked, named.length) ? named : [];
+    const answer = {
+      roomId: room.id,
       at: Date.now(),
       author: { profileId: conversation.profileId },
       text: reply.text ?? "",
-      tags: [],
+      tags: passedOn,
       threadId: thread.id,
       answers: asked.id,
       ...(reply.ended !== "finished" && { ended: reply.ended }),
-    });
-    this.hub.publishToRoom(conversation.roomId, { type: "room.message", message: answer, threads: [] });
+      ...(passedOn.length < named.length && { tagsDropped: named }),
+    };
+    const unfinished = this.unfinishedAnswer(asked, conversation.profileId);
+    const posted = unfinished ? this.store.rewriteRoomMessage({ ...answer, id: unfinished.id }) : this.store.appendRoomMessage({ ...answer, id: crypto.randomUUID() });
+    this.post(posted, passedOn);
+    passedOn.forEach((profileId) => this.ask(room, profileId, posted, undefined));
   }
 
-  private ask(room: Room, profileId: string, message: RoomMessage, personId: string) {
+  /**
+   * The room_tag tool: the agents of the room, by name, that the caller's final answer of the turn under way tags; they
+   * replace those it named before in that turn. Null for a conversation that is no agent's in a room.
+   */
+  nameTagsForAnswer(conversationId: string, names: string[]): TagsNamed | null {
+    const conversation = this.store.findConversation(conversationId);
+    const room = conversation?.roomId ? this.store.findRoom(conversation.roomId) : undefined;
+    const answering = this.askedIn(conversationId, Number.MAX_SAFE_INTEGER);
+    if (!conversation || !room || !answering) return null;
+    const others = room.agents.filter(({ profileId }) => profileId !== conversation.profileId && this.answers(room, profileId)).map(({ profileId }) => this.store.findProfile(profileId)!);
+    const ownName = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId)?.name;
+    const itself = ownName !== undefined && names.some((named) => sameName(named, ownName));
+    const tagged = others.filter(({ name }) => names.some((named) => sameName(named, name)));
+    const unknown = names.filter((named) => !(ownName !== undefined && sameName(named, ownName)) && !others.some(({ name }) => sameName(named, name)));
+    this.tagsForAnswers.set(conversationId, { answering: answering.id, profileIds: tagged.map(({ id }) => id) });
+    return { tagged: tagged.map(({ name }) => name), itself, unknown, others: others.map(({ name }) => name) };
+  }
+
+  /** The room_history tool: older messages of the room the caller was sent, framed as its catch-ups. Null for a conversation that is no agent's in a room. */
+  readBack(conversationId: string, query: RoomHistoryQuery): string | null {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation?.roomId || conversation.profileId === null || !this.store.findRoom(conversation.roomId)) return null;
+    const sent = this.store.listRoomMessagesBetween(conversation.roomId, 0, this.store.roomSeenThrough(conversation.roomId, conversation.profileId));
+    return roomHistory(sent, query, (author) => this.nameOf(author));
+  }
+
+  private ask(room: Room, profileId: string, message: RoomMessage, personId: string | undefined) {
     const agent = room.agents.find((each) => each.profileId === profileId)!;
     const conversationId = agent.conversationId ?? this.startSession(room, profileId);
     const unseen = this.store
       .listRoomMessagesBetween(room.id, this.store.roomSeenThrough(room.id, profileId), message.seq)
       .filter(({ author }) => !(writtenByAgent(author) && author.profileId === profileId));
-    const prompt = catchUpPrompt({ roomName: room.name, unseen, nameOf: (author) => this.nameOf(author), firstInRoom: agent.conversationId === null });
+    const prompt = catchUpPrompt({
+      roomName: room.name,
+      unseen,
+      nameOf: (author) => this.nameOf(author),
+      firstInRoom: agent.conversationId === null,
+      otherAgents: this.otherAgentNames(room, profileId),
+    });
     this.store.markRoomSeen(room.id, profileId, message.seq);
     this.sessions.send(conversationId, prompt, [], { authorId: personId, afterTurn: true, roomMessageId: message.id }).catch(() => {});
+  }
+
+  /** The message goes to every page that shows the room, with a thread for each agent it tags. */
+  private post(message: RoomMessage, tagged: string[]) {
+    const threads = tagged.map((profileId) => ({ id: crypto.randomUUID(), roomId: message.roomId, messageId: message.id, profileId }));
+    threads.forEach((started) => this.store.insertRoomThread(started));
+    this.hub.publishToRoom(message.roomId, { type: "room.message", message, threads });
+  }
+
+  private takeTagsFor(conversationId: string, answering: string) {
+    const named = this.tagsForAnswers.get(conversationId);
+    this.tagsForAnswers.delete(conversationId);
+    return named?.answering === answering ? named.profileIds : [];
+  }
+
+  private agentsMayGoOn(roomId: string, asked: RoomMessage, tagging: number) {
+    const timeline = this.timeline(roomId);
+    const personMessage = personMessageBehind(asked, new Map(timeline.messages.map((message) => [message.id, message])));
+    return agentTaggedTurnsAfter(timeline, personMessage) + tagging <= AGENT_TAGGED_TURNS_AFTER_A_PERSON;
+  }
+
+  private unfinishedAnswer(asked: RoomMessage, profileId: string) {
+    const latest = this.store
+      .listRoomMessages(asked.roomId)
+      .findLast(({ answers, author }) => answers === asked.id && writtenByAgent(author) && author.profileId === profileId);
+    return latest?.ended === undefined ? undefined : latest;
+  }
+
+  private otherAgentNames(room: Room, profileId: string) {
+    return room.agents.flatMap((agent) => (agent.profileId === profileId ? [] : (this.store.findProfile(agent.profileId)?.name ?? [])));
   }
 
   /** An agent of the room whose profile is still there to take a turn. */
@@ -154,9 +263,11 @@ export class RoomService {
     return roomMessageId === undefined ? undefined : this.store.findRoomMessage(roomMessageId);
   }
 
+  /** The thread the agent answers the message in: the one the message started for it, or the thread a person's follow-up was written in. */
   private threadOf(message: RoomMessage, profileId: string): RoomThread | undefined {
-    if (message.threadId !== null) return this.store.findRoomThread(message.threadId);
-    return this.store.listRoomThreads(message.roomId).find((thread) => thread.messageId === message.id && thread.profileId === profileId);
+    const started = this.store.listRoomThreads(message.roomId).find((thread) => thread.messageId === message.id && thread.profileId === profileId);
+    if (started) return started;
+    return message.threadId !== null && message.answers === undefined ? this.store.findRoomThread(message.threadId) : undefined;
   }
 
   private nameOf(author: RoomAuthor) {

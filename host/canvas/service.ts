@@ -19,6 +19,7 @@ import { saveIntoWorkspace } from "./save-to-project.ts";
 import { noteOfPageErrors, type CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { workingCopyOf } from "../worktrees.ts";
+import { roomMessageAnsweredAt, shownOnRoomCanvas } from "../../shared/rooms.ts";
 
 const RENDER_REPORT_TIMEOUT_MS = 6000;
 
@@ -199,7 +200,11 @@ export class CanvasService {
     });
   }
 
-  /** An answer the agent no longer waits on goes to it as the next message, written by the person who answered. */
+  /**
+   * An answer the agent no longer waits on goes to it as the next message, written by the person who answered. A room's
+   * agent hears it after the turn it may be in, as going on with the room message whose turn asked, so that its answer
+   * goes into that message's thread.
+   */
   answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[], authorId?: string) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
@@ -210,7 +215,13 @@ export class CanvasService {
     this.save({ ...item, status: "answered", answer: { ...given, deliveredAs: waiter ? "tool-result" : "next-message" } });
     if (waiter) waiter.answered(given);
     else if (item.installsPluginOffer) void this.installThenTell(item, item.installsPluginOffer, given, authorId);
-    else this.conversations.send(item.conversationId, answerAsMessage(item, given), [], { authorId }).catch(() => {});
+    else this.conversations.send(item.conversationId, answerAsMessage(item, given), [], { authorId, ...this.roomMessageAsking(item) }).catch(() => {});
+  }
+
+  private roomMessageAsking(item: AskItem) {
+    if (!this.store.findConversation(item.conversationId)?.roomId) return {};
+    const roomMessageId = roomMessageAnsweredAt(this.store.listEventsOfTypes(item.conversationId, ["user-message"]), item.createdAt);
+    return roomMessageId === undefined ? {} : { roomMessageId, afterTurn: true };
   }
 
   private pluginInstaller: PluginInstaller = {
@@ -336,6 +347,8 @@ export class CanvasService {
     const item = { ...change, updatedAt: Date.now() };
     this.store.saveCanvasItem(item);
     this.hub.publishToConversation(item.conversationId, { type: "canvas.upserted", item });
+    const roomId = this.store.findConversation(item.conversationId)?.roomId;
+    if (roomId && shownOnRoomCanvas(item)) this.hub.publishToRoom(roomId, { type: "canvas.upserted", item });
     if (item.kind === "ask") this.conversations.questionsChanged(item.conversationId);
     return item;
   }

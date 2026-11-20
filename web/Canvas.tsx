@@ -760,6 +760,8 @@ function useAppTabOnOpen(conversationId: string, open: OpenApp[], showTab: (tab:
 
 /** What each conversation's canvas showed when the user left it, which the panel, made again for each conversation, picks up. */
 const leftViews = new Map<string, { latestId: string | undefined; selectedId: string | null; tab: CoveringTab; seenEdit: SeenEdit }>();
+/** Each request to bring an item in front is met once, not again when the canvas mounts anew still holding it. */
+const metItemRequests = new WeakSet<{ itemId: string }>();
 
 /** The agent's change to the tab's item the user last saw, by item: its changes since flash once the tab opens. */
 interface SeenEdit {
@@ -780,6 +782,8 @@ export function CanvasPanel({
   workspaceId,
   canvasViews,
   onHide,
+  inRoom = false,
+  itemToShow = null,
 }: {
   conversationId: string;
   items: CanvasItem[];
@@ -797,6 +801,10 @@ export function CanvasPanel({
   /** Where the canvas assets serve each canvas plugin's view, by plugin name. */
   canvasViews: Record<string, string>;
   onHide: () => void;
+  /** A room's canvas, which holds its agents' pages and questions: no changes of a workspace, no pointing at a page to ask about it. */
+  inRoom?: boolean;
+  /** The item the user asked to see, brought in front once for each time they ask. */
+  itemToShow?: { itemId: string } | null;
 }) {
   const pages = useMemo<CanvasItem[]>(() => items.filter((item) => !isTabItem(item)), [items]);
   const tabItem = currentTabItem(items);
@@ -850,7 +858,8 @@ export function CanvasPanel({
   const shownPageFrame = useRef<HTMLIFrameElement>(null);
   const shownQuestionForm = useRef<HTMLFormElement>(null);
   const somethingElseShown = Boolean(selected || edit.shown);
-  const changesShown = changesOpen || (!tab && !somethingElseShown);
+  const nothingCovers = changesOpen || (!tab && !somethingElseShown);
+  const changesShown = !inRoom && nothingCovers;
   const outcome = selected && outcomeOf(selected);
   const questionNote = useClearWhenSettled(selected, (settledId) => setSelectedId((current) => (current === settledId ? null : current)));
   const settledNote = edit.note ?? questionNote;
@@ -863,6 +872,11 @@ export function CanvasPanel({
     edit.setAside();
     placeForReview(pages.find((item) => item.id === id));
   };
+  useEffect(() => {
+    if (!itemToShow || metItemRequests.has(itemToShow)) return;
+    metItemRequests.add(itemToShow);
+    pick(itemToShow.itemId);
+  }, [itemToShow]);
   const clear = () => {
     setSelectedId(null);
     setTab(null);
@@ -879,7 +893,7 @@ export function CanvasPanel({
   const popOut = () => poppable && openItemWindow({ conversationId, itemId: poppable.id }, poppable.title);
   const shownPage = !tab && selected?.kind === "show" ? selected : undefined;
   const pageExport = usePageExport(shownPage, shownPageFrame);
-  const pageMarks = usePageMarks(shownPage, shownPageFrame);
+  const pageMarks = usePageMarks(inRoom ? undefined : shownPage, shownPageFrame);
   const shownQuestion = !tab && selected?.kind === "ask" ? selected : undefined;
   const findTarget: FindTarget | undefined = shownPage
     ? { kind: "page", id: shownPage.id, frame: shownPageFrame }
@@ -903,7 +917,7 @@ export function CanvasPanel({
   const firstAfterSeparator = (entries: BarMenuEntry[]) => entries.map((entry, index) => (index === 0 ? { ...entry, separatorBefore: true } : entry));
   const foldedTabs: BarMenuEntry[] = tabsFolded
     ? [
-        { label: words.bar.changes, checked: changesShown, disabled: !somethingElseShown && !checklistOpen, onChoose: () => toggleTab("changes") },
+        ...(inRoom ? [] : [{ label: words.bar.changes, checked: changesShown, disabled: !somethingElseShown && !checklistOpen, onChoose: () => toggleTab("changes") }]),
         ...(checklistCountText ? [{ label: checklistCountText, checked: checklistOpen, onChoose: () => toggleTab("checklist") }] : []),
         ...apps.open.map(({ app, title }) => ({ label: title, checked: tab === appTab(app), onChoose: () => toggleTab(appTab(app)) })),
         ...workspaceTabs.map(({ plugin, title }) => ({ label: title, checked: tab === pluginTab(plugin), onChoose: () => toggleTab(pluginTab(plugin)) })),
@@ -912,7 +926,7 @@ export function CanvasPanel({
     : [];
   const foldedPageTools: BarMenuEntry[] = pageToolsFolded
     ? [
-        ...(shownPage ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
+        ...(shownPage && !inRoom ? [{ label: words.bar.pointAndAsk, checked: pageMarks.pointing, onChoose: () => pageMarks.point(!pageMarks.pointing) }] : []),
         ...(pageMarks.waiting > 0 ? [{ label: words.markBatch.bar(pageMarks.waiting), checked: pageMarks.listOpen, onChoose: pageMarks.toggleList }] : []),
       ]
     : [];
@@ -1004,16 +1018,18 @@ export function CanvasPanel({
             {words.bar.editsWaiting(edit.waiting)}
           </button>
         )}
-        <button
-          type="button"
-          className={`changes-toggle ${changesShown ? "on" : ""}`}
-          aria-pressed={changesShown}
-          data-hint={hints.canvasChanges}
-          disabled={!somethingElseShown && !checklistOpen}
-          onClick={() => toggleTab("changes")}
-        >
-          <span className={changesOpen ? "canvas-title" : undefined}>{words.bar.changes}</span>
-        </button>
+        {!inRoom && (
+          <button
+            type="button"
+            className={`changes-toggle ${changesShown ? "on" : ""}`}
+            aria-pressed={changesShown}
+            data-hint={hints.canvasChanges}
+            disabled={!somethingElseShown && !checklistOpen}
+            onClick={() => toggleTab("changes")}
+          >
+            <span className={changesOpen ? "canvas-title" : undefined}>{words.bar.changes}</span>
+          </button>
+        )}
         {(tabItem || plan) && (
           <button
             type="button"
@@ -1076,7 +1092,7 @@ export function CanvasPanel({
             <sup className="mark-batch-count">{pageMarks.waiting}</sup>
           </button>
         )}
-        {shownPage && (
+        {shownPage && !inRoom && (
           <button
             type="button"
             className={`point-toggle ${pageMarks.pointing ? "on" : ""}`}
@@ -1105,19 +1121,15 @@ export function CanvasPanel({
       {pageFind.opened}
       {historyOpen && <CanvasHistory items={newestFirst} selectedId={selected?.id ?? null} onPick={pick} />}
       <div className="canvas-body">
-        {changesShown && (
-          <>
-            {!somethingElseShown && (
-              <div className="empty-state">
-                <SettledNoteLine note={settledNote} />
-                {pages.length === 0
-                  ? words.bar.emptyFirst
-                  : words.bar.empty}
-              </div>
-            )}
-            <ChangesView conversationId={conversationId} refreshPoint={changesRefreshPoint} homeDir={homeDir} />
-          </>
+        {nothingCovers && !somethingElseShown && (
+          <div className="empty-state">
+            <SettledNoteLine note={settledNote} />
+            {pages.length === 0
+              ? words.bar.emptyFirst
+              : words.bar.empty}
+          </div>
         )}
+        {changesShown && <ChangesView conversationId={conversationId} refreshPoint={changesRefreshPoint} homeDir={homeDir} />}
         {checklistOpen && (
           <ChecklistView plan={plan}>
             {tabItem && (
@@ -1139,7 +1151,7 @@ export function CanvasPanel({
             html={selected.html ?? ""}
             assetsOrigin={assetsOrigin}
             className="show"
-            markable
+            markable={!inRoom}
             panelFinds
             followsTextSize
             frameRef={shownPageFrame}

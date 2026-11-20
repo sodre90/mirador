@@ -1,5 +1,8 @@
 import type { Messages } from "../en/index.ts";
 
+const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
+
 export const rooms: Messages["rooms"] = {
   rooms: "Räume",
   newRoom: "Neuer Raum",
@@ -33,4 +36,9 @@ export const rooms: Messages["rooms"] = {
   failed: "Die Runde ist fehlgeschlagen.",
   noAnswer: "Ohne Antwort in Worten beendet.",
   agentGone: "Ein Agent, der nicht mehr im Raum ist",
+  tagged: (agents) => `Hat ${agents} markiert`,
+  tagsDropped: (agents, turns) =>
+    `Nicht markiert: ${agents}. Die Agenten wurden angehalten, da sie sich ${turns}-mal gegenseitig markiert haben, seit ein Mensch geschrieben hat. Markiere einen mit @, um weiterzumachen.`,
+  madeOnCanvas: (pages, questions) => `Im Canvas: ${listed(pages > 0 && counted(pages, "Seite", "Seiten"), questions > 0 && counted(questions, "Frage", "Fragen"))}`,
+  openOnCanvas: "Im Canvas öffnen",
 };

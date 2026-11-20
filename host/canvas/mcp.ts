@@ -28,6 +28,7 @@ import type { Store } from "../store.ts";
 import { registerUsageStatsTool } from "./usage-stats-tool.ts";
 import { registerPlanUsageTool } from "./plan-usage-tool.ts";
 import { registerLandTool } from "./land-tool.ts";
+import { registerRoomTools, type RoomTools } from "./room-tools.ts";
 
 const PROGRESS_HEARTBEAT_MS = 15_000;
 
@@ -139,11 +140,12 @@ export interface CanvasServerParts {
   canvasPlugins?: CanvasPlugins | null;
   catalog?: PluginCatalog | null;
   store?: Store | null;
+  rooms?: RoomTools | null;
   antigravityAskWaitMs?: number;
 }
 
 function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning) {
-  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
+  const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
@@ -295,6 +297,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {}, reviewFree);
   if (store) registerPlanUsageTool(server, store, conversations, callingConversation, reviewFree);
   if (store?.findConversation(conversationId)?.worktree) registerLandTool(server, conversations, callingConversation, loadedUpFront);
+  if (rooms && store?.findConversation(conversationId)?.roomId) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
 
   return server;
 }
@@ -303,7 +306,12 @@ export class CanvasMcpEndpoints {
   private readonly handlers = new Map<string, McpHttpHandler>();
   private readonly cutInstructionsWarning = new CutInstructionsWarning();
 
-  constructor(private readonly parts: CanvasServerParts) {}
+  constructor(private parts: CanvasServerParts) {}
+
+  /** The rooms are made after the canvas servers' parts; their agents' conversations get the room tools from then on. */
+  offersRoomToolsFrom(rooms: RoomTools) {
+    this.parts = { ...this.parts, rooms };
+  }
 
   handle(conversationId: string, request: Request) {
     return this.handlerFor(conversationId).fetch(request);

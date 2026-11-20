@@ -1,5 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
+const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join("，");
+
 export const rooms: Messages["rooms"] = {
   rooms: "房间",
   newRoom: "新建房间",
@@ -33,4 +35,8 @@ export const rooms: Messages["rooms"] = {
   failed: "这一轮次失败了。",
   noAnswer: "结束时没有文字回答。",
   agentGone: "已不在房间里的 Agent",
+  tagged: (agents) => `标记了 ${agents}`,
+  tagsDropped: (agents, turns) => `未标记：${agents}。自从有人写下消息以来，Agent 已互相标记了 ${turns} 次，所以它们被停下了。用 @ 标记其中一个即可继续。`,
+  madeOnCanvas: (pages, questions) => `画布上：${listed(pages > 0 && `${pages} 个页面`, questions > 0 && `${questions} 个问题`)}`,
+  openOnCanvas: "在画布上打开",
 };

@@ -202,6 +202,7 @@ const addedColumns = [
   { table: "conversations", column: "worktree", definition: "TEXT" },
   { table: "conversations", column: "side_chat_of", definition: "TEXT" },
   { table: "conversations", column: "room_id", definition: "TEXT" },
+  { table: "room_messages", column: "tags_dropped", definition: "TEXT" },
   { table: "conversations", column: "agent_commands", definition: "TEXT" },
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
   { table: "workspace_groups", column: "parent_id", definition: "TEXT" },
@@ -403,6 +404,7 @@ interface RoomMessageRow {
   thread_id: string | null;
   answers: string | null;
   ended: RoomAnswerEnd | null;
+  tags_dropped: string | null;
 }
 
 interface RoomThreadRow {
@@ -423,6 +425,7 @@ const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
   threadId: row.thread_id,
   ...(row.answers !== null && { answers: row.answers }),
   ...(row.ended !== null && { ended: row.ended }),
+  ...(row.tags_dropped !== null && { tagsDropped: JSON.parse(row.tags_dropped) as string[] }),
 });
 
 const toRoomThread = ({ id, room_id, message_id, profile_id }: RoomThreadRow): RoomThread => ({ id, roomId: room_id, messageId: message_id, profileId: profile_id });
@@ -1043,12 +1046,38 @@ export class Store {
   }
 
   appendRoomMessage(message: Omit<RoomMessage, "seq">): RoomMessage {
-    const { next: seq } = this.db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM room_messages WHERE room_id = ?").get(message.roomId) as { next: number };
+    const seq = this.nextRoomSeq(message.roomId);
     const author = writtenByAgent(message.author) ? { personId: null, profileId: message.author.profileId } : { personId: message.author.personId, profileId: null };
     this.db
-      .query("INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, text, tags, thread_id, answers, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(message.id, message.roomId, seq, message.at, author.personId, author.profileId, message.text, JSON.stringify(message.tags), message.threadId, message.answers ?? null, message.ended ?? null);
+      .query("INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, text, tags, thread_id, answers, ended, tags_dropped) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(
+        message.id,
+        message.roomId,
+        seq,
+        message.at,
+        author.personId,
+        author.profileId,
+        message.text,
+        JSON.stringify(message.tags),
+        message.threadId,
+        message.answers ?? null,
+        message.ended ?? null,
+        message.tagsDropped ? JSON.stringify(message.tagsDropped) : null,
+      );
     return { ...message, seq };
+  }
+
+  /** The message under the same id, as written anew: what it says and how it ended change, and it moves to the end of the room. */
+  rewriteRoomMessage(message: Omit<RoomMessage, "seq">): RoomMessage {
+    const seq = this.nextRoomSeq(message.roomId);
+    this.db
+      .query("UPDATE room_messages SET seq = ?, at = ?, text = ?, tags = ?, ended = ?, tags_dropped = ? WHERE id = ?")
+      .run(seq, message.at, message.text, JSON.stringify(message.tags), message.ended ?? null, message.tagsDropped ? JSON.stringify(message.tagsDropped) : null, message.id);
+    return { ...message, seq };
+  }
+
+  private nextRoomSeq(roomId: string) {
+    return (this.db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM room_messages WHERE room_id = ?").get(roomId) as { next: number }).next;
   }
 
   listRoomMessages(roomId: string): RoomMessage[] {

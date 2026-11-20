@@ -1,5 +1,7 @@
 import type { Messages } from "../en/index.ts";
 
+const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
+
 export const rooms: Messages["rooms"] = {
   rooms: "Szobák",
   newRoom: "Új szoba",
@@ -33,4 +35,9 @@ export const rooms: Messages["rooms"] = {
   failed: "A kör nem sikerült.",
   noAnswer: "Szöveges válasz nélkül ért véget.",
   agentGone: "Egy ágens, amely már nincs a szobában",
+  tagged: (agents) => `Megjelölte: ${agents}`,
+  tagsDropped: (agents, turns) =>
+    `Nincs megjelölve: ${agents}. Az ágensek nem folytathatják, mert ${turns} alkalommal jelölték meg egymást, mióta valaki utoljára írt. A folytatáshoz jelölj meg egyet @-cal.`,
+  madeOnCanvas: (pages, questions) => `A vásznon: ${listed(pages > 0 && `${pages} oldal`, questions > 0 && `${questions} kérdés`)}`,
+  openOnCanvas: "Megnyitás a vásznon",
 };

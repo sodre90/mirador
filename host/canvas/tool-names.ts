@@ -1,4 +1,5 @@
 export { canvasToolName, USE_TOOL_TOOL } from "../../shared/tool-title.ts";
+import { ROOM_HISTORY_TOOL, ROOM_TAG_TOOL } from "../../shared/rooms.ts";
 import { USE_TOOL_TOOL } from "../../shared/tool-title.ts";
 
 export const USAGE_STATS_TOOL = "usage_stats";
@@ -9,7 +10,7 @@ export const LAND_TOOL = "land";
 export const PLUGIN_LOAD_TOOL = "plugin_load";
 
 /** None of them changes files or runs commands for the agent, so none is worth a permission prompt. */
-export const PRE_ALLOWED_CANVAS_TOOLS = ["show", "ask", "when_done", USAGE_STATS_TOOL, PLAN_USAGE_TOOL, TITLE_CONVERSATION_TOOL, USE_TOOL_TOOL];
+export const PRE_ALLOWED_CANVAS_TOOLS = ["show", "ask", "when_done", USAGE_STATS_TOOL, PLAN_USAGE_TOOL, TITLE_CONVERSATION_TOOL, USE_TOOL_TOOL, ROOM_HISTORY_TOOL, ROOM_TAG_TOOL];
 
 export const APP_TOOLS = ["app_open", "apply", "app_state", "app_run"];
 

@@ -61,7 +61,7 @@ import { ReminderToast } from "./ReminderViews.tsx";
 import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
-import { RoomView } from "./Room.tsx";
+import { RoomCanvas, RoomView } from "./Room.tsx";
 import { RoomDialog } from "./RoomsSidebar.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
@@ -397,9 +397,10 @@ export function App() {
   useReloadWhenHostRestarted(state.hostRunId);
   const conversationLayouts = useConversationLayouts();
   const conversationIds = state.conversations.map(({ id }) => id).join(" ");
+  const roomIds = state.rooms.map(({ id }) => id).join(" ");
   useEffect(() => {
-    if (state.hostRunId !== null) conversationLayouts.forgetAllBut(conversationIds.split(" "));
-  }, [state.hostRunId, conversationIds]);
+    if (state.hostRunId !== null) conversationLayouts.forgetAllBut([...conversationIds.split(" "), ...roomIds.split(" ")]);
+  }, [state.hostRunId, conversationIds, roomIds]);
   const [sidebarWidth, setSidebarWidth] = useSidebarWidth();
   const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
   const toggleSidebar = () => setSidebarHidden((wasHidden) => !wasHidden);
@@ -418,8 +419,9 @@ export function App() {
     () => ({ openApps: state.openApps, installedApps: state.installedApps, appDocuments: state.appDocuments, workspaceTabs: state.workspaceTabs, pluginTabs: state.pluginTabs }),
     [state.openApps, state.installedApps, state.appDocuments, state.workspaceTabs, state.pluginTabs],
   );
-  const layout = conversationLayouts.layoutOf(state.selectedConversationId);
-  const changeLayout = (update: (layout: PaneLayout) => PaneLayout) => conversationLayouts.change(state.selectedConversationId, update);
+  const laidOutId = state.selectedConversationId ?? state.selectedRoomId;
+  const layout = conversationLayouts.layoutOf(laidOutId);
+  const changeLayout = (update: (layout: PaneLayout) => PaneLayout) => conversationLayouts.change(laidOutId, update);
   const setHidden = (pane: "canvas" | "terminals", hidden: (wasHidden: boolean) => boolean) =>
     changeLayout((current) => ({ ...current, hidden: { ...current.hidden, [pane]: hidden(current.hidden[pane]) } }));
   const canvasVisible = !layout.hidden.canvas;
@@ -427,7 +429,17 @@ export function App() {
   const canvasInView = inView(layout, "canvas");
   const terminalInView = inView(layout, "terminals");
   const open = selectedOpen(state);
-  const canvasNews = open && state.selectedConversationId ? latestCanvasNews(open.canvas, state.openApps, state.selectedConversationId) : undefined;
+  const canvasNews =
+    open && state.selectedConversationId
+      ? latestCanvasNews(open.canvas, state.openApps, state.selectedConversationId)
+      : state.roomTimeline
+        ? latestCanvasNews(state.roomTimeline.canvas, [], state.roomTimeline.roomId)
+        : undefined;
+  const [roomItemToShow, setRoomItemToShow] = useState<{ roomId: string; itemId: string } | null>(null);
+  const openOnRoomCanvas = (roomId: string, itemId: string) => {
+    setHidden("canvas", () => false);
+    setRoomItemToShow({ roomId, itemId });
+  };
   const toggleCanvas = () =>
     changeLayout((current) => {
       const toggled = toggledInView(current, "canvas");
@@ -605,6 +617,7 @@ export function App() {
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
   const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);
   const showCanvas = canvasVisible && conversation !== null && open !== null;
+  const showRoomCanvas = canvasVisible && shownRoom !== null;
   const showTerminals = terminalVisible && conversation !== null && workspace !== undefined;
   const keptCanvases = (
     <OpensIn.Provider value={state.editor.opensIn}>
@@ -623,6 +636,19 @@ export function App() {
           canvasViews={state.canvasViews}
           onHide={hideCanvas}
         />
+        {shownRoom && (
+          <RoomCanvas
+            key={shownRoom.id}
+            room={shownRoom}
+            items={state.roomTimeline?.canvas ?? []}
+            shown={showRoomCanvas}
+            assetsOrigin={state.canvasAssetsOrigin}
+            homeDir={state.homeDir}
+            canvasViews={state.canvasViews}
+            itemToShow={roomItemToShow?.roomId === shownRoom.id ? roomItemToShow : null}
+            onHide={hideCanvas}
+          />
+        )}
       </KnownConversations.Provider>
     </OpensIn.Provider>
   );
@@ -632,7 +658,7 @@ export function App() {
   const worktreesWorkspace = overlay?.kind === "worktrees" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const layoutToggles = {
     sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
-    canvas: { visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) },
+    canvas: { visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) && !shownRoom },
     terminal: { visible: terminalInView, toggle: toggleTerminal, disabled: !(conversation && workspace) },
   };
   /** Shown on its own, in the main pane, as the conversation it now is; the host stops listing it as a side chat. */
@@ -733,6 +759,7 @@ export function App() {
             ownerId={state.ownerId}
             ownerPicture={state.avatar}
             dispatch={dispatch}
+            onOpenOnCanvas={(itemId) => openOnRoomCanvas(shownRoom.id, itemId)}
           />
         )}
         {!(conversation && open) &&
@@ -793,7 +820,7 @@ export function App() {
           keptOutOfSight={{ canvas: keptCanvases }}
           content={{
             conversation: conversationPane,
-            canvas: showCanvas ? keptCanvases : null,
+            canvas: showCanvas || showRoomCanvas ? keptCanvases : null,
             terminals: showTerminals ? (
               <TerminalPane key={conversation!.id} conversationId={conversation!.id} workspace={workspace!} status={status} onHide={toggleTerminal} />
             ) : null,

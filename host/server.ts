@@ -232,6 +232,7 @@ export function startServer(services: HostServices) {
     delete: (conversationId) => deleteConversation(conversationId),
   });
   conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
+  mcp.offersRoomToolsFrom(rooms);
   const { network } = config.reachability;
   const localHosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
   const publicHost = config.publicOrigin ? [new URL(config.publicOrigin).host] : [];
@@ -1802,7 +1803,7 @@ export function startServer(services: HostServices) {
       case "room.subscribe": {
         const timeline = rooms.timeline(message.roomId);
         socket.data.roomSubscriptions.add(message.roomId);
-        return reply({ type: "room.timeline", roomId: message.roomId, ...timeline });
+        return reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId) });
       }
       case "room.unsubscribe":
         socket.data.roomSubscriptions.delete(message.roomId);

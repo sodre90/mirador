@@ -1,5 +1,8 @@
 import type { Messages } from "../en/index.ts";
 
+const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
+const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
+
 export const rooms: Messages["rooms"] = {
   rooms: "Salas",
   newRoom: "Nueva sala",
@@ -33,4 +36,9 @@ export const rooms: Messages["rooms"] = {
   failed: "El turno falló.",
   noAnswer: "Terminó sin una respuesta en palabras.",
   agentGone: "Un agente que ya no está en la sala",
+  tagged: (agents) => `Etiquetó a ${agents}`,
+  tagsDropped: (agents, turns) =>
+    `Sin etiquetar: ${agents}. Los agentes se detuvieron, porque se etiquetaron entre sí ${turns} veces desde que una persona escribió. Etiqueta a uno con @ para seguir.`,
+  madeOnCanvas: (pages, questions) => `En el lienzo: ${listed(pages > 0 && counted(pages, "página", "páginas"), questions > 0 && counted(questions, "pregunta", "preguntas"))}`,
+  openOnCanvas: "Abrir en el lienzo",
 };

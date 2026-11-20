@@ -862,7 +862,8 @@ export class ConversationService {
 
   /**
    * The harness's sessions for the workspace directory, newest first, with the app's conversation on each. A session a
-   * conversation of another workspace holds is that workspace's, though both may name one folder under two spellings.
+   * conversation of another workspace holds is that workspace's, though both may name one folder under two spellings,
+   * and one an agent works on a room's tasks in is the room's.
    */
   private async harnessSessions(workspaceId: string, launch: Launch) {
     const directory = await recordedDirectory(this.existingWorkspace(workspaceId));
@@ -873,8 +874,8 @@ export class ConversationService {
     const { sessions } = await harness.listSessions(directory);
     const conversations = this.store.listConversations();
     const conversationIdBySession = new Map(conversations.map(({ acpSessionId, id }) => [acpSessionId, id]));
-    const heldInAnotherWorkspace = new Set(conversations.filter((conversation) => conversation.workspaceId !== workspaceId).map(({ acpSessionId }) => acpSessionId));
-    return { profile, sessions: sessions.filter(({ cwd, sessionId }) => cwd === directory && !heldInAnotherWorkspace.has(sessionId)), conversationIdBySession };
+    const heldElsewhere = new Set(conversations.filter((conversation) => conversation.workspaceId !== workspaceId || conversation.roomId).map(({ acpSessionId }) => acpSessionId));
+    return { profile, sessions: sessions.filter(({ cwd, sessionId }) => cwd === directory && !heldElsewhere.has(sessionId)), conversationIdBySession };
   }
 
   /** Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation. */
