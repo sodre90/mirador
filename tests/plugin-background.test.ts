@@ -35,7 +35,7 @@ async function starterHost(hosts: Record<string, CanvasHost> = {}, store = store
   const starts: { workspaceId: string; pluginTitle: string; start: WorkspaceConversationStart }[] = [];
   host.plugins.startsWorkspaceConversationsWith(async (workspaceId, pluginTitle, start) => {
     starts.push({ workspaceId, pluginTitle, start });
-    return { id: "started", profile: start.profile };
+    return { id: "started", profile: store.findProfile(start.profileId)!.name };
   });
   return { ...host, starts };
 }
@@ -85,16 +85,16 @@ describe("a plugin's background work", () => {
 });
 
 describe("a plugin's workspace context", () => {
-  test("lists Mirador's profiles by name, with the agent each runs", async () => {
+  test("lists Mirador's profiles by name, each with its id and the agent it runs", async () => {
     const { plugins } = await starterHost();
     const [message] = await Promise.all(plugins.workspaceTabStateMessages("w1"));
-    expect(message).toMatchObject({ state: { profiles: ["Claude", "Night runs"] } });
+    expect(message).toMatchObject({ state: { profiles: [{ id: "p1", name: "Claude" }, { id: "p2", name: "Night runs" }] } });
     let handed: PluginBackgroundContext | undefined;
     const withBackground = await starterHost({ starter: { ...starter, background: (context) => void (handed = context) } });
     withBackground.plugins.startBackgroundWork();
     expect(handed!.inWorkspace("w1").profiles()).toEqual([
-      { name: "Claude", agent: "claude", model: null, effort: null },
-      { name: "Night runs", agent: "codex", model: null, effort: null },
+      { id: "p1", name: "Claude", agent: "claude", model: null, effort: null },
+      { id: "p2", name: "Night runs", agent: "codex", model: null, effort: null },
     ]);
   });
 
@@ -103,15 +103,17 @@ describe("a plugin's workspace context", () => {
     await Promise.all(plugins.workspaceTabStateMessages("w1"));
     plugins.profilesChanged();
     await settled();
-    expect(toPluginTabs).toEqual([expect.objectContaining({ type: "plugin-tab.state", plugin: "starter", workspaceId: "w1", state: { profiles: ["Claude", "Night runs"] } })]);
+    expect(toPluginTabs).toEqual([
+      expect.objectContaining({ type: "plugin-tab.state", plugin: "starter", workspaceId: "w1", state: { profiles: [{ id: "p1", name: "Claude" }, { id: "p2", name: "Night runs" }] } }),
+    ]);
   });
 
   test("asks a profile's agent for its models and the efforts of the model it starts on, grouped models listed one by one", async () => {
     let handed: PluginBackgroundContext | undefined;
     const { plugins } = await starterHost({ starter: { ...starter, background: (context) => void (handed = context) } });
     const asked: string[] = [];
-    plugins.asksProfileChoicesWith(async (profileName): Promise<SessionConfigOption[]> => {
-      asked.push(profileName);
+    plugins.asksProfileChoicesWith(async (profileId): Promise<SessionConfigOption[]> => {
+      asked.push(profileId);
       return [
         { id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "default", options: [{ value: "default", name: "Default" }] },
         {
@@ -129,7 +131,7 @@ describe("a plugin's workspace context", () => {
       ];
     });
     plugins.startBackgroundWork();
-    expect(await handed!.inWorkspace("w1").profileChoices("Claude")).toEqual({
+    expect(await handed!.inWorkspace("w1").profileChoices("p1")).toEqual({
       models: [
         { id: "default", name: "Default (recommended)" },
         { id: "opus", name: "Opus" },
@@ -140,7 +142,7 @@ describe("a plugin's workspace context", () => {
         { id: "high", name: "High" },
       ],
     });
-    expect(asked).toEqual(["Claude"]);
+    expect(asked).toEqual(["p1"]);
   });
 
   test("passes on an agent that didn't answer as null, and one that offers no choice of model or effort as none", async () => {
@@ -148,9 +150,9 @@ describe("a plugin's workspace context", () => {
     const { plugins } = await starterHost({ starter: { ...starter, background: (context) => void (handed = context) } });
     plugins.startBackgroundWork();
     plugins.asksProfileChoicesWith(async () => null);
-    expect(await handed!.inWorkspace("w1").profileChoices("Claude")).toBeNull();
+    expect(await handed!.inWorkspace("w1").profileChoices("p1")).toBeNull();
     plugins.asksProfileChoicesWith(async () => [{ id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "default", options: [{ value: "default", name: "Default" }] }]);
-    expect(await handed!.inWorkspace("w1").profileChoices("Night runs")).toEqual({ models: [], efforts: [] });
+    expect(await handed!.inWorkspace("w1").profileChoices("p2")).toEqual({ models: [], efforts: [] });
   });
 
   test("a tab that never read the profiles isn't asked again when they change", async () => {
@@ -163,8 +165,8 @@ describe("a plugin's workspace context", () => {
 
   test("starts a conversation in its workspace, shown as the plugin's, for a plugin whose plugin.json says it does", async () => {
     const { plugins, starts } = await starterHost();
-    expect(await plugins.actInWorkspaceTab("starter", "w1", { profile: "Night runs" })).toEqual({ id: "started", profile: "Night runs" });
-    expect(starts).toEqual([{ workspaceId: "w1", pluginTitle: "Starter", start: { profile: "Night runs", prompt: "Check the results", title: "Results" } }]);
+    expect(await plugins.actInWorkspaceTab("starter", "w1", { profileId: "p2" })).toEqual({ id: "started", profile: "Night runs" });
+    expect(starts).toEqual([{ workspaceId: "w1", pluginTitle: "Starter", start: { profileId: "p2", prompt: "Check the results", title: "Results" } }]);
   });
 
   test("refuses to start one for a plugin whose plugin.json doesn't say it does", async () => {
@@ -174,7 +176,7 @@ describe("a plugin's workspace context", () => {
     const { startsConversations: _, ...manifest } = JSON.parse(readFileSync(manifestFile, "utf8"));
     writeFileSync(manifestFile, JSON.stringify(manifest));
     const { plugins } = await canvasPluginHost(folder, storeWithProfiles());
-    expect(plugins.actInWorkspaceTab("starter", "w1", { profile: "Claude" })).rejects.toThrow(
+    expect(plugins.actInWorkspaceTab("starter", "w1", { profileId: "p1" })).rejects.toThrow(
       "Starter can't start conversations of its own: its plugin.json doesn't set startsConversations.",
     );
   });
@@ -229,9 +231,9 @@ function serviceWithHelper() {
 }
 
 describe("a conversation a plugin starts in a workspace", () => {
-  test("stands at the top of the workspace on the profile named, takes the profile's defaults, and works on the prompt shown as the plugin's", async () => {
+  test("stands at the top of the workspace on the profile with that id, takes the profile's defaults, and works on the prompt shown as the plugin's", async () => {
     const { store, conversations, prompted } = serviceWithHelper();
-    const started = await conversations.startForPlugin("w1", "Routines", { profile: "helper", prompt: "Check last night's e2e results", title: "Daily e2e · 13 Nov" });
+    const started = await conversations.startForPlugin("w1", "Routines", { profileId: "helper", prompt: "Check last night's e2e results", title: "Daily e2e · 13 Nov" });
     expect(started).toEqual({ id: expect.any(String), profile: "Helper" });
     expect(conversations.get(started.id)).toMatchObject({
       workspaceId: "w1",
@@ -247,17 +249,25 @@ describe("a conversation a plugin starts in a workspace", () => {
     expect(message!.event).toMatchObject({ type: "user-message", text: "Check last night's e2e results", fromPlugin: "Routines" });
   });
 
-  test("tells a plugin what the agent of the profile it names offers, whatever the name's case", async () => {
+  test("still starts on a profile renamed since the plugin kept its id, and gives the profile's name as it is now", async () => {
+    const { store, conversations } = serviceWithHelper();
+    store.saveProfile({ ...store.findProfile("helper")!, name: "Night helper" });
+    const started = await conversations.startForPlugin("w1", "Routines", { profileId: "helper", prompt: "Check last night's e2e results" });
+    expect(started).toEqual({ id: expect.any(String), profile: "Night helper" });
+    expect(conversations.get(started.id).profileId).toBe("helper");
+  });
+
+  test("tells a plugin what the agent of the profile with that id offers", async () => {
     const { conversations } = serviceWithHelper();
     const offered: SessionConfigOption[] = [{ id: "effort", name: "Effort", category: "thought_level", type: "select", currentValue: "low", options: [{ value: "low", name: "Low" }] }];
     (conversations as unknown as { profileChoicesCache: Map<string, { at: number; model: string | null; options: SessionConfigOption[] }> }).profileChoicesCache.set("helper", { at: Date.now(), model: null, options: offered });
-    expect(await conversations.profileChoicesNamed("HELPER")).toEqual(offered);
-    await expect(conversations.profileChoicesNamed("Nightly")).rejects.toThrow("There is no profile named Nightly; the profiles are Helper.");
+    expect(await conversations.profileChoicesForPlugin("helper")).toEqual(offered);
+    await expect(conversations.profileChoicesForPlugin("nightly")).rejects.toThrow("No profile has the id nightly: it may have been deleted.");
   });
 
-  test("names the profiles there are when none has the name given, and refuses a workspace that isn't open", async () => {
+  test("refuses a profile id no profile has, and a workspace that isn't open", async () => {
     const { conversations } = serviceWithHelper();
-    expect(conversations.startForPlugin("w1", "Routines", { profile: "Nightly", prompt: "p" })).rejects.toThrow("There is no profile named Nightly; the profiles are Helper.");
-    expect(conversations.startForPlugin("nowhere", "Routines", { profile: "Helper", prompt: "p" })).rejects.toThrow();
+    expect(conversations.startForPlugin("w1", "Routines", { profileId: "nightly", prompt: "p" })).rejects.toThrow("No profile has the id nightly: it may have been deleted.");
+    expect(conversations.startForPlugin("nowhere", "Routines", { profileId: "helper", prompt: "p" })).rejects.toThrow();
   });
 });

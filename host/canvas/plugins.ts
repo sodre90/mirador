@@ -101,8 +101,8 @@ export type ReadUsage = (callerId: string, plugin: string, conversationId: strin
 /** `pluginTitle` names whose its first message shows as. */
 export type StartInWorkspace = (workspaceId: string, pluginTitle: string, start: WorkspaceConversationStart) => Promise<StartedConversation>;
 
-/** What the agent of the profile of that name offers, null when it didn't answer; rejects when no profile has the name. */
-export type AskProfileChoices = (profileName: string) => Promise<Conversation["configOptions"] | null>;
+/** What the agent of the profile with that id offers, null when it didn't answer; rejects when no profile has the id. */
+export type AskProfileChoices = (profileId: string) => Promise<Conversation["configOptions"] | null>;
 
 const namedChoices = (options: Conversation["configOptions"], category: "model" | "thought_level") =>
   categoryChoices(options, category).map(({ value, name }) => ({ id: value, name }));
@@ -558,8 +558,8 @@ export class CanvasPlugins {
         }
         return this.startInWorkspace(workspaceId, plugin.manifest.title, start);
       },
-      profileChoices: async (profileName) => {
-        const options = await this.askProfileChoices(profileName);
+      profileChoices: async (profileId) => {
+        const options = await this.askProfileChoices(profileId);
         return options && offeredChoices(options);
       },
     };
@@ -913,7 +913,7 @@ export class CanvasPlugins {
   }
 
   private pluginProfiles(): PluginProfile[] {
-    return this.store.listProfiles().map(({ id, name, harness, model, effort }) => ({ name, agent: harness, model: model ? this.namedModel(id, model) : null, effort }));
+    return this.store.listProfiles().map(({ id, name, harness, model, effort }) => ({ id, name, agent: harness, model: model ? this.namedModel(id, model) : null, effort }));
   }
 
   private namedModel(profileId: string, model: string): { id: string; name: string } {

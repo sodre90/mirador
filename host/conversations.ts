@@ -609,12 +609,12 @@ export class ConversationService {
 
   /**
    * For a plugin's own work, such as a routine that is due: a conversation in the workspace, where the workspace starts
-   * its conversations, on the profile of that name, working on `prompt` at once, its first message shown as the plugin's.
+   * its conversations, on the profile with that id, working on `prompt` at once, its first message shown as the plugin's.
    * It works for nobody, so it stands in the sidebar as any other and tells the user when its turns end.
    */
-  async startForPlugin(workspaceId: string, pluginTitle: string, { profile: profileName, prompt, title, model, effort }: WorkspaceConversationStart): Promise<StartedConversation> {
+  async startForPlugin(workspaceId: string, pluginTitle: string, { profileId, prompt, title, model, effort }: WorkspaceConversationStart): Promise<StartedConversation> {
     const workspace = this.existingWorkspace(workspaceId);
-    const profile = this.profileNamed(profileName);
+    const profile = this.profileWithId(profileId);
     const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
     return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, pluginTitle));
   }
@@ -623,6 +623,12 @@ export class ConversationService {
     const profiles = this.store.listProfiles();
     const profile = profiles.find(({ name }) => name.toLowerCase() === profileName.trim().toLowerCase());
     if (!profile) throw new Error(`There is no profile named ${profileName}; the profiles are ${profiles.map(({ name }) => name).join(", ")}.`);
+    return profile;
+  }
+
+  private profileWithId(profileId: string) {
+    const profile = this.store.findProfile(profileId);
+    if (!profile) throw new Error(`No profile has the id ${profileId}: it may have been deleted.`);
     return profile;
   }
 
@@ -1367,9 +1373,9 @@ export class ConversationService {
     return probe;
   }
 
-  /** As `profileChoices`, for a plugin that names the profile; rejects, naming the profiles there are, when none has that name. */
-  async profileChoicesNamed(profileName: string): Promise<acp.SessionConfigOption[] | null> {
-    return this.profileChoices(this.profileNamed(profileName).id);
+  /** As `profileChoices`, for a plugin; rejects when no profile has that id. */
+  async profileChoicesForPlugin(profileId: string): Promise<acp.SessionConfigOption[] | null> {
+    return this.profileChoices(this.profileWithId(profileId).id);
   }
 
   /**

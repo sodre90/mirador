@@ -325,6 +325,8 @@ export interface PluginWorkspace {
 
 /** One of Mirador's profiles, for a plugin to offer the user a choice of them. Plugin API 11 brought it. */
 export interface PluginProfile {
+  /** Stays the same when the profile is renamed, so a plugin that keeps a profile for later keeps this. Plugin API 23 brought it. */
+  id: string;
   name: string;
   /** The agent it runs, as Mirador names it, e.g. "claude" or "codex". */
   agent: string;
@@ -338,9 +340,10 @@ export interface PluginProfile {
   effort: string | null;
 }
 
-/** A conversation a plugin starts of its own in a workspace: on the profile of that name, working on `prompt` at once. */
+/** A conversation a plugin starts of its own in a workspace: on the profile with that id, working on `prompt` at once. */
 export interface WorkspaceConversationStart extends ConversationChoices {
-  profile: string;
+  /** The profile's `id`, which a rename doesn't change. */
+  profileId: string;
   prompt: string;
   /** Its title, kept as one the user typed is, as `title` is for a conversation a tool starts. */
   title?: string;
@@ -361,18 +364,18 @@ export interface WorkspaceTabContext {
    * Starts a conversation of the plugin's own in the workspace, where the workspace starts its conversations, its first
    * message shown as the plugin's. Unlike one a tool starts, it works for nobody: it stands in the sidebar as any other,
    * takes its profile's defaults, YOLO included, and tells the user when its turns end; the plugin hears of them through
-   * `activity`. Throws unless the plugin's plugin.json sets `startsConversations`, and, naming the profiles there are,
-   * when none has that name. Plugin API 11 brought it.
+   * `activity`. Throws unless the plugin's plugin.json sets `startsConversations`, and when no profile has that id.
+   * Plugin API 11 brought it; API 23 made it take the profile's id.
    */
   startConversation(start: WorkspaceConversationStart): Promise<StartedConversation>;
   /**
-   * What a conversation that starts on the profile of that name can choose, as its agent says, for `startConversation`'s
+   * What a conversation that starts on the profile with that id can choose, as its agent says, for `startConversation`'s
    * `model` and `effort`. Mirador asks the agent as the Profiles dialog does, starting it for a few seconds unless it
    * answered in the last 15 minutes. Resolves to null when the agent couldn't start, didn't answer within 30 seconds, or
-   * answered without listing any choices, and rejects, naming the profiles there are, when none has that name. Plugin
-   * API 18 brought it.
+   * answered without listing any choices, and rejects when no profile has that id. Plugin API 18 brought it; API 23 made
+   * it take the profile's id.
    */
-  profileChoices(profileName: string): Promise<ProfileChoices | null>;
+  profileChoices(profileId: string): Promise<ProfileChoices | null>;
 }
 
 /** What a profile's agent offers a conversation, each by the id `startConversation` takes and the name the agent gives it. */
