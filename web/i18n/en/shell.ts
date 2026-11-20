@@ -1,4 +1,5 @@
 import type { PaneId } from "../../layout.ts";
+import type { PriceCategory } from "../../../shared/config-options.ts";
 import type { QuotaName } from "../../usage.ts";
 import type { WaitingTone } from "../../../shared/waiting.ts";
 
@@ -328,6 +329,7 @@ export const shell = {
     cacheLeft: (time: string) => `cache ${time}`,
     cacheCold: "cache cold",
     credits: (amount: string) => `${amount} credits`,
+    priceCategories: { low: "low cost", medium: "medium cost", high: "high cost", very_high: "very high cost" } satisfies Record<PriceCategory, string>,
     days: (count: number) => `${count}d`,
     hours: (count: number) => `${count}h`,
     minutes: (count: number) => `${count}m`,

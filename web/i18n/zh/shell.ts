@@ -312,6 +312,7 @@ export const shell: Messages["shell"] = {
     cacheLeft: (time: string) => `缓存 ${time}`,
     cacheCold: "缓存已过期",
     credits: (amount) => `${amount} 积分`,
+    priceCategories: { low: "低成本", medium: "中等成本", high: "高成本", very_high: "极高成本" },
     days: (count) => `${count}天`,
     hours: (count) => `${count}小时`,
     minutes: (count) => `${count}分`,

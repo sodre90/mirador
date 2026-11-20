@@ -317,6 +317,7 @@ export const shell: Messages["shell"] = {
     cacheLeft: (time: string) => `gyorsítótár ${time}`,
     cacheCold: "gyorsítótár lejárt",
     credits: (amount) => `${amount} kredit`,
+    priceCategories: { low: "alacsony költség", medium: "közepes költség", high: "magas költség", very_high: "nagyon magas költség" },
     days: (count) => `${count}n`,
     hours: (count) => `${count}ó`,
     minutes: (count) => `${count}p`,

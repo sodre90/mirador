@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { choiceGroups, filterChoiceGroups } from "../web/choices.ts";
+import { nameWithPrice } from "../web/model-names.ts";
 
 type SelectOption = Extract<SessionConfigOption, { type: "select" }>;
 
@@ -40,13 +41,23 @@ describe("choices", () => {
   });
 });
 
-test("a model Copilot prices shows its multiplier beside its name, in a flat and in a grouped list", () => {
+test("a model Copilot prices shows its price category and multiplier beside its name, in a flat and in a grouped list", () => {
   const option = (options: SelectOption["options"]): SelectOption => ({ id: "model", name: "Model", category: "model", type: "select", currentValue: "a", options });
-  const opus = { value: "opus", name: "Claude Opus 5.5", _meta: { copilotUsage: "15x" } };
+  const opus = { value: "opus", name: "Claude Opus 5.5", _meta: { copilotUsage: "15x", copilotPriceCategory: "high" } };
   const auto = { value: "auto", name: "Auto", _meta: null };
-  expect(choiceGroups(option([opus, auto])).flatMap(({ choices }) => choices.map(({ label }) => label))).toEqual(["Claude Opus 5.5 · 15x", "Auto"]);
+  expect(choiceGroups(option([opus, auto])).flatMap(({ choices }) => choices.map(({ label }) => label))).toEqual(["Claude Opus 5.5 · high cost · 15x", "Auto"]);
   expect(choiceGroups(option([{ group: "g", name: "Copilot", options: [opus, auto] }])).flatMap(({ choices }) => choices.map(({ name }) => name))).toEqual([
-    "Claude Opus 5.5 · 15x",
+    "Claude Opus 5.5 · high cost · 15x",
     "Auto",
   ]);
+});
+
+test("a model's name carries whichever of its price category and multiplier Copilot sends, and ignores a category it doesn't know", () => {
+  const named = (_meta: Record<string, unknown> | null) => nameWithPrice({ value: "m", name: "Model", _meta });
+  expect(named({ copilotPriceCategory: "very_high" })).toBe("Model · very high cost");
+  expect(named({ copilotUsage: "1x" })).toBe("Model · 1x");
+  expect(named({ copilotUsage: "1x", copilotPriceCategory: "medium" })).toBe("Model · medium cost · 1x");
+  expect(named(null)).toBe("Model");
+  expect(named({ copilotUsage: "1x", copilotPriceCategory: "astronomical" })).toBe("Model · 1x");
+  expect(named({ copilotPriceCategory: 3 })).toBe("Model");
 });

@@ -1,5 +1,5 @@
 import type { SessionConfigOption, SessionConfigSelectOption } from "@agentclientprotocol/sdk/unstable";
-import { nameWithMultiplier } from "../shared/config-options.ts";
+import { nameWithPrice } from "./model-names.ts";
 
 type SelectOption = Extract<SessionConfigOption, { type: "select" }>;
 
@@ -21,7 +21,7 @@ function groupedByNamePrefix(options: SessionConfigSelectOption[]): ChoiceGroup[
   const groups = new Map<string, Choice[]>();
   options.forEach((option) => {
     const { value, description } = option;
-    const name = nameWithMultiplier(option);
+    const name = nameWithPrice(option);
     const separator = name.indexOf("/");
     const group = separator > 0 ? name.slice(0, separator) : "";
     const label = separator > 0 ? name.slice(separator + 1) : name;
@@ -36,7 +36,7 @@ export function choiceGroups(option: SelectOption): ChoiceGroup[] {
     return option.options.flatMap((entry) =>
       "group" in entry
         ? [{ name: entry.name, choices: entry.options.map((option) => {
-            const name = nameWithMultiplier(option);
+            const name = nameWithPrice(option);
             return { value: option.value, label: name, name, description: option.description ?? null };
           }) }]
         : [],

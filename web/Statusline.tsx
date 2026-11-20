@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
-import { chosenModel, withMultiplier } from "../shared/config-options.ts";
+import { chosenModel } from "../shared/config-options.ts";
+import { withPrice } from "./model-names.ts";
 import type { StatuslineChip } from "../shared/canvas-plugins.ts";
 import type { ContextUsage, Conversation, PlanQuotas, PluginContextHint, PluginStatuslineChips, Profile, PromptCache, QuotaWindow, StatuslineRender } from "../shared/model.ts";
 import { COMPACT_COMMAND } from "../shared/slash-commands.ts";
@@ -314,7 +315,7 @@ function BuiltInStatusline({
       )}
       {model && (
         <span className="chip" data-hint={hints.model}>
-          {withMultiplier(model.name, model.multiplier)}
+          {withPrice(model.name, model.price)}
         </span>
       )}
       {usage && usage.size > 0 && <ContextMeter conversationId={conversation.id} usage={usage} advice={contextHints} />}

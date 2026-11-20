@@ -1,7 +1,8 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { useRef, useState, type CSSProperties, type RefObject } from "react";
 import { conversationSettingValue, isChoiceSetting, profileSettingWhoseModelsItLists, settingValueFollowingProfile, type PluginChoiceProfileSetting, type PluginProfileSetting } from "../shared/apps.ts";
-import { chosenModel, flatSelectOptions, nameWithMultiplier } from "../shared/config-options.ts";
+import { chosenModel, flatSelectOptions } from "../shared/config-options.ts";
+import { nameWithPrice } from "./model-names.ts";
 import { harnessLabels, type AskMode, type Conversation, type Profile } from "../shared/model.ts";
 import { agentBesideProfile } from "../shared/profile-label.ts";
 import { placedBelowOnItsSide, useClosing } from "./BarMenu.tsx";
@@ -48,7 +49,7 @@ function ConfigControl({ conversationId, option }: { conversationId: string; opt
       <select aria-label={option.name} value={option.currentValue} onChange={(event) => setValue(event.target.value)}>
         {choices.map((choice) => (
           <option key={choice.value} value={choice.value} title={choice.description ?? undefined}>
-            {nameWithMultiplier(choice)}
+            {nameWithPrice(choice)}
           </option>
         ))}
       </select>

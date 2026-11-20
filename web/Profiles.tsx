@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
-import { categoryChoices, flatSelectOptions, knownChoices, nameWithMultiplier } from "../shared/config-options.ts";
+import { categoryChoices, flatSelectOptions, knownChoices } from "../shared/config-options.ts";
+import { nameWithPrice } from "./model-names.ts";
 import { harnessIds, harnessLabels, type AskMode, type Conversation, type HarnessId, type Pastel, type Profile } from "../shared/model.ts";
 import { maskSecrets, parseEnvironment } from "../shared/profile-environment.ts";
 import type { ProfileDraft, ProfileTestResult } from "../shared/protocol.ts";
@@ -147,7 +148,7 @@ const AGENTS_OWN_CHOICE = "";
 
 /** Agent's default first, then the choices the agent lists, and the profile's own if the agent has not offered it. A model says what it costs where the agent says. */
 function dropdownChoices(conversations: Conversation[], harness: HarnessId, category: "mode" | "thought_level" | "model", saved: string, fetched: SessionConfigOption[] | null) {
-  const known = (fetched ? categoryChoices(fetched, category) : knownChoices(conversations, harness, category)).map((choice) => ({ value: choice.value, name: category === "model" ? nameWithMultiplier(choice) : choice.name }));
+  const known = (fetched ? categoryChoices(fetched, category) : knownChoices(conversations, harness, category)).map((choice) => ({ value: choice.value, name: category === "model" ? nameWithPrice(choice) : choice.name }));
   const savedButUnknown = saved !== AGENTS_OWN_CHOICE && !known.some(({ value }) => value === saved) ? [{ value: saved, name: saved }] : [];
   return [{ value: AGENTS_OWN_CHOICE, name: words.agentsDefault }, ...known, ...savedButUnknown];
 }
