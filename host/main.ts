@@ -116,7 +116,7 @@ canvasPlugins.deletesConversationsWith((callerId, plugin, conversationId) => con
 canvasPlugins.promptsStartedWith((callerId, plugin, pluginTitle, conversationId, text) => conversations.promptStarted(callerId, plugin, pluginTitle, conversationId, text));
 canvasPlugins.readsUsageWith((callerId, plugin, conversationId) => conversations.usageOf(callerId, plugin, conversationId));
 canvasPlugins.startsWorkspaceConversationsWith((workspaceId, pluginTitle, start) => conversations.startForPlugin(workspaceId, pluginTitle, start));
-canvasPlugins.asksProfileChoicesWith((profileName) => conversations.profileChoicesNamed(profileName));
+canvasPlugins.asksProfileChoicesWith((profileId) => conversations.profileChoicesForPlugin(profileId));
 conversations.hearRepliesWith(
   (started, startedBy, reply) => canvasPlugins.replied(started, startedBy, reply),
   (plugin) => canvasPlugins.tellsItsCaller(plugin),

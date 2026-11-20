@@ -646,7 +646,7 @@ describe("CanvasPlugins", () => {
     await callTool("show_card", { title: "Race", text: "Start one" });
 
     expect(await plugins.act(items()[0]!.id, { profile: "Local" })).toEqual({
-      profiles: [{ name: "Local", agent: "opencode", model: null, effort: null }],
+      profiles: [{ id: "local", name: "Local", agent: "opencode", model: null, effort: null }],
       started: { id: "c2", profile: "Local", worktree: { folder: "/worktrees/p/1a2b3c4d", branch: "mirador/1a2b3c4d" } },
     });
     expect(asked).toEqual([{ callerId: "c1", plugin: "board", profile: "Local", prompt: "Fix it", title: "Racer 1", worktree: "own" }]);
@@ -680,9 +680,9 @@ describe("CanvasPlugins", () => {
     await callTool("show_card", { title: "Race", text: "Pick profiles" });
 
     expect(await plugins.act(items()[0]!.id, {})).toEqual([
-      { name: "New", agent: "claude", model: { id: "custom-model", name: "custom-model" }, effort: null },
-      { name: "Own", agent: "claude", model: null, effort: null },
-      { name: "Work", agent: "claude", model: { id: "opus", name: "claude-opus[1m] (opus)" }, effort: "xhigh" },
+      { id: "new", name: "New", agent: "claude", model: { id: "custom-model", name: "custom-model" }, effort: null },
+      { id: "own", name: "Own", agent: "claude", model: null, effort: null },
+      { id: "work", name: "Work", agent: "claude", model: { id: "opus", name: "claude-opus[1m] (opus)" }, effort: "xhigh" },
     ]);
   });
 

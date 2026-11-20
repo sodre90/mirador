@@ -2,7 +2,7 @@
   "name": "starter",
   "title": "Starter",
   "version": "1.0.0",
-  "api": 11,
+  "api": 23,
   "startsConversations": true,
   "canvas": { "host": "host.ts", "view": "view.js" }
 }

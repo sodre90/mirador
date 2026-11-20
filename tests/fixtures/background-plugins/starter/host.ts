@@ -11,7 +11,9 @@ function startWhereAsked(context: PluginBackgroundContext) {
     const asking = join(folder, "start-in-background");
     if (workspace.storage.get("started") || !existsSync(asking)) continue;
     workspace.storage.set("started", true);
-    workspace.startConversation({ profile: readFileSync(asking, "utf8").trim(), prompt: "Started in the background", title: "Background start" }).catch((error) => console.error("the starter couldn't start a conversation:", error));
+    const named = readFileSync(asking, "utf8").trim();
+    const profileId = workspace.profiles().find(({ name }) => name === named)?.id ?? named;
+    workspace.startConversation({ profileId, prompt: "Started in the background", title: "Background start" }).catch((error) => console.error("the starter couldn't start a conversation:", error));
   }
 }
 
@@ -23,8 +25,8 @@ const host: CanvasHost = {
     setInterval(() => startWhereAsked(context), LOOKS_EVERY_MS);
   },
   workspaceTab: {
-    state: ({ profiles }) => ({ profiles: profiles().map(({ name }) => name) }),
-    action: (action, { startConversation }) => startConversation({ profile: (action as { profile: string }).profile, prompt: "Check the results", title: "Results" }),
+    state: ({ profiles }) => ({ profiles: profiles().map(({ id, name }) => ({ id, name })) }),
+    action: (action, { startConversation }) => startConversation({ profileId: (action as { profileId: string }).profileId, prompt: "Check the results", title: "Results" }),
   },
 };
 

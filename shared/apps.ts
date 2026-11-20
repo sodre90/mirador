@@ -25,9 +25,10 @@ import type { HostProblem } from "./host-problems.ts";
  * say a profile that has the plugin on needs it; API 21 lets an app's view read the workspace's git refs, a file as it
  * is at one of them and the files that differ from one, and hear when HEAD or the tags move; API 22 tells a canvas
  * plugin a conversation's turns, and its profile's, as Mirador recorded them, and lets it give advice on the
- * conversation's context for its context meter, with Compact now.
+ * conversation's context for its context meter, with Compact now; API 23 gives each profile its id, which a workspace
+ * tab and background work start conversations on and ask choices of, so a renamed profile stays theirs.
  */
-export const APP_PLUGIN_API = 22;
+export const APP_PLUGIN_API = 23;
 
 /**
  * The first plugin API whose profile settings may be typed or toggled, and whose canvas host may draw statusline chips,
