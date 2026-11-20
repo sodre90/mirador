@@ -1,13 +1,17 @@
+import { HostProblemError } from "../shared/host-problems.ts";
 import {
   DEVICE_TOKEN_PATTERNS,
   isPushKey,
   PUSH_GRANT_PATTERN,
+  PUSH_RELAY_CHOICES,
+  pushRelayAddressProblem,
   sealedPushBlob,
   type ClearMessage,
   type PushKind,
   type PushMessage,
   type PushOutcome,
   type PushRegistration,
+  type PushRelayRequest,
   type PushRelaySetting,
   type PushRequest,
 } from "../shared/push.ts";
@@ -84,9 +88,29 @@ export class PushNotifications {
     store.pushTold().forEach(({ conversationId, devices, seenWaiting }) => this.toldOf.set(conversationId, { devices: new Set(devices), seenWaiting }));
   }
 
-  /** What pages and phones learn of where this Mac pushes. */
+  /** What pages and phones learn of where this Mac pushes; while it pushes none, phones ask no relay for a grant. */
   relaySetting(): PushRelaySetting {
-    return { ...this.store.pushRelaySetting(), grantRelay: this.grantRelay };
+    return { ...this.store.pushRelaySetting(), grantRelay: this.grantRelayInUse(), miradorRelay: this.grantRelay };
+  }
+
+  /** A relay of your own needs a web origin and, unless it keeps the one set for that address, this machine's token. */
+  chooseRelay(relay: PushRelayRequest) {
+    if (!PUSH_RELAY_CHOICES.includes(relay.choice)) throw new Error(`There is no push relay choice "${relay.choice}".`);
+    if (relay.choice === "own") this.chooseOwnRelay(relay.address.trim(), relay.token?.trim() || null);
+    else this.store.setPushRelay(null, null);
+    this.store.setPushesOff(relay.choice === "off");
+  }
+
+  private chooseOwnRelay(address: string, token: string | null) {
+    const problem = pushRelayAddressProblem(address);
+    if (problem) throw new HostProblemError(problem);
+    const keepsToken = address === this.store.pushRelaySetting().address && this.store.pushRelaySetting().tokenSet;
+    if (!token && !keepsToken) throw new HostProblemError({ code: "push-relay-needs-token" });
+    this.store.setPushRelay(address, token);
+  }
+
+  private grantRelayInUse() {
+    return this.store.pushesOff() ? null : this.grantRelay;
   }
 
   register(deviceId: string, registration: PushRegistration) {
@@ -164,6 +188,7 @@ export class PushNotifications {
   }
 
   private routeTo({ grant }: PushRegistration): PushRoute | null {
+    if (this.store.pushesOff()) return null;
     const ownRelay = this.store.pushRelay();
     if (ownRelay) return { ...ownRelay, grant: null };
     return this.grantRelay && grant ? { address: this.grantRelay, token: null, grant } : null;

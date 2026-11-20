@@ -143,10 +143,18 @@ export const settings: Messages["settings"] = {
   },
   pushRelay: {
     title: "Handys ohne offenes Mirador",
-    hint: (relay: string | null) =>
-      relay
-        ? `Ein Push-Relay sagt deinen Handys Bescheid, wenn ein Agent dich braucht, während Mirador auf ihnen nicht offen ist. Dieser Rechner schickt über Miradors Relay unter ${relay}, mit einer Freigabe, die jedes Handy von ihm bekommt, außer du legst unten ein eigenes fest. Ein Relay kann nicht lesen, was es weitergibt.`
-        : "Ein Push-Relay sagt deinen Handys Bescheid, wenn ein Agent dich braucht, während Mirador auf ihnen nicht offen ist. Leg unten eines fest; es kann nicht lesen, was es weitergibt.",
+    hint: "Ein Push-Relay sagt deinen Handys Bescheid, wenn ein Agent dich braucht, während Mirador auf ihnen nicht offen ist. Ein Relay kann nicht lesen, was es weitergibt.",
+    relay: "Push-Relay",
+    choices: {
+      mirador: (relay: string) => `Miradors Relay (${relay})`,
+      own: "Ein eigenes Relay",
+      off: "Keins, keine Pushes",
+    },
+    chosen: {
+      mirador: "Jedes Handy bekommt von Miradors Relay eine Freigabe, mit der dieser Rechner ihm Pushes schicken kann.",
+      own: "Dein Relay schickt mit dem Token, das sein Betreiber für diesen Rechner erstellt hat.",
+      off: "Dieser Rechner schickt keine Pushes. Android-Handys bleiben stattdessen im Hintergrund mit ihm verbunden, ab dem nächsten Mal, wenn du Mirador auf ihnen öffnest. iPhones sagen dir nur Bescheid, solange Mirador auf ihnen offen ist.",
+    },
     address: "Relay-Adresse",
     token: "Token dieses Rechners",
     tokenSet: "Gesetzt",

@@ -309,7 +309,8 @@ export const hints = {
   enterWhileBusy: "What Enter does with a message while the agent works; ⌥Enter (Alt+Enter) does the other. With opencode, messages always wait for the turn to end.",
   openFile:
     "Opens the file in the program the host's system uses for it, on the machine Mirador runs on. A script opens as text, in the program Settings › Conversations choose. A program does not open.",
-  pushRelayAddress: "A relay of your own, used instead of Mirador's: where this machine sends pushes for your phones. Empty, it pushes through Mirador's relay. Phones get pushes only once they register with this machine.",
+  pushRelayChoice: "Where this machine sends pushes for your phones: Mirador's relay, one you run yourself, or none.",
+  pushRelayAddress: "Your relay's address: where this machine sends pushes for your phones. Phones get pushes only once they register with this machine.",
   pushRelayToken: "The token the relay's owner made for this machine. Mirador keeps it and never shows it again; leave it empty to keep the one set.",
   machineName: "What phones call this machine: they pick it up when they connect, and a phone can still give it a name of its own. It also joins other machines as Mirador on this name. Empty, it goes by its computer's name.",
   scriptProgram:

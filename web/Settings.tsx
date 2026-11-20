@@ -1,6 +1,6 @@
 import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState } from "../shared/editors.ts";
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
-import { pushRelayHost, type PushRelaySetting } from "../shared/push.ts";
+import { PUSH_RELAY_CHOICES, pushRelayChoiceOf, pushRelayHost, type PushRelayChoice, type PushRelayRequest, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
 import { OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ClaudeProgram, type Profile, type PromptTemplate } from "../shared/model.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
@@ -1092,40 +1092,66 @@ function MachineNameSettings({ machineName, computerName }: { machineName: strin
 }
 
 function PushRelaySettings({ pushRelay }: { pushRelay: PushRelaySetting }) {
+  const savedChoice = pushRelayChoiceOf(pushRelay);
+  const miradorRelay = pushRelayHost(pushRelay.miradorRelay);
+  const [choice, setChoice] = useState<PushRelayChoice>(savedChoice);
   const [address, setAddress] = useState(pushRelay.address ?? "");
   const [token, setToken] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => setChoice(savedChoice), [savedChoice]);
   useEffect(() => setAddress(pushRelay.address ?? ""), [pushRelay.address]);
-  const save = async () => {
-    const saved = await saveSetting((requestId) => ({ type: "settings.set-push-relay", requestId, address, token: token.trim() || null }));
+  const save = async (relay: PushRelayRequest) => {
+    const saved = await saveSetting((requestId) => ({ type: "settings.set-push-relay", requestId, relay }));
     setProblem(saved);
     if (!saved) setToken("");
   };
+  const saveOwnRelay = () => save({ choice: "own", address, token: token.trim() || null });
+  const choose = (chosen: PushRelayChoice) => {
+    setChoice(chosen);
+    setProblem(null);
+    if (chosen !== "own") void save({ choice: chosen });
+  };
+  const labelOf = (option: PushRelayChoice) => (option === "mirador" ? text.pushRelay.choices.mirador(miradorRelay ?? "") : text.pushRelay.choices[option]);
   return (
     <>
       <h3>{text.pushRelay.title}</h3>
-      <p className="hint push-relay-hint">{text.pushRelay.hint(pushRelayHost(pushRelay.grantRelay))}</p>
+      <p className="hint">{text.pushRelay.hint}</p>
       <div className="sending-settings push-relay">
-        <label data-hint={hints.pushRelayAddress}>
-          {text.pushRelay.address}
-          <input type="url" className="push-relay-address" value={address} placeholder="https://push.example.com" spellCheck={false} onChange={(event) => setAddress(event.target.value)} />
+        <label data-hint={hints.pushRelayChoice}>
+          {text.pushRelay.relay}
+          <select className="push-relay-choice" value={choice} onChange={(event) => choose(event.target.value as PushRelayChoice)}>
+            {PUSH_RELAY_CHOICES.filter((option) => option !== "mirador" || miradorRelay).map((option) => (
+              <option key={option} value={option}>
+                {labelOf(option)}
+              </option>
+            ))}
+          </select>
         </label>
-        <label data-hint={hints.pushRelayToken}>
-          {text.pushRelay.token}
-          <input
-            type="password"
-            className="push-relay-token"
-            value={token}
-            placeholder={pushRelay.tokenSet ? text.pushRelay.tokenSet : ""}
-            autoComplete="off"
-            onChange={(event) => setToken(event.target.value)}
-            onKeyDown={(event) => event.key === "Enter" && void save()}
-          />
-        </label>
-        <button className="push-relay-save" onClick={() => void save()}>
-          {text.pushRelay.save}
-        </button>
+        {choice === "own" && (
+          <>
+            <label data-hint={hints.pushRelayAddress}>
+              {text.pushRelay.address}
+              <input type="url" className="push-relay-address" value={address} placeholder="https://push.example.com" spellCheck={false} onChange={(event) => setAddress(event.target.value)} />
+            </label>
+            <label data-hint={hints.pushRelayToken}>
+              {text.pushRelay.token}
+              <input
+                type="password"
+                className="push-relay-token"
+                value={token}
+                placeholder={pushRelay.tokenSet ? text.pushRelay.tokenSet : ""}
+                autoComplete="off"
+                onChange={(event) => setToken(event.target.value)}
+                onKeyDown={(event) => event.key === "Enter" && void saveOwnRelay()}
+              />
+            </label>
+            <button className="push-relay-save" onClick={() => void saveOwnRelay()}>
+              {text.pushRelay.save}
+            </button>
+          </>
+        )}
       </div>
+      <p className="hint push-relay-hint">{text.pushRelay.chosen[choice]}</p>
       {problem && <p className="push-relay-problem">{problem}</p>}
     </>
   );

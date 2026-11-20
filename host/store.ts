@@ -1084,7 +1084,7 @@ export class Store {
     return id;
   }
 
-  pushRelaySetting(): Omit<PushRelaySetting, "grantRelay"> {
+  pushRelaySetting(): Pick<PushRelaySetting, "address" | "tokenSet"> {
     return { address: this.setting("push_relay_address"), tokenSet: this.setting("push_relay_token") !== null };
   }
 
@@ -1100,6 +1100,14 @@ export class Store {
     const sameRelay = address !== null && address === this.setting("push_relay_address");
     this.setSetting("push_relay_address", address);
     if (token !== null || !sameRelay) this.setSetting("push_relay_token", token);
+  }
+
+  pushesOff() {
+    return this.setting("pushes_off") === "true";
+  }
+
+  setPushesOff(off: boolean) {
+    this.setSetting("pushes_off", off ? "true" : null);
   }
 
   setPushRegistration(deviceId: string, registration: PushRegistration) {

@@ -141,10 +141,18 @@ export const settings = {
   },
   pushRelay: {
     title: "Phones away from Mirador",
-    hint: (relay: string | null) =>
-      relay
-        ? `A push relay tells your phones when an agent needs you while Mirador isn't open on them. This machine pushes through Mirador's relay at ${relay}, with a grant each phone gets from it, unless you set a relay of your own below. A relay can't read what it passes on.`
-        : "A push relay tells your phones when an agent needs you while Mirador isn't open on them. Set one below; it can't read what it passes on.",
+    hint: "A push relay tells your phones when an agent needs you while Mirador isn't open on them. A relay can't read what it passes on.",
+    relay: "Push relay",
+    choices: {
+      mirador: (relay: string) => `Mirador's relay (${relay})`,
+      own: "A relay of my own",
+      off: "None, pushes off",
+    },
+    chosen: {
+      mirador: "Each phone gets a grant from Mirador's relay, which lets this machine push to it.",
+      own: "Your relay pushes with the token its owner made for this machine.",
+      off: "This machine sends no pushes. Android phones stay connected to it in the background instead, from the next time Mirador is opened on them. iPhones notify you only while Mirador is open on them.",
+    },
     address: "Relay address",
     token: "This machine's token",
     tokenSet: "Set",

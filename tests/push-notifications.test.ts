@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { loadConfig } from "../host/config.ts";
 import { pushRegistrationProblem, PushNotifications } from "../host/push-notifications.ts";
 import { Store } from "../host/store.ts";
-import { DEFAULT_PUSH_RELAY, openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, pushRelayHost, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRequest } from "../shared/push.ts";
+import { DEFAULT_PUSH_RELAY, openedPushBlob, PUSH_BLOB_BYTES, pushRelayAddressProblem, pushRelayChoiceOf, pushRelayHost, sealedPushBlob, type ClearMessage, type PushKey, type PushMessage, type PushRegistration, type PushRelayRequest, type PushRequest } from "../shared/push.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import vector from "../shared/push-test-vector.json";
 import { storeWithConversation } from "./canvas-plugin-host.ts";
@@ -154,9 +154,44 @@ describe("pushing notifications", () => {
 
   test("pages and phones learn where the Mac pushes, and where phones get their grants", () => {
     const { store, pushes } = pushingHost(undefined, { ownRelay: false });
-    expect(pushes.relaySetting()).toEqual({ address: null, tokenSet: false, grantRelay: GRANT_RELAY });
+    expect(pushes.relaySetting()).toEqual({ address: null, tokenSet: false, grantRelay: GRANT_RELAY, miradorRelay: GRANT_RELAY });
     store.setPushRelay("https://push.example.com", "relay-token");
-    expect(pushes.relaySetting()).toEqual({ address: "https://push.example.com", tokenSet: true, grantRelay: GRANT_RELAY });
+    expect(pushes.relaySetting()).toEqual({ address: "https://push.example.com", tokenSet: true, grantRelay: GRANT_RELAY, miradorRelay: GRANT_RELAY });
+  });
+
+  test("with pushes off the Mac pushes nothing, and phones learn to ask no relay for a grant; back on Mirador's relay, it pushes with the phone's grant", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(undefined, grant));
+    pushes.chooseRelay({ choice: "off" });
+    expect(pushes.relaySetting()).toEqual({ address: null, tokenSet: false, grantRelay: null, miradorRelay: GRANT_RELAY });
+    await pushes.notify(notification);
+    expect(posted).toHaveLength(0);
+    pushes.chooseRelay({ choice: "mirador" });
+    expect(pushes.relaySetting()).toEqual({ address: null, tokenSet: false, grantRelay: GRANT_RELAY, miradorRelay: GRANT_RELAY });
+    await pushes.notify(notification);
+    expect(posted.map(({ url, authorization, request }) => [url, authorization, request.grant])).toEqual([[`${GRANT_RELAY}/push`, null, grant]]);
+  });
+
+  test("Settings choose Mirador's relay, one of your own with this machine's token, or none", () => {
+    const { store, pushes } = pushingHost(undefined, { ownRelay: false });
+    const choice = () => pushRelayChoiceOf(pushes.relaySetting());
+    expect(choice()).toBe("mirador");
+    expect(() => pushes.chooseRelay({ choice: "own", address: " ", token: "relay-token" })).toThrow("The push relay's address isn't a web address.");
+    expect(() => pushes.chooseRelay({ choice: "own", address: "https://push.example.com", token: null })).toThrow("The push relay needs this machine's token.");
+    pushes.chooseRelay({ choice: "own", address: " https://push.example.com ", token: " relay-token " });
+    expect(choice()).toBe("own");
+    pushes.chooseRelay({ choice: "own", address: "https://push.example.com", token: null });
+    expect(store.pushRelay(), "saved again with no token, the relay keeps the one set").toEqual({ address: "https://push.example.com", token: "relay-token" });
+    pushes.chooseRelay({ choice: "off" });
+    expect(choice()).toBe("off");
+    expect(store.pushRelaySetting(), "turning pushes off forgets the relay of your own and its token").toEqual({ address: null, tokenSet: false });
+    pushes.chooseRelay({ choice: "own", address: "https://push.example.com", token: "relay-token" });
+    expect(choice(), "a relay of your own turns pushes on again").toBe("own");
+    pushes.chooseRelay({ choice: "mirador" });
+    expect(choice()).toBe("mirador");
+    expect(store.pushRelay()).toBeNull();
+    expect(() => pushes.chooseRelay({ choice: "elsewhere" } as unknown as PushRelayRequest)).toThrow('There is no push relay choice "elsewhere".');
+    expect(pushRelayChoiceOf(new PushNotifications(store, { grantRelay: null }).relaySetting()), "a host with no Mirador relay pushes nowhere until one of your own is set").toBe("off");
   });
 
   test("a phone the relay says is gone is forgotten, and one it failed for is kept", async () => {

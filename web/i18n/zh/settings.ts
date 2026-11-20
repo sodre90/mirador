@@ -143,10 +143,18 @@ export const settings: Messages["settings"] = {
   },
   pushRelay: {
     title: "没打开 Mirador 的手机",
-    hint: (relay: string | null) =>
-      relay
-        ? `推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。除非你在下方设置自己的中继，这台机器会通过 Mirador 的中继（${relay}）发送推送，并使用每部手机从该中继获得的授权。中继无法读取所转发的内容。`
-        : "推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。请在下方设置一个；它无法读取所转发的内容。",
+    hint: "推送中继会在 Agent 需要你、而手机上没有打开 Mirador 时通知手机。中继无法读取所转发的内容。",
+    relay: "推送中继",
+    choices: {
+      mirador: (relay: string) => `Mirador 的中继（${relay}）`,
+      own: "我自己的中继",
+      off: "无，不发送推送",
+    },
+    chosen: {
+      mirador: "每部手机都会从 Mirador 的中继获得授权，这台机器凭此向它发送推送。",
+      own: "你的中继使用其所有者为这台机器生成的令牌发送推送。",
+      off: "这台机器不发送推送。安卓手机会改为在后台与它保持连接，从你下次在手机上打开 Mirador 时开始。iPhone 只在打开 Mirador 时才会通知你。",
+    },
     address: "中继地址",
     token: "这台机器的令牌",
     tokenSet: "已设置",

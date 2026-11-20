@@ -32,7 +32,7 @@ import { avatarProblem } from "../shared/avatar.ts";
 import { promptTemplateProblem } from "../shared/prompt-templates.ts";
 import { joinRequestNotification } from "../shared/system-notifications.ts";
 import { NOTIFICATION_KINDS, type PushNotifications } from "./push-notifications.ts";
-import { pushRelayAddressProblem } from "../shared/push.ts";
+import type { PushRelayRequest } from "../shared/push.ts";
 import { canvasAssetsOriginOnLoopback, DESKTOP_APP_CODE_PARAMETER, PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { claudeProgramLookUps, claudeProgramReport } from "./acp/claude-program.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
@@ -1055,13 +1055,8 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.machine-name", machineName: store.machineNameSetting() });
   }
 
-  function setPushRelay(address: string, token: string | null) {
-    const trimmed = address.trim();
-    const problem = trimmed ? pushRelayAddressProblem(trimmed) : null;
-    if (problem) throw new HostProblemError(problem);
-    const keepsToken = trimmed === store.pushRelaySetting().address && store.pushRelaySetting().tokenSet;
-    if (trimmed && !token?.trim() && !keepsToken) throw new HostProblemError({ code: "push-relay-needs-token" });
-    store.setPushRelay(trimmed || null, token?.trim() || null);
+  function setPushRelay(relay: PushRelayRequest) {
+    pushes.chooseRelay(relay);
     hub.broadcast({ type: "settings.push-relay", pushRelay: pushes.relaySetting() });
   }
 
@@ -1246,7 +1241,7 @@ export function startServer(services: HostServices) {
       case "settings.set-machine-name":
         return setMachineName(message.machineName);
       case "settings.set-push-relay":
-        return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => setPushRelay(message.address, message.token)) });
+        return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => setPushRelay(message.relay)) });
       case "push.register":
         if (socket.data.deviceId) pushes.register(socket.data.deviceId, message);
         return;

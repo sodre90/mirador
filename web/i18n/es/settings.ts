@@ -143,10 +143,18 @@ export const settings: Messages["settings"] = {
   },
   pushRelay: {
     title: "Teléfonos sin Mirador abierto",
-    hint: (relay: string | null) =>
-      relay
-        ? `Un relé push avisa a tus teléfonos cuando un agente te necesita y Mirador no está abierto en ellos. Esta máquina envía a través del relé de Mirador en ${relay}, con un permiso que cada teléfono obtiene de él, salvo que definas abajo un relé propio. Un relé no puede leer lo que transmite.`
-        : "Un relé push avisa a tus teléfonos cuando un agente te necesita y Mirador no está abierto en ellos. Define uno abajo; no puede leer lo que transmite.",
+    hint: "Un relé push avisa a tus teléfonos cuando un agente te necesita y Mirador no está abierto en ellos. Un relé no puede leer lo que transmite.",
+    relay: "Relé push",
+    choices: {
+      mirador: (relay: string) => `Relé de Mirador (${relay})`,
+      own: "Un relé propio",
+      off: "Ninguno, sin notificaciones push",
+    },
+    chosen: {
+      mirador: "Cada teléfono obtiene un permiso del relé de Mirador, con el que esta máquina puede enviarle notificaciones push.",
+      own: "Tu relé envía con el token que su dueño creó para esta máquina.",
+      off: "Esta máquina no envía notificaciones push. Los teléfonos Android, en cambio, siguen conectados a ella en segundo plano a partir de la próxima vez que abras Mirador en ellos. Los iPhone te avisan solo mientras Mirador está abierto en ellos.",
+    },
     address: "Dirección del relé",
     token: "Token de esta máquina",
     tokenSet: "Definido",

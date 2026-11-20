@@ -123,6 +123,8 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 
   await test.step("Settings take the relay's address and this machine's token, and never show the token again", async () => {
     const settings = await openSettings(page, "Notifications");
+    await expect(settings.locator(".push-relay-address"), "only a relay of your own takes an address").toBeHidden();
+    await settings.locator(".push-relay-choice").selectOption("own");
     await settings.locator(".push-relay-address").fill("http://push.example.com");
     await settings.locator(".push-relay-token").fill("relay-token-for-this-mac");
     await settings.getByRole("button", { name: "Save" }).click();
@@ -140,6 +142,7 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
     await expect(settings.locator(".push-relay-problem"), "the token is for its relay alone").toHaveText("The push relay needs this machine's token.");
     await page.reload();
     const reopened = await openSettings(page, "Notifications");
+    await expect(reopened.locator(".push-relay-choice")).toHaveValue("own");
     await expect(reopened.locator(".push-relay-address")).toHaveValue(relayOrigin());
     await expect(reopened.locator(".push-relay-token")).toHaveAttribute("placeholder", "Set");
     await page.keyboard.press("Escape");
@@ -218,10 +221,16 @@ test("a phone that doesn't show a notification gets it pushed through the relay 
 test("with no relay of its own set, the Mac pushes through Mirador's relay with the grant the phone holds, and no token", async ({ page, browser }) => {
   await signInWithWorkspace(page, host);
   const settings = await openSettings(page, "Notifications");
-  await settings.locator(".push-relay-address").fill("");
-  await settings.getByRole("button", { name: "Save" }).click();
-  await expect(settings.locator(".push-relay-token")).toHaveAttribute("placeholder", "");
-  await expect(settings.locator(".push-relay-hint")).toContainText(`This machine pushes through Mirador's relay at ${new URL(relayOrigin()).host}`);
+  await settings.locator(".push-relay-choice").selectOption("mirador");
+  await expect(settings.locator(".push-relay-address")).toBeHidden();
+  await expect(settings.locator(".push-relay-choice option:checked")).toHaveText(`Mirador's relay (${new URL(relayOrigin()).host})`);
+  await expect(settings.locator(".push-relay-hint")).toHaveText("Each phone gets a grant from Mirador's relay, which lets this machine push to it.");
+  await settings.locator(".push-relay-choice").selectOption("own");
+  await expect(settings.locator(".push-relay-token"), "Mirador's relay forgot the token of your own").toHaveAttribute("placeholder", "");
+  await settings.locator(".push-relay-choice").selectOption("mirador");
+  await page.reload();
+  const reopened = await openSettings(page, "Notifications");
+  await expect(reopened.locator(".push-relay-choice")).toHaveValue("mirador");
   await page.keyboard.press("Escape");
   const asking = await startConversation(page);
   const elsewhere = await startConversation(page);
@@ -235,5 +244,38 @@ test("with no relay of its own set, the Mac pushes through Mirador's relay with 
   expect(authorization).toBeUndefined();
   expect(push).toMatchObject({ platform: "ios", deviceToken: "cd".repeat(32), sandbox: true, kind: "alert", grant });
   expect((await openedPushBlob(pushKey, push.blob!)).notification).toMatchObject({ kind: "question", conversationId: asking, body: "Asks: Pushed with the phone's grant?" });
+  await phone.close();
+});
+
+test("with pushes off the Mac pushes nothing, so a phone hears only over its connection; back on Mirador's relay, it pushes again", async ({ page, browser }) => {
+  await signInWithWorkspace(page, host);
+  const settings = await openSettings(page, "Notifications");
+  await settings.locator(".push-relay-choice").selectOption("off");
+  await expect(settings.locator(".push-relay-hint")).toContainText("This machine sends no pushes. Android phones stay connected to it in the background instead");
+  await page.reload();
+  const reopened = await openSettings(page, "Notifications");
+  await expect(reopened.locator(".push-relay-choice")).toHaveValue("off");
+  await page.keyboard.press("Escape");
+  const askedWhileOff = await startConversation(page);
+  const askedWhileOn = await startConversation(page);
+  const elsewhere = await startConversation(page);
+  const phone = await joinedPhone(page, browser);
+  await page.goto(`${host.origin}/#/c/${elsewhere}`);
+  await registerForPushes(phone, { answerShown: false, grant });
+  const before = relayed.length;
+
+  askInBackground(askedWhileOff, "Heard only over the connection?");
+  await expect.poll(() => phone.evaluate(() => (window as unknown as { notificationsHeard: string[] }).notificationsHeard)).toContain("Asks: Heard only over the connection?");
+  const turnedOn = await openSettings(page, "Notifications");
+  await turnedOn.locator(".push-relay-choice").selectOption("mirador");
+  await expect(turnedOn.locator(".push-relay-hint")).toContainText("Each phone gets a grant");
+  await page.keyboard.press("Escape");
+
+  askInBackground(askedWhileOn, "Pushed once pushes are on again?");
+  /** The earlier tests' phones hold the same key and may hold grants too, so pushes are told apart by what they are about. */
+  const pushedAbout = () =>
+    Promise.all(relayed.slice(before).filter(({ push }) => push.kind === "alert").map(async ({ push }) => (await openedPushBlob(pushKey, push.blob!)).notification.conversationId));
+  await expect.poll(pushedAbout, { timeout: 15_000 }).toContain(askedWhileOn);
+  expect(await pushedAbout(), "the question asked while pushes were off, which would have been pushed first, never went").not.toContain(askedWhileOff);
   await phone.close();
 });

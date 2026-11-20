@@ -184,7 +184,7 @@ export const initialState: AppState = {
   editor: UNKNOWN_EDITOR,
   machineName: null,
   computerName: "",
-  pushRelay: { address: null, tokenSet: false, grantRelay: null },
+  pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
   avatar: null,
   voiceSettings: defaultVoiceSettings,
   voiceEngine: { setup: { state: "unsupported", reason: "" }, servers: { speech: "stopped", voiceModel: "stopped", speaking: "stopped" }, onDisk: [], memoryBytes: 0 },

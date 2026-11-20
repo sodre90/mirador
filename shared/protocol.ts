@@ -53,7 +53,7 @@ import type { PluginCommand, SlashCommand } from "./slash-commands.ts";
 import type { WaitingSummary } from "./waiting.ts";
 import type { SplitAxis } from "./terminal-layout.ts";
 import type { SystemNotification } from "./system-notifications.ts";
-import type { PushRegistration, PushRelaySetting } from "./push.ts";
+import type { PushRegistration, PushRelayRequest, PushRelaySetting } from "./push.ts";
 import type { SubagentUsage } from "./subagent-usage.ts";
 import type { VoiceSettings } from "./voice.ts";
 import type { VoiceEngineStatus } from "./voice-engine.ts";
@@ -140,8 +140,8 @@ export type ClientMessage =
   | { type: "settings.set-script-program"; program: string }
   | { type: "settings.set-editor"; setting: EditorSetting }
   | { type: "settings.set-machine-name"; machineName: string }
-  /** An empty address stops pushes and forgets the token; a null token keeps the one set before. Answered with settings.saved. */
-  | { type: "settings.set-push-relay"; requestId: string; address: string; token: string | null }
+  /** Mirador's relay or none forgets a relay of your own and its token; a null token keeps the one set for the same relay. Answered with settings.saved. */
+  | { type: "settings.set-push-relay"; requestId: string; relay: PushRelayRequest }
   /** From a joined phone only. */
   | ({ type: "push.register" } & PushRegistration)
   | { type: "push.unregister" }

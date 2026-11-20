@@ -178,9 +178,19 @@ export interface PushRegistration extends PushKey {
 export interface PushRelaySetting {
   address: string | null;
   tokenSet: boolean;
-  /** Where it pushes with phones' grants while no address and token are set, so phones ask it for theirs; null where a test host has none. */
+  /** Where it pushes with phones' grants while no address and token are set, so phones ask it for theirs; null while pushes are off, or where a test host has none. */
   grantRelay: string | null;
+  /** Mirador's relay as this host knows it, also while it pushes elsewhere or not at all; null where a test host has none. */
+  miradorRelay: string | null;
 }
 
 /** Whether a Mac pushes through a relay of its own, with its own token, rather than with phones' grants. */
 export const pushesWithOwnRelay = ({ address, tokenSet }: PushRelaySetting) => address !== null && tokenSet;
+
+export const PUSH_RELAY_CHOICES = ["mirador", "own", "off"] as const;
+export type PushRelayChoice = (typeof PUSH_RELAY_CHOICES)[number];
+
+/** What Settings ask the host to push through; only a relay of your own takes an address and a token. */
+export type PushRelayRequest = { choice: "mirador" | "off" } | { choice: "own"; address: string; token: string | null };
+
+export const pushRelayChoiceOf = ({ address, grantRelay }: PushRelaySetting): PushRelayChoice => (address !== null ? "own" : grantRelay !== null ? "mirador" : "off");

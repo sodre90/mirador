@@ -143,10 +143,18 @@ export const settings: Messages["settings"] = {
   },
   pushRelay: {
     title: "Telefonok, amikor nincs nyitva a Mirador",
-    hint: (relay: string | null) =>
-      relay
-        ? `Egy push-továbbító szól a telefonjaidnak, ha egy ágensnek szüksége van rád, miközben nincs nyitva rajtuk a Mirador. Ez a gép a Mirador továbbítóján (${relay}) keresztül küld, azzal az engedéllyel, amelyet minden telefon tőle kap, hacsak lent nem állítasz be sajátot. A továbbító nem tudja elolvasni, amit továbbít.`
-        : "Egy push-továbbító szól a telefonjaidnak, ha egy ágensnek szüksége van rád, miközben nincs nyitva rajtuk a Mirador. Állíts be egyet lent; nem tudja elolvasni, amit továbbít.",
+    hint: "Egy push-továbbító szól a telefonjaidnak, ha egy ágensnek szüksége van rád, miközben nincs nyitva rajtuk a Mirador. A továbbító nem tudja elolvasni, amit továbbít.",
+    relay: "Push-továbbító",
+    choices: {
+      mirador: (relay: string) => `A Mirador továbbítója (${relay})`,
+      own: "Saját továbbító",
+      off: "Nincs, push kikapcsolva",
+    },
+    chosen: {
+      mirador: "Minden telefon engedélyt kap a Mirador továbbítójától, amellyel ez a gép push-értesítést küldhet neki.",
+      own: "A továbbítód azzal a tokennel küld, amelyet a gazdája ennek a gépnek készített.",
+      off: "Ez a gép nem küld push-értesítést. Az androidos telefonok helyette a háttérben kapcsolatban maradnak vele, attól kezdve, hogy legközelebb megnyitod rajtuk a Miradort. Az iPhone-ok csak akkor értesítenek, amikor nyitva van rajtuk a Mirador.",
+    },
     address: "Továbbító címe",
     token: "Ennek a gépnek a tokenje",
     tokenSet: "Beállítva",
