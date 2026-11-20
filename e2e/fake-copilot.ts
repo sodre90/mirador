@@ -5,7 +5,7 @@ import * as acp from "@agentclientprotocol/sdk/unstable";
 
 /**
  * A Copilot that prices its models and keeps its session's usage in its own events file, as Copilot does: it offers Auto
- * and models with `_meta.copilotUsage`, and each turn appends a cumulative `session.usage_checkpoint` to
+ * and models with `_meta.copilotUsage` and `_meta.copilotPriceCategory`, and each turn appends a cumulative `session.usage_checkpoint` to
  * `$COPILOT_HOME/session-state/<session>/events.jsonl` a moment after it answers and reports context usage without a cost.
  * Turn n of a session has used the n-th of CREDITS_AFTER_TURN, in nano-AIU; on the free model it stays 0.
  */
@@ -25,6 +25,7 @@ const modelOptions = (current: string): acp.SessionConfigOption[] => [
       { value: "auto", name: "Auto", _meta: null },
       { value: "claude-sonnet-5.5", name: "Claude Sonnet 5.5", _meta: { copilotUsage: "1x", copilotEnablement: "enabled", copilotPriceCategory: "medium" } },
       { value: "free-model", name: "Free Model", _meta: { copilotUsage: "0x", copilotEnablement: "enabled", copilotPriceCategory: "low" } },
+      { value: "gpt-6.2-astra", name: "GPT-6.2 Astra", _meta: { copilotUsage: "1x", copilotEnablement: "enabled", copilotPriceCategory: "very_high" } },
       { value: "claude-opus-5.5", name: "Claude Opus 5.5", _meta: { copilotUsage: "15x", copilotEnablement: "enabled", copilotPriceCategory: "high" } },
     ],
   },

@@ -32,6 +32,7 @@ These terms stay the same everywhere:
 | checklist | ellenőrzőlista | checklist (la) | 清单 | Checkliste |
 | History (canvas) | Előzmények | Historial | 历史 | Verlauf |
 | AI credits (Copilot's usage unit) | AI-kredit | créditos de IA | AI 积分 | KI-Credits |
+| cost (Copilot's price category: low/medium/high/very high) | költség | costo | 成本 | Kosten |
 | reminder | emlékeztető | recordatorio | 提醒 | Erinnerung |
 | put away (a conversation, until a reminder) | félretesz | apartar | 放一边 | beiseitelegen |
 | Later (the sidebar group of put-away conversations) | Később | Más tarde | 稍后 | Später |

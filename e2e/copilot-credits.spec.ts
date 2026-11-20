@@ -1,7 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
-import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings } from "./helpers.ts";
+import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd, conversationSettings, openProfileTab } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -20,21 +20,24 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
-test("Copilot's model multipliers show in the picker, and its credits grow in the status bar turn by turn", async ({ page }) => {
+test("Copilot's model price categories and multipliers show in the picker, and its credits grow in the status bar turn by turn", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const dialog = await createProfile(page, "priced Copilot", `COPILOT_HOME=${copilotHome()}\nCOPILOT_PATH=${join(host.fakeProgramsDir, "copilot")}`, "", "Copilot");
+  await openProfileTab(dialog, "Defaults");
+  await expect(dialog.getByLabel("Profile model").locator("option", { hasText: "Claude Opus 5.5" })).toHaveText("Claude Opus 5.5 · high cost · 15x", { timeout: 60_000 });
   await dialog.getByRole("button", { name: "Close" }).click();
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "priced Copilot · Copilot" });
   await startConversation(page);
 
   const picker = async () => (await conversationSettings(page)).getByLabel("Model", { exact: true });
-  await expect((await picker()).locator("option", { hasText: "Claude Opus 5.5" })).toHaveText("Claude Opus 5.5 · 15x");
-  await expect((await picker()).locator("option", { hasText: "Claude Sonnet 5.5" })).toHaveText("Claude Sonnet 5.5 · 1x");
+  await expect((await picker()).locator("option", { hasText: "Claude Opus 5.5" })).toHaveText("Claude Opus 5.5 · high cost · 15x");
+  await expect((await picker()).locator("option", { hasText: "Claude Sonnet 5.5" })).toHaveText("Claude Sonnet 5.5 · medium cost · 1x");
+  await expect((await picker()).locator("option", { hasText: "GPT-6.2 Astra" })).toHaveText("GPT-6.2 Astra · very high cost · 1x");
   await expect((await picker()).locator("option", { hasText: "Auto" })).toHaveText("Auto");
 
-  await (await picker()).selectOption({ label: "Claude Opus 5.5 · 15x" });
-  await expect(statusline(page).locator(".chip", { hasText: "Claude Opus 5.5" })).toHaveText("Claude Opus 5.5 · 15x");
+  await (await picker()).selectOption({ label: "Claude Opus 5.5 · high cost · 15x" });
+  await expect(statusline(page).locator(".chip", { hasText: "Claude Opus 5.5" })).toHaveText("Claude Opus 5.5 · high cost · 15x");
 
   await sendMessage(page, "first");
   await waitForTurnToEnd(page);
@@ -50,7 +53,7 @@ test("a free model's conversation shows 0.00 credits once Copilot has a checkpoi
   await signIn(page, host);
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: "priced Copilot · Copilot" });
   await startConversation(page);
-  await (await conversationSettings(page)).getByLabel("Model", { exact: true }).selectOption({ label: "Free Model · 0x" });
+  await (await conversationSettings(page)).getByLabel("Model", { exact: true }).selectOption({ label: "Free Model · low cost · 0x" });
   await sendMessage(page, "free");
   await waitForTurnToEnd(page);
   await expect(statusline(page).locator(".chip", { hasText: "credits" })).toHaveText("0.00 credits");

@@ -342,6 +342,7 @@ export const shell: Messages["shell"] = {
     cacheLeft: (time: string) => `Cache ${time}`,
     cacheCold: "Cache abgelaufen",
     credits: (amount) => `${amount} Credits`,
+    priceCategories: { low: "geringe Kosten", medium: "mittlere Kosten", high: "hohe Kosten", very_high: "sehr hohe Kosten" },
     days: (count) => `${count} d`,
     hours: (count) => `${count} h`,
     minutes: (count) => `${count} min`,

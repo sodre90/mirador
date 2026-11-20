@@ -134,18 +134,22 @@ describe("statusline", () => {
   });
 
   test("the model shown is the chosen option's name", () => {
-    expect(chosenModel([modelOption])).toEqual({ id: "opus", name: "Opus 5.5", multiplier: null });
+    expect(chosenModel([modelOption])).toEqual({ id: "opus", name: "Opus 5.5", price: null });
     expect(chosenModel([])).toBeNull();
   });
 
-  test("a model that Copilot prices carries its multiplier, and a malformed one is ignored", () => {
-    const priced = (copilotUsage: unknown): SessionConfigOption => ({
+  test("a model that Copilot prices carries its multiplier and price category, and a malformed one is ignored", () => {
+    const priced = (_meta: Record<string, unknown> | null): SessionConfigOption => ({
       ...modelOption,
-      options: [{ value: "opus", name: "Opus 5.5", _meta: { copilotUsage } }],
+      options: [{ value: "opus", name: "Opus 5.5", _meta }],
     });
-    expect(chosenModel([priced("15x")])).toEqual({ id: "opus", name: "Opus 5.5", multiplier: "15x" });
-    expect(chosenModel([priced("0.33x")])?.multiplier).toBe("0.33x");
-    expect(chosenModel([priced("lots")])?.multiplier).toBeNull();
-    expect(chosenModel([priced(15)])?.multiplier).toBeNull();
+    expect(chosenModel([priced({ copilotUsage: "15x", copilotPriceCategory: "high" })])).toEqual({ id: "opus", name: "Opus 5.5", price: { category: "high", multiplier: "15x" } });
+    expect(chosenModel([priced({ copilotUsage: "0.33x" })])?.price).toEqual({ category: null, multiplier: "0.33x" });
+    expect(chosenModel([priced({ copilotPriceCategory: "very_high" })])?.price).toEqual({ category: "very_high", multiplier: null });
+    expect(chosenModel([priced({ copilotUsage: "lots" })])?.price).toBeNull();
+    expect(chosenModel([priced({ copilotUsage: 15 })])?.price).toBeNull();
+    expect(chosenModel([priced({ copilotPriceCategory: "astronomical" })])?.price).toBeNull();
+    expect(chosenModel([priced({ copilotPriceCategory: 3 })])?.price).toBeNull();
+    expect(chosenModel([priced(null)])?.price).toBeNull();
   });
 });

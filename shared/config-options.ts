@@ -27,28 +27,35 @@ export function knownChoices(conversations: Conversation[], harness: HarnessId, 
   return [];
 }
 
-/** What a request on the model costs against the plan, as Copilot says it, e.g. "15x" for Claude Opus; null from an agent that says nothing. */
-export function modelMultiplier(choice: SessionConfigSelectOption): string | null {
-  const usage = choice._meta?.copilotUsage;
-  return typeof usage === "string" && /^\d+(\.\d+)?x$/.test(usage) ? usage : null;
+export const PRICE_CATEGORIES = ["low", "medium", "high", "very_high"] as const;
+export type PriceCategory = (typeof PRICE_CATEGORIES)[number];
+
+export interface ModelPrice {
+  category: PriceCategory | null;
+  /** What a request on the model costs against a legacy plan, as Copilot says it, e.g. "15x" for Claude Opus. */
+  multiplier: string | null;
 }
 
-/** The model's name, followed by its multiplier where it has one. */
-export const withMultiplier = (name: string, multiplier: string | null) => (multiplier ? `${name} · ${multiplier}` : name);
-
-export const nameWithMultiplier = (choice: SessionConfigSelectOption) => withMultiplier(choice.name, modelMultiplier(choice));
+/** What Copilot says a model costs: its price category and its multiplier; null from an agent that says neither. */
+export function modelPrice(choice: SessionConfigSelectOption): ModelPrice | null {
+  const usage = choice._meta?.copilotUsage;
+  const multiplier = typeof usage === "string" && /^\d+(\.\d+)?x$/.test(usage) ? usage : null;
+  const category = choice._meta?.copilotPriceCategory;
+  const priceCategory = PRICE_CATEGORIES.find((known) => known === category) ?? null;
+  return priceCategory || multiplier ? { category: priceCategory, multiplier } : null;
+}
 
 export interface ChosenModel {
   id: string;
   name: string;
-  multiplier: string | null;
+  price: ModelPrice | null;
 }
 
 export function chosenModel(configOptions: SessionConfigOption[]): ChosenModel | null {
   const option = configOptions.find((candidate): candidate is SelectOption => candidate.category === "model" && candidate.type === "select");
   if (!option) return null;
   const choice = flatSelectOptions(option).find(({ value }) => value === option.currentValue);
-  return { id: option.currentValue, name: choice?.name ?? option.currentValue, multiplier: choice ? modelMultiplier(choice) : null };
+  return { id: option.currentValue, name: choice?.name ?? option.currentValue, price: choice ? modelPrice(choice) : null };
 }
 
 /**

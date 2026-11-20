@@ -336,6 +336,7 @@ export const shell: Messages["shell"] = {
     cacheLeft: (time: string) => `caché ${time}`,
     cacheCold: "caché caducada",
     credits: (amount) => `${amount} créditos`,
+    priceCategories: { low: "costo bajo", medium: "costo medio", high: "costo alto", very_high: "costo muy alto" },
     days: (count) => `${count}d`,
     hours: (count) => `${count}h`,
     minutes: (count) => `${count}min`,

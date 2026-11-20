@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { pluginsOffFor, profileSettingWhoseModelsItLists, settingValue, type ConversationPlugin, type PluginChoiceProfileSetting, type PluginLook, type PluginProfileSetting, type PluginSettings } from "../shared/apps.ts";
-import { categoryChoices, nameWithMultiplier } from "../shared/config-options.ts";
+import { categoryChoices } from "../shared/config-options.ts";
+import { nameWithPrice } from "./model-names.ts";
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { itemRooms, type ItemRoom } from "../shared/canvas-plugins.ts";
 import { connection } from "./connection.ts";
@@ -76,7 +77,7 @@ function useModelsOfProfile(profileId: string | null): SettingChoice[] {
     const requestId = crypto.randomUUID();
     const stopListening = connection.onMessage((message) => {
       if (message.type !== "profile.choices.got" || message.requestId !== requestId) return;
-      setModels(categoryChoices(message.configOptions ?? [], "model").map((choice) => ({ value: choice.value, label: nameWithMultiplier(choice) })));
+      setModels(categoryChoices(message.configOptions ?? [], "model").map((choice) => ({ value: choice.value, label: nameWithPrice(choice) })));
     });
     connection.send({ type: "profile.choices.get", requestId, profileId });
     return stopListening;
