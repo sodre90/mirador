@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { answersWithin, modelServerEnvironment, NO_MODEL_SERVER, settingsIn } from "../e2e/model-server.ts";
+import { answersWithin, answerSeconds, modelServerEnvironment, NO_MODEL_SERVER, settingsIn } from "../e2e/model-server.ts";
 
 const SAVED = "# the owner's model server\nLLM_SERVER_URL=https://models.example:8443\nexport LLM_SERVER_KEY='saved-key'\n";
 
@@ -66,5 +66,32 @@ describe("answersWithin", () => {
     expect(await answersWithin(server.status, 30, 10)).toBe(false);
     expect(server.asked.length).toBeGreaterThan(1);
     expect(server.asked.length).toBeLessThan(5);
+  });
+});
+
+describe("answerSeconds", () => {
+  /** Runs `body` with fetch answering `response`, as the model server would. */
+  const withFetchAnswering = async <T>(response: () => Promise<Response>, body: () => Promise<T>): Promise<T> => {
+    const original = globalThis.fetch;
+    globalThis.fetch = response as unknown as typeof fetch;
+    try {
+      return await body();
+    } finally {
+      globalThis.fetch = original;
+    }
+  };
+
+  test("is how many seconds the server took to answer its completion", async () => {
+    const seconds = await withFetchAnswering(async () => new Response("{}", { status: 200 }), () => answerSeconds(5_000));
+    expect(seconds).not.toBeNull();
+    expect(seconds!).toBeGreaterThanOrEqual(0);
+  });
+
+  test("is null when the server answers other than 200, such as while it restarts", async () => {
+    expect(await withFetchAnswering(async () => new Response("down", { status: 502 }), () => answerSeconds(5_000))).toBeNull();
+  });
+
+  test("is null when nothing answers", async () => {
+    expect(await withFetchAnswering(async () => { throw new Error("unreachable"); }, () => answerSeconds(5_000))).toBeNull();
   });
 });

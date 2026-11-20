@@ -83,6 +83,14 @@ jobs:
             "  $($current.name) $($current.pid)$(if (& $isStale $current) { ', parent pid stale' })"
             $current = if (& $isStale $current) { $null } else { $byPid[[int]$current.parentPid] }
           }
+      # A spec that waits for a real reply hangs for minutes on a model server that doesn't answer, so the run asks for a
+      # completion first and ends here instead, saying which it was (vcs-1yvyg).
+      - name: Does the model server answer
+        shell: pwsh
+        env:
+          ANTHROPIC_BASE_URL: ${{ secrets.LLM_SERVER_URL }}
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.LLM_SERVER_KEY }}
+        run: bun e2e/model-server-check.ts
       # As in the unit tests: Git for Windows puts only its cmd folder on PATH, so a user's Windows has no sh, sleep or
       # openssl there; the runner's PATH has them, from Git's other folders and from OpenSSL.
       # Specs that wait for a real reply get it from the owner's model server, on the "haiku" the test hosts choose. The
