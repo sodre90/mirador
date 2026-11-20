@@ -14,7 +14,8 @@ ARG PI_VERSION=1.3.0
 ARG CODEX_VERSION=0.165.0
 # The Copilot CLI the Copilot e2e spec drives against the scripted model.
 ARG COPILOT_VERSION=1.0.105
-ARG PLAYWRIGHT_VERSION=1.63.0
+# The Playwright build_image passes in, from package.json's "@playwright/test".
+ARG PLAYWRIGHT_VERSION
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl fish git openssl unzip xz-utils && rm -rf /var/lib/apt/lists/*
 RUN arch=$(dpkg --print-architecture | sed 's/amd64/x64/') \

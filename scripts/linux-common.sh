@@ -7,9 +7,15 @@ case "$arch" in
   *) echo "MIRADOR_LINUX_ARCH must be x64 or arm64, not $arch" >&2; exit 2 ;;
 esac
 
+# From package.json, so the image installs the browsers of the Playwright the tree runs.
+playwright_version() {
+  bun -e 'console.log(require(process.argv.at(-1)).devDependencies["@playwright/test"])' "$repo/package.json"
+}
+
 # Images and the Bun cache are kept per architecture, so building for one never replaces the other.
 build_image() {
-  docker build --quiet --platform "$platform" --build-arg "ARCH=$arch" --build-arg "BUN_VERSION=$(<"$repo/.bun-version")" --tag "mirador-$1-$arch" \
+  docker build --quiet --platform "$platform" --build-arg "ARCH=$arch" --build-arg "BUN_VERSION=$(<"$repo/.bun-version")" \
+    --build-arg "PLAYWRIGHT_VERSION=$(playwright_version)" --tag "mirador-$1-$arch" \
     --file "$repo/scripts/$1.Dockerfile" "$repo/scripts" >/dev/null
 }
 
