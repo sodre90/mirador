@@ -304,6 +304,7 @@ export class TestHost {
       MIRADOR_PLUGIN_UPDATE_CHECK: "off",
       MIRADOR_SOURCE_WATCH: this.options.copiesSource ? "on" : "off",
       MIRADOR_PLUGIN_CATALOG: "off",
+      MIRADOR_PI_RELEASE_URL: "off",
       MIRADOR_DEFAULT_PLUGINS: "off",
       MIRADOR_PUSH_RELAY: "off",
       SHELL: this.options.shell ?? defaultShell,

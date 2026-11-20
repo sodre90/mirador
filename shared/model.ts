@@ -743,6 +743,8 @@ export type ConversationEvent =
   | { type: "context-cleared" }
   /** From here on the agent goes on in the same session, started again with its settings read anew. */
   | { type: "agent-reloaded" }
+  /** A newer release of the agent is out; `command` runs its updater on the program the agent runs, as a `!` command. */
+  | { type: "update-available"; harness: HarnessId; installed: string; latest: string; command: string }
   /**
    * `usageLimit`: Claude's usage limit stopped the turn; it resets at `resetsAt`, when the message names a time.
    * `authRequired`: the agent refused the prompt until the user signs in again.

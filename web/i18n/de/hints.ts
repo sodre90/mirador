@@ -315,6 +315,7 @@ export const hints: Messages["hints"] = {
     "Wenn du eine Unterhaltung löschst, bleibt ihr Canvas so lange erhalten. Setzt du ihre Sitzung über Sitzung fortsetzen… fort, kommt der Canvas so zurück, wie er war, auch Reviews und Rundgänge. Danach kommt nur zurück, was der eigene Verlauf der Sitzung enthält: Seiten, Fragen und Checklisten.",
   terminalCommand:
     "Claude Code zeigt das nur in seinem eigenen Terminal, deshalb landet es in einem Terminal-Tab dieser Unterhaltung, ausgeführt von dem Claude Code, das das Profil dieser Unterhaltung nutzt. Der Befehl passiert dort im Terminal; die Antwort des Agenten oben ist nur seine Ablehnung.",
+  updateAgent: (command) => `Führt ${command} hier aus, wie es ! im Nachrichtenfeld täte. Unterhaltungen, die du danach beginnst, nutzen die neue Version.`,
   logIn:
     "Öffnet die eigene Anmeldung des Agenten in einem Terminal-Tab dieser Unterhaltung, mit ihrem Profil, sodass ein Profil mit eigenem Konto genau dieses anmeldet. Sobald dort steht, dass du angemeldet bist, sende deine Nachricht erneut.",
   queuedGrip: "Ziehe, um die Reihenfolge zu ändern, in der Nachrichten aus der Warteschlange rausgehen: Sie gehen von oben weg.",

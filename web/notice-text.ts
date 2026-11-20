@@ -39,6 +39,8 @@ export function noticeText(about: NoticeAbout) {
       return words.contextCleared;
     case "agent-reloaded":
       return words.agentReloaded;
+    case "update-available":
+      return words.updateAvailable(harnessLabels[about.harness], about.latest, about.installed);
     case "profile-changed":
       if (!about.profileName) return words.agentsOwnSetup;
       return about.agent ? words.agentWithProfile(harnessLabels[about.agent], about.profileName) : words.profile(about.profileName);

@@ -288,6 +288,7 @@ export const hints = {
     "When you delete a conversation, its canvas is kept this long. Continuing its session from Continue a session… brings the canvas back as it was, reviews and tours too. After that, only what the session's own history holds comes back: pages, questions and checklists.",
   terminalCommand:
     "Claude Code shows this one only in its own terminal, so this opens it there: a terminal tab of this conversation, run by the Claude Code this conversation's profile uses. The panel is where the command happens; the agent's answer above is only its refusal.",
+  updateAgent: (command: string) => `Runs ${command} here, as a ! command in the message box would. Conversations you start afterwards use the new version.`,
   logIn:
     "Opens the agent's own sign-in in a terminal tab of this conversation, with its profile, so a profile with an account of its own signs that one in. Once it says you are signed in, send your message again.",
   queuedGrip: "Drag to change the order queued messages go out in: they leave from the top.",

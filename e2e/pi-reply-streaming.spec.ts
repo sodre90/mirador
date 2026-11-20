@@ -119,7 +119,7 @@ function piEnvironmentOf(model: ModelServer, agents: string, api: "openai-comple
   const provider = { baseUrl: model.url, api, apiKey: "unused", models: [{ id: "paced", name: "Paced", input: ["text", "image"] }] };
   writeFileSync(join(agentDirectory, "models.json"), JSON.stringify({ providers: { e2e: provider } }));
   writeFileSync(join(agentDirectory, "settings.json"), JSON.stringify({ defaultProvider: "e2e", defaultModel: "paced" }));
-  return [`PI_CODING_AGENT_DIR=${agentDirectory}`, "PI_OFFLINE=1", "npm_config_registry=http://127.0.0.1:9/", "npm_config_offline=true"].join("\n");
+  return [`PI_CODING_AGENT_DIR=${agentDirectory}`, "PI_OFFLINE=1"].join("\n");
 }
 
 const host = new TestHost();

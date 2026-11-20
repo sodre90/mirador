@@ -82,7 +82,7 @@ import { askedOutsideQuotes, conversationAsText, sideChatBrief, sideChatModeOf }
 import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
-import { miradorCommandEnvironment } from "./acp/environment.ts";
+import { loginShell, miradorCommandEnvironment } from "./acp/environment.ts";
 import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
@@ -109,6 +109,8 @@ import { copilotHomeOf, copilotSessionCredits } from "./copilot-credits.ts";
 import { claudeTranscript, lastAnsweringModel, modelChoiceFor, recordsUserMessage, userMessageTakenInAt } from "./claude-transcript.ts";
 import { claudeTranscriptPaths, messageSnippetOf, openOpencodeDatabase, opencodeDatabasePath } from "./session-transcripts.ts";
 import { UserCommandRunner } from "./user-commands.ts";
+import { newerPiThan } from "./pi-updates.ts";
+import { commandShell, shellInvocation } from "./command-shell.ts";
 import { Worktrees, workingCopyOf } from "./worktrees.ts";
 import { ConversationSessions } from "./conversation-sessions.ts";
 import { SubagentSessions } from "./subagent-sessions.ts";
@@ -2504,7 +2506,22 @@ export class ConversationService {
     if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
     else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
     runtime.startChoices = undefined;
+    if (isFirstSession && conversation.harness === "pi" && !conversation.sideChatOf) this.offerNewerPi(conversationId, harness).catch(() => {});
     return created.sessionId;
+  }
+
+  /**
+   * Says so when a newer pi is out than the one the agent runs, with the command that updates that pi. Only a
+   * conversation nothing has happened in yet hears of it: in one under way, the notice would land in the middle of a reply.
+   */
+  private async offerNewerPi(conversationId: string, harness: HarnessProcess) {
+    const program = harness.spec.environment.PI_ACP_PI_COMMAND;
+    if (!this.config.piReleaseUrl || !program) return;
+    const newer = await newerPiThan(program, harness.spec.environment, this.config.piReleaseUrl);
+    if (!newer || !this.store.hasConversation(conversationId)) return;
+    if (this.runtime(conversationId).running || hasBegun(this.store.listEvents(conversationId))) return;
+    const shell = commandShell(loginShell, profileEnvironment(this.profileOf(this.get(conversationId))));
+    this.append(conversationId, { type: "update-available", harness: "pi", ...newer, command: shellInvocation(shell, [program, "update"]) });
   }
 
   /**

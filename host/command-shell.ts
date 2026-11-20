@@ -120,3 +120,10 @@ export const withOutputAppendedTo = (path: string, command: string) => `exec >>$
 const powershellQuoted = (text: string) => `'${text.replaceAll("'", "''")}'`;
 
 export const powershellInvocation = ([program, ...args]: string[]) => `& ${[program!, ...args].map(powershellQuoted).join(" ")}`;
+
+const POSIX_BARE_WORD = /^[\w@%+=:,./-]+$/;
+
+const posixWord = (word: string) => (POSIX_BARE_WORD.test(word) ? word : posixQuoted(word));
+
+/** The command line that runs `words` in `shell`, quoting only the words that need it, so it reads as one would type it. */
+export const shellInvocation = (shell: CommandShell, words: string[]) => (shell.kind === "posix" ? words.map(posixWord).join(" ") : powershellInvocation(words));

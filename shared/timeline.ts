@@ -501,6 +501,10 @@ class TimelineBuilder {
         return this.push(noticeBlock(origin, { kind: "context-cleared" }));
       case "agent-reloaded":
         return this.push(noticeBlock(origin, { kind: "agent-reloaded" }));
+      case "update-available": {
+        const { harness, installed, latest, command } = event;
+        return this.push(noticeBlock(origin, { kind: "update-available", harness, installed, latest, command }));
+      }
       case "profile-changed":
         return this.push(noticeBlock(origin, { kind: "profile-changed", profileName: event.profileName, agent: event.agent }));
       case "permission": {

@@ -112,6 +112,7 @@ import {
   type TimelineBlock,
   type ToolBlock,
 } from "../shared/timeline.ts";
+import type { NoticeAbout } from "../shared/notices.ts";
 import { noticeText } from "./notice-text.ts";
 import { errorText } from "./problem-text.ts";
 import { statusDetailOf } from "./status-detail.ts";
@@ -651,6 +652,19 @@ function InfoLine({ text }: { text: string }) {
   );
 }
 
+/** A newer release of the agent, with a button that runs its updater as a `!` command would, so the update shows below. */
+function UpdateAvailableLine({ about, conversationId }: { about: Extract<NoticeAbout, { kind: "update-available" }>; conversationId: string }) {
+  const update = () => connection.send({ type: "conversation.run-command", conversationId, command: about.command });
+  return (
+    <div className="notice-line update-available-line">
+      <span>{noticeText(about)}</span>
+      <button type="button" data-hint={hints.updateAgent(about.command)} onClick={update}>
+        {words.notice.updateAgent(harnessLabels[about.harness])}
+      </button>
+    </div>
+  );
+}
+
 /** What an agent's notice update said: one line, and when it brought detail, a line that folds the detail away and keeps its line breaks. */
 function AgentNoticeLine({ block }: { block: AgentNoticeBlock }) {
   const loudness = block.severity === "warning" || block.severity === "error" ? block.severity : "info";
@@ -984,6 +998,7 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
     case "permission":
       return <PermissionCard block={block} conversationId={conversationId} />;
     case "notice":
+      if (block.about.kind === "update-available") return <UpdateAvailableLine about={block.about} conversationId={conversationId} />;
       return <div className="notice-line">{noticeText(block.about)}</div>;
     case "info":
       return <InfoLine text={block.text} />;

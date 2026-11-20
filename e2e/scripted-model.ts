@@ -318,12 +318,6 @@ export function opencodeProgram() {
   return found;
 }
 
-/**
- * pi-acp asks npm for pi's newest version as each session starts and posts "New version available" as an agent message
- * when it is newer than the pi installed. With no registry to ask, the notice never shows, rather than whenever npm answers
- * within pi-acp's 800 ms.
- */
-const NPM_WITHOUT_A_REGISTRY = ["npm_config_registry=http://127.0.0.1:9/", "npm_config_offline=true"];
 const PI_QUICK_RETRIES = { baseDelayMs: 100 };
 
 /**
@@ -340,7 +334,7 @@ export function scriptedPiEnvironment(model: ScriptedModel, root: string, defaul
   const provider = { baseUrl: model.url, api: "openai-completions", apiKey: "unused", models };
   writeFileSync(join(agentDirectory, "models.json"), JSON.stringify({ providers: { e2e: provider } }));
   writeFileSync(join(agentDirectory, "settings.json"), JSON.stringify({ defaultProvider: "e2e", defaultModel, retry: PI_QUICK_RETRIES }));
-  return [`PI_CODING_AGENT_DIR=${agentDirectory}`, "PI_OFFLINE=1", ...NPM_WITHOUT_A_REGISTRY].join("\n");
+  return [`PI_CODING_AGENT_DIR=${agentDirectory}`, "PI_OFFLINE=1"].join("\n");
 }
 
 /** pi as the host finds it, on PATH; null where it is not installed. */

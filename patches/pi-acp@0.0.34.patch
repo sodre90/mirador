@@ -48,7 +48,7 @@ index 0000000000000000000000000000000000000000..a077840b116493e38f412b3a8572502b
 +  return entry.type === "message" && entry.message?.role === role;
 +}
 diff --git a/dist/index.js b/dist/index.js
-index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..8451a6ba9569563f0e65935675cacdb957accf05 100755
+index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..ac6218cbde6670505159b5ffc673ae3900d9f3ed 100755
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -71,6 +71,8 @@ function shouldUseShellForPiCommand(cmd) {
@@ -692,6 +692,15 @@ index 64758f027a38a7ecbe7d6e05e88edcc72ee9f193..8451a6ba9569563f0e65935675cacdb9
        conn: this.conn,
        fileCommands,
        piCommand: process.env.PI_ACP_PI_COMMAND
+@@ -2071,7 +2322,7 @@ var PiAcpAgent = class {
+     }
+     const { configOptions, models, modes } = configuration;
+     const quietStartup = getQuietStartup(params.cwd);
+-    const updateNotice = buildUpdateNotice();
++    const updateNotice = process.env.PI_ACP_UPDATE_CHECK === "off" ? null : buildUpdateNotice();
+     const preludeText = quietStartup ? updateNotice ? updateNotice + "\n" : "" : buildStartupInfo({
+       cwd: params.cwd,
+       fileCommands,
 @@ -2079,7 +2330,6 @@ var PiAcpAgent = class {
      });
      if (preludeText)

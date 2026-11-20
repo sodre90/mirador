@@ -109,6 +109,8 @@ export const chat: Messages["chat"] = {
     agentWithProfile: (agent, profile) => `Ahora se usa ${agent}, con el perfil “${profile}”`,
     profile: (profile) => `Ahora se usa el perfil “${profile}”`,
     mode: (mode) => `Modo: ${mode}`,
+    updateAvailable: (agent, latest, installed) => `Hay una versión nueva de ${agent}: ${latest}; tienes la ${installed}`,
+    updateAgent: (agent) => `Actualizar ${agent}`,
   },
   author: {
     fromPlugin: (plugin) => `De: ${plugin}`,

@@ -33,6 +33,7 @@ const notices: NoticeAbout[] = [
   { kind: "job-wait-ended", wait: wait(), end: "stopped" },
   { kind: "context-cleared" },
   { kind: "agent-reloaded" },
+  { kind: "update-available", harness: "pi", installed: "1.5.2", latest: "1.6.0", command: "/home/me/.local/bin/pi update" },
   { kind: "profile-changed", profileName: null },
   { kind: "profile-changed", profileName: "Work" },
   { kind: "profile-changed", profileName: "Radiance", agent: "opencode" },

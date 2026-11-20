@@ -181,10 +181,11 @@ export function launchEnvironment(harness: HarnessId, profile: Profile | null, c
 
 /**
  * pi-acp runs the pi in PI_ACP_PI_COMMAND, rather than whichever its own PATH finds, and keeps its startup notes (pi's
- * version, every skill) out of the conversation. A profile may set either itself.
+ * version, every skill) out of the conversation. A profile may set either itself. Mirador's patch leaves the check for a
+ * newer pi to the host, which makes it without holding up the session (host/pi-updates.ts).
  */
 function piAcpEnvironment(profileEnvironment: Record<string, string>): Record<string, string> {
-  const environment: Record<string, string> = { PI_ACP_QUIET_STARTUP: "true", ...profileEnvironment };
+  const environment: Record<string, string> = { PI_ACP_QUIET_STARTUP: "true", ...profileEnvironment, PI_ACP_UPDATE_CHECK: "off" };
   if (environment.PI_ACP_PI_COMMAND) return environment;
   const program = findPi(environment.PATH);
   if (!program) throw new HostProblemError({ code: "pi-not-installed" });

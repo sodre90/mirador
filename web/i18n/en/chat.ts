@@ -113,6 +113,8 @@ export const chat = {
     agentWithProfile: (agent: string, profile: string) => `Now using ${agent}, with the profile “${profile}”`,
     profile: (profile: string) => `Now using the profile “${profile}”`,
     mode: (mode: string) => `Mode: ${mode}`,
+    updateAvailable: (agent: string, latest: string, installed: string) => `${agent} ${latest} is out; you have ${installed}`,
+    updateAgent: (agent: string) => `Update ${agent}`,
   },
   author: {
     fromPlugin: (plugin: string) => `From ${plugin}`,

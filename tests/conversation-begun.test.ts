@@ -6,7 +6,7 @@ import type { ConversationEvent } from "../shared/model.ts";
 const stored = (...events: ConversationEvent[]) => events.map((event, seq) => ({ seq, at: seq, event }));
 const acp = (update: SessionUpdate): ConversationEvent => ({ type: "acp", update });
 
-test("a conversation is empty while only the agent's start-up, ! commands, errors and profile changes are in it", () => {
+test("a conversation is empty while only the agent's start-up, ! commands, errors, profile changes and update notices are in it", () => {
   expect(hasBegun([])).toBe(false);
   expect(
     hasBegun(
@@ -15,6 +15,7 @@ test("a conversation is empty while only the agent's start-up, ! commands, error
         { type: "user-command", commandId: "c1", command: "ls" },
         { type: "error", message: "Sign in first.", authRequired: true },
         { type: "profile-changed", profileName: "Radiance", agent: "opencode" },
+        { type: "update-available", harness: "pi", installed: "1.5.2", latest: "1.6.0", command: "pi update" },
       ),
     ),
   ).toBe(false);

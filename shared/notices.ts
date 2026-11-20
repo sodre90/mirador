@@ -14,6 +14,7 @@ export type NoticeAbout =
   | { kind: "context-cleared" }
   | { kind: "agent-reloaded" }
   | { kind: "profile-changed"; profileName: string | null; agent?: HarnessId }
+  | { kind: "update-available"; harness: HarnessId; installed: string; latest: string; command: string }
   | { kind: "mode"; modeId: string; modeName?: string };
 
 /** Where the host leaves a mode's display name on the agent's mode update, since the timeline only sees stored events. */
@@ -58,6 +59,8 @@ export function englishNoticeText(about: NoticeAbout) {
       return "Context cleared: the agent starts afresh";
     case "agent-reloaded":
       return "Agent reloaded: it picks up its current settings and MCP servers";
+    case "update-available":
+      return `${harnessLabels[about.harness]} ${about.latest} is out; you have ${about.installed}`;
     case "profile-changed":
       return profileChangedNotice(about.profileName, about.agent);
     case "mode":

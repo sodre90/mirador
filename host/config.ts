@@ -8,6 +8,8 @@ import { englishProblem, HostProblemError } from "../shared/host-problems.ts";
 import { DEFAULT_PUSH_RELAY, pushRelayAddressProblem } from "../shared/push.ts";
 
 const PLUGIN_CATALOG_URL = "https://raw.githubusercontent.com/sodre90/mirador-plugins/main/index.json";
+/** What `pi update` asks for the latest pi. */
+const PI_RELEASE_URL = "https://pi.dev/api/latest-version";
 const DEFAULT_PLUGINS_FILE = join(dirname(import.meta.dir), "plugins", "defaults.json");
 
 /** Other devices reach the host over HTTPS on these ports of every network it is on. */
@@ -68,6 +70,8 @@ export interface HostConfig {
   latestReleaseUrl: string;
   /** Where the catalog of official plugins is; MIRADOR_PLUGIN_CATALOG=off, as test hosts have it unless a spec gives one, fetches none. */
   pluginCatalogUrl: string | null;
+  /** Where a new pi conversation learns of a newer pi; MIRADOR_PI_RELEASE_URL=off, as test hosts have it unless a spec gives one, asks nowhere. */
+  piReleaseUrl: string | null;
   /** The relay this Mac pushes through with phones' grants while Settings name no relay of its own; MIRADOR_PUSH_RELAY=off, as test hosts have it unless a spec gives one, pushes with none. */
   pushGrantRelay: string | null;
   /** The plugins Mirador installs once at its start; MIRADOR_DEFAULT_PLUGINS=off, as test hosts have it unless a spec gives a file, installs none. */
@@ -246,6 +250,7 @@ export function loadConfig(env = process.env): HostConfig {
     watchesSource: env.MIRADOR_SOURCE_WATCH !== "off",
     latestReleaseUrl: env.MIRADOR_LATEST_RELEASE_URL ?? `https://api.github.com/repos/${RELEASES_REPOSITORY}/releases/latest`,
     pluginCatalogUrl: env.MIRADOR_PLUGIN_CATALOG === "off" ? null : (env.MIRADOR_PLUGIN_CATALOG ?? PLUGIN_CATALOG_URL),
+    piReleaseUrl: env.MIRADOR_PI_RELEASE_URL === "off" ? null : (env.MIRADOR_PI_RELEASE_URL ?? PI_RELEASE_URL),
     pushGrantRelay: pushRelayInEnvironment(env.MIRADOR_PUSH_RELAY),
     defaultPluginsFile: env.MIRADOR_DEFAULT_PLUGINS === "off" ? null : (env.MIRADOR_DEFAULT_PLUGINS ?? DEFAULT_PLUGINS_FILE),
     voiceModelsUrl: env.MIRADOR_VOICE_MODELS_URL ?? "https://huggingface.co",

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { commandLine, commandShell, findGitBash, findPowerShell, isConsoleTitleOf, powershellInvocation, programName, terminalShell, windowsPidOf } from "../host/command-shell.ts";
+import { commandLine, commandShell, findGitBash, findPowerShell, isConsoleTitleOf, powershellInvocation, programName, shellInvocation, terminalShell, windowsPidOf } from "../host/command-shell.ts";
 
 const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
 const withGitBash = { gitBash: () => gitBash, powershell: () => "pwsh.exe" };
@@ -72,6 +72,14 @@ test("PowerShell 7 is preferred when installed, else Windows PowerShell", () => 
 
 test("a program and its arguments reach PowerShell as they are, quotes included", () => {
   expect(powershellInvocation(["C:\\Program Files\\claude.exe", "auth", "it's"])).toBe("& 'C:\\Program Files\\claude.exe' 'auth' 'it''s'");
+});
+
+test("a program and its arguments read as typed in a POSIX shell, quoted only where a word needs it", () => {
+  const posix = { kind: "posix", program: "/bin/zsh" } as const;
+  expect(shellInvocation(posix, ["/home/me/.local/bin/pi", "update"])).toBe("/home/me/.local/bin/pi update");
+  expect(shellInvocation(posix, ["/Users/me/My Tools/pi", "update"])).toBe("'/Users/me/My Tools/pi' update");
+  expect(shellInvocation(posix, ["/opt/it's/pi", "$HOME"])).toBe("'/opt/it'\\''s/pi' '$HOME'");
+  expect(shellInvocation({ kind: "powershell", program: "pwsh" }, ["C:\\Tools\\pi.cmd", "update"])).toBe("& 'C:\\Tools\\pi.cmd' 'update'");
 });
 
 describe("a terminal tab", () => {

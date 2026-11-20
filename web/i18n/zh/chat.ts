@@ -106,6 +106,8 @@ export const chat: Messages["chat"] = {
     agentWithProfile: (agent, profile) => `现在使用 ${agent}，配置为“${profile}”`,
     profile: (profile) => `现在使用配置“${profile}”`,
     mode: (mode) => `模式：${mode}`,
+    updateAvailable: (agent, latest, installed) => `${agent} ${latest} 已发布；你的是 ${installed}`,
+    updateAgent: (agent) => `更新 ${agent}`,
   },
   author: {
     fromPlugin: (plugin) => `来自 ${plugin}`,

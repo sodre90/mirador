@@ -106,6 +106,8 @@ export const chat: Messages["chat"] = {
     agentWithProfile: (agent, profile) => `Mostantól ez fut: ${agent}, ezzel a profillal: „${profile}”`,
     profile: (profile) => `Mostantól ez a profil érvényes: „${profile}”`,
     mode: (mode) => `Mód: ${mode}`,
+    updateAvailable: (agent, latest, installed) => `Új ${agent}-verzió: ${latest}; neked ${installed} van`,
+    updateAgent: (agent) => `${agent} frissítése`,
   },
   author: {
     fromPlugin: (plugin) => `Küldte: ${plugin}`,

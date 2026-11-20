@@ -305,6 +305,7 @@ export const hints: Messages["hints"] = {
     "Ha törölsz egy beszélgetést, a vászna ennyi ideig megmarad. Ha a munkamenetét a Munkamenet folytatása… menüből folytatod, a vászon úgy tér vissza, ahogy volt, az átnézésekkel és bejárásokkal együtt. Ezután csak az jön vissza, amit a munkamenet saját előzménye őriz: oldalak, kérdések és ellenőrzőlisták.",
   terminalCommand:
     "A Claude Code ezt csak a saját termináljában mutatja, ezért ez ott nyitja meg: a beszélgetés egy terminállapján, azzal a Claude Code-dal, amelyet a beszélgetés profilja használ. Maga a parancs a panelen zajlik; az ágens fenti válasza csak annyi, hogy elutasította.",
+  updateAgent: (command) => `Lefuttatja itt ezt a parancsot, ahogy a ! tenné az üzenetmezőben: ${command}. Az ezután indított beszélgetések már az új verziót használják.`,
   logIn:
     "Megnyitja az ágens saját bejelentkezését a beszélgetés egy terminállapján, a profiljával, így egy saját fiókkal rendelkező profil abba jelentkezik be. Ha kiírja, hogy bejelentkeztél, küldd el újra az üzenetedet.",
   queuedGrip: "Húzd, hogy módosítsd a sorba állított üzenetek kimenési sorrendjét: felülről indulnak.",

@@ -313,6 +313,7 @@ export const hints: Messages["hints"] = {
     "Cuando eliminas una conversación, su lienzo se conserva este tiempo. Si continúas su sesión desde Continuar una sesión…, el lienzo vuelve tal como estaba, también las revisiones y los recorridos. Después, solo vuelve lo que guarda el historial de la propia sesión: páginas, preguntas y checklists.",
   terminalCommand:
     "Claude Code muestra este comando solo en su propia terminal, así que esto lo abre allí: una pestaña de terminal de esta conversación, ejecutada por el Claude Code que usa el perfil de esta conversación. El panel es donde ocurre el comando; la respuesta del agente de arriba es solo su negativa.",
+  updateAgent: (command) => `Ejecuta ${command} aquí, como lo haría ! en el cuadro de mensaje. Las conversaciones que inicies después usan la versión nueva.`,
   logIn:
     "Abre el inicio de sesión propio del agente en una pestaña de terminal de esta conversación, con su perfil, de modo que un perfil con cuenta propia inicie sesión con esa. Cuando diga que has iniciado sesión, envía tu mensaje de nuevo.",
   queuedGrip: "Arrastra para cambiar el orden en que salen los mensajes en cola: salen desde arriba.",
