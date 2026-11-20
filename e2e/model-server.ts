@@ -59,15 +59,22 @@ export function ownersModelServer(): Record<string, string> {
 }
 
 /** The HTTP status the model server gives a one-token request, 0 when nothing answers: a restart on the owner's machine shows as 502s for a while. */
-export async function modelServerStatus(): Promise<number> {
+export async function modelServerStatus(timeoutMs = 30_000): Promise<number> {
   const { ANTHROPIC_BASE_URL: url = process.env.ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN: key = process.env.ANTHROPIC_AUTH_TOKEN } = ownersModelServer();
   const response = await fetch(`${url}/v1/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${key}`, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model: MODEL_SERVER_MODEL, max_tokens: 1, messages: [{ role: "user", content: "hi" }] }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   }).catch(() => null);
   return response?.status ?? 0;
+}
+
+/** How long the server took to answer a one-token completion, or null when it did not answer 200 in `timeoutMs`. */
+export async function answerSeconds(timeoutMs: number): Promise<number | null> {
+  const started = performance.now();
+  const status = await modelServerStatus(timeoutMs);
+  return status === 200 ? (performance.now() - started) / 1000 : null;
 }
 
 /** Whether `status` comes back 200 before `withinMs` is up, asking again every `everyMs`: a model server busy with another's long prompt answers late. */
