@@ -25,6 +25,10 @@ export interface SocketData {
   deviceId: string | null;
   /** Who writes the messages the socket sends. */
   personId: string;
+  /** Signed in as the machine's owner; anyone else reaches only the rooms they are in. */
+  isOwner: boolean;
+  /** For a person other than the owner: the rooms their page was told of, so it hears when one is gone for them. */
+  roomsShown: Set<string>;
   subscriptions: Set<string>;
   /** The documents the socket's page shows, by their ids: only these pages get their documents, which can be large. */
   appSubscriptions: Set<string>;
@@ -61,11 +65,12 @@ export const pageOnHost = ({ deviceId, from }: Pick<SocketData, "deviceId" | "fr
 
 export const isLoopback = (address: string) => ["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(address);
 
-export type SignedIn = Pick<SocketData, "deviceId" | "personId">;
+/** Who a request or socket signed in as; nobody is null. */
+export type SignedIn = Pick<SocketData, "deviceId" | "personId" | "isOwner">;
 
 export const socketData = (
   role: SocketData["role"],
-  { deviceId, personId }: SignedIn,
+  { deviceId, personId, isOwner }: SignedIn,
   canvasAssetsOrigin = "",
   from = thisMachine,
   readsDeflatedMessages = false,
@@ -75,6 +80,8 @@ export const socketData = (
   role,
   deviceId,
   personId,
+  isOwner,
+  roomsShown: new Set<string>(),
   canvasAssetsOrigin,
   from,
   readsDeflatedMessages,
@@ -98,15 +105,29 @@ export type BrowserSocket = ServerWebSocket<SocketData>;
 export const webSocketCompression = { compress: "dedicated", decompress: true } as const;
 
 /** Other devices reach the host over a network, often a phone's mobile data; this machine's own pages don't, and skip the work. */
-function deliver(socket: BrowserSocket, payload: string) {
+function transmit(socket: BrowserSocket, payload: string) {
   if (socket.data.readsDeflatedMessages && payload.length > DEFLATED_MESSAGE_MIN_LENGTH) socket.sendBinary(deflateRawSync(payload), false);
   else socket.send(payload, socket.data.deviceId !== null);
 }
 
-const once = (make: () => string) => {
-  let made: string | undefined;
+const once = <T>(make: () => T) => {
+  let made: T | undefined;
   return () => (made ??= make());
 };
+
+/** A message goes to many sockets as the same object, written out once. */
+const payloads = new WeakMap<ServerMessage, string>();
+
+function payloadOf(message: ServerMessage) {
+  const known = payloads.get(message);
+  if (known !== undefined) return known;
+  const payload = JSON.stringify(message);
+  payloads.set(message, payload);
+  return payload;
+}
+
+/** What a person other than the machine's owner may see of a message: the message, ones made for them from it, or nothing. */
+export type ShownToPerson = (message: ServerMessage, socket: SocketData) => ServerMessage[];
 
 export class Hub {
   private readonly sockets = new Set<BrowserSocket>();
@@ -114,6 +135,19 @@ export class Hub {
   private announcedWaiting: string | null = null;
   private announcedRunningTurnsCount: number | null = null;
   private readonly runningTurnsListeners: ((count: number) => void)[] = [];
+  /** Until the host says what people see, nothing reaches anyone but the owner. */
+  private shownToPerson: ShownToPerson = () => [];
+
+  /** Every message to people other than the owner passes through this first. */
+  showsPeople(shownToPerson: ShownToPerson) {
+    this.shownToPerson = shownToPerson;
+  }
+
+  /** The one way out to a socket: the owner's get every message as it is, anyone else's only what they may see of it. */
+  private deliver(socket: BrowserSocket, message: ServerMessage) {
+    if (socket.data.isOwner) return transmit(socket, payloadOf(message));
+    this.shownToPerson(message, socket.data).forEach((shown) => transmit(socket, payloadOf(shown)));
+  }
 
   add(socket: BrowserSocket) {
     (socket.data.role === "notifier" ? this.notifiers : this.sockets).add(socket);
@@ -125,12 +159,11 @@ export class Hub {
   }
 
   send(socket: BrowserSocket, message: ServerMessage) {
-    deliver(socket, JSON.stringify(message));
+    this.deliver(socket, message);
   }
 
   broadcast(message: ServerMessage) {
-    const payload = JSON.stringify(message);
-    this.sockets.forEach((socket) => deliver(socket, payload));
+    this.sockets.forEach((socket) => this.deliver(socket, message));
   }
 
   /** Pages keep recently opened conversations subscribed, hidden; this is whether one is showing it. */
@@ -156,18 +189,19 @@ export class Hub {
 
   /** Only the desktop app's notification sockets hear it, and only when it changed; pages work it out from the conversations they already hold. */
   announceWaiting(waiting: WaitingSummary) {
-    const payload = JSON.stringify({ type: "waiting.counted", ...waiting } satisfies ServerMessage);
+    const message: ServerMessage = { type: "waiting.counted", ...waiting };
+    const payload = payloadOf(message);
     if (payload === this.announcedWaiting) return;
     this.announcedWaiting = payload;
-    this.notifiers.forEach((socket) => deliver(socket, payload));
+    this.notifiers.forEach((socket) => this.deliver(socket, message));
   }
 
   /** Of pages, only the desktop app's notification sockets hear it; it goes out only when it changed. */
   announceRunningTurnsCount(count: number) {
     if (count === this.announcedRunningTurnsCount) return;
     this.announcedRunningTurnsCount = count;
-    const payload = JSON.stringify({ type: "running-turns.counted", count } satisfies ServerMessage);
-    this.notifiers.forEach((socket) => deliver(socket, payload));
+    const message: ServerMessage = { type: "running-turns.counted", count };
+    this.notifiers.forEach((socket) => this.deliver(socket, message));
     this.runningTurnsListeners.forEach((listener) => listener(count));
   }
 
@@ -177,8 +211,8 @@ export class Hub {
 
   /** Pages show it whichever device they are on, as it is about this host; another machine's desktop app runs an install of its own. */
   announceNewerVersion(newerVersion: NewerVersion | null) {
-    const payload = JSON.stringify({ type: "newer-version.found", newerVersion } satisfies ServerMessage);
-    [...this.sockets, ...[...this.notifiers].filter(({ data }) => data.deviceId === null)].forEach((socket) => deliver(socket, payload));
+    const message: ServerMessage = { type: "newer-version.found", newerVersion };
+    [...this.sockets, ...[...this.notifiers].filter(({ data }) => data.deviceId === null)].forEach((socket) => this.deliver(socket, message));
   }
 
   announcePluginUpdates(pluginUpdates: PluginUpdate[]) {
@@ -193,10 +227,10 @@ export class Hub {
   }
 
   private notifyEachDevice(sockets: BrowserSocket[], notification: SystemNotification) {
-    const payload = JSON.stringify({ type: "system-notification", notification } satisfies ServerMessage);
+    const message: ServerMessage = { type: "system-notification", notification };
     const isNotifier = ({ data }: BrowserSocket) => data.role === "notifier";
     const listenersOn = (device: BrowserSocket[]) => (device.some(isNotifier) ? device.filter(isNotifier) : device);
-    [...Map.groupBy(sockets, ({ data }) => data.deviceId).values()].flatMap(listenersOn).forEach((socket) => deliver(socket, payload));
+    [...Map.groupBy(sockets, ({ data }) => data.deviceId).values()].flatMap(listenersOn).forEach((socket) => this.deliver(socket, message));
   }
 
   /** Each page gets a message of its own. */
@@ -220,9 +254,8 @@ export class Hub {
   }
 
   publishWhere(isRecipient: (socket: BrowserSocket) => boolean, message: ServerMessage) {
-    const payload = JSON.stringify(message);
     this.sockets.forEach((socket) => {
-      if (isRecipient(socket)) deliver(socket, payload);
+      if (isRecipient(socket)) this.deliver(socket, message);
     });
   }
 
@@ -245,24 +278,18 @@ export class Hub {
   }
 
   publishToRoom(roomId: string, message: ServerMessage) {
-    const payload = JSON.stringify(message);
-    this.sockets.forEach((socket) => {
-      if (socket.data.roomSubscriptions.has(roomId)) deliver(socket, payload);
-    });
+    this.publishWhere((socket) => socket.data.roomSubscriptions.has(roomId), message);
   }
 
   publishToConversation(conversationId: string, message: ServerMessage) {
-    const payload = JSON.stringify(message);
-    this.sockets.forEach((socket) => {
-      if (socket.data.subscriptions.has(conversationId)) deliver(socket, payload);
-    });
+    this.publishWhere((socket) => socket.data.subscriptions.has(conversationId), message);
   }
 
   publishEvent(conversationId: string, event: StoredEvent) {
-    const forPage = once(() => JSON.stringify({ type: "conversation.event", conversationId, event: pageEvent(event) } satisfies ServerMessage));
-    const lowData = once(() => JSON.stringify({ type: "conversation.event", conversationId, event: lowDataEvent(conversationId, event) } satisfies ServerMessage));
+    const forPage = once((): ServerMessage => ({ type: "conversation.event", conversationId, event: pageEvent(event) }));
+    const lowData = once((): ServerMessage => ({ type: "conversation.event", conversationId, event: lowDataEvent(conversationId, event) }));
     this.sockets.forEach((socket) => {
-      if (socket.data.subscriptions.has(conversationId)) deliver(socket, socket.data.lowDataSubscriptions.has(conversationId) ? lowData() : forPage());
+      if (socket.data.subscriptions.has(conversationId)) this.deliver(socket, socket.data.lowDataSubscriptions.has(conversationId) ? lowData() : forPage());
     });
   }
 }

@@ -8,6 +8,22 @@ export interface RoomAgent {
   conversationId: string | null;
 }
 
+/**
+ * What a person other than the machine's owner may do in a room, which the owner owns: a member writes, tags its agents
+ * and follows up in their threads; a guest only writes.
+ */
+export type RoomRole = "member" | "guest";
+
+export const ROOM_ROLES: RoomRole[] = ["member", "guest"];
+
+export const isRoomRole = (value: unknown): value is RoomRole => ROOM_ROLES.includes(value as RoomRole);
+
+/** A person the owner let into a room, other than the owner. */
+export interface RoomPerson {
+  personId: string;
+  role: RoomRole;
+}
+
 /** Where people of this machine and its agents write together; nothing reaches an agent until a message tags it. */
 export interface Room {
   id: string;
@@ -17,8 +33,13 @@ export interface Room {
   agents: RoomAgent[];
   /** What its agents may do without asking. */
   permissions: PermissionPreset;
+  /** The people in it besides the owner; a person who is not the owner sees only themselves here. */
+  people: RoomPerson[];
   createdAt: number;
 }
+
+/** Whether someone of this role may write this: anything for a member, and for a guest nothing that makes an agent take a turn. */
+export const mayWriteAs = (role: RoomRole, tags: string[], threadId: string | null) => role === "member" || (tags.length === 0 && threadId === null);
 
 export type RoomAuthor = { personId: string } | { profileId: string };
 

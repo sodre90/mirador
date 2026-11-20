@@ -122,7 +122,7 @@ export class JoinRequestService {
       return { answer: "denied" };
     }
     if (request.deviceId === null) {
-      const { device, token } = this.devices.admit(request.name);
+      const { device, token } = this.devices.admit(request.name, this.store.ownerId());
       this.store.setJoinRequestDevice(id, device.id);
       return { answer: "approved", deviceId: device.id, token };
     }

@@ -48,7 +48,7 @@ const waitingForALine = [process.execPath, "-e", "process.stdin.once('data', () 
 function fakeBrowser() {
   const received: ServerMessage[] = [];
   const socket = {
-    data: { subscriptions: new Set<string>(), terminalConversationId: null },
+    data: { isOwner: true, subscriptions: new Set<string>(), terminalConversationId: null },
     send: (payload: string) => received.push(JSON.parse(payload)),
   } as unknown as BrowserSocket;
   hub.add(socket);

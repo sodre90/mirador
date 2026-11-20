@@ -101,7 +101,7 @@ function machineWithRooms() {
   store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 1 });
   const hub = new Hub();
   const received: ServerMessage[] = [];
-  const page = { data: socketData("page", { deviceId: null, personId: ownerId }), send: (payload: string) => received.push(JSON.parse(payload) as ServerMessage) };
+  const page = { data: socketData("page", { deviceId: null, personId: ownerId, isOwner: true }), send: (payload: string) => received.push(JSON.parse(payload) as ServerMessage) };
   hub.add(page as unknown as BrowserSocket);
   const sent: Sent[] = [];
   const deleted: string[] = [];
@@ -229,7 +229,7 @@ describe("a room's store", () => {
 
   test("forgets a deleted room's agents, messages and threads", () => {
     const { store, rooms, room } = machineWithRooms();
-    rooms.write(room.id, "x", "@Builder go", ["p1"], null);
+    rooms.write(room.id, store.ownerId(), "@Builder go", ["p1"], null);
     store.deleteRoom(room.id);
     expect(store.findRoom(room.id)).toBeUndefined();
     expect(store.listRoomMessages(room.id)).toEqual([]);
@@ -409,6 +409,60 @@ describe("a room", () => {
     expect(deleted).toEqual([conversationId]);
     expect(received.at(-1)).toEqual({ type: "room.deleted", roomId: room.id });
     expect(rooms.list()).toEqual([]);
+  });
+});
+
+describe("people other than the owner in a room", () => {
+  const problemCode = (write: () => unknown) => {
+    try {
+      write();
+    } catch (error) {
+      return (error as HostProblemError).problem.code;
+    }
+    return null;
+  };
+
+  test("write only in the rooms they were let into, a guest without tagging or following up, and are never framed as the owner", () => {
+    const { store, rooms, room, ownerId, sent, posted } = machineWithRooms();
+    store.insertPerson({ id: "g1", name: "", color: null });
+    store.insertPerson({ id: "m1", name: "Mia", color: null });
+    store.insertPerson({ id: "s1", name: "Stan", color: null });
+    rooms.setPersonRole(room.id, "g1", "guest");
+    rooms.setPersonRole(room.id, "m1", "member");
+    const tagging = rooms.write(room.id, ownerId, "@Builder ship it", ["p1"], null);
+    const [thread] = posted()[0]!.threads;
+    expect(problemCode(() => rooms.write(room.id, "s1", "let me in", [], null))).toBe("room-gone");
+    expect(problemCode(() => rooms.write(room.id, "g1", "@Builder go", ["p1"], null))).toBe("room-guests-only-write");
+    expect(problemCode(() => rooms.write(room.id, "g1", "and this", [], thread!.id))).toBe("room-guests-only-write");
+    rooms.write(room.id, "g1", "hello all", [], null);
+    rooms.write(room.id, "m1", "@Reviewer check it", ["p2"], null);
+    rooms.write(room.id, "m1", "and the docs", [], thread!.id);
+    expect(posted().map(({ message }) => [message.author, message.text])).toEqual([
+      [{ personId: ownerId }, tagging.text],
+      [{ personId: "g1" }, "hello all"],
+      [{ personId: "m1" }, "@Reviewer check it"],
+      [{ personId: "m1" }, "and the docs"],
+    ]);
+    const reviewerPrompt = sent.find(({ text }) => text.includes("@Reviewer check it"))!.text;
+    expect(headerLines(reviewerPrompt).map((line) => line.replace(/, \d{4}.*$/, ""))).toEqual(["#1 Ann", "#2 A person without a name", "#3 Mia"]);
+  });
+
+  test("are let in, given another role and taken out by the owner alone, and the owner is in every room already", () => {
+    const { store, rooms, room, ownerId, received } = machineWithRooms();
+    store.insertPerson({ id: "m1", name: "Mia", color: null });
+    rooms.setPersonRole(room.id, "m1", "guest");
+    rooms.setPersonRole(room.id, "m1", "member");
+    expect(store.findRoom(room.id)!.people).toEqual([{ personId: "m1", role: "member" }]);
+    expect(received.findLast(({ type }) => type === "room.upserted")).toMatchObject({ room: { people: [{ personId: "m1", role: "member" }] } });
+    expect(problemCode(() => rooms.setPersonRole(room.id, ownerId, "guest"))).toBe("room-person-unknown");
+    expect(problemCode(() => rooms.setPersonRole(room.id, "nobody", "member"))).toBe("room-person-unknown");
+    expect(() => rooms.setPersonRole(room.id, "m1", "owner" as never)).toThrow();
+    rooms.removePerson(room.id, "m1");
+    expect(store.findRoom(room.id)!.people).toEqual([]);
+    expect(store.roomsOf("m1")).toEqual([]);
+    rooms.setPersonRole(room.id, "m1", "guest");
+    rooms.delete(room.id);
+    expect(received.at(-1)).toMatchObject({ type: "people.listed" });
   });
 });
 

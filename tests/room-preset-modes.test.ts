@@ -59,7 +59,7 @@ test("a room's agent runs in its preset's mode, not its profile's, ignores its p
   mkdirSync(project);
   store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: null, mode: "agent-full-access", effort: null, bypassPermissions: true, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null }], permissions: "read-freely", createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null }], permissions: "read-freely", people: [], createdAt: 1 });
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const { agent, promptedIn } = codexAgent();
   (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set("p1", agent);

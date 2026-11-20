@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
-import type { Room, RoomApproval, RoomMessage, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { Room, RoomApproval, RoomMessage, RoomRole, RoomThread, RoomTimeline } from "./rooms.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -399,6 +399,9 @@ export type ClientMessage =
   | { type: "room.set-agents"; roomId: string; profileIds: string[] }
   /** Its agents' conversations follow the preset from their next permission request on. */
   | { type: "room.set-permissions"; roomId: string; permissions: PermissionPreset }
+  /** Lets a person of this machine into the room with the role, or changes their role there. */
+  | { type: "room.set-person-role"; roomId: string; personId: string; role: RoomRole }
+  | { type: "room.remove-person"; roomId: string; personId: string }
   /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
   | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
   /** Deletes the room with its agents' conversations in it. */

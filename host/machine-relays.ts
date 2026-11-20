@@ -110,7 +110,7 @@ export class MachineRelays {
     private readonly store: Store,
     private readonly ports: number[],
     private readonly canvasAssetsOrigin: string,
-    private readonly isSignedIn: (request: Request) => boolean,
+    private readonly signedInAsOwner: (request: Request) => boolean,
     private readonly joined: (machineId: string) => void,
     private readonly signedOut: (machineId: string) => void,
   ) {}
@@ -306,7 +306,7 @@ export class MachineRelays {
     const relayOrigins = [`http://127.0.0.1:${port}`, `http://localhost:${port}`];
     const relayOrigin = relayOrigins.find((origin) => new URL(origin).host === request.headers.get("host"));
     if (!relayOrigin) return new Response("forbidden host", { status: 403 });
-    if (!this.isSignedIn(request)) return new Response("unauthorized", { status: 401 });
+    if (!this.signedInAsOwner(request)) return new Response("unauthorized", { status: 401 });
     const origin = request.headers.get("origin");
     if (origin !== null && !relayOrigins.includes(origin)) return new Response("forbidden origin", { status: 403 });
 

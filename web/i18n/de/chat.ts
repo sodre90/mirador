@@ -118,6 +118,7 @@ export const chat: Messages["chat"] = {
     fromMirador: "Von Mirador",
     fromScript: "Von einem Skript",
     you: "Du",
+    owner: "Besitzer",
   },
   entry: {
     openTerminalTab: "Terminal-Tab öffnen",

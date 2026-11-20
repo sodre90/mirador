@@ -114,6 +114,7 @@ export const chat: Messages["chat"] = {
     fromMirador: "来自 Mirador",
     fromScript: "来自脚本",
     you: "你",
+    owner: "所有者",
   },
   entry: {
     openTerminalTab: "打开终端标签页",

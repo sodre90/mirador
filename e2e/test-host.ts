@@ -5,6 +5,7 @@ import { basename, delimiter, dirname, join } from "node:path";
 import { test } from "@playwright/test";
 import { muteMarkerName, MUTED_LIST_FILE, mutedListAt } from "../host/notifier.ts";
 import { HOST_RELAUNCH, HOST_RESTART_EXIT_CODE } from "../shared/host-relaunch.ts";
+import { TOKEN_COOKIE } from "../shared/protocol.ts";
 import { freePorts } from "./free-ports.ts";
 import { ownersModelServer } from "./model-server.ts";
 import { processTreeOf, waitForProcessesToEnd } from "./process-tree.ts";
@@ -234,6 +235,16 @@ export class TestHost {
 
   private get bun() {
     return process.env.MIRADOR_E2E_MINIMAL_ENV ? programOnPath("bun") : "bun";
+  }
+
+  /**
+   * Adds a person other than the owner to the host's machine, with a device of theirs: a browser that signs in with the
+   * token in the cookie it gets is that person.
+   */
+  admitPerson(name: string): { personId: string; cookie: { name: string; value: string; url: string } } {
+    const seeded = execFileSync(this.bun, [join(repoRoot, "e2e", "seed-person.ts"), this.sourceDir, join(this.dataDir, "state.sqlite"), name], { encoding: "utf8" });
+    const { personId, token } = JSON.parse(seeded) as { personId: string; token: string };
+    return { personId, cookie: { name: TOKEN_COOKIE, value: token, url: this.origin } };
   }
 
   /**

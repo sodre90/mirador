@@ -20,7 +20,7 @@ test("an error that ends a turn before its session opens republishes the convers
   store.insertWorkspace({ id: "w1", name: "project", path: project, defaultLaunch: { harness: "claude", profileId: "p1" }, createdAt: 1 });
   const hub = new Hub();
   const received: ServerMessage[] = [];
-  hub.add({ data: socketData("page", { deviceId: null, personId: "owner" }), send: (payload: string) => received.push(JSON.parse(payload) as ServerMessage) } as unknown as BrowserSocket);
+  hub.add({ data: socketData("page", { deviceId: null, personId: "owner", isOwner: true }), send: (payload: string) => received.push(JSON.parse(payload) as ServerMessage) } as unknown as BrowserSocket);
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) });
   const conversations = new ConversationService(store, hub, config, {} as never, {} as never, {} as never, new SystemNotifications(store, hub));
   const conversation = conversations.create("w1", { harness: "claude", profileId: "p1" });

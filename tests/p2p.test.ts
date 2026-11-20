@@ -104,9 +104,9 @@ test("the environment may hand devices another broker address and announce more 
 });
 
 unixOnlyTest("the sidecar uses the host's broker and announces the extra places, while devices get the broker address meant for them", async () => {
-  const { p2p, devices } = host({ broker: { address: "127.0.0.1:47800", key: brokerKey }, deviceBroker: "10.0.2.2:47800", candidates: ["10.0.2.2:41641"] });
+  const { p2p, devices, store } = host({ broker: { address: "127.0.0.1:47800", key: brokerKey }, deviceBroker: "10.0.2.2:47800", candidates: ["10.0.2.2:41641"] });
   expect((await p2p.invite("ABCDEFGHJK", Date.now() + 60_000))!.broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
-  expect(p2p.register(devices.admit("Phone").device.id, newKeyPair().publicKey).broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
+  expect(p2p.register(devices.admit("Phone", store.ownerId()).device.id, newKeyPair().publicKey).broker).toEqual({ address: "10.0.2.2:47800", key: brokerKey });
   await commandsRead(2);
   const sidecarArguments = readFileSync(argumentsFile, "utf8").split("\n");
   expect(sidecarArguments).toContain("--broker=127.0.0.1:47800");
@@ -114,9 +114,9 @@ unixOnlyTest("the sidecar uses the host's broker and announces the extra places,
 });
 
 unixOnlyTest("devices reach the canvas server through the tunnel at a port of its own, which their tunnel places name", async () => {
-  const { p2p, devices } = host({ canvasAssetsPort: 24601 });
+  const { p2p, devices, store } = host({ canvasAssetsPort: 24601 });
   expect((await p2p.invite("ABCDEFGHJK", Date.now() + 60_000))!.canvasPort).toBe(4601);
-  expect(p2p.register(devices.admit("Phone").device.id, newKeyPair().publicKey).canvasPort).toBe(4601);
+  expect(p2p.register(devices.admit("Phone", store.ownerId()).device.id, newKeyPair().publicKey).canvasPort).toBe(4601);
   await commandsRead(2);
   expect(readFileSync(argumentsFile, "utf8").split("\n")).toContain("--forward=4601=127.0.0.1:24601");
 });
@@ -150,8 +150,8 @@ test("devices get addresses of their own in the host's tunnel network", () => {
 });
 
 unixOnlyTest("a device that sends its key is let in on a socket of its own, and keeps its address when its key changes", async () => {
-  const { p2p, devices, listening } = host();
-  const { device } = devices.admit("Phone");
+  const { p2p, devices, listening, store } = host();
+  const { device } = devices.admit("Phone", store.ownerId());
   const firstKey = newKeyPair().publicKey;
   const tunnel = p2p.register(device.id, firstKey);
   expect(tunnel).toMatchObject({ hostKey: p2p.places().hostKey, port: 4600, broker: { address: "203.0.113.7:47800", key: brokerKey } });
@@ -165,17 +165,17 @@ unixOnlyTest("a device that sends its key is let in on a socket of its own, and 
 });
 
 test("a key is refused when it is not one, or when another device already uses it", () => {
-  const { p2p, devices } = host();
+  const { p2p, devices, store } = host();
   const key = newKeyPair().publicKey;
-  p2p.register(devices.admit("Phone").device.id, key);
-  expect(() => p2p.register(devices.admit("Laptop").device.id, key)).toThrow(/Another device/);
-  expect(() => p2p.register(devices.admit("Tablet").device.id, "not a key")).toThrow(/not a key/);
+  p2p.register(devices.admit("Phone", store.ownerId()).device.id, key);
+  expect(() => p2p.register(devices.admit("Laptop", store.ownerId()).device.id, key)).toThrow(/Another device/);
+  expect(() => p2p.register(devices.admit("Tablet", store.ownerId()).device.id, "not a key")).toThrow(/not a key/);
   expect(p2p.refusedKey(newKeyPair().publicKey)).toBeNull();
 });
 
 unixOnlyTest("a revoked device is let in no more, and its listener closes", async () => {
-  const { p2p, devices, listening } = host();
-  const { device } = devices.admit("Phone");
+  const { p2p, devices, listening, store } = host();
+  const { device } = devices.admit("Phone", store.ownerId());
   const key = newKeyPair().publicKey;
   p2p.register(device.id, key);
   p2p.forget(device.id);
@@ -218,7 +218,7 @@ test("a sidecar that can't start is tried again later, and the host keeps runnin
 
 unixOnlyTest("paired devices are let in again when the host starts", async () => {
   const first = host();
-  const { device } = first.devices.admit("Phone");
+  const { device } = first.devices.admit("Phone", first.store.ownerId());
   const key = newKeyPair().publicKey;
   const { deviceAddress } = first.p2p.register(device.id, key);
   first.p2p.stop();

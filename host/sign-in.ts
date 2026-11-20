@@ -22,7 +22,7 @@ export const signedInWith =
   (browserToken: string, devices: DeviceService, ownerId: string) =>
   (request: Request): SignedIn | null => {
     const token = cookieValue(request, TOKEN_COOKIE);
-    if (sameSecret(token, browserToken)) return { deviceId: null, personId: ownerId };
+    if (sameSecret(token, browserToken)) return { deviceId: null, personId: ownerId, isOwner: true };
     const device = token ? devices.deviceWithToken(token) : undefined;
-    return device ? { deviceId: device.id, personId: device.personId } : null;
+    return device ? { deviceId: device.id, personId: device.personId, isOwner: device.personId === ownerId } : null;
   };

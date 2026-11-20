@@ -15,6 +15,8 @@ import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   agentTaggedTurnsAfter,
   catchUpPrompt,
+  isRoomRole,
+  mayWriteAs,
   personMessageBehind,
   roomHistory,
   shownOnRoomCanvas,
@@ -25,6 +27,7 @@ import {
   type RoomAuthor,
   type RoomHistoryQuery,
   type RoomMessage,
+  type RoomRole,
   type RoomThread,
   type RoomTimeline,
 } from "../shared/rooms.ts";
@@ -54,6 +57,7 @@ export interface TagsNamed {
 }
 
 const OWNER_WITHOUT_A_NAME = "Owner";
+const PERSON_WITHOUT_A_NAME = "A person without a name";
 const AGENT_GONE = "An agent no longer in the room";
 
 const distinct = (ids: string[]) => [...new Set(ids)];
@@ -114,6 +118,7 @@ export class RoomService implements RoomPermissionRules {
       workspaceId,
       agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null })),
       permissions: knownPreset(permissions),
+      people: [],
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -145,10 +150,28 @@ export class RoomService implements RoomPermissionRules {
     room.agents.forEach(({ conversationId }) => conversationId && void this.sessions.followRoomPreset(conversationId).catch(() => {}));
   }
 
+  /** Lets the person into the room with the role, or gives them that role there, from their next message on. */
+  setPersonRole(roomId: string, personId: string, role: RoomRole) {
+    this.existingRoom(roomId);
+    if (!isRoomRole(role)) throw new Error(`There is no room role "${role}".`);
+    if (personId === this.store.ownerId() || !this.store.listPeople().some(({ id }) => id === personId)) throw new HostProblemError({ code: "room-person-unknown" });
+    this.store.setRoomPersonRole(roomId, personId, role);
+    this.peopleChanged(roomId);
+  }
+
+  /** The person's open pages lose the room at once. */
+  removePerson(roomId: string, personId: string) {
+    this.existingRoom(roomId);
+    this.store.removeRoomPerson(roomId, personId);
+    this.peopleChanged(roomId);
+  }
+
   delete(roomId: string) {
-    this.existingRoom(roomId).agents.forEach(({ conversationId }) => conversationId && this.sessions.delete(conversationId));
+    const room = this.existingRoom(roomId);
+    room.agents.forEach(({ conversationId }) => conversationId && this.sessions.delete(conversationId));
     this.store.deleteRoom(roomId);
     this.hub.broadcast({ type: "room.deleted", roomId });
+    if (room.people.length > 0) this.peopleListed();
   }
 
   /** Whether the room's preset, or what an approver let through for the rest of the turn, lets the request through without asking. */
@@ -214,6 +237,7 @@ export class RoomService implements RoomPermissionRules {
    */
   write(roomId: string, personId: string, text: string, tags: string[], threadId: string | null): RoomMessage {
     const room = this.existingRoom(roomId);
+    this.assertMayWrite(room, personId, tags, threadId);
     const tagged = distinct(tags);
     const thread = threadId === null ? null : this.followedUp(room, threadId, tagged);
     if (tagged.some((profileId) => !this.answers(room, profileId))) throw new HostProblemError({ code: "room-message-misaddressed" });
@@ -307,6 +331,14 @@ export class RoomService implements RoomPermissionRules {
 
   private assertMayApprove(room: Room, personId: string) {
     if (!this.approversOf(room).includes(personId)) throw new HostProblemError({ code: "room-approval-not-yours" });
+  }
+
+  /** The owner writes anything in every room; anyone else as their role there lets them, and nothing in a room they are not in. */
+  private assertMayWrite(room: Room, personId: string, tags: string[], threadId: string | null) {
+    if (personId === this.store.ownerId()) return;
+    const role = room.people.find((person) => person.personId === personId)?.role;
+    if (!role) throw new HostProblemError({ code: "room-gone" });
+    if (!mayWriteAs(role, tags, threadId)) throw new HostProblemError({ code: "room-guests-only-write" });
   }
 
   /** Someone waits for the answer: an approver who tagged the agent, or followed up in its thread. */
@@ -421,7 +453,8 @@ export class RoomService implements RoomPermissionRules {
 
   private nameOf(author: RoomAuthor) {
     if (writtenByAgent(author)) return this.store.findProfile(author.profileId)?.name ?? AGENT_GONE;
-    return this.store.listPeople().find(({ id }) => id === author.personId)?.name || OWNER_WITHOUT_A_NAME;
+    const named = this.store.listPeople().find(({ id }) => id === author.personId)?.name;
+    return named || (author.personId === this.store.ownerId() ? OWNER_WITHOUT_A_NAME : PERSON_WITHOUT_A_NAME);
   }
 
   private existingRoom(roomId: string) {
@@ -438,6 +471,16 @@ export class RoomService implements RoomPermissionRules {
     const trimmed = name.trim();
     if (!trimmed) throw new HostProblemError({ code: "room-needs-a-name" });
     return trimmed;
+  }
+
+  private peopleChanged(roomId: string) {
+    this.publish(roomId);
+    this.peopleListed();
+  }
+
+  /** Who shares a room decides whom each person other than the owner sees, so their pages hear of people again. */
+  private peopleListed() {
+    this.hub.broadcast({ type: "people.listed", people: this.store.listPeople() });
   }
 
   private publish(roomId: string) {

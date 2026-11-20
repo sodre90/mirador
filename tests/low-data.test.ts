@@ -128,7 +128,7 @@ describe("canvas changes", () => {
 describe("Hub.publishEvent", () => {
   function connect(hub: Hub, deviceId: string | null, subscription: "whole" | "low data") {
     const sent: { payload: string; compressed: boolean }[] = [];
-    const socket = { data: socketData("page", { deviceId, personId: "owner" }), send: (payload: string, compressed: boolean) => sent.push({ payload, compressed }) } as unknown as BrowserSocket;
+    const socket = { data: socketData("page", { deviceId, personId: "owner", isOwner: true }), send: (payload: string, compressed: boolean) => sent.push({ payload, compressed }) } as unknown as BrowserSocket;
     socket.data.subscriptions.add("c1");
     if (subscription === "low data") socket.data.lowDataSubscriptions.add("c1");
     hub.add(socket);
@@ -152,7 +152,7 @@ describe("deflated messages", () => {
   function connect(readsDeflatedMessages: boolean) {
     const sent: { text: string; binary: boolean; compressed: boolean }[] = [];
     const socket = {
-      data: socketData("page", { deviceId: "phone", personId: "owner" }, "", undefined, readsDeflatedMessages),
+      data: socketData("page", { deviceId: "phone", personId: "owner", isOwner: true }, "", undefined, readsDeflatedMessages),
       send: (text: string, compressed: boolean) => sent.push({ text, binary: false, compressed }),
       sendBinary: (data: Buffer, compressed: boolean) => sent.push({ text: inflateRawSync(data).toString(), binary: true, compressed }),
     } as unknown as BrowserSocket;

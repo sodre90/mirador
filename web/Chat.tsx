@@ -343,8 +343,8 @@ const CanvasShowsEdits = createContext(false);
 
 /** Whether the agent is at work in the conversation, so a failed turn cannot be tried again yet. */
 const ConversationBusy = createContext(false);
-/** Who writes the messages, and the picture the owner set, or null: their initials or the person icon stand in. */
-export const MessageWriters = createContext<{ people: Person[]; ownerId: string | null; ownerPicture: string | null }>({ people: [], ownerId: null, ownerPicture: null });
+/** Who writes the messages, who reads them, and the picture the owner set, or null: their initials or the person icon stand in. */
+export const MessageWriters = createContext<{ people: Person[]; ownerId: string | null; ownerPicture: string | null; you: string | null }>({ people: [], ownerId: null, ownerPicture: null, you: null });
 
 function usePerson(personId: string | null) {
   const { people } = useContext(MessageWriters);
@@ -789,7 +789,14 @@ export function PersonAvatar({ personId }: { personId: string | null }) {
   );
 }
 
-export const usePersonName = (personId: string | null) => usePerson(personId)?.name || words.author.you;
+/** A person who gave no name is You to themselves, and the owner or someone without a name to the others. */
+export function usePersonName(personId: string | null) {
+  const { ownerId, you } = useContext(MessageWriters);
+  const name = usePerson(personId)?.name;
+  if (name) return name;
+  if (personId === null || personId === you) return words.author.you;
+  return personId === ownerId ? words.author.owner : t.rooms.nameless;
+}
 
 export function PersonName({ personId }: { personId: string | null }) {
   return <span className="person-name">{usePersonName(personId)}</span>;
@@ -2267,7 +2274,7 @@ export function ChatPanel({
   const timeline = useTimeline(open.events);
   const sideChatShown = conversation.id in useSideChatsShown();
   const readingAs = replyReadingOf(voiceSettings);
-  const messageWriters = useMemo(() => ({ people, ownerId, ownerPicture: userPicture }), [people, ownerId, userPicture]);
+  const messageWriters = useMemo(() => ({ people, ownerId, ownerPicture: userPicture, you: ownerId }), [people, ownerId, userPicture]);
   useEffect(() => readWhenSpokenTurnEnds(conversation.id, open.events, timeline, readingAs), [timeline]);
   useEffect(
     () => () => {

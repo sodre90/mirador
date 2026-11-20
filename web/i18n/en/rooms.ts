@@ -1,4 +1,5 @@
 import type { PermissionPreset } from "../../../shared/room-permissions.ts";
+import type { RoomRole } from "../../../shared/rooms.ts";
 
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
@@ -58,4 +59,16 @@ export const rooms = {
   allowForTask: "Allow for this task",
   deny: "Deny",
   waitingForApproval: (agent: string) => `${agent} is waiting for approval…`,
+  emptyForGuest: "Nothing written yet.",
+  guestPlaceholder: (room: string) => `Write in ${room}…`,
+  ownerAnswers: "The room's owner answers this question.",
+  people: "People",
+  peopleHint: "A member writes, tags the agents and follows up in their threads; a guest only writes. Neither answers the agents' requests nor changes the room.",
+  noPeople: "Nobody else uses this machine yet.",
+  notInRoom: "Not in the room",
+  roles: { member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
+  roleOf: (person: string) => `Role of ${person}`,
+  nameless: "Someone without a name",
+  inNoRoom: "You are in no room yet. When the owner of this machine adds you to one, it shows here.",
+  noRoomOpen: "Pick a room on the left.",
 };

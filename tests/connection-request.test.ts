@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { Connection } from "../web/connection.ts";
 
-function openConnection() {
+/** The first of what the host sends on a connection, as far as who the page signed in as goes. */
+const snapshotFor = (you: string): ServerMessage => ({ type: "snapshot", you, ownerId: "owner" }) as Extract<ServerMessage, { type: "snapshot" }>;
+
+function connectionWithSocket() {
   const connection = new Connection();
   const sentMessages: ClientMessage[] = [];
   (connection as unknown as { socket: { readyState: number; send: (raw: string) => void } }).socket = {
@@ -12,6 +15,35 @@ function openConnection() {
   connection.setStatus("open");
   return { connection, sentMessages };
 }
+
+function openConnection(you = "owner") {
+  const opened = connectionWithSocket();
+  opened.connection.dispatchMessage(snapshotFor(you));
+  return opened;
+}
+
+describe("Connection.send", () => {
+  test("holds what the page sends until the host's snapshot says who it signed in as, then sends it in order", () => {
+    const { connection, sentMessages } = connectionWithSocket();
+    connection.send({ type: "ping" });
+    connection.send({ type: "conversation.subscribe", conversationId: "c1" });
+    expect(sentMessages).toEqual([]);
+    connection.dispatchMessage(snapshotFor("owner"));
+    expect(sentMessages.map(({ type }) => type)).toEqual(["ping", "conversation.subscribe"]);
+    connection.send({ type: "ping" });
+    expect(sentMessages).toHaveLength(3);
+  });
+
+  test("signed in as a person other than the owner, sends nothing the host refuses people, held or not", () => {
+    const { connection, sentMessages } = connectionWithSocket();
+    connection.send({ type: "conversation.subscribe", conversationId: "c1" });
+    connection.send({ type: "room.subscribe", roomId: "r1" });
+    connection.dispatchMessage(snapshotFor("mia"));
+    expect(connection.send({ type: "presence", conversationId: null, attentive: true, roomId: "r1" })).toBe(false);
+    expect(connection.send({ type: "room.write", roomId: "r1", text: "hello", tags: [], threadId: null })).toBe(true);
+    expect(sentMessages.map(({ type }) => type)).toEqual(["room.subscribe", "room.write"]);
+  });
+});
 
 describe("Connection.sendAndAwait", () => {
   test("rejects immediately when not connected, without leaking listeners", async () => {

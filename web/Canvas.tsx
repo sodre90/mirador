@@ -429,10 +429,22 @@ function AnsweredSeveral({ answer }: { answer: NonNullable<AskItem["answer"]> })
   );
 }
 
-function AskView({ item, pagesBefore, assetsOrigin, formRef }: { item: AskItem; pagesBefore: ShowItem[]; assetsOrigin: string; formRef: RefObject<HTMLFormElement | null> }) {
+function AskView({
+  item,
+  pagesBefore,
+  assetsOrigin,
+  formRef,
+  answerable,
+}: {
+  item: AskItem;
+  pagesBefore: ShowItem[];
+  assetsOrigin: string;
+  formRef: RefObject<HTMLFormElement | null>;
+  answerable: boolean;
+}) {
   const questions = questionsOf(item);
   const several = item.questions !== undefined;
-  const waiting = item.status === "waiting";
+  const waiting = item.status === "waiting" && answerable;
   const typingAidAttributes = useTypingAidAttributes();
   const { drafts, page, setPage, changeDraft, note, setNote } = useAskProgress(item.id, questions.length);
   const answers = drafts.map(draftAnswer);
@@ -473,6 +485,7 @@ function AskView({ item, pagesBefore, assetsOrigin, formRef }: { item: AskItem; 
       )}
       {item.status === "answered" && item.answer && several && <AnsweredSeveral answer={item.answer} />}
       {item.status === "cancelled" && <div className="ask-answer">{words.ask.withdrawn}</div>}
+      {item.status === "waiting" && !answerable && <div className="ask-answer">{t.rooms.ownerAnswers}</div>}
       {pagesBeforeShown.map((before) => (
         <section key={before.id} className="ask-page-before" aria-label={words.ask.shownBeforeLabel(before.title)}>
           <div className="ask-page-before-title" data-hint={hints.askPageBefore}>
@@ -783,6 +796,7 @@ export function CanvasPanel({
   canvasViews,
   onHide,
   inRoom = false,
+  readOnly = false,
   itemToShow = null,
 }: {
   conversationId: string;
@@ -803,6 +817,8 @@ export function CanvasPanel({
   onHide: () => void;
   /** A room's canvas, which holds its agents' pages and questions: no changes of a workspace, no pointing at a page to ask about it. */
   inRoom?: boolean;
+  /** Seen by a person other than the machine's owner, who reads its pages and questions but neither answers, saves nor reports on them. */
+  readOnly?: boolean;
   /** The item the user asked to see, brought in front once for each time they ask. */
   itemToShow?: { itemId: string } | null;
 }) {
@@ -932,7 +948,7 @@ export function CanvasPanel({
     : [];
   const pageActions: BarMenuEntry[] = [
     ...(findTarget ? [{ label: words.bar.findOnPage, shortcut: shortcutKeys().find, onChoose: pageFind.openFind }] : []),
-    ...pageExport.entries,
+    ...(readOnly ? [] : pageExport.entries),
     ...(poppable ? [{ label: words.bar.openInWindow, onChoose: popOut }] : []),
   ];
   const moreEntries: BarMenuEntry[] = [
@@ -1155,7 +1171,7 @@ export function CanvasPanel({
             panelFinds
             followsTextSize
             frameRef={shownPageFrame}
-            onRendered={reportRender(selected.id)}
+            onRendered={readOnly ? undefined : reportRender(selected.id)}
             onMessage={receiveShownPageMessage}
           />
         )}
@@ -1168,6 +1184,7 @@ export function CanvasPanel({
             pagesBefore={pages.filter((page): page is ShowItem => page.kind === "show" && shownQuestion.shownBefore?.includes(page.id) === true)}
             assetsOrigin={assetsOrigin}
             formRef={shownQuestionForm}
+            answerable={!readOnly}
           />
         )}
       </div>

@@ -8,7 +8,7 @@ const phoneAddress: ClientAddress = { fromAddress: "100.101.5.7", tailscaleUser:
 const laptopAddress: ClientAddress = { fromAddress: "192.168.1.23", tailscaleUser: null };
 
 function connect(hub: Hub, role: SocketData["role"], deviceId: string | null, from: ClientAddress = laptopAddress) {
-  const socket = { data: socketData(role, { deviceId, personId: "owner" }, "", from), send: () => {} } as unknown as BrowserSocket;
+  const socket = { data: socketData(role, { deviceId, personId: "owner", isOwner: true }, "", from), send: () => {} } as unknown as BrowserSocket;
   hub.add(socket);
   return socket;
 }

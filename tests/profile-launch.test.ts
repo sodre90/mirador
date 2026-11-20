@@ -9,7 +9,7 @@ test("a profile's environment and prelaunch command go only to pages that edit p
   const hub = new Hub();
   const socketThatReadsProfileLaunch = (readsProfileLaunch: boolean) => {
     const received: ServerMessage[] = [];
-    const data = socketData("page", { deviceId: "a-device", personId: "owner" }, "", undefined, false, readsProfileLaunch);
+    const data = socketData("page", { deviceId: "a-device", personId: "owner", isOwner: true }, "", undefined, false, readsProfileLaunch);
     hub.add({ data, send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket);
     return received;
   };
@@ -27,7 +27,7 @@ test("a page that doesn't edit profiles gets them without their plugins' secrets
   const hub = new Hub();
   const socketThatReadsProfileLaunch = (readsProfileLaunch: boolean) => {
     const received: ServerMessage[] = [];
-    hub.add({ data: socketData("page", { deviceId: "a-device", personId: "owner" }, "", undefined, false, readsProfileLaunch), send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket);
+    hub.add({ data: socketData("page", { deviceId: "a-device", personId: "owner", isOwner: true }, "", undefined, false, readsProfileLaunch), send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket);
     return received;
   };
   const page = socketThatReadsProfileLaunch(true);

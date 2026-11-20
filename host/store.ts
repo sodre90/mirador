@@ -36,7 +36,7 @@ import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checkli
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
-import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomThread } from "../shared/rooms.ts";
+import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread } from "../shared/rooms.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
 
@@ -141,6 +141,9 @@ const schema = `
     person_id TEXT, profile_id TEXT, text TEXT NOT NULL, tags TEXT NOT NULL, thread_id TEXT, answers TEXT, ended TEXT, UNIQUE (room_id, seq));
   CREATE TABLE IF NOT EXISTS room_threads (
     id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, message_id TEXT NOT NULL, profile_id TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_people (
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    role TEXT NOT NULL, PRIMARY KEY (room_id, person_id));
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -1002,6 +1005,7 @@ export class Store {
   insertRoom(room: Room) {
     this.db.query("INSERT INTO rooms (id, name, workspace_id, permissions, created_at) VALUES (?, ?, ?, ?, ?)").run(room.id, room.name, room.workspaceId, room.permissions, room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
+    room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
   }
 
   listRooms(): Room[] {
@@ -1016,14 +1020,31 @@ export class Store {
 
   private toRoom({ id, name, workspace_id, permissions, created_at }: RoomRow): Room {
     const agents = this.db.query("SELECT profile_id, conversation_id FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as { profile_id: string; conversation_id: string | null }[];
+    const people = this.db.query("SELECT person_id AS personId, role FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPerson[];
     return {
       id,
       name,
       workspaceId: workspace_id,
       agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })),
       permissions,
+      people,
       createdAt: created_at,
     };
+  }
+
+  /** The rooms the person is in, besides the owner, who owns them all. */
+  roomsOf(personId: string): Room[] {
+    const rows = this.db.query("SELECT rooms.* FROM rooms JOIN room_people ON room_people.room_id = rooms.id WHERE room_people.person_id = ? ORDER BY rooms.created_at, rooms.rowid").all(personId) as RoomRow[];
+    return rows.map((row) => this.toRoom(row));
+  }
+
+  /** Lets the person into the room with the role, or gives them that role there. */
+  setRoomPersonRole(roomId: string, personId: string, role: RoomRole) {
+    this.db.query("INSERT INTO room_people (room_id, person_id, role) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET role = excluded.role").run(roomId, personId, role);
+  }
+
+  removeRoomPerson(roomId: string, personId: string) {
+    this.db.query("DELETE FROM room_people WHERE room_id = ? AND person_id = ?").run(roomId, personId);
   }
 
   renameRoom(id: string, name: string) {
@@ -1636,6 +1657,10 @@ export class Store {
   listPeople(): Person[] {
     const rows = this.db.query("SELECT id, name, color FROM people ORDER BY rowid").all() as { id: string; name: string; color: string | null }[];
     return rows.map(({ id, name, color }) => ({ id, name, color: isPastel(color) ? color : null }));
+  }
+
+  insertPerson({ id, name, color }: Person) {
+    this.db.query("INSERT INTO people (id, name, color) VALUES (?, ?, ?)").run(id, name, color);
   }
 
   /** The first person, made with the database. */

@@ -1,0 +1,259 @@
+import type { CanvasItem, Profile } from "../shared/model.ts";
+import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
+import type { ServerMessage } from "../shared/protocol.ts";
+import { shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
+import type { ShownToPerson, SocketData } from "./hub.ts";
+import type { Store } from "./store.ts";
+
+const HIDDEN = null;
+
+type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
+
+type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { type: K }>, socket: SocketData) => ServerMessage[];
+
+/** A room as a person in it sees it: of its people only themselves, and nothing of the workspace its agents work in. */
+const roomSeenBy = ({ id, name, agents, permissions, people, createdAt }: Room, personId: string): Room => ({
+  id,
+  name,
+  workspaceId: "",
+  agents: agents.map(({ profileId, conversationId }) => ({ profileId, conversationId })),
+  permissions,
+  people: people.filter((person) => person.personId === personId),
+  createdAt,
+});
+
+/** A room's agent as people in the room see it: its name and the agent it runs on, none of its settings. */
+const agentSeen = ({ id, name, harness }: Profile): Profile => ({
+  id,
+  name,
+  harness,
+  environment: "",
+  prelaunch: "",
+  model: null,
+  mode: null,
+  effort: null,
+  bypassPermissions: false,
+  askMode: "wait",
+  color: null,
+  pluginsOff: [],
+  createdAt: 0,
+});
+
+/**
+ * What a signed-in person other than the machine's owner sees of each message the host sends: their rooms, the people
+ * and agents in them, and those rooms' messages and canvases, as made for them; nothing else. A message type missing here
+ * does not compile.
+ */
+export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeople" | "ownerId" | "listProfiles" | "findConversation">): ShownToPerson {
+  const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
+  const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
+
+  const agentsOf = (rooms: Room[]) => {
+    const agentIds = new Set(rooms.flatMap(({ agents }) => agents.map(({ profileId }) => profileId)));
+    return store.listProfiles().filter(({ id }) => agentIds.has(id));
+  };
+  const isAgentOfTheirRooms = (profileId: string, socket: SocketData) =>
+    store.roomsOf(socket.personId).some(({ agents }) => agents.some((agent) => agent.profileId === profileId));
+
+  /** The owner, who is in every room, and everyone who shares a room with the person. */
+  const peopleSeenBy = (personId: string) => {
+    const seen = new Set([store.ownerId(), personId, ...store.roomsOf(personId).flatMap(({ people }) => people.map((person) => person.personId))]);
+    return store.listPeople().filter(({ id }) => seen.has(id));
+  };
+
+  /** The room as it is now for a person in it, with its agents, which they may not have been told of; for a person just taken out of it, that it is gone. */
+  const roomNewsFor = (room: Room, socket: SocketData): ServerMessage[] => {
+    if (room.people.some(({ personId }) => personId === socket.personId)) {
+      socket.roomsShown.add(room.id);
+      const agents = agentsOf([room]).map((profile): ServerMessage => ({ type: "profile.upserted", profile: agentSeen(profile) }));
+      return [...agents, { type: "room.upserted", room: roomSeenBy(room, socket.personId) }];
+    }
+    socket.roomSubscriptions.delete(room.id);
+    return shownIf(socket.roomsShown.delete(room.id), { type: "room.deleted", roomId: room.id });
+  };
+
+  const onCanvasOfTheirRoom = (item: CanvasItem, socket: SocketData) => {
+    const roomId = store.findConversation(item.conversationId)?.roomId;
+    return shownOnRoomCanvas(item) && typeof roomId === "string" && isIn(socket, roomId);
+  };
+
+  const snapshotFor = ({ hostRunId }: Snapshot, socket: SocketData): Snapshot => {
+    const rooms = store.roomsOf(socket.personId);
+    rooms.forEach(({ id }) => socket.roomsShown.add(id));
+    return {
+      type: "snapshot",
+      workspaces: [],
+      workspaceGroups: [],
+      conversations: [],
+      rooms: rooms.map((room) => roomSeenBy(room, socket.personId)),
+      roomApprovals: [],
+      profiles: agentsOf(rooms).map(agentSeen),
+      promptTemplates: [],
+      canvasUse: "as-needed",
+      claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
+      scriptProgram: "",
+      editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
+      pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
+      avatar: null,
+      people: peopleSeenBy(socket.personId),
+      ownerId: store.ownerId(),
+      you: socket.personId,
+      installedAgents: [],
+      canvasAssetsOrigin: socket.canvasAssetsOrigin,
+      agentsCanvasAssetsOrigin: "",
+      machines: [],
+      machineStatuses: [],
+      hiddenMachines: [],
+      hostId: "",
+      homeDir: "",
+      hostRunId,
+      hostCodeChanged: false,
+      desktopAppOutdated: false,
+      version: "",
+      answersPings: true,
+      newerVersion: null,
+      installedApps: [],
+      openApps: [],
+      canvasViews: {},
+      conversationPlugins: [],
+      pluginLooks: {},
+      olderAfter: DEFAULT_OLDER_AFTER,
+      conversationsShown: DEFAULT_CONVERSATIONS_SHOWN,
+    };
+  };
+
+  const views: { [K in ServerMessage["type"]]: View<K> | typeof HIDDEN } = {
+    "snapshot": (message, socket) => [snapshotFor(message, socket)],
+    "apps.open": HIDDEN,
+    "app.state": HIDDEN,
+    "app.storage": HIDDEN,
+    "profile.upserted": ({ profile }, socket) => shownIf(isAgentOfTheirRooms(profile.id, socket), { type: "profile.upserted", profile: agentSeen(profile) }),
+    "profile.deleted": HIDDEN,
+    "profile.saved": HIDDEN,
+    "profile.choices.got": HIDDEN,
+    "profile.tested": HIDDEN,
+    "plugin.profile-checked": HIDDEN,
+    "prompt-template.upserted": HIDDEN,
+    "prompt-template.deleted": HIDDEN,
+    "settings.canvas-use": HIDDEN,
+    "settings.keep-awake": HIDDEN,
+    "settings.plugin-update-mode": HIDDEN,
+    "plugins.updated-at-start": HIDDEN,
+    "settings.reminder-morning": HIDDEN,
+    "settings.conversation-order": HIDDEN,
+    "settings.keep-deleted-canvas": HIDDEN,
+    "settings.older-after": HIDDEN,
+    "settings.conversations-shown": HIDDEN,
+    "settings.claude-program": HIDDEN,
+    "settings.script-program": HIDDEN,
+    "settings.editor": HIDDEN,
+    "settings.machine-name": HIDDEN,
+    "settings.push-relay": HIDDEN,
+    "settings.avatar": HIDDEN,
+    "people.listed": (_, socket) => [{ type: "people.listed", people: peopleSeenBy(socket.personId) }],
+    "voice.settings": HIDDEN,
+    "voice.engine": HIDDEN,
+    "workspace.upserted": HIDDEN,
+    "workspace.deleted": HIDDEN,
+    "workspace-group.upserted": HIDDEN,
+    "workspace-group.deleted": HIDDEN,
+    "conversation.upserted": HIDDEN,
+    "conversation.deleted": HIDDEN,
+    "room.created": HIDDEN,
+    "room.upserted": ({ room }, socket) => roomNewsFor(room, socket),
+    "room.deleted": (message, socket) => shownIf(socket.roomsShown.delete(message.roomId), message),
+    "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), message),
+    "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
+    "room.approvals": HIDDEN,
+    "conversation.history": HIDDEN,
+    "conversation.earlier": HIDDEN,
+    "tool-output.got": HIDDEN,
+    "conversation.found": HIDDEN,
+    "tool-raw-output.got": HIDDEN,
+    "async-task.output.got": HIDDEN,
+    "conversation.event": HIDDEN,
+    "conversation.revert-previewed": HIDDEN,
+    "conversation.reverted": HIDDEN,
+    "conversation.revert-failed": HIDDEN,
+    "conversation.rewind-previewed": HIDDEN,
+    "conversation.rewind-done": HIDDEN,
+    "conversation.rewound": HIDDEN,
+    "conversation.rewind-failed": HIDDEN,
+    "canvas.upserted": (message, socket) => shownIf(onCanvasOfTheirRoom(message.item, socket), message),
+    "canvas.exported": HIDDEN,
+    "canvas.saved-to-project": HIDDEN,
+    "canvas.export-failed": HIDDEN,
+    "fs.completions": HIDDEN,
+    "statusline.rendered": HIDDEN,
+    "subagent-usage.got": HIDDEN,
+    "sessions.listed": HIDDEN,
+    "sessions.searched": HIDDEN,
+    "sessions.failed": HIDDEN,
+    "slash-commands.listed": HIDDEN,
+    "conversation.fork-checked": HIDDEN,
+    "conversation.side-chat.started": HIDDEN,
+    "prompt-history.listed": HIDDEN,
+    "mentions.suggested": HIDDEN,
+    "changes.listed": HIDDEN,
+    "changes.diffed": HIDDEN,
+    "changes.files-listed": HIDDEN,
+    "changes.committable-listed": HIDDEN,
+    "changes.committed": HIDDEN,
+    "changes.landable-listed": HIDDEN,
+    "changes.landed": HIDDEN,
+    "changes.failed": HIDDEN,
+    "terminals.listed": HIDDEN,
+    "terminal.opened": HIDDEN,
+    "terminal.replayed": HIDDEN,
+    "terminal.output": HIDDEN,
+    "terminal.exited": HIDDEN,
+    "terminal.busy": HIDDEN,
+    "terminal.cleared": HIDDEN,
+    "system-notification": HIDDEN,
+    "waiting.counted": HIDDEN,
+    "running-turns.counted": HIDDEN,
+    "host.code-changed": HIDDEN,
+    "desktop-app.outdated": HIDDEN,
+    "newer-version.found": HIDDEN,
+    "newer-version.checked": HIDDEN,
+    "newer-version.pulled": HIDDEN,
+    "plugin-updates.found": HIDDEN,
+    "host.restarting": HIDDEN,
+    "error": (message) => [message],
+    "pong": (message) => [message],
+    "files.ask-to-open": HIDDEN,
+    "conversation.delete-asks": HIDDEN,
+    "conversations.delete-asks": HIDDEN,
+    "workspace.delete-asks": HIDDEN,
+    "devices.listed": HIDDEN,
+    "plugins.listed": HIDDEN,
+    "plugins.views": HIDDEN,
+    "plugins.settings": HIDDEN,
+    "plugins.changed": HIDDEN,
+    "plugins.offered": HIDDEN,
+    "canvas.item-acted": HIDDEN,
+    "app.file-opened": HIDDEN,
+    "canvas.command-ran": HIDDEN,
+    "plugin-window.state": HIDDEN,
+    "plugin-window.acted": HIDDEN,
+    "plugin-tab.state": HIDDEN,
+    "plugin-tab.acted": HIDDEN,
+    "plugins.commits-found": HIDDEN,
+    "devices.invited": HIDDEN,
+    "address.found": HIDDEN,
+    "machines.changed": HIDDEN,
+    "machines.hidden": HIDDEN,
+    "machine.status": HIDDEN,
+    "machine.join-asked": HIDDEN,
+    "machine.join-answered": HIDDEN,
+    "join-requests.listed": HIDDEN,
+    "join-request.answered": HIDDEN,
+    "settings.saved": HIDDEN,
+    "search.results": HIDDEN,
+  };
+
+  return (message, socket) => {
+    const view = views[message.type] as View<ServerMessage["type"]> | typeof HIDDEN;
+    return view === HIDDEN ? [] : view(message, socket);
+  };
+}

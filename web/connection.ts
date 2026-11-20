@@ -1,3 +1,4 @@
+import { sentByPeople } from "../shared/person-messages.ts";
 import { PROFILE_LAUNCH_PARAMETER, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 
 export type ConnectionStatus = "connecting" | "open" | "unauthorized" | "reconnecting";
@@ -13,16 +14,20 @@ export class Connection {
   private readonly messageListeners = new Set<MessageListener>();
   private readonly statusListeners = new Set<StatusListener>();
   private readonly unsent: ClientMessage[] = [];
+  /** The host's snapshot, the first message on each connection, says who the page signed in as; until it comes, what the page sends waits. */
+  private snapshotCame = false;
+  /** Signed in as a person other than the machine's owner, the page holds back all the host refuses from people. */
+  private sendsAsPerson = false;
   status: ConnectionStatus = "connecting";
 
   connect() {
     const socket = new WebSocket(`${location.origin.replace(/^http/, "ws")}/ws?${PROFILE_LAUNCH_PARAMETER}`);
     this.socket = socket;
+    this.snapshotCame = false;
     let opened = false;
     socket.onopen = () => {
       opened = true;
       this.retryDelay = 500;
-      this.unsent.splice(0).forEach((message) => socket.send(JSON.stringify(message)));
       this.setStatus("open");
     };
     socket.onmessage = (event) => {
@@ -36,12 +41,25 @@ export class Connection {
     };
   }
 
-  /** Sends at once, or as soon as the socket opens, so that what the user does while the page connects or reconnects counts. */
+  /** Sends at once, or as soon as the host's snapshot comes, so that what the user does while the page connects or reconnects counts. */
   send(message: ClientMessage): boolean {
-    if (this.status === "unauthorized") return false;
-    if (this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
+    if (this.status === "unauthorized" || !this.mayBeSent(message)) return false;
+    if (this.snapshotCame && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
     else this.unsent.push(message);
     return true;
+  }
+
+  private mayBeSent(message: ClientMessage) {
+    return !this.sendsAsPerson || sentByPeople(message);
+  }
+
+  private sendWaitingAs({ you, ownerId }: Extract<ServerMessage, { type: "snapshot" }>) {
+    this.snapshotCame = true;
+    this.sendsAsPerson = you !== ownerId;
+    this.unsent
+      .splice(0)
+      .filter((message) => this.mayBeSent(message))
+      .forEach((message) => this.socket?.send(JSON.stringify(message)));
   }
 
   /**
@@ -101,6 +119,7 @@ export class Connection {
   }
 
   dispatchMessage(message: ServerMessage) {
+    if (message.type === "snapshot") this.sendWaitingAs(message);
     this.messageListeners.forEach((listener) => listener(message));
   }
 

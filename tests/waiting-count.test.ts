@@ -40,7 +40,7 @@ test("the tab title carries the count only while something waits", () => {
 
 function connect(hub: Hub, role: SocketData["role"]) {
   const received: ServerMessage[] = [];
-  const socket = { data: socketData(role, { deviceId: null, personId: "owner" }), send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket;
+  const socket = { data: socketData(role, { deviceId: null, personId: "owner", isOwner: true }), send: (payload: string) => received.push(JSON.parse(payload)) } as unknown as BrowserSocket;
   hub.add(socket);
   return received;
 }

@@ -38,14 +38,14 @@ export class DeviceService {
 
   /** Uses the invite up and gives the new device its token; null if the code is wrong, used or expired. */
   join(code: string, name: string) {
-    return this.store.takeInvite(inviteKey(code), this.now()) ? this.admit(name) : null;
+    return this.store.takeInvite(inviteKey(code), this.now()) ? this.admit(name, this.store.ownerId()) : null;
   }
 
-  /** Lets a new device of the owner's in, with the token it signs in with from now on; only its hash is kept. */
-  admit(name: string): { device: Device; token: string } {
+  /** Lets a new device of the person's in, with the token it signs in with from now on; only its hash is kept. */
+  admit(name: string, personId: string): { device: Device; token: string } {
     const now = this.now();
     const token = newToken();
-    const device = { id: crypto.randomUUID(), name, personId: this.store.ownerId(), joinedAt: now, lastSeenAt: now };
+    const device = { id: crypto.randomUUID(), name, personId, joinedAt: now, lastSeenAt: now };
     this.store.insertDevice(device, hashed(token));
     return { device, token };
   }

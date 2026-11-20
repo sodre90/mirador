@@ -212,7 +212,7 @@ const relays = new MachineRelays(
   store,
   config.relayPorts,
   `http://127.0.0.1:${config.canvasAssetsPort}`,
-  (request) => signedIn(request) !== null,
+  (request) => signedIn(request)?.isOwner === true,
   (machineId) => {
     hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
     watch.start(machineId);

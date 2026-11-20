@@ -1,7 +1,7 @@
 import { useState, type Dispatch } from "react";
-import type { Profile, Workspace } from "../shared/model.ts";
+import type { Person, Profile, Workspace } from "../shared/model.ts";
 import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
-import type { Room, RoomApproval } from "../shared/rooms.ts";
+import { ROOM_ROLES, type Room, type RoomApproval, type RoomRole } from "../shared/rooms.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { waitingHints } from "./hints.ts";
@@ -20,11 +20,14 @@ export function RoomsSection({
   rooms,
   selectedRoomId,
   waitingRoomIds,
+  manages,
   dispatch,
 }: {
   rooms: Room[];
   selectedRoomId: string | null;
   waitingRoomIds: Set<string>;
+  /** The machine's owner makes rooms and changes them; anyone else only opens the ones they are in. */
+  manages: boolean;
   dispatch: Dispatch<AppAction>;
 }) {
   const openSettings = (roomId: string | null) => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId } });
@@ -34,9 +37,11 @@ export function RoomsSection({
         <div className="workspace-heading">
           <div className="workspace-name">{words.rooms}</div>
         </div>
-        <button type="button" className="icon workspace-new" aria-label={words.newRoom} onClick={() => openSettings(null)}>
-          +
-        </button>
+        {manages && (
+          <button type="button" className="icon workspace-new" aria-label={words.newRoom} onClick={() => openSettings(null)}>
+            +
+          </button>
+        )}
       </header>
       <ul>
         {rooms.map((room) => {
@@ -55,17 +60,19 @@ export function RoomsSection({
                   {waitingLabels.decision}
                 </span>
               )}
-              <button
-                type="button"
-                className="icon"
-                aria-label={words.roomSettings(room.name)}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openSettings(room.id);
-                }}
-              >
-                ⋯
-              </button>
+              {manages && (
+                <button
+                  type="button"
+                  className="icon"
+                  aria-label={words.roomSettings(room.name)}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openSettings(room.id);
+                  }}
+                >
+                  ⋯
+                </button>
+              )}
             </li>
           );
         })}
@@ -74,17 +81,64 @@ export function RoomsSection({
   );
 }
 
-/** Makes a room, or changes one: its name, agents and what they may do without asking; a room's workspace stays the one it was made in. */
+type RoleInRoom = RoomRole | null;
+
+const rolesIn = (room: Room | null): Record<string, RoleInRoom> => Object.fromEntries(room?.people.map(({ personId, role }) => [personId, role]) ?? []);
+
+/** Lets each person whose role the owner changed into the room with it, or takes them out of it. */
+function sendRoleChanges(roomId: string, before: Record<string, RoleInRoom>, after: Record<string, RoleInRoom>) {
+  Object.entries(after)
+    .filter(([personId, role]) => (before[personId] ?? null) !== role)
+    .forEach(([personId, role]) =>
+      connection.send(role === null ? { type: "room.remove-person", roomId, personId } : { type: "room.set-person-role", roomId, personId, role }),
+    );
+}
+
+/** The people of the machine besides its owner, each in the room as a member or a guest, or not in it. */
+function RoomPeopleField({ people, roles, onChange }: { people: Person[]; roles: Record<string, RoleInRoom>; onChange: (personId: string, role: RoleInRoom) => void }) {
+  return (
+    <fieldset className="room-field room-people-field">
+      <legend>{words.people}</legend>
+      {people.length === 0 && <span className="hint">{words.noPeople}</span>}
+      {people.map((person) => {
+        const name = person.name || words.nameless;
+        return (
+          <label key={person.id} className="room-person-choice">
+            <span>{name}</span>
+            <select aria-label={words.roleOf(name)} value={roles[person.id] ?? ""} onChange={(event) => onChange(person.id, (event.target.value || null) as RoleInRoom)}>
+              <option value="">{words.notInRoom}</option>
+              {ROOM_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {words.roles[role]}
+                </option>
+              ))}
+            </select>
+          </label>
+        );
+      })}
+      {people.length > 0 && <span className="hint">{words.peopleHint}</span>}
+    </fieldset>
+  );
+}
+
+/**
+ * Makes a room, or changes one: its name, agents, what they may do without asking and who else is in it; a room's
+ * workspace stays the one it was made in.
+ */
 export function RoomDialog({
   room,
   workspaces,
   profiles,
+  people,
+  ownerId,
   dispatch,
   onClose,
 }: {
   room: Room | null;
   workspaces: Workspace[];
   profiles: Profile[];
+  people: Person[];
+  ownerId: string | null;
   dispatch: Dispatch<AppAction>;
   onClose: () => void;
 }) {
@@ -92,6 +146,7 @@ export function RoomDialog({
   const [workspaceId, setWorkspaceId] = useState(room?.workspaceId ?? workspaces[0]?.id ?? "");
   const [agentIds, setAgentIds] = useState<string[]>(room?.agents.map(({ profileId }) => profileId) ?? []);
   const [permissions, setPermissions] = useState<PermissionPreset>(room?.permissions ?? DEFAULT_PERMISSION_PRESET);
+  const [roles, setRoles] = useState(() => rolesIn(room));
   const toggle = (profileId: string) => setAgentIds((ticked) => (ticked.includes(profileId) ? ticked.filter((id) => id !== profileId) : [...ticked, profileId]));
   const canSave = name.trim() !== "" && workspaceId !== "";
   const save = () => {
@@ -100,6 +155,7 @@ export function RoomDialog({
       if (name.trim() !== room.name) connection.send({ type: "room.rename", roomId: room.id, name });
       connection.send({ type: "room.set-agents", roomId: room.id, profileIds: agentIds });
       if (permissions !== room.permissions) connection.send({ type: "room.set-permissions", roomId: room.id, permissions });
+      sendRoleChanges(room.id, rolesIn(room), roles);
       return onClose();
     }
     const requestId = crypto.randomUUID();
@@ -161,6 +217,13 @@ export function RoomDialog({
           ))}
           <span className="hint">{words.permissionsHint}</span>
         </fieldset>
+        {room && (
+          <RoomPeopleField
+            people={people.filter(({ id }) => id !== ownerId)}
+            roles={roles}
+            onChange={(personId, role) => setRoles((before) => ({ ...before, [personId]: role }))}
+          />
+        )}
         <div className="form-actions">
           {room && (
             <ConfirmButton className="link danger room-delete" label={words.deleteRoom} hint={words.deleteHint} armedText={words.deleteArmed} armedHint={words.deleteArmedHint} onConfirm={deleteRoom}>

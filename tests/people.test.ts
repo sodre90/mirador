@@ -57,9 +57,20 @@ test("a device let in with an invite is the owner's, and signs in as the owner, 
   const withCookie = (value: string) => new Request("http://127.0.0.1/", { headers: { cookie: `${TOKEN_COOKIE}=${value}` } });
 
   expect(device.personId).toBe(store.ownerId());
-  expect(signedIn(withCookie(token))).toEqual({ deviceId: device.id, personId: store.ownerId() });
-  expect(signedIn(withCookie("browser-token"))).toEqual({ deviceId: null, personId: store.ownerId() });
+  expect(signedIn(withCookie(token))).toEqual({ deviceId: device.id, personId: store.ownerId(), isOwner: true });
+  expect(signedIn(withCookie("browser-token"))).toEqual({ deviceId: null, personId: store.ownerId(), isOwner: true });
   expect(signedIn(withCookie("not-a-token"))).toBeNull();
+});
+
+test("a device of another person signs in as that person, who is not the owner", () => {
+  const store = new Store(":memory:");
+  const devices = new DeviceService(store);
+  store.insertPerson({ id: "mia", name: "Mia", color: null });
+  const { device, token } = devices.admit("Mia's laptop", "mia");
+  const signedIn = signedInWith("browser-token", devices, store.ownerId());
+
+  expect(store.listPeople().map(({ id }) => id)).toEqual([store.ownerId(), "mia"]);
+  expect(signedIn(new Request("http://127.0.0.1/", { headers: { cookie: `${TOKEN_COOKIE}=${token}` } }))).toEqual({ deviceId: device.id, personId: "mia", isOwner: false });
 });
 
 test("a name loses the spaces around it and is cut to its longest", () => {

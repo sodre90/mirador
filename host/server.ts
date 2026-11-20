@@ -68,6 +68,8 @@ import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import { RoomService } from "./rooms.ts";
+import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
+import { personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { machineAddress } from "../shared/machines.ts";
 import { personName } from "../shared/people.ts";
@@ -244,6 +246,7 @@ export function startServer(services: HostServices) {
     },
     notifications,
   );
+  hub.showsPeople(personView(store));
   conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
   conversations.followsRoomPermissionsOf(rooms);
   mcp.offersRoomToolsFrom(rooms);
@@ -303,6 +306,12 @@ export function startServer(services: HostServices) {
     const signedIn = "deviceId" in end ? signedInWithCookie(request) : null;
     return signedIn?.deviceId && "deviceId" in end && signedIn.deviceId === end.deviceId ? signedIn : null;
   };
+
+  const refusedPerson = () => problemResponse({ code: "only-the-owner" }, 403);
+
+  const personInRooms = (personId: string): PersonInRooms => ({
+    roleIn: (roomId) => store.findRoom(roomId)?.people.find((person) => person.personId === personId)?.role ?? null,
+  });
 
   function authenticate(request: Request) {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
@@ -929,9 +938,10 @@ export function startServer(services: HostServices) {
     const signedIn = signedInAs(request);
     if (!signedIn) return new Response("unauthorized", { status: 401 });
     if (!isPageOrigin(request)) return new Response("forbidden origin", { status: 403 });
+    if (role === "notifier" && !signedIn.isOwner) return refusedPerson();
     const readsDeflatedMessages = request.headers.has(DEFLATED_MESSAGES_HEADER);
     const { searchParams } = new URL(request.url);
-    const readsProfileLaunch = searchParams.has(PROFILE_LAUNCH_PARAMETER);
+    const readsProfileLaunch = signedIn.isOwner && searchParams.has(PROFILE_LAUNCH_PARAMETER);
     const desktopAppCode = role === "notifier" ? searchParams.get(DESKTOP_APP_CODE_PARAMETER) : null;
     if (!tunnelEnds.has(request)) rememberAddressUsed(request.headers.get("host"));
     const data = socketData(role, signedIn, canvasAssetsOriginFor(request), clientAddressOf(request, server), readsDeflatedMessages, readsProfileLaunch, desktopAppCode);
@@ -1823,6 +1833,10 @@ export function startServer(services: HostServices) {
         return rooms.setAgents(message.roomId, message.profileIds);
       case "room.set-permissions":
         return rooms.setPermissions(message.roomId, message.permissions);
+      case "room.set-person-role":
+        return rooms.setPersonRole(message.roomId, message.personId, message.role);
+      case "room.remove-person":
+        return rooms.removePerson(message.roomId, message.personId);
       case "room.approve":
         return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
       case "room.delete":
@@ -1843,8 +1857,17 @@ export function startServer(services: HostServices) {
     }
   }
 
+  /** A person other than the owner reaches the page itself over HTTP, and what anyone reaches before signing in; every other route is the owner's. */
+  const OPEN_TO_PEOPLE = new Set(["/", "/join", "/join-requests", "/join-requests/:id/reveal", "/join-requests/:id/poll", "/mirador-ca.pem", "/mirador-here", "/auth"]);
+
+  function refusingPeople<R extends Record<string, unknown>>(routes: R): R {
+    return withEachHandler(routes, (path, handler) =>
+      OPEN_TO_PEOPLE.has(path) ? handler : (request, server) => (signedInAs(request)?.isOwner === false ? refusedPerson() : handler(request, server)),
+    );
+  }
+
   /** All the network listener serves: what pages of other devices use. */
-  const routesForDevices = {
+  const routesForDevices = refusingPeople({
     "/": index,
     "/join": { POST: join },
     "/join-requests": { POST: openJoinRequest },
@@ -1870,15 +1893,15 @@ export function startServer(services: HostServices) {
     "/mirador-ca.pem": serveAuthority,
     "/mirador-here": here,
     "/tunnel": { POST: registerTunnel },
-  };
+  });
   /** Only this machine's own browser, agents and scripts sign in with these tokens, so they are served on 127.0.0.1 alone. */
-  const routesForThisMachine = {
+  const routesForThisMachine = refusingPeople({
     "/auth": authenticate,
     "/mcp/:conversationId": (request: Bun.BunRequest<"/mcp/:conversationId">) => serveMcp(request, request.params.conversationId),
     "/sessions/:sessionId/messages": { POST: receiveScriptMessage },
     "/sessions/:sessionId/job-waits": { POST: receiveJobWait },
     "/devices": { GET: listDevicesForCommandLine },
-  };
+  });
 
   function sendSnapshot(socket: BrowserSocket) {
     if (!claudeProgram.found) void lookUpClaudeProgram(store.claudeProgramSetting());
@@ -1987,7 +2010,8 @@ export function startServer(services: HostServices) {
     async message(socket, raw) {
       if (socket.data.role === "notifier") return;
       try {
-        await dispatch(socket, JSON.parse(String(raw)) as ClientMessage);
+        const sent: unknown = JSON.parse(String(raw));
+        await dispatch(socket, socket.data.isOwner ? (sent as ClientMessage) : admittedFromPerson(sent, personInRooms(socket.data.personId)));
       } catch (error) {
         hub.send(socket, { type: "error", ...failure(error) });
       }
@@ -2023,19 +2047,10 @@ export function startServer(services: HostServices) {
 
   /** Marks each request a route takes as come through the tunnel from `end`, before the route's own checks run. */
   function throughTunnel<R extends Record<string, unknown>>(routes: R, end: TunnelEnd): R {
-    const marked =
-      (handler: (request: Request, server: unknown) => unknown) =>
-      (request: Request, server: unknown) => {
-        tunnelEnds.set(request, end);
-        return handler(request, server);
-      };
-    const isMethods = (route: object) => Object.keys(route).length > 0 && Object.keys(route).every((key) => /^[A-Z]+$/.test(key));
-    const markedRoute = (route: unknown): unknown => {
-      if (typeof route === "function") return marked(route as (request: Request, server: unknown) => unknown);
-      if (route && typeof route === "object" && isMethods(route)) return Object.fromEntries(Object.entries(route).map(([method, handler]) => [method, markedRoute(handler)]));
-      return route;
-    };
-    return Object.fromEntries(Object.entries(routes).map(([path, route]) => [path, markedRoute(route)])) as R;
+    return withEachHandler(routes, (_, handler) => (request, server) => {
+      tunnelEnds.set(request, end);
+      return handler(request, server);
+    });
   }
 
   /** A device's own listener serves the device routes alone; the joining listener, reached with an invite's one-time key, serves joining alone. */
@@ -2078,6 +2093,19 @@ export function startServer(services: HostServices) {
     networkServer?.stop(true);
   };
   return { stop, rebuildUi };
+}
+
+type RouteHandler = (request: Request, server: unknown) => unknown;
+
+/** The routes with each handler, of every method, put through `wrap`; the page bundles and static responses stay as they are. */
+function withEachHandler<R extends Record<string, unknown>>(routes: R, wrap: (path: string, handler: RouteHandler) => RouteHandler): R {
+  const isMethods = (route: object) => Object.keys(route).length > 0 && Object.keys(route).every((key) => /^[A-Z]+$/.test(key));
+  const wrapped = (path: string, route: unknown): unknown => {
+    if (typeof route === "function") return wrap(path, route as RouteHandler);
+    if (route && typeof route === "object" && isMethods(route)) return Object.fromEntries(Object.entries(route).map(([method, handler]) => [method, wrapped(path, handler)]));
+    return route;
+  };
+  return Object.fromEntries(Object.entries(routes).map(([path, route]) => [path, wrapped(path, route)])) as R;
 }
 
 /** Types the options where they are written, so they can be passed to both Bun.serve and server.reload. */

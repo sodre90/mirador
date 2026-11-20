@@ -346,7 +346,7 @@ function PictureChoice<Option extends string>({
   );
 }
 
-function OwnProfileSettings({ person }: { person: Person }) {
+export function OwnProfileSettings({ person }: { person: Person }) {
   const [name, setName] = useState(person.name);
   useEffect(() => setName(person.name), [person.name]);
   const save = (profile: Pick<Person, "name" | "color">) => connection.send({ type: "person.set-own-profile", ...profile });

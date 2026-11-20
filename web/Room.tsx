@@ -249,6 +249,9 @@ function ApprovalStrip({ approvals, agentsById, you }: { approvals: RoomApproval
 
 const waitsInThread = (approvals: RoomApproval[], threadId: string) => approvals.some((approval) => approval.threadId === threadId);
 
+/** A guest writes in the room, but tags none of its agents and follows up in none of their threads; the owner is no guest anywhere. */
+const isGuestIn = (room: Room, you: string | null) => room.people.some(({ personId, role }) => personId === you && role === "guest");
+
 function ThreadColumn({
   thread,
   timeline,
@@ -258,6 +261,7 @@ function ThreadColumn({
   approvals,
   waitingForYou,
   you,
+  followsUp,
   onClose,
 }: {
   thread: RoomThread;
@@ -268,6 +272,7 @@ function ThreadColumn({
   approvals: RoomApproval[];
   waitingForYou: RoomApproval[];
   you: string | null;
+  followsUp: boolean;
   onClose: () => void;
 }) {
   const asked = askedInThread(timeline, thread);
@@ -298,7 +303,7 @@ function ThreadColumn({
         {workingOn && <div className="working">{workingLine}</div>}
       </div>
       <ApprovalStrip approvals={waitingForYou.filter(({ threadId }) => threadId === thread.id)} agentsById={agentsById} you={you} />
-      <RoomComposer placeholder={words.followUpPlaceholder(agent.name)} agents={[]} onSend={(text) => writeIn(thread.roomId, text, [], thread.id)} />
+      {followsUp && <RoomComposer placeholder={words.followUpPlaceholder(agent.name)} agents={[]} onSend={(text) => writeIn(thread.roomId, text, [], thread.id)} />}
     </aside>
   );
 }
@@ -349,12 +354,13 @@ export function RoomView({
     return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId) };
   });
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
+  const tagsAgents = !isGuestIn(room, you);
   const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
   const thread = timeline?.threads.find(({ id }) => id === threadId) ?? null;
   const threadAgent = thread ? agentsById.get(thread.profileId) : undefined;
   const threadConversationId = threadAgent?.conversation?.id ?? null;
   useEffect(() => dispatch({ type: "keep-thread-conversations", conversationIds: threadConversationId ? [threadConversationId] : [] }), [threadConversationId]);
-  const messageWriters = useMemo(() => ({ people, ownerId, ownerPicture }), [people, ownerId, ownerPicture]);
+  const messageWriters = useMemo(() => ({ people, ownerId, ownerPicture, you }), [people, ownerId, ownerPicture, you]);
   const messagesById = new Map(timeline?.messages.map((message) => [message.id, message]));
   const shown = timeline?.messages.filter(shownInRoom) ?? [];
   const canvasOfAnswers = useMemo(
@@ -381,7 +387,7 @@ export function RoomView({
       </header>
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}
-        {timeline && shown.length === 0 && <div className="notice-line">{words.empty}</div>}
+        {timeline && shown.length === 0 && <div className="notice-line">{tagsAgents ? words.empty : words.emptyForGuest}</div>}
         {shown.map((message) => {
           const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
           return (
@@ -395,7 +401,11 @@ export function RoomView({
         <div ref={timelineEnd} />
       </div>
       <ApprovalStrip approvals={waitingForYou} agentsById={agentsById} you={you} />
-      <RoomComposer placeholder={words.placeholder(room.name)} agents={agents.filter(({ profile }) => profile)} onSend={(text, tags) => writeIn(room.id, text, tags, null)} />
+      <RoomComposer
+        placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
+        agents={tagsAgents ? agents.filter(({ profile }) => profile) : []}
+        onSend={(text, tags) => writeIn(room.id, text, tags, null)}
+      />
     </>
   );
   const side =
@@ -410,6 +420,7 @@ export function RoomView({
         approvals={approvals}
         waitingForYou={waitingForYou}
         you={you}
+        followsUp={tagsAgents}
         onClose={() => setThreadId(null)}
       />
     ) : null;
@@ -429,6 +440,7 @@ export function RoomCanvas({
   homeDir,
   canvasViews,
   itemToShow,
+  readOnly,
   onHide,
 }: {
   room: Room;
@@ -438,6 +450,7 @@ export function RoomCanvas({
   homeDir: string;
   canvasViews: Record<string, string>;
   itemToShow: { itemId: string } | null;
+  readOnly: boolean;
   onHide: () => void;
 }) {
   return (
@@ -457,6 +470,7 @@ export function RoomCanvas({
           canvasViews={canvasViews}
           onHide={onHide}
           inRoom
+          readOnly={readOnly}
           itemToShow={itemToShow}
         />
       </CanvasShown.Provider>

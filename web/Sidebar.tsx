@@ -974,7 +974,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
         <span>{words.paletteBar}</span>
         <kbd>{shortcutKeys().palette}</kbd>
       </button>
-      <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} waitingRoomIds={roomsWaitingFor(state.you, state.roomApprovals)} dispatch={dispatch} />
+      <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} waitingRoomIds={roomsWaitingFor(state.you, state.roomApprovals)} manages dispatch={dispatch} />
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">

@@ -121,6 +121,7 @@ export const chat = {
     fromMirador: "From Mirador",
     fromScript: "From a script",
     you: "You",
+    owner: "Owner",
   },
   entry: {
     openTerminalTab: "Open a terminal tab",

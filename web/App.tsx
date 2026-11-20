@@ -62,6 +62,7 @@ import { TerminalPane } from "./Terminals.tsx";
 import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
 import { RoomCanvas, RoomView } from "./Room.tsx";
+import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
 import { RoomDialog } from "./RoomsSidebar.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
@@ -354,7 +355,7 @@ const RedrawnOnlyWhenShown = memo(
   (_, next) => !next.shown,
 );
 
-/** Subscribes to the room the page shows, and to it again after a reconnect. */
+/** Subscribes to the room the page shows, once the host lists it, and to it again after a reconnect. */
 function useRoomSubscribed(status: ConnectionStatus, roomId: string | null) {
   useEffect(() => {
     if (status !== "open" || roomId === null) return;
@@ -560,7 +561,7 @@ export function App() {
     if (state.hostRunId !== null) forgetSideChatsOfDeleted(state.conversations);
   }, [state.hostRunId, conversationIds]);
   useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats, ...state.threadConversations]);
-  useRoomSubscribed(status, state.selectedRoomId);
+  useRoomSubscribed(status, state.rooms.some(({ id }) => id === state.selectedRoomId) ? state.selectedRoomId : null);
 
   const openConversation = useCallback(
     (conversationId: string, machineId?: string) => {
@@ -614,6 +615,7 @@ export function App() {
   }, [state.selectedConversationId, state.selectedRoomId, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
+  if (seesOnlyTheirRooms(state)) return <RoomsOnlyApp state={state} dispatch={dispatch} banner={<HostBanner status={status} state={state} />} />;
 
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
   const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);
@@ -647,6 +649,7 @@ export function App() {
             homeDir={state.homeDir}
             canvasViews={state.canvasViews}
             itemToShow={roomItemToShow?.roomId === shownRoom.id ? roomItemToShow : null}
+            readOnly={false}
             onHide={hideCanvas}
           />
         )}
@@ -955,6 +958,8 @@ export function App() {
           room={state.rooms.find(({ id }) => id === overlay.roomId) ?? null}
           workspaces={state.workspaces}
           profiles={state.profiles}
+          people={state.people}
+          ownerId={state.ownerId}
           dispatch={dispatch}
           onClose={closeOverlay}
         />

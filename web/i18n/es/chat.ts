@@ -117,6 +117,7 @@ export const chat: Messages["chat"] = {
     fromMirador: "De Mirador",
     fromScript: "De un script",
     you: "Tú",
+    owner: "Propietario",
   },
   entry: {
     openTerminalTab: "Abrir una pestaña de terminal",
