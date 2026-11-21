@@ -4,6 +4,7 @@ import type { SystemNotification } from "../shared/system-notifications.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { DIRECT_REACH, type MachineReach } from "./machine-tunnels.ts";
 import { trusting } from "./machine-trust.ts";
+import { webSocketTo } from "./p2p/dial.ts";
 import type { Store } from "./store.ts";
 
 /** Waits longer after each failed try in a row, so a machine that is off is asked about once a minute at most. */
@@ -28,9 +29,9 @@ class MachineSocket {
   constructor(
     private readonly path: string,
     /** The machine as this host reaches it now, asked again each time the socket opens, as a tunnel's forward moves whenever its dial starts again. */
-    private readonly reach: Pick<MachineReach, "reached" | "stillReaches">,
+    private readonly reach: Pick<MachineReach, "reached" | "wayTo">,
     private readonly machine: Machine,
-    private readonly signIn: (origin: string) => Bun.WebSocketOptions | null,
+    private readonly signIn: (origin: string) => { headers: Record<string, string>; tls?: Bun.WebSocketOptions["tls"] } | null,
     private readonly events: {
       opened?: () => void;
       message: (message: ServerMessage) => void;
@@ -48,10 +49,12 @@ class MachineSocket {
   private async open() {
     const reached = await this.reach.reached(this.machine);
     if (this.stopped) return;
-    if (!reached || !this.reach.stillReaches(reached)) return this.openLater();
+    const way = reached && this.reach.wayTo(reached);
+    if (!reached || !way) return this.openLater();
     const options = this.signIn(reached.origin);
     if (!options) return;
-    const socket = new (WebSocket as unknown as BunWebSocket)(`${reached.origin.replace(/^http/, "ws")}${this.path}`, options);
+    const { url, headers } = webSocketTo(way, this.path, options.headers);
+    const socket = new (WebSocket as unknown as BunWebSocket)(url, { ...options, headers });
     this.socket = socket;
     let opened = false;
     const givingUp = setTimeout(() => socket.close(), OPEN_TIMEOUT_MS);
@@ -148,7 +151,7 @@ export class MachineWatch {
     private readonly machinesChanged: () => void,
     private readonly notify: (notification: SystemNotification) => void,
     private readonly signedOut: (machineId: string) => void,
-    private readonly tunnels: Pick<MachineReach, "reached" | "stillReaches"> = DIRECT_REACH,
+    private readonly tunnels: Pick<MachineReach, "reached" | "stillReaches" | "wayTo"> = DIRECT_REACH,
     private readonly heartbeatEveryMs = HEARTBEAT_EVERY_MS,
   ) {}
 

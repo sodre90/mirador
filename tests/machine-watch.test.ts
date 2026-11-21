@@ -1,7 +1,11 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { signInRevoked } from "../host/machine-sign-in.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
 import { MachineWatch } from "../host/machine-watch.ts";
+import type { Way } from "../host/p2p/dial.ts";
 import { Store } from "../host/store.ts";
 import type { Machine, MachineStatus } from "../shared/model.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, type ServerMessage } from "../shared/protocol.ts";
@@ -256,52 +260,89 @@ describe("MachineWatch", () => {
 
 describe("a machine reached through a dial's forward", () => {
   const places = { hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=", hostAddress: "fd12:3456:789a:1::1", port: 4600, broker: { address: "p2p.example.com:47800", key: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=" } };
+  const tunnelOrigin = `http://[${places.hostAddress}]:4600`;
   const HEARTBEAT_MS = 100;
+
+  /** A dial's socket, in a folder of its own, with `fetch` answering there as the machine through the tunnel, which takes an Origin only of its Host's. */
+  function socketTo(fetch: (request: Request, server: Bun.Server<{ path: string }>) => Response | Promise<Response> | undefined, websocket?: Bun.WebSocketHandler<{ path: string }>) {
+    const folder = mkdtempSync(join(tmpdir(), "mirador-forward-"));
+    const socket = join(folder, "w");
+    const server = Bun.serve<{ path: string }>({
+      unix: socket,
+      fetch: (request, server) => {
+        const origin = request.headers.get("origin");
+        if (origin !== null && origin !== `http://${request.headers.get("host")}`) return new Response("forbidden origin", { status: 403 });
+        return fetch(request, server);
+      },
+      websocket: websocket ?? { message() {} },
+    });
+    cleanUp.push(() => {
+      server.stop(true);
+      rmSync(folder, { recursive: true, force: true });
+    });
+    return { origin: tunnelOrigin, socket };
+  }
 
   /** The forward and the machine beyond it: it answers pings until it goes quiet, as when its owner unpinned this computer, after which nothing answers at all. */
   function machineBeyondForward() {
     const sockets: Socket[] = [];
     const state = { quiet: false };
-    const server = Bun.serve<{ path: string }>({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: (request, server) => {
+    const way = socketTo(
+      (request, server) => {
         if (state.quiet) return new Promise<Response>(() => {});
         return server.upgrade(request, { data: { path: new URL(request.url).pathname } }) ? undefined : new Response("no", { status: 400 });
       },
-      websocket: {
+      {
         open: (socket) => void sockets.push(socket),
         message(socket, message) {
           if (!state.quiet && JSON.parse(String(message)).type === "ping") socket.send(JSON.stringify({ type: "pong" }));
         },
       },
-    });
-    cleanUp.push(() => server.stop(true));
-    return { origin: `http://127.0.0.1:${server.port}`, sockets, state };
+    );
+    return { way, sockets, state };
   }
 
-  function watchingThrough(forwardOrigin: string) {
+  function machineInStore() {
     const store = new Store(":memory:");
-    store.insertMachine({ id: "m1", name: "Ann's machine", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
+    store.insertMachine({ id: "m1", name: "Ann's machine", origin: tunnelOrigin, createdAt: 1 });
     store.setMachineTunnelPlaces("m1", places);
     store.setMachineDeviceToken("m1", "device-token");
     store.setMachineJoinedAs("m1", { asPerson: true, relayKey: "relay-key" });
+    return store;
+  }
+
+  /** A dial whose process holds its forward while `running`. */
+  function dialTo(way: Way) {
     const dial = { running: true };
-    const reach: Pick<MachineReach, "reached" | "stillReaches"> = {
-      reached: async (machine: Machine) => ({ ...machine, origin: forwardOrigin }),
+    const reach: Pick<MachineReach, "reached" | "stillReaches" | "wayTo"> = {
+      reached: async (machine: Machine) => ({ ...machine, origin: way.origin }),
       stillReaches: () => dial.running,
+      wayTo: () => (dial.running ? way : null),
     };
+    return { dial, reach };
+  }
+
+  function watchingThrough(way: Way) {
+    const store = machineInStore();
+    const { dial, reach } = dialTo(way);
     const statuses: MachineStatus[] = [];
     const signedOut: string[] = [];
     const watch = new MachineWatch(store, THIS_HOST, (status) => statuses.push(status), () => {}, () => {}, (machineId) => signedOut.push(machineId), reach, HEARTBEAT_MS);
     cleanUp.push(() => watch.stopAll());
     watch.startAll();
-    return { watch, store, statuses, signedOut, dial, reach };
+    return { watch, store, statuses, signedOut, dial };
   }
+
+  test("opens the machine's socket through the dial's, signed in and naming the machine's address in the tunnel as its Host", async () => {
+    const machine = machineBeyondForward();
+    const { watch } = watchingThrough(machine.way);
+    await eventually(() => expect(watch.statuses()[0]!.reachable).toBe(true));
+    expect(machine.sockets.map(({ data }) => data.path)).toEqual(["/ws"]);
+  });
 
   test("asks the machine to answer now and then, and says it stopped answering once it goes quiet, though the forward keeps the socket open", async () => {
     const machine = machineBeyondForward();
-    const { watch, statuses } = watchingThrough(machine.origin);
+    const { watch, statuses } = watchingThrough(machine.way);
     await eventually(() => expect(watch.statuses()[0]!.reachable).toBe(true));
     await Bun.sleep(HEARTBEAT_MS * 5);
     expect(statuses.map(({ reachable }) => reachable)).toEqual([true]);
@@ -314,7 +355,7 @@ describe("a machine reached through a dial's forward", () => {
 
   test("takes the person out of the machine's rooms only by a close that came while the dial's process held the forward", async () => {
     const machine = machineBeyondForward();
-    const { store, signedOut, dial } = watchingThrough(machine.origin);
+    const { store, signedOut, dial } = watchingThrough(machine.way);
     await eventually(() => expect(machine.sockets).toHaveLength(1));
     dial.running = false;
     machine.sockets.forEach((socket) => socket.close(OUT_OF_ROOMS_CLOSE_CODE, "out of every room"));
@@ -325,18 +366,14 @@ describe("a machine reached through a dial's forward", () => {
 
   test("counts a 401 as this computer revoked only when it came while the dial's process held the forward the whole time, and sends no token through one it no longer holds", async () => {
     const asked: string[] = [];
-    const turnsAway = Bun.serve({
-      hostname: "127.0.0.1",
-      port: 0,
-      fetch: async (request) => {
-        asked.push(request.headers.get("cookie") ?? "");
-        await Bun.sleep(100);
-        return new Response("unauthorized", { status: 401 });
-      },
+    const turnsAway = socketTo(async (request) => {
+      asked.push(request.headers.get("cookie") ?? "");
+      await Bun.sleep(100);
+      return new Response("unauthorized", { status: 401 });
     });
-    cleanUp.push(() => turnsAway.stop(true));
-    const { store, dial, reach } = watchingThrough("http://127.0.0.1:1");
-    const reached = { ...store.findMachine("m1")!, origin: `http://127.0.0.1:${turnsAway.port}` };
+    const store = machineInStore();
+    const { dial, reach } = dialTo(turnsAway);
+    const reached = { ...store.findMachine("m1")!, origin: turnsAway.origin };
     expect(await signInRevoked(store, reached, reach)).toBe(true);
 
     const asking = signInRevoked(store, reached, reach);

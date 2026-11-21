@@ -7,7 +7,7 @@ import { DeviceService, inviteKey } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
 import { fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
-import { freeLoopbackPortPair } from "../host/p2p/dial.ts";
+import { atAddress, tunnelOriginsOf, type Forward } from "../host/p2p/dial.ts";
 import type { Machine } from "../shared/model.ts";
 import type { RelayedSocket } from "../host/machine-relays.ts";
 import { newChallenge, NO_AUTHORITY, ownerKey, signedRoomJoin, type OwnerKey } from "../host/person-keys.ts";
@@ -287,29 +287,49 @@ describe("a machine reached through a dial's forward", () => {
   const relayKey = "k".repeat(43);
   const places = { hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=", hostAddress: "fd12:3456:789a:1::1", port: 4600, broker: { address: "p2p.example.com:47800", key: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=" } };
 
-  /** Stands in for a dial's forward and the machine beyond it, at the port pair a dial would take, saying what it was asked. */
-  async function forwardToMachine(says: string) {
-    const port = await freeLoopbackPortPair();
+  const origins = tunnelOriginsOf(places);
+
+  /**
+   * Stands in for a dial's sockets and the machine beyond them, which takes an Origin only of its Host's, as it does
+   * through the tunnel, and says what it was asked.
+   */
+  function forwardToMachine(says: string): { forward: Pick<Forward, "web" | "canvas">; asked: string[] } {
+    const folder = mkdtempSync(join(tmpdir(), "mirador-forward-"));
     const asked: string[] = [];
-    const answer = (where: string) => (request: Request) => {
+    const refused = (where: string, request: Request) => {
+      const origin = request.headers.get("origin");
+      if (origin !== null && origin !== `http://${request.headers.get("host")}`) return new Response("forbidden origin", { status: 403 });
       asked.push(`${where} ${new URL(request.url).pathname} ${request.headers.get("cookie")}`);
-      return new Response(`${says}'s ${where}`);
+      return null;
     };
-    const servers = [Bun.serve({ hostname: "::1", port, fetch: answer("page") }), Bun.serve({ hostname: "::1", port: port + 1, fetch: answer("canvas") })];
-    cleanUps.push(() => servers.forEach((server) => server.stop(true)));
-    return { origin: `http://[::1]:${port}`, asked };
+    const sockets = { web: join(folder, "w"), canvas: join(folder, "c") };
+    const servers = [
+      Bun.serve({
+        unix: sockets.web,
+        fetch: (request, server) => refused("page", request) ?? (server.upgrade(request) ? undefined : new Response(`${says}'s page`)),
+        websocket: { open: (socket) => void socket.send(`${says}'s socket`), message() {} },
+      }),
+      Bun.serve({ unix: sockets.canvas, fetch: (request) => refused("canvas", request) ?? new Response(`${says}'s canvas`) }),
+    ];
+    cleanUps.push(() => {
+      servers.forEach((server) => server.stop(true));
+      rmSync(folder, { recursive: true, force: true });
+    });
+    return { forward: { web: { origin: origins.web, socket: sockets.web }, canvas: { origin: origins.canvas, socket: sockets.canvas } }, asked };
   }
 
-  function machineThrough(firstForward: string) {
+  function machineThrough(firstForward: Pick<Forward, "web" | "canvas">) {
     const store = new Store(":memory:");
     store.insertMachine({ id: "theirs", name: "Theirs", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
     store.setMachineTunnelPlaces("theirs", places);
     store.setMachineDeviceToken("theirs", "person-device-token");
     store.setMachineJoinedAs("theirs", { asPerson: true, relayKey });
-    const dial = { origin: firstForward, running: true };
+    const dial = { forward: firstForward, running: true };
     const reach: MachineReach = {
-      reached: async (machine: Machine) => ({ ...machine, origin: dial.origin }),
+      reached: async (machine: Machine) => ({ ...machine, origin: dial.forward.web.origin }),
       stillReaches: () => dial.running,
+      wayTo: () => (dial.running ? dial.forward.web : null),
+      canvasWayTo: () => (dial.running ? dial.forward.canvas : null),
       dialToJoin: () => Promise.reject(new Error("not joining here")),
       start: () => {},
     };
@@ -318,18 +338,34 @@ describe("a machine reached through a dial's forward", () => {
     const relays = new MachineRelays(store, [relayPort, canvasPort], "http://127.0.0.1:4601", () => false, () => {}, (machineId) => signedOut.push(machineId), unusedOwnerKey, reach);
     relays.startAll();
     cleanUps.push(() => relays.stopAll());
-    return { dial, signedOut, relay: `http://127.0.0.1:${relayPort}`, canvasRelay: `http://127.0.0.1:${canvasPort}` };
+    return { dial, signedOut, relayPort, relay: `http://127.0.0.1:${relayPort}`, canvasRelay: `http://127.0.0.1:${canvasPort}` };
   }
 
-  test("sends nothing through a forward its dial's process no longer holds, which anyone may have taken since: no request, no token", async () => {
-    const forward = await forwardToMachine("Theirs");
-    const { dial, relay, canvasRelay, signedOut } = machineThrough(forward.origin);
+  test("relays the page's requests and sockets through the dial's socket, signed in and asking for the machine's address in the tunnel", async () => {
+    const { forward, asked } = forwardToMachine("Theirs");
+    const { relayPort, relay } = machineThrough(forward);
+    const page = await fetch(`${relay}/${relayKey}/rooms`, { headers: { origin: "null" } });
+    expect(await page.text()).toBe("Theirs's page");
+    const BunWebSocket = WebSocket as unknown as new (url: string, options: { headers: Record<string, string> }) => WebSocket;
+    const socket = new BunWebSocket(`ws://127.0.0.1:${relayPort}/${relayKey}/ws`, { headers: { Origin: "null" } });
+    const first = await new Promise<string>((resolve, reject) => {
+      socket.onmessage = ({ data }) => resolve(String(data));
+      socket.onclose = () => reject(new Error("the relay closed the socket"));
+    });
+    socket.close();
+    expect(first).toBe("Theirs's socket");
+    expect(asked).toEqual(["page /rooms mirador_token=person-device-token", "page /ws mirador_token=person-device-token"]);
+  });
+
+  test("sends nothing through a forward its dial's process no longer holds: no request, no token", async () => {
+    const { forward, asked } = forwardToMachine("Theirs");
+    const { dial, relay, canvasRelay, signedOut } = machineThrough(forward);
     dial.running = false;
     expect((await fetch(`${relay}/${relayKey}/gone`, { headers: { origin: "null" } })).status).toBe(502);
     expect((await fetch(`${relay}/app.js`)).status).toBe(502);
     expect((await fetch(`${canvasRelay}/d3.min.js`)).status).toBe(502);
     await Bun.sleep(100);
-    expect(forward.asked).toEqual([]);
+    expect(asked).toEqual([]);
     expect(signedOut).toEqual([]);
   });
 
@@ -348,10 +384,13 @@ describe("a machine reached through a dial's forward", () => {
     store.insertMachine({ id: "theirs", name: "Theirs", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
     store.setMachineTunnelPlaces("theirs", places);
     let stopped = false;
+    const exited: Forward = { web: atAddress(`http://127.0.0.1:${machine.port}`), canvas: atAddress("http://127.0.0.1:1"), running: false };
     const reach: MachineReach = {
       reached: async () => null,
       stillReaches: () => false,
-      dialToJoin: async () => ({ forward: Promise.resolve({ origin: `http://127.0.0.1:${machine.port}`, running: false }), stop: () => (stopped = true) }),
+      wayTo: () => null,
+      canvasWayTo: () => null,
+      dialToJoin: async () => ({ forward: Promise.resolve(exited), stop: () => (stopped = true) }),
       start: () => {},
     };
     const relays = new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey, reach);
@@ -361,11 +400,11 @@ describe("a machine reached through a dial's forward", () => {
     expect(stopped).toBe(true);
   });
 
-  test("loads canvas pages from beside the forward the machine is reached through now, which moves each time its dial starts again", async () => {
-    const [before, after] = [await forwardToMachine("Before"), await forwardToMachine("After")];
-    const { dial, canvasRelay } = machineThrough(before.origin);
+  test("loads canvas pages through the canvas socket of the forward the machine is reached through now, which moves each time its dial starts again", async () => {
+    const [before, after] = [forwardToMachine("Before"), forwardToMachine("After")];
+    const { dial, canvasRelay } = machineThrough(before.forward);
     expect(await (await fetch(`${canvasRelay}/d3.min.js`)).text()).toBe("Before's canvas");
-    dial.origin = after.origin;
+    dial.forward = after.forward;
     expect(await (await fetch(`${canvasRelay}/d3.min.js`)).text()).toBe("After's canvas");
     expect(before.asked).toEqual(["canvas /d3.min.js null"]);
   });
@@ -376,7 +415,7 @@ describe("a request to a machine through a forward", () => {
     const silent = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
     try {
       const startedAt = Date.now();
-      expect(await fetchAnswered(`http://127.0.0.1:${silent.port}/`, {}, 200)).toBeNull();
+      expect(await fetchAnswered(atAddress(`http://127.0.0.1:${silent.port}`), "/", {}, 200)).toBeNull();
       expect(Date.now() - startedAt).toBeLessThan(2000);
     } finally {
       silent.stop(true);
@@ -400,7 +439,7 @@ describe("a request to a machine through a forward", () => {
         ),
     });
     try {
-      const response = await fetchAnswered(`http://127.0.0.1:${slowBody.port}/`, {}, 200);
+      const response = await fetchAnswered(atAddress(`http://127.0.0.1:${slowBody.port}`), "/", {}, 200);
       expect(await response?.text()).toBe("first last");
     } finally {
       slowBody.stop(true);

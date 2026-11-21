@@ -24,7 +24,7 @@ export const INVITE_WAITS_FOR_BROKER_MS = 5_000;
 /** A started sidecar the broker hasn't answered in this long can't be found through it: a firewall, or no network. */
 const BROKER_UNREACHABLE_AFTER_MS = 15_000;
 /** Longer paths don't fit in a Unix socket's address on macOS (104 bytes) and Linux (108). */
-const LONGEST_SOCKET_PATH = 100;
+export const LONGEST_SOCKET_PATH = 100;
 
 export interface PeerToPeerSettings {
   binary: string;

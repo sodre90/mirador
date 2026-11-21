@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -64,6 +64,9 @@ function visitorsDials() {
     .filter((file) => file.endsWith(".pid") && !file.startsWith("join-"))
     .map((file) => (JSON.parse(readFileSync(join(folder, file), "utf8")) as { pid: number }).pid);
 }
+
+/** The dial's whole command line, as ps shows it. */
+const commandOf = (pid: number) => spawnSync("ps", ["-ww", "-o", "command=", "-p", String(pid)], { encoding: "utf8" }).stdout;
 
 const isRunning = (pid: number) => {
   try {
@@ -160,6 +163,18 @@ test("a room invite's one link, pasted under Machines, joins the owner's machine
 
   const [dialBefore] = visitorsDials();
   expect(dialBefore).toBeDefined();
+
+  const dialsFromSockets = process.platform !== "win32";
+  await test.step("the person's Mirador reaches the machine through sockets in a folder only its account can enter, at no port of the loopback", async () => {
+    if (!dialsFromSockets) return;
+    const forwards = commandOf(dialBefore!).match(/--forward=\S+/g) ?? [];
+    const socketFolder = join(visitors.dataDir, "machine-tunnels");
+    expect(forwards).toHaveLength(2);
+    forwards.forEach((forward) => expect(forward.startsWith(`--forward=unix:${socketFolder}/d`)).toBe(true));
+    const [socketsOfDial] = readdirSync(socketFolder, { withFileTypes: true }).filter((entry) => entry.isDirectory());
+    expect(statSync(join(socketFolder, socketsOfDial!.name)).mode & 0o777).toBe(0o700);
+    expect(readdirSync(join(socketFolder, socketsOfDial!.name)).sort()).toEqual(["c", "w"]);
+  });
 
   await test.step("killed and started again, the person's Mirador stops the dial it left behind and reaches the room through a new one", async () => {
     await visitors.kill();

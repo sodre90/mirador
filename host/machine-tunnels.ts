@@ -1,11 +1,23 @@
 import { createHash, randomBytes } from "node:crypto";
-import { chmodSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, lstatSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { Machine } from "../shared/model.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { HERE_PATH } from "./addresses.ts";
-import { Dial, dialCommand, stopLeftOverDials, type DialProgram, type Forward } from "./p2p/dial.ts";
+import {
+  atAddress,
+  Dial,
+  dialCommand,
+  DIALS_THROUGH_SOCKETS,
+  fetchThrough,
+  socketFolderProblem,
+  stopLeftOverDials,
+  tunnelOriginsOf,
+  type DialProgram,
+  type Forward,
+  type Way,
+} from "./p2p/dial.ts";
 import { installSidecar } from "./p2p/sidecar-download.ts";
 import type { Store } from "./store.ts";
 
@@ -14,11 +26,11 @@ export const ANSWER_WAIT_MS = 20_000;
 const ANSWER_TRY_TIMEOUT_MS = 3000;
 const ANSWER_TRY_EVERY_MS = 250;
 
-/** Whether anything answers at `origin` within `ms`: an invite's one-time key reaches joining alone, which answers other paths with 404. */
-export async function answersWithin(origin: string, ms: number) {
+/** Whether anything answers on the way within `ms`: an invite's one-time key reaches joining alone, which answers other paths with 404. */
+export async function answersWithin(way: Way, ms: number) {
   for (const deadline = Date.now() + ms; Date.now() < deadline; ) {
     const timeout = Math.max(1, Math.min(ANSWER_TRY_TIMEOUT_MS, deadline - Date.now()));
-    const response = await fetch(`${origin}${HERE_PATH}`, { signal: AbortSignal.timeout(timeout) }).catch(() => null);
+    const response = await fetchThrough(way, HERE_PATH, { signal: AbortSignal.timeout(timeout) }).catch(() => null);
     if (response) {
       await response.body?.cancel();
       return true;
@@ -43,10 +55,11 @@ export interface JoiningDial {
 
 /**
  * This host's ends of the tunnels of machines it joined peer to peer: a `mirador-p2p dial` for each, with this host's
- * own key there, whose forwards on this computer's loopback are where the relays and the watch reach the machine. The
- * keys are in the store; each dial reads its own from a file only this account reads, which goes with the machine.
- * A forward is handed out only while the dial's process that listens there runs, and whoever sends a secret through it
- * asks `stillReaches` right before: another account on this computer may take a port the moment that process exits.
+ * own key there, whose forwards are where the relays and the watch reach the machine: Unix sockets in this host's
+ * folder, which only its account can enter, or on Windows, ports on this computer's loopback. The keys are in the
+ * store; each dial reads its own from a file only this account reads, which goes with the machine. A forward is handed
+ * out only while the dial's process that listens there runs, and whoever sends a secret through it asks `wayTo` or
+ * `stillReaches` right before: on Windows, another account on this computer may take a port the moment that process exits.
  */
 export class MachineTunnels {
   private readonly dials = new Map<string, MachineDial>();
@@ -54,14 +67,19 @@ export class MachineTunnels {
   private readonly answering = new WeakMap<Forward, Promise<boolean>>();
   private readonly forwardOfReached = new WeakMap<Machine, Forward>();
   private installed: Promise<string> | null = null;
+  private unavailableSaid = false;
+  /** Absolute, as a ws+unix URL takes a relative path's first folder for a host. */
+  private readonly folder: string;
 
   constructor(
     private readonly store: Store,
-    private readonly folder: string,
+    folder: string,
     private readonly program: DialProgram | null,
-    /** The relays' ports, which a forward never takes. */
+    /** The relays' ports, which a forward on Windows never takes. */
     private readonly avoidedPorts: number[],
-  ) {}
+  ) {
+    this.folder = resolve(folder);
+  }
 
   /** What a host that was killed left running is stopped first. */
   startAll() {
@@ -112,16 +130,17 @@ export class MachineTunnels {
   }
 
   /**
-   * The machine as this host reaches it: a machine joined peer to peer at its dial's forward, once the machine answers
-   * there, else null, as it is while no dial's process runs; never at its address in the tunnel, which only the dial
-   * knows the way to.
+   * The machine as this host reaches it: a machine joined peer to peer through its dial's forward, once the machine
+   * answers there, else null, as it is while no dial's process runs; never at its address in the tunnel, which only the
+   * dial knows the way to. Its origin is that address, which a request through a socket names as its Host, or on Windows
+   * the forward's port.
    */
   async reached(machine: Machine): Promise<Machine | null> {
     if (!machine.peerToPeer) return machine;
     const dial = await this.dials.get(machine.id)?.ready;
     const forward = await dial?.current();
     if (!forward || !(await this.answeringAt(forward)) || !forward.running) return null;
-    const reached = { ...machine, origin: forward.origin };
+    const reached = { ...machine, origin: forward.web.origin };
     this.forwardOfReached.set(reached, forward);
     return reached;
   }
@@ -129,6 +148,19 @@ export class MachineTunnels {
   /** Whether the dial's process that `reached` came from runs still, so its forward is still its own; always for a machine reached at its address. */
   stillReaches(reached: Machine) {
     return !reached.peerToPeer || this.forwardOfReached.get(reached)?.running === true;
+  }
+
+  /** The way to the web server of `reached`, while it still reaches it: at its address, or through the forward of the dial's process it came from. */
+  wayTo(reached: Machine): Way | null {
+    if (!reached.peerToPeer) return atAddress(reached.origin);
+    const forward = this.forwardOfReached.get(reached);
+    return forward?.running ? forward.web : null;
+  }
+
+  /** The way to the canvas server of `reached` through its dial's forward, while it still reaches it; a machine at its address says where its canvas server is. */
+  canvasWayTo(reached: Machine): Way | null {
+    const forward = this.forwardOfReached.get(reached);
+    return reached.peerToPeer && forward?.running ? forward.canvas : null;
   }
 
   /** Its key file goes when it stops, as does one a killed host left, at the next start. */
@@ -139,8 +171,9 @@ export class MachineTunnels {
     const keyFile = join(this.folder, `${name}.key`);
     writeFileSync(keyFile, invite.joinKey, { mode: 0o600 });
     const dial = new Dial(
-      (localPort) => dialCommand(binary, { keyFile, address: invite.joinAddress, places: invite, localPort }),
-      { pidFile: join(this.folder, `${name}.pid`), keyFile },
+      (from) => dialCommand(binary, { keyFile, address: invite.joinAddress, places: invite, from }),
+      { folder: this.folder, pidFile: join(this.folder, `${name}.pid`), keyFile },
+      tunnelOriginsOf(invite),
       (line) => console.error(`joining through a tunnel: ${line}`),
       { avoidedPorts: this.avoidedPorts, restarts: false },
     );
@@ -160,7 +193,7 @@ export class MachineTunnels {
   private answeringAt(forward: Forward) {
     const known = this.answering.get(forward);
     if (known) return known;
-    const asked = answersWithin(forward.origin, ANSWER_WAIT_MS).then((answered) => {
+    const asked = answersWithin(forward.web, ANSWER_WAIT_MS).then((answered) => {
       if (!answered) this.answering.delete(forward);
       return answered;
     });
@@ -179,8 +212,9 @@ export class MachineTunnels {
     const { address } = tunnel.device;
     const name = this.store.findMachine(machineId)?.name ?? machineId;
     wanted.dial = new Dial(
-      (localPort) => dialCommand(binary, { keyFile, address, places: tunnel.places, localPort }),
-      { pidFile: this.fileOf(machineId, "pid"), keyFile },
+      (from) => dialCommand(binary, { keyFile, address, places: tunnel.places, from }),
+      { folder: this.folder, pidFile: this.fileOf(machineId, "pid"), keyFile },
+      tunnelOriginsOf(tunnel.places),
       (line) => console.error(`the tunnel to ${name}: ${line}`),
       { avoidedPorts: this.avoidedPorts },
     );
@@ -188,9 +222,12 @@ export class MachineTunnels {
     return wanted.dial;
   }
 
-  /** The binary, downloaded the first time a machine is dialed where the environment names none. */
+  /**
+   * The binary, downloaded the first time a machine is dialed where the environment names none. A folder whose sockets
+   * can't be reached makes dialing unavailable, rather than forwarding from ports any account could take.
+   */
   private binary() {
-    if (!this.program) return Promise.reject(new HostProblemError({ code: "peer-to-peer-unavailable-here" }));
+    if (!this.program || !this.canDialFromSockets()) return Promise.reject(new HostProblemError({ code: "peer-to-peer-unavailable-here" }));
     const { path, download } = this.program;
     if (!download) return Promise.resolve(path);
     this.installed ??= installSidecar(path, download).then(
@@ -204,9 +241,23 @@ export class MachineTunnels {
     return this.installed;
   }
 
+  private canDialFromSockets() {
+    const notOwn = existsSync(this.folder) && !this.folderIsThisAccountsOwn() ? `${this.folder} is not a folder of this account's own.` : null;
+    const problem = notOwn ?? (DIALS_THROUGH_SOCKETS ? socketFolderProblem(this.folder) : null);
+    if (problem && !this.unavailableSaid) console.error(`Machines can't be dialed peer to peer: ${problem}`);
+    this.unavailableSaid ||= problem !== null;
+    return problem === null;
+  }
+
   private makeFolder() {
     mkdirSync(this.folder, { recursive: true, mode: 0o700 });
-    chmodSync(this.folder, 0o700);
+    if (this.folderIsThisAccountsOwn()) chmodSync(this.folder, 0o700);
+  }
+
+  /** A link, or a folder another account made there first, is one that account could reach into. */
+  private folderIsThisAccountsOwn() {
+    const found = lstatSync(this.folder, { throwIfNoEntry: false });
+    return found !== undefined && found.isDirectory() && (process.getuid === undefined || found.uid === process.getuid());
   }
 
   private fileOf(machineId: string, extension: "key" | "pid") {
@@ -214,13 +265,15 @@ export class MachineTunnels {
   }
 }
 
-/** How this host reaches machines: at their address, or at a dial of its own into a machine's tunnel. */
-export type MachineReach = Pick<MachineTunnels, "reached" | "stillReaches" | "dialToJoin" | "start">;
+/** How this host reaches machines: at their address, or through a dial of its own into a machine's tunnel. */
+export type MachineReach = Pick<MachineTunnels, "reached" | "stillReaches" | "wayTo" | "canvasWayTo" | "dialToJoin" | "start">;
 
 /** A host that dials no tunnels reaches machines at their address alone. */
 export const DIRECT_REACH: MachineReach = {
   reached: async (machine) => (machine.peerToPeer ? null : machine),
   stillReaches: (reached) => !reached.peerToPeer,
+  wayTo: (reached) => (reached.peerToPeer ? null : atAddress(reached.origin)),
+  canvasWayTo: () => null,
   dialToJoin: () => Promise.reject(new HostProblemError({ code: "peer-to-peer-unavailable-here" })),
   start: () => {},
 };
