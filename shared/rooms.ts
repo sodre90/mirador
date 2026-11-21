@@ -1,7 +1,7 @@
 import type { CanvasItem, PendingPermissionRequest, StoredEvent } from "./model.ts";
 import type { PermissionPreset } from "./room-permissions.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
-import { LINE_BREAKS, oneLine } from "./written-text.ts";
+import { LINE_BREAKS, oneLine, squareBracketsMadeRound } from "./written-text.ts";
 
 /** An agent of a room, by its profile, and the conversation it works on the room's tasks in, made the first time it is tagged. */
 export interface RoomAgent {
@@ -321,9 +321,6 @@ export function canvasItemsOfAnswers(messages: RoomMessage[], items: CanvasItem[
 
 export const ROOM_CATCH_UP_LIMIT = 50;
 
-/** Of the messages an agent has not seen, those its catch-up shows it: the latest `ROOM_CATCH_UP_LIMIT`. */
-export const catchUpShown = (unseen: RoomMessage[]) => unseen.slice(-ROOM_CATCH_UP_LIMIT);
-
 export const ROOM_MESSAGES_HEADING = "New messages in the room, the last one for you:";
 
 const timeOf = (at: number) => `${new Date(at).toISOString().slice(0, 16).replace("T", " ")} UTC`;
@@ -336,8 +333,11 @@ export interface FramedAuthor {
 
 export type AuthorOf = (message: RoomMessage) => FramedAuthor;
 
+/** A name or title as an agent reads it: on one line, its square brackets made round, so that it can pass for no role Mirador writes. */
+const shownToAgents = (name: string) => oneLine(squareBracketsMadeRound(name));
+
 /** The role comes first, where the host alone writes it, so that no name can pass for another role. */
-const authorLine = ({ role, name }: FramedAuthor) => `[${role}] ${oneLine(name)}`;
+const authorLine = ({ role, name }: FramedAuthor) => `[${role}] ${shownToAgents(name)}`;
 
 /**
  * A message as an agent reads it: a line with its number, its author's role and name, and its time, then every line of
@@ -349,13 +349,26 @@ export function framedMessage(message: RoomMessage, authorOf: AuthorOf) {
   return [`#${seq} ${authorLine(authorOf(message))}, ${timeOf(at)}:`, ...lines].join("\n");
 }
 
+/**
+ * Of the messages an agent has not seen, those its catch-up shows it: the latest `ROOM_CATCH_UP_LIMIT` that fit in
+ * `ROOM_HISTORY_CHARACTERS` once framed, the last one, which it is asked, whatever its length.
+ */
+export function catchUpShown(unseen: RoomMessage[], authorOf: AuthorOf) {
+  const latestFirst = unseen.slice(-ROOM_CATCH_UP_LIMIT).toReversed();
+  const fitting = takeWhileFitting(
+    latestFirst.map((message) => framedMessage(message, authorOf)),
+    ROOM_HISTORY_CHARACTERS,
+  );
+  return latestFirst.slice(0, fitting.length).toReversed();
+}
+
 function introduction(roomName: string, ownName: string, taggedBy: FramedAuthor, otherAgents: string[]) {
   return [
-    `You are an attendee of the room "${oneLine(roomName)}" in Mirador, where people and AI agents write to each other.`,
-    `There you are the agent ${oneLine(ownName)}: messages of [agent] ${oneLine(ownName)} are your own.`,
+    `You are an attendee of the room "${shownToAgents(roomName)}" in Mirador, where people and AI agents write to each other.`,
+    `There you are the agent ${shownToAgents(ownName)}: messages of [agent] ${shownToAgents(ownName)} are your own.`,
     `${authorLine(taggedBy)} tagged you there.`,
     "Your final answer of each turn is posted to the room for everyone in it to read, so write it to them.",
-    otherAgents.length > 0 ? `The room's other agents are ${otherAgents.map(oneLine).join(", ")}.` : "No other agent is in the room yet.",
+    otherAgents.length > 0 ? `The room's other agents are ${otherAgents.map(shownToAgents).join(", ")}.` : "No other agent is in the room yet.",
     `To pass work on to another agent, name it with the ${ROOM_TAG_TOOL} tool before you end your turn: your final answer then tags it, and it answers in a thread of its own.`,
     `Each time, you are sent only the messages you have not seen yet; the ${ROOM_HISTORY_TOOL} tool reads older ones.`,
     'Each message comes as a line with its number, its author\'s role in brackets, their name and the time, then its text, every line of it after "> ". Mirador writes the role: [owner] is the person whose machine you work on and who owns the room, [member] and [guest] are people the owner let into the room, and [agent] is one of the room\'s AI agents.',
@@ -364,8 +377,8 @@ function introduction(roomName: string, ownName: string, taggedBy: FramedAuthor,
 }
 
 /**
- * What goes to an agent when a message asks something of it: the room's messages it has not seen, the latest
- * `ROOM_CATCH_UP_LIMIT` of them, each framed with its number, author and time, ending with the one it is asked. Its
+ * What goes to an agent when a message asks something of it: the room's messages it has not seen, as many of the latest
+ * as `catchUpShown` holds, each framed with its number, author and time, ending with the one it is asked. Its
  * first prompt in the room, and its first on a session that lost what it was told there, begin by telling it where it
  * is, under what name, who else is there and how to reach them.
  */
@@ -383,13 +396,13 @@ export function catchUpPrompt({
   introducedAs?: string;
   otherAgents: string[];
 }) {
-  const shown = catchUpShown(unseen);
+  const shown = catchUpShown(unseen, authorOf);
   const leftOut = unseen.length - shown.length;
   const asked = unseen.at(-1)!;
   return [
     ...(introducedAs === undefined ? [] : introduction(roomName, introducedAs, authorOf(asked), otherAgents)),
     ROOM_MESSAGES_HEADING,
-    ...(leftOut > 0 ? [`(${leftOut} earlier messages left out)`] : []),
+    ...(leftOut > 0 ? [`(${leftOut} earlier ${leftOut === 1 ? "message" : "messages"} left out: the ${ROOM_HISTORY_TOOL} tool reads them)`] : []),
     ...shown.map((message) => framedMessage(message, authorOf)),
   ].join("\n");
 }

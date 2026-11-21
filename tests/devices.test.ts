@@ -52,6 +52,7 @@ test("a device's name shows as it reads, on one line, whatever the device that j
   expect(deviceName("Mirador on \u202Epotpal\u202C")).toBe("Mirador on potpal");
   expect(deviceName("Mirador\u200B on\u2066 laptop\u{E0041}")).toBe("Mirador on laptop");
   expect(deviceName("\u202E\u200B\n")).toBe("Unnamed device");
+  expect(deviceName("Mirador on \u001b[2Jlaptop\u0007\u009b")).toBe("Mirador on [2Jlaptop");
 });
 
 test("a public address needs both origins, and canvas pages then load their libraries from the public one", () => {

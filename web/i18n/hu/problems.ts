@@ -40,6 +40,7 @@ export const problems: Messages["problems"] = {
     "person-name-taken": "Ez a név foglalt: a tulajdonos, egy ágens vagy egy másik személy viseli, vagy a Mirador ezt írja név helyett. Válassz másikat.",
     "person-name-reorders": "Ebben a névben olyan karakterek vannak, amelyek a betűit más sorrendben mutatják, mint ahogy írva vannak. Válassz másikat.",
     "person-name-mixes-scripts": "A név egyik szava két ábécé betűit keveri, ahogy egy másik név utánzata tenné. Minden szót egy ábécével írj.",
+    "person-name-has-brackets": "Egy név nem tartalmazhat szögletes zárójelet, abban írja a Mirador a személy szerepét. Válassz másikat.",
     "room-person-name-taken": "A szobában valaki, vagy az egyik ágense, már ezen a néven vagy egy ugyanígy olvasható néven szerepel. Előbb kérd meg, hogy változtassa meg a nevét.",
     "room-writing-too-fast": "Túl gyorsan írsz a szobákba. Várj egy percet, aztán írj újra.",
     "profile-changing-too-fast": "Túl sokszor változtattad a profilodat. Várj egy percet, aztán próbáld újra.",

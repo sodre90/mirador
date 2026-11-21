@@ -118,6 +118,7 @@ import { ConversationSessions } from "./conversation-sessions.ts";
 import { SubagentSessions } from "./subagent-sessions.ts";
 import { SubagentUsageReader } from "./subagent-usage.ts";
 import { UnknownSessionUpdates } from "./unknown-session-updates.ts";
+import { conversationCanvasToken } from "./canvas-token.ts";
 
 const MAX_TITLE_LENGTH = 200;
 const LISTED_SESSIONS = 30;
@@ -2922,7 +2923,7 @@ profileId: string | null, conversationId: string) {
       type: "http",
       name: CANVAS_SERVER_NAME,
       url: `${this.config.appOrigin}/mcp/${conversationId}`,
-      headers: [{ name: "Authorization", value: `Bearer ${this.config.mcpToken}` }],
+      headers: [{ name: "Authorization", value: `Bearer ${conversationCanvasToken(this.config.mcpToken, conversationId)}` }],
     };
   }
 

@@ -3,6 +3,7 @@ import { accessSync, chmodSync, constants, cpSync, createWriteStream, existsSync
 import { homedir, tmpdir } from "node:os";
 import { basename, delimiter, dirname, join } from "node:path";
 import { test } from "@playwright/test";
+import { conversationCanvasToken } from "../host/canvas-token.ts";
 import { muteMarkerName, MUTED_LIST_FILE, mutedListAt } from "../host/notifier.ts";
 import { HOST_RELAUNCH, HOST_RESTART_EXIT_CODE } from "../shared/host-relaunch.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
@@ -217,6 +218,11 @@ export class TestHost {
   /** A fresh token per start, like production, so resume must re-supply it to the agent. */
   get mcpToken() {
     return `e2e-mcp-token-${this.starts}`;
+  }
+
+  /** What the conversation's agent calls its canvas server with, made from `mcpToken`. */
+  canvasTokenOf(conversationId: string) {
+    return conversationCanvasToken(this.mcpToken, conversationId);
   }
 
   /** Written by the host on its first start and kept, like the browser token. */

@@ -1,3 +1,4 @@
+import { leadsToThisComputer } from "../shared/this-computer.ts";
 import { desktopNonce, inDesktopApp, sendToDesktopApp } from "./desktop-bridge.ts";
 
 const OPEN_LINK_MESSAGE = "mirador:open-link";
@@ -38,9 +39,9 @@ const inSomeoneElsesFrame = () => inAFrame() && window.origin === "null";
 
 const askTheParentPageToOpen = (url: string) => window.parent.postMessage({ type: OPEN_LINK_MESSAGE, url }, "*");
 
-function askTheAppToOpen(url: string) {
+function askTheAppToOpen(url: string, asked: { bySomeoneElsesMachine?: true } = {}) {
   const nonce = desktopNonce();
-  if (nonce) sendToDesktopApp({ type: "desktop-open-link", nonce, url });
+  if (nonce) sendToDesktopApp({ type: "desktop-open-link", nonce, url, ...(asked.bySomeoneElsesMachine && { askedBySomeoneElsesMachine: true }) });
 }
 
 const isOpenLinkMessage = (data: unknown): data is { type: string; url: string } =>
@@ -79,14 +80,41 @@ export function openWebAddress(address: string) {
   else window.open(url.href, "_blank", "noopener");
 }
 
-/** The web address a frame's page asks this page to open, when it asks for one: never a file, a script or any other scheme. */
-export function linkAskedFor(data: unknown) {
+/**
+ * The web address someone else's machine's frame asks this page to open, when it asks for one: never a file, a script
+ * or any other scheme, nor an address of this computer or of `ownHosts`, the names this Mirador is reached by. A relay
+ * on this computer serves that machine's pages, which opened outside their sandboxed frame would share a site with
+ * this Mirador's page, its cookies and frames.
+ */
+export function linkAskedFor(data: unknown, ownHosts: string[]) {
   if (!isOpenLinkMessage(data) || data.url.length > LONGEST_LINK_ASKED_FOR) return null;
-  return webAddress(data.url);
+  const url = webAddress(data.url);
+  return url && !leadsToThisComputer(url, ownHosts) ? url : null;
 }
 
 /** A link someone else's machine asked for, once the person chose to open it: never with this page as its opener or referrer. */
 export function openLinkFromSomeoneElsesMachine(url: URL) {
-  if (inDesktopApp() && desktopNonce() !== null) askTheAppToOpen(url.href);
+  if (inDesktopApp() && desktopNonce() !== null) askTheAppToOpen(url.href, { bySomeoneElsesMachine: true });
   else window.open(url.href, "_blank", "noopener,noreferrer");
+}
+
+/** How long Open takes no press once the prompt shows: a double-click's second press, or one under way as it showed, comes sooner. */
+export const OPEN_TAKES_PRESSES_AFTER_MS = 500;
+
+/** A click on Open, by when the prompt showed, when the press that made it began on Open (null when none did), and when it came. */
+export interface ClickOnOpen {
+  shownAt: number;
+  pressBeganAt: number | null;
+  clickedAt: number;
+  byKeyboard: boolean;
+}
+
+/**
+ * Whether the person chose to open the link: by a key on Open, or by a press that began on Open, either one once the
+ * prompt had shown for `OPEN_TAKES_PRESSES_AFTER_MS`. A press begun in the frame below, or on the spot before the prompt
+ * covered it, opens nothing.
+ */
+export function choseToOpen({ shownAt, pressBeganAt, clickedAt, byKeyboard }: ClickOnOpen) {
+  const afterTheWait = (at: number) => at - shownAt >= OPEN_TAKES_PRESSES_AFTER_MS;
+  return afterTheWait(clickedAt) && (byKeyboard || (pressBeganAt !== null && afterTheWait(pressBeganAt)));
 }

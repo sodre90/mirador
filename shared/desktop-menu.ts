@@ -42,7 +42,7 @@ export type DesktopMenuMessage =
   | { type: "desktop-menu-request"; nonce: string }
   | { type: "desktop-action"; nonce: string; action: string }
   | { type: "desktop-nonce-request" }
-  | { type: "desktop-open-link"; nonce: string; url: string }
+  | { type: "desktop-open-link"; nonce: string; url: string; askedBySomeoneElsesMachine?: true }
   | { type: "desktop-close-window"; nonce: string }
   | { type: "desktop-appearance"; nonce: string; appearance: DesktopAppearance }
   | { type: "desktop-language"; nonce: string; language: Language }

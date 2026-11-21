@@ -674,7 +674,8 @@ describe("a person other than the owner", () => {
     for (const name of takenForMia) expect({ name, problem: problemOf(await settingOwnProfile(miaPage, name)) }).toEqual({ name, problem: "person-name-taken" });
     expect(problemOf(await settingOwnProfile(miaPage, "\u202EnnA"))).toBe("person-name-reorders");
     expect(problemOf(await settingOwnProfile(miaPage, "B\u0443ilder"))).toBe("person-name-mixes-scripts");
-    const takenForStan = ["ANN", "owner", "Someone without a name", "Someone without a name 4821", "You"];
+    expect(problemOf(await settingOwnProfile(miaPage, "[owner] Peter"))).toBe("person-name-has-brackets");
+    const takenForStan = ["ANN", "owner", "Someone without a name", "Someone without a name 4821", "S0meone without a name 482l", "You"];
     for (const name of takenForStan) expect({ name, problem: problemOf(await settingOwnProfile(stanPage, name)) }).toEqual({ name, problem: "person-name-taken" });
     expect(problemOf(await settingOwnProfile(owner, "Builder"))).toBeNull();
     expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();

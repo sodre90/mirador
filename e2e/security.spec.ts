@@ -33,7 +33,10 @@ test("rejects browsers and clients without the right credentials", async ({ page
     fetch(`${host.origin}/mcp/anything`, { method: "POST", headers, body: "{}" }).then(({ status }) => status);
   expect(await mcp({})).toBe(401);
   expect(await mcp({ Authorization: "Bearer wrong" })).toBe(401);
-  expect(await mcp({ Authorization: `Bearer ${host.mcpToken}`, Origin: host.origin })).toBe(403);
+  expect(await mcp({ Authorization: `Bearer ${host.canvasTokenOf("anything")}`, Origin: host.origin })).toBe(403);
+  expect(await mcp({ Authorization: `Bearer ${host.mcpToken}` })).toBe(401);
+  expect(await mcp({ Authorization: `Bearer ${host.canvasTokenOf("another")}` })).toBe(401);
+  expect(await mcp({ Authorization: `Bearer ${host.canvasTokenOf("anything")}` })).toBe(404);
 
   for (const [path, body] of [
     ["messages", "hello"],

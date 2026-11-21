@@ -54,6 +54,12 @@ test("a mark of another script, or one put on an invisible character, does not m
   expect(["An\u0301n", "An\u093Cn", "An\u0E31n", "\u200B\u093CAnn", "\u0410nn"].filter((name) => !nameTaken(name, ["Ann"]))).toEqual([]);
 });
 
+test("a person other than the owner may not take a name with square brackets, or brackets that read as them, which could pass for a role Mirador writes", () => {
+  const withBrackets = ["[owner] Peter", "[agent] Claude", "[agent]", "Ann]", "\uFF3Bowner\uFF3D Peter", "\u3010owner\u3011 Peter", "\u27E6agent\u27E7 Claude", "\u2045owner\u2046", "\uFE47owner\uFE48"];
+  expect(withBrackets.map(nameRefused)).toEqual(Array(withBrackets.length).fill("person-name-has-brackets"));
+  expect(["Ann (design)", "Ann {x}", "\u300CAnn\u300D", "Ann"].map(nameRefused)).toEqual([null, null, null, null]);
+});
+
 test("a person other than the owner may not take a name that shows its letters in another order, or mixes alphabets in a word", () => {
   expect(["\u202EnnA", "Ann\u2066x\u2069", "A\u200Fnn"].map(nameRefused)).toEqual(Array(3).fill("person-name-reorders"));
   expect(["\u0410nn", "\u039Fwner", "B\u0443ilder", "Ann-\u0405mith"].map(nameRefused)).toEqual(Array(4).fill("person-name-mixes-scripts"));
@@ -126,7 +132,23 @@ test("no name reads as Mirador's words for someone without a name, whatever numb
   const readingAsNameless = ["Someone without a name 4821", "someone without a name4821", "Jemand ohne Namen (12)", "Alguien sin nombre #7", "没有名字的人 \uFF11\uFF12", "Valaki név nélkül \u0664\u0662", "Someone without a name\u200B 1"];
   expect(readingAsNameless.filter((name) => !readsAsMiradorsWords(name))).toEqual([]);
   expect(readsAsMiradorsWords("You")).toBe(true);
-  expect(["Ann 2", "Someone", "4821", "Someone without a name tag", "You 2"].filter(readsAsMiradorsWords)).toEqual([]);
+  expect(["Ann 2", "Someone", "4821", "Someone with a name", "Alguien", "没有名字", "You 2"].filter(readsAsMiradorsWords)).toEqual([]);
+});
+
+test("no name starts as Mirador's words for someone without a name, whatever follows them, nor with digits or letters that read as theirs", () => {
+  const startingAsNameless = [
+    "Someone without a name l234",
+    "Someone without a name 12\u04174",
+    "S0meone without a name 4821",
+    "Jemand ohne Namen 482l",
+    "没有名字的人 482l",
+    "Valaki nev nelkul 482I",
+    "Someone w1thout a narne 4821",
+    "Someonewithout a name",
+    "Someone without a name tag",
+    "\u0405omeone without a name 4821",
+  ];
+  expect(startingAsNameless.filter((name) => !readsAsMiradorsWords(name))).toEqual([]);
 });
 
 test("the devices that joined before devices belonged to people are the owner's", () => {
@@ -155,17 +177,22 @@ test("a device let in with an invite is the owner's, and signs in as the owner, 
   expect(signedIn(withCookie("not-a-token"))).toBeNull();
 });
 
-test("a request with two token cookies signs in nobody, as a page of another port of this computer can add the second", () => {
+test("a request with two token cookies signs in the owner when one is the host's own, which no other page knows, and otherwise nobody, as a page of another port of this computer can add the second", () => {
   const store = new Store(":memory:");
   const devices = new DeviceService(store);
   store.insertPerson({ id: "mia", name: "Mia", color: null });
   const { token } = devices.admit("Mia's laptop", "mia");
+  const { token: phone } = devices.join(devices.invite().code, "Phone")!;
   const signedIn = signedInWith("browser-token", devices, store.ownerId());
   const withCookies = (cookie: string) => new Request("http://127.0.0.1/", { headers: { cookie } });
+  const owner = { deviceId: null, personId: store.ownerId(), isOwner: true };
 
-  expect(signedIn(withCookies(`${TOKEN_COOKIE}=${token}; ${TOKEN_COOKIE}=browser-token`))).toBeNull();
-  expect(signedIn(withCookies(`${TOKEN_COOKIE}=browser-token; theme=dark; ${TOKEN_COOKIE}=${token}`))).toBeNull();
-  expect(signedIn(withCookies(`theme=dark; ${TOKEN_COOKIE}=browser-token`))).toEqual({ deviceId: null, personId: store.ownerId(), isOwner: true });
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=${token}; ${TOKEN_COOKIE}=browser-token`))).toEqual(owner);
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=browser-token; theme=dark; ${TOKEN_COOKIE}=${token}`))).toEqual(owner);
+  expect(signedIn(withCookies(`theme=dark; ${TOKEN_COOKIE}=browser-token`))).toEqual(owner);
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=${phone}; ${TOKEN_COOKIE}=${token}`))).toBeNull();
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=${token}; ${TOKEN_COOKIE}=tossed`))).toBeNull();
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=browser-tokenX; ${TOKEN_COOKIE}=${token}`))).toBeNull();
 });
 
 test("a device of another person signs in as that person, who is not the owner", () => {

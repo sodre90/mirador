@@ -40,6 +40,7 @@ export const problems: Messages["problems"] = {
     "person-name-taken": "Dieser Name ist vergeben: Der Besitzer, ein Agent oder eine andere Person hier trägt ihn, oder Mirador schreibt ihn anstelle eines Namens. Wähle einen anderen.",
     "person-name-reorders": "Dieser Name enthält Zeichen, die seine Buchstaben in anderer Reihenfolge zeigen, als sie geschrieben sind. Wähle einen anderen.",
     "person-name-mixes-scripts": "Ein Wort dieses Namens mischt Buchstaben zweier Alphabete, wie es eine Nachahmung eines anderen Namens täte. Schreibe jedes Wort in einem Alphabet.",
+    "person-name-has-brackets": "Ein Name enthält keine eckigen Klammern, in die Mirador die Rolle einer Person schreibt. Wähle einen anderen.",
     "room-person-name-taken": "Jemand im Raum oder einer seiner Agenten trägt schon den Namen dieser Person oder einen, der gleich aussieht. Bitte die Person zuerst, ihren zu ändern.",
     "room-writing-too-fast": "Du schreibst zu schnell in Räume. Warte eine Minute und schreibe dann wieder.",
     "profile-changing-too-fast": "Du hast dein Profil zu oft geändert. Warte eine Minute und versuche es dann erneut.",

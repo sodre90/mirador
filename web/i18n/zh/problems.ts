@@ -40,6 +40,7 @@ export const problems: Messages["problems"] = {
     "person-name-taken": "这个名字已被占用：所有者、某个 Agent 或这里的其他人在用它，或 Mirador 用它代替名字。请换一个。",
     "person-name-reorders": "这个名字含有会让字母以不同于书写顺序显示的字符。请换一个。",
     "person-name-mixes-scripts": "这个名字的某个词混用了两种字母，就像在仿冒另一个名字。每个词请只用一种字母书写。",
+    "person-name-has-brackets": "名字里不能有方括号，Mirador 用方括号写出一个人的角色。请换一个。",
     "room-person-name-taken": "房间里已有人或某个 Agent 使用这个人的名字，或读起来相同的名字。请先让对方改名。",
     "room-writing-too-fast": "你在房间里写得太快了。请等一分钟再写。",
     "profile-changing-too-fast": "你修改个人资料的次数太多了。请等一分钟再试。",

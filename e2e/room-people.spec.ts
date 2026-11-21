@@ -166,12 +166,18 @@ test("a person the owner lets into a room sees only that room on their own brows
     await thread.getByRole("button", { name: "Close thread" }).click();
   });
 
-  await test.step("Mia can't take the name of the room's agent, and is told why; she names herself anew, and the owner's page names her messages so", async () => {
+  await test.step("Mia can't take the name of the room's agent, a name in brackets or one that reads as a nameless person's, and is told why; she names herself anew, and the owner's page names her messages so", async () => {
     await miaPage.getByRole("button", { name: "Your profile" }).click();
     const profile = miaPage.getByRole("dialog", { name: "Your profile" });
     await expect(profile).toContainText(/Without a name, they say You to you and Someone without a name \d{4} to everyone else\./);
     const name = profile.getByLabel("Name");
     await name.fill("builder");
+    await name.press("Enter");
+    await expect(profile.getByRole("alert")).toHaveText("That name is taken: the owner, an agent or another person here goes by it, or Mirador says it in a name's place. Choose another.");
+    await name.fill("[owner] Mia");
+    await name.press("Enter");
+    await expect(profile.getByRole("alert")).toHaveText("A name holds no square brackets, which Mirador writes a person's role in. Choose another.");
+    await name.fill("S0meone without a name 482l");
     await name.press("Enter");
     await expect(profile.getByRole("alert")).toHaveText("That name is taken: the owner, an agent or another person here goes by it, or Mirador says it in a name's place. Choose another.");
     await name.fill("Mia Rossi");

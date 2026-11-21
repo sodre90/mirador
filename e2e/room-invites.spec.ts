@@ -167,28 +167,76 @@ test("a person joins a room from their own Mirador with an invite, works in it w
   });
 
   await test.step("a link in the room opens from the owner's machine once the person has seen where it leads, and never by the machine's page alone", async () => {
-    const address = `${owners.origin}/mirador-here`;
+    const address = "https://example.com/garden-notes";
+    await visitor.context().route(address, (route) => route.fulfill({ contentType: "text/html", body: "<title>Garden notes</title>" }));
     const ownersComposer = page.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
     await ownersComposer.fill(`Read [the notes](${address})`);
     await ownersComposer.press("Enter");
     const link = frame.getByRole("link", { name: "the notes" });
     const prompt = visitor.getByRole("alertdialog", { name: "Open a link from Ann's machine?" });
+    const openButton = prompt.getByRole("button", { name: "Open", exact: true });
     await link.click();
-    await expect(prompt.locator(".link-host")).toHaveText(new URL(owners.origin).host);
+    await expect(prompt.locator(".link-host")).toHaveText("example.com");
     await expect(prompt.locator(".link-address")).toHaveText(address);
     await expect(prompt.getByRole("button", { name: "Cancel" })).toBeFocused();
     await prompt.getByRole("button", { name: "Cancel" }).click();
     await expect(prompt).toHaveCount(0);
 
     await link.click();
+    await expect(openButton).toBeEnabled();
+    const tabsBefore = visitor.context().pages().length;
+    await openButton.dispatchEvent("click", { detail: 1 });
+    await visitor.waitForTimeout(500);
+    await expect(prompt).toBeVisible();
+    expect(visitor.context().pages()).toHaveLength(tabsBefore);
     const opened = visitor.context().waitForEvent("page");
-    await prompt.getByRole("button", { name: "Open", exact: true }).click();
+    await openButton.click();
     const tab = await opened;
+    await expect(tab).toHaveTitle("Garden notes");
     await expect.poll(() => tab.url()).toBe(address);
     expect(await tab.evaluate(() => [window.opener, document.referrer])).toEqual([null, ""]);
     await tab.close();
     await expect(prompt).toHaveCount(0);
+  });
 
+  await test.step("a link in the room to an address of this computer shows no prompt, however it is written, while other links still do", async () => {
+    const ownersComposer = page.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
+    const loopbacks = [`${owners.origin}/mirador-here`, `http://127.1:${visitors.port}/`, `http://[::ffff:127.0.0.1]:${visitors.port}/`, "http://app.localhost./"];
+    await ownersComposer.fill(`Local ones: ${loopbacks.map((address, index) => `[local ${index}](${address})`).join(", ")}; and [the notes again](https://example.com/garden-notes)`);
+    await ownersComposer.press("Enter");
+    const prompt = visitor.getByRole("alertdialog", { name: "Open a link from Ann's machine?" });
+    for (const index of loopbacks.keys()) {
+      await frame.getByRole("link", { name: `local ${index}`, exact: true }).click();
+      await visitor.waitForTimeout(300);
+      await expect(prompt).toHaveCount(0);
+    }
+    await frame.getByRole("link", { name: "the notes again" }).click();
+    await expect(prompt.locator(".link-address")).toHaveText("https://example.com/garden-notes");
+    await prompt.getByRole("button", { name: "Cancel" }).click();
+    await expect(prompt).toHaveCount(0);
+  });
+
+  await test.step("the owner's machine's pages run sandboxed even opened outside its frame, so they set no cookie of this computer's", async () => {
+    const machineFrame = visitor.locator('iframe[title="Ann\'s machine"]');
+    const keyed = (await machineFrame.getAttribute("src"))!;
+    for (const address of [keyed, `${new URL(keyed).origin}/`]) {
+      const tab = await browser.newPage();
+      await tab.goto(address);
+      const reached = await tab.evaluate(() => {
+        try {
+          document.cookie = "mirador_token=tossed; path=/ws";
+          return { origin, cookies: "set" };
+        } catch {
+          return { origin, cookies: "refused" };
+        }
+      });
+      expect({ address, reached }).toEqual({ address, reached: { origin: "null", cookies: "refused" } });
+      await tab.close();
+    }
+  });
+
+  await test.step("the owner's machine's page asks for no link without a click, nor while its frame is not in use", async () => {
+    const prompt = visitor.getByRole("alertdialog", { name: "Open a link from Ann's machine?" });
     const machineFrame = visitor.locator('iframe[title="Ann\'s machine"]');
     const inside = (await (await machineFrame.elementHandle())!.contentFrame())!;
     const askedUnclicked = (afterMs: number) =>

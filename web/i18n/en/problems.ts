@@ -38,6 +38,7 @@ export const problems = {
     "person-name-taken": "That name is taken: the owner, an agent or another person here goes by it, or Mirador says it in a name's place. Choose another.",
     "person-name-reorders": "That name holds characters that show its letters in another order than they are written. Choose another.",
     "person-name-mixes-scripts": "A word of that name mixes letters of two alphabets, as a look-alike of another name would. Write each word in one alphabet.",
+    "person-name-has-brackets": "A name holds no square brackets, which Mirador writes a person's role in. Choose another.",
     "room-person-name-taken": "Someone in the room, or one of its agents, already goes by that person's name or one that reads the same. Ask them to change theirs first.",
     "room-writing-too-fast": "You write in rooms too fast. Wait a minute, then write again.",
     "profile-changing-too-fast": "You changed your profile too often. Wait a minute, then try again.",

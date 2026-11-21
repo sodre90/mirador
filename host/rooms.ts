@@ -1,6 +1,6 @@
 import { lstatSync, realpathSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
@@ -126,14 +126,24 @@ export function absolutePathNamed(path: string, base: string, home: HostsHome): 
   return resolve(home.directory, `.${path.slice(startingFromHome.length)}`);
 }
 
-/** A link on the way can lead out of the workspace, so the real place of the nearest existing entry decides; null where none can be read. */
-function realPlaceOf(path: string): string | null {
+function exists(path: string) {
   try {
     lstatSync(path);
+    return true;
   } catch {
-    return dirname(path) === path ? null : realPlaceOf(dirname(path));
+    return false;
   }
-  return realPathOrNull(path);
+}
+
+/**
+ * A link on the way can lead out of the workspace, so an entry's real place decides. One not made yet is judged by its
+ * folder, which must exist: deeper, folders made on the way could be links leading anywhere. Null where neither can be read.
+ */
+function realPlaceOf(path: string): string | null {
+  if (exists(path)) return realPathOrNull(path);
+  const folder = dirname(path);
+  const realFolder = folder !== path && exists(folder) ? realPathOrNull(folder) : null;
+  return realFolder === null ? null : join(realFolder, basename(path));
 }
 
 /**
@@ -426,13 +436,14 @@ export class RoomService implements RoomRules, TurnListener {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation?.roomId || conversation.profileId === null) return;
     this.showAnswering(conversation.roomId, conversationId, null);
+    const namedInTurn = this.store.takeRoomAnswerTags(conversationId);
     const room = this.store.findRoom(conversation.roomId);
     const asked = this.askedIn(conversationId, turnSeq);
     const thread = asked && this.threadOf(asked, conversation.profileId);
     if (!room || !asked || !thread) return;
     const reply = replyOf(this.store.listEventsFrom(conversationId, turnSeq));
     const finished = reply.ended === "finished";
-    const named = finished ? this.takeTagsFor(conversationId, room, asked).filter((profileId) => this.answers(room, profileId)) : [];
+    const named = finished ? this.tagsFor(namedInTurn, room, asked).filter((profileId) => this.answers(room, profileId)) : [];
     const passedOn = this.agentsMayGoOn(room.id, asked, named.length) ? named : [];
     const answer = {
       roomId: room.id,
@@ -698,7 +709,7 @@ export class RoomService implements RoomRules, TurnListener {
     const ownerId = this.store.ownerId();
     const riding = this.agentsAsked(task)
       .filter((profileId) => this.answers(room, profileId))
-      .flatMap((profileId) => catchUpShown([...this.unseenBy(room, profileId, task), task]).slice(0, -1));
+      .flatMap((profileId) => catchUpShown([...this.unseenBy(room, profileId, task), task], this.authorOf).slice(0, -1));
     return [...new Map(riding.map((message) => [message.id, message])).values()]
       .toSorted((a, b) => a.seq - b.seq)
       .map((message) => ({ messageId: message.id, author: message.author, role: authorRoleOf(message, ownerId), text: message.text }));
@@ -728,9 +739,11 @@ export class RoomService implements RoomRules, TurnListener {
     this.tasksMayCarryOthers(message.roomId);
   }
 
-  /** The agents the turn named to tag, kept through a restart of the host; they tag only while the person the answer works for may tag agents themselves. */
-  private takeTagsFor(conversationId: string, room: Room, answering: RoomMessage) {
-    const named = this.store.takeRoomAnswerTags(conversationId);
+  /**
+   * The agents the turn named to tag, kept through a restart of the host and taken however the turn ends, so a stopped
+   * turn's leave none for a later one; they tag only while the person the answer works for may tag agents themselves.
+   */
+  private tagsFor(named: { answering: string; profileIds: string[] } | undefined, room: Room, answering: RoomMessage) {
     return named?.answering === answering.id && this.personBehindMayTag(room, answering) ? named.profileIds : [];
   }
 

@@ -110,6 +110,7 @@ import { computerName } from "./machine-name.ts";
 import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } from "./p2p/service.ts";
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
 import { described, englishProblem, HostProblemError, problemFieldsOf, problemOf, type DescribedProblem, type HostProblem } from "../shared/host-problems.ts";
+import { conversationCanvasToken } from "./canvas-token.ts";
 
 export interface HostServices {
   config: HostConfig;
@@ -725,8 +726,9 @@ export function startServer(services: HostServices) {
     return sameSecret(bearer, token) ? null : new Response("unauthorized", { status: 401 });
   }
 
+  /** Each conversation's canvas server takes only the token made for that conversation, which its agent alone is given. */
   function serveMcp(request: Request, conversationId: string) {
-    const refused = refusedAgentRequest(request, config.mcpToken);
+    const refused = refusedAgentRequest(request, conversationCanvasToken(config.mcpToken, conversationId));
     if (refused) return refused;
     if (!store.findConversation(conversationId)) return new Response("unknown conversation", { status: 404 });
     return mcp.handle(conversationId, request);

@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { askToJoin as askToJoinThere } from "../shared/join-requests.ts";
+import { SOMEONE_ELSES_MACHINE_SANDBOX } from "../shared/machines.ts";
 import type { Machine } from "../shared/model.ts";
 import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE } from "../shared/protocol.ts";
 import { HERE_PATH } from "./addresses.ts";
@@ -74,14 +75,29 @@ export interface RelayedSocket {
 
 /**
  * Another site's page, or someone else's machine's page in its opaque origin, with which WebKit sends this host's
- * Strict cookie on the scripts and images it loads; and, of this computer's other ports, anything but this host's page
- * loading the machine into its frame, which the browser says is a same-site navigation.
+ * Strict cookie on the scripts and images it loads; and, from this computer's other ports, anything but a navigation.
+ * Any page of this computer that loads the machine, into a frame or a window of its own, is a same-site navigation and
+ * passes here: the frame-ancestors the relay answers with, `framedOnlyBy`, is what keeps any page but this host's own
+ * from framing it.
  */
 function askedFromAnotherPage(request: Request) {
   const site = request.headers.get("sec-fetch-site");
   const loadsTheFrame = request.method === "GET" && request.headers.get("sec-fetch-mode") === "navigate";
   return site === "cross-site" || (site === "same-site" && !loadsTheFrame);
 }
+
+/** This host's own pages frame a machine of this computer's owner, and that machine's page its own frames; no other page of this computer may. */
+const framedOnlyBy = (thisHostsPages: string[]) => `frame-ancestors 'self' ${thisHostsPages.join(" ")}`;
+
+/**
+ * Someone else's machine's pages run sandboxed in an opaque origin wherever they open, as in their frame: opened in a
+ * window of their own at this computer's address, they could otherwise set cookies that this computer's other ports,
+ * this host's among them, are sent, and frame this host's page with its Strict cookie.
+ */
+const sandboxedAsInTheirFrame = (headers: Headers) => {
+  headers.append("content-security-policy", `sandbox ${SOMEONE_ELSES_MACHINE_SANDBOX}`);
+  return headers;
+};
 
 const refusedJoinFromPage = () => new Response("This computer asks to join its machines itself, from its own window.", { status: 403 });
 const didNotAnswer = (machine: Machine) => new Response(`${machine.name} did not answer.`, { status: 502 });
@@ -219,6 +235,8 @@ export class MachineRelays {
     private readonly store: Store,
     private readonly ports: number[],
     private readonly canvasAssetsOrigin: string,
+    /** Where this host's own page is served on this computer, which alone may frame a machine of its owner's. */
+    private readonly thisHostsPages: string[],
     private readonly signedInAsOwner: (request: Request) => boolean,
     private readonly joined: (machineId: string) => void,
     private readonly signedOut: (machineId: string) => void,
@@ -481,7 +499,8 @@ export class MachineRelays {
       this.machineCanvasOrigins.delete(machineId);
       return new Response(`${machine.name} did not answer.`, { status: 502 });
     }
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: relayedHeaders(response.headers, canvas.origin, relayOrigin) });
+    const relayed = relayedHeaders(response.headers, canvas.origin, relayOrigin);
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: known.asPerson ? sandboxedAsInTheirFrame(relayed) : relayed });
   }
 
   private listen(machineId: string, port: number) {
@@ -536,7 +555,9 @@ export class MachineRelays {
     const response = await this.fetchFromMachine(machine, `${url.pathname}${url.search}`, request, headers);
     if (!response) return didNotAnswer(machine);
     if (response.status === 401) this.forgetRevokedSignIn(machine);
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: relayedHeaders(response.headers, machine.origin, relayOrigin) });
+    const relayed = relayedHeaders(response.headers, machine.origin, relayOrigin);
+    relayed.append("content-security-policy", framedOnlyBy(this.thisHostsPages));
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: relayed });
   }
 
   /**
@@ -562,7 +583,7 @@ export class MachineRelays {
     if (response.status === 401) this.forgetRevokedSignIn(machine);
     const keyPath = `/${machine.relayKey}`;
     const body = request.method === "GET" && isPage(response) ? connectingToRelay(await response.text(), relayOrigin) : response.body;
-    return new Response(body, { status: response.status, statusText: response.statusText, headers: withOpenCors(relayedHeaders(response.headers, machine.origin, relayOrigin, keyPath)) });
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: sandboxedAsInTheirFrame(withOpenCors(relayedHeaders(response.headers, machine.origin, relayOrigin, keyPath))) });
   }
 
   private async relayPublicPart(machine: Machine, relayOrigin: string, url: URL, request: Request, opensSocket: boolean) {
@@ -570,7 +591,7 @@ export class MachineRelays {
     const headers = forwardedHeaders(request.headers, machine.origin, null, await this.canvasAssetsOriginFor(machine));
     const response = await this.fetchFromMachine(machine, `${url.pathname}${url.search}`, request, headers);
     if (!response) return didNotAnswer(machine);
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: withOpenCors(relayedHeaders(response.headers, machine.origin, relayOrigin)) });
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: sandboxedAsInTheirFrame(withOpenCors(relayedHeaders(response.headers, machine.origin, relayOrigin))) });
   }
 
   /** `machine` as this host reaches it, through a forward only while that forward is still its dial's own. */

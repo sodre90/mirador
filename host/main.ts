@@ -236,6 +236,7 @@ const relays = new MachineRelays(
   store,
   config.relayPorts,
   `http://127.0.0.1:${config.canvasAssetsPort}`,
+  [config.appOrigin, `http://localhost:${config.port}`],
   (request) => signedIn(request)?.isOwner === true,
   (machineId) => {
     hub.broadcast({ type: "machines.changed", machines: store.listMachines() });

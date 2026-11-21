@@ -5,6 +5,12 @@ import { decodedInviteTunnel, encodedInviteTunnel, type InviteTunnel } from "./t
 export const LONGEST_MACHINE_NAME = 40;
 
 /**
+ * What someone else's machine's pages may do: run scripts and send forms, in an opaque origin of their own, in their
+ * frame and anywhere else they open, as their relay serves them sandboxed too.
+ */
+export const SOMEONE_ELSES_MACHINE_SANDBOX = "allow-scripts allow-forms";
+
+/**
  * An invite link's #part: the code, then the fingerprint of the machine's own certificate authority when it has one,
  * then how to reach it peer to peer when it can.
  */

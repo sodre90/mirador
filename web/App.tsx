@@ -864,7 +864,7 @@ export function App() {
           onPlace={machines.rememberPlace}
         />
       )}
-      {railShown && <LinkFromMachinePrompt />}
+      {railShown && <LinkFromMachinePrompt ownOrigins={[state.canvasAssetsOrigin, state.agentsCanvasAssetsOrigin]} />}
       <HintLayer />
       {conversation && open && <SelectionActions conversationId={conversation.id} onAsk={(text) => askInSideChat(conversation.id, text)} />}
       <JoinRequestPrompts joinRequests={state.joinRequests} />

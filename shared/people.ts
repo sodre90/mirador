@@ -1,10 +1,11 @@
 import { de } from "../web/i18n/de/index.ts";
-import { en } from "../web/i18n/en/index.ts";
+import { en, type Messages } from "../web/i18n/en/index.ts";
 import { es } from "../web/i18n/es/index.ts";
 import { hu } from "../web/i18n/hu/index.ts";
 import { zh } from "../web/i18n/zh/index.ts";
+import type { Language } from "./i18n/languages.ts";
 import type { Person } from "./model.ts";
-import { oneLine, reordersWhatShows, shownAsWritten } from "./written-text.ts";
+import { holdsSquareBrackets, oneLine, reordersWhatShows, shownAsWritten } from "./written-text.ts";
 
 /** How long a person's name can be, so it fits beside their messages. */
 export const LONGEST_PERSON_NAME = 40;
@@ -27,6 +28,10 @@ export const personGoesBy = (person: Pick<Person, "name" | "number"> | undefined
 /** What the host and agents call a room's agent whose profile is gone. */
 export const AGENT_GONE = "An agent no longer in the room";
 
+/** The pages' words in each of their languages, so that a language added to them can't be left out of the names kept here. */
+const PAGES_WORDS: Record<Language, Messages> = { en, hu, es, zh, de };
+const pagesWordsInEveryLanguage = Object.values(PAGES_WORDS);
+
 /**
  * Words the host, or a page in any of its languages, puts in an author's place or beside it, which no person may take
  * as their name.
@@ -35,7 +40,7 @@ export const NAMES_KEPT_BY_MIRADOR = [
   OWNER_WITHOUT_A_NAME,
   PERSON_WITHOUT_A_NAME,
   AGENT_GONE,
-  ...[en, hu, es, zh, de].flatMap(({ chat, rooms }) => [
+  ...pagesWordsInEveryLanguage.flatMap(({ chat, rooms }) => [
     chat.author.you,
     chat.author.owner,
     chat.author.fromMirador,
@@ -46,12 +51,31 @@ export const NAMES_KEPT_BY_MIRADOR = [
   ]),
 ];
 
-const WORDS_FOR_A_PERSON_WITHOUT_A_NAME = [PERSON_WITHOUT_A_NAME, ...[en, hu, es, zh, de].map(({ rooms }) => rooms.nameless)];
+const WORDS_FOR_A_PERSON_WITHOUT_A_NAME = [PERSON_WITHOUT_A_NAME, ...pagesWordsInEveryLanguage.map(({ rooms }) => rooms.nameless)];
 
-const withoutWhatEndsIt = (name: string) => comparableName(name).replace(/[\s\p{N}\p{P}]+$/u, "");
+/** Digits and signs that read as letters, and letters that read as one another, each with the one letter they are taken as. */
+const READ_AS_ONE_LETTER: [RegExp, string][] = [
+  [/rn/g, "m"],
+  [/vv/g, "w"],
+  [/[0]/g, "o"],
+  [/[1il|!]/g, "l"],
+  [/[3]/g, "e"],
+  [/[4@]/g, "a"],
+  [/[5$]/g, "s"],
+  [/[7+]/g, "t"],
+];
 
-/** Whether the name reads as one of Mirador's words for an author, a person without a name's with any number or mark after it among them. */
-export const readsAsMiradorsWords = (name: string) => nameTaken(name, NAMES_KEPT_BY_MIRADOR) || nameTaken(withoutWhatEndsIt(name), WORDS_FOR_A_PERSON_WITHOUT_A_NAME);
+/** A name as its start is compared with the words for a person without a name: comparable, without spaces, and the letters and digits that read as one another made one. */
+const startAsRead = (name: string) => READ_AS_ONE_LETTER.reduce((read, [lookAlikes, letter]) => read.replace(lookAlikes, letter), comparableName(name).replace(/\s+/gu, ""));
+
+/** Whether the name starts as the words for a person without a name do in any of the pages' languages, whatever follows them, so that it can't pass for one with a number. */
+const startsAsSomeoneWithoutAName = (name: string) => {
+  const start = startAsRead(name);
+  return WORDS_FOR_A_PERSON_WITHOUT_A_NAME.some((words) => start.startsWith(startAsRead(words)));
+};
+
+/** Whether the name reads as one of Mirador's words for an author, or starts as its words for a person without a name. */
+export const readsAsMiradorsWords = (name: string) => nameTaken(name, NAMES_KEPT_BY_MIRADOR) || startsAsSomeoneWithoutAName(name);
 
 /** Cyrillic and Greek letters that read as Latin ones, and the Latin letter each reads as; a capital and its small letter can read as different ones. */
 const LATIN_LOOK_ALIKES: Record<string, string> = {
@@ -97,8 +121,9 @@ const scriptOf = (letter: string) => (CHINESE_JAPANESE_OR_KOREAN.test(letter) ? 
 const mixesScripts = (name: string) => name.split(/[\s\u0085\u2800]+/u).some((word) => new Set(Array.from(word.matchAll(/\p{L}/gu), ([letter]) => scriptOf(letter))).size > 1);
 
 /** Why a person other than the owner may not go by the name, as a host problem's code; null when they may. */
-export function nameRefused(name: string): "person-name-reorders" | "person-name-mixes-scripts" | null {
+export function nameRefused(name: string): "person-name-reorders" | "person-name-mixes-scripts" | "person-name-has-brackets" | null {
   if (reordersWhatShows(name)) return "person-name-reorders";
+  if (holdsSquareBrackets(name.normalize("NFKC"))) return "person-name-has-brackets";
   return mixesScripts(shownAsWritten(name)) ? "person-name-mixes-scripts" : null;
 }
 

@@ -10,6 +10,7 @@ import { connectedFrom, deviceStatus, joinedOn, whoseDevice, type DevicesAndPeop
 import type { JoinRequest } from "../shared/model.ts";
 import { isContainerName, isPid, isSshHost, waitSetUpReply, type JobWaitRequest } from "../shared/job-waits.ts";
 import { inviteLink } from "../shared/machines.ts";
+import { printableInTerminal } from "../shared/written-text.ts";
 import { UsageData } from "./usage-data.ts";
 import { toolReport, usageReport, UsageQueryError, type Finding, type ToolReport, type Totals, type UsageReport } from "./usage-stats.ts";
 
@@ -122,8 +123,9 @@ function storedDevices(databasePath: string): DevicesAndPeople {
   return listed;
 }
 
-/** Lined up, leaving out a column nobody has a value in. */
-function printColumns(rows: string[][]) {
+/** Lined up, leaving out a column nobody has a value in; a name a device or person gave can hold what a terminal acts on. */
+function printColumns(written: string[][]) {
+  const rows = written.map((row) => row.map(printableInTerminal));
   const widths = rows[0]!.map((_, column) => Math.max(...rows.map((row) => row[column]!.length)));
   const filled = (row: string[]) => row.flatMap((cell, column) => (widths[column] ? [cell.padEnd(widths[column])] : []));
   rows.forEach((row) => console.log(filled(row).join("   ").trimEnd()));

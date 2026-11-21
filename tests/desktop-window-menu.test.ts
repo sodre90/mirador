@@ -127,6 +127,15 @@ describe("menu in the window", () => {
     }
   });
 
+  test("opens no address of this computer for a link someone else's machine asked for, while the page's own links to local servers open", () => {
+    const local = { type: "desktop-open-link", nonce: "n-1", url: "http://localhost:3000/" };
+    expect(pageRequest(local, "n-1")).toEqual({ type: "open-link", url: "http://localhost:3000/" });
+    for (const url of ["http://localhost:3000/", "http://127.1:20001/key/", "http://[::ffff:127.0.0.1]/", "http://0.0.0.0:4600/", "http://app.localhost./"]) {
+      expect(pageRequest({ ...local, url, askedBySomeoneElsesMachine: true }, "n-1")).toBeNull();
+    }
+    expect(pageRequest({ ...local, url: "https://example.com/a", askedBySomeoneElsesMachine: true }, "n-1")).toEqual({ type: "open-link", url: "https://example.com/a" });
+  });
+
   test("gives the window the theme only when the page asks with the nonce, and only a theme Mirador has", () => {
     for (const appearance of ["light", "dark", "system"] as const) {
       expect(pageRequest({ type: "desktop-appearance", nonce: "n-1", appearance }, "n-1")).toEqual({ type: "appearance", appearance });

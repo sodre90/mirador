@@ -252,7 +252,7 @@ test("the ask tool advertises one question or several, tells the agent to ask se
   const response = await fetch(`${host.origin}/mcp/${conversationId}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${host.mcpToken}`,
+      Authorization: `Bearer ${host.canvasTokenOf(conversationId)}`,
       "Content-Type": "application/json",
       Accept: "application/json, text/event-stream",
       "MCP-Protocol-Version": "2025-11-25",

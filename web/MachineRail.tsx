@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { markInitials } from "../shared/marks.ts";
 import { spacedNumber } from "../shared/join-requests.ts";
-import type { MachineToJoin } from "../shared/machines.ts";
+import { SOMEONE_ELSES_MACHINE_SANDBOX, type MachineToJoin } from "../shared/machines.ts";
 import type { Machine, MachineSeen, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
@@ -32,7 +32,7 @@ const relayAddress = (machine: Machine) => `${location.protocol}//${location.hos
  * service worker shared with anything, no microphone or clipboard, and no way to navigate this window or open one of
  * its own outside the sandbox. A machine of this computer's owner gets this window's microphone and clipboard.
  */
-const frameTrust = (machine: Machine) => (machine.asPerson ? { sandbox: "allow-scripts allow-forms", "data-someone-elses": "" } : { allow: "clipboard-read; clipboard-write; microphone" });
+const frameTrust = (machine: Machine) => (machine.asPerson ? { sandbox: SOMEONE_ELSES_MACHINE_SANDBOX, "data-someone-elses": "" } : { allow: "clipboard-read; clipboard-write; microphone" });
 
 /** For the stylesheet: the machine's pastel, which its rail button, mark and strip draw with. */
 export const colorAttributes = (color: Pastel | null) => (color ? { "data-color": color, style: pastelVariables(color) } : {});

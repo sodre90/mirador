@@ -11,6 +11,7 @@ import {
 } from "../../../shared/desktop-menu.ts";
 import { isLanguage, type Language } from "../../../shared/i18n/languages.ts";
 import { isPluginName, type ItemWindowRoute } from "../../../shared/item-window.ts";
+import { namesThisComputer } from "../../../shared/this-computer.ts";
 import { webUrl } from "./navigation.ts";
 import type { UpdateOffer } from "./self-update.ts";
 import { isTrayAction, trayMenu, type TrayAction, type TrayState } from "./tray-menu.ts";
@@ -62,6 +63,7 @@ export type PageRequest =
  * Any frame in the window can post to the app, the agents' canvas pages and other machines' pages included, and the app
  * can't tell which did; only the page the app handed the nonce to can make it act, or show it the menu, and the frames,
  * from other origins, never see the nonce. Anyone may ask for the nonce, which the app hands to its window's page alone.
+ * A link someone else's machine asked for never opens an address of this computer, where its relay serves its pages.
  */
 export function pageRequest(detail: unknown, nonce: string): PageRequest | null {
   if (typeof detail !== "object" || detail === null) return null;
@@ -79,5 +81,6 @@ export function pageRequest(detail: unknown, nonce: string): PageRequest | null 
   if (message.type === "desktop-open-plugin-window" && isPluginName(message.plugin)) return { type: "open-plugin-window", plugin: message.plugin };
   if (message.type === "desktop-window-title" && typeof message.title === "string") return { type: "window-title", title: message.title };
   const url = message.type === "desktop-open-link" ? webUrl(message.url) : null;
-  return url ? { type: "open-link", url } : null;
+  const leadsHereFromAfar = url !== null && message.askedBySomeoneElsesMachine === true && namesThisComputer(new URL(url).hostname);
+  return url && !leadsHereFromAfar ? { type: "open-link", url } : null;
 }

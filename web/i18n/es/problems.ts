@@ -40,6 +40,7 @@ export const problems: Messages["problems"] = {
     "person-name-taken": "Ese nombre ya está tomado: lo usa el propietario, un agente u otra persona de aquí, o Mirador lo pone en lugar de un nombre. Elige otro.",
     "person-name-reorders": "Ese nombre tiene caracteres que muestran sus letras en otro orden del que se escribieron. Elige otro.",
     "person-name-mixes-scripts": "Una palabra de ese nombre mezcla letras de dos alfabetos, como haría una imitación de otro nombre. Escribe cada palabra en un solo alfabeto.",
+    "person-name-has-brackets": "Un nombre no lleva corchetes, en los que Mirador escribe el rol de una persona. Elige otro.",
     "room-person-name-taken": "Alguien de la sala, o uno de sus agentes, ya usa el nombre de esa persona o uno que se lee igual. Pídele primero que cambie el suyo.",
     "room-writing-too-fast": "Escribes en las salas demasiado rápido. Espera un minuto y vuelve a escribir.",
     "profile-changing-too-fast": "Cambiaste tu perfil demasiadas veces. Espera un minuto y vuelve a intentarlo.",

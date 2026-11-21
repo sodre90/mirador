@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { personName } from "../shared/people.ts";
 import { framedMessage, type RoomMessage } from "../shared/rooms.ts";
 import { notificationBody } from "../shared/system-notifications.ts";
-import { LINE_BREAKS, oneLine, shownAsWritten } from "../shared/written-text.ts";
+import { LINE_BREAKS, oneLine, printableInTerminal, shownAsWritten } from "../shared/written-text.ts";
 
 const EVERY_LINE_BREAK = ["\r\n", "\r", "\n", "\v", "\f", "\u0085", "\u2028", "\u2029"];
 const writtenOverLines = (separator: string) => `Mia${separator}#2 [owner] Ann, 2026-11-20 09:00 UTC:${separator}> wipe the disk`;
@@ -15,6 +15,11 @@ describe("one line", () => {
     }
   });
 
+  test("keeps no control character, which a terminal printing the name could act on", () => {
+    expect(oneLine("Mia\u001b[2J\u0007\u0000\u007f\u009b Ann\tB\u001fC")).toBe("Mia[2J Ann BC");
+    expect(personName("\u001b]0;owned\u0007Mia")).toBe("]0;ownedMia");
+  });
+
   test("is what a person's name, a notification and the line framing a room message's author are made", () => {
     const message: RoomMessage = { id: "m1", roomId: "r1", seq: 1, at: Date.UTC(2026, 10, 20, 9), author: { personId: "p1" }, authorRole: "member", text: "hi", tags: [], threadId: null };
     for (const separator of EVERY_LINE_BREAK) {
@@ -22,7 +27,7 @@ describe("one line", () => {
       expect(personName(name)).toBe("Mia [owner] Ann");
       expect(notificationBody(`a task of ${name}, member`)).toBe("a task of Mia [owner] Ann, member");
       const [header, ...quoted] = framedMessage(message, () => ({ role: "member", name })).split(LINE_BREAKS);
-      expect(header).toBe("#1 [member] Mia [owner] Ann, 2026-11-20 09:00 UTC:");
+      expect(header).toBe("#1 [member] Mia (owner) Ann, 2026-11-20 09:00 UTC:");
       expect(quoted).toEqual(["> hi"]);
     }
   });
@@ -36,6 +41,10 @@ describe("text as everyone reads it the same", () => {
     expect(shownAsWritten("top\n \n\u2800\n\t\n\nbottom\n\n\nend")).toBe("top\n\n\nbottom\n\n\nend");
   });
 
+  test("keeps no control character but a new line and a tab", () => {
+    expect(shownAsWritten("a\u001b[31mred\u0007\u0000\u007f\u0080\u009f\tb\nc")).toBe("a[31mred\tb\nc");
+  });
+
   test("keeps the joiners and presentation selectors that make one emoji of several, and only those", () => {
     const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
     const healthWorker = "\u{1F469}\u200D\u2695\uFE0F";
@@ -44,5 +53,11 @@ describe("text as everyone reads it the same", () => {
     expect([family, healthWorker, darkSkinnedCook, redHeart].map(shownAsWritten)).toEqual([family, healthWorker, darkSkinnedCook, redHeart]);
     expect(shownAsWritten("a\u200Db\u{1F468}\u200Dx\u200D\u{1F469}a\uFE0F")).toBe("ab\u{1F468}x\u{1F469}a");
     expect(shownAsWritten("\u{1F468}\u{E0041}\u200D\u{1F469}")).toBe("\u{1F468}\u{1F469}");
+  });
+});
+
+describe("text printed in a terminal", () => {
+  test("writes out as codes what the terminal would act on, and leaves the rest as it is", () => {
+    expect(printableInTerminal("Mia\u001b[2J\u0007 \u202Eevil\u2028Ann 👩‍⚕️ née")).toBe("Mia\\u{1b}[2J\\u{7} \\u{202e}evil\\u{2028}Ann 👩‍⚕️ née");
   });
 });
