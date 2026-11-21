@@ -7,6 +7,8 @@ import { LINE_BREAKS, oneLine } from "./written-text.ts";
 export interface RoomAgent {
   profileId: string;
   conversationId: string | null;
+  /** The room message the agent's turn under way answers; null while it takes no turn. */
+  answering: string | null;
 }
 
 /**
@@ -54,8 +56,11 @@ export interface Room {
   createdAt: number;
 }
 
+/** A member makes agents take turns; a guest only talks. */
+export const asksAgentsAs = (role: RoomRole) => role === "member";
+
 /** Whether someone of this role may write this: anything for a member, and for a guest nothing that makes an agent take a turn. */
-export const mayWriteAs = (role: RoomRole, tags: string[], threadId: string | null) => role === "member" || (tags.length === 0 && threadId === null);
+export const mayWriteAs = (role: RoomRole, tags: string[], threadId: string | null) => asksAgentsAs(role) || (tags.length === 0 && threadId === null);
 
 /** The most a message written in a room may hold, as the host counts it: its text with the spaces around it trimmed. */
 export const ROOM_MESSAGE_MOST_CHARACTERS = 20_000;
@@ -189,17 +194,48 @@ export const messagesOfThread = (timeline: RoomTimeline, thread: RoomThread) =>
 export const askedInThread = (timeline: RoomTimeline, thread: RoomThread) =>
   messagesOfThread(timeline, thread).filter((message) => message.id === thread.messageId || isFollowUp(message));
 
+/** The first message the thread asked its agent that reached it: one the agent answered there, or the one its turn under way answers. */
+export function firstReachingTheAgent(timeline: RoomTimeline, thread: RoomThread, answering: string | null): RoomMessage | undefined {
+  const answered = (message: RoomMessage) =>
+    timeline.messages.some(({ answers, author }) => answers === message.id && writtenByAgent(author) && author.profileId === thread.profileId);
+  return askedInThread(timeline, thread).find((message) => message.id === answering || answered(message));
+}
+
+/** A message the agent of the thread has to answer there. */
+export interface WorkPending {
+  message: RoomMessage;
+  thread: RoomThread;
+}
+
+/** The threads whose agents a message asks: the one it follows up in, or those it started. */
+const threadsAskedBy = (message: RoomMessage, threads: RoomThread[]) =>
+  isFollowUp(message) ? threads.filter(({ id }) => id === message.threadId) : threads.filter(({ messageId }) => messageId === message.id);
+
+const answerKey = (messageId: string, profileId: string) => `${messageId} ${profileId}`;
+
 /** The messages in the room or in its threads that the agent of their thread has not answered yet, oldest first, each with that thread. */
-export function unanswered({ messages, threads }: RoomTimeline): { message: RoomMessage; thread: RoomThread }[] {
-  const answered = new Set(messages.flatMap(({ answers, author }) => (answers !== undefined && writtenByAgent(author) ? [`${answers} ${author.profileId}`] : [])));
-  const threadById = new Map(threads.map((thread) => [thread.id, thread]));
-  const threadsAsked = (message: RoomMessage) =>
-    isFollowUp(message) ? [threadById.get(message.threadId!)].filter((thread) => thread !== undefined) : threads.filter(({ messageId }) => messageId === message.id);
+export function unanswered({ messages, threads }: RoomTimeline): WorkPending[] {
+  const answered = new Set(messages.flatMap(({ answers, author }) => (answers !== undefined && writtenByAgent(author) ? [answerKey(answers, author.profileId)] : [])));
   return messages.flatMap((message) =>
-    threadsAsked(message)
-      .filter(({ profileId }) => !answered.has(`${message.id} ${profileId}`))
+    threadsAskedBy(message, threads)
+      .filter(({ profileId }) => !answered.has(answerKey(message.id, profileId)))
       .map((thread) => ({ message, thread })),
   );
+}
+
+/**
+ * What agents have to answer: first the messages a turn under way answers again, going on from an answer its agent gave
+ * there, as after a question, then those still unanswered.
+ */
+export function workPending(timeline: RoomTimeline, agents: RoomAgent[]): WorkPending[] {
+  const { messages, threads } = timeline;
+  const answeredBy = (message: RoomMessage, profileId: string) => messages.some(({ answers, author }) => answers === message.id && writtenByAgent(author) && author.profileId === profileId);
+  const goingOn = agents.flatMap(({ profileId, answering }) => {
+    const message = messages.find(({ id }) => id === answering);
+    const thread = message && threadsAskedBy(message, threads).find((asked) => asked.profileId === profileId);
+    return message && thread && answeredBy(message, profileId) ? [{ message, thread }] : [];
+  });
+  return [...goingOn, ...unanswered(timeline)];
 }
 
 const roomMessageReaching = ({ event }: StoredEvent) => (event.type === "user-message" ? event.roomMessageId : undefined);
@@ -222,12 +258,11 @@ export function eventsAnswering(events: StoredEvent[], messageId: string): Store
     .slice(1);
 }
 
-/** The room message the agent's turn under way at `at` answers: the last that reached it by then. */
-export const roomMessageAnsweredAt = (userMessages: StoredEvent[], at: number) =>
-  userMessages
-    .filter((stored) => stored.at <= at)
-    .map(roomMessageReaching)
-    .findLast((messageId) => messageId !== undefined);
+/** Whether the room message reached the agent in these events of its conversation. */
+export const reachedAmong = (events: StoredEvent[], messageId: string) => events.some((stored) => roomMessageReaching(stored) === messageId);
+
+/** The room message the agent's turn under way answers: the last that reached it. */
+export const roomMessageAnswered = (userMessages: StoredEvent[]) => userMessages.map(roomMessageReaching).findLast((messageId) => messageId !== undefined);
 
 /** At most this many turns of agents that other agents tagged may follow a message of a person. */
 export const AGENT_TAGGED_TURNS_AFTER_A_PERSON = 8;
@@ -265,16 +300,23 @@ export const taskWaits = ({ taskHeld }: RoomMessage) => taskHeld === "waiting";
 /** No agent reads a task an approver has not allowed, nor the line that says one was declined. */
 export const keptFromAgents = (message: RoomMessage) => message.taskHeld !== undefined || isDeclined(message);
 
-/** The pages and questions each agent's answer brought onto the room's canvas: those its agent made since its answer before. */
+/**
+ * The pages and questions each agent's answer brought onto the room's canvas. One made while the agent answered a
+ * message goes with its first answer to that message posted after it was made: a turn that went on from an answer, as
+ * after a question, makes an answer of its own. With none posted after, it goes with the last, which an answer written
+ * anew in its place keeps the number of.
+ */
 export function canvasItemsOfAnswers(messages: RoomMessage[], items: CanvasItem[], conversationOf: (profileId: string) => string | null | undefined): Map<string, CanvasItem[]> {
-  const answers = messages.flatMap((message) => (writtenByAgent(message.author) && !isDeclined(message) ? [{ answer: message, profileId: message.author.profileId }] : []));
-  return new Map(
-    answers.map(({ answer, profileId }, index) => {
-      const conversationId = conversationOf(profileId);
-      const since = answers.slice(0, index).findLast((earlier) => earlier.profileId === profileId)?.answer.at ?? 0;
-      return [answer.id, items.filter((item) => item.conversationId === conversationId && item.createdAt > since && item.createdAt <= answer.at)];
-    }),
-  );
+  const answers = messages
+    .flatMap((message) => (writtenByAgent(message.author) && message.answers !== undefined && !isDeclined(message) ? [{ ...message, conversationId: conversationOf(message.author.profileId) }] : []))
+    .toSorted((a, b) => a.seq - b.seq);
+  const answerHolding = ({ conversationId, madeInRoom }: CanvasItem) => {
+    if (!madeInRoom) return undefined;
+    const toTheMessage = answers.filter((answer) => answer.conversationId === conversationId && answer.answers === madeInRoom.answering);
+    return (toTheMessage.find(({ seq }) => seq > madeInRoom.afterSeq) ?? toTheMessage.at(-1))?.id;
+  };
+  const held = items.map((item) => ({ item, answerId: answerHolding(item) }));
+  return new Map(answers.map(({ id }) => [id, held.filter(({ answerId }) => answerId === id).map(({ item }) => item)]));
 }
 
 export const ROOM_CATCH_UP_LIMIT = 50;
@@ -307,9 +349,10 @@ export function framedMessage(message: RoomMessage, authorOf: AuthorOf) {
   return [`#${seq} ${authorLine(authorOf(message))}, ${timeOf(at)}:`, ...lines].join("\n");
 }
 
-function introduction(roomName: string, taggedBy: FramedAuthor, otherAgents: string[]) {
+function introduction(roomName: string, ownName: string, taggedBy: FramedAuthor, otherAgents: string[]) {
   return [
     `You are an attendee of the room "${oneLine(roomName)}" in Mirador, where people and AI agents write to each other.`,
+    `There you are the agent ${oneLine(ownName)}: messages of [agent] ${oneLine(ownName)} are your own.`,
     `${authorLine(taggedBy)} tagged you there.`,
     "Your final answer of each turn is posted to the room for everyone in it to read, so write it to them.",
     otherAgents.length > 0 ? `The room's other agents are ${otherAgents.map(oneLine).join(", ")}.` : "No other agent is in the room yet.",
@@ -322,27 +365,29 @@ function introduction(roomName: string, taggedBy: FramedAuthor, otherAgents: str
 
 /**
  * What goes to an agent when a message asks something of it: the room's messages it has not seen, the latest
- * `ROOM_CATCH_UP_LIMIT` of them, each framed with its number, author and time, ending with the one it is asked; its
- * first prompt in the room begins by telling it where it is, who else is there and how to reach them.
+ * `ROOM_CATCH_UP_LIMIT` of them, each framed with its number, author and time, ending with the one it is asked. Its
+ * first prompt in the room, and its first on a session that lost what it was told there, begin by telling it where it
+ * is, under what name, who else is there and how to reach them.
  */
 export function catchUpPrompt({
   roomName,
   unseen,
   authorOf,
-  firstInRoom,
+  introducedAs,
   otherAgents,
 }: {
   roomName: string;
   unseen: RoomMessage[];
   authorOf: AuthorOf;
-  firstInRoom: boolean;
+  /** The agent's own name, when the prompt introduces it to the room. */
+  introducedAs?: string;
   otherAgents: string[];
 }) {
   const shown = catchUpShown(unseen);
   const leftOut = unseen.length - shown.length;
   const asked = unseen.at(-1)!;
   return [
-    ...(firstInRoom ? introduction(roomName, authorOf(asked), otherAgents) : []),
+    ...(introducedAs === undefined ? [] : introduction(roomName, introducedAs, authorOf(asked), otherAgents)),
     ROOM_MESSAGES_HEADING,
     ...(leftOut > 0 ? [`(${leftOut} earlier messages left out)`] : []),
     ...shown.map((message) => framedMessage(message, authorOf)),

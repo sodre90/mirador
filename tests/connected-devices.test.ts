@@ -66,14 +66,15 @@ describe("device wording", () => {
 describe("whose device mirador devices says it is", () => {
   const device = (personId: string): ListedDevice => ({ id: personId, name: personId, personId, joinedAt: 0, lastSeenAt: 0, connection: null });
   const people = [
-    { id: "owner", name: "Ann", color: null },
-    { id: "dora", name: "Dora", color: null },
-    { id: "nameless", name: "", color: null },
+    { id: "owner", name: "Ann", color: null, number: 1001 },
+    { id: "dora", name: "Dora", color: null, number: 1002 },
+    { id: "nameless", name: "", color: null, number: 4821 },
   ];
 
   test("a person's device names the person, the owner's nothing", () => {
     expect(whoseDevice(device("owner"), { people, ownerId: "owner" })).toBe("");
     expect(whoseDevice(device("dora"), { people, ownerId: "owner" })).toBe("Dora, in rooms only");
-    expect(whoseDevice(device("nameless"), { people, ownerId: "owner" })).toBe("Someone without a name, in rooms only");
+    expect(whoseDevice(device("nameless"), { people, ownerId: "owner" })).toBe("Someone without a name 4821, in rooms only");
+    expect(whoseDevice(device("gone"), { people, ownerId: "owner" })).toBe("Someone without a name, in rooms only");
   });
 });

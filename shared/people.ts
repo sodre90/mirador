@@ -3,6 +3,7 @@ import { en } from "../web/i18n/en/index.ts";
 import { es } from "../web/i18n/es/index.ts";
 import { hu } from "../web/i18n/hu/index.ts";
 import { zh } from "../web/i18n/zh/index.ts";
+import type { Person } from "./model.ts";
 import { oneLine, reordersWhatShows, shownAsWritten } from "./written-text.ts";
 
 /** How long a person's name can be, so it fits beside their messages. */
@@ -14,8 +15,14 @@ export const personName = (name: string) => oneLine(name).slice(0, LONGEST_PERSO
 /** What the host and agents call the machine's owner while they have no name. */
 export const OWNER_WITHOUT_A_NAME = "Owner";
 
-/** What the host and agents call a person other than the owner while they have no name. */
+/** What the host and agents call a person other than the owner while they have no name, with their number after it. */
 export const PERSON_WITHOUT_A_NAME = "Someone without a name";
+
+/** What a person without a name goes by: the words for one, then the number that tells them from others without one. */
+export const namelessPerson = (words: string, { number }: Pick<Person, "number">) => `${words} ${number}`;
+
+/** What a person goes by: their name, or while they have none the words for a person without one, with their number when they are known. */
+export const personGoesBy = (person: Pick<Person, "name" | "number"> | undefined, nameless: string) => person?.name || (person ? namelessPerson(nameless, person) : nameless);
 
 /** What the host and agents call a room's agent whose profile is gone. */
 export const AGENT_GONE = "An agent no longer in the room";
@@ -39,6 +46,13 @@ export const NAMES_KEPT_BY_MIRADOR = [
   ]),
 ];
 
+const WORDS_FOR_A_PERSON_WITHOUT_A_NAME = [PERSON_WITHOUT_A_NAME, ...[en, hu, es, zh, de].map(({ rooms }) => rooms.nameless)];
+
+const withoutWhatEndsIt = (name: string) => comparableName(name).replace(/[\s\p{N}\p{P}]+$/u, "");
+
+/** Whether the name reads as one of Mirador's words for an author, a person without a name's with any number or mark after it among them. */
+export const readsAsMiradorsWords = (name: string) => nameTaken(name, NAMES_KEPT_BY_MIRADOR) || nameTaken(withoutWhatEndsIt(name), WORDS_FOR_A_PERSON_WITHOUT_A_NAME);
+
 /** Cyrillic and Greek letters that read as Latin ones, and the Latin letter each reads as; a capital and its small letter can read as different ones. */
 const LATIN_LOOK_ALIKES: Record<string, string> = {
   "\u0410": "A", "\u0412": "B", "\u0415": "E", "\u041A": "K", "\u041C": "M", "\u041D": "H", "\u041E": "O", "\u0420": "P", "\u0421": "C", "\u0422": "T", "\u0423": "Y", "\u0425": "X", "\u0405": "S", "\u0406": "I", "\u0408": "J", "\u051A": "Q", "\u051C": "W",
@@ -48,15 +62,25 @@ const LATIN_LOOK_ALIKES: Record<string, string> = {
 };
 const LOOKS_LATIN = new RegExp(`[${Object.keys(LATIN_LOOK_ALIKES).join("")}]`, "gu");
 
+const LETTER_AND_ITS_MARKS = /(\p{L}?)(\p{M}+)/gu;
+const READS_THE_SAME_WITHOUT_ITS_MARKS = /[\p{Script=Latin}\p{Script=Greek}\p{Script=Cyrillic}]/u;
+/** Accents shared by many scripts, Arabic harakat and Hebrew points, which a name is as often written without. */
+const MARKS_A_NAME_IS_WRITTEN_WITHOUT = /[\p{Script=Inherited}\p{Script=Hebrew}]/gu;
+
+/** The vowel signs of scripts such as Devanagari and Thai are part of a name's letters; accents, and any mark on a Latin, Greek or Cyrillic letter or on no letter, are not. */
+const marksThatChangeTheName = (letter: string, marks: string) =>
+  letter === "" || READS_THE_SAME_WITHOUT_ITS_MARKS.test(letter) ? "" : marks.replace(MARKS_A_NAME_IS_WRITTEN_WITHOUT, "");
+
 /**
- * A name as it is compared with others: letters taken apart from their marks and the marks dropped, look-alike letters
- * and spaces folded into one form, invisible characters dropped, runs of spaces made one, and case ignored, so that two
- * names that read the same compare the same.
+ * A name as it is compared with others: invisible characters dropped, letters taken apart from their marks and the
+ * marks that leave it reading the same dropped, look-alike letters and spaces folded into one form, runs of spaces made
+ * one, and case ignored, so that two names that read the same compare the same.
  */
 export const comparableName = (name: string) =>
   name
     .normalize("NFKD")
-    .replace(/[\p{M}\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, "")
+    .replace(/[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu, "")
+    .replace(LETTER_AND_ITS_MARKS, (_, letter: string, marks: string) => letter + marksThatChangeTheName(letter, marks))
     .replace(/[\s\u0085\u2800]+/gu, " ")
     .replace(LOOKS_LATIN, (letter) => LATIN_LOOK_ALIKES[letter]!)
     .trim()

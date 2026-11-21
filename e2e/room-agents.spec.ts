@@ -1,12 +1,13 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { AGENT_TAGGED_TURNS_AFTER_A_PERSON } from "../shared/rooms.ts";
-import { addWorkspace, answerCanvasQuestion, createProfile, literally, signIn } from "./helpers.ts";
+import { addWorkspace, allowNotifications, answerCanvasQuestion, clickNotification, createProfile, literally, notificationsShown, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
 const promptsOf = { Builder: () => join(host.root, "builder-prompts"), Reviewer: () => join(host.root, "reviewer-prompts") };
+const answersHeld = () => join(host.root, "answers-held");
 const recordedPrompts = (agent: keyof typeof promptsOf) => readFileSync(promptsOf[agent](), "utf8");
 
 test.beforeAll(async ({ browser }) => {
@@ -17,7 +18,7 @@ test.beforeAll(async ({ browser }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   for (const agent of ["Builder", "Reviewer"] as const) {
-    const profiles = await createProfile(page, agent, `FAKE_ACP_PROMPTS=${promptsOf[agent]()}`, "", "opencode");
+    const profiles = await createProfile(page, agent, `FAKE_ACP_PROMPTS=${promptsOf[agent]()}\nFAKE_ACP_ANSWERS_HELD_BY=${answersHeld()}`, "", "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
   }
   await page.close();
@@ -59,6 +60,7 @@ async function tag(page: Page, room: string, agent: string, rest: string) {
 }
 
 const canvasCall = (tool: string, input: unknown) => `CANVAS ${tool} ${JSON.stringify(input)}`;
+const roomRow = (page: Page, room: string) => page.locator(".sidebar .rooms li", { hasText: `# ${room}` });
 
 test("an agent's page shows on the room's canvas, its answer opens it there, the canvas hidden too, and it stays after a reload", async ({ page }) => {
   await openNewRoom(page, "Pages");
@@ -98,12 +100,41 @@ test("a question asked in a room is answered on its canvas, and the agent's repl
   await expect(answerSaying(page, "Unrelated done")).toHaveCount(1);
 
   await asking.getByRole("button", { name: "Open on canvas" }).click();
+  writeFileSync(answersHeld(), "");
   await answerCanvasQuestion(page, "Blue");
+  const working = page.locator(".room-timeline > .room-thread-line", { hasText: "Builder is working…" });
+  await expect(working).toBeVisible();
+  await working.getByRole("button", { name: "Open thread" }).click();
+  await expect(thread(page, "Builder").locator(".working")).toHaveText("Builder is working…");
+  rmSync(answersHeld());
+  await expect(working).toHaveCount(0);
   const reply = answerSaying(page, "Going with Blue");
   await expect(reply.locator(".room-quote")).toContainText("Which colour?");
   await reply.getByRole("button", { name: "Open thread" }).click();
   await expect(thread(page, "Builder").locator(".message.agent")).toHaveText([/The question is now showing/, "Going with Blue"]);
   await expect(thread(page, "Builder")).not.toContainText("Unrelated done");
+});
+
+test("a question asked in a room while you look elsewhere notifies, marks the room and counts in the tab's title until answered", async ({ page }) => {
+  await allowNotifications(page);
+  await openNewRoom(page, "Sizes");
+  const asksRoom = new URL(page.url()).hash;
+  const go = join(host.root, "sizes-go");
+  await tag(page, "Sizes", "Builder", `WAIT ${go} ${canvasCall("ask", { question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] })}`);
+  await openNewRoom(page, "Elsewhere");
+  await expect(page).toHaveTitle("Mirador");
+  writeFileSync(go, "");
+
+  await expect.poll(async () => (await notificationsShown(page)).map(({ body }) => body)).toEqual(["project · Asks: Which size?", "project · Finished, waiting for you"]);
+  await expect(roomRow(page, "Sizes")).toHaveAttribute("data-waiting-tone", "decision");
+  await expect(page).toHaveTitle("(1) Mirador");
+  await clickNotification(page, "project · Asks: Which size?");
+  await expect(page).toHaveURL(new RegExp(`${asksRoom}$`));
+  await answersOf(page, "Builder").getByRole("button", { name: "Open on canvas" }).click();
+  await answerCanvasQuestion(page, "Large");
+  await expect(answerSaying(page, "Going with Large")).toHaveCount(1);
+  await expect(roomRow(page, "Sizes")).not.toHaveAttribute("data-waiting-tone");
+  await expect(page).toHaveTitle("Mirador");
 });
 
 test("an agent tags another with room_tag, which answers in a thread of its own having read the first one's answer", async ({ page }) => {

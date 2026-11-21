@@ -142,6 +142,9 @@ const schema = `
     person_id TEXT, profile_id TEXT, text TEXT NOT NULL, tags TEXT NOT NULL, thread_id TEXT, answers TEXT, ended TEXT, UNIQUE (room_id, seq));
   CREATE TABLE IF NOT EXISTS room_threads (
     id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, message_id TEXT NOT NULL, profile_id TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_answer_tags (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    answering TEXT NOT NULL REFERENCES room_messages(id) ON DELETE CASCADE, profile_ids TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS room_people (
     room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
     role TEXT NOT NULL, PRIMARY KEY (room_id, person_id));
@@ -201,7 +204,11 @@ export interface KeyOver extends PublicTunnelKey {
   until: number;
 }
 
+/** Four digits, short enough to tell people without a name apart at a glance. */
+const PERSON_NUMBERS = Array.from({ length: 9000 }, (_, index) => 1000 + index);
+
 const addedColumns = [
+  { table: "people", column: "number", definition: "INTEGER" },
   { table: "workspaces", column: "default_profile_id", definition: "TEXT" },
   { table: "machines", column: "relay_port", definition: "INTEGER" },
   { table: "machines", column: "device_token", definition: "TEXT" },
@@ -256,6 +263,7 @@ const addedColumns = [
   { table: "rooms", column: "peoples_tasks_wait", definition: "INTEGER NOT NULL DEFAULT 1" },
   { table: "room_messages", column: "author_role", definition: "TEXT" },
   { table: "room_messages", column: "task_held", definition: "TEXT" },
+  { table: "room_agents", column: "answering", definition: "TEXT" },
   { table: "room_people", column: "name_clash", definition: "TEXT" },
   { table: "machines", column: "out_of_rooms", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "machines", column: "as_person", definition: "INTEGER NOT NULL DEFAULT 0" },
@@ -551,6 +559,7 @@ export class Store {
     const devicesHadPeople = this.hasColumn("devices", "person_id");
     this.addMissingColumns();
     if (!this.hasPeople()) this.addOwner();
+    this.numberPeople();
     if (!devicesHadPeople) this.giveDevicesToTheOwner();
     this.keyAppsByFolder();
     this.keyOpenAppsByConversation();
@@ -1114,13 +1123,17 @@ export class Store {
   }
 
   private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, created_at }: RoomRow): Room {
-    const agents = this.db.query("SELECT profile_id, conversation_id FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as { profile_id: string; conversation_id: string | null }[];
+    const agents = this.db.query("SELECT profile_id, conversation_id, answering FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as {
+      profile_id: string;
+      conversation_id: string | null;
+      answering: string | null;
+    }[];
     const people = this.db.query("SELECT person_id, role, name_clash FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPersonRow[];
     return {
       id,
       name,
       workspaceId: workspace_id,
-      agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })),
+      agents: agents.map(({ profile_id, conversation_id, answering }) => ({ profileId: profile_id, conversationId: conversation_id, answering })),
       permissions,
       people: people.map(toRoomPerson),
       peoplesTasksWait: peoples_tasks_wait === 1,
@@ -1132,6 +1145,12 @@ export class Store {
   roomsOf(personId: string): Room[] {
     const rows = this.db.query("SELECT rooms.* FROM rooms JOIN room_people ON room_people.room_id = rooms.id WHERE room_people.person_id = ? ORDER BY rooms.created_at, rooms.rowid").all(personId) as RoomRow[];
     return rows.map((row) => this.toRoom(row));
+  }
+
+  /** Everyone who wrote in the room, those taken out of it since too. */
+  writersIn(roomId: string): string[] {
+    const rows = this.db.query("SELECT DISTINCT person_id FROM room_messages WHERE room_id = ? AND person_id IS NOT NULL").all(roomId) as { person_id: string }[];
+    return rows.map(({ person_id }) => person_id);
   }
 
   /** Everyone who wrote in the rooms the person is in, those taken out of them since too. */
@@ -1205,6 +1224,10 @@ export class Store {
     this.db.query("UPDATE rooms SET peoples_tasks_wait = ? WHERE id = ?").run(wait ? 1 : 0, id);
   }
 
+  setRoomWorkspace(id: string, workspaceId: string) {
+    this.db.query("UPDATE rooms SET workspace_id = ? WHERE id = ?").run(workspaceId, id);
+  }
+
   setRoomPermissions(id: string, permissions: PermissionPreset) {
     this.db.query("UPDATE rooms SET permissions = ? WHERE id = ?").run(permissions, id);
   }
@@ -1230,8 +1253,31 @@ export class Store {
     return row?.seen_through ?? 0;
   }
 
+  /** The room message the conversation's agent answers in the turn under way, or null once that turn ended. */
+  setRoomAgentAnswering(conversationId: string, answering: string | null) {
+    this.db.query("UPDATE room_agents SET answering = ? WHERE conversation_id = ?").run(answering, conversationId);
+  }
+
+  /** No agent's turn runs on before the host starts. */
+  forgetRoomAgentsAnswering() {
+    this.db.query("UPDATE room_agents SET answering = NULL").run();
+  }
+
   markRoomSeen(roomId: string, profileId: string, seq: number) {
     this.db.query("UPDATE room_agents SET seen_through = MAX(seen_through, ?) WHERE room_id = ? AND profile_id = ?").run(seq, roomId, profileId);
+  }
+
+  /** The agents the conversation's answer to the room message tags, as its agent named them; they replace those it named before. */
+  setRoomAnswerTags(conversationId: string, answering: string, profileIds: string[]) {
+    this.db
+      .query("INSERT INTO room_answer_tags (conversation_id, answering, profile_ids) VALUES (?, ?, ?) ON CONFLICT (conversation_id) DO UPDATE SET answering = excluded.answering, profile_ids = excluded.profile_ids")
+      .run(conversationId, answering, JSON.stringify(profileIds));
+  }
+
+  /** The agents the conversation named for its answer, which it takes, so that they tag once. */
+  takeRoomAnswerTags(conversationId: string): { answering: string; profileIds: string[] } | undefined {
+    const row = this.db.query<{ answering: string; profile_ids: string }, [string]>("DELETE FROM room_answer_tags WHERE conversation_id = ? RETURNING answering, profile_ids").get(conversationId);
+    return row ? { answering: row.answering, profileIds: JSON.parse(row.profile_ids) as string[] } : undefined;
   }
 
   appendRoomMessage(message: Omit<RoomMessage, "seq">): RoomMessage {
@@ -1271,17 +1317,21 @@ export class Store {
     return (this.db.query("SELECT * FROM room_messages WHERE room_id = ? AND task_held = 'waiting' ORDER BY seq").all(roomId) as RoomMessageRow[]).map(toRoomMessage);
   }
 
-  /** The message under the same id, as written anew: what it says and how it ended change, and it moves to the end of the room. */
+  /** The message under the same id, as written anew: what it says, when, and how it ended change; its number, which agents may have read, stays. */
   rewriteRoomMessage(message: Omit<RoomMessage, "seq">): RoomMessage {
-    const seq = this.nextRoomSeq(message.roomId);
     this.db
-      .query("UPDATE room_messages SET seq = ?, at = ?, text = ?, tags = ?, ended = ?, tags_dropped = ? WHERE id = ?")
-      .run(seq, message.at, message.text, JSON.stringify(message.tags), message.ended ?? null, message.tagsDropped ? JSON.stringify(message.tagsDropped) : null, message.id);
-    return { ...message, seq };
+      .query("UPDATE room_messages SET at = ?, text = ?, tags = ?, ended = ?, tags_dropped = ? WHERE id = ?")
+      .run(message.at, message.text, JSON.stringify(message.tags), message.ended ?? null, message.tagsDropped ? JSON.stringify(message.tagsDropped) : null, message.id);
+    return this.findRoomMessage(message.id)!;
+  }
+
+  /** The number of the room's latest message, 0 while it has none. */
+  lastRoomSeq(roomId: string) {
+    return (this.db.query("SELECT COALESCE(MAX(seq), 0) AS last FROM room_messages WHERE room_id = ?").get(roomId) as { last: number }).last;
   }
 
   private nextRoomSeq(roomId: string) {
-    return (this.db.query("SELECT COALESCE(MAX(seq), 0) + 1 AS next FROM room_messages WHERE room_id = ?").get(roomId) as { next: number }).next;
+    return this.lastRoomSeq(roomId) + 1;
   }
 
   listRoomMessages(roomId: string): RoomMessage[] {
@@ -1863,12 +1913,27 @@ export class Store {
 
   /** The owner first. */
   listPeople(): Person[] {
-    const rows = this.db.query("SELECT id, name, color FROM people ORDER BY rowid").all() as { id: string; name: string; color: string | null }[];
-    return rows.map(({ id, name, color }) => ({ id, name, color: isPastel(color) ? color : null }));
+    const rows = this.db.query("SELECT id, name, color, number FROM people ORDER BY rowid").all() as { id: string; name: string; color: string | null; number: number }[];
+    return rows.map(({ id, name, color, number }) => ({ id, name, color: isPastel(color) ? color : null, number }));
   }
 
-  insertPerson({ id, name, color }: Person) {
-    this.db.query("INSERT INTO people (id, name, color) VALUES (?, ?, ?)").run(id, name, color);
+  /** With a number of its own, which no other person has. */
+  insertPerson({ id, name, color }: Omit<Person, "number">) {
+    this.db.query("INSERT INTO people (id, name, color, number) VALUES (?, ?, ?, ?)").run(id, name, color, this.freePersonNumber());
+  }
+
+  private freePersonNumber() {
+    const taken = new Set((this.db.query("SELECT number FROM people WHERE number IS NOT NULL").all() as { number: number }[]).map(({ number }) => number));
+    const free = PERSON_NUMBERS.filter((number) => !taken.has(number));
+    if (free.length === 0) throw new Error("Every person number is taken.");
+    return free[Math.floor(Math.random() * free.length)]!;
+  }
+
+  /** People from before they had numbers get theirs. */
+  private numberPeople() {
+    const unnumbered = this.db.query("SELECT id FROM people WHERE number IS NULL ORDER BY rowid").all() as { id: string }[];
+    unnumbered.forEach(({ id }) => this.db.query("UPDATE people SET number = ? WHERE id = ?").run(this.freePersonNumber(), id));
+    this.db.run("CREATE UNIQUE INDEX IF NOT EXISTS people_by_number ON people(number)");
   }
 
   /** The first person, made with the database. */
@@ -1899,7 +1964,7 @@ export class Store {
   }
 
   private addOwner() {
-    this.db.query("INSERT INTO people (id, name, color) VALUES (?, '', NULL)").run(crypto.randomUUID());
+    this.insertPerson({ id: crypto.randomUUID(), name: "", color: null });
   }
 
   /** Every device that joined before devices belonged to people is the owner's. */

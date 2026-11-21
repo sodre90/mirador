@@ -208,6 +208,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.rename": true,
   "room.set-agents": true,
   "room.set-permissions": true,
+  "room.set-workspace": true,
   "room.set-person-role": true,
   "room.remove-person": true,
   "room.invite": true,
@@ -303,9 +304,9 @@ let hostOutput = "";
 let port = 0;
 let profile: Profile;
 let workspace: Workspace;
-const mia: Person = { id: crypto.randomUUID(), name: "Mia", color: "mint" };
-const gus: Person = { id: crypto.randomUUID(), name: "Gus", color: "sky" };
-const stan: Person = { id: crypto.randomUUID(), name: "Stan", color: null };
+const mia: Omit<Person, "number"> = { id: crypto.randomUUID(), name: "Mia", color: "mint" };
+const gus: Omit<Person, "number"> = { id: crypto.randomUUID(), name: "Gus", color: "sky" };
+const stan: Omit<Person, "number"> = { id: crypto.randomUUID(), name: "Stan", color: null };
 const tokens: Record<string, string> = {};
 let owner: Page;
 let miaPage: Page;
@@ -673,9 +674,16 @@ describe("a person other than the owner", () => {
     for (const name of takenForMia) expect({ name, problem: problemOf(await settingOwnProfile(miaPage, name)) }).toEqual({ name, problem: "person-name-taken" });
     expect(problemOf(await settingOwnProfile(miaPage, "\u202EnnA"))).toBe("person-name-reorders");
     expect(problemOf(await settingOwnProfile(miaPage, "B\u0443ilder"))).toBe("person-name-mixes-scripts");
-    const takenForStan = ["ANN", "owner", "Someone without a name", "You"];
+    const takenForStan = ["ANN", "owner", "Someone without a name", "Someone without a name 4821", "You"];
     for (const name of takenForStan) expect({ name, problem: problemOf(await settingOwnProfile(stanPage, name)) }).toEqual({ name, problem: "person-name-taken" });
     expect(problemOf(await settingOwnProfile(owner, "Builder"))).toBeNull();
+    expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
+  });
+
+  test("leaves the owner no name another person goes by, nor one that reads as someone without a name", async () => {
+    for (const name of ["mia  r", "stan\u200B", "Someone without a name 1234", "Alguien sin nombre \u0664\u0662"]) {
+      expect({ name, problem: problemOf(await settingOwnProfile(owner, name)) }).toEqual({ name, problem: "person-name-taken" });
+    }
     expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
   });
 
@@ -848,7 +856,7 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     dora = { personId: snapshot.you, token, deviceId, page };
     expect(snapshot.you).not.toBe(snapshot.ownerId);
     expect(snapshot.rooms.map(({ id, people }) => ({ id, people }))).toEqual([{ id: roomC.id, people: [{ personId: dora.personId, role: "member" }] }]);
-    expect(snapshot.people.find(({ id }) => id === dora.personId)).toEqual({ id: dora.personId, name: "Dora", color: "mint" });
+    expect(snapshot.people.find(({ id }) => id === dora.personId)).toEqual({ id: dora.personId, name: "Dora", color: "mint", number: expect.any(Number) });
     await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomC.id && room.people.some(({ personId, role }) => personId === dora.personId && role === "member")), mark);
     await owner.waitFor(isType("room-invites.listed", ({ invites }) => !invites.some(({ id }) => id === invite.id)), mark);
     const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => devices.some(({ id }) => id === deviceId)), mark);

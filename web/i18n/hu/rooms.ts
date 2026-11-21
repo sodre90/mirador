@@ -9,7 +9,7 @@ export const rooms: Messages["rooms"] = {
   editRoom: "Szoba beállításai",
   name: "Szoba neve",
   workspace: "Munkaterület",
-  workspaceHint: "A szoba ágensei itt dolgoznak.",
+  workspaceHint: "A szoba ágensei itt dolgoznak. Ha megváltoztatod, mindegyik elölről kezdi ott, és újra megismeri a szobát.",
   agents: "Ágensek",
   agentsHint: "Egy üzenet csak akkor jut el egy ágenshez, ha @-cal megjelölöd benne.",
   noProfiles: "Előbb készíts egy profilt, hogy legyen ágens a szobához.",

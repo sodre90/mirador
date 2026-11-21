@@ -6,7 +6,7 @@ import { isHidden, machinesSeen } from "../shared/machines.ts";
 import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace, type WorkspaceGroup } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { groupHolds, groupsWithPaths, shownGroupOf, sidebarItems } from "../shared/sidebar-order.ts";
-import { countWaiting } from "../shared/waiting.ts";
+import { countWaiting, roomsWaitingFor } from "../shared/waiting.ts";
 import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
@@ -599,7 +599,7 @@ export function App() {
     status === "open",
     openConversation,
   );
-  useTabTitle(countWaiting(state.conversations));
+  useTabTitle(countWaiting(state.conversations) + roomsWaitingFor(state).size);
 
   useEffect(() => {
     const selectFromHash = () => {

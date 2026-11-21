@@ -1,4 +1,5 @@
 import { useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { namelessPerson } from "../shared/people.ts";
 import { t } from "./i18n/index.ts";
 import { inView, toggledInView, type PaneLayout } from "./layout.ts";
 import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
@@ -125,7 +126,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
       </div>
       {ownProfileOpen && you && (
         <Modal label={t.settings.ownProfile.title} className="own-profile-dialog" onClose={() => setOwnProfileOpen(false)}>
-          <OwnProfileSettings person={you} nameless={t.rooms.nameless} />
+          <OwnProfileSettings person={you} nameless={namelessPerson(t.rooms.nameless, you)} />
         </Modal>
       )}
     </div>

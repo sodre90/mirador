@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
@@ -11,7 +12,7 @@ const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in
 const answerSaying = (page: Page, text: string) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".message.agent", { hasText: text }) });
 const thread = (page: Page) => page.getByRole("complementary", { name: "Thread of Builder" });
 /** A message of the owner's as an agent is sent it: a line with its number, its author's role and name and the time, then its text after "> ". */
-const framed = (text: string) => `#\\d+ \\[owner\\] Owner, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC:\\n> ${literally(text)}\\n`;
+const framed = (text: string, author = "\\[owner\\] Owner") => `#\\d+ ${author}, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC:\\n> ${literally(text)}\\n`;
 
 const isRunning = (pid: number) => {
   try {
@@ -22,8 +23,11 @@ const isRunning = (pid: number) => {
   }
 };
 
-/** A test host whose Builder is the fake agent, which closes and resumes sessions, logging its resumes, and keeps the prompts it is sent. */
-function hostWithBuilder(environment: Record<string, string> = {}) {
+/**
+ * A test host whose Builder is the fake agent, which closes and resumes sessions, logging its resumes, and keeps the
+ * prompts it is sent; or, `failingResumes`, says it resumes sessions but fails each time.
+ */
+function hostWithBuilder(environment: Record<string, string> = {}, { failingResumes = false } = {}) {
   const host = new TestHost({ fakePrograms: true, environment });
   const promptsFile = () => join(host.root, "builder-prompts");
   const agentLog = () => join(host.root, "builder-agent.log");
@@ -44,7 +48,8 @@ function hostWithBuilder(environment: Record<string, string> = {}) {
   };
   return {
     host,
-    profileEnvironment: () => [`FAKE_ACP_PROMPTS=${promptsFile()}`, "FAKE_ACP_RESUMES=1", `FAKE_ACP_LOG=${agentLog()}`, "FAKE_ACP_NAME=Builder"].join("\n"),
+    profileEnvironment: () =>
+      [`FAKE_ACP_PROMPTS=${promptsFile()}`, failingResumes ? "FAKE_ACP_RESUME_FAILS=1" : "FAKE_ACP_RESUMES=1", `FAKE_ACP_LOG=${agentLog()}`, "FAKE_ACP_NAME=Builder"].join("\n"),
     prompts: () => readFileSync(promptsFile(), "utf8"),
     agentLogLines: () => (existsSync(agentLog()) ? readFileSync(agentLog(), "utf8").split("\n").filter(Boolean) : []),
     /** Each prompt the agent took: the process that took it, and the session it went to. */
@@ -121,6 +126,14 @@ async function secondAnswerResumes(page: Page, builder: Builder, first: Awaited<
   await thread(page).getByRole("button", { name: "Close thread" }).click();
 }
 
+/** The resumed session keeps its canvas tools: a page it shows lands on the room's canvas. */
+async function showsAPageAfterResuming(page: Page) {
+  await tagBuilder(page, `CANVAS show ${JSON.stringify({ title: "After the resume", html: "<h1>Still drawing</h1>" })}`);
+  await expect(page.locator(".canvas-panel:visible .canvas-title")).toHaveText("After the resume");
+  await expect(page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1")).toHaveText("Still drawing");
+  await expect(page.locator(".room-timeline")).not.toContainText("No canvas server was given");
+}
+
 test.describe("a room's agent whose process stopped once it sat idle", () => {
   const builder = hostWithBuilder({ MIRADOR_ROOM_AGENT_IDLE_MS: String(ROOM_AGENT_IDLE_MS) });
 
@@ -129,6 +142,30 @@ test.describe("a room's agent whose process stopped once it sat idle", () => {
     const first = await firstAnswer(page, builder);
     await expect.poll(() => isRunning(first.pid), { message: "the agent's process stops once it sat idle", timeout: 20_000 }).toBe(false);
     await secondAnswerResumes(page, builder, first);
+    await showsAPageAfterResuming(page);
+  });
+});
+
+test.describe("a room's agent that can't resume its session", () => {
+  const builder = hostWithBuilder({ MIRADOR_ROOM_AGENT_IDLE_MS: String(ROOM_AGENT_IDLE_MS) }, { failingResumes: true });
+
+  test("tagged again on a new session, is introduced to the room again with its messages so far, its own answer among them", async ({ page }) => {
+    await openRoomWithBuilder(page, builder);
+    const first = await firstAnswer(page, builder);
+    await expect.poll(() => isRunning(first.pid), { message: "the agent's process stops once it sat idle", timeout: 20_000 }).toBe(false);
+    await write(page, "The build went green meanwhile");
+    await tagBuilder(page, "SAY Second answer");
+    await expect(answerSaying(page, "Second answer").locator(".room-quote")).toContainText("@Builder SAY Second answer");
+
+    const sentAgain = builder.prompts().slice(first.promptsSoFar);
+    expect(sentAgain).toContain('You are an attendee of the room "Launch"');
+    expect(sentAgain).toContain("There you are the agent Builder: messages of [agent] Builder are your own.");
+    expect(sentAgain).toMatch(
+      new RegExp(
+        `${literally(ROOM_MESSAGES_HEADING)}\\n${framed("Morning all")}${framed("@Builder SAY First answer")}${framed("First answer", "\\[agent\\] Builder")}${framed("The build went green meanwhile")}${framed("@Builder SAY Second answer")}$`,
+      ),
+    );
+    expect(sentAgain.split(ROOM_MESSAGES_HEADING), "the introduction stands in for the catch-up").toHaveLength(2);
   });
 });
 
@@ -144,5 +181,27 @@ test.describe("a room's agent across a host restart", () => {
     await expect(page.getByRole("heading", { name: "# Launch" })).toBeVisible();
     expect(isRunning(first.pid), "the host's stop ended the agent's process").toBe(false);
     await secondAnswerResumes(page, builder, first);
+    await showsAPageAfterResuming(page);
+  });
+});
+
+test.describe("a thread of a room's agent whose conversation went on long after it", () => {
+  const builder = hostWithBuilder();
+  /** Turns of a little over 250 KB each, of which a page gets 16 at a time: the thread's answer lies two parts back. */
+  const LATER_TURNS = 40;
+
+  test("shows the agent's work on the thread's message, from parts of the conversation the page did not hold", async ({ page }) => {
+    await openRoomWithBuilder(page, builder);
+    await firstAnswer(page, builder);
+    await builder.host.stop();
+    const database = join(builder.host.dataDir, "state.sqlite");
+    const conversationId = execFileSync("bun", [join(import.meta.dirname, "room-agent-conversations.ts"), database, "Launch"], { encoding: "utf8" }).trim();
+    execFileSync("bun", [join(import.meta.dirname, "seed-paged-conversation.ts"), database, conversationId, String(LATER_TURNS), "250000", "a later message"]);
+    await builder.host.start();
+    await reloadFromRestartedHost(page);
+
+    await answerSaying(page, "First answer").getByRole("button", { name: "Open thread" }).click();
+    await expect(thread(page).locator(".message.agent")).toHaveText(["First answer"]);
+    await expect(thread(page)).not.toContainText("reply 39");
   });
 });

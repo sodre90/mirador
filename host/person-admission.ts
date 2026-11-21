@@ -204,6 +204,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.rename": OWNER_ONLY,
   "room.set-agents": OWNER_ONLY,
   "room.set-permissions": OWNER_ONLY,
+  "room.set-workspace": OWNER_ONLY,
   "room.set-person-role": OWNER_ONLY,
   "room.remove-person": OWNER_ONLY,
   "room.invite": OWNER_ONLY,

@@ -303,6 +303,32 @@ describe("pushing notifications", () => {
     expect(posted.map(({ request }) => request.kind)).toEqual(["alert"]);
   });
 
+  test("a notification read elsewhere, as on a page showing its room, is cleared at once unless its conversation still waits", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(["finished", "question"]));
+    await pushes.notify({ ...notification, kind: "finished" });
+    await pushes.read(["c1", "never-told"]);
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear"]);
+    await pushes.read(["c1"]);
+    expect(posted).toHaveLength(2);
+
+    await pushes.notify({ ...notification, id: "n2" });
+    await pushes.waitingChanged(new Set(["c1"]));
+    await pushes.read(["c1"]);
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear", "alert"]);
+    await pushes.waitingChanged(new Set());
+    expect(posted.map(({ request }) => request.kind)).toEqual(["alert", "clear", "alert", "clear"]);
+  });
+
+  test("a notification read before its push went out isn't pushed", async () => {
+    const { pushes, posted } = pushingHost();
+    pushes.register("phone", registration(["finished"]));
+    const pushed = pushes.notify({ ...notification, kind: "finished" });
+    await pushes.read(["c1"]);
+    await pushed;
+    expect(posted).toHaveLength(0);
+  });
+
   test("a revoked phone's registration goes with it", () => {
     const { store, pushes } = pushingHost();
     pushes.register("phone", registration());

@@ -20,7 +20,7 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
   pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
   avatar: null,
-  people: [{ id: "owner", name: "", color: null }],
+  people: [{ id: "owner", name: "", color: null, number: 1000 }],
   ownerId: "owner",
   you: "owner",
   canvasAssetsOrigin: "http://127.0.0.1:4601",

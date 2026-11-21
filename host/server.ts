@@ -68,7 +68,7 @@ import { deviceName, inviteKey, type DeviceService } from "./devices.ts";
 import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderAndOverallLimit, SenderLimit, senderForLimits, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
-import { RoomService } from "./rooms.ts";
+import type { RoomService } from "./rooms.ts";
 import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
@@ -76,7 +76,7 @@ import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
 import { namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { inviteIn, LONGEST_MACHINE_NAME, machineAddress } from "../shared/machines.ts";
-import { NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personName } from "../shared/people.ts";
+import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { oneLine, shownAsWritten } from "../shared/written-text.ts";
 import { placesIn, type InviteTunnel } from "../shared/tunnel.ts";
@@ -157,6 +157,7 @@ export interface HostServices {
   p2p: PeerToPeer | null;
   pushes: PushNotifications;
   notifications: SystemNotifications;
+  rooms: RoomService;
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
@@ -251,29 +252,13 @@ export function startServer(services: HostServices) {
     p2p,
     pushes,
     notifications,
+    rooms,
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
-  const rooms = new RoomService(
-    store,
-    hub,
-    {
-      startInRoom: (roomId, workspaceId, launch, title) => conversations.startInRoom(roomId, workspaceId, launch, title),
-      send: (conversationId, text, imageIds, options) => conversations.send(conversationId, text, imageIds, options),
-      delete: (conversationId) => deleteConversation(conversationId),
-      waitingPermissions: (conversationId) => conversations.waitingPermissions(conversationId),
-      answerPermission: (conversationId, permissionId, allowed) => conversations.answerPermission(conversationId, permissionId, allowed),
-      followRoomPreset: (conversationId) => conversations.followRoomPreset(conversationId),
-    },
-    notifications,
-    config.dataDir,
-  );
   hub.showsPeople(personView(store));
   const roomInvites = new RoomInvites(store, devices, ownerKey.publicKey);
   rooms.hearPeopleOutOfEveryRoomWith(signOutPeopleInNoRoom);
-  conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
-  conversations.followsRoomPermissionsOf(rooms);
-  mcp.offersRoomToolsFrom(rooms);
   const { network } = config.reachability;
   const localHosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
   const publicHost = config.publicOrigin ? [new URL(config.publicOrigin).host] : [];
@@ -1144,10 +1129,6 @@ export function startServer(services: HostServices) {
   }
 
   function deleteWorkspace(workspaceId: string, { keepsUncommittedWork = false } = {}) {
-    rooms
-      .list()
-      .filter((room) => room.workspaceId === workspaceId)
-      .forEach(({ id }) => rooms.delete(id));
     conversations
       .list()
       .filter((conversation) => conversation.workspaceId === workspaceId)
@@ -1157,8 +1138,12 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "workspace.deleted", workspaceId });
   }
 
-  /** Removing a workspace deletes its conversations' worktrees, so one holding uncommitted files asks first. */
+  /**
+   * Removing a workspace deletes its conversations' worktrees, so one holding uncommitted files asks first. One that rooms
+   * work in stays: the owner gives each room another workspace, or deletes it, first.
+   */
   async function deleteWorkspaceOrAsk(socket: BrowserSocket, workspaceId: string, discardsUncommitted: boolean) {
+    rooms.assertNoneWorkIn(workspaceId);
     const uncommittedFiles = discardsUncommitted ? 0 : await conversations.uncommittedFilesLostInWorkspace(workspaceId);
     if (uncommittedFiles > 0) return hub.send(socket, { type: "workspace.delete-asks", workspaceId, uncommittedFiles });
     deleteWorkspace(workspaceId, { keepsUncommittedWork: !discardsUncommitted });
@@ -1271,19 +1256,24 @@ export function startServer(services: HostServices) {
   }
 
   /**
-   * A person other than the owner may change it only so often, and may not take a name that shows its letters in
-   * another order than they are written, mixes alphabets in a word, or reads as one they see: the owner's, an agent's or
-   * another person's of their rooms, or one the host and pages say in an author's place. What they write is kept as
-   * everyone reads it.
+   * No one may take a name that reads as one the host and pages say in an author's place, or as another person's they
+   * see: the owner sees everyone, a person the owner and the people of their rooms, whose agents' names they may not take
+   * either. A person other than the owner may change it only so often, and may not take a name that shows its letters in
+   * another order than they are written or mixes alphabets in a word. What they write is kept as everyone reads it.
    */
   function setOwnProfile(personId: string, name: string, color: Pastel | null) {
     if (color !== null && !isPastel(color)) throw new HostProblemError({ code: "unknown-colour", value: color });
-    if (personId === store.ownerId()) return keepOwnProfile(personId, personName(name), color);
+    if (personId === store.ownerId()) {
+      const named = personName(name);
+      const renamed = named !== store.listPeople().find(({ id }) => id === personId)?.name;
+      if (renamed && (readsAsMiradorsWords(named) || nameTaken(named, namesOfPeopleBut(personId)))) throw new HostProblemError({ code: "person-name-taken" });
+      return keepOwnProfile(personId, named, color);
+    }
     if (!changingOwnProfile.allows(personId)) throw new HostProblemError({ code: "profile-changing-too-fast" });
     const refused = nameRefused(name);
     if (refused) throw new HostProblemError({ code: refused });
     const named = personName(shownAsWritten(name));
-    if (nameTaken(named, namesSeenBy(personId))) throw new HostProblemError({ code: "person-name-taken" });
+    if (readsAsMiradorsWords(named) || nameTaken(named, namesOthersGoBy(store, personId))) throw new HostProblemError({ code: "person-name-taken" });
     keepOwnProfile(personId, named, color);
     if (store.forgetNameClashesOf(personId)) store.roomsOf(personId).forEach((room) => hub.broadcast({ type: "room.upserted", room }));
   }
@@ -1293,7 +1283,7 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "people.listed", people: store.listPeople() });
   }
 
-  const namesSeenBy = (personId: string) => [...namesOthersGoBy(store, personId), ...NAMES_KEPT_BY_MIRADOR];
+  const namesOfPeopleBut = (personId: string) => store.listPeople().flatMap(({ id, name }) => (id === personId ? [] : [name]));
 
   /** The picture every page shows next to the user's messages; null leaves the person icon. */
   function setAvatar(image: string | null) {
@@ -1885,6 +1875,7 @@ export function startServer(services: HostServices) {
         const { conversationId, attentive, sideChatId = null, roomId = null } = message;
         socket.data.presence = { conversationId, attentive, sideChatId, roomId };
         if (attentive) [conversationId, sideChatId].forEach((seen) => seen && conversations.markSeen(seen));
+        if (attentive && roomId) notifications.roomRead(roomId);
         return;
       }
       case "terminal.clear":
@@ -2019,6 +2010,8 @@ export function startServer(services: HostServices) {
         return rooms.rename(message.roomId, message.name);
       case "room.set-agents":
         return rooms.setAgents(message.roomId, message.profileIds);
+      case "room.set-workspace":
+        return rooms.setWorkspace(message.roomId, message.workspaceId);
       case "room.set-permissions":
         return rooms.setPermissions(message.roomId, message.permissions);
       case "room.set-person-role":
@@ -2038,7 +2031,8 @@ export function startServer(services: HostServices) {
       case "room.approve":
         return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
       case "room.answer-task":
-        return rooms.answerTask(message.roomId, message.messageId, message.answer, socket.data.personId);
+        rooms.answerTask(message.roomId, message.messageId, message.answer, socket.data.personId);
+        return notifications.roomRead(message.roomId);
       case "room.set-peoples-tasks-wait":
         return rooms.setPeoplesTasksWait(message.roomId, message.wait);
       case "room.delete":

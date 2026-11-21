@@ -196,6 +196,7 @@ export const problems: Messages["problems"] = {
   answerAllQuestions: (count) => `Beantworte alle ${count} Fragen.`,
   tabTerminalLimit: (count) => `Ein Tab fasst höchstens ${count} Terminals.`,
   roomMessageTooLong: (most) => `Eine Nachricht im Raum fasst höchstens ${most} Zeichen.`,
+  workspaceHasRooms: (rooms) => `In diesem Arbeitsbereich arbeiten Räume: ${rooms.join(", ")}. Gib jedem in seinen Einstellungen einen anderen Arbeitsbereich oder lösche ihn, bevor du diesen entfernst.`,
   unknownWorkspace: (id) => `Unbekannter Arbeitsbereich: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} hat keine Einstellung ${setting}.`,
   pluginNotTurnable: (plugin) => `${plugin} ist kein Plugin, das ein Profil ein- oder ausschalten kann.`,

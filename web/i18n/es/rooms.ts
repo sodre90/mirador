@@ -10,7 +10,7 @@ export const rooms: Messages["rooms"] = {
   editRoom: "Configuración de la sala",
   name: "Nombre de la sala",
   workspace: "Espacio de trabajo",
-  workspaceHint: "Los agentes de la sala trabajan aquí.",
+  workspaceHint: "Los agentes de la sala trabajan aquí. Si lo cambias, cada uno empieza de nuevo allí y se le presenta la sala otra vez.",
   agents: "Agentes",
   agentsHint: "Un mensaje llega a un agente solo cuando lo etiqueta con @.",
   noProfiles: "Crea primero un perfil, para tener un agente para la sala.",

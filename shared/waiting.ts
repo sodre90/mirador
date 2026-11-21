@@ -1,4 +1,5 @@
 import type { Conversation, WaitingFor } from "./model.ts";
+import type { RoomApproval, RoomTaskApproval } from "./rooms.ts";
 
 export type WaitingTone = "decision" | "failed" | "done" | "unread";
 
@@ -47,6 +48,24 @@ export function summarizeWaiting(waiting: WaitingConversation[]): WaitingSummary
 }
 
 export const countWaiting = (conversations: Conversation[]) => conversations.filter(isWaiting).length;
+
+/** What a page knows of the rooms that may wait for the person it shows them to. */
+export interface RoomsWaiting {
+  you: string | null;
+  roomApprovals: RoomApproval[];
+  roomTasksWaiting: RoomTaskApproval[];
+  roomConversations: Conversation[];
+}
+
+/**
+ * The rooms where an agent waits for you to answer its request or question, or a person's task waits for you to allow
+ * it. Only the owner's page holds the agents' conversations, whose questions the owner alone answers.
+ */
+export const roomsWaitingFor = ({ you, roomApprovals, roomTasksWaiting, roomConversations }: RoomsWaiting) =>
+  new Set([
+    ...[...roomApprovals, ...roomTasksWaiting].filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }) => roomId),
+    ...roomConversations.flatMap(({ roomId, waitingFor }) => (roomId && waitingFor === "question" ? [roomId] : [])),
+  ]);
 
 /** Decisions first, since those agents are stuck until you answer; otherwise in the order given. */
 export const waitingByUrgency = (conversations: Conversation[]) =>

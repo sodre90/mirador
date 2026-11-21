@@ -193,6 +193,7 @@ export const problems = {
   answerAllQuestions: (count: number) => `Answer all ${count} questions.`,
   tabTerminalLimit: (count: number) => `A tab holds at most ${count} terminals.`,
   roomMessageTooLong: (most: number) => `A room message holds at most ${most} characters.`,
+  workspaceHasRooms: (rooms: string[]) => `Rooms work in this workspace: ${rooms.join(", ")}. Give each another workspace in its settings, or delete it, before you remove this one.`,
   unknownWorkspace: (id: string) => `Unknown workspace ${id}`,
   pluginHasNoSetting: (plugin: string, setting: string) => `${plugin} has no setting ${setting}.`,
   pluginNotTurnable: (plugin: string) => `${plugin} isn't a plugin a profile can turn on or off.`,

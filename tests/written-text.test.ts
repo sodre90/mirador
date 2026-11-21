@@ -35,4 +35,14 @@ describe("text as everyone reads it the same", () => {
     expect(shownAsWritten(`top${"\n".repeat(200)}bottom`)).toBe("top\n\n\nbottom");
     expect(shownAsWritten("top\n \n\u2800\n\t\n\nbottom\n\n\nend")).toBe("top\n\n\nbottom\n\n\nend");
   });
+
+  test("keeps the joiners and presentation selectors that make one emoji of several, and only those", () => {
+    const family = "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}";
+    const healthWorker = "\u{1F469}\u200D\u2695\uFE0F";
+    const darkSkinnedCook = "\u{1F9D1}\u{1F3FF}\u200D\u{1F373}";
+    const redHeart = "\u2764\uFE0F";
+    expect([family, healthWorker, darkSkinnedCook, redHeart].map(shownAsWritten)).toEqual([family, healthWorker, darkSkinnedCook, redHeart]);
+    expect(shownAsWritten("a\u200Db\u{1F468}\u200Dx\u200D\u{1F469}a\uFE0F")).toBe("ab\u{1F468}x\u{1F469}a");
+    expect(shownAsWritten("\u{1F468}\u{E0041}\u200D\u{1F469}")).toBe("\u{1F468}\u{1F469}");
+  });
 });

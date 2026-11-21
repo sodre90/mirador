@@ -11,7 +11,7 @@ export const rooms = {
   editRoom: "Room settings",
   name: "Room name",
   workspace: "Workspace",
-  workspaceHint: "The room's agents work here.",
+  workspaceHint: "The room's agents work here. Changing it starts each of them afresh there, introduced to the room again.",
   agents: "Agents",
   agentsHint: "A message reaches an agent only when it tags it with @.",
   noProfiles: "Make a profile first, to have an agent for the room.",

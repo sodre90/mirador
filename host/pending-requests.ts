@@ -14,26 +14,6 @@ function stringField(value: unknown, key: string) {
 
 const shortened = (text: string) => cutWithEllipsis(text, COMMAND_SHOWN);
 
-/** `kindSeenBefore`: the kind of the tool call the request is about, from the agent's updates, for an agent that leaves it off the request. */
-export function pendingPermission(
-  permissionId: string,
-  { toolCall, options }: Pick<acp.RequestPermissionRequest, "toolCall" | "options">,
-  kindSeenBefore: acp.ToolKind | null = null,
-): PendingPermissionRequest {
-  const title = toolCall.title ?? "a tool";
-  const toolKind = toolCall.kind ?? kindSeenBefore;
-  const runsCommand = toolKind === "execute";
-  return {
-    kind: "permission",
-    permissionId,
-    title,
-    toolKind,
-    command: runsCommand ? shortened(stringField(toolCall.rawInput, "command") ?? title) : null,
-    description: runsCommand ? stringField(toolCall.rawInput, "description") : null,
-    options,
-  };
-}
-
 /** The request as the host judges it by itself: with the whole command, and every path its locations and diffs name. */
 export function askedPermissionOf(toolCall: acp.ToolCallUpdate, kindSeenBefore: acp.ToolKind | null): AskedPermission {
   const toolKind = toolCall.kind ?? kindSeenBefore;
@@ -44,6 +24,23 @@ export function askedPermissionOf(toolCall: acp.ToolCallUpdate, kindSeenBefore: 
     title,
     command: toolKind === "execute" ? (stringField(toolCall.rawInput, "command") ?? title) : null,
     paths: [...new Set([...(toolCall.locations ?? []).map(({ path }) => path), ...diffPaths])],
+  };
+}
+
+/** The request as pages list it, from what the host judged of it: a command cut short, with the agent's description of it. */
+export function pendingPermission(
+  permissionId: string,
+  { toolKind, title, command }: AskedPermission,
+  { toolCall, options }: Pick<acp.RequestPermissionRequest, "toolCall" | "options">,
+): PendingPermissionRequest {
+  return {
+    kind: "permission",
+    permissionId,
+    title,
+    toolKind,
+    command: command === null ? null : shortened(command),
+    description: command === null ? null : stringField(toolCall.rawInput, "description"),
+    options,
   };
 }
 

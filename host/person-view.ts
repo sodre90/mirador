@@ -19,7 +19,7 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, c
   id,
   name,
   workspaceId: "",
-  agents: agents.map(({ profileId, conversationId }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId) })),
+  agents: agents.map(({ profileId, conversationId, answering }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId), answering })),
   permissions,
   people: people.flatMap(({ personId: each, role }) => (each === personId ? [{ personId, role }] : [])),
   peoplesTasksWait,

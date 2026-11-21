@@ -7,6 +7,7 @@ import type {
   CanvasAnswer,
   CanvasItem,
   CanvasItemBase,
+  MadeInRoom,
   ShowItem,
 } from "../../shared/model.ts";
 import type { ConversationService } from "../conversations.ts";
@@ -19,7 +20,7 @@ import { saveIntoWorkspace } from "./save-to-project.ts";
 import { noteOfPageErrors, type CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { workingCopyOf } from "../worktrees.ts";
-import { roomMessageAnsweredAt, shownOnRoomCanvas } from "../../shared/rooms.ts";
+import { roomMessageAnswered, shownOnRoomCanvas } from "../../shared/rooms.ts";
 
 const RENDER_REPORT_TIMEOUT_MS = 6000;
 
@@ -82,6 +83,7 @@ export class CanvasService {
       html: request.html,
       status: "shown",
       createdAt: Date.now(),
+      ...this.madeInRoom(conversationId),
     });
     const render = await this.waitForRenderReport(item);
     if (render === "no-viewer") this.awaitFirstView(item.id);
@@ -100,6 +102,7 @@ export class CanvasService {
       ...(installsPluginOffer && { installsPluginOffer }),
       status: "waiting",
       createdAt: Date.now(),
+      ...this.madeInRoom(conversationId),
     });
     this.notifications.notify(conversationId, { kind: "question", question: item.title });
     return item;
@@ -218,10 +221,15 @@ export class CanvasService {
     else this.conversations.send(item.conversationId, answerAsMessage(item, given), [], { authorId, ...this.roomMessageAsking(item) }).catch(() => {});
   }
 
-  private roomMessageAsking(item: AskItem) {
-    if (!this.store.findConversation(item.conversationId)?.roomId) return {};
-    const roomMessageId = roomMessageAnsweredAt(this.store.listEventsOfTypes(item.conversationId, ["user-message"]), item.createdAt);
-    return roomMessageId === undefined ? {} : { roomMessageId, afterTurn: true };
+  private roomMessageAsking({ madeInRoom }: AskItem) {
+    return madeInRoom ? { roomMessageId: madeInRoom.answering, afterTurn: true } : {};
+  }
+
+  /** In a room, the message the agent's turn answers as it makes the item, and how far the room had got by then. */
+  private madeInRoom(conversationId: string): { madeInRoom?: MadeInRoom } {
+    const roomId = this.store.findConversation(conversationId)?.roomId;
+    const answering = roomId && roomMessageAnswered(this.store.listEventsOfTypes(conversationId, ["user-message"]));
+    return answering ? { madeInRoom: { answering, afterSeq: this.store.lastRoomSeq(roomId) } } : {};
   }
 
   private pluginInstaller: PluginInstaller = {

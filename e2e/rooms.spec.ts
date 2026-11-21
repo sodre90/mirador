@@ -1,7 +1,7 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, literally, signIn } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, literally, removeWorkspace, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -141,5 +141,58 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await dialog.getByRole("button", { name: "Confirm: Delete room" }).click();
     await expect(page.locator(".sidebar .rooms li")).toHaveCount(0);
     await expect(page.getByText("No conversation selected")).toBeVisible();
+  });
+});
+
+test("a workspace a room works in stays until the room moves to another, where its agent starts afresh and is introduced again", async ({ page }) => {
+  const elsewhere = join(host.root, "elsewhere");
+  /** The fake agent's answer to FOLDER, which names the folder as the operating system resolves it. */
+  const workingIn = (folder: string) => `Working in ${realpathSync(folder)}`;
+  const moverPrompts = join(host.root, "mover-prompts");
+  mkdirSync(elsewhere, { recursive: true });
+  writeFileSync(moverPrompts, "");
+  await signInWithWorkspace(page, host);
+  await addWorkspaceFromSidebar(page, elsewhere);
+  const profiles = await createProfile(page, "Mover", `FAKE_ACP_PROMPTS=${moverPrompts}`, "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "New room" }).click();
+  const creating = page.getByRole("dialog", { name: "New room" });
+  await creating.getByLabel("Room name").fill("Moving");
+  await creating.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: "elsewhere" });
+  await creating.getByLabel("Mover").check();
+  await creating.getByRole("button", { name: "Create room" }).click();
+  const composer = page.getByRole("textbox", { name: "Write in Moving, @ tags an agent…" });
+  const tagMover = async (rest: string) => {
+    await composer.fill("@Mo");
+    await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: "@Mover" }).click();
+    await composer.pressSequentially(rest);
+    await composer.press("Enter");
+  };
+  await tagMover("FOLDER");
+  await expect(roomEntries(page).locator(".message.agent")).toHaveText([workingIn(elsewhere)]);
+
+  await test.step("removing the room's workspace is refused, naming the room", async () => {
+    await removeWorkspace(workspaceCard(page, elsewhere));
+    await expect(page.locator(".notices .notice")).toContainText("Rooms work in this workspace: Moving. Give each another workspace in its settings, or delete it, before you remove this one.");
+    await expect(workspaceCard(page, elsewhere)).toBeVisible();
+  });
+
+  await test.step("the room moves to another workspace, and its old one can go", async () => {
+    await page.getByRole("button", { name: "Settings of Moving" }).click();
+    const settings = page.getByRole("dialog", { name: "Room settings" });
+    await settings.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: "project" });
+    await settings.getByRole("button", { name: "Save" }).click();
+    await removeWorkspace(workspaceCard(page, elsewhere));
+    await expect(workspaceCard(page, elsewhere)).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "# Moving" })).toBeVisible();
+  });
+
+  await test.step("its agent starts afresh in the new workspace, introduced to the room again with what it said there", async () => {
+    const promptsBefore = readFileSync(moverPrompts, "utf8").length;
+    await tagMover("FOLDER");
+    await expect(roomEntries(page).locator(".message.agent")).toHaveText([workingIn(elsewhere), workingIn(host.projectDir)]);
+    const sentAfresh = readFileSync(moverPrompts, "utf8").slice(promptsBefore);
+    expect(sentAfresh).toContain('You are an attendee of the room "Moving"');
+    expect(sentAfresh).toMatch(new RegExp(`> ${literally(workingIn(elsewhere))}\\n#\\d+ \\[owner\\] Owner, [^\\n]*\\n> @Mover FOLDER\\n$`));
   });
 });

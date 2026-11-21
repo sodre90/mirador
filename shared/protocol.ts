@@ -402,6 +402,7 @@ export type ClientMessage =
   | { type: "room.set-agents"; roomId: string; profileIds: string[] }
   /** Its agents' conversations follow the preset from their next permission request on. */
   | { type: "room.set-permissions"; roomId: string; permissions: PermissionPreset }
+  | { type: "room.set-workspace"; roomId: string; workspaceId: string }
   /** Lets a person of this machine into the room with the role, or changes their role there. */
   | { type: "room.set-person-role"; roomId: string; personId: string; role: RoomRole }
   | { type: "room.remove-person"; roomId: string; personId: string }

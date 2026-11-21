@@ -195,6 +195,7 @@ export const problems: Messages["problems"] = {
   answerAllQuestions: (count) => `Válaszolj az összes kérdésre (${count}).`,
   tabTerminalLimit: (count) => `Egy lapon legfeljebb ${count} terminál lehet.`,
   roomMessageTooLong: (most) => `Egy szobaüzenet legfeljebb ${most} karakter lehet.`,
+  workspaceHasRooms: (rooms) => `Szobák dolgoznak ebben a munkaterületben: ${rooms.join(", ")}. A beállításaikban adj mindegyiknek másik munkaterületet, vagy töröld, mielőtt ezt eltávolítod.`,
   unknownWorkspace: (id) => `Ismeretlen munkaterület: ${id}`,
   pluginHasNoSetting: (plugin, setting) => `Ennek a bővítménynek (${plugin}) nincs ilyen beállítása: ${setting}.`,
   pluginNotTurnable: (plugin) => `Ezt a bővítményt (${plugin}) egy profil nem kapcsolhatja be vagy ki.`,

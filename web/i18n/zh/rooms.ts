@@ -9,7 +9,7 @@ export const rooms: Messages["rooms"] = {
   editRoom: "房间设置",
   name: "房间名称",
   workspace: "工作区",
-  workspaceHint: "房间的 Agent 在这里工作。",
+  workspaceHint: "房间的 Agent 在这里工作。更换后，每个 Agent 都会在新工作区重新开始，并再次了解这个房间。",
   agents: "Agent",
   agentsHint: "只有消息用 @ 标记了某个 Agent，消息才会送到它那里。",
   noProfiles: "先创建一个配置，房间才有 Agent。",

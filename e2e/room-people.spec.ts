@@ -5,7 +5,7 @@ import { PROBLEM_HEADER } from "../shared/host-problems.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Room } from "../shared/rooms.ts";
-import { addWorkspace, createProfile, lastAgentMessage, sendMessage, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, createProfile, lastAgentMessage, openSettings, sendMessage, signIn, startConversation } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -169,7 +169,7 @@ test("a person the owner lets into a room sees only that room on their own brows
   await test.step("Mia can't take the name of the room's agent, and is told why; she names herself anew, and the owner's page names her messages so", async () => {
     await miaPage.getByRole("button", { name: "Your profile" }).click();
     const profile = miaPage.getByRole("dialog", { name: "Your profile" });
-    await expect(profile).toContainText("Without a name, they say You to you and Someone without a name to everyone else.");
+    await expect(profile).toContainText(/Without a name, they say You to you and Someone without a name \d{4} to everyone else\./);
     const name = profile.getByLabel("Name");
     await name.fill("builder");
     await name.press("Enter");
@@ -177,6 +177,16 @@ test("a person the owner lets into a room sees only that room on their own brows
     await name.fill("Mia Rossi");
     await name.press("Enter");
     await expect(profile.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
+  });
+
+  await test.step("the owner can't take Mia's name either, and keeps their own", async () => {
+    const settings = await openSettings(page);
+    const name = settings.getByLabel("Name", { exact: true });
+    await name.fill("mia rossi");
+    await name.press("Enter");
+    await expect(settings.getByRole("alert")).toHaveText("That name is taken: the owner, an agent or another person here goes by it, or Mirador says it in a name's place. Choose another.");
+    await settings.getByRole("button", { name: "Close" }).click();
     await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
   });
 
@@ -192,4 +202,17 @@ test("a person the owner lets into a room sees only that room on their own brows
   expect(JSON.stringify(miaTraffic.received)).not.toContain(agentConversationId);
 
   await miaContext.close();
+
+  await test.step("two people without a name read apart in the room's settings, each by a number of their own", async () => {
+    host.admitPerson("");
+    host.admitPerson("");
+    await page.reload();
+    await page.getByRole("button", { name: "Settings of Launch" }).click();
+    const dialog = page.getByRole("dialog", { name: "Room settings" });
+    const nameless = dialog.locator(".room-person-choice > span").filter({ hasText: /^Someone without a name \d{4}$/ });
+    await expect(nameless).toHaveCount(2);
+    const [first, second] = await nameless.allTextContents();
+    expect(first).not.toBe(second);
+    await expect(dialog.getByLabel(`Role of ${first}`)).toHaveValue("");
+  });
 });

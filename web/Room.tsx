@@ -8,11 +8,13 @@ import {
   askedInThread,
   canvasItemsOfAnswers,
   eventsAnswering,
+  firstReachingTheAgent,
+  reachedAmong,
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomMessageLength,
   shownInRoom,
   taskWaits,
-  unanswered,
+  workPending,
   writtenByAgent,
   type Room,
   type RoomApproval,
@@ -20,20 +22,21 @@ import {
   type RoomMessage,
   type RoomMessageSentAlong,
   type RoomTaskApproval,
-
   type RoomThread,
   type RoomTimeline,
+  type WorkPending,
 } from "../shared/rooms.ts";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName } from "./Chat.tsx";
 import { connection } from "./connection.ts";
+import { useEarlierHistory } from "./earlier-history.ts";
 import type { EditRequest } from "./edit-approval.ts";
 import { hints } from "./hints.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
 import { ConversationWithSide } from "./SideChat.tsx";
-import type { AppAction, OpenConversation } from "./state.ts";
+import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -46,9 +49,9 @@ interface RoomAgentShown {
   name: string;
   profile: Profile | undefined;
   conversation: Conversation | undefined;
+  /** The room message the agent's turn under way answers. */
+  answering: string | null;
 }
-
-type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[] };
 
 const isBusy = (conversation: Conversation | undefined) => conversation?.status === "running" || conversation?.status === "starting";
 
@@ -356,6 +359,7 @@ const isGuestIn = (room: Room, you: string | null) => room.people.some(({ person
 function ThreadColumn({
   thread,
   timeline,
+  pending,
   agent,
   opened,
   agentsById,
@@ -367,6 +371,7 @@ function ThreadColumn({
 }: {
   thread: RoomThread;
   timeline: RoomTimeline;
+  pending: WorkPending[];
   agent: RoomAgentShown;
   opened: OpenConversation | undefined;
   agentsById: Map<string, RoomAgentShown>;
@@ -377,7 +382,8 @@ function ThreadColumn({
   onClose: () => void;
 }) {
   const asked = askedInThread(timeline, thread);
-  const pendingHere = unanswered(timeline).filter((pending) => pending.thread.id === thread.id);
+  const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
+  const pendingHere = pending.filter((each) => each.thread.id === thread.id);
   const workingOn = pendingHere.length > 0;
   const workingLine = pendingHere.every(({ message }) => taskWaits(message))
     ? words.taskWaits(agent.name)
@@ -402,6 +408,7 @@ function ThreadColumn({
         </button>
       </header>
       <div className="timeline">
+        {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
         {asked.map((message) => (
           <div key={message.id} className="room-thread-turn">
             <RoomEntry message={message} agentsById={agentsById} />
@@ -416,12 +423,21 @@ function ThreadColumn({
   );
 }
 
+/** Asks the host for earlier parts of the agent's conversation until they reach back to the room message, so its thread shows all the work on it. */
+function HistoryReachingBack({ opened, messageId }: { opened: OpenConversation; messageId: string }) {
+  const earlier = useEarlierHistory(opened);
+  const reached = reachedAmong(opened.events, messageId);
+  useEffect(() => {
+    if (!reached && earlier.available && !earlier.loading) earlier.load();
+  });
+  return null;
+}
+
 /**
  * What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it
  * works on it, waits for approval in it, comes to it later, or waits for its task to be allowed.
  */
-function workUnderWay(timeline: RoomTimeline, agentsById: Map<string, RoomAgentShown>, approvals: RoomApproval[]) {
-  const pending = unanswered(timeline);
+function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentShown>, approvals: RoomApproval[]) {
   const sent = pending.filter(({ message }) => !taskWaits(message));
   return pending.map(({ message, thread }) => {
     const agent = agentsById.get(thread.profileId);
@@ -464,9 +480,9 @@ export function RoomView({
   onOpenOnCanvas: (itemId: string) => void;
 }) {
   const [threadId, setThreadId] = useState<string | null>(null);
-  const agents = room.agents.map(({ profileId, conversationId }): RoomAgentShown => {
+  const agents = room.agents.map(({ profileId, conversationId, answering }): RoomAgentShown => {
     const profile = profiles.find(({ id }) => id === profileId);
-    return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId) };
+    return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId), answering };
   });
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
   const tagsAgents = !isGuestIn(room, you);
@@ -483,6 +499,7 @@ export function RoomView({
     () => (timeline ? canvasItemsOfAnswers(timeline.messages, timeline.canvas, (profileId) => room.agents.find((agent) => agent.profileId === profileId)?.conversationId) : new Map<string, CanvasItem[]>()),
     [timeline, room.agents],
   );
+  const pending = timeline ? workPending(timeline, room.agents) : [];
   const timelineEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     timelineEnd.current?.scrollIntoView({ block: "end" });
@@ -513,7 +530,7 @@ export function RoomView({
             </RoomEntry>
           );
         })}
-        {timeline && workUnderWay(timeline, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
+        {workUnderWay(pending, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <div ref={timelineEnd} />
       </div>
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
@@ -530,6 +547,7 @@ export function RoomView({
         key={thread.id}
         thread={thread}
         timeline={timeline}
+        pending={pending}
         agent={threadAgent}
         opened={threadConversations.find(({ conversationId }) => conversationId === threadConversationId)}
         agentsById={agentsById}

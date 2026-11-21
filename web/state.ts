@@ -57,6 +57,9 @@ export type SettingsPage = "appearance" | "conversations" | "agents" | "voice" |
 
 export type DevicesListed = Extract<ServerMessage, { type: "devices.listed" }>;
 
+/** A room's messages and threads, with the pages and questions of its canvas. */
+export type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[] };
+
 /** A plugin's tab in a workspace, as its host code last said. */
 export interface PluginTabState {
   seq: number;
@@ -81,7 +84,7 @@ export interface AppState {
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
-  roomTimeline: (RoomTimeline & { roomId: string; canvas: CanvasItem[] }) | null;
+  roomTimeline: (RoomTimelineWithCanvas & { roomId: string }) | null;
   /** The agents' conversations whose threads are shown beside their room, subscribed as the kept conversations are. */
   threadConversations: OpenConversation[];
   profiles: Profile[];
@@ -324,16 +327,22 @@ function keepingThreadConversations(state: AppState, conversationIds: string[]):
   return { ...state, threadConversations: conversationIds.map((conversationId) => alreadyOpen(conversationId) ?? notLoaded(conversationId)) };
 }
 
-function withRoomTimeline(state: AppState, roomId: string, change: (timeline: RoomTimeline & { canvas: CanvasItem[] }) => RoomTimeline & { canvas: CanvasItem[] }): AppState {
+function withRoomTimeline(state: AppState, roomId: string, change: (timeline: RoomTimelineWithCanvas) => RoomTimelineWithCanvas): AppState {
   return state.roomTimeline?.roomId === roomId ? { ...state, roomTimeline: { roomId, ...change(state.roomTimeline) } } : state;
 }
+
+/** The room's canvas shows the pages and questions of its agents still in it; one taken out takes its own along. */
+const madeByAgentOf =
+  ({ agents }: Room) =>
+  (item: CanvasItem) =>
+    agents.some(({ conversationId }) => conversationId === item.conversationId);
 
 /**
  * An agent's page or question goes on the canvas of the room its conversation is in, while the page shows that room;
  * the room's agents name their conversation there, or, to a person other than the owner, its stand-in.
  */
 function withRoomCanvasItem(state: AppState, item: CanvasItem): AppState {
-  const roomId = state.rooms.find(({ agents }) => agents.some(({ conversationId }) => conversationId === item.conversationId))?.id;
+  const roomId = state.rooms.find((room) => madeByAgentOf(room)(item))?.id;
   if (!roomId || !shownOnRoomCanvas(item)) return state;
   return withRoomTimeline(state, roomId, (timeline) => ({ ...timeline, canvas: upsert(timeline.canvas, withThisPagesAssetsOrigin(state, item)) }));
 }
@@ -657,7 +666,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "room-invites.listed":
       return { ...state, roomInvites: message.invites };
     case "room.upserted":
-      return { ...state, rooms: upsert(state.rooms, message.room) };
+      return withRoomTimeline({ ...state, rooms: upsert(state.rooms, message.room) }, message.room.id, (timeline) => ({ ...timeline, canvas: timeline.canvas.filter(madeByAgentOf(message.room)) }));
     case "room.deleted": {
       const next = {
         ...state,

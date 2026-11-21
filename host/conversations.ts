@@ -220,15 +220,23 @@ interface PendingPermission {
 
 export type WaitingPermission = Pick<PendingPermission, "request" | "asked" | "at">;
 
-/** What the rooms decide of their agents' permission requests. */
-export interface RoomPermissionRules {
+/** Hears the turns of every conversation, by the seq of the message that began each. */
+export interface TurnListener {
+  turnStarted(conversationId: string, turnSeq: number): void;
+  turnEnded(conversationId: string, turnSeq: number): void;
+}
+
+/** What the rooms decide for their agents' conversations: which permission requests go through, and what an agent that lost its session hears. */
+export interface RoomRules {
   /** Whether the host lets the request of a room's agent through without asking anyone. */
   allowsByItself(conversationId: string, asked: AskedPermission): boolean;
   /** A request of one of the room's agents started or stopped waiting. */
   waitingChanged(roomId: string): void;
+  /** What a room's agent on a new session, which lost all it was told in the room, is sent for the turn begun at `turnSeq` with `text`. */
+  reintroduced(conversationId: string, turnSeq: number, text: string): string;
 }
 
-const NO_ROOM_PERMISSION_RULES: RoomPermissionRules = { allowsByItself: () => false, waitingChanged: () => {} };
+const NO_ROOM_RULES: RoomRules = { allowsByItself: () => false, waitingChanged: () => {}, reintroduced: (_, __, text) => text };
 
 interface PromptStart {
   imageIds?: string[];
@@ -335,6 +343,8 @@ interface Runtime {
   heldCodexSession?: string;
   /** What a side chat's agent hears ahead of its first question, until that question goes out. */
   sideChatBrief?: string;
+  /** A room's agent on a new session after an earlier one, which lost all it was told in the room: its next prompt tells it again. */
+  roomContextLost?: boolean;
   /** The latest permission request still reading the files it would edit; the next one shows after it. */
   permissionArriving?: Promise<unknown>;
   queuedMessages: QueuedMessage[];
@@ -449,10 +459,10 @@ export class ConversationService {
   private hearReply: HearReply = () => {};
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
-  private hearTurnEnd: (conversationId: string, turnSeq: number) => void = () => {};
-  private roomPermissions = NO_ROOM_PERMISSION_RULES;
+  private turnsHeard: TurnListener = { turnStarted: () => {}, turnEnded: () => {} };
+  private roomRules = NO_ROOM_RULES;
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
-  private deleteWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
+  private deletesWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
   /** The turns the previous host died in the middle of, whose replies, if owed, say they failed. */
   private readonly turnsCutShortByCrash: Set<string>;
 
@@ -710,7 +720,7 @@ export class ConversationService {
     if (!this.startedFromCallerBy(conversation.startedBy, callerId, plugin)) {
       throw new Error(`Conversation ${conversationId} wasn't started by the ${plugin} plugin from this conversation, so it can't be deleted from here.`);
     }
-    this.deleteWithAllItHolds(conversationId, { keepsUnmergedBranch: false });
+    this.deletesWithAllItHolds(conversationId, { keepsUnmergedBranch: false });
   }
 
   /**
@@ -773,14 +783,17 @@ export class ConversationService {
     this.pluginTellsItsCaller = tellsItsCaller;
   }
 
-  /** Hears each turn that ends while the host runs on, by the seq of the message that began it. */
-  hearTurnEndsWith(hearTurnEnd: (conversationId: string, turnSeq: number) => void) {
-    this.hearTurnEnd = hearTurnEnd;
+  /** Hears each turn as it starts, and as it ends while the host runs on, by the seq of the message that began it. */
+  hearTurnsWith(listener: TurnListener) {
+    this.turnsHeard = listener;
   }
 
-  /** A room's agent asks its room's rules first, and the room hears whenever one of its agents' requests starts or stops waiting. */
-  followsRoomPermissionsOf(rules: RoomPermissionRules) {
-    this.roomPermissions = rules;
+  /**
+   * A room's agent asks its room's rules first, the room hears whenever one of its agents' requests starts or stops
+   * waiting, and an agent on a new session after an earlier one is told of the room again.
+   */
+  followsRoomRulesOf(rules: RoomRules) {
+    this.roomRules = rules;
   }
 
   /** Plugins hear what happens in every conversation: the user's messages, turns and tool calls. */
@@ -790,7 +803,12 @@ export class ConversationService {
 
   /** The host's own delete, which also closes the conversation's terminals, documents, questions and side chats, for a plugin's delete to go through. */
   deletesWithAllItHoldsBy(deleteWithAllItHolds: (conversationId: string, options: DeleteOptions) => void) {
-    this.deleteWithAllItHolds = deleteWithAllItHolds;
+    this.deletesWithAllItHolds = deleteWithAllItHolds;
+  }
+
+  /** Deletes the conversation as the user's delete does, its terminals, documents, questions and side chats with it. */
+  deleteWithAllItHolds(conversationId: string) {
+    this.deletesWithAllItHolds(conversationId, {});
   }
 
   /** What keeps documents in a worktree hears that its folder is gone, so nothing is left open or stored for it. */
@@ -1577,6 +1595,7 @@ export class ConversationService {
       },
       notes,
     );
+    if (turnSeq !== undefined) this.turnsHeard.turnStarted(conversationId, turnSeq);
     if (startsTurn && turnSeq !== undefined) await this.keepFilesOfTurn(conversationId, turnSeq);
     let response: acp.PromptResponse | undefined;
     let endedOnItsOwn: acp.PromptResponse | undefined;
@@ -1585,7 +1604,8 @@ export class ConversationService {
       const sessionId = await this.ensureSession(conversationId);
       sessionOpened = true;
       this.setStatus(conversationId, "running");
-      const prompt = [...this.takeSideChatBrief(runtime), ...(await this.promptContent(conversationId, withNotes(notes, text), imageIds))];
+      const sent = this.takeRoomContextLost(runtime) && turnSeq !== undefined ? this.roomRules.reintroduced(conversationId, turnSeq, text) : text;
+      const prompt = [...this.takeSideChatBrief(runtime), ...(await this.promptContent(conversationId, withNotes(notes, sent), imageIds))];
       const harness = this.harnessFor(this.get(conversationId));
       turn.promptSent = { text, sentAt: Date.now() };
       const answered = harness.prompt(sessionId, prompt);
@@ -1637,7 +1657,7 @@ export class ConversationService {
       endTurn();
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
-    if (!this.stopping && turnSeq !== undefined) this.hearTurnEnd(conversationId, turnSeq);
+    if (!this.stopping && turnSeq !== undefined) this.turnsHeard.turnEnded(conversationId, turnSeq);
     this.sendNextQueuedMessage(conversationId);
     if (!this.nudgeAfterStall(conversationId, turn, endedOnItsOwn)) this.followUpOnCanvasUse(conversationId, turn, endedOnItsOwn);
     this.stopRoomProcessOnceIdle(conversationId);
@@ -2598,6 +2618,7 @@ profileId: string | null, conversationId: string) {
     this.closeSessionIfConversationDeleted(conversationId, harness, created.sessionId);
     this.muteNotifier(conversation, created.sessionId);
     this.bindSession(conversationId, created.sessionId, created.configOptions);
+    runtime.roomContextLost = Boolean(conversation.roomId) && !isFirstSession;
     await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
     if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
     else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
@@ -3278,6 +3299,12 @@ profileId: string | null, conversationId: string) {
     this.restoreCanvas = restoreCanvas;
   }
 
+  private takeRoomContextLost(runtime: Runtime) {
+    const lost = runtime.roomContextLost === true;
+    runtime.roomContextLost = undefined;
+    return lost;
+  }
+
   private takeSideChatBrief(runtime: Runtime): acp.ContentBlock[] {
     const brief = runtime.sideChatBrief;
     runtime.sideChatBrief = undefined;
@@ -3315,7 +3342,7 @@ profileId: string | null, conversationId: string) {
     const kindSeenBefore = runtime.openToolCalls.kindOf(request.toolCall.toolCallId);
     const asked = askedPermissionOf(toolCall, kindSeenBefore);
     const { roomId } = this.get(conversationId);
-    if (allowOptionId && roomId && this.roomPermissions.allowsByItself(conversationId, asked)) return { outcome: { outcome: "selected", optionId: allowOptionId } };
+    if (allowOptionId && roomId && this.roomRules.allowsByItself(conversationId, asked)) return { outcome: { outcome: "selected", optionId: allowOptionId } };
     const permissionId = crypto.randomUUID();
     if (runtime.turn && !runtime.turn.ended) runtime.turn.awaitedUser = true;
     this.append(conversationId, {
@@ -3331,12 +3358,12 @@ profileId: string | null, conversationId: string) {
         if (!runtime.pendingPermissions.delete(permissionId)) return;
         this.append(conversationId, { type: "permission-resolved", permissionId, optionId });
         if (this.store.hasConversation(conversationId)) this.publish(this.get(conversationId));
-        if (roomId) this.roomPermissions.waitingChanged(roomId);
+        if (roomId) this.roomRules.waitingChanged(roomId);
         resolve(optionId ? { outcome: { outcome: "selected", optionId } } : { outcome: { outcome: "cancelled" } });
       };
-      runtime.pendingPermissions.set(permissionId, { settle, allowOptionId, request: pendingPermission(permissionId, request, kindSeenBefore), asked, at: Date.now() });
+      runtime.pendingPermissions.set(permissionId, { settle, allowOptionId, request: pendingPermission(permissionId, asked, { toolCall, options: request.options }), asked, at: Date.now() });
       this.publish(this.get(conversationId));
-      if (roomId) this.roomPermissions.waitingChanged(roomId);
+      if (roomId) this.roomRules.waitingChanged(roomId);
       signal.addEventListener("abort", () => settle(null), { once: true });
     });
   }

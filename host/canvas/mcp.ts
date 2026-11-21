@@ -335,12 +335,7 @@ export class CanvasMcpEndpoints {
   private readonly handlers = new Map<string, McpHttpHandler>();
   private readonly cutInstructionsWarning = new CutInstructionsWarning();
 
-  constructor(private parts: CanvasServerParts) {}
-
-  /** The rooms are made after the canvas servers' parts; their agents' conversations get the room tools from then on. */
-  offersRoomToolsFrom(rooms: RoomTools) {
-    this.parts = { ...this.parts, rooms };
-  }
+  constructor(private readonly parts: CanvasServerParts) {}
 
   handle(conversationId: string, request: Request) {
     return this.handlerFor(conversationId).fetch(request);

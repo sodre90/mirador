@@ -13,7 +13,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
-import { RoomsSection, roomsWaitingFor } from "./RoomsSidebar.tsx";
+import { RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
@@ -41,7 +41,7 @@ import type { AppAction, AppState, DevicesListed, Overlay } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { WorktreeIcon, WorktreeMark } from "./Worktrees.tsx";
 import { canMarkUnread, markRead, markUnread } from "./unread.ts";
-import { lastsUntilOpened, waitingByUrgency, waitingLabels, waitingShowsOnDot, waitingTones } from "./waiting.ts";
+import { lastsUntilOpened, roomsWaitingFor, waitingByUrgency, waitingLabels, waitingShowsOnDot, waitingTones } from "./waiting.ts";
 import { scrollToNearestWaiting, useWaitingOutOfView, waitingInFoldedGroup, type HiddenWaiting } from "./waiting-edges.ts";
 import { parentFolder } from "./workspace-folder.ts";
 import { CONVERSATION_ORDERS, landingBeforeInCustomOrder, usualDirection, type ConversationOrder, type OrderDirection } from "../shared/conversation-order.ts";
@@ -974,7 +974,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
         <span>{words.paletteBar}</span>
         <kbd>{shortcutKeys().palette}</kbd>
       </button>
-      <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} waitingRoomIds={roomsWaitingFor(state.you, [...state.roomApprovals, ...state.roomTasksWaiting])} manages dispatch={dispatch} />
+      <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} waitingRoomIds={roomsWaitingFor(state)} manages dispatch={dispatch} />
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">

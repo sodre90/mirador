@@ -1,4 +1,5 @@
 import type { DeviceConnection, ListedDevice, Person } from "./model.ts";
+import { PERSON_WITHOUT_A_NAME, personGoesBy } from "./people.ts";
 import { relativeTimeOf } from "./relative-time.ts";
 
 export const joinedOn = (at: number, locale?: string) => new Date(at).toLocaleDateString(locale, { day: "numeric", month: "short", year: "numeric" });
@@ -26,5 +27,6 @@ export interface DevicesAndPeople {
 /** "Dora, in rooms only" on a person's device; nothing on the owner's. */
 export function whoseDevice({ personId }: ListedDevice, { people, ownerId }: Omit<DevicesAndPeople, "devices">) {
   if (personId === ownerId) return "";
-  return `${people.find(({ id }) => id === personId)?.name || "Someone without a name"}, in rooms only`;
+  const person = people.find(({ id }) => id === personId);
+  return `${personGoesBy(person, PERSON_WITHOUT_A_NAME)}, in rooms only`;
 }

@@ -58,6 +58,7 @@ export type HostProblem =
   | { code: "answer-all-questions"; count: number }
   | { code: "tab-terminal-limit"; count: number }
   | { code: "room-message-too-long"; most: number }
+  | { code: "workspace-has-rooms"; rooms: string[] }
   | { code: "unknown-workspace"; id: string }
   | { code: "plugin-has-no-setting"; plugin: string; setting: string }
   | { code: "plugin-not-turnable"; plugin: string }

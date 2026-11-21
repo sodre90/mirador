@@ -21,6 +21,7 @@ import {
   type UsageLimitWait,
 } from "../shared/model.ts";
 import { markInitials } from "../shared/marks.ts";
+import { personGoesBy } from "../shared/people.ts";
 import { pastelVariables } from "./pastels.ts";
 import { titlesOfPlugins, toolTitlesOfPlugins, usePluginsOff } from "./plugin-settings.ts";
 import { readableToolTitle as readableToolTitleOf } from "../shared/tool-title.ts";
@@ -792,10 +793,10 @@ export function PersonAvatar({ personId }: { personId: string | null }) {
 /** A person who gave no name is You to themselves, and the owner or someone without a name to the others. */
 export function usePersonName(personId: string | null) {
   const { ownerId, you } = useContext(MessageWriters);
-  const name = usePerson(personId)?.name;
-  if (name) return name;
+  const person = usePerson(personId);
+  if (person?.name) return person.name;
   if (personId === null || personId === you) return words.author.you;
-  return personId === ownerId ? words.author.owner : t.rooms.nameless;
+  return personId === ownerId ? words.author.owner : personGoesBy(person, t.rooms.nameless);
 }
 
 export function PersonName({ personId }: { personId: string | null }) {

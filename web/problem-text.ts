@@ -110,6 +110,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.answerAllQuestions(problem.count);
     case "room-message-too-long":
       return words.roomMessageTooLong(problem.most);
+    case "workspace-has-rooms":
+      return words.workspaceHasRooms(problem.rooms);
     case "tab-terminal-limit":
       return words.tabTerminalLimit(problem.count);
     case "unknown-workspace":

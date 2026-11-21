@@ -1,9 +1,10 @@
 import { useEffect, useState, type Dispatch } from "react";
 import { roomInviteLink } from "../shared/machines.ts";
 import type { Person, Profile, ReachabilitySettings, Workspace } from "../shared/model.ts";
+import { personGoesBy } from "../shared/people.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
-import { ROOM_ROLES, type Room, type RoomApproval, type RoomInvite, type RoomRole, type RoomTaskApproval } from "../shared/rooms.ts";
+import { ROOM_ROLES, type Room, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
@@ -16,10 +17,6 @@ import type { AppAction } from "./state.ts";
 import { waitingLabels } from "./waiting.ts";
 
 const words = t.rooms;
-
-/** The rooms where an agent waits for you to answer its request, or a person's task waits for you to allow it. */
-export const roomsWaitingFor = (you: string | null, waiting: (RoomApproval | RoomTaskApproval)[]) =>
-  new Set(waiting.filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }) => roomId));
 
 export function RoomsSection({
   rooms,
@@ -129,7 +126,7 @@ function RoomPeopleField({
       </span>
       {people.length === 0 && <span className="hint">{words.noPeople}</span>}
       {people.map((person) => {
-        const name = person.name || words.nameless;
+        const name = personGoesBy(person, words.nameless);
         const nameClash = nameClashes[person.id];
         return (
           <div key={person.id}>
@@ -310,6 +307,7 @@ export function RoomDialog({
     if (!canSave) return;
     if (room) {
       if (name.trim() !== room.name) connection.send({ type: "room.rename", roomId: room.id, name });
+      if (workspaceId !== room.workspaceId) connection.send({ type: "room.set-workspace", roomId: room.id, workspaceId });
       connection.send({ type: "room.set-agents", roomId: room.id, profileIds: agentIds });
       if (permissions !== room.permissions) connection.send({ type: "room.set-permissions", roomId: room.id, permissions });
       if (tasksStartUnasked === room.peoplesTasksWait) connection.send({ type: "room.set-peoples-tasks-wait", roomId: room.id, wait: !tasksStartUnasked });
@@ -345,7 +343,7 @@ export function RoomDialog({
         </label>
         <label className="room-field">
           {words.workspace}
-          <select value={workspaceId} disabled={room !== null} onChange={(event) => setWorkspaceId(event.target.value)}>
+          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
             {workspaces.map((workspace) => (
               <option key={workspace.id} value={workspace.id}>
                 {workspace.name}

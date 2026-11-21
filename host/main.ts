@@ -40,6 +40,7 @@ import { VoiceEngine } from "./voice/engine/engine.ts";
 import { MUTED_LIST_FILE, NotifierMute } from "./notifier.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
 import { giveEveryWorkspaceAProfile, moveProfilelessOntoProfiles, ProfileService } from "./profiles.ts";
+import { RoomService } from "./rooms.ts";
 import { HostRestart, relaunch, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "./restart.ts";
 import { DesktopAppCheck } from "./desktop-app-check.ts";
 import { switchOf, type PluginUpdate } from "../shared/apps.ts";
@@ -167,6 +168,9 @@ await apps.reopenAll();
 const stopWatchingViews = watchViews(loadedPlugins, () =>
   hub.broadcast({ type: "plugins.views", installedApps: apps.installed(), canvasViews: canvasPlugins.viewPaths() }),
 );
+const rooms = new RoomService(store, hub, conversations, notifications, config.dataDir);
+conversations.hearTurnsWith(rooms);
+conversations.followsRoomRulesOf(rooms);
 const mcp = new CanvasMcpEndpoints({
   canvas,
   conversations,
@@ -175,6 +179,7 @@ const mcp = new CanvasMcpEndpoints({
   canvasPlugins,
   catalog,
   store,
+  rooms,
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
 const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugins.viewCode(pathname);
@@ -267,7 +272,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

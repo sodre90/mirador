@@ -4,6 +4,7 @@ import type { Conversation } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import {
   countWaiting,
+  roomsWaitingFor,
   lastsUntilOpened,
   summarizeWaiting,
   waitingByUrgency,
@@ -12,6 +13,7 @@ import {
   type WaitingSummary,
   type WaitingTone,
 } from "../shared/waiting.ts";
+import type { RoomApproval, RoomTaskApproval } from "../shared/rooms.ts";
 import { tabTitle } from "../web/tab-title.ts";
 
 const c = (waitingFor: Conversation["waitingFor"]) => ({ waitingFor }) as Conversation;
@@ -20,6 +22,20 @@ test("counts every conversation waiting for you, whatever it waits for, your own
   expect(countWaiting([c("permission"), c("question"), c("finished"), c("error"), c("unread"), c(null)])).toBe(5);
   expect(countWaiting([])).toBe(0);
   expect(countWaiting([c(null)])).toBe(0);
+});
+
+test("a room waits for you while one of its agents' requests or questions, or a person's task, waits for you to answer it", () => {
+  const approval = (roomId: string, approvers: string[]) => ({ roomId, approvers }) as RoomApproval;
+  const task = (roomId: string, approvers: string[]) => ({ roomId, approvers }) as RoomTaskApproval;
+  const inRoom = (roomId: string, waitingFor: Conversation["waitingFor"]) => ({ roomId, waitingFor }) as Conversation;
+  const owner = {
+    you: "owner",
+    roomApprovals: [approval("asks", ["owner"]), approval("asks-another", ["someone else"])],
+    roomTasksWaiting: [task("task", ["owner"]), task("asks", ["owner"])],
+    roomConversations: [inRoom("question", "question"), inRoom("permission-only", "permission"), inRoom("finished", "finished")],
+  };
+  expect([...roomsWaitingFor(owner)].toSorted()).toEqual(["asks", "question", "task"]);
+  expect(roomsWaitingFor({ you: "mia", roomApprovals: [], roomTasksWaiting: [], roomConversations: [] }).size).toBe(0);
 });
 
 test("an Unread mark comes after everything the agent waits on, and opening clears it as it clears Done and Failed", () => {

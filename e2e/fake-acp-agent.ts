@@ -56,7 +56,8 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * each once the one before was answered: `{"kind": toolKind, "title": text}` with a `"command"` it would run or a
  * `"path"` it would read or change (an edit's comes with its diff), or `{"waitFor": path}`, which holds the turn until
  * that file exists; `{{folder}}` in them is the session's folder. It answers with what each request got, or "Done."
- * when none asked. `My answer to your question` is answered with "Going with " and the answer.
+ * when none asked. Ending in `FOLDER`, the message is answered with the folder the session works in. `WAIT ` and a path there holds the turn until that file exists before it does the rest. `My answer
+ * to your question` is answered with "Going with " and the answer, once no file is at `FAKE_ACP_ANSWERS_HELD_BY`.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
  * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
@@ -67,7 +68,8 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * each with the name in `FAKE_ACP_NAME`. FAKE_ACP_IGNORES_SIGTERM=1 makes it survive SIGTERM, and FAKE_ACP_PID_FILE
  * names a file it writes its pid to. `FAKE_ACP_STEERS=1` offers claude-agent-acp's `_session/steering`: a message
  * steered into a `REPLY STEERED ` or `ENDS UNREAD ` turn joins it, any other is refused as needing a prompt of its own.
- * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones.
+ * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones; a resumed session keeps the
+ * canvas server the resume gave it.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
  * A side chat's brief, sent before its first question, is written to the prompts file but leaves the commands alone.
  * Its start, its sessions and the prompts it takes go to stderr, which the host stamps into the agent's log, so a kept
@@ -347,6 +349,12 @@ async function reportUsage(client: acp.AgentContext, sessionId: string, used: nu
   return { stopReason: "end_turn" as const };
 }
 
+async function goWithAnswer(client: acp.AgentContext, sessionId: string, answer: string) {
+  const held = process.env.FAKE_ACP_ANSWERS_HELD_BY;
+  while (held && existsSync(held)) await Bun.sleep(50);
+  return sayText(client, sessionId, `Going with ${answer}`);
+}
+
 async function sayText(client: acp.AgentContext, sessionId: string, text: string) {
   await client.notify(acp.methods.client.session.update, { sessionId, update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } } });
   return { stopReason: "end_turn" as const };
@@ -416,6 +424,8 @@ async function replyAroundATool(client: acp.AgentContext, sessionId: string, tex
 async function answerInRoom(client: acp.AgentContext, sessionId: string, prompt: string) {
   const asked = prompt.trimEnd().split("\n").at(-1)!;
   await runTools(client, sessionId, [{ title: "Read the room", kind: "read", rawInput: {} }]);
+  const waitFor = /\bWAIT (\S+) /.exec(asked)?.[1];
+  while (waitFor && !existsSync(waitFor)) await Bun.sleep(50);
   const after = (word: string) => (asked.includes(word) ? asked.slice(asked.lastIndexOf(word) + word.length) : null);
   const canvasCall = after("CANVAS ");
   if (canvasCall !== null) {
@@ -430,6 +440,7 @@ async function answerInRoom(client: acp.AgentContext, sessionId: string, prompt:
     await callCanvasTool(sessionId, "room_tag", { agents: [other] });
     return sayText(client, sessionId, `PINGPONG ${itself} ${other}`);
   }
+  if (asked.endsWith("FOLDER")) return sayText(client, sessionId, `Working in ${sessionFolders.get(sessionId)}`);
   return sayText(client, sessionId, after("SAY ") ?? "Noted.");
 }
 
@@ -614,6 +625,8 @@ acp
   })
   .onRequest(acp.methods.agent.session.resume, (ctx) => {
     if (!resumes) throw acp.RequestError.internalError(undefined, "No such session");
+    sessionFolders.set(ctx.params.sessionId, ctx.params.cwd);
+    keepCanvasServer(ctx.params.sessionId, ctx.params.mcpServers ?? []);
     log(`resumed ${ctx.params.sessionId}`);
     return {};
   })
@@ -672,7 +685,7 @@ acp
     if (startsWith(prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
     if (startsWith(prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
     if (text.includes(ROOM_MESSAGES_HEADING)) return answerInRoom(ctx.client, ctx.params.sessionId, text);
-    if (startsWith(prompt, "My answer to your question")) return sayText(ctx.client, ctx.params.sessionId, `Going with ${text.slice(text.lastIndexOf(": ") + ": ".length)}`);
+    if (startsWith(prompt, "My answer to your question")) return goWithAnswer(ctx.client, ctx.params.sessionId, text.slice(text.lastIndexOf(": ") + ": ".length));
     if (startsWith(prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
     if (startsWith(prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
     return startsWith(prompt, "WEDGE") || startsWith(prompt, "CRASH") ? new Promise(() => {}) : { stopReason: "end_turn" as const };

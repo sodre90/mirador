@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { joinedOn } from "../shared/devices.ts";
 import { askToJoin, spacedNumber } from "../shared/join-requests.ts";
 import { inviteLink, isRoomInviteLink, joinCodeIn } from "../shared/machines.ts";
+import { personGoesBy } from "../shared/people.ts";
 import { relativeTimeOf } from "../shared/relative-time.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
 import type { DeviceConnection, ListedDevice, Person, PublicAddress, ReachabilitySettings } from "../shared/model.ts";
@@ -641,7 +642,7 @@ export function DeviceSettings({ listed, people, ownerId }: { listed: DevicesLis
             <span className="device-name">{device.name}</span>
             {device.id === listed.thisDeviceId && <span className="device-this">{words.list.thisDevice}</span>}
             {device.personId !== ownerId && (
-              <span className="device-person">{words.list.personsDevice(people.find(({ id }) => id === device.personId)?.name || t.rooms.nameless)}</span>
+              <span className="device-person">{words.list.personsDevice(personGoesBy(people.find(({ id }) => id === device.personId), t.rooms.nameless))}</span>
             )}
             <span className="device-seen">
               {deviceStatus(device)}

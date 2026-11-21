@@ -1,6 +1,6 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel, type Device, type Pastel } from "../shared/model.ts";
-import { NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personName } from "../shared/people.ts";
+import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import { isRoomRole, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
@@ -168,7 +168,7 @@ export class RoomInvites {
    */
   private namePerson(roomId: string, personId: string, presented: unknown, color: Pastel | null) {
     const named = typeof presented === "string" && presented.length <= LONGEST_PRESENTED_NAME && !nameRefused(presented) ? personName(shownAsWritten(presented)) : "";
-    const keptByMirador = nameTaken(named, NAMES_KEPT_BY_MIRADOR);
+    const keptByMirador = readsAsMiradorsWords(named);
     const clashes = !keptByMirador && nameTaken(named, namesOthersGoBy(this.store, personId));
     this.store.setPersonProfile(personId, { name: keptByMirador || clashes ? "" : named, color });
     this.store.forgetNameClashesOf(personId);

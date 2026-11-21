@@ -6,7 +6,17 @@ import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { signedInWith } from "../host/sign-in.ts";
 import { Store } from "../host/store.ts";
-import { comparableName, LONGEST_PERSON_NAME, NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personName } from "../shared/people.ts";
+import {
+  comparableName,
+  LONGEST_PERSON_NAME,
+  namelessPerson,
+  NAMES_KEPT_BY_MIRADOR,
+  nameRefused,
+  nameTaken,
+  personGoesBy,
+  personName,
+  readsAsMiradorsWords,
+} from "../shared/people.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "mirador-people-"));
@@ -28,10 +38,26 @@ test("names that only look alike compare the same: Cyrillic and Greek look-alike
   expect(nameTaken("\u039Fwner", NAMES_KEPT_BY_MIRADOR)).toBe(true);
 });
 
+test("the vowel signs of Devanagari and Thai names keep them apart, while Arabic harakat, Hebrew points and accents do not", () => {
+  expect(nameTaken("राम", ["रम"])).toBe(false);
+  expect(nameTaken("क़मल", ["कमल"])).toBe(false);
+  expect(nameTaken("\u0958\u092E\u0932", ["\u0915\u093C\u092E\u0932"])).toBe(true);
+  expect(nameTaken("มานี", ["มาน"])).toBe(false);
+  expect(nameTaken("สมชัย", ["สมชย"])).toBe(false);
+  expect(nameTaken("ภูมิ", ["ภูม"])).toBe(false);
+  expect(nameTaken("مُحَمَّد", ["محمد"])).toBe(true);
+  expect(nameTaken("דָּוִד", ["דוד"])).toBe(true);
+  expect(nameTaken("\u0930\u200D\u093E\u092E", ["\u0930\u093E\u092E"])).toBe(true);
+});
+
+test("a mark of another script, or one put on an invisible character, does not make a Latin name another", () => {
+  expect(["An\u0301n", "An\u093Cn", "An\u0E31n", "\u200B\u093CAnn", "\u0410nn"].filter((name) => !nameTaken(name, ["Ann"]))).toEqual([]);
+});
+
 test("a person other than the owner may not take a name that shows its letters in another order, or mixes alphabets in a word", () => {
   expect(["\u202EnnA", "Ann\u2066x\u2069", "A\u200Fnn"].map(nameRefused)).toEqual(Array(3).fill("person-name-reorders"));
   expect(["\u0410nn", "\u039Fwner", "B\u0443ilder", "Ann-\u0405mith"].map(nameRefused)).toEqual(Array(4).fill("person-name-mixes-scripts"));
-  expect(["Ann", "\u041C\u0430\u0440\u0438\u044F", "Anna \u041C\u0430\u0440\u0438\u044F", "\u5C71\u7530 \u592A\u90CE", "\u3084\u307E\u7530", "\uAE40\u6C11\u6D19", "Zo\u00EB 2", "Mia R"].map(nameRefused)).toEqual(Array(8).fill(null));
+  expect(["An\u0301n", "An\u093Cn", "An\u0E31n", "\u200B\u093CAnn", "\u0410nn"].filter((name) => !nameTaken(name, ["Ann"]))).toEqual([]);
 });
 
 test("a name is taken when it reads as one already taken, and a blank one never is", () => {
@@ -49,7 +75,7 @@ test("a name is taken when it reads as one already taken, and a blank one never 
 
 test("a new machine has one person, its owner, with no name or colour yet", () => {
   const store = new Store(":memory:");
-  expect(store.listPeople()).toEqual([{ id: store.ownerId(), name: "", color: null }]);
+  expect(store.listPeople()).toEqual([{ id: store.ownerId(), name: "", color: null, number: expect.any(Number) }]);
 });
 
 test("the owner stays the same person when the machine starts again", () => {
@@ -66,7 +92,41 @@ test("the owner stays the same person when the machine starts again", () => {
 test("a person's name and colour are kept", () => {
   const store = new Store(":memory:");
   store.setPersonProfile(store.ownerId(), { name: "Ada Lovelace", color: "teal" });
-  expect(store.listPeople()).toEqual([{ id: store.ownerId(), name: "Ada Lovelace", color: "teal" }]);
+  expect(store.listPeople()).toEqual([{ id: store.ownerId(), name: "Ada Lovelace", color: "teal", number: expect.any(Number) }]);
+});
+
+test("each person has a four-digit number of their own, which people from before numbers get when the machine starts", () => {
+  const path = databasePath();
+  const before = new Database(path);
+  before.run("CREATE TABLE people (id TEXT PRIMARY KEY, name TEXT NOT NULL, color TEXT)");
+  before.run("INSERT INTO people (id, name, color) VALUES ('owner', '', NULL), ('mia', '', NULL)");
+  before.close();
+
+  const store = new Store(path);
+  Array.from({ length: 50 }, (_, index) => store.insertPerson({ id: `person-${index}`, name: "", color: null }));
+  const numbers = store.listPeople().map(({ number }) => number);
+  expect(numbers).toHaveLength(52);
+  expect(new Set(numbers).size).toBe(52);
+  expect(numbers.every((number) => number >= 1000 && number <= 9999)).toBe(true);
+  const kept = store.listPeople();
+  store.close();
+  const again = new Store(path);
+  expect(again.listPeople()).toEqual(kept);
+  again.close();
+});
+
+test("a person without a name goes by the words for one and their number, so two of them read apart", () => {
+  expect(namelessPerson("Someone without a name", { number: 4821 })).toBe("Someone without a name 4821");
+  expect(personGoesBy({ name: "", number: 4821 }, "Valaki név nélkül")).toBe("Valaki név nélkül 4821");
+  expect(personGoesBy({ name: "Mia", number: 4821 }, "Someone without a name")).toBe("Mia");
+  expect(personGoesBy(undefined, "Someone without a name")).toBe("Someone without a name");
+});
+
+test("no name reads as Mirador's words for someone without a name, whatever number or mark follows them, in any of its languages", () => {
+  const readingAsNameless = ["Someone without a name 4821", "someone without a name4821", "Jemand ohne Namen (12)", "Alguien sin nombre #7", "没有名字的人 \uFF11\uFF12", "Valaki név nélkül \u0664\u0662", "Someone without a name\u200B 1"];
+  expect(readingAsNameless.filter((name) => !readsAsMiradorsWords(name))).toEqual([]);
+  expect(readsAsMiradorsWords("You")).toBe(true);
+  expect(["Ann 2", "Someone", "4821", "Someone without a name tag", "You 2"].filter(readsAsMiradorsWords)).toEqual([]);
 });
 
 test("the devices that joined before devices belonged to people are the owner's", () => {

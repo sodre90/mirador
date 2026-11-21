@@ -154,7 +154,16 @@ export class PushNotifications {
     this.toldOf.forEach((told, conversationId) => {
       if (waiting.has(conversationId)) this.markSeenWaiting(conversationId, told);
     });
-    const settled = [...this.toldOf].filter(([conversationId, told]) => told.seenWaiting && !waiting.has(conversationId));
+    return this.settle([...this.toldOf.keys()].filter((conversationId) => this.toldOf.get(conversationId)!.seenWaiting && !waiting.has(conversationId)));
+  }
+
+  /** Conversations whose notifications were read elsewhere, as on a page showing their room: the phones told of one that no longer waits get a clear. */
+  read(conversationIds: string[]): Promise<void> {
+    return this.settle(conversationIds.filter((conversationId) => this.toldOf.has(conversationId) && !this.waiting.has(conversationId)));
+  }
+
+  private settle(conversationIds: string[]) {
+    const settled = conversationIds.map((conversationId) => [conversationId, this.toldOf.get(conversationId)!] as const);
     settled.forEach(([conversationId]) => {
       this.toldOf.delete(conversationId);
       this.store.forgetPushTold(conversationId);

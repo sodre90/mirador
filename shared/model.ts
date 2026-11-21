@@ -104,6 +104,8 @@ export interface Person {
   id: string;
   name: string;
   color: Pastel | null;
+  /** Tells a person without a name from others without one; random, so it says nothing of how many people the machine has. */
+  number: number;
 }
 
 /** Another browser or app that joined this machine with an invite; it signs in with a token of its own, which revoking it ends. */
@@ -860,6 +862,12 @@ export interface CanvasAnswer {
 export type CanvasItemKind = "show" | "ask" | "plugin";
 
 /** What every canvas item carries, whatever its kind. */
+/** Where a room's agent was when it made a page or question: the room message its turn answered, and the number of the room's latest message by then. */
+export interface MadeInRoom {
+  answering: string;
+  afterSeq: number;
+}
+
 export interface CanvasItemBase {
   id: string;
   conversationId: string;
@@ -867,6 +875,7 @@ export interface CanvasItemBase {
   title: string;
   status: CanvasItemStatus;
   createdAt: number;
+  madeInRoom?: MadeInRoom;
   /** When the item last changed, so a client catching up after a reconnect gets only the items that changed since. */
   updatedAt?: number;
 }

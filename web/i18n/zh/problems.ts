@@ -191,6 +191,7 @@ export const problems: Messages["problems"] = {
   answerAllQuestions: (count) => `请回答全部 ${count} 个问题。`,
   tabTerminalLimit: (count) => `一个标签页最多容纳 ${count} 个终端。`,
   roomMessageTooLong: (most) => `房间消息最多 ${most} 个字符。`,
+  workspaceHasRooms: (rooms) => `有房间在这个工作区中工作：${rooms.join("、")}。移除它之前，先在每个房间的设置中为它换一个工作区，或删除它。`,
   unknownWorkspace: (id) => `未知工作区：${id}`,
   pluginHasNoSetting: (plugin, setting) => `${plugin} 没有设置项 ${setting}。`,
   pluginNotTurnable: (plugin) => `${plugin} 不是配置可以开启或关闭的插件。`,
