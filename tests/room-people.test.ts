@@ -359,6 +359,7 @@ function hostEnvironment() {
     MIRADOR_PI_RELEASE_URL: "off",
     MIRADOR_DEFAULT_PLUGINS: "off",
     MIRADOR_PUSH_RELAY: "off",
+    MIRADOR_P2P: "off",
   };
 }
 

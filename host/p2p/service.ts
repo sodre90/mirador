@@ -41,8 +41,8 @@ export interface PeerToPeerSettings {
 
 type Broker = PeerToPeerSettings["broker"];
 
-/** The broker hosts use when the environment names none. Null until p2p.sodre90.com is ready for everyone's Miradors. */
-export const BUILT_IN_BROKER: Broker | null = null;
+/** The broker hosts use when the environment names none. Devices keep its name from their invites, so it moves with DNS, never by renaming. */
+export const BUILT_IN_BROKER: Broker = { address: "p2p.sodre90.com:47800", key: "PsrAwnWrWi1LsRJnRUE8vcZNAAwXdgPu9Vfq60bipRA=" };
 
 export interface BuiltInPeerToPeer {
   sidecar: DownloadedSidecar | null;
@@ -51,16 +51,34 @@ export interface BuiltInPeerToPeer {
 
 /**
  * The environment's sidecar and broker win, and naming only some of them is a mistake worth saying. Without them, the
- * host connects peer to peer through the built-in broker, with a sidecar it downloads the first time it needs one.
+ * host connects peer to peer through the built-in broker, with a sidecar it downloads the first time it needs one,
+ * unless MIRADOR_P2P=off keeps it from reaching out at all, as the hosts of tests are kept.
  */
 export function peerToPeerSettings(environment: Record<string, string | undefined>, builtIn: BuiltInPeerToPeer): PeerToPeerSettings | null {
   const { MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: address, MIRADOR_P2P_BROKER_KEY: key } = environment;
-  if (!binary && !address && !key) return builtIn.sidecar && builtIn.broker && { binary: builtIn.sidecar.path, download: builtIn.sidecar.download, broker: builtIn.broker };
+  if (!binary && !address && !key) {
+    const { sidecar, broker } = builtIn;
+    return environment.MIRADOR_P2P !== "off" && sidecar && broker ? { binary: sidecar.path, download: sidecar.download, broker } : null;
+  }
   if (!binary || !address || !key) throw new Error("Peer to peer needs MIRADOR_P2P_BINARY, MIRADOR_P2P_BROKER and MIRADOR_P2P_BROKER_KEY together.");
   if (!isTunnelKey(key)) throw new Error("MIRADOR_P2P_BROKER_KEY is not a key: it is 32 bytes in base64.");
   const deviceBroker = environment.MIRADOR_P2P_DEVICE_BROKER || undefined;
   const candidates = environment.MIRADOR_P2P_CANDIDATES?.split(",").map((candidate) => candidate.trim()).filter(Boolean);
   return { binary, broker: { address, key }, ...(deviceBroker && { deviceBroker }), ...(candidates?.length && { candidates }) };
+}
+
+/**
+ * Peer to peer the environment names is a setting worth failing on; the built-in one nobody asked for never keeps the
+ * host from starting, which goes without it and says why.
+ */
+export function peerToPeerUnlessBuiltInFails<Made>(environment: Record<string, string | undefined>, make: () => Made): Made | null {
+  try {
+    return make();
+  } catch (error) {
+    if (environment.MIRADOR_P2P_BINARY) throw error;
+    console.error(`Peer to peer is off: ${error instanceof Error ? error.message : String(error)}`);
+    return null;
+  }
 }
 
 /**
