@@ -6,12 +6,18 @@ import { isNewerVersion } from "../../shared/newer-version.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import type { Store } from "../store.ts";
-import { gitOutput, withoutCredentials, type InstalledPlugins, type UpdatesByItself } from "./installed-plugins.ts";
+import { gitOutput, withoutCredentials, type InstalledPlugins, type PluginPins, type UpdatesByItself } from "./installed-plugins.ts";
 import { isPlainFolderName, parkedFolderOf, refuseUnlessPlainFolderName, removeOrLog, settleCutShortSwaps, swapPlugin } from "./plugin-swaps.ts";
 import { messageOf, readManifest, type PluginLoadProblem } from "./plugins.ts";
 
-/** An official plugin, by the name its plugin.json gives and the repo Mirador installs it from. */
-export interface OfficialPlugin {
+/** A release Mirador installs only at the commit its tag pointed at when the catalog's maintainer read it. */
+export interface PluginPin {
+  release: string;
+  commit: string;
+}
+
+/** An official plugin, by the name its plugin.json gives and the repo Mirador installs it from, with the release it is pinned to. */
+export interface OfficialPlugin extends PluginPin {
   name: string;
   repo: string;
 }
@@ -44,9 +50,25 @@ export function officialness(plugin: { name: string | null; remote: string | nul
   return remote !== null && named.some(({ repo }) => comparableRemote(repo) === comparableRemote(remote)) ? "official" : "name-only";
 }
 
-/** What the user chose for the plugin's folder, else whether it is an official plugin. */
-export const mayUpdateByItself = (plugin: { folder: string; name: string | null; remote: string | null }, chosen: Record<string, boolean>, official: OfficialPlugin[]) =>
-  chosen[plugin.folder] ?? officialness(plugin, official) === "official";
+/** The pin of the official plugin this is, the first listed winning; null for a plugin that isn't official. */
+export function pinOf(plugin: { name: string | null; remote: string | null }, official: OfficialPlugin[]): PluginPin | null {
+  const { remote } = plugin;
+  const pinned = remote === null ? undefined : official.find(({ name, repo }) => name === plugin.name && comparableRemote(repo) === comparableRemote(remote));
+  return pinned ? { release: pinned.release, commit: pinned.commit } : null;
+}
+
+/** The pin of the official plugin cloned from `url`, for an install that names no branch or tag. */
+export function pinOfRepo(url: string, official: OfficialPlugin[]): PluginPin | null {
+  const pinned = official.find(({ repo }) => comparableRemote(repo) === comparableRemote(url));
+  return pinned ? { release: pinned.release, commit: pinned.commit } : null;
+}
+
+/**
+ * What the user chose for the plugin's folder, else whether it is an official plugin cloned at a release: one cloned at
+ * a branch would take every push, which nobody read.
+ */
+export const mayUpdateByItself = (plugin: { folder: string; name: string | null; remote: string | null; atRelease: boolean }, chosen: Record<string, boolean>, official: OfficialPlugin[]) =>
+  chosen[plugin.folder] ?? (plugin.atRelease && officialness(plugin, official) === "official");
 
 const hostModulesOf = (manifest: PluginManifest) => JSON.stringify([manifest.app?.host ?? null, manifest.canvas?.host ?? null]);
 
@@ -195,6 +217,8 @@ interface Status {
 
 const remoteOf = ({ source }: Pick<PluginInfo, "source">) => (source.kind === "git" ? source.remote : null);
 
+const isAtRelease = ({ source }: Pick<PluginInfo, "source">) => source.kind === "git" && source.branch === null && source.release !== null;
+
 /**
  * Prepares the releases the host finds for the plugins that may update by themselves: clones and builds each in the
  * ready folder, where it waits for a start the mode says, or notes why it waits for the user instead. Also what this
@@ -221,8 +245,14 @@ export class ReadyPluginUpdates {
     for (const note of readNotes(this.readyFolder)) this.statuses.set(note.folder, { release: note.to, heldBack: note.heldBack });
   }
 
+  /** What installs and updates of an official plugin take: its pin, and nothing newer. */
+  readonly pins: PluginPins = {
+    ofPlugin: (plugin) => pinOf(plugin, this.official()),
+    ofRepo: (url) => pinOfRepo(url, this.official()),
+  };
+
   readonly updatesByItself: UpdatesByItself = (plugin) =>
-    mayUpdateByItself({ folder: plugin.folder, name: plugin.name, remote: remoteOf(plugin) }, this.store.pluginUpdatesByItself(), this.official());
+    mayUpdateByItself({ folder: plugin.folder, name: plugin.name, remote: remoteOf(plugin), atRelease: isAtRelease(plugin) }, this.store.pluginUpdatesByItself(), this.official());
 
   get appliedAtStart(): AppliedPluginUpdate[] {
     return this.applied;

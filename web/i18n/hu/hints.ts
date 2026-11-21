@@ -106,7 +106,7 @@ export const hints: Messages["hints"] = {
     "A következő újraindításkor visszaállítja a frissítés előtti verziót. Ez a kiadás ezután nem települ magától, de kézzel továbbra is frissíthetsz rá.",
   updateAllPlugins: "Klónozza minden bővítmény újabb kiadását vagy új commitjait, megmutatja, mi fut mindegyikből, majd egyszer kér beleegyezést mindegyikhez.",
   updatePlugin:
-    "Klónozza a legújabb kiadást, vagy az ágat a mostani állapotában, és megmutatja, mi fut belőle. Ha beleegyezel, buildeli, és csak ezután cseréli le a bővítményt, így egy sikertelen frissítés a régi állapotban hagyja.",
+    "Klónozza a megjelenített kiadást, vagy az ágat a mostani állapotában, és megmutatja, mi fut belőle. Ha beleegyezel, buildeli, és csak ezután cseréli le a bővítményt, így egy sikertelen frissítés a régi állapotban hagyja.",
   removePluginArmed: "Kattints újra a bővítmény eltávolításához. A Mirador a következő indulásától nem tölti be.",
   unlinkPluginArmed: "Kattints újra a link eltávolításához. A mappa, amelyre mutat, változatlan marad.",
   copyOnSelect: "A terminálban kijelölt szöveg – húzással, dupla vagy tripla kattintással – azonnal a vágólapra kerül, mint az iTerm2-ben és a Linux-terminálokban.",

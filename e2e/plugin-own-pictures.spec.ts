@@ -22,7 +22,7 @@ function installedByHand(folder: string, fields: Record<string, unknown>) {
 }
 
 test.beforeAll(async () => {
-  const listed = { recommendWhen: "the user wants it", repo: "https://example.invalid/repo.git", screenshots: [CATALOG_PICTURE] };
+  const listed = { recommendWhen: "the user wants it", repo: "https://example.invalid/repo.git", release: "1.0.0", commit: "0123456789abcdef0123456789abcdef01234567", screenshots: [CATALOG_PICTURE] };
   const board = { ...listed, name: "board", title: "Board", description: "The catalog's words on the board.", tagline: "The catalog's line on the board." };
   const counter = { ...listed, name: "counter", title: "Counter", description: "Counts by one, as the catalog says.", tagline: "The catalog's line on the counter." };
   installedByHand("board", { description: "Keeps a board, as its own plugin.json says.", tagline: "Its own line on the board.", screenshots: [BOARD_PICTURE] });

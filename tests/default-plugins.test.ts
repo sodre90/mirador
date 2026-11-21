@@ -27,11 +27,16 @@ function releasedCounterRepo(name: string) {
   return repo;
 }
 
+const NOT_A_COMMIT_YET = "0".repeat(40);
+
+const commitOf = (repo: string) => git(repo, "rev-parse", "HEAD");
+
 describe("default plugins", () => {
-  test("reads the plugins of the defaults file, leaving out entries without a name, repo and tag; no file, no plugins", async () => {
+  test("reads the plugins of the defaults file, leaving out entries without a name, repo, tag and full commit; no file, no plugins", async () => {
     const file = join(root, "defaults.json");
-    writeFileSync(file, JSON.stringify({ plugins: [{ name: "counter", repo: "https://example.com/counter.git", tag: "v1.0.0" }, { name: "tagless", repo: "x" }] }));
-    expect(await defaultPluginsIn(file)).toEqual([{ name: "counter", repo: "https://example.com/counter.git", tag: "v1.0.0" }]);
+    const counter = { name: "counter", repo: "https://example.com/counter.git", tag: "v1.0.0", commit: "db96375471067cf1d740971c1acdce65c945a546" };
+    writeFileSync(file, JSON.stringify({ plugins: [counter, { name: "tagless", repo: "x" }, { ...counter, commit: "db96375" }] }));
+    expect(await defaultPluginsIn(file)).toEqual([counter]);
     expect(await defaultPluginsIn(join(root, "no-such.json"))).toEqual([]);
   });
 
@@ -40,16 +45,16 @@ describe("default plugins", () => {
     const folder = join(root, "plugins");
     mkdirSync(folder);
     const store = new Store(":memory:");
-    const unreachable = { name: "unreachable", repo: join(root, "no-such-repo"), tag: "v1.0.0" };
-    const defaults = [{ name: "counter", repo, tag: "v1.0.0" }, unreachable];
+    const unreachable = { name: "unreachable", repo: join(root, "no-such-repo"), tag: "v1.0.0", commit: NOT_A_COMMIT_YET };
+    const counter = { name: "counter", repo, tag: "v1.0.0", commit: commitOf(repo) };
 
-    await installDefaultPlugins(defaults, new InstalledPlugins(folder, []), store);
+    await installDefaultPlugins([counter, unreachable], new InstalledPlugins(folder, []), store);
     expect((await new InstalledPlugins(folder, []).list()).map(({ name, version, source }) => [name, version, source.kind === "git" && source.release])).toEqual([["counter", "1.0.0", "1.0.0"]]);
     expect(store.defaultPluginsInstalled()).toEqual(["counter"]);
 
     await new InstalledPlugins(folder, []).remove("counter");
-    releasedCounterRepo("no-such-repo");
-    await installDefaultPlugins(defaults, new InstalledPlugins(folder, []), store);
+    const reachable = releasedCounterRepo("no-such-repo");
+    await installDefaultPlugins([counter, { ...unreachable, commit: commitOf(reachable) }], new InstalledPlugins(folder, []), store);
     expect((await new InstalledPlugins(folder, []).list()).map(({ name }) => name)).toEqual(["counter"]);
     expect(store.defaultPluginsInstalled()).toEqual(["counter", "unreachable"]);
   });
@@ -59,7 +64,20 @@ describe("default plugins", () => {
     mkdirSync(folder);
     cpSync(COUNTER, join(folder, "counter"), { recursive: true });
     const store = new Store(":memory:");
-    await installDefaultPlugins([{ name: "counter", repo: join(root, "nowhere"), tag: "v1.0.0" }], new InstalledPlugins(folder, []), store);
+    await installDefaultPlugins([{ name: "counter", repo: join(root, "nowhere"), tag: "v1.0.0", commit: NOT_A_COMMIT_YET }], new InstalledPlugins(folder, []), store);
     expect(store.defaultPluginsInstalled()).toEqual(["counter"]);
+  });
+
+  test("doesn't install a default whose tag now points at another commit than the one Mirador names, and tries again at the next start", async () => {
+    const repo = releasedCounterRepo("moved-tag-repo");
+    const named = commitOf(repo);
+    git(repo, "commit", "--quiet", "--allow-empty", "-m", "Something nobody read");
+    git(repo, "tag", "--force", "v1.0.0");
+    const folder = join(root, "moved-tag-plugins");
+    mkdirSync(folder);
+    const store = new Store(":memory:");
+    await installDefaultPlugins([{ name: "counter", repo, tag: "v1.0.0", commit: named }], new InstalledPlugins(folder, []), store);
+    expect(await new InstalledPlugins(folder, []).list()).toEqual([]);
+    expect(store.defaultPluginsInstalled()).toEqual([]);
   });
 });

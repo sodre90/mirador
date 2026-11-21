@@ -9,6 +9,7 @@ import { renameWhenFree } from "../rename-when-free.ts";
 import { parkedFolderOf, swapPlugin } from "./plugin-swaps.ts";
 import { AppProblem, messageOf, newerApiOf, pluginFiles, pluginFolders, readManifest, refuseUnversioned, type CanvasPlugin, type PluginLoadProblem } from "./plugins.ts";
 import { causeOf, HostProblemError, problemFieldsOf, type HostProblem } from "../../shared/host-problems.ts";
+import type { PluginPin } from "./ready-plugin-updates.ts";
 
 const GIT_GIVES_UP_AFTER_MS = 5 * 60_000;
 const BUILD_GIVES_UP_AFTER_MS = 10 * 60_000;
@@ -102,6 +103,12 @@ const NO_NEWS: PluginNews = { release: null, commits: [], needsApi: null };
 /** Where a plugin's clone keeps the releases its update checks fetch, apart from its own tags, which say what it has installed. */
 const FETCHED_RELEASES = "refs/mirador/releases/";
 const fetchedReleaseRef = (release: string) => `${FETCHED_RELEASES}${releaseTag(release)}`;
+
+/** Refuses a fetched release whose tag no longer points at the commit the catalog's maintainer read. */
+async function refuseUnlessFetchedAtPin(folder: string, pin: PluginPin) {
+  const tagged = await gitOutput(folder, ["rev-parse", "--verify", "--quiet", `${fetchedReleaseRef(pin.release)}^{commit}`]);
+  if (tagged !== pin.commit) throw new HostProblemError({ code: "plugin-release-moved", release: pin.release, pinned: pin.commit, found: tagged });
+}
 
 /** Every release in one fetch, a tag the repo moved since included, so reading the newer ones' plugin.json fetches nothing more. */
 async function fetchReleases(folder: string) {
@@ -219,6 +226,15 @@ async function commitsOfFetchedRelease(folder: string, release: string) {
   return commitsOfLog(log);
 }
 
+/** An official plugin's news: the release it is pinned to, once past the installed one, and never a newer tag nobody read. */
+async function pinnedNews(folder: string, installed: string, pin: PluginPin): Promise<PluginNews> {
+  if (!isNewerVersion(pin.release, installed)) return NO_NEWS;
+  await fetchReleases(folder);
+  await refuseUnlessFetchedAtPin(folder, pin);
+  const needsApi = newerApiOf(parsedOrNull(await gitOutput(folder, ["show", `${pin.commit}:plugin.json`])));
+  return { release: pin.release, needsApi, commits: await commitsOfFetchedRelease(folder, pin.release) };
+}
+
 /** Every text in a problem, without credentials, as the page may show any of them. */
 const problemWithoutCredentials = (problem: HostProblem): HostProblem =>
   Object.fromEntries(
@@ -240,6 +256,14 @@ const byTitle = ({ title, folder }: PluginInfo) => title ?? folder;
 
 /** What decides whether a plugin's releases may go in without asking. */
 export type UpdatesByItself = (plugin: Pick<PluginInfo, "folder" | "name" | "source">) => boolean;
+
+/** The pins of the official plugins: the only release an install or update of one takes, at the only commit it accepts. */
+export interface PluginPins {
+  ofPlugin(plugin: { name: string | null; remote: string | null }): PluginPin | null;
+  ofRepo(url: string): PluginPin | null;
+}
+
+const NO_PINS: PluginPins = { ofPlugin: () => null, ofRepo: () => null };
 
 /** A release cloned for an update that may go in without asking, next to the plugin it would replace. */
 export interface ClonedRelease {
@@ -266,6 +290,7 @@ export class InstalledPlugins {
   private changesStarted = 0;
   private changesEnded = 0;
   private updatesByItself: UpdatesByItself = () => false;
+  private pins: PluginPins = NO_PINS;
 
   constructor(
     readonly folder: string,
@@ -282,6 +307,10 @@ export class InstalledPlugins {
 
   decidesUpdatesByItselfWith(updatesByItself: UpdatesByItself) {
     this.updatesByItself = updatesByItself;
+  }
+
+  followsPinsWith(pins: PluginPins) {
+    this.pins = pins;
   }
 
   /** Lists again once the changes are done when one was under way while it listed, so that it never shows a plugin half gone. */
@@ -326,15 +355,17 @@ export class InstalledPlugins {
   }
 
   /**
-   * Clones the repo at the branch or tag given, or else at its newest release, or its default branch when it tags no
-   * release, without building it: what it brings, for the user to agree to before any of its code runs.
+   * Clones the repo at the branch or tag given, or else at the release an official plugin is pinned to, or else at its
+   * newest release, or its default branch when it tags no release, without building it: what it brings, for the user to
+   * agree to before any of its code runs. With a pinned commit, a clone at any other is refused.
    */
-  offer(url: string, branch: string | null): Promise<PluginOffer> {
+  offer(url: string, branch: string | null, pinnedCommit: string | null = null): Promise<PluginOffer> {
     return this.oneAtATime(async () => {
       const repo = expandedHome(url.trim());
       const given = branch?.trim() || null;
-      const release = given || !repo ? null : await newestRelease(repo);
-      const { staged, manifest } = await this.cloned(repo, given ?? (release && releaseTag(release)));
+      const pin = given || !repo ? null : this.pins.ofRepo(repo);
+      const release = pin?.release ?? (given || !repo ? null : await newestRelease(repo));
+      const { staged, manifest } = await this.cloned(repo, given ?? (release && releaseTag(release)), pin?.commit ?? pinnedCommit);
       try {
         await this.refuseTakenName(manifest.name);
       } catch (error) {
@@ -345,14 +376,18 @@ export class InstalledPlugins {
     });
   }
 
-  /** Clones what updating the plugin brings, the newest release or the branch as it is now, without building it, for the user to agree to. */
+  /**
+   * Clones what updating the plugin brings, the newest release, the pinned one for an official plugin, or the branch as
+   * it is now, without building it, for the user to agree to.
+   */
   offerUpdate(folderName: string): Promise<PluginOffer> {
     return this.oneAtATime(async () => {
       const folder = this.clonedPlugin(folderName);
       const followed = await this.followed(folder);
       const newest = followed.release && ((await this.releaseNews(folder, followed.remote, followed.release)).release ?? followed.release);
       const installed = await readManifest(folder).catch(() => null);
-      const { staged, manifest } = await this.cloned(followed.remote, newest ? releaseTag(newest) : followed.branch);
+      const pin = newest ? this.pins.ofPlugin({ name: installed?.name ?? null, remote: followed.remote }) : null;
+      const { staged, manifest } = await this.cloned(followed.remote, newest ? releaseTag(newest) : followed.branch, pin?.commit ?? null);
       try {
         if (installed && manifest.name !== installed.name) {
           throw new HostProblemError({ code: "plugin-renamed", name: manifest.name, installedName: installed.name, folder: folderName });
@@ -409,9 +444,9 @@ export class InstalledPlugins {
     if (staging) rmSync(staging.staged, { recursive: true, force: true });
   }
 
-  /** Installs without asking, for the plugins Mirador installs by itself. */
-  async add(url: string, branch: string | null): Promise<void> {
-    await this.install((await this.offer(url, branch)).id);
+  /** Installs without asking, for the plugins Mirador installs by itself, at the commit Mirador names. */
+  async add(url: string, branchOrTag: string | null, commit: string | null = null): Promise<void> {
+    await this.install((await this.offer(url, branchOrTag, commit)).id);
   }
 
   /** Updates without asking. */
@@ -465,6 +500,8 @@ export class InstalledPlugins {
    * newer release needs a newer Mirador, the newest of them, saying which plugin API it needs.
    */
   private async releaseNews(folder: string, remote: string, installed: string): Promise<PluginNews> {
+    const pin = this.pins.ofPlugin({ name: (await manifestFields(folder)).name, remote });
+    if (pin) return pinnedNews(folder, installed, pin);
     const newer = (await releasesOf(remote)).filter((release) => isNewerVersion(release, installed));
     const newest = newer[0];
     if (newest === undefined) return NO_NEWS;
@@ -510,7 +547,8 @@ export class InstalledPlugins {
     const followed = await this.followed(folder);
     if (followed.branch !== null) throw new HostProblemError({ code: "plugin-has-nothing-to-update-from", folder: folderName });
     const [installed, installedCommit] = await Promise.all([readManifest(folder).catch(() => null), gitOutput(folder, ["rev-parse", "HEAD"])]);
-    const { staged, manifest } = await this.cloned(followed.remote, releaseTag(release));
+    const pin = this.pins.ofPlugin({ name: installed?.name ?? null, remote: followed.remote });
+    const { staged, manifest } = await this.cloned(followed.remote, releaseTag(release), pin?.commit ?? null);
     return { staged, manifest, installed, installedCommit, commit: await gitOutput(staged, ["rev-parse", "HEAD"]) };
   }
 
@@ -559,8 +597,11 @@ export class InstalledPlugins {
     return done;
   }
 
-  /** Clones the repo at the branch or tag, or its default branch, into the staging folder, and reads its plugin.json; runs none of its code. */
-  private async cloned(url: string, branchOrTag: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
+  /**
+   * Clones the repo at the branch or tag, or its default branch, into the staging folder, and reads its plugin.json; runs
+   * none of its code. A clone that isn't at the pinned commit given is refused before anything reads it.
+   */
+  private async cloned(url: string, branchOrTag: string | null, pinnedCommit: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
     if (!url) throw new HostProblemError({ code: "plugin-needs-repo-address" });
     mkdirSync(this.staging, { recursive: true });
     const staged = join(this.staging, crypto.randomUUID());
@@ -572,6 +613,10 @@ export class InstalledPlugins {
         GIT_GIVES_UP_AFTER_MS,
       );
       if (!cloned.ok) throw new HostProblemError({ code: "git-clone-failed", output: cloned.output });
+      const found = pinnedCommit && (await gitOutput(staged, ["rev-parse", "HEAD"]));
+      if (pinnedCommit && found !== pinnedCommit) {
+        throw new HostProblemError({ code: "plugin-release-moved", release: releaseOfTag(branchOrTag) ?? String(branchOrTag), pinned: pinnedCommit, found: found || null });
+      }
       const manifest = await readManifest(staged)
         .then((read) => (refuseUnversioned(read), read))
         .catch((error) => {

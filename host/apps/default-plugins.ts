@@ -1,19 +1,21 @@
 import { existsSync } from "node:fs";
 import { basename } from "node:path";
+import { isCommit } from "../../shared/apps.ts";
 import type { Store } from "../store.ts";
 import type { InstalledPlugins } from "./installed-plugins.ts";
 import { messageOf } from "./plugins.ts";
 
-/** A plugin Mirador installs by itself, at the release Mirador names. */
+/** A plugin Mirador installs by itself, at the release Mirador names and only at the commit its tag pointed at then. */
 export interface DefaultPlugin {
   name: string;
   repo: string;
   tag: string;
+  commit: string;
 }
 
 function isDefaultPlugin(value: unknown): value is DefaultPlugin {
-  const { name, repo, tag } = (value ?? {}) as Partial<DefaultPlugin>;
-  return [name, repo, tag].every((text) => typeof text === "string" && text !== "");
+  const { name, repo, tag, commit } = (value ?? {}) as Partial<DefaultPlugin>;
+  return [name, repo, tag].every((text) => typeof text === "string" && text !== "") && isCommit(commit);
 }
 
 export async function defaultPluginsIn(file: string): Promise<DefaultPlugin[]> {
@@ -31,7 +33,7 @@ export async function installDefaultPlugins(defaults: DefaultPlugin[], plugins: 
   const installedFolders = new Set((await plugins.list()).flatMap(({ folder, name }) => [folder, name ?? folder]));
   for (const plugin of defaults.filter(({ name }) => !installedBefore.has(name))) {
     try {
-      if (!installedFolders.has(plugin.name)) await plugins.add(plugin.repo, plugin.tag);
+      if (!installedFolders.has(plugin.name)) await plugins.add(plugin.repo, plugin.tag, plugin.commit);
       store.rememberDefaultPluginInstalled(plugin.name);
     } catch (error) {
       console.warn(`the ${plugin.name} plugin, which Mirador installs by itself, didn't install from ${basename(plugin.repo)}: ${messageOf(error)}`);

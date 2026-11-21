@@ -472,7 +472,7 @@ function useInstallOfficial(plugin: CatalogPlugin | null, startInstalling: boole
     if (!plugin) return;
     setStep("cloning");
     setProblem(null);
-    const offered = await offerPlugin((requestId) => ({ type: "plugins.offer", requestId, url: plugin.repo, branch: plugin.branch ?? null }));
+    const offered = await offerPlugin((requestId) => ({ type: "plugins.offer", requestId, url: plugin.repo, branch: null }));
     setStep(offered.offer ?? "idle");
     setProblem(offered.problem);
   };

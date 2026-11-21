@@ -13,6 +13,8 @@ import {
   mayUpdateByItself,
   miradorIdentity,
   miradorUpdated,
+  pinOf,
+  pinOfRepo,
   previousFolderOf,
   ReadyPluginUpdates,
   readyFolderOf,
@@ -103,7 +105,7 @@ async function restarted(pluginsFolder: string, store: Store) {
 describe("heldBackBecause", () => {
   const installed = counterManifest as PluginManifest;
   const decided = { release: "1.0.1", undone: undefined, name: "counter", remote: "https://github.com/me/counter.git", official: [] };
-  const officialCounter = [{ name: "counter", repo: "https://github.com/me/counter.git" }];
+  const officialCounter = [{ name: "counter", repo: "https://github.com/me/counter.git", release: "1.0.0", commit: "a".repeat(40) }];
 
   test("a release from the plugin's own remote, with the same build command and host modules, goes in by itself", () => {
     expect(heldBackBecause(decided)).toBeNull();
@@ -124,7 +126,7 @@ describe("heldBackBecause", () => {
   });
 
   test("a plugin with an official one's name but cloned from another repo waits, whatever credentials or .git the remote has", () => {
-    expect(heldBackBecause({ ...decided, official: [{ name: "counter", repo: "https://github.com/sodre90/counter.git" }] })).toBe("remote-changed");
+    expect(heldBackBecause({ ...decided, official: [{ name: "counter", repo: "https://github.com/sodre90/counter.git", release: "1.0.0", commit: "a".repeat(40) }] })).toBe("remote-changed");
     expect(heldBackBecause({ ...decided, remote: "https://me:token@github.com/me/counter", official: officialCounter })).toBeNull();
     expect(heldBackBecause({ ...decided, remote: null, official: officialCounter })).toBe("remote-changed");
   });
@@ -140,20 +142,45 @@ describe("heldBackBecause", () => {
 });
 
 describe("which plugins update by themselves", () => {
-  const official = [{ name: "review", repo: "https://github.com/sodre90/mirador-review.git" }];
-  const review = { folder: "review", name: "review", remote: "https://github.com/sodre90/mirador-review" };
+  const official = [{ name: "review", repo: "https://github.com/sodre90/mirador-review.git", release: "1.0.0", commit: "a".repeat(40) }];
+  const review = { folder: "review", name: "review", remote: "https://github.com/sodre90/mirador-review", atRelease: true };
+  const counter = { folder: "counter", name: "counter", remote: "/repos/counter", atRelease: true };
 
   test("official plugins, by name and repo, do until the user turns it off; any other only once the user turns it on", () => {
     expect(mayUpdateByItself(review, {}, official)).toBe(true);
     expect(mayUpdateByItself(review, { review: false }, official)).toBe(false);
-    expect(mayUpdateByItself({ folder: "counter", name: "counter", remote: "/repos/counter" }, {}, official)).toBe(false);
-    expect(mayUpdateByItself({ folder: "counter", name: "counter", remote: "/repos/counter" }, { counter: true }, official)).toBe(true);
+    expect(mayUpdateByItself(counter, {}, official)).toBe(false);
+    expect(mayUpdateByItself(counter, { counter: true }, official)).toBe(true);
   });
 
   test("a plugin that only shares an official one's name, or whose name can't be read, isn't on by default", () => {
     expect(mayUpdateByItself({ ...review, remote: "https://github.com/someone/review.git" }, {}, official)).toBe(false);
     expect(mayUpdateByItself({ ...review, remote: null }, {}, official)).toBe(false);
-    expect(mayUpdateByItself({ folder: "review", name: null, remote: review.remote }, {}, official)).toBe(false);
+    expect(mayUpdateByItself({ ...review, name: null }, {}, official)).toBe(false);
+  });
+
+  test("an official plugin cloned at a branch isn't on by default, as every push would go in unread", () => {
+    expect(mayUpdateByItself({ ...review, atRelease: false }, {}, official)).toBe(false);
+    expect(mayUpdateByItself({ ...review, atRelease: false }, { review: true }, official)).toBe(true);
+  });
+});
+
+describe("pins of official plugins", () => {
+  const official = [
+    { name: "review", repo: "https://github.com/sodre90/mirador-review.git", release: "1.0.14", commit: "b".repeat(40) },
+    { name: "review", repo: "https://github.com/sodre90/mirador-review.git", release: "1.0.6", commit: "c".repeat(40) },
+  ];
+
+  test("an official plugin's pin is the first listed, by name and repo, whatever credentials or .git the remote has", () => {
+    expect(pinOf({ name: "review", remote: "https://me:token@github.com/sodre90/mirador-review" }, official)).toEqual({ release: "1.0.14", commit: "b".repeat(40) });
+    expect(pinOf({ name: "review", remote: "https://github.com/someone/mirador-review.git" }, official)).toBeNull();
+    expect(pinOf({ name: "other", remote: "https://github.com/sodre90/mirador-review.git" }, official)).toBeNull();
+    expect(pinOf({ name: "review", remote: null }, official)).toBeNull();
+  });
+
+  test("an install from an official plugin's repo takes its pin", () => {
+    expect(pinOfRepo("https://github.com/sodre90/mirador-review", official)).toEqual({ release: "1.0.14", commit: "b".repeat(40) });
+    expect(pinOfRepo("https://github.com/someone/mirador-review.git", official)).toBeNull();
   });
 });
 
@@ -347,21 +374,49 @@ describe("ready plugin updates", () => {
     expect(ready.marked(found)).toMatchObject([{ release: null, ready: false, heldBack: "not-a-release" }]);
   });
 
-  test("an official plugin updates by itself without being turned on", async () => {
-    const official = (repo: string) => [{ name: "counter", repo }];
+  test("an official plugin updates by itself without being turned on, only to the release the catalog pins", async () => {
     const repo = counterRepo("official");
     const pluginsFolder = join(root, "official", "plugins");
     const store = new Store(":memory:");
     store.setPluginUpdateMode("any-restart");
+    let official: OfficialPlugin[] = [{ name: "counter", repo, release: "1.0.0", commit: git(repo, "rev-parse", "HEAD") }];
     const plugins = new InstalledPlugins(pluginsFolder, []);
-    const ready = new ReadyPluginUpdates(pluginsFolder, plugins, store, () => official(repo));
+    const ready = new ReadyPluginUpdates(pluginsFolder, plugins, store, () => official);
     plugins.decidesUpdatesByItselfWith(ready.updatesByItself);
+    plugins.followsPinsWith(ready.pins);
     await plugins.add(repo, null);
     expect((await plugins.list())[0]?.updatesByItself).toBe(true);
+
     release(repo, "1.0.1");
+    expect(await plugins.updatesFound(null), "a release the catalog doesn't pin yet").toEqual([]);
+
+    official = [{ ...official[0]!, release: "1.0.1", commit: git(repo, "rev-parse", "HEAD") }];
     const found = await plugins.updatesFound(null);
+    expect(found).toMatchObject([{ release: "1.0.1" }]);
     await ready.prepare(found);
     expect(ready.marked(found)).toMatchObject([{ ready: true }]);
+  });
+
+  test("a pinned release whose tag moved since is neither found, offered nor prepared", async () => {
+    const repo = counterRepo("moved");
+    const pluginsFolder = join(root, "moved", "plugins");
+    const store = new Store(":memory:");
+    store.setPluginUpdateMode("any-restart");
+    const plugins = new InstalledPlugins(pluginsFolder, []);
+    let official: OfficialPlugin[] = [{ name: "counter", repo, release: "1.0.0", commit: git(repo, "rev-parse", "HEAD") }];
+    const ready = new ReadyPluginUpdates(pluginsFolder, plugins, store, () => official);
+    plugins.decidesUpdatesByItselfWith(ready.updatesByItself);
+    plugins.followsPinsWith(ready.pins);
+    await plugins.add(repo, null);
+    release(repo, "1.0.1");
+    official = [{ ...official[0]!, release: "1.0.1", commit: git(repo, "rev-parse", "HEAD") }];
+    git(repo, "commit", "--quiet", "--allow-empty", "-m", "Something nobody read");
+    git(repo, "tag", "--force", "v1.0.1");
+
+    expect(await plugins.updatesFound(null)).toEqual([]);
+    await expect(plugins.news("counter")).rejects.toMatchObject({ problem: { code: "plugin-release-moved", release: "1.0.1", pinned: official[0]!.commit } });
+    await expect(plugins.offerUpdate("counter")).rejects.toMatchObject({ problem: { code: "plugin-release-moved" } });
+    await expect(plugins.cloneRelease("counter", "1.0.1")).rejects.toMatchObject({ problem: { code: "plugin-release-moved", found: git(repo, "rev-parse", "HEAD") } });
   });
 
   test("switching to asking, or turning a plugin off, discards its ready update", async () => {

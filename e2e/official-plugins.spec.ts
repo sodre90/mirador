@@ -21,6 +21,17 @@ function counterRepoNamed(folder: string, name: string, title: string) {
   git(folder, "init", "--quiet", "-b", "main");
   git(folder, "add", ".");
   git(folder, "commit", "--quiet", "-m", "Count by one");
+  git(folder, "tag", "v1.0.0");
+}
+
+const pinnedAtItsRelease = (repo: string) => ({ repo, release: "1.0.0", commit: git(repo, "rev-parse", "v1.0.0^{commit}") });
+
+/** Moves the repo's tag v1.0.0 to a new commit, as a maintainer gone bad could, and back to where it was. */
+function movedTag(repo: string) {
+  const pinned = git(repo, "rev-parse", "v1.0.0^{commit}");
+  git(repo, "commit", "--quiet", "--allow-empty", "-m", "Something else");
+  git(repo, "tag", "--force", "v1.0.0");
+  return { moved: git(repo, "rev-parse", "HEAD"), pinned, putBack: () => git(repo, "tag", "--force", "v1.0.0", pinned) };
 }
 
 const TALLY_ICON = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8"><rect width="8" height="8" fill="teal"/></svg>';
@@ -31,8 +42,8 @@ const TALLY_TOTALS = { url: "https://example.invalid/tally/screenshots/totals.pn
 function publishCatalog() {
   counterRepoNamed(counterRepo(), "counter", "Counter");
   counterRepoNamed(tallyRepo(), "tally", "Tally");
-  const counter = { name: "counter", title: "Counter", description: "Counts by one.", recommendWhen: "the user wants to count", repo: counterRepo(), branch: "main" };
-  const tally = { name: "tally", title: "Tally", description: "Keeps a tally.", recommendWhen: "the user keeps a tally", repo: tallyRepo(), icon: TALLY_ICON, screenshots: [TALLY_SCREENSHOT, TALLY_TOTALS], tagline: "Tallies votes as they come.", kinds: ["app"] };
+  const counter = { name: "counter", title: "Counter", description: "Counts by one.", recommendWhen: "the user wants to count", ...pinnedAtItsRelease(counterRepo()) };
+  const tally = { name: "tally", title: "Tally", description: "Keeps a tally.", recommendWhen: "the user keeps a tally", ...pinnedAtItsRelease(tallyRepo()), icon: TALLY_ICON, screenshots: [TALLY_SCREENSHOT, TALLY_TOTALS], tagline: "Tallies votes as they come.", kinds: ["app"] };
   writeFileSync(catalogFile(), JSON.stringify({ plugins: [counter, tally] }));
 }
 
@@ -49,7 +60,7 @@ test.afterAll(async () => {
 
 const plugins = (page: Page) => page.getByRole("dialog", { name: "Plugins" });
 
-test("the agent recommends an official plugin, and Mirador installs it only once the user answers Install", async ({ page }) => {
+test("the agent recommends an official plugin, and Mirador installs it, at the commit the catalog pins, only once the user answers Install", async ({ page }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const conversationId = await startConversation(page);
@@ -113,6 +124,15 @@ test("the agent recommends an official plugin, and Mirador installs it only once
     await page.keyboard.press("Escape");
     await expect(plugins(page).locator(".plugin-viewer")).toHaveCount(0);
     await expect(tally).toBeVisible();
+
+    const { moved, pinned, putBack } = movedTag(tallyRepo());
+    await tally.getByRole("button", { name: "Install", exact: true }).click();
+    await expect(tally.locator(".plugin-output"), "a tag moved since the catalog pinned it is refused before any of its code runs").toHaveText(
+      `Its tag v1.0.0 now points at commit ${moved.slice(0, 7)}, not at ${pinned.slice(0, 7)}, the one the list of official plugins names, so Mirador doesn't install it.`,
+    );
+    await expect(tally.getByRole("group", { name: "Install Tally?" })).toHaveCount(0);
+    putBack();
+
     await tally.getByRole("button", { name: "Install", exact: true }).click();
     await tally.getByRole("group", { name: "Install Tally?" }).getByRole("button", { name: "Install", exact: true }).click();
     await expect(tally.getByText("used from the next start")).toBeVisible({ timeout: 30_000 });

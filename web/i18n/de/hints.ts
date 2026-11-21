@@ -112,7 +112,7 @@ export const hints: Messages["hints"] = {
     "Holt ab dem nächsten Neustart die Version zurück, die dieses Update ersetzt hat. Dieses Release wird danach nicht mehr von selbst installiert, du kannst es aber weiterhin von Hand installieren.",
   updateAllPlugins: "Klont das neuere Release oder die neuen Commits jedes Plugins, zeigt, was von jedem ausgeführt wird, und fragt dann einmal für alle.",
   updatePlugin:
-    "Klont das neueste Release oder den Branch, wie er jetzt ist, und zeigt, was davon ausgeführt wird. Sobald du zustimmst, baut es ihn und ersetzt erst dann das Plugin, sodass ein fehlgeschlagenes Update es lässt, wie es war.",
+    "Klont das angezeigte Release oder den Branch, wie er jetzt ist, und zeigt, was davon ausgeführt wird. Sobald du zustimmst, baut es ihn und ersetzt erst dann das Plugin, sodass ein fehlgeschlagenes Update es lässt, wie es war.",
   removePluginArmed: "Klicke erneut, um dieses Plugin zu entfernen. Mirador lädt es ab seinem nächsten Start nicht mehr.",
   unlinkPluginArmed: "Klicke erneut, um die Verknüpfung zu entfernen. Der Ordner, auf den sie zeigt, bleibt, wie er ist.",
   copyOnSelect:

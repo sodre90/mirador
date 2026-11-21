@@ -139,10 +139,11 @@ const readyPluginUpdates = new ReadyPluginUpdates(
   pluginsFolder,
   plugins,
   store,
-  () => [...catalog.all, ...defaultPlugins].map(({ name, repo }) => ({ name, repo })),
+  () => [...catalog.all, ...defaultPlugins.map(({ name, repo, tag, commit }) => ({ name, repo, release: tag.replace(/^v/, ""), commit }))],
   () => hub.announcePluginUpdates(readyPluginUpdates.marked(pluginUpdates.current ?? [])),
 );
 plugins.decidesUpdatesByItselfWith(readyPluginUpdates.updatesByItself);
+plugins.followsPinsWith(readyPluginUpdates.pins);
 await readyPluginUpdates.started(pluginsUpdatedAtStart, loadedPlugins.problems);
 canvas.installsPluginsWith(officialPluginInstaller(catalog, plugins, (listed) => hub.broadcast(listed)));
 const apps = new AppDocuments(store, loadedPlugins.apps, {
@@ -185,9 +186,11 @@ const desktopApp = new DesktopAppCheck(
   (outdated) => hub.broadcast({ type: "desktop-app.outdated", outdated }),
 );
 const newerVersion = new NewerVersionWatcher(newerVersionLookup(sourceDir, config.latestReleaseUrl), (found) => hub.announceNewerVersion(found));
-// Prepared after every look, not only when what was found changed, so a clone that failed is tried again.
+// Prepared after every look, not only when what was found changed, so a clone that failed is tried again. Each fetching look
+// reads the catalog first, so an official plugin updates to the release it pins now.
 const pluginUpdates = new Lookout(
-  async (_, last: PluginUpdate[] | null) => {
+  async (fetching, last: PluginUpdate[] | null) => {
+    if (fetching) await catalog.refresh();
     const found = await plugins.updatesFound(last);
     void readyPluginUpdates.prepare(found);
     return found;

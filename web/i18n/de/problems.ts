@@ -270,6 +270,10 @@ export const problems: Messages["problems"] = {
   repoIsNotAPlugin: (cause) => `Das Repo ist kein Plugin, das Mirador laden kann: ${cause}.`,
   pluginTagVersionMismatch: (tag, release, version) =>
     `Sein Tag ${tag} ist Release ${release}, aber seine plugin.json gibt Version ${version} an.`,
+  pluginReleaseMoved: (release, pinned, found) =>
+    `Sein Tag v${release} zeigt jetzt auf Commit ${found.slice(0, 7)}, nicht auf ${pinned.slice(0, 7)}, den die Liste der offiziellen Plugins nennt, deshalb installiert Mirador es nicht.`,
+  pluginReleaseGone: (release, pinned) =>
+    `Sein Tag v${release} ist weg, deshalb kann Mirador nicht prüfen, ob er Commit ${pinned.slice(0, 7)} ist, den die Liste der offiziellen Plugins nennt, und installiert es nicht.`,
   pluginBuildFailed: (command, output) => `Sein Build-Befehl ist fehlgeschlagen (${command}):\n${output}`,
   pluginInvalidAfterBuild: (cause) => `Nach dem Build: ${cause}.`,
   pluginInvalidAfterCloning: (cause) => `Nach dem Klonen: ${cause}.`,

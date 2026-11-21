@@ -254,6 +254,10 @@ export const problems: Messages["problems"] = {
   gitCloneFailed: (output) => `git clone 失败：\n${output}`,
   repoIsNotAPlugin: (cause) => `该仓库不是 Mirador 能加载的插件：${cause}。`,
   pluginTagVersionMismatch: (tag, release, version) => `它的标签 ${tag} 对应发布版本 ${release}，但它的 plugin.json 写的版本是 ${version}。`,
+  pluginReleaseMoved: (release, pinned, found) =>
+    `它的标签 v${release} 现在指向提交 ${found.slice(0, 7)}，而不是官方插件列表指定的 ${pinned.slice(0, 7)}，所以 Mirador 不会安装它。`,
+  pluginReleaseGone: (release, pinned) =>
+    `它的标签 v${release} 已不存在，Mirador 无法确认它是官方插件列表指定的提交 ${pinned.slice(0, 7)}，所以不会安装它。`,
   pluginBuildFailed: (command, output) => `它的构建命令 ${command} 失败：\n${output}`,
   pluginInvalidAfterBuild: (cause) => `构建之后，${cause}。`,
   pluginInvalidAfterCloning: (cause) => `克隆之后，${cause}。`,

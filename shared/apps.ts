@@ -311,7 +311,10 @@ export interface CatalogPlugin {
   recommendWhen: string;
   /** What git clones, which the catalog's README asks to be an https URL anyone can clone. */
   repo: string;
-  branch?: string;
+  /** The release Mirador installs and updates the plugin to, the one the catalog's maintainer read: never a newer tag. */
+  release: string;
+  /** The commit the release's tag pointed at when it was read; a clone at any other is refused, as the tag moved since. */
+  commit: string;
   /** The plugin's icon, as SVG text. */
   icon?: string;
   /** A line on what it does, for its tile; the description stands in without one. */
@@ -323,7 +326,7 @@ export interface CatalogPlugin {
 }
 
 export interface PluginScreenshot {
-  /** From the catalog, an https URL, as a raw file of the plugin's repo at a release tag; from an installed plugin, the host's URL for the file. */
+  /** From the catalog, an https URL, as a raw file of the plugin's repo at its pinned commit; from an installed plugin, the host's URL for the file. */
   url: string;
   caption: string;
 }
@@ -360,16 +363,20 @@ function withShowableExtras({ icon, screenshots, tagline, kinds, ...plugin }: Ca
 
 function isCatalogPlugin(value: unknown): value is CatalogPlugin {
   if (typeof value !== "object" || value === null) return false;
-  const { name, title, description, recommendWhen, repo, branch } = value as Partial<CatalogPlugin>;
+  const { name, title, description, recommendWhen, repo, release, commit } = value as Partial<CatalogPlugin>;
   return (
     typeof name === "string" &&
     /^[a-z0-9][a-z0-9-]*$/.test(name) &&
     [title, description, recommendWhen].every((text) => typeof text === "string" && text !== "") &&
     typeof repo === "string" &&
     repo !== "" &&
-    (branch === undefined || typeof branch === "string")
+    isPluginVersion(release) &&
+    isCommit(commit)
   );
 }
+
+/** A full commit id, as a pin names it: an abbreviated one could match another commit. */
+export const isCommit = (commit: unknown): commit is string => typeof commit === "string" && /^[0-9a-f]{40}$/.test(commit);
 
 /** The catalog's plugins, leaving out entries this Mirador can't read, as a newer catalog may have. */
 export function catalogPluginsOf(catalog: unknown): CatalogPlugin[] | null {

@@ -112,7 +112,7 @@ export const hints: Messages["hints"] = {
     "Restaura la versión que esta actualización reemplazó a partir del próximo reinicio. Después, esta versión ya no se instala sola, pero puedes seguir actualizando a ella manualmente.",
   updateAllPlugins: "Clona la versión más nueva o los commits nuevos de cada plugin y muestra qué parte de cada uno se ejecuta, y luego pregunta una sola vez por todos.",
   updatePlugin:
-    "Clona la versión más reciente, o la rama tal como está ahora, y muestra qué parte se ejecuta. Cuando aceptas, hace el build y solo entonces reemplaza el plugin, así que una actualización fallida lo deja como estaba.",
+    "Clona la versión indicada, o la rama tal como está ahora, y muestra qué parte se ejecuta. Cuando aceptas, hace el build y solo entonces reemplaza el plugin, así que una actualización fallida lo deja como estaba.",
   removePluginArmed: "Haz clic de nuevo para quitar este plugin. Mirador deja de cargarlo desde su próximo inicio.",
   unlinkPluginArmed: "Haz clic de nuevo para quitar el enlace. La carpeta a la que apunta se queda como está.",
   copyOnSelect:

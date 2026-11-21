@@ -98,7 +98,7 @@ export const pluginsListed = async (plugins: InstalledPlugins, catalog: PluginCa
 export const officialPluginInstaller = (catalog: PluginCatalog, plugins: InstalledPlugins, listed: (message: ServerMessage) => void): PluginInstaller => ({
   offer: async (name) => {
     const plugin = catalog.installable(name);
-    return plugins.offer(plugin.repo, plugin.branch ?? null);
+    return plugins.offer(plugin.repo, `v${plugin.release}`, plugin.commit);
   },
   settle: async (offerId, accepted) => {
     if (!accepted) {

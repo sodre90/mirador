@@ -103,7 +103,7 @@ export const hints = {
     "Brings back the version this update replaced, from the next restart. This release then won't install by itself again, but you can still update to it by hand.",
   updateAllPlugins: "Clones every plugin's newer release or new commits and shows what of each runs, then asks once for all of them.",
   updatePlugin:
-    "Clones the newest release, or the branch as it is now, and shows what of it runs. Once you agree it builds it, and only then replaces the plugin, so a failed update leaves it as it was.",
+    "Clones the release shown, or the branch as it is now, and shows what of it runs. Once you agree it builds it, and only then replaces the plugin, so a failed update leaves it as it was.",
   removePluginArmed: "Click again to remove this plugin. Mirador stops loading it from its next start.",
   unlinkPluginArmed: "Click again to remove the link. The folder it points to stays as it is.",
   copyOnSelect: "Text you select in a terminal, by dragging or double- or triple-clicking, goes to the clipboard at once, as in iTerm2 and Linux terminals.",

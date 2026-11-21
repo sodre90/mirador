@@ -33,10 +33,25 @@ function release(name: string, version: string, manifest: Record<string, unknown
   git(repoOf(name), "tag", `v${version}`);
 }
 
+const official = (name: string, title: string, release: string) => ({
+  name,
+  title,
+  description: `The ${name}.`,
+  recommendWhen: `the user wants a ${name}`,
+  repo: repoOf(name),
+  release,
+  commit: git(repoOf(name), "rev-parse", `v${release}^{commit}`),
+});
+
+/** The catalog of official plugins, pinning Counter at the release given and each at the commit its tag points at now. */
+function publishCatalog(counterRelease: string) {
+  writeFileSync(catalogFile(), JSON.stringify({ plugins: [official("counter", "Counter", counterRelease), official("gauge", "Gauge", "1.0.1"), official("dial", "Dial", "1.0.0")] }));
+}
+
 /**
  * Four plugins installed at their release 1.0.0 as Mirador installs one, each with a 1.0.1 since: Counter and Gauge are
- * official, through the catalog, and Gauge's 1.0.1 doesn't load; Tally and Meter aren't, and Meter's 1.0.1 brings a build command.
- * Dial, official too, follows its main branch, so it never updates by itself.
+ * official, through the catalog, which pins Gauge at its 1.0.1, which doesn't load, and Counter still at its 1.0.0; Tally and
+ * Meter aren't, and Meter's 1.0.1 brings a build command. Dial, official too, follows its main branch, so it never updates by itself.
  */
 test.beforeAll(async () => {
   const plugins = join(host.dataDir, "plugins");
@@ -52,8 +67,7 @@ test.beforeAll(async () => {
   release("tally", "1.0.1");
   release("meter", "1.0.1", { build: "echo built > built.txt" });
   release("gauge", "1.0.1", {}, { "host.ts": 'throw new Error("the gauge broke");\n' });
-  const official = (name: string, title: string) => ({ name, title, description: `The ${name}.`, recommendWhen: `the user wants a ${name}`, repo: repoOf(name) });
-  writeFileSync(catalogFile(), JSON.stringify({ plugins: [official("counter", "Counter"), official("gauge", "Gauge"), official("dial", "Dial")] }));
+  publishCatalog("1.0.0");
   await host.start();
 });
 test.afterAll(async () => {
@@ -85,6 +99,21 @@ async function restartAndReload(page: Page) {
 
 test("plugins ask before each update until the user lets them update by themselves at any restart, and what went in can be undone", async ({ page }) => {
   await signIn(page, host);
+
+  await test.step("an official plugin's newer release waits until the catalog pins it, however it is tagged", async () => {
+    let plugins = await openPlugins(page);
+    await expect(plugins.getByRole("button", { name: "Update all (3)" }), "Counter's 1.0.1 is tagged, but the catalog still pins 1.0.0").toBeVisible();
+    const counter = await detailsOf(plugins, "Counter");
+    await expect(counter.locator(".plugin-upkeep dl")).toContainText("Version1.0.0");
+    await expect(counter.getByRole("button", { name: "Update", exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    publishCatalog("1.0.1");
+    await restartAndReload(page);
+    plugins = await openPlugins(page);
+    await expect(plugins.getByRole("button", { name: "Update all (4)" }), "the catalog pins Counter's 1.0.1 now").toBeVisible();
+    await page.keyboard.press("Escape");
+  });
 
   await test.step("by default Mirador asks: the updates it finds wait for Update all, also across a restart", async () => {
     let plugins = await openPlugins(page);

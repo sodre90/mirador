@@ -267,6 +267,10 @@ export const problems: Messages["problems"] = {
   gitCloneFailed: (output) => `git clone falló:\n${output}`,
   repoIsNotAPlugin: (cause) => `El repositorio no es un plugin que Mirador pueda cargar: ${cause}.`,
   pluginTagVersionMismatch: (tag, release, version) => `Su etiqueta ${tag} es la versión ${release}, pero su plugin.json dice versión ${version}.`,
+  pluginReleaseMoved: (release, pinned, found) =>
+    `Su etiqueta v${release} ahora apunta al commit ${found.slice(0, 7)}, no al ${pinned.slice(0, 7)} que indica la lista de plugins oficiales, así que Mirador no lo instala.`,
+  pluginReleaseGone: (release, pinned) =>
+    `Su etiqueta v${release} ya no existe, así que Mirador no puede comprobar que sea el commit ${pinned.slice(0, 7)} que indica la lista de plugins oficiales, y no lo instala.`,
   pluginBuildFailed: (command, output) => `Falló su comando de build, ${command}:\n${output}`,
   pluginInvalidAfterBuild: (cause) => `Tras el build, ${cause}.`,
   pluginInvalidAfterCloning: (cause) => `Tras clonarlo, ${cause}.`,

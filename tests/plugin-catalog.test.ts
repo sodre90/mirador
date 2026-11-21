@@ -10,9 +10,18 @@ const media = {
   description: "Edit a video with the agent.",
   recommendWhen: "the user wants to edit a video",
   repo: "https://github.com/sodre90/mirador-media.git",
-  branch: "main",
+  release: "1.1.4",
+  commit: "978acf8a3e4d0b1c2f5e6d7c8b9a0f1e2d3c4b5a",
 };
-const checklist = { name: "checklist", title: "Checklist", description: "Steps, ticked.", recommendWhen: "the work has several steps", repo: "https://github.com/sodre90/mirador-checklist.git" };
+const checklist = {
+  name: "checklist",
+  title: "Checklist",
+  description: "Steps, ticked.",
+  recommendWhen: "the work has several steps",
+  repo: "https://github.com/sodre90/mirador-checklist.git",
+  release: "1.0.6",
+  commit: "db96375471067cf1d740971c1acdce65c945a546",
+};
 
 let served: unknown = { plugins: [media, checklist] };
 const server = Bun.serve({ port: 0, fetch: () => (served === null ? new Response("gone", { status: 500 }) : Response.json(served)) });
@@ -28,6 +37,15 @@ test("the catalog keeps the entries it can read: each with a repo to clone", () 
   ).toEqual([checklist]);
   expect(catalogPluginsOf({ plugins: "media" })).toBeNull();
   expect(catalogPluginsOf(null)).toBeNull();
+});
+
+test("the catalog keeps only entries pinned to a release at a full commit, so a newer tag nobody read never installs", () => {
+  const { release: _release, commit: _commit, ...unpinned } = media;
+  expect(
+    catalogPluginsOf({
+      plugins: [unpinned, { ...unpinned, branch: "main" }, { ...media, release: "v1.1.4" }, { ...media, commit: "978acf8" }, { ...media, commit: media.commit.toUpperCase() }, checklist],
+    }),
+  ).toEqual([checklist]);
 });
 
 test("the catalog keeps an entry's icon and pictures when it can show them, and the entry without them when it can't", () => {
