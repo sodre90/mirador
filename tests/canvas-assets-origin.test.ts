@@ -1,54 +1,14 @@
 import { expect, test } from "bun:test";
 import type { ShowItem } from "../shared/model.ts";
-import type { ServerMessage } from "../shared/protocol.ts";
 import { initialState, reducer, selectedOpen, type AppState } from "../web/state.ts";
+import { snapshotMessage } from "./snapshot-message.ts";
 
 const agentsOrigin = "https://box.local:4603";
 const page = (html: string): ShowItem => ({ id: "item", conversationId: "a", kind: "show", title: "Chart", html, status: "shown", createdAt: 0 });
 const chart = page(`<script src="${agentsOrigin}/d3.min.js"></script><p>${agentsOrigin}</p>`);
 
 function connectedAt(canvasAssetsOrigin: string): AppState {
-  const snapshot = {
-    type: "snapshot",
-    workspaces: [],
-    workspaceGroups: [],
-    conversations: [],
-    rooms: [],
-    roomApprovals: [],
-    roomTasksWaiting: [],
-    roomInvites: [],
-    profiles: [],
-    promptTemplates: [],
-    canvasUse: "often",
-    claudeProgram: { configured: "", found: null, version: null, installFolders: "", installCommand: "" },
-    scriptProgram: "",
-    editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
-    pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
-    avatar: null,
-    people: [{ id: "owner", name: "", color: null }],
-    ownerId: "owner",
-    you: "owner",
-    canvasAssetsOrigin,
-    agentsCanvasAssetsOrigin: agentsOrigin,
-    installedAgents: ["claude"],
-    machines: [],
-    machineStatuses: [],
-    hiddenMachines: [],
-    hostId: "this-host",
-    homeDir: "/home/me",
-    hostRunId: "run",
-    hostCodeChanged: false,
-    desktopAppOutdated: false,
-    version: "0.2.0",
-    newerVersion: null,
-    installedApps: [],
-    openApps: [],
-    canvasViews: {},
-    conversationPlugins: [],
-    pluginLooks: {},
-    olderAfter: "1-week",
-    conversationsShown: "8",
-  } satisfies ServerMessage;
+  const snapshot = snapshotMessage({ canvasAssetsOrigin, agentsCanvasAssetsOrigin: agentsOrigin });
   const connected = reducer(initialState, { type: "server", message: snapshot });
   return reducer(connected, { type: "select", conversationId: "a" });
 }

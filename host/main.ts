@@ -7,12 +7,12 @@ import { authorityFingerprint, namesToCover, servingCertificate } from "./certif
 import { CanvasMcpEndpoints } from "./canvas/mcp.ts";
 import { AppDocuments } from "./apps/documents.ts";
 import { defaultPluginsIn, installDefaultPlugins } from "./apps/default-plugins.ts";
-import { InstalledPlugins, pluginLooksOf } from "./apps/installed-plugins.ts";
+import { commitsOf, InstalledPlugins, pluginLooksOf } from "./apps/installed-plugins.ts";
 import { applyReadyUpdatesAtStart, ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
-import { loadPlugins, watchViews } from "./apps/plugins.ts";
+import { loadPlugins, pluginFolders, watchViews } from "./apps/plugins.ts";
 import { CanvasPlugins } from "./canvas/plugins.ts";
 import { PluginSettingsStore } from "./plugin-settings.ts";
-import { officialPluginInstaller, PluginCatalog } from "./plugin-catalog.ts";
+import { officialPluginInstaller, PluginCatalog, revokedWhileRunning } from "./plugin-catalog.ts";
 import { CanvasService } from "./canvas/service.ts";
 import { restoreCanvas } from "./canvas/canvas-calls.ts";
 import { DAY_MS, workingCopyIdOf } from "../shared/model.ts";
@@ -82,14 +82,22 @@ const notifierMute = new NotifierMute(config.notifierDir, join(config.dataDir, M
 notifierMute.unmuteSessionsOfEarlierRuns();
 const sourceDir = dirname(import.meta.dir);
 const pluginsFolder = join(config.dataDir, "plugins");
+const loadedPluginNames = new Set<string>();
+const catalog = new PluginCatalog(store, config.pluginCatalogUrl, (name) => loadedPluginNames.has(name) || existsSync(join(pluginsFolder, name)));
 const defaultPlugins = config.defaultPluginsFile ? await defaultPluginsIn(config.defaultPluginsFile) : [];
-if (defaultPlugins.length > 0) await installDefaultPlugins(defaultPlugins, new InstalledPlugins(pluginsFolder, []), store);
-const pluginsUpdatedAtStart = await applyReadyUpdatesAtStart(pluginsFolder, store, sourceDir);
-const loadedPlugins = await loadPlugins(pluginsFolder);
+if (defaultPlugins.length > 0) {
+  const defaultsInstaller = new InstalledPlugins(pluginsFolder, []);
+  defaultsInstaller.refusesRevokedFrom(catalog);
+  await installDefaultPlugins(defaultPlugins, defaultsInstaller, store);
+}
+const pluginsUpdatedAtStart = await applyReadyUpdatesAtStart(pluginsFolder, store, sourceDir, catalog);
+const pluginCommitsAtStart = await commitsOf(pluginFolders(pluginsFolder));
+const loadedPlugins = await loadPlugins(pluginsFolder, (folder) => catalog.revocationOf(pluginCommitsAtStart.get(folder) ?? null));
 for (const { folder, message } of loadedPlugins.problems) console.warn(`The plugin in ${folder} didn't load: ${message}`);
 const canvasPlugins = new CanvasPlugins(store, hub, loadedPlugins.canvases);
-const loadedPluginNames = new Set([...loadedPlugins.canvases, ...loadedPlugins.apps].map(({ manifest }) => manifest.name));
-const catalog = new PluginCatalog(store, config.pluginCatalogUrl, (name) => loadedPluginNames.has(name) || existsSync(join(pluginsFolder, name)));
+for (const { manifest } of [...loadedPlugins.canvases, ...loadedPlugins.apps]) loadedPluginNames.add(manifest.name);
+const revokedPluginsRunning = () => revokedWhileRunning([...loadedPlugins.canvases, ...loadedPlugins.apps], pluginCommitsAtStart, catalog);
+catalog.tellsRevocationsTo(() => hub.broadcast({ type: "plugins.revoked-running", plugins: revokedPluginsRunning() }));
 void catalog.refresh();
 canvasPlugins.offersFrom(catalog);
 const pluginLooks = await pluginLooksOf([...loadedPlugins.canvases, ...loadedPlugins.apps]);
@@ -144,6 +152,7 @@ const readyPluginUpdates = new ReadyPluginUpdates(
 );
 plugins.decidesUpdatesByItselfWith(readyPluginUpdates.updatesByItself);
 plugins.followsPinsWith(readyPluginUpdates.pins);
+plugins.refusesRevokedFrom(catalog);
 await readyPluginUpdates.started(pluginsUpdatedAtStart, loadedPlugins.problems);
 canvas.installsPluginsWith(officialPluginInstaller(catalog, plugins, (listed) => hub.broadcast(listed)));
 const apps = new AppDocuments(store, loadedPlugins.apps, {
@@ -251,7 +260,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, notifications });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, notifications });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

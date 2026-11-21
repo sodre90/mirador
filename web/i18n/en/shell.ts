@@ -309,6 +309,8 @@ export const shell = {
     connecting: "Connecting…",
     reconnecting: "Connection lost, reconnecting…",
     hostCodeChanged: "The host's code changed since it started.",
+    revokedPluginsLabel: "Plugins revoked while they run",
+    revokedPluginRunning: (title: string, reason: string) => `The list of official plugins revoked the ${title} release you run: ${reason} Restart Mirador to stop it.`,
     restartHost: "Restart host",
     desktopAppOutdatedBefore: "The Mirador app is older than its code. Run",
     desktopAppOutdatedAfter: " in the Mirador folder, then quit the app: it opens again with the new build.",

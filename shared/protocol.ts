@@ -48,7 +48,7 @@ import type { ConversationOrder } from "./conversation-order.ts";
 import type { HostProblem } from "./host-problems.ts";
 import type { PageLibraries } from "./canvas-export.ts";
 import type { InviteTunnel } from "./tunnel.ts";
-import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, ConversationPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginLook, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode } from "./apps.ts";
+import type { AppDocumentState, AppliedPluginUpdate, AppStorageItems, CatalogPlugin, ConversationPlugin, InstalledApp, OpenApp, PluginCommit, PluginInfo, PluginLook, PluginOffer, PluginSettings, PluginUpdate, PluginUpdateMode, RevokedPlugin } from "./apps.ts";
 import type { LowDataSubscription } from "./low-data.ts";
 import type { MentionSuggestion } from "./mentions.ts";
 import type { NewerVersion } from "./newer-version.ts";
@@ -505,6 +505,8 @@ export type ServerMessage =
       pluginUpdateMode?: PluginUpdateMode;
       /** The updates the host put in as it started, and those it took back out; the same for each page until the next start. */
       pluginsUpdatedAtStart?: AppliedPluginUpdate[];
+      /** The plugins running since the host started at a release the catalog revoked since, until a restart stops them. Missing from a host older than revocations. */
+      revokedPlugins?: RevokedPlugin[];
       /** Missing from a host older than keeping deleted canvases. */
       keepDeletedCanvas?: KeepDeletedCanvas;
       /** Missing from a host older than reminders. */
@@ -537,6 +539,7 @@ export type ServerMessage =
   | { type: "settings.plugin-update-mode"; mode: PluginUpdateMode }
   /** What the host put in as it started, again after one of them was undone. */
   | { type: "plugins.updated-at-start"; updates: AppliedPluginUpdate[] }
+  | { type: "plugins.revoked-running"; plugins: RevokedPlugin[] }
   | { type: "settings.reminder-morning"; minutes: number }
   | { type: "settings.conversation-order"; order: ConversationOrder }
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }

@@ -58,6 +58,8 @@ export const plugins: Messages["plugins"] = {
   kind: { app: "Aplicación", canvas: "Herramientas del lienzo" },
   updateAvailable: "Actualización disponible",
   didntLoadBadge: "No se cargó",
+  revokedBadge: "Retirada",
+  revokedNote: (reason: string) => `La lista de plugins oficiales retiró esta versión: ${reason} Mirador deja de cargarla desde su próximo inicio.`,
   toolsHeading: "Herramientas que da al agente",
   toolsOf: (plugin: string) => `Herramientas de ${plugin}`,
   settingsHeading: "Configuración",

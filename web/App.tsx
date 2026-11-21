@@ -102,6 +102,23 @@ export function HostBanner({ status, state }: { status: ConnectionStatus; state:
   );
 }
 
+/** In the main window only, unlike HostBanner: one restart stops the plugins for every window. */
+function RevokedPluginsBanner({ state }: { state: AppState }) {
+  if (state.revokedPlugins.length === 0) return null;
+  return (
+    <div className="banner plugins-revoked" role="alert" aria-label={t.shell.app.revokedPluginsLabel}>
+      <ul>
+        {state.revokedPlugins.map(({ title, reason }) => (
+          <li key={title}>{t.shell.app.revokedPluginRunning(title, reason)}</li>
+        ))}
+      </ul>
+      <button type="button" data-hint={hints.restartHost} onClick={restartHost}>
+        {t.shell.app.restartHost} <kbd>{shortcutKeys().restartHost}</kbd>
+      </button>
+    </div>
+  );
+}
+
 function DesktopAppBanner({ state }: { state: AppState }) {
   if (!state.desktopAppOutdated) return null;
   return (
@@ -713,6 +730,7 @@ export function App() {
       <LayoutToggleState.Provider value={layoutToggles}>
         <HostBanner status={status} state={state} />
         <DesktopAppBanner state={state} />
+        <RevokedPluginsBanner state={state} />
         <NewerVersionBanner newerVersion={state.newerVersion} />
         <PluginsUpdatedBanner hostRunId={state.hostRunId} updates={state.pluginsUpdatedAtStart} />
         {inFixedOrder(state.kept).map((kept) => {

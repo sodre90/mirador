@@ -271,6 +271,7 @@ export const problems = {
     `Its tag v${release} now points at commit ${found.slice(0, 7)}, not at ${pinned.slice(0, 7)}, the one the list of official plugins names, so Mirador doesn't install it.`,
   pluginReleaseGone: (release: string, pinned: string) =>
     `Its tag v${release} is gone, so Mirador can't check that it is commit ${pinned.slice(0, 7)}, the one the list of official plugins names, and doesn't install it.`,
+  pluginReleaseRevoked: (reason: string) => `The list of official plugins revoked this release: ${reason}`,
   pluginBuildFailed: (command: string, output: string) => `Its build command, ${command}, failed:\n${output}`,
   pluginInvalidAfterBuild: (cause: string) => `After its build, ${cause}.`,
   pluginInvalidAfterCloning: (cause: string) => `After cloning, ${cause}.`,

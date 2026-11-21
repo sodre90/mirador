@@ -59,6 +59,8 @@ export const plugins: Messages["plugins"] = {
   kind: { app: "App", canvas: "Canvas-Tools" },
   updateAvailable: "Update verfügbar",
   didntLoadBadge: "Nicht geladen",
+  revokedBadge: "Zurückgezogen",
+  revokedNote: (reason: string) => `Die Liste der offiziellen Plugins hat dieses Release zurückgezogen: ${reason} Mirador lädt es ab seinem nächsten Start nicht mehr.`,
   toolsHeading: "Tools, die es dem Agenten gibt",
   toolsOf: (plugin: string) => `Tools: ${plugin}`,
   settingsHeading: "Einstellungen",

@@ -1,7 +1,7 @@
 import { afterAll, expect, test } from "bun:test";
-import { catalogPluginsOf } from "../shared/apps.ts";
+import { catalogPluginsOf, revokedReleasesOf } from "../shared/apps.ts";
 import { offeredPluginsGuidance } from "../host/canvas/guidance.ts";
-import { PluginCatalog } from "../host/plugin-catalog.ts";
+import { PluginCatalog, revokedWhileRunning } from "../host/plugin-catalog.ts";
 import { Store } from "../host/store.ts";
 
 const media = {
@@ -75,6 +75,52 @@ test("offers the plugins not installed yet, keeps the last catalog fetched when 
   installed.add("media");
   expect(catalog.notInstalled()).toEqual([checklist]);
   served = { plugins: [media, checklist] };
+});
+
+test("reads the releases the catalog revokes, by full commit in any case and with a reason; none from a catalog that lists none", () => {
+  const sendsFiles = { commit: media.commit, reason: "It sends your files away." };
+  expect(revokedReleasesOf({ plugins: [], revoked: [sendsFiles] })).toEqual([sendsFiles]);
+  expect(revokedReleasesOf({ revoked: [{ ...sendsFiles, commit: media.commit.toUpperCase() }] })).toEqual([sendsFiles]);
+  expect(revokedReleasesOf({ revoked: [{ ...sendsFiles, commit: media.commit.slice(0, 7) }, { ...sendsFiles, reason: " " }, { commit: media.commit }, "x", null] })).toEqual([]);
+  expect(revokedReleasesOf({ plugins: [] })).toEqual([]);
+  expect(revokedReleasesOf(null)).toEqual([]);
+});
+
+test("tells why a release is revoked, from the last catalog fetched and across restarts, and says when the revoked ones change", async () => {
+  const store = new Store(":memory:");
+  const catalog = new PluginCatalog(store, url, () => false);
+  let told = 0;
+  catalog.tellsRevocationsTo(() => told++);
+  served = { plugins: [media, checklist], revoked: [{ commit: media.commit, reason: "It sends your files away." }] };
+  await catalog.refresh();
+  expect(catalog.revocationOf(media.commit)).toBe("It sends your files away.");
+  expect(catalog.revocationOf(checklist.commit)).toBeNull();
+  expect(catalog.revocationOf(null)).toBeNull();
+  expect(told).toBe(1);
+
+  await catalog.refresh();
+  expect(told, "the same revocations again aren't news").toBe(1);
+  expect(new PluginCatalog(store, null, () => false).revocationOf(media.commit)).toBe("It sends your files away.");
+
+  served = { plugins: [media, checklist] };
+  await catalog.refresh();
+  expect(catalog.revocationOf(media.commit)).toBeNull();
+  expect(told).toBe(2);
+});
+
+test("a plugin running since the start at a release revoked since is named once, with why; one at a commit that's fine, or not in git, isn't", () => {
+  const running = [
+    { folder: "/plugins/media", manifest: { title: "Media" } },
+    { folder: "/plugins/media", manifest: { title: "Media" } },
+    { folder: "/plugins/checklist", manifest: { title: "Checklist" } },
+    { folder: "/plugins/local", manifest: { title: "Local" } },
+  ];
+  const commitsAtStart = new Map([
+    ["/plugins/media", media.commit],
+    ["/plugins/checklist", checklist.commit],
+  ]);
+  const revocations = { revocationOf: (commit: string | null) => (commit === media.commit ? "It sends your files away." : null) };
+  expect(revokedWhileRunning(running, commitsAtStart, revocations)).toEqual([{ title: "Media", reason: "It sends your files away." }]);
 });
 
 test("installs only an official plugin that isn't installed yet", async () => {

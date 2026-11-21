@@ -292,6 +292,8 @@ export const shell: Messages["shell"] = {
     connecting: "正在连接…",
     reconnecting: "连接已断开，正在重新连接…",
     hostCodeChanged: "host 的代码在它启动后已更改。",
+    revokedPluginsLabel: "运行中被撤销的插件",
+    revokedPluginRunning: (title: string, reason: string) => `官方插件列表撤销了正在运行的 ${title} 发布版本：${reason} 重启 Mirador 即可停止它。`,
     restartHost: "重启 host",
     desktopAppOutdatedBefore: "Mirador 应用比它的代码旧。请在 Mirador 文件夹中运行",
     desktopAppOutdatedAfter: "，然后退出应用：它会以新版本重新打开。",

@@ -56,6 +56,8 @@ export const plugins: Messages["plugins"] = {
   kind: { app: "应用", canvas: "画布工具" },
   updateAvailable: "有可用更新",
   didntLoadBadge: "未加载",
+  revokedBadge: "已撤销",
+  revokedNote: (reason: string) => `官方插件列表撤销了这个发布版本：${reason} Mirador 从下次启动起不再加载它。`,
   toolsHeading: "它为 Agent 提供的工具",
   toolsOf: (plugin: string) => `${plugin} 的工具`,
   settingsHeading: "设置",

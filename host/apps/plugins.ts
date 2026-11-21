@@ -70,12 +70,17 @@ export interface LoadedPlugins {
   problems: PluginLoadProblem[];
 }
 
-/** Every folder in `pluginsFolder` with a plugin.json; one that fails to load is reported and the rest still load. */
-export async function loadPlugins(pluginsFolder: string): Promise<LoadedPlugins> {
+/**
+ * Every folder in `pluginsFolder` with a plugin.json; one that fails to load, or that holds a release the catalog
+ * revoked, is reported and the rest still load.
+ */
+export async function loadPlugins(pluginsFolder: string, revokedBecause: (folder: string) => string | null = () => null): Promise<LoadedPlugins> {
   const loaded: LoadedPlugins = { apps: [], canvases: [], problems: [] };
   const names = new Map<string, LoadedPlugin>();
   for (const folder of pluginFolders(pluginsFolder)) {
     try {
+      const revoked = revokedBecause(folder);
+      if (revoked !== null) throw new HostProblemError({ code: "plugin-release-revoked", reason: revoked });
       const { app, canvas } = await loadPlugin(folder);
       const { name } = (app ?? canvas)!.manifest;
       if (names.has(name)) throw new HostProblemError({ code: "plugin-name-already-used", name });

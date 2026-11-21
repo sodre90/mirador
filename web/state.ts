@@ -5,7 +5,7 @@ import { DEFAULT_MORNING_MINUTES, type ReminderMode } from "../shared/reminders.
 import type { ReminderUndo } from "./reminders.ts";
 import type { PushRelaySetting } from "../shared/push.ts";
 import type { NewerVersion } from "../shared/newer-version.ts";
-import { appKey, type AppDocumentState, type AppliedPluginUpdate, type InstalledApp, type OpenApp, type PluginUpdate, type PluginUpdateMode } from "../shared/apps.ts";
+import { appKey, type AppDocumentState, type AppliedPluginUpdate, type InstalledApp, type OpenApp, type PluginUpdate, type PluginUpdateMode, type RevokedPlugin } from "../shared/apps.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Turn } from "../shared/reverts.ts";
 import { CUSTOM_ORDER, type ConversationOrder } from "../shared/conversation-order.ts";
@@ -153,6 +153,8 @@ export interface AppState {
   /** The host process run this page last heard from; another one means the host restarted, maybe with new code. */
   hostRunId: string | null;
   hostCodeChanged: boolean;
+  /** The plugins running at a release the catalog revoked since the host started, until a restart stops them. */
+  revokedPlugins: RevokedPlugin[];
   hostRestarting: boolean;
   desktopAppOutdated: boolean;
   newerVersion: NewerVersion | null;
@@ -245,6 +247,7 @@ export const initialState: AppState = {
   overlay: null,
   hostRunId: null,
   hostCodeChanged: false,
+  revokedPlugins: [],
   hostRestarting: false,
   desktopAppOutdated: false,
   newerVersion: null,
@@ -413,6 +416,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         homeDir: message.homeDir,
         hostRunId: message.hostRunId,
         hostCodeChanged: message.hostCodeChanged,
+        revokedPlugins: message.revokedPlugins ?? [],
         desktopAppOutdated: message.desktopAppOutdated,
         newerVersion: message.newerVersion,
         pluginUpdates: message.pluginUpdates ?? [],
@@ -515,6 +519,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, pluginUpdateMode: message.mode };
     case "plugins.updated-at-start":
       return { ...state, pluginsUpdatedAtStart: message.updates };
+    case "plugins.revoked-running":
+      return { ...state, revokedPlugins: message.plugins };
     case "settings.reminder-morning":
       return { ...state, reminderMorning: message.minutes };
     case "settings.conversation-order":

@@ -268,9 +268,10 @@ export const problems: Messages["problems"] = {
   repoIsNotAPlugin: (cause) => `A tároló nem olyan bővítmény, amelyet a Mirador be tud tölteni: ${cause}.`,
   pluginTagVersionMismatch: (tag, release, version) => `A címkéje (${tag}) szerinti kiadás: ${release}, a plugin.json szerinti verzió viszont: ${version}.`,
   pluginReleaseMoved: (release, pinned, found) =>
-    `A v${release} címkéje most a ${found.slice(0, 7)} commitra mutat, nem a hivatalos pluginek listájában szereplő ${pinned.slice(0, 7)} commitra, ezért a Mirador nem telepíti.`,
+    `A v${release} címkéje most a ${found.slice(0, 7)} commitra mutat, nem a hivatalos bővítmények listájában szereplő ${pinned.slice(0, 7)} commitra, ezért a Mirador nem telepíti.`,
   pluginReleaseGone: (release, pinned) =>
-    `A v${release} címkéje eltűnt, így a Mirador nem tudja ellenőrizni, hogy a hivatalos pluginek listájában szereplő ${pinned.slice(0, 7)} commit-e, ezért nem telepíti.`,
+    `A v${release} címkéje eltűnt, így a Mirador nem tudja ellenőrizni, hogy a hivatalos bővítmények listájában szereplő ${pinned.slice(0, 7)} commit-e, ezért nem telepíti.`,
+  pluginReleaseRevoked: (reason: string) => `A hivatalos bővítmények listája visszavonta ezt a kiadást: ${reason}`,
   pluginBuildFailed: (command, output) => `Nem sikerült a build parancsa (${command}):\n${output}`,
   pluginInvalidAfterBuild: (cause) => `A build után ${cause}.`,
   pluginInvalidAfterCloning: (cause) => `A klónozás után ${cause}.`,

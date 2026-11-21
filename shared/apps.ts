@@ -293,6 +293,8 @@ export interface PluginInfo {
   tagline: string | null;
   /** The pictures its plugin.json lists that are images inside its folder, each at the host's URL for it. */
   screenshots: PluginScreenshot[];
+  /** Why the catalog revoked the release in its folder, which Mirador doesn't load; null when it didn't. Missing from a host older than revocations. */
+  revokedBecause?: string | null;
 }
 
 export type PluginKind = "app" | "canvas";
@@ -373,6 +375,30 @@ function isCatalogPlugin(value: unknown): value is CatalogPlugin {
     isPluginVersion(release) &&
     isCommit(commit)
   );
+}
+
+/** A release the catalog pulled back, by its commit, with why, in words for the plugin's users. */
+export interface RevokedRelease {
+  commit: string;
+  reason: string;
+}
+
+/** A plugin Mirador runs from its start at a release the catalog revoked since, until a restart stops it. */
+export interface RevokedPlugin {
+  title: string;
+  reason: string;
+}
+
+const asRevokedRelease = (value: unknown): RevokedRelease[] => {
+  const { commit, reason } = (value ?? {}) as Partial<RevokedRelease>;
+  const lowerCaseCommit = typeof commit === "string" ? commit.toLowerCase() : null;
+  return isCommit(lowerCaseCommit) && typeof reason === "string" && reason.trim() !== "" ? [{ commit: lowerCaseCommit, reason }] : [];
+};
+
+/** The releases the catalog revokes, leaving out entries this Mirador can't read; none from a catalog that lists none. */
+export function revokedReleasesOf(catalog: unknown): RevokedRelease[] {
+  const revoked = (catalog as { revoked?: unknown } | null)?.revoked;
+  return Array.isArray(revoked) ? revoked.flatMap(asRevokedRelease) : [];
 }
 
 /** A full commit id, as a pin names it: an abbreviated one could match another commit. */

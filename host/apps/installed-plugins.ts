@@ -265,6 +265,21 @@ export interface PluginPins {
 
 const NO_PINS: PluginPins = { ofPlugin: () => null, ofRepo: () => null };
 
+/** Why the catalog revoked the release at a commit; null when it didn't, or for no commit. */
+export interface Revocations {
+  revocationOf(commit: string | null): string | null;
+}
+
+const NO_REVOCATIONS: Revocations = { revocationOf: () => null };
+
+const headOf = (folder: string) => gitOutput(folder, ["rev-parse", "HEAD"]);
+
+/** The commit each folder's checkout is at, for the ones in a git repo. */
+export async function commitsOf(folders: string[]): Promise<Map<string, string>> {
+  const commits = await Promise.all(folders.map(async (folder) => [folder, await headOf(folder)] as const));
+  return new Map(commits.flatMap(([folder, commit]) => (commit === null ? [] : [[folder, commit]])));
+}
+
 /** A release cloned for an update that may go in without asking, next to the plugin it would replace. */
 export interface ClonedRelease {
   staged: string;
@@ -291,6 +306,7 @@ export class InstalledPlugins {
   private changesEnded = 0;
   private updatesByItself: UpdatesByItself = () => false;
   private pins: PluginPins = NO_PINS;
+  private revocations: Revocations = NO_REVOCATIONS;
 
   constructor(
     readonly folder: string,
@@ -311,6 +327,10 @@ export class InstalledPlugins {
 
   followsPinsWith(pins: PluginPins) {
     this.pins = pins;
+  }
+
+  refusesRevokedFrom(revocations: Revocations) {
+    this.revocations = revocations;
   }
 
   /** Lists again once the changes are done when one was under way while it listed, so that it never shows a plugin half gone. */
@@ -338,6 +358,7 @@ export class InstalledPlugins {
       waitsForRestart,
       tools: loadedCanvas && !waitsForRestart ? toolsOf(loadedCanvas) : [],
       updatesByItself: source.kind === "git" && this.updatesByItself({ folder: basename(folder), name: fields.name, source }),
+      revokedBecause: this.revocations.revocationOf(await headOf(folder)),
     };
   }
 
@@ -501,18 +522,31 @@ export class InstalledPlugins {
    */
   private async releaseNews(folder: string, remote: string, installed: string): Promise<PluginNews> {
     const pin = this.pins.ofPlugin({ name: (await manifestFields(folder)).name, remote });
-    if (pin) return pinnedNews(folder, installed, pin);
+    if (pin) return this.revocations.revocationOf(pin.commit) === null ? pinnedNews(folder, installed, pin) : NO_NEWS;
     const newer = (await releasesOf(remote)).filter((release) => isNewerVersion(release, installed));
-    const newest = newer[0];
-    if (newest === undefined) return NO_NEWS;
+    if (newer.length === 0) return NO_NEWS;
     await fetchReleases(folder);
+    const unrevoked = await this.unrevokedReleases(folder, newer);
+    const newest = unrevoked[0];
+    if (newest === undefined) return NO_NEWS;
     let apiTheNewestNeeds: number | null = null;
-    for (const release of newer) {
+    for (const release of unrevoked) {
       const needsApi = newerApiOf(parsedOrNull(await gitOutput(folder, ["show", `${fetchedReleaseRef(release)}:plugin.json`])));
       if (needsApi === null) return { release, needsApi, commits: await commitsOfFetchedRelease(folder, release) };
       apiTheNewestNeeds ??= needsApi;
     }
     return { release: newest, needsApi: apiTheNewestNeeds, commits: await commitsOfFetchedRelease(folder, newest) };
+  }
+
+  /** The fetched releases, in their order, but those at a commit the catalog revoked. */
+  private async unrevokedReleases(folder: string, releases: string[]): Promise<string[]> {
+    const checked = await Promise.all(
+      releases.map(async (release) => {
+        const commit = await gitOutput(folder, ["rev-parse", "--verify", "--quiet", `${fetchedReleaseRef(release)}^{commit}`]);
+        return { release, revoked: this.revocations.revocationOf(commit) !== null };
+      }),
+    );
+    return checked.filter(({ revoked }) => !revoked).map(({ release }) => release);
   }
 
   /** What the ref brings that the checkout doesn't have: its commits, newest first, and the plugin API its plugin.json names when this Mirador's is older. */
@@ -599,7 +633,8 @@ export class InstalledPlugins {
 
   /**
    * Clones the repo at the branch or tag, or its default branch, into the staging folder, and reads its plugin.json; runs
-   * none of its code. A clone that isn't at the pinned commit given is refused before anything reads it.
+   * none of its code. A clone that isn't at the pinned commit given, or that is at a commit the catalog revoked, is
+   * refused before anything reads it.
    */
   private async cloned(url: string, branchOrTag: string | null, pinnedCommit: string | null): Promise<{ staged: string; manifest: PluginManifest }> {
     if (!url) throw new HostProblemError({ code: "plugin-needs-repo-address" });
@@ -613,10 +648,12 @@ export class InstalledPlugins {
         GIT_GIVES_UP_AFTER_MS,
       );
       if (!cloned.ok) throw new HostProblemError({ code: "git-clone-failed", output: cloned.output });
-      const found = pinnedCommit && (await gitOutput(staged, ["rev-parse", "HEAD"]));
-      if (pinnedCommit && found !== pinnedCommit) {
-        throw new HostProblemError({ code: "plugin-release-moved", release: releaseOfTag(branchOrTag) ?? String(branchOrTag), pinned: pinnedCommit, found: found || null });
+      const head = await headOf(staged);
+      if (pinnedCommit && head !== pinnedCommit) {
+        throw new HostProblemError({ code: "plugin-release-moved", release: releaseOfTag(branchOrTag) ?? String(branchOrTag), pinned: pinnedCommit, found: head });
       }
+      const revoked = this.revocations.revocationOf(head);
+      if (revoked !== null) throw new HostProblemError({ code: "plugin-release-revoked", reason: revoked });
       const manifest = await readManifest(staged)
         .then((read) => (refuseUnversioned(read), read))
         .catch((error) => {

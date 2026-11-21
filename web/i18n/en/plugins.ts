@@ -54,6 +54,8 @@ export const plugins = {
   kind: { app: "App", canvas: "Canvas tools" },
   updateAvailable: "Update available",
   didntLoadBadge: "Didn't load",
+  revokedBadge: "Revoked",
+  revokedNote: (reason: string) => `The list of official plugins revoked this release: ${reason} Mirador doesn't load it from its next start.`,
   toolsHeading: "Tools it gives the agent",
   toolsOf: (plugin: string) => `Tools of ${plugin}`,
   settingsHeading: "Settings",

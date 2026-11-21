@@ -316,6 +316,8 @@ export const shell: Messages["shell"] = {
     connecting: "Conectando…",
     reconnecting: "Conexión perdida, reconectando…",
     hostCodeChanged: "El código del host cambió desde que se inició.",
+    revokedPluginsLabel: "Plugins retirados mientras se ejecutan",
+    revokedPluginRunning: (title: string, reason: string) => `La lista de plugins oficiales retiró la versión de ${title} que se está ejecutando: ${reason} Reinicia Mirador para detenerla.`,
     restartHost: "Reiniciar host",
     desktopAppOutdatedBefore: "La aplicación de Mirador es más antigua que su código. Ejecuta",
     desktopAppOutdatedAfter: " en la carpeta de Mirador y luego cierra la aplicación: se abre de nuevo con la nueva versión.",

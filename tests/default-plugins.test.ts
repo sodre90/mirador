@@ -1,5 +1,5 @@
 import { afterAll, describe, expect, test } from "bun:test";
-import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultPluginsIn, installDefaultPlugins } from "../host/apps/default-plugins.ts";
@@ -66,6 +66,24 @@ describe("default plugins", () => {
     const store = new Store(":memory:");
     await installDefaultPlugins([{ name: "counter", repo: join(root, "nowhere"), tag: "v1.0.0", commit: NOT_A_COMMIT_YET }], new InstalledPlugins(folder, []), store);
     expect(store.defaultPluginsInstalled()).toEqual(["counter"]);
+  });
+
+  test("doesn't install a default at a commit the catalog revoked, and never runs its build", async () => {
+    const repo = releasedCounterRepo("revoked-repo");
+    const buildRan = join(root, "revoked-build-ran");
+    const manifest = join(repo, "plugin.json");
+    writeFileSync(manifest, JSON.stringify({ ...JSON.parse(readFileSync(manifest, "utf8")), build: `touch '${buildRan}'` }));
+    git(repo, "commit", "--quiet", "-am", "Build it");
+    git(repo, "tag", "--force", "v1.0.0");
+    const folder = join(root, "revoked-plugins");
+    mkdirSync(folder);
+    const store = new Store(":memory:");
+    const installer = new InstalledPlugins(folder, []);
+    installer.refusesRevokedFrom({ revocationOf: (commit) => (commit === commitOf(repo) ? "It sends your files away." : null) });
+    await installDefaultPlugins([{ name: "counter", repo, tag: "v1.0.0", commit: commitOf(repo) }], installer, store);
+    expect(await new InstalledPlugins(folder, []).list()).toEqual([]);
+    expect(existsSync(buildRan), "its build never ran").toBe(false);
+    expect(store.defaultPluginsInstalled()).toEqual([]);
   });
 
   test("doesn't install a default whose tag now points at another commit than the one Mirador names, and tries again at the next start", async () => {

@@ -121,6 +121,7 @@ export type HostProblem =
   | { code: "repo-is-not-a-plugin"; cause: string; causeProblem?: HostProblem }
   | { code: "plugin-tag-version-mismatch"; tag: string; release: string; version: string }
   | { code: "plugin-release-moved"; release: string; pinned: string; found: string | null }
+  | { code: "plugin-release-revoked"; reason: string }
   | { code: "plugin-build-failed"; command: string; output: string }
   | { code: "plugin-invalid-after-build"; cause: string; causeProblem?: HostProblem }
   | { code: "plugin-invalid-after-cloning"; cause: string; causeProblem?: HostProblem }

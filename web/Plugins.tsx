@@ -407,7 +407,11 @@ function PluginBadges({ plugin, news }: { plugin: GalleryPlugin; news: FoundUpda
         </span>
       )}
       {news && (news.ready ? <span className="plugin-badge plugin-update-ready">{words.updateReady}</span> : <span className="plugin-badge plugin-has-update">{words.updateAvailable}</span>)}
-      {installed?.problem && <span className="plugin-badge plugin-failed">{words.didntLoadBadge}</span>}
+      {installed?.revokedBecause ? (
+        <span className="plugin-badge plugin-failed">{words.revokedBadge}</span>
+      ) : (
+        installed?.problem && <span className="plugin-badge plugin-failed">{words.didntLoadBadge}</span>
+      )}
       {installed?.waitsForRestart && <span className="plugin-badge plugin-waits">{words.waitsForRestart}</span>}
     </span>
   );
@@ -422,7 +426,7 @@ const mainActionOf = (plugin: GalleryPlugin, news: PluginNews | undefined) =>
 function PluginTile({ plugin, news, updating, onOpen }: { plugin: GalleryPlugin; news: FoundUpdate | undefined; updating: boolean; onOpen: (start: Start) => void }) {
   const action = mainActionOf(plugin, news);
   return (
-    <li className={plugin.installed?.problem ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
+    <li className={plugin.installed?.problem || plugin.installed?.revokedBecause ? "plugin-tile failed" : "plugin-tile"} aria-label={plugin.title} onClick={() => onOpen(null)}>
       <span className="plugin-tile-top">
         <PluginIcon name={plugin.key} title={plugin.title} icon={plugin.installed?.icon ?? plugin.official?.icon} />
         <button type="button" className="plugin-title" onClick={(event) => (event.stopPropagation(), onOpen(null))}>
@@ -531,6 +535,7 @@ function InstalledDetail({
   return (
     <>
       {plugin.problem && <p className="plugin-problem">{words.didntLoad(describedText(plugin.problem, plugin.problemAbout))}</p>}
+      {plugin.revokedBecause && !plugin.problem && <p className="plugin-problem">{words.revokedNote(plugin.revokedBecause)}</p>}
       {plugin.tools && plugin.tools.length > 0 && <ToolList title={title} tools={plugin.tools} />}
       {settings && settings.settings.length > 0 && (
         <>

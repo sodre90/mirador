@@ -56,6 +56,8 @@ export const plugins: Messages["plugins"] = {
   kind: { app: "Alkalmazás", canvas: "Vászoneszközök" },
   updateAvailable: "Frissítés érhető el",
   didntLoadBadge: "Nem töltődött be",
+  revokedBadge: "Visszavonva",
+  revokedNote: (reason: string) => `A hivatalos bővítmények listája visszavonta ezt a kiadást: ${reason} A Mirador a következő indulásától nem tölti be.`,
   toolsHeading: "Eszközök, amelyeket az ágensnek ad",
   toolsOf: (plugin: string) => `${plugin} eszközei`,
   settingsHeading: "Beállítások",

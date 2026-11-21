@@ -297,6 +297,8 @@ export const shell: Messages["shell"] = {
     connecting: "Kapcsolódás…",
     reconnecting: "Megszakadt a kapcsolat, újrakapcsolódás…",
     hostCodeChanged: "A host kódja megváltozott az indulása óta.",
+    revokedPluginsLabel: "Futás közben visszavont bővítmények",
+    revokedPluginRunning: (title: string, reason: string) => `A hivatalos bővítmények listája visszavonta a futó ${title} kiadást: ${reason} Indítsd újra a Miradort, hogy leálljon.`,
     restartHost: "Host újraindítása",
     desktopAppOutdatedBefore: "A Mirador alkalmazás elavult a kódjához képest. Futtasd ezt a Mirador mappájában:",
     desktopAppOutdatedAfter: ", aztán lépj ki az alkalmazásból: az új változattal nyílik meg újra.",

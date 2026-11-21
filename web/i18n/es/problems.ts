@@ -271,6 +271,7 @@ export const problems: Messages["problems"] = {
     `Su etiqueta v${release} ahora apunta al commit ${found.slice(0, 7)}, no al ${pinned.slice(0, 7)} que indica la lista de plugins oficiales, así que Mirador no lo instala.`,
   pluginReleaseGone: (release, pinned) =>
     `Su etiqueta v${release} ya no existe, así que Mirador no puede comprobar que sea el commit ${pinned.slice(0, 7)} que indica la lista de plugins oficiales, y no lo instala.`,
+  pluginReleaseRevoked: (reason: string) => `La lista de plugins oficiales retiró esta versión: ${reason}`,
   pluginBuildFailed: (command, output) => `Falló su comando de build, ${command}:\n${output}`,
   pluginInvalidAfterBuild: (cause) => `Tras el build, ${cause}.`,
   pluginInvalidAfterCloning: (cause) => `Tras clonarlo, ${cause}.`,

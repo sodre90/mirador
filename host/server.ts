@@ -47,7 +47,7 @@ import { shownProblemOf, type InstalledPlugins } from "./apps/installed-plugins.
 import type { CanvasPlugins } from "./canvas/plugins.ts";
 import { AppStorage } from "./apps/storage.ts";
 import { AppProblem, messageOf } from "./apps/plugins.ts";
-import { appKey, isPluginUpdateMode, type PluginLook, type PluginUpdate, type PluginUpdateMode } from "../shared/apps.ts";
+import { appKey, isPluginUpdateMode, type PluginLook, type PluginUpdate, type PluginUpdateMode, type RevokedPlugin } from "../shared/apps.ts";
 import type { ReadyPluginUpdates } from "./apps/ready-plugin-updates.ts";
 import type { PluginSettingsStore } from "./plugin-settings.ts";
 import { pluginsListed as listedPlugins, type PluginCatalog } from "./plugin-catalog.ts";
@@ -134,6 +134,8 @@ export interface HostServices {
   pullNewerVersion: () => Promise<string | null>;
   pluginUpdates: Lookout<PluginUpdate[]>;
   readyPluginUpdates: ReadyPluginUpdates;
+  /** The plugins running since the host started at a release the catalog revoked since. */
+  revokedPluginsRunning: () => RevokedPlugin[];
   devices: DeviceService;
   /** Who this machine's owner is to the machines they join, and whom no room invite here admits. */
   ownerKey: OwnerKey;
@@ -229,6 +231,7 @@ export function startServer(services: HostServices) {
     pullNewerVersion,
     pluginUpdates,
     readyPluginUpdates,
+    revokedPluginsRunning,
     devices,
     ownerKey,
     joinRequests,
@@ -2079,6 +2082,7 @@ export function startServer(services: HostServices) {
       pluginUpdates: markedPluginUpdates(),
       pluginUpdateMode: store.pluginUpdateMode(),
       pluginsUpdatedAtStart: readyPluginUpdates.appliedAtStart,
+      revokedPlugins: revokedPluginsRunning(),
       installedApps: apps.installed(),
       openApps: apps.openApps(),
       canvasViews: canvasPlugins.viewPaths(),

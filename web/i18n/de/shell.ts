@@ -321,6 +321,8 @@ export const shell: Messages["shell"] = {
     connecting: "Verbindung wird hergestellt…",
     reconnecting: "Verbindung verloren, wird neu verbunden…",
     hostCodeChanged: "Der Code des Hosts hat sich seit seinem Start geändert.",
+    revokedPluginsLabel: "Während des Laufs zurückgezogene Plugins",
+    revokedPluginRunning: (title: string, reason: string) => `Die Liste der offiziellen Plugins hat das laufende Release von ${title} zurückgezogen: ${reason} Starte Mirador neu, um es zu stoppen.`,
     restartHost: "Host neu starten",
     desktopAppOutdatedBefore: "Die Mirador-App ist älter als ihr Code. Führe",
     desktopAppOutdatedAfter: " im Mirador-Ordner aus und beende dann die App: Sie öffnet sich mit der neuen Version wieder.",

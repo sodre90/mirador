@@ -258,6 +258,7 @@ export const problems: Messages["problems"] = {
     `它的标签 v${release} 现在指向提交 ${found.slice(0, 7)}，而不是官方插件列表指定的 ${pinned.slice(0, 7)}，所以 Mirador 不会安装它。`,
   pluginReleaseGone: (release, pinned) =>
     `它的标签 v${release} 已不存在，Mirador 无法确认它是官方插件列表指定的提交 ${pinned.slice(0, 7)}，所以不会安装它。`,
+  pluginReleaseRevoked: (reason: string) => `官方插件列表撤销了这个发布版本：${reason}`,
   pluginBuildFailed: (command, output) => `它的构建命令 ${command} 失败：\n${output}`,
   pluginInvalidAfterBuild: (cause) => `构建之后，${cause}。`,
   pluginInvalidAfterCloning: (cause) => `克隆之后，${cause}。`,

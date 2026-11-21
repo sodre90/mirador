@@ -6,7 +6,7 @@ import { isNewerVersion } from "../../shared/newer-version.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import type { Store } from "../store.ts";
-import { gitOutput, withoutCredentials, type InstalledPlugins, type PluginPins, type UpdatesByItself } from "./installed-plugins.ts";
+import { gitOutput, withoutCredentials, type InstalledPlugins, type PluginPins, type Revocations, type UpdatesByItself } from "./installed-plugins.ts";
 import { isPlainFolderName, parkedFolderOf, refuseUnlessPlainFolderName, removeOrLog, settleCutShortSwaps, swapPlugin } from "./plugin-swaps.ts";
 import { messageOf, readManifest, type PluginLoadProblem } from "./plugins.ts";
 
@@ -165,16 +165,21 @@ async function stillAt(plugin: string, commit: string | null) {
 
 /**
  * Swaps each ready update in for its plugin, keeping the plugin it replaces in the previous folder, the latest one only.
- * An update that no longer fits its plugin, or that fails to swap in, goes, and leaves the plugin as it was; one that
- * fails never stops the others.
+ * An update that no longer fits its plugin, that the catalog revoked since it was ready, or that fails to swap in, goes,
+ * and leaves the plugin as it was; one that fails never stops the others.
  */
-export async function applyReadyUpdates(pluginsFolder: string, rename = renameWhenFree): Promise<AppliedPluginUpdate[]> {
+export async function applyReadyUpdates(pluginsFolder: string, revocations: Revocations, rename = renameWhenFree): Promise<AppliedPluginUpdate[]> {
   const [readyFolder, previousFolder] = [readyFolderOf(pluginsFolder), previousFolderOf(pluginsFolder)];
   const applied: AppliedPluginUpdate[] = [];
   for (const note of readNotes(readyFolder).filter(({ heldBack }) => heldBack === null)) {
     try {
       const clone = join(readyFolder, note.folder, CLONE_FOLDER);
       if (!existsSync(clone) || !(await stillAt(join(pluginsFolder, note.folder), note.fromCommit))) continue;
+      const revoked = revocations.revocationOf(await gitOutput(clone, ["rev-parse", "HEAD"]));
+      if (revoked !== null) {
+        console.warn(`the ready update of the ${note.folder} plugin to ${note.to} goes, as the catalog revoked it: ${revoked}`);
+        continue;
+      }
       const previous = join(previousFolder, note.folder);
       removeOrLog(previous);
       if (existsSync(previous)) continue;
@@ -194,7 +199,13 @@ export async function applyReadyUpdates(pluginsFolder: string, rename = renameWh
  * in when the mode says this start is one for them, then records which Mirador this is. Nothing here stops the host
  * from starting; a failure leaves the plugins as they were.
  */
-export async function applyReadyUpdatesAtStart(pluginsFolder: string, store: Store, sourceDir: string, rename = renameWhenFree): Promise<AppliedPluginUpdate[]> {
+export async function applyReadyUpdatesAtStart(
+  pluginsFolder: string,
+  store: Store,
+  sourceDir: string,
+  revocations: Revocations,
+  rename = renameWhenFree,
+): Promise<AppliedPluginUpdate[]> {
   let applied: AppliedPluginUpdate[] = [];
   try {
     await settleCutShortSwaps(pluginsFolder, (folder, release, because) => store.rememberPluginUpdateUndone(folder, release, because));
@@ -202,7 +213,7 @@ export async function applyReadyUpdatesAtStart(pluginsFolder: string, store: Sto
     const now = await miradorIdentity(sourceDir);
     const mode = store.pluginUpdateMode();
     if (mode === "ask") removeOrLog(readyFolderOf(pluginsFolder));
-    if (appliesAtThisStart(mode, store.miradorStartedAs(), now)) applied = await applyReadyUpdates(pluginsFolder, rename);
+    if (appliesAtThisStart(mode, store.miradorStartedAs(), now)) applied = await applyReadyUpdates(pluginsFolder, revocations, rename);
     store.rememberMiradorStartedAs(now);
   } catch (error) {
     console.warn(`putting the ready plugin updates in failed, so the plugins not updated yet stay as they were: ${messageOf(error)}`);

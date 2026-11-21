@@ -3,7 +3,7 @@ import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rea
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { PluginManifest } from "../shared/apps.ts";
-import { InstalledPlugins } from "../host/apps/installed-plugins.ts";
+import { InstalledPlugins, type Revocations } from "../host/apps/installed-plugins.ts";
 import { isPlainFolderName, settleCutShortSwaps, swapPlugin } from "../host/apps/plugin-swaps.ts";
 import { loadPlugins } from "../host/apps/plugins.ts";
 import {
@@ -37,6 +37,7 @@ function renameOnlyOnce() {
 
 /** A source folder without .git, as a release's copy of Mirador is. */
 const releaseSource = join(root, "mirador-release");
+const NONE_REVOKED: Revocations = { revocationOf: () => null };
 mkdirSync(releaseSource);
 
 function git(folder: string, ...args: string[]) {
@@ -92,8 +93,8 @@ async function installedCounter(name: string, official: OfficialPlugin[] = []) {
 }
 
 /** As the host starts again: the ready updates go in, the plugins load, and the plugins folder is listed anew. */
-async function restarted(pluginsFolder: string, store: Store) {
-  const applied = await applyReadyUpdatesAtStart(pluginsFolder, store, releaseSource);
+async function restarted(pluginsFolder: string, store: Store, revocations: Revocations = NONE_REVOKED) {
+  const applied = await applyReadyUpdatesAtStart(pluginsFolder, store, releaseSource, revocations);
   const loaded = await loadPlugins(pluginsFolder);
   const plugins = new InstalledPlugins(pluginsFolder, loaded.problems);
   const ready = new ReadyPluginUpdates(pluginsFolder, plugins, store, () => []);
@@ -449,6 +450,17 @@ describe("ready plugin updates", () => {
     expect(versionIn(join(pluginsFolder, "counter"))).toBe("1.0.1");
   });
 
+  test("a ready update the catalog revoked since it was prepared doesn't go in, and goes", async () => {
+    const { repo, pluginsFolder, store, plugins, ready } = await installedCounter("revoked-ready");
+    release(repo, "1.0.1");
+    await ready.prepare(await plugins.updatesFound(null));
+    const revokedRelease = git(repo, "rev-parse", "v1.0.1^{commit}");
+    const revocations: Revocations = { revocationOf: (commit) => (commit === revokedRelease ? "It sends your files away." : null) };
+    expect((await restarted(pluginsFolder, store, revocations)).applied).toEqual([]);
+    expect(versionIn(join(pluginsFolder, "counter"))).toBe("1.0.0");
+    expect(readdirSync(readyFolderOf(pluginsFolder))).toEqual([]);
+  });
+
   test("a ready update no longer fits a plugin the user updated by hand meanwhile, and goes", async () => {
     const { repo, pluginsFolder, store, plugins, ready } = await installedCounter("updated-by-hand");
     release(repo, "1.0.1");
@@ -580,7 +592,7 @@ describe("ready plugin updates", () => {
     const { repo, pluginsFolder, store, plugins, ready } = await installedCounter("swap-fails");
     release(repo, "1.0.1");
     await ready.prepare(await plugins.updatesFound(null));
-    expect(await applyReadyUpdatesAtStart(pluginsFolder, store, releaseSource, renameOnlyOnce())).toEqual([]);
+    expect(await applyReadyUpdatesAtStart(pluginsFolder, store, releaseSource, NONE_REVOKED, renameOnlyOnce())).toEqual([]);
     await restarted(pluginsFolder, store);
     expect(versionIn(join(pluginsFolder, "counter"))).toBe("1.0.0");
   });

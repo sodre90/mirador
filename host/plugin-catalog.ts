@@ -1,6 +1,6 @@
-import { catalogPluginsOf, type CatalogPlugin } from "../shared/apps.ts";
+import { catalogPluginsOf, revokedReleasesOf, type CatalogPlugin, type RevokedPlugin, type RevokedRelease } from "../shared/apps.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import { withoutCredentials, type InstalledPlugins } from "./apps/installed-plugins.ts";
+import { withoutCredentials, type InstalledPlugins, type Revocations } from "./apps/installed-plugins.ts";
 import { messageOf } from "./apps/plugins.ts";
 import { MAX_IMAGE_BYTES } from "./images.ts";
 import { imageTypeOf } from "./local-images.ts";
@@ -14,9 +14,11 @@ export interface PluginScreenshotImage {
   mimeType: string;
 }
 
-/** The official plugins, as the catalog lists them; the last one fetched stands while Mirador can't fetch it. */
-export class PluginCatalog {
+/** The official plugins and the releases revoked, as the catalog lists them; the last one fetched stands while Mirador can't fetch it. */
+export class PluginCatalog implements Revocations {
   private plugins: CatalogPlugin[];
+  private revoked: RevokedRelease[];
+  private revocationsChanged = () => {};
   /** Pictures fetched once and kept while the host runs, so the page loads them from the host however it blocks other sites' images. */
   private readonly screenshots = new Map<string, Promise<PluginScreenshotImage | null>>();
 
@@ -25,7 +27,18 @@ export class PluginCatalog {
     private readonly url: string | null,
     private readonly isInstalled: (name: string) => boolean,
   ) {
-    this.plugins = catalogPluginsOf(store.pluginCatalog()) ?? [];
+    const stored = store.pluginCatalog();
+    this.plugins = catalogPluginsOf(stored) ?? [];
+    this.revoked = revokedReleasesOf(stored);
+  }
+
+  revocationOf(commit: string | null): string | null {
+    return this.revoked.find((release) => release.commit === commit)?.reason ?? null;
+  }
+
+  /** Tells the listener after each fetch that revokes other releases than the catalog did before. */
+  tellsRevocationsTo(listener: () => void) {
+    this.revocationsChanged = listener;
   }
 
   get all(): CatalogPlugin[] {
@@ -65,8 +78,12 @@ export class PluginCatalog {
       const catalog: unknown = await response.json();
       const plugins = catalogPluginsOf(catalog);
       if (!plugins) throw new Error("it lists no plugins");
+      const revoked = revokedReleasesOf(catalog);
+      const revocationsChanged = JSON.stringify(revoked) !== JSON.stringify(this.revoked);
       this.plugins = plugins;
+      this.revoked = revoked;
       this.store.savePluginCatalog(catalog);
+      if (revocationsChanged) this.revocationsChanged();
     } catch (error) {
       console.warn(`the catalog of official plugins at ${this.url} couldn't be fetched: ${error instanceof Error ? error.message : String(error)}`);
     }
@@ -84,6 +101,15 @@ async function fetchImage(url: string): Promise<PluginScreenshotImage | null> {
     console.warn(`the plugin picture at ${url} couldn't be fetched: ${messageOf(error)}`);
     return null;
   }
+}
+
+/** The plugins running since the host started at a release the catalog revoked since, each once. */
+export function revokedWhileRunning(running: { folder: string; manifest: { title: string } }[], commitsAtStart: Map<string, string>, revocations: Revocations): RevokedPlugin[] {
+  const titles = new Map(running.map(({ folder, manifest }) => [folder, manifest.title]));
+  return [...titles].flatMap(([folder, title]) => {
+    const reason = revocations.revocationOf(commitsAtStart.get(folder) ?? null);
+    return reason === null ? [] : [{ title, reason }];
+  });
 }
 
 export const pluginsListed = async (plugins: InstalledPlugins, catalog: PluginCatalog): Promise<ServerMessage> => ({

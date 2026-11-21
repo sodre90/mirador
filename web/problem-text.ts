@@ -236,6 +236,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.pluginTagVersionMismatch(problem.tag, problem.release, problem.version);
     case "plugin-release-moved":
       return problem.found === null ? words.pluginReleaseGone(problem.release, problem.pinned) : words.pluginReleaseMoved(problem.release, problem.pinned, problem.found);
+    case "plugin-release-revoked":
+      return words.pluginReleaseRevoked(problem.reason);
     case "plugin-build-failed":
       return words.pluginBuildFailed(problem.command, problem.output);
     case "plugin-invalid-after-build":

@@ -477,13 +477,19 @@ body.resizing iframe {
   text-overflow: ellipsis;
 }
 
-.banner.plugins-updated {
+.banner.plugins-updated,
+.banner.plugins-revoked {
   display: flex;
   align-items: flex-start;
   gap: 10px;
 }
 
-.banner.plugins-updated ul {
+.banner.plugins-revoked {
+  white-space: normal;
+}
+
+.banner.plugins-updated ul,
+.banner.plugins-revoked ul {
   flex: 1 1 auto;
   min-width: 0;
   margin: 0;
@@ -501,6 +507,7 @@ body.resizing iframe {
 
 /* The banner is the same orange with black text in both themes, so its button is too. */
 .banner.plugins-updated button,
+.banner.plugins-revoked button,
 .banner.host-code-changed button,
 .banner.newer-version button {
   font-size: calc(12px * var(--font-scale));
@@ -511,6 +518,7 @@ body.resizing iframe {
 }
 
 .banner.plugins-updated button:hover,
+.banner.plugins-revoked button:hover,
 .banner.host-code-changed button:hover,
 .banner.newer-version button:hover {
   background: #fff;

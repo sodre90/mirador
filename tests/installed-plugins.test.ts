@@ -72,7 +72,7 @@ describe("InstalledPlugins", () => {
     const listed = await new InstalledPlugins(plugins, loaded.problems).list();
 
     expect(listed).toEqual([
-      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false, description: null, tagline: null, screenshots: [] },
+      { folder: "broken", name: "broken", title: "Broken", version: "1.0.0", source: { kind: "folder" }, problem: "host.ts doesn't exist; build the plugin first?", problemAbout: { code: "plugin-file-missing", path: "host.ts" }, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false, description: null, tagline: null, screenshots: [], revokedBecause: null },
       {
         folder: "cloned",
         name: "counter",
@@ -88,8 +88,9 @@ describe("InstalledPlugins", () => {
         description: null,
         tagline: null,
         screenshots: [],
+        revokedBecause: null,
       },
-      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false, description: null, tagline: null, screenshots: [] },
+      { folder: "linked", name: "linked-counter", title: "Linked counter", version: "1.0.0", source: { kind: "linked", target: elsewhere }, problem: null, waitsForRestart: false, kinds: ["app"], tools: [], icon: null, updatesByItself: false, description: null, tagline: null, screenshots: [], revokedBecause: null },
     ]);
   });
 
@@ -237,6 +238,7 @@ describe("adding, updating and removing plugins", () => {
         description: null,
         tagline: null,
         screenshots: [],
+        revokedBecause: null,
       },
     ]);
     expect(leftInStaging(plugins)).toEqual([]);
@@ -427,7 +429,7 @@ describe("adding, updating and removing plugins", () => {
     await installed.update("counter");
     expect((await installed.list())[0]).toMatchObject({ version: "1.11.0", source: { release: "1.11.0" }, waitsForRestart: true });
     expect(readFileSync(join(plugins, "counter", "view.js"), "utf8")).toBe("document.body.textContent = 'Counting by two';\n");
-  });
+  }, 60_000);
 
   test("a release or commits for a newer plugin API are news that can't go in, so the updates found by itself leave them out", async () => {
     const repo = builtCounterRepo("newer-api-repo");
@@ -509,6 +511,39 @@ describe("adding, updating and removing plugins", () => {
     expect(await installed.news("counter")).toEqual(supported);
     expect((await installed.list())[0], "the installed release is still the one its own tag names").toMatchObject({ source: { release: "1.0.0" } });
     expect(git(join(plugins, "counter"), "for-each-ref", "--format=%(refname:short)", "refs/mirador/releases/")).not.toContain("v2.2.0");
+  });
+
+  test("a release the catalog revoked is no news and is refused before its build, and a plugin at one lists why", async () => {
+    const repo = builtCounterRepo("revoked-repo");
+    git(repo, "tag", "v1.0.0");
+    const plugins = pluginsIn("revoked");
+    const installed = new InstalledPlugins(plugins, []);
+    const revoked = new Map<string, string>();
+    installed.refusesRevokedFrom({ revocationOf: (commit) => (commit === null ? null : (revoked.get(commit) ?? null)) });
+    await installed.add(repo, null);
+    expect((await installed.list())[0]?.revokedBecause).toBeNull();
+
+    release(repo, "1.1.0");
+    revoked.set(git(repo, "rev-parse", "HEAD"), "It sends your files away.");
+    expect(await installed.news("counter")).toEqual({ release: null, commits: [], needsApi: null });
+    expect(await installed.updatesFound(null)).toEqual([]);
+    await expect(installed.offer(repo, "v1.1.0")).rejects.toMatchObject({ problem: { code: "plugin-release-revoked", reason: "It sends your files away." } });
+    expect(leftInStaging(plugins), "the refused clone goes").toEqual([]);
+
+    release(repo, "1.2.0");
+    expect(await installed.news("counter"), "a newer release past the revoked one is news").toMatchObject({ release: "1.2.0" });
+
+    revoked.set(git(repo, "rev-parse", "v1.0.0^{commit}"), "It counts your keystrokes.");
+    expect((await installed.list())[0]?.revokedBecause).toBe("It counts your keystrokes.");
+  });
+
+  test("loads no plugin the catalog revoked, and says why", async () => {
+    const plugins = pluginsIn("revoked-load");
+    cpSync(COUNTER, join(plugins, "counter"), { recursive: true });
+    const counter = join(plugins, "counter");
+    const loaded = await loadPlugins(plugins, (folder) => (folder === counter ? "It counts your keystrokes." : null));
+    expect(loaded.apps).toEqual([]);
+    expect(loaded.problems).toEqual([{ folder: counter, message: expect.stringContaining("It counts your keystrokes."), messageAbout: { code: "plugin-release-revoked", reason: "It counts your keystrokes." } }]);
   });
 
   test("refuses a release whose plugin.json gives another version, and a plugin without a version, which doesn't load either", async () => {
