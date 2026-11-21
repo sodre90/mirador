@@ -252,6 +252,11 @@ export const problems: Messages["problems"] = {
     `Ahora no se puede llegar a ${machine}. Puede que su Mirador esté apagado o sin conexión, o que la invitación ya se haya usado o haya caducado. Inténtalo más tarde, o pide una invitación nueva.`,
   machineNeedsWholeInvite: (machine) => `A ${machine} se llega peer to peer, así que para unirse hace falta el enlace de invitación completo, no solo su código.`,
   inviteFromAnotherMachine: (machine) => `Esa invitación es de otra máquina, no de ${machine}. Pégala en Máquinas, donde añade la suya.`,
+  dialFolderTooLong: (folder) =>
+    `La conexión peer to peer no funciona desde la carpeta de datos de Mirador de este equipo, porque su ruta es demasiado larga para los sockets que necesita: ${folder}. Inicia Mirador con una carpeta de datos más corta, indicada en MIRADOR_DATA_DIR.`,
+  dialFolderUnusableCharacter: (folder) =>
+    `La conexión peer to peer no funciona desde la carpeta de datos de Mirador de este equipo, porque su ruta tiene un carácter con el que no se pueden nombrar los sockets que necesita, como dos puntos, un espacio o una letra fuera de ASCII: ${folder}. Inicia Mirador con una carpeta de datos de letras simples, indicada en MIRADOR_DATA_DIR.`,
+  dialFolderNotOwn: (folder) => `La conexión peer to peer no funciona desde la carpeta de datos de Mirador de este equipo, porque pertenece a otra cuenta del equipo: ${folder}.`,
   machineCertificateUntrusted: (machine) =>
     `Este equipo no confía en el certificado de ${machine}, y ${machine} no ofrece una autoridad de certificación propia.`,
   machineGaveNoToken: (machine) => `${machine} dejó entrar a este equipo sin un token.`,

@@ -1,9 +1,21 @@
 import type { Machine } from "../shared/model.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
-import type { MachineReach } from "./machine-tunnels.ts";
+import type { MachineReach, MachineTunnels } from "./machine-tunnels.ts";
 import { trusting } from "./machine-trust.ts";
 import { fetchThrough } from "./p2p/dial.ts";
 import type { Store } from "./store.ts";
+
+/**
+ * The machine turned this host's token away, or said its owner took this computer's person out: the token goes, and
+ * this host's place in the machine's tunnel with its dial and key. One joined as a person says from then on that its
+ * owner signed this computer out of their rooms, by taking the person out or revoking this computer alike, even when
+ * this host was off as it happened and only learns it now.
+ */
+export function forgetSignInAt(store: Store, tunnels: Pick<MachineTunnels, "forget">, machineId: string) {
+  if (store.findMachine(machineId)?.asPerson) store.setMachineOutOfRooms(machineId, true);
+  tunnels.forget(machineId);
+  store.forgetMachineDeviceToken(machineId);
+}
 
 /** A machine that doesn't answer by then hasn't said it turned this host away. */
 const ASKING_TIMEOUT_MS = 10_000;

@@ -3,7 +3,7 @@ import type { MachineAddress } from "../shared/machines.ts";
 import type { Machine } from "../shared/model.ts";
 import { tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
 import { authorityFingerprint } from "./certificates.ts";
-import { HostProblemError } from "../shared/host-problems.ts";
+import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 
 /** Checks a machine's certificate against the certificate authority this host trusts it by, or the computer's own ones when there is none. */
 export const trusting = (authority: string | null) => (authority ? { tls: { ca: authority } } : {});
@@ -52,15 +52,16 @@ export interface WayToMachine {
 }
 
 /**
- * A link that carries the machine's tunnel joins through it wherever this computer `dialsTunnels`. Elsewhere its code
- * goes to the link's address only where nothing on the way reads it: over HTTPS whose certificate the computer's own
- * authorities or the link's fingerprint vouch for, never one trusted on first use, or over plain HTTP within a private
- * network. An address or a link without a tunnel is reached as it is.
+ * A link that carries the machine's tunnel joins through it unless something keeps this computer from dialing tunnels,
+ * `whyNotDialing`, which a link with no other address says. Elsewhere its code goes to the link's address only where
+ * nothing on the way reads it: over HTTPS whose certificate the computer's own authorities or the link's fingerprint
+ * vouch for, never one trusted on first use, or over plain HTTP within a private network. An address or a link without
+ * a tunnel is reached as it is.
  */
-export function wayToMachine({ origin, tunnel }: Pick<MachineAddress, "origin" | "tunnel">, dialsTunnels: boolean): WayToMachine {
+export function wayToMachine({ origin, tunnel }: Pick<MachineAddress, "origin" | "tunnel">, whyNotDialing: HostProblem | null): WayToMachine {
   if (!tunnel) return { origin, tunnel: null, trustsOnFirstUse: true };
-  if (dialsTunnels) return { origin: tunnelOrigin(tunnel), tunnel, trustsOnFirstUse: false };
-  if (origin === tunnelOrigin(tunnel)) throw new HostProblemError({ code: "peer-to-peer-unavailable-here" });
+  if (!whyNotDialing) return { origin: tunnelOrigin(tunnel), tunnel, trustsOnFirstUse: false };
+  if (origin === tunnelOrigin(tunnel)) throw new HostProblemError(whyNotDialing);
   const { protocol, hostname } = new URL(origin);
   if (protocol === "http:" && !isPrivateHostname(hostname)) throw new HostProblemError({ code: "invite-address-unprotected", address: origin });
   return { origin, tunnel: null, trustsOnFirstUse: false };

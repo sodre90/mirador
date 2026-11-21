@@ -1,4 +1,4 @@
-import { useState, type Dispatch } from "react";
+import { useEffect, useState, type Dispatch } from "react";
 import { roomInviteLink } from "../shared/machines.ts";
 import type { Person, Profile, ReachabilitySettings, Workspace } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
@@ -184,10 +184,23 @@ function CopyLinkButton({ link }: { link: string }) {
   );
 }
 
+/** The invites not yet expired, which drop out each as it expires: the host lists them again only when they change otherwise. */
+function useUnexpired(invites: RoomInvite[]) {
+  const [now, setNow] = useState(Date.now);
+  const unexpired = invites.filter(({ expiresAt }) => expiresAt > now);
+  const soonestExpiry = Math.min(...unexpired.map(({ expiresAt }) => expiresAt));
+  useEffect(() => {
+    if (!Number.isFinite(soonestExpiry)) return;
+    const timer = setTimeout(() => setNow(Date.now()), soonestExpiry - Date.now());
+    return () => clearTimeout(timer);
+  }, [soonestExpiry]);
+  return unexpired;
+}
+
 function RoomInvitesField({ room, invites, reachability }: { room: Room; invites: RoomInvite[]; reachability: ReachabilitySettings | null }) {
   const [role, setRole] = useState<RoomRole>("member");
   const [made, setMade] = useState<MadeRoomInvite | null>(null);
-  const waiting = invites.filter(({ roomId }) => roomId === room.id);
+  const waiting = useUnexpired(invites.filter(({ roomId }) => roomId === room.id));
   const makeInvite = async () => {
     try {
       const invited = await connection.sendAndAwait(

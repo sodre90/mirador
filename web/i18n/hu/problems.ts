@@ -253,6 +253,11 @@ export const problems: Messages["problems"] = {
     `A gép (${machine}) most nem érhető el. Lehet, hogy a Miradora nem fut vagy nincs hálózaton, vagy a meghívót már felhasználták, illetve lejárt. Próbáld újra később, vagy kérj új meghívót.`,
   machineNeedsWholeInvite: (machine) => `A gépet (${machine}) peer to peer kapcsolattal éred el, így a csatlakozáshoz a teljes meghívólink kell, nem csak a kódja.`,
   inviteFromAnotherMachine: (machine) => `Ez a meghívó nem a géptől (${machine}) jött, hanem egy másiktól. Illeszd be a Gépek alatt, ott hozzáadja a saját gépét.`,
+  dialFolderTooLong: (folder) =>
+    `A peer to peer kapcsolat nem működik ennek a számítógépnek a Mirador-adatmappájából, mert az útvonala túl hosszú a szükséges socketekhez: ${folder}. Indítsd a Miradort rövidebb adatmappával, ezt a MIRADOR_DATA_DIR adja meg.`,
+  dialFolderUnusableCharacter: (folder) =>
+    `A peer to peer kapcsolat nem működik ennek a számítógépnek a Mirador-adatmappájából, mert az útvonalában olyan karakter van, amellyel a szükséges socketek nem nevezhetők meg, például kettőspont, szóköz vagy ASCII-n kívüli betű: ${folder}. Indítsd a Miradort egyszerű betűkből álló adatmappával, ezt a MIRADOR_DATA_DIR adja meg.`,
+  dialFolderNotOwn: (folder) => `A peer to peer kapcsolat nem működik ennek a számítógépnek a Mirador-adatmappájából, mert a számítógép egy másik fiókjáé: ${folder}.`,
   machineCertificateUntrusted: (machine) => `Ez a számítógép nem bízik a gép (${machine}) tanúsítványában, és ${machine} nem kínál saját tanúsítványkiadót.`,
   machineGaveNoToken: (machine) => `A gép (${machine}) token nélkül engedte be ezt a számítógépet.`,
   machineIgnoredRoomInvite: (machine) =>

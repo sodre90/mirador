@@ -109,6 +109,9 @@ export type HostProblem =
   | { code: "machine-unreachable-now"; machine: string }
   | { code: "machine-needs-whole-invite"; machine: string }
   | { code: "invite-from-another-machine"; machine: string }
+  | { code: "dial-folder-too-long"; folder: string }
+  | { code: "dial-folder-unusable-character"; folder: string }
+  | { code: "dial-folder-not-own"; folder: string }
   | { code: "machine-certificate-untrusted"; machine: string }
   | { code: "machine-gave-no-token"; machine: string }
   | { code: "machine-joined-as-person"; machine: string }

@@ -254,6 +254,11 @@ export const problems: Messages["problems"] = {
     `${machine} ist gerade nicht erreichbar. Vielleicht ist Mirador dort aus oder offline, oder die Einladung wurde schon benutzt oder ist abgelaufen. Versuch es später noch einmal oder bitte um eine neue Einladung.`,
   machineNeedsWholeInvite: (machine) => `${machine} wird per Peer-to-Peer erreicht, daher braucht der Beitritt den ganzen Einladungslink, nicht nur seinen Code.`,
   inviteFromAnotherMachine: (machine) => `Diese Einladung kommt von einem anderen Rechner als ${machine}. Füge sie unter Rechner ein, dort fügt sie ihren eigenen hinzu.`,
+  dialFolderTooLong: (folder) =>
+    `Peer-to-Peer funktioniert nicht aus dem Mirador-Datenordner dieses Computers, weil sein Pfad für die nötigen Sockets zu lang ist: ${folder}. Starte Mirador mit einem kürzeren Datenordner, festgelegt in MIRADOR_DATA_DIR.`,
+  dialFolderUnusableCharacter: (folder) =>
+    `Peer-to-Peer funktioniert nicht aus dem Mirador-Datenordner dieses Computers, weil sein Pfad ein Zeichen enthält, mit dem sich die nötigen Sockets nicht benennen lassen, etwa einen Doppelpunkt, ein Leerzeichen oder einen Buchstaben außerhalb von ASCII: ${folder}. Starte Mirador mit einem Datenordner aus einfachen Buchstaben, festgelegt in MIRADOR_DATA_DIR.`,
+  dialFolderNotOwn: (folder) => `Peer-to-Peer funktioniert nicht aus dem Mirador-Datenordner dieses Computers, weil er einem anderen Konto auf diesem Computer gehört: ${folder}.`,
   machineCertificateUntrusted: (machine) =>
     `Dieser Computer vertraut dem Zertifikat von ${machine} nicht, und ${machine} bietet keine eigene Zertifizierungsstelle an.`,
   machineGaveNoToken: (machine) => `${machine} hat diesen Computer ohne Token hereingelassen.`,

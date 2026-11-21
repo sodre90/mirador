@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { machineAddress } from "../shared/machines.ts";
-import { addWorkspace, createProfile, openSettings, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, openSettings, reloadFromRestartedHost, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** mirador-p2p is built from its own repository, which only the owner's machines have; elsewhere this spec is skipped. */
@@ -20,6 +20,8 @@ const owners = new TestHost({ fakePrograms: true, environment: peerToPeer });
 /** The invited person's own Mirador, which dials the owner's tunnel itself. */
 const visitors = new TestHost({ environment: peerToPeer });
 let broker: ChildProcess | undefined;
+/** The link the person joined with first, which is used up from then on. */
+let usedLink = "";
 
 test.describe.configure({ mode: "serial" });
 test.skip(!sidecarBuilt, `needs mirador-p2p at ${binary}`);
@@ -50,6 +52,29 @@ test.afterAll(async () => {
   await Promise.all([owners.cleanUp(), visitors.cleanUp()]);
 });
 
+const outOfRooms = "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste its whole link here.";
+
+async function gardenSettings(page: Page) {
+  await page.locator(".sidebar .rooms li", { hasText: "# Garden" }).click();
+  await page.getByRole("button", { name: "Settings of Garden" }).click();
+  return page.getByRole("dialog", { name: "Room settings" });
+}
+
+async function makeInviteLink(page: Page) {
+  const dialog = await gardenSettings(page);
+  await dialog.getByRole("button", { name: "Make an invite" }).click();
+  const link = (await dialog.getByRole("group", { name: "Invite code" }).locator(".invite-link").textContent())!;
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  return link;
+}
+
+async function setRoleOfDora(page: Page, role: "Not in the room") {
+  const dialog = await gardenSettings(page);
+  await dialog.getByLabel("Role of Dora").selectOption({ label: role });
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+}
+
 async function nameOwnProfile(page: Page, name: string) {
   const settings = await openSettings(page);
   await settings.getByLabel("Name", { exact: true }).fill(name);
@@ -77,7 +102,7 @@ const isRunning = (pid: number) => {
   }
 };
 
-test("a room invite's one link, pasted under Machines, joins the owner's machine through its tunnel and opens the room, which comes back after a restart", async ({ page, browser }) => {
+test("a room invite's one link, made before the owner's machine restarted and pasted under Machines after it, joins the machine through its tunnel and opens the room, which comes back after a restart", async ({ page, browser }) => {
   test.setTimeout(180_000);
   const roomMessages = page.locator(".room-timeline .room-entry .message");
   await signIn(page, owners);
@@ -111,6 +136,12 @@ test("a room invite's one link, pasted under Machines, joins the owner's machine
     await dialog.getByRole("button", { name: "Cancel" }).click();
     return shown;
   });
+  usedLink = link;
+
+  await test.step("the owner's machine restarts before the person uses the link, which still reaches it", async () => {
+    await owners.restart();
+    await reloadFromRestartedHost(page);
+  });
 
   const visitor = await browser.newPage();
   await signIn(visitor, visitors);
@@ -119,14 +150,14 @@ test("a room invite's one link, pasted under Machines, joins the owner's machine
   const composer = frame.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
   const railButton = visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's Mac" });
 
-  await test.step("a link whose join through the tunnel fails adds nothing, so the person can paste the right one after it", async () => {
+  await test.step("a link with a wrong code says so through the tunnel and adds nothing, so the person can paste the right one after it", async () => {
     await visitor.getByRole("button", { name: "Machines…" }).click();
     const machines = visitor.getByRole("dialog", { name: "Machines" });
     const code = machineAddress(link)!.joinCode!;
     const wrongLink = link.replace(code, `${code.slice(0, -1)}${code.endsWith("A") ? "B" : "A"}`);
     await machines.getByLabel("Address or invite link").fill(wrongLink);
     await machines.getByRole("button", { name: "Add and join" }).click();
-    await expect(visitor.locator(".notice", { hasText: "Ann's Mac did not take it as one" })).toBeVisible({ timeout: 60_000 });
+    await expect(visitor.locator(".notice", { hasText: "This invite code is wrong, used or expired. Ask for a new one." })).toBeVisible({ timeout: 60_000 });
     await expect(machines.locator(".machine-list li", { hasText: "Ann's Mac" })).toHaveCount(0);
     await expect(machines.getByLabel("Address or invite link")).toHaveValue(wrongLink);
     await expect(machines.getByText("This machine is already in the list.")).toHaveCount(0);
@@ -193,7 +224,7 @@ test("a room invite's one link, pasted under Machines, joins the owner's machine
 
   await test.step("with the owner's machine restarted, the person's Mirador reaches the room through the same tunnel again", async () => {
     await owners.restart();
-    await page.reload();
+    await reloadFromRestartedHost(page);
     await visitor.reload();
     await railButton.click();
     await frame.locator(".sidebar .rooms li").filter({ hasText: "# Garden" }).click({ timeout: 60_000 });
@@ -215,6 +246,75 @@ test("a room invite's one link, pasted under Machines, joins the owner's machine
     await expect(row).toHaveCount(0);
     await expect.poll(() => isRunning(dial!)).toBe(false);
     expect(readdirSync(join(visitors.dataDir, "machine-tunnels"))).toEqual([]);
+  });
+  await visitor.close();
+});
+
+test("a used link says the invite is over, and a person taken out of the room or whose Mirador is revoked is told so by their own Mirador, which stops dialing the machine", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await signIn(page, owners);
+  const visitor = await browser.newPage();
+  await signIn(visitor, visitors);
+  const railButton = visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's Mac" });
+  const frame = visitor.frameLocator('iframe[title="Ann\'s Mac"]');
+  const joinPanel = visitor.getByRole("region", { name: "Join Ann's Mac" });
+  const tunnelFiles = () => readdirSync(join(visitors.dataDir, "machine-tunnels"));
+
+  await test.step("the link the person used before, pasted again, says the invite is over and adds nothing", async () => {
+    await visitor.getByRole("button", { name: "Machines…" }).click();
+    const machines = visitor.getByRole("dialog", { name: "Machines" });
+    await machines.getByLabel("Address or invite link").fill(usedLink);
+    await machines.getByRole("button", { name: "Add and join" }).click();
+    await expect(visitor.locator(".notice", { hasText: "This invite code is wrong, used or expired. Ask for a new one." })).toBeVisible({ timeout: 60_000 });
+    await expect(machines.locator(".machine-list li", { hasText: "Ann's Mac" })).toHaveCount(0);
+    await machines.getByRole("button", { name: "Close" }).click();
+  });
+
+  await test.step("with a new link, the person is in the room again", async () => {
+    const link = await makeInviteLink(page);
+    await visitor.getByRole("button", { name: "Machines…" }).click();
+    const machines = visitor.getByRole("dialog", { name: "Machines" });
+    await machines.getByLabel("Address or invite link").fill(link);
+    await machines.getByRole("button", { name: "Add and join" }).click();
+    await expect(machines).toHaveCount(0, { timeout: 60_000 });
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect.poll(visitorsDials).toHaveLength(1);
+  });
+
+  await test.step("taken out of the room while their Mirador was off, the person learns it from their own Mirador once it starts, which dials the machine no more", async () => {
+    await visitors.stop();
+    await setRoleOfDora(page, "Not in the room");
+    await owners.restart();
+    await visitors.start();
+    await reloadFromRestartedHost(page);
+    await reloadFromRestartedHost(visitor);
+    await railButton.click();
+    await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(outOfRooms, { timeout: 60_000 });
+    await expect(joinPanel.getByLabel("Invite link")).toBeVisible();
+    await expect.poll(tunnelFiles).toEqual([]);
+  });
+
+  await test.step("a new invite's code alone, typed in the machine's place, is not enough, and its whole link lets the person in again", async () => {
+    const link = await makeInviteLink(page);
+    await joinPanel.getByLabel("Invite link").fill(machineAddress(link)!.joinCode!);
+    await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(joinPanel.locator(".join-problem")).toHaveText("Ann's Mac is reached peer to peer, so joining it takes the whole invite link, not just its code.");
+    await joinPanel.getByLabel("Invite link").fill(link);
+    await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(joinPanel).toHaveCount(0, { timeout: 60_000 });
+    await frame.locator(".sidebar .rooms li").filter({ hasText: "# Garden" }).click({ timeout: 60_000 });
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect.poll(visitorsDials).toHaveLength(1);
+  });
+
+  await test.step("the owner revokes the person's Mirador, which says at once that it is signed out and dials the machine no more", async () => {
+    const settings = await openSettings(page, "Devices");
+    await settings.locator(".device-list li", { hasText: "Mirador on " }).getByRole("button", { name: /^Revoke / }).click();
+    await settings.getByRole("button", { name: /^Confirm: Revoke / }).click();
+    await expect(settings.locator(".device-list li", { hasText: "Mirador on " })).toHaveCount(0);
+    await settings.getByRole("button", { name: "Close" }).click();
+    await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(outOfRooms, { timeout: 60_000 });
+    await expect.poll(tunnelFiles).toEqual([]);
   });
   await visitor.close();
 });

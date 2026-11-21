@@ -14,7 +14,7 @@ import { newKeyPair } from "./p2p/identity.ts";
 import { errorResponse, problemResponse } from "./problem-response.ts";
 import { sameSecret } from "./sign-in.ts";
 import type { Store } from "./store.ts";
-import { HostProblemError } from "../shared/host-problems.ts";
+import { HostProblemError, PROBLEM_HEADER, problemInHeader, type HostProblem } from "../shared/host-problems.ts";
 import { checkedDeviceTunnel, placesIn, type InviteTunnel } from "../shared/tunnel.ts";
 
 const UPSTREAM_OPEN_TIMEOUT_MS = 10_000;
@@ -74,6 +74,32 @@ export interface RelayedSocket {
 
 const refusedJoinFromPage = () => new Response("This computer asks to join its machines itself, from its own window.", { status: 403 });
 const didNotAnswer = (machine: Machine) => new Response(`${machine.name} did not answer.`, { status: 502 });
+
+/**
+ * What a Mirador answers a join it turns away with, which this host says in the page's own language. The machine is
+ * someone else's, so only these are taken from it, by their code alone, never any other problem it names.
+ */
+const JOIN_REFUSALS: HostProblem[] = [
+  { code: "invite-code-missing" },
+  { code: "invite-code-wrong" },
+  { code: "join-too-often" },
+  { code: "room-join-unproven" },
+  { code: "room-invite-needs-mirador" },
+  { code: "room-invite-not-through-tunnel" },
+  { code: "room-invite-loopback-from-afar" },
+];
+
+/** The refusal of a join the machine named, as one of JOIN_REFUSALS; null when it named none of them. */
+export function joinRefusalIn(response: Response): HostProblem | null {
+  const named = problemInHeader(response.headers.get(PROBLEM_HEADER));
+  return JOIN_REFUSALS.find(({ code }) => code === named?.code) ?? null;
+}
+
+/** A refusal the machine named, or else its own words, from a Mirador too old to name it. */
+const refusedJoin = async (response: Response) => {
+  const refusal = joinRefusalIn(response);
+  return refusal ? new HostProblemError(refusal) : new Error(await response.text());
+};
 
 /** The room a room invite let this computer's owner into, as the machine names it; taken only in the form a room's id has. */
 const roomIdIn = (answer: { roomId?: unknown }) => (typeof answer.roomId === "string" && /^[\w-]{1,64}$/.test(answer.roomId) ? answer.roomId : null);
@@ -259,11 +285,11 @@ export class MachineRelays {
     if (!challenged) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
     const reached: ReachedAt = { host: new URL(machine.origin).host, authorityFingerprint: authority ? authorityFingerprint(authority) : NO_AUTHORITY };
     const person = challenged.ok ? this.ownerAsPerson(code, reached, await challenged.json().catch(() => ({}))) : undefined;
+    if (!person && isRoomInviteCode(code)) throw new HostProblemError(joinRefusalIn(challenged) ?? { code: "machine-ignored-room-invite", machine: machine.name });
     if (!person && machine.asPerson) throw new HostProblemError({ code: "machine-joined-as-person", machine: machine.name });
-    if (!person && isRoomInviteCode(code)) throw new HostProblemError({ code: "machine-ignored-room-invite", machine: machine.name });
     const response = await post("/join", { code, name: thisHostAsDevice(this.store), person });
     if (!response) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
-    if (!response.ok) throw new Error(await response.text());
+    if (!response.ok) throw await refusedJoin(response);
     const answer = (await response.json()) as { token?: unknown; roomId?: unknown };
     if (typeof answer.token !== "string") throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
     this.signInFromNowOn(machine, authority, answer.token, person ? { asPerson: true, relayKey: newRelayKey() } : { asPerson: false });
@@ -294,11 +320,11 @@ export class MachineRelays {
       const challenged = await post("/join-challenges", { code });
       if (!challenged) throw unreachable;
       const person = challenged.ok ? this.ownerAsPerson(code, { tunnelKey: invite.hostKey }, await challenged.json().catch(() => ({}))) : undefined;
-      if (!person) throw new HostProblemError({ code: "machine-ignored-room-invite", machine: machine.name });
+      if (!person) throw new HostProblemError(joinRefusalIn(challenged) ?? { code: "machine-ignored-room-invite", machine: machine.name });
       const own = newKeyPair();
       const response = await post("/join", { code, name: thisHostAsDevice(this.store), person, tunnelKey: own.publicKey });
       if (!response) throw unreachable;
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) throw await refusedJoin(response);
       const answer = (await response.json().catch(() => ({}))) as { token?: unknown; roomId?: unknown; tunnel?: unknown };
       const given = checkedDeviceTunnel(answer.tunnel);
       if (typeof answer.token !== "string" || !given || !isFromMachine(given)) throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });

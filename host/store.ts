@@ -150,6 +150,7 @@ const schema = `
     role TEXT NOT NULL, expires_at INTEGER NOT NULL);
   CREATE TABLE IF NOT EXISTS person_keys (
     public_key TEXT PRIMARY KEY, person_id TEXT NOT NULL UNIQUE REFERENCES people(id) ON DELETE CASCADE);
+  CREATE TABLE IF NOT EXISTS tunnel_keys_over (key TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL, until INTEGER NOT NULL);
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -176,6 +177,28 @@ export interface MachineTunnel {
 export interface StoredDeviceTunnel {
   key: string;
   address: string;
+}
+
+/** A key let into the peer-to-peer tunnel, by its public half alone, and its address there: whoever reads it can't use it. */
+export interface PublicTunnelKey {
+  key: string;
+  address: string;
+}
+
+/** The one-time key of an invite, device or room invite alike, kept with the invite so the host lets it in again after a restart. */
+export interface InviteJoinKey extends PublicTunnelKey {
+  /** The invite's code as `inviteKey` keeps it. */
+  codeKey: string;
+  expiresAt: number;
+}
+
+/** Whose a key that is over was: a device's, revoked or out of every room, or an invite's, used, expired or withdrawn. */
+export type KeyOverKind = "device" | "invite";
+
+/** A key the tunnel still lets in until `until`, to a socket that answers nothing but that it is over. */
+export interface KeyOver extends PublicTunnelKey {
+  kind: KeyOverKind;
+  until: number;
 }
 
 const addedColumns = [
@@ -240,6 +263,10 @@ const addedColumns = [
   { table: "machines", column: "tunnel", definition: "TEXT" },
   { table: "machines", column: "tunnel_address", definition: "TEXT" },
   { table: "machines", column: "tunnel_key", definition: "TEXT" },
+  { table: "invites", column: "join_key", definition: "TEXT" },
+  { table: "invites", column: "join_address", definition: "TEXT" },
+  { table: "room_invites", column: "join_key", definition: "TEXT" },
+  { table: "room_invites", column: "join_address", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -1905,6 +1932,57 @@ export class Store {
 
   deleteDevice(id: string) {
     this.db.query("DELETE FROM devices WHERE id = ?").run(id);
+  }
+
+  /** The one-time key of the invite with the code hash, by its public half: the private one is in the invite's link alone. */
+  setInviteJoinKey(codeHash: string, { key, address }: PublicTunnelKey) {
+    this.db.query("UPDATE invites SET join_key = ?, join_address = ? WHERE code_hash = ?").run(key, address, codeHash);
+    this.db.query("UPDATE room_invites SET join_key = ?, join_address = ? WHERE code_hash = ?").run(key, address, codeHash);
+  }
+
+  /** The one-time keys of invites still waiting at `now`, device and room invites alike. */
+  waitingInviteJoinKeys(now: number): InviteJoinKey[] {
+    return this.db
+      .query(
+        `SELECT code_hash AS codeKey, join_key AS key, join_address AS address, expires_at AS expiresAt FROM invites WHERE join_key IS NOT NULL AND expires_at > ?1
+         UNION ALL SELECT code_hash, join_key, join_address, expires_at FROM room_invites WHERE join_key IS NOT NULL AND expires_at > ?1`,
+      )
+      .all(now) as InviteJoinKey[];
+  }
+
+  /** The one-time keys of invites that expired by `now`, each handed out once: the invites keep them no more. */
+  takeExpiredInviteJoinKeys(now: number): PublicTunnelKey[] {
+    const take = (table: string) => {
+      const expired = this.db.query(`SELECT join_key AS key, join_address AS address FROM ${table} WHERE join_key IS NOT NULL AND expires_at <= ?`).all(now) as PublicTunnelKey[];
+      this.db.query(`UPDATE ${table} SET join_key = NULL, join_address = NULL WHERE join_key IS NOT NULL AND expires_at <= ?`).run(now);
+      return expired;
+    };
+    return this.inOneTransaction(() => [...take("invites"), ...take("room_invites")]);
+  }
+
+  /**
+   * Keeps the key as over, unless it already is; past `most` of them, those whose time ends soonest go. The keys that
+   * went, for the sidecar to let them go too.
+   */
+  addKeyOver({ key, address, kind, until }: KeyOver, most: number): string[] {
+    this.db.query("INSERT OR IGNORE INTO tunnel_keys_over (key, address, kind, until) VALUES (?, ?, ?, ?)").run(key, address, kind, until);
+    const beyondMost = this.db
+      .query("DELETE FROM tunnel_keys_over WHERE key IN (SELECT key FROM tunnel_keys_over WHERE kind = ? ORDER BY until DESC, rowid DESC LIMIT -1 OFFSET ?) RETURNING key")
+      .all(kind, most) as { key: string }[];
+    return beyondMost.map(({ key }) => key);
+  }
+
+  keysOver(): KeyOver[] {
+    return this.db.query("SELECT key, address, kind, until FROM tunnel_keys_over ORDER BY until").all() as KeyOver[];
+  }
+
+  /** Those whose time ran out by `now`, which are gone from then on. */
+  takeKeysOverEndedBy(now: number): string[] {
+    return (this.db.query("DELETE FROM tunnel_keys_over WHERE until <= ? RETURNING key").all(now) as { key: string }[]).map(({ key }) => key);
+  }
+
+  isKeyOver(key: string) {
+    return this.db.query("SELECT 1 FROM tunnel_keys_over WHERE key = ?").get(key) !== null;
   }
 
   setDeviceTunnel(id: string, { key, address }: StoredDeviceTunnel) {

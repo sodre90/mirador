@@ -208,16 +208,22 @@ test("a device joins through the tunnel with an invite's one-time key, then reac
     expect(stolenKey.status).toBe(409);
   });
 
-  await test.step("once revoked, the device reaches nothing through the tunnel", async () => {
+  await test.step("once revoked, the device reaches nothing through the tunnel, which only tells it, whatever it asks, that it is signed out", async () => {
     const phoneRow = settings.locator(".device-list li", { hasText: "Phone" });
     await phoneRow.getByRole("button", { name: "Revoke Phone" }).click();
     await phoneRow.getByRole("button", { name: "Revoke Phone" }).click();
     await expect(phoneRow).toHaveCount(0);
-    const afterRevoking = await fetch(`${device.origin}/mirador-here`, { signal: AbortSignal.timeout(5000) }).then(
-      (response) => response.status,
+    const answerTo = (path: string) =>
+      fetch(`${device.origin}${path}`, { ...asDevice, signal: AbortSignal.timeout(5000) }).then(
+        async (response) => `${response.status} ${await response.text()}`,
+        () => "no answer",
+      );
+    await expect.poll(() => Promise.all(["/mirador-here", "/api/rooms", "/"].map(answerTo))).toEqual(["401 unauthorized", "401 unauthorized", "401 unauthorized"]);
+    const canvasAnswers = await fetch(`http://127.0.0.1:${Number(new URL(device.origin).port) + 1}/d3.min.js`, { signal: AbortSignal.timeout(5000) }).then(
+      (response) => `${response.status}`,
       () => "no answer",
     );
-    expect(afterRevoking).toBe("no answer");
+    expect(canvasAnswers).not.toBe("200");
   });
 });
 

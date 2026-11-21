@@ -90,18 +90,26 @@ test("a room invite's link carries the way through the machine's tunnel, at the 
 
 test("a room invite's link with a tunnel joins through it wherever this computer dials tunnels, even with an address of its own that answers", () => {
   const withAddress = machineAddress(roomInviteLink("https://box.local:4602", "ROOM-ABCD-EFGH-JKLM", fingerprint, tunnel))!;
-  expect(wayToMachine(withAddress, true)).toEqual({ origin: tunnelOrigin(tunnel), tunnel, trustsOnFirstUse: false });
-  expect(wayToMachine(machineAddress("https://box.local:4602")!, true)).toEqual({ origin: "https://box.local:4602", tunnel: null, trustsOnFirstUse: true });
+  expect(wayToMachine(withAddress, null)).toEqual({ origin: tunnelOrigin(tunnel), tunnel, trustsOnFirstUse: false });
+  expect(wayToMachine(machineAddress("https://box.local:4602")!, null)).toEqual({ origin: "https://box.local:4602", tunnel: null, trustsOnFirstUse: true });
 });
 
 test("where this computer can't dial the tunnel, the link's code goes to its address only over HTTPS trusted by more than first use, or plain HTTP within a private network", () => {
   const withoutTunnelHere = (origin: string, authorityFingerprint: string | null = null) => () =>
-    wayToMachine(machineAddress(roomInviteLink(origin, "ROOM-ABCD-EFGH-JKLM", authorityFingerprint, tunnel))!, false);
+    wayToMachine(machineAddress(roomInviteLink(origin, "ROOM-ABCD-EFGH-JKLM", authorityFingerprint, tunnel))!, { code: "peer-to-peer-unavailable-here" });
   expect(withoutTunnelHere("https://box.local:4602", fingerprint)()).toEqual({ origin: "https://box.local:4602", tunnel: null, trustsOnFirstUse: false });
   expect(withoutTunnelHere("http://192.168.1.20:4600")()).toEqual({ origin: "http://192.168.1.20:4600", tunnel: null, trustsOnFirstUse: false });
   expect(withoutTunnelHere("http://203.0.113.7:4600")).toThrow("the invite's address, http://203.0.113.7:4600, is not protected by HTTPS");
   expect(withoutTunnelHere("http://box.example.com:4600")).toThrow("is not protected by HTTPS");
   expect(withoutTunnelHere(tunnelOrigin(tunnel))).toThrow("Peer to peer isn't available on this computer, and this invite needs it");
+});
+
+test("a link through the tunnel alone says why this computer can't dial it, such as a data folder too long for the sockets dialing needs", () => {
+  const throughTunnelOnly = machineAddress(roomInviteLink(tunnelOrigin(tunnel), "ROOM-ABCD-EFGH-JKLM", null, tunnel))!;
+  const folderTooLong = { code: "dial-folder-too-long", folder: "/Users/ann/a-long-folder/machine-tunnels" } as const;
+  expect(() => wayToMachine(throughTunnelOnly, folderTooLong)).toThrow(
+    "Peer to peer can't work from this computer's Mirador data folder, as its path is too long for the sockets it needs: /Users/ann/a-long-folder/machine-tunnels.",
+  );
 });
 
 test("only loopback, private, Tailscale and link-local addresses are within a private network", () => {

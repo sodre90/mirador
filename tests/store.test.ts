@@ -1113,4 +1113,39 @@ describe("Store", () => {
     ]);
     reopened.close();
   });
+
+  test("keeps no more keys that are over than it is told, letting those that end soonest go, and lets each go when its time ends", () => {
+    const store = new Store(":memory:");
+    const over = (key: string, until: number) => ({ key, address: `fd00::${until}`, kind: "invite" as const, until });
+    expect(store.addKeyOver(over("first", 30), 2)).toEqual([]);
+    expect(store.addKeyOver(over("second", 10), 2)).toEqual([]);
+    expect(store.addKeyOver(over("first", 99), 2)).toEqual([]);
+    expect(store.addKeyOver(over("third", 20), 2)).toEqual(["second"]);
+    expect(store.keysOver().map(({ key }) => key)).toEqual(["third", "first"]);
+    expect(store.isKeyOver("second")).toBe(false);
+    expect(store.isKeyOver("third")).toBe(true);
+    expect(store.takeKeysOverEndedBy(20)).toEqual(["third"]);
+    expect(store.takeKeysOverEndedBy(20)).toEqual([]);
+    expect(store.keysOver()).toEqual([{ key: "first", address: "fd00::30", kind: "invite", until: 30 }]);
+  });
+
+  test("an invite keeps its one-time key by its public half until it expires, and hands an expired one out once", () => {
+    const store = new Store(":memory:");
+    store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
+    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 });
+    store.addInvite("device code", 100);
+    store.addRoomInvite({ id: "i1", roomId: "r1", role: "member", expiresAt: 200 }, "room code");
+    store.addInvite("keyless code", 100);
+    store.setInviteJoinKey("device code", { key: "device key", address: "fd00::1" });
+    store.setInviteJoinKey("room code", { key: "room key", address: "fd00::2" });
+    expect(store.waitingInviteJoinKeys(50)).toEqual([
+      { codeKey: "device code", key: "device key", address: "fd00::1", expiresAt: 100 },
+      { codeKey: "room code", key: "room key", address: "fd00::2", expiresAt: 200 },
+    ]);
+    expect(store.takeExpiredInviteJoinKeys(150)).toEqual([{ key: "device key", address: "fd00::1" }]);
+    expect(store.takeExpiredInviteJoinKeys(150)).toEqual([]);
+    expect(store.waitingInviteJoinKeys(150)).toEqual([{ codeKey: "room code", key: "room key", address: "fd00::2", expiresAt: 200 }]);
+    expect(store.deleteRoomInvite("i1")).toBe("room code");
+    expect(store.waitingInviteJoinKeys(150)).toEqual([]);
+  });
 });

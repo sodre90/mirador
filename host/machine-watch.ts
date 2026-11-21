@@ -176,7 +176,7 @@ export class MachineWatch {
       },
       closed: (code: number, reached: Machine) => {
         this.update(watched, { reachable: false });
-        if (code === OUT_OF_ROOMS_CLOSE_CODE && this.tunnels.stillReaches(reached)) this.outOfRooms(machineId);
+        if (code === OUT_OF_ROOMS_CLOSE_CODE && this.tunnels.stillReaches(reached)) this.signedOut(machineId);
       },
       refused: (reached: Machine) => signInRevoked(this.store, reached, this.tunnels).then((revoked) => revoked && this.signedOut(machineId)),
     };
@@ -218,11 +218,6 @@ export class MachineWatch {
         watched.waitingIn.delete(message.conversationId);
         return this.update(watched, { waiting: waitingList(watched) });
     }
-  }
-
-  private outOfRooms(machineId: string) {
-    this.store.setMachineOutOfRooms(machineId, true);
-    this.signedOut(machineId);
   }
 
   private learnHostId(machineId: string, hostId: string) {

@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, openSettings, primaryModifier, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, openSettings, primaryModifier, reloadFromRestartedHost, signIn } from "./helpers.ts";
 import { roomInviteLink } from "../shared/machines.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -10,6 +10,8 @@ const owners = new TestHost({ fakePrograms: true });
 /** The invited person's own Mirador, which joins the owner's machine. */
 const visitors = new TestHost();
 const builderPrompts = () => join(owners.root, "builder-prompts");
+
+test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
   writeBunProgram(owners.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));
@@ -20,6 +22,8 @@ test.afterAll(async () => {
   await Promise.all([owners.stop(), visitors.stop()]);
   await Promise.all([owners.cleanUp(), visitors.cleanUp()]);
 });
+
+const OUT_OF_ROOMS = "Its owner signed this computer out of their rooms there. Ask them for a new invite, and join with its code.";
 
 const roomMessages = (page: Page | FrameLocator) => page.locator(".room-timeline .room-entry .message");
 
@@ -52,7 +56,7 @@ async function setRoleOfDora(page: Page, role: "Guest" | "Not in the room") {
   await expect(dialog).toBeHidden();
 }
 
-test("a person joins a room from their own Mirador with an invite, works in it with their name and role, is let go of at once when taken out, and comes back by a room invite alone", async ({ page, browser }) => {
+test("a person joins a room from their own Mirador with an invite, works in it with their name and role, is let go of at once when taken out or revoked, and told so also when their Mirador was off, and comes back by a room invite alone", async ({ page, browser }) => {
   await signIn(page, owners);
   await nameOwnProfile(page, "Ann");
   const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
@@ -184,7 +188,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
   await test.step("taken out of the room, the person's Mirador says they are in no room there any more, and offers no way in but a new invite", async () => {
     await setRoleOfDora(page, "Not in the room");
     const join = visitor.getByRole("region", { name: "Join Ann's machine" });
-    await expect(join).toContainText("Its owner took you out of the last room you were in there, which signed this computer out. Ask them for a new invite, and join with its code.");
+    await expect(join).toContainText(OUT_OF_ROOMS);
     await expect(join.getByRole("button", { name: "Ask to join" })).toHaveCount(0);
     const settings = await openSettings(page, "Devices");
     await expect(settings.locator(".device-person")).toHaveCount(0);
@@ -225,5 +229,53 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(visitor.locator('iframe[title="Ann\'s machine"]')).toHaveAttribute("sandbox", "allow-scripts allow-forms");
     await expect(frame.locator(".sidebar .rooms li")).toHaveText(["# Garden"]);
   });
+
+  const joinPanel = visitor.getByRole("region", { name: "Join Ann's machine" });
+  await test.step("the owner revokes the person's Mirador, which says it is signed out of their rooms there", async () => {
+    const settings = await openSettings(page, "Devices");
+    await settings.locator(".device-list li", { hasText: "Mirador on " }).getByRole("button", { name: /^Revoke / }).click();
+    await settings.getByRole("button", { name: /^Confirm: Revoke / }).click();
+    await expect(settings.locator(".device-list li", { hasText: "Mirador on " })).toHaveCount(0);
+    await settings.getByRole("button", { name: "Close" }).click();
+    await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(OUT_OF_ROOMS, { timeout: 30_000 });
+  });
+
+  const lettingBackIn = await makeMemberInvite(page);
+  await test.step("a new invite lets the person in again", async () => {
+    await joinPanel.getByLabel("Invite code or link").fill(lettingBackIn);
+    await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(joinPanel).toHaveCount(0);
+    await expect(frame.locator(".sidebar .rooms li")).toHaveText(["# Garden"]);
+  });
+
+  await test.step("taken out of the room while their Mirador was off, the person learns it from their own Mirador once it starts", async () => {
+    await visitors.stop();
+    await setRoleOfDora(page, "Not in the room");
+    await visitors.start();
+    await reloadFromRestartedHost(visitor);
+    await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "Ann's machine" }).click();
+    await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(OUT_OF_ROOMS, { timeout: 30_000 });
+  });
+
+  await test.step("the invite the person came back with last, typed again, says it is used up", async () => {
+    await joinPanel.getByLabel("Invite code or link").fill(lettingBackIn);
+    await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(joinPanel.locator(".join-problem")).toHaveText("This invite code is wrong, used or expired. Ask for a new one.");
+  });
   await visitor.close();
+});
+
+test("an invite leaves the owner's list of waiting invites as it expires", async ({ page }) => {
+  await page.clock.install();
+  await signIn(page, owners);
+  await page.locator(".sidebar .rooms li", { hasText: "# Garden" }).click();
+  const dialog = await roomSettings(page);
+  const waiting = dialog.getByRole("list", { name: "Waiting invites" }).getByRole("listitem");
+  await expect(waiting).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Make an invite" }).click();
+  await expect(waiting).toHaveText([/^Member, until /]);
+  await page.clock.fastForward("14:00");
+  await expect(waiting).toHaveText([/^Member, until /]);
+  await page.clock.fastForward("02:00");
+  await expect(waiting).toHaveCount(0);
 });

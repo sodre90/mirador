@@ -2,6 +2,7 @@ import type { Subprocess } from "bun";
 import { existsSync, lstatSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
+import type { HostProblem } from "../../shared/host-problems.ts";
 import { tunnelOrigin, type TunnelPlaces } from "../../shared/tunnel.ts";
 import { CANVAS_TUNNEL_PORT, LONGEST_SOCKET_PATH } from "./service.ts";
 import type { DownloadedSidecar, SidecarDownload } from "./sidecar-download.ts";
@@ -74,10 +75,10 @@ function wsUnixUrlCarries(socket: string) {
 }
 
 /** Why this host can't dial from sockets in `folder`, or null when it can. */
-export function socketFolderProblem(folder: string) {
+export function socketFolderProblem(folder: string): HostProblem | null {
   const longest = join(folder, `${SOCKET_FOLDER_PREFIX}XXXXXX`, WEB_SOCKET);
-  if (Buffer.byteLength(longest) > LONGEST_SOCKET_PATH) return `${longest} is too long for a Unix socket: a shorter data folder would do.`;
-  if (!wsUnixUrlCarries(longest)) return `${folder} has a character a WebSocket can't name a Unix socket's path with, such as a colon, a space or a letter outside ASCII.`;
+  if (Buffer.byteLength(longest) > LONGEST_SOCKET_PATH) return { code: "dial-folder-too-long", folder };
+  if (!wsUnixUrlCarries(longest)) return { code: "dial-folder-unusable-character", folder };
   return null;
 }
 

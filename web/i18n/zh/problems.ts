@@ -244,6 +244,10 @@ export const problems: Messages["problems"] = {
   machineUnreachableNow: (machine) => `现在连不上 ${machine}。它的 Mirador 可能没有运行或已离线，也可能邀请已被使用或已过期。请稍后再试，或再要一个新邀请。`,
   machineNeedsWholeInvite: (machine) => `${machine} 通过点对点连接，所以加入时需要完整的邀请链接，而不只是邀请码。`,
   inviteFromAnotherMachine: (machine) => `这个邀请来自另一台机器，而不是 ${machine}。请把它粘贴到“机器”里，它会添加自己的机器。`,
+  dialFolderTooLong: (folder) => `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它的路径对所需的套接字来说太长：${folder}。请用更短的数据文件夹启动 Mirador，在 MIRADOR_DATA_DIR 中设置。`,
+  dialFolderUnusableCharacter: (folder) =>
+    `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它的路径含有所需套接字无法使用的字符，例如冒号、空格或 ASCII 以外的字母：${folder}。请用只含普通字母的数据文件夹启动 Mirador，在 MIRADOR_DATA_DIR 中设置。`,
+  dialFolderNotOwn: (folder) => `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它属于这台电脑上的另一个账户：${folder}。`,
   machineCertificateUntrusted: (machine) => `这台电脑不信任 ${machine} 的证书，而 ${machine} 也没有提供自己的证书颁发机构。`,
   machineGaveNoToken: (machine) => `${machine} 让这台电脑加入了，却没有给出令牌。`,
   machineIgnoredRoomInvite: (machine) => `这是房间邀请的代码，但 ${machine} 没有把它当作房间邀请，所以这台电脑没有加入。邀请可能已过期或已被使用，请再要一个。`,

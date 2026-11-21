@@ -460,6 +460,7 @@ export function startServer(services: HostServices) {
     if (refused) return refused;
     const { code } = (await request.json().catch(() => ({}))) as { code?: unknown };
     if (typeof code !== "string") return problemResponse({ code: "invite-code-missing" }, 400);
+    if (!joinsWithItsOwnInvite(request, code)) return problemResponse({ code: "invite-code-wrong" }, 404);
     const reached = roomJoinReach(request, server, code);
     if (reached instanceof Response) return reached;
     const challenge = roomInvites.challenge(code, reached);
@@ -667,7 +668,8 @@ export function startServer(services: HostServices) {
     if (!parsed) throw new HostProblemError({ code: "not-a-machine-address", address });
     const { joinCode, authorityFingerprint, forRoom } = parsed;
     if (pageOrigins.includes(parsed.origin) || (parsed.tunnel && parsed.tunnel.hostKey === p2p?.publicKey)) throw new HostProblemError({ code: "that-is-this-machine" });
-    const { origin, tunnel, trustsOnFirstUse } = wayToMachine(parsed, parsed.tunnel !== null && (await tunnels.canDial()));
+    const whyNotDialing = parsed.tunnel ? await tunnels.whyNotDialing() : null;
+    const { origin, tunnel, trustsOnFirstUse } = wayToMachine(parsed, whyNotDialing);
     if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const machineId = crypto.randomUUID();
     const shownName = name.trim() || nameInInvite(parsed.tunnel) || new URL(origin).hostname;

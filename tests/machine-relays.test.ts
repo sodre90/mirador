@@ -5,13 +5,14 @@ import { join } from "node:path";
 import { authorityFingerprint, ownServingCertificate } from "../host/certificates.ts";
 import { DeviceService, inviteKey } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
-import { fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
+import { fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, joinRefusalIn, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
 import { atAddress, tunnelOriginsOf, type Forward } from "../host/p2p/dial.ts";
 import type { Machine } from "../shared/model.ts";
 import type { RelayedSocket } from "../host/machine-relays.ts";
 import { newChallenge, NO_AUTHORITY, ownerKey, signedRoomJoin, type OwnerKey } from "../host/person-keys.ts";
-import { HostProblemError } from "../shared/host-problems.ts";
+import { HostProblemError, type HostProblem } from "../shared/host-problems.ts";
+import { problemResponse } from "../host/problem-response.ts";
 import { Store } from "../host/store.ts";
 
 const machine = "https://home-server.example.ts.net";
@@ -730,5 +731,31 @@ describe("joining a machine that made its own certificate", () => {
     await expect(relays.askToJoin("box", () => {})).rejects.toThrow("This computer joins Box as a person in its rooms");
     expect(otherRequests).toEqual([]);
     expect(store.machineDeviceToken("box")).toBeNull();
+  });
+
+  /** A machine that turns every join away, answering its challenge and its join with these. */
+  function refusingMachine(refusal: () => Response) {
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, routes: { "/join-challenges": { POST: refusal }, "/join": { POST: refusal } }, fetch: () => new Response("join page") });
+    cleanUps.push(() => server.stop(true));
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "box", name: "Box", origin: `http://127.0.0.1:${server.port}`, createdAt: 1 });
+    const relays = new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey);
+    const refusedWith = (code: string) => relays.join("box", code).then(() => null, (error: Error) => (error instanceof HostProblemError ? error.problem : error.message));
+    return { store, refusedWith };
+  }
+
+  test("says why the machine turned a code away in this computer's own words, a used or expired invite's alike, whether it was a room invite's or not", async () => {
+    const { store, refusedWith } = refusingMachine(() => problemResponse({ code: "invite-code-wrong" }, 404));
+    expect(await refusedWith("ROOM-ABCD-EFGH-JKLM")).toEqual({ code: "invite-code-wrong" });
+    expect(await refusedWith("ABCD-EFGH-JKLM")).toEqual({ code: "invite-code-wrong" });
+    expect(store.machineDeviceToken("box")).toBeNull();
+  });
+
+  test("takes from the machine no problem but a join's refusal, nor anything it adds to one, keeping its own words for anything else", async () => {
+    const naming = (problem: Record<string, unknown>) => () => problemResponse(problem as HostProblem, 403, "the machine's own words");
+    expect(await refusingMachine(naming({ code: "workspace-gone" })).refusedWith("ROOM-ABCD-EFGH-JKLM")).toEqual({ code: "machine-ignored-room-invite", machine: "Box" });
+    expect(await refusingMachine(naming({ code: "workspace-gone" })).refusedWith("ABCD-EFGH-JKLM")).toBe("the machine's own words");
+    expect(await refusingMachine(naming({ code: "join-too-often", more: "a link to click" })).refusedWith("ABCD-EFGH-JKLM")).toEqual({ code: "join-too-often" });
+    expect(joinRefusalIn(new Response("no problem named", { status: 403 }))).toBeNull();
   });
 });

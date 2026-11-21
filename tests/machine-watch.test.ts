@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { signInRevoked } from "../host/machine-sign-in.ts";
+import { forgetSignInAt, signInRevoked } from "../host/machine-sign-in.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
 import { MachineWatch } from "../host/machine-watch.ts";
 import type { Way } from "../host/p2p/dial.ts";
@@ -224,16 +224,32 @@ describe("MachineWatch", () => {
   test("joined as a person, signs out the moment the machine's owner takes this computer's person out of their last room", async () => {
     const machine = fakeMachine();
     cleanUp.push(() => machine.server.stop(true));
-    const { watch, store, signedOut } = watching(machine.origin, { asPerson: true });
+    const { watch, signedOut } = watching(machine.origin, { asPerson: true });
     await eventually(() => expect(machine.sockets).toHaveLength(1));
-    expect(store.findMachine("m1")?.outOfRooms).toBe(false);
 
     machine.sockets.forEach((socket) => socket.close(OUT_OF_ROOMS_CLOSE_CODE, "out of every room"));
     await eventually(() => expect(signedOut).toEqual(["m1"]));
-    expect(store.findMachine("m1")?.outOfRooms).toBe(true);
     expect(watch.statuses()).toEqual([]);
     await Bun.sleep(300);
     expect(machine.signIns).toHaveLength(1);
+  });
+
+  test("a machine that signed this computer out takes its token and its place in the tunnel, and says it is out of their rooms when it was joined as a person", () => {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "person", name: "Ann's Mac", origin: "https://ann.example:4600", createdAt: 1 });
+    store.insertMachine({ id: "device", name: "Home server", origin: "https://home.example:4600", createdAt: 1 });
+    store.setMachineJoinedAs("person", { asPerson: true, relayKey: "relay-key" });
+    ["person", "device"].forEach((machineId) => store.setMachineDeviceToken(machineId, "device-token"));
+    const forgotten: string[] = [];
+    const tunnels = { forget: (machineId: string) => forgotten.push(machineId) };
+
+    forgetSignInAt(store, tunnels, "person");
+    forgetSignInAt(store, tunnels, "device");
+
+    expect(forgotten).toEqual(["person", "device"]);
+    expect(["person", "device"].map((machineId) => store.machineDeviceToken(machineId))).toEqual([null, null]);
+    expect(store.findMachine("person")?.outOfRooms).toBe(true);
+    expect(store.findMachine("device")?.outOfRooms).toBe(false);
   });
 
   test("does not ask a machine it stopped watching whether it still lets this host in, so a host stopping never reads the store it closed", async () => {

@@ -251,6 +251,11 @@ export const problems = {
     `${machine} can't be reached right now. Its Mirador may be off or offline, or the invite was used or has expired. Try again later, or ask for a new invite.`,
   machineNeedsWholeInvite: (machine: string) => `${machine} is reached peer to peer, so joining it takes the whole invite link, not just its code.`,
   inviteFromAnotherMachine: (machine: string) => `That invite is from another machine than ${machine}. Paste it under Machines, where it adds its own.`,
+  dialFolderTooLong: (folder: string) =>
+    `Peer to peer can't work from this computer's Mirador data folder, as its path is too long for the sockets it needs: ${folder}. Start Mirador with a shorter data folder, set in MIRADOR_DATA_DIR.`,
+  dialFolderUnusableCharacter: (folder: string) =>
+    `Peer to peer can't work from this computer's Mirador data folder, as its path has a character the sockets it needs can't be named with, such as a colon, a space or a letter outside ASCII: ${folder}. Start Mirador with a data folder of plain letters, set in MIRADOR_DATA_DIR.`,
+  dialFolderNotOwn: (folder: string) => `Peer to peer can't work from this computer's Mirador data folder, as another account on this computer owns it: ${folder}.`,
   machineCertificateUntrusted: (machine: string) =>
     `This computer doesn't trust ${machine}'s certificate, and ${machine} offers no certificate authority of its own.`,
   machineGaveNoToken: (machine: string) => `${machine} let this computer in without a token.`,

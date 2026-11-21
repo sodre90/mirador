@@ -253,7 +253,8 @@ function MachineFrame({
  * In a machine's place until this computer has joined it, as the machine shows nothing to a computer without an invite.
  * Asking to join, which its owner approves, makes this computer one of the owner's own devices, so it is offered only
  * for a machine this computer has no record of joining as a person: one added from a room invite's link, joined with
- * a room invite before, or whose owner took this computer's person out of their last room there takes a code alone.
+ * a room invite before, or whose owner signed this computer out of their rooms there takes an invite alone. A machine
+ * reached peer to peer takes the invite's whole link, as only the link carries the way through its tunnel.
  */
 function JoinMachinePanel({ machine }: { machine: Machine }) {
   const [text, setText] = useState("");
@@ -300,9 +301,9 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
       ) : (
         <>
           {machine.outOfRooms ? (
-            <p className="join-out-of-rooms">{words.outOfRooms}</p>
+            <p className="join-out-of-rooms">{machine.peerToPeer ? words.outOfRoomsPeerToPeer : words.outOfRooms}</p>
           ) : machine.asPerson ? (
-            <p className="join-room-invite">{words.roomInviteFirst}</p>
+            <p className="join-room-invite">{machine.peerToPeer ? words.roomInviteLinkFirst : words.roomInviteFirst}</p>
           ) : (
             <>
               <p>
@@ -320,8 +321,15 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
           )}
           <form onSubmit={join}>
             <label>
-              {words.inviteCode}
-              <input value={text} onChange={(event) => setText(event.target.value)} placeholder="ABCD-EFGH-JKLM" autoFocus autoComplete="off" spellCheck={false} />
+              {machine.peerToPeer ? words.inviteLink : words.inviteCode}
+              <input
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={machine.peerToPeer ? undefined : "ABCD-EFGH-JKLM"}
+                autoFocus
+                autoComplete="off"
+                spellCheck={false}
+              />
             </label>
             <button type="submit" className="primary" disabled={joining || !text.trim()}>
               {joining ? words.joining : words.joinButton}

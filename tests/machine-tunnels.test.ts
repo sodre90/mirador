@@ -202,11 +202,12 @@ describe("the ways to a machine", () => {
 
   test("dials need a folder whose sockets' paths fit a Unix socket's address and a ws+unix URL carries as they are", () => {
     ["/Users/ann/.mirador/machine-tunnels", "/home/ann/m&m's[old]+%41|~!$;=@/machine-tunnels"].forEach((folder) => expect(socketFolderProblem(folder)).toBeNull());
-    expect(socketFolderProblem(`/Users/ann/${"x".repeat(80)}/machine-tunnels`)).toContain("too long for a Unix socket");
+    const tooLong = `/Users/ann/${"x".repeat(80)}/machine-tunnels`;
+    expect(socketFolderProblem(tooLong)).toEqual({ code: "dial-folder-too-long", folder: tooLong });
     ["a:b", "a b", "józsef", "a#b", "a?b", 'a"b', "a<b", "a>b", "a`b", "a{b", "a}b", "a^b", "a\tb", "a\x7fb"].forEach((name) =>
-      expect(socketFolderProblem(`/home/${name}/.mirador/machine-tunnels`)).toContain("can't name a Unix socket's path with"),
+      expect(socketFolderProblem(`/home/${name}/.mirador/machine-tunnels`)?.code).toBe("dial-folder-unusable-character"),
     );
-    ["data/machine-tunnels", "my data/machine-tunnels"].forEach((relative) => expect(socketFolderProblem(relative)).toContain("can't name a Unix socket's path with"));
+    ["data/machine-tunnels", "my data/machine-tunnels"].forEach((relative) => expect(socketFolderProblem(relative)?.code).toBe("dial-folder-unusable-character"));
   });
 });
 
@@ -464,11 +465,12 @@ describe.skipIf(onWindows)("MachineTunnels", () => {
     expect(asked).toEqual([]);
   });
 
-  test("a data folder whose sockets' paths would be too long leaves peer to peer unavailable here, with no dial started and no port taken instead", async () => {
-    const { store, tunnels } = machineJoinedThroughTunnel({ dials: join(folder(), "x".repeat(100), "dials") });
+  test("a data folder whose sockets' paths would be too long says so to whoever joins, with no dial started and no port taken instead", async () => {
+    const dials = join(folder(), "x".repeat(100), "dials");
+    const { store, tunnels } = machineJoinedThroughTunnel({ dials });
     tunnels.startAll();
-    expect(await tunnels.canDial()).toBe(false);
-    expect(tunnels.dialToJoin({ ...places, joinKey: PRIVATE_KEY, joinAddress: "fd12::9" })).rejects.toThrow("Peer to peer isn't available on this computer");
+    expect(await tunnels.whyNotDialing()).toEqual({ code: "dial-folder-too-long", folder: dials });
+    expect(tunnels.dialToJoin({ ...places, joinKey: PRIVATE_KEY, joinAddress: "fd12::9" })).rejects.toThrow("Peer to peer can't work from this computer's Mirador data folder, as its path is too long");
     expect(await tunnels.reached(store.findMachine("m1")!)).toBeNull();
   });
 

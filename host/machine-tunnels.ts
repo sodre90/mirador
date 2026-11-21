@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { chmodSync, existsSync, lstatSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { HostProblemError } from "../shared/host-problems.ts";
+import { englishProblem, HostProblemError, type HostProblem } from "../shared/host-problems.ts";
 import type { Machine } from "../shared/model.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { HERE_PATH } from "./addresses.ts";
@@ -121,11 +121,11 @@ export class MachineTunnels {
     this.joining.clear();
   }
 
-  /** Whether this computer can dial machines' tunnels: it has mirador-p2p, or downloads it now. */
-  canDial() {
+  /** Why this computer can't dial machines' tunnels, or null when it can: it has mirador-p2p, or downloads it now. */
+  whyNotDialing(): Promise<HostProblem | null> {
     return this.binary().then(
-      () => true,
-      () => false,
+      () => null,
+      (error: unknown) => (error instanceof HostProblemError ? error.problem : { code: "peer-to-peer-unavailable-here" }),
     );
   }
 
@@ -227,7 +227,9 @@ export class MachineTunnels {
    * can't be reached makes dialing unavailable, rather than forwarding from ports any account could take.
    */
   private binary() {
-    if (!this.program || !this.canDialFromSockets()) return Promise.reject(new HostProblemError({ code: "peer-to-peer-unavailable-here" }));
+    if (!this.program) return Promise.reject(new HostProblemError({ code: "peer-to-peer-unavailable-here" }));
+    const folderProblem = this.socketFolderProblem();
+    if (folderProblem) return Promise.reject(new HostProblemError(folderProblem));
     const { path, download } = this.program;
     if (!download) return Promise.resolve(path);
     this.installed ??= installSidecar(path, download).then(
@@ -241,12 +243,12 @@ export class MachineTunnels {
     return this.installed;
   }
 
-  private canDialFromSockets() {
-    const notOwn = existsSync(this.folder) && !this.folderIsThisAccountsOwn() ? `${this.folder} is not a folder of this account's own.` : null;
+  private socketFolderProblem(): HostProblem | null {
+    const notOwn: HostProblem | null = existsSync(this.folder) && !this.folderIsThisAccountsOwn() ? { code: "dial-folder-not-own", folder: this.folder } : null;
     const problem = notOwn ?? (DIALS_THROUGH_SOCKETS ? socketFolderProblem(this.folder) : null);
-    if (problem && !this.unavailableSaid) console.error(`Machines can't be dialed peer to peer: ${problem}`);
+    if (problem && !this.unavailableSaid) console.error(`Machines can't be dialed peer to peer: ${englishProblem(problem)}`);
     this.unavailableSaid ||= problem !== null;
-    return problem === null;
+    return problem;
   }
 
   private makeFolder() {

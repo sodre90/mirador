@@ -22,6 +22,7 @@ import { DeviceService } from "./devices.ts";
 import { ownerKey } from "./person-keys.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { MachineRelays } from "./machine-relays.ts";
+import { forgetSignInAt } from "./machine-sign-in.ts";
 import { MachineTunnels } from "./machine-tunnels.ts";
 import { MachineWatch } from "./machine-watch.ts";
 import { ownPageOrigins } from "./addresses.ts";
@@ -297,8 +298,7 @@ console.log(`data: ${config.dataDir}  agent logs: ${agentLogsDirectory(config.da
 if (network) console.log(`other devices: ${config.publicOrigin} (HTTPS on port ${network.port} of every network this machine is on)`);
 
 function machineSignedOut(machineId: string) {
-  tunnels.forget(machineId);
-  store.forgetMachineDeviceToken(machineId);
+  forgetSignInAt(store, tunnels, machineId);
   watch.stop(machineId);
   hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
 }

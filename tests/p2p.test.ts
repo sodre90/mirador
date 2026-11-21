@@ -6,9 +6,10 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService, inviteKey } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
-import { BUILT_IN_BROKER, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
+import { BUILT_IN_BROKER, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
 import type { PeerToPeerStatus } from "../shared/protocol.ts";
+import { PROBLEM_HEADER, problemInHeader } from "../shared/host-problems.ts";
 import { downloadedSidecar, installSidecar, SIDECAR_RELEASE } from "../host/p2p/sidecar-download.ts";
 import { Store } from "../host/store.ts";
 import { computerName } from "../host/machine-name.ts";
@@ -17,6 +18,7 @@ const brokerKey = newKeyPair().publicKey;
 const noBuiltIn = { sidecar: null, broker: null };
 /** The fake sidecar is a shell script, and the identity's files are kept by Unix permissions; peer to peer is Unix-only on the host anyway. */
 const unixOnlyTest = test.skipIf(process.platform === "win32");
+const DAY = 24 * 60 * 60_000;
 let folder: string;
 let commandsFile: string;
 let argumentsFile: string;
@@ -50,9 +52,23 @@ async function commandsRead(count: number) {
   const deadline = Date.now() + 5000;
   for (;;) {
     const lines = readFileSync(commandsFile, "utf8").split("\n").filter(Boolean);
-    if (lines.length >= count || Date.now() > deadline) return lines.map((line) => JSON.parse(line) as Record<string, { key: string; socket?: string; address?: string }>);
+    if (lines.length >= count || Date.now() > deadline) return lines.map((line) => JSON.parse(line) as Record<string, { key: string; socket?: string; address?: string; socket_only?: true }>);
     await Bun.sleep(20);
   }
+}
+
+/** What the socket a key is pinned to answers at `path`, as a request through the tunnel would reach it. */
+const askedThrough = (socket: string | undefined, path: string, init: RequestInit = {}) => fetch(`http://[fd12::1]:4600${path}`, { ...init, unix: socket });
+
+/** Started as the host starts again, on the same store and folder, at the time `now` says. */
+function startedAgain(store: Store, now: () => number = Date.now) {
+  const listening = new Map<string, TunnelEnd>();
+  p2p = new PeerToPeer({ binary: fakeSidecar(), broker: { address: "203.0.113.7:47800", key: brokerKey } }, join(folder, "p2p"), store, now, 50);
+  p2p.start((socket, end) => {
+    listening.set(socket, end);
+    return { stop: () => listening.delete(socket) };
+  });
+  return { p2p, listening };
 }
 
 /** Waits, as a busy machine starts the sidecar late, until peer to peer stands at `status` or five seconds have passed. */
@@ -61,13 +77,13 @@ async function peerToPeerReaches(p2p: PeerToPeer, status: PeerToPeerStatus) {
   while (p2p.peerToPeerStatus() !== status && Date.now() < deadline) await Bun.sleep(20);
 }
 
-function host(more: Partial<PeerToPeerSettings> = {}) {
+function host(more: Partial<PeerToPeerSettings> = {}, now: () => number = Date.now) {
   const store = new Store(":memory:");
-  const devices = new DeviceService(store);
+  const devices = new DeviceService(store, now);
   const listening = new Map<string, TunnelEnd>();
   const settings = { binary: more.binary ?? fakeSidecar(), broker: { address: "203.0.113.7:47800", key: brokerKey }, ...more };
   const statuses: string[] = [];
-  p2p = new PeerToPeer(settings, join(folder, "p2p"), store, Date.now, 50);
+  p2p = new PeerToPeer(settings, join(folder, "p2p"), store, now, 50);
   const started = p2p;
   started.start(
     (socket, end) => {
@@ -193,18 +209,29 @@ test("a key is refused when it is not one, or when another device already uses i
   expect(p2p.refusedKey(newKeyPair().publicKey)).toBeNull();
 });
 
-unixOnlyTest("a revoked device is let in no more, and its listener closes", async () => {
+unixOnlyTest("a revoked device's key reaches its own socket no more, only one that answers whatever it asks that it is unauthorized, as its token is at the address", async () => {
   const { p2p, devices, listening, store } = host();
   const { device } = devices.admit("Phone", store.ownerId());
   const key = newKeyPair().publicKey;
-  p2p.register(device.id, key);
+  const { deviceAddress } = p2p.register(device.id, key);
+  const deviceSocket = [...listening].find(([, end]) => "deviceId" in end)![0];
   p2p.forget(device.id);
   devices.revoke(device.id);
   expect([...listening.values()].some((end) => "deviceId" in end)).toBe(false);
-  expect((await commandsRead(2)).at(-1)).toEqual({ unpin: { key } });
+  const over = (await commandsRead(3))[2]!.pin!;
+  expect((await commandsRead(3))[1]).toEqual({ unpin: { key } });
+  expect(over.socket_only).toBe(true);
+  expect(over).toMatchObject({ key, address: deviceAddress });
+  expect(over.socket).not.toBe(deviceSocket);
+  for (const [path, init] of [["/ws", {}], ["/api/rooms", { method: "POST", body: "{}" }], ["/join", { method: "POST", body: "{}" }]] as const) {
+    const answer = await askedThrough(over.socket, path, init);
+    expect([answer.status, await answer.text(), answer.headers.get(PROBLEM_HEADER)]).toEqual([401, "unauthorized", null]);
+  }
+  expect(p2p.refusedKey(key)?.status).toBe(409);
+  expect(() => p2p.register(devices.admit("Laptop", store.ownerId()).device.id, key)).toThrow(/Another device/);
 });
 
-unixOnlyTest("an invite's one-time key reaches only a joining socket of the invite's own, until shortly after the invite is used", async () => {
+unixOnlyTest("an invite's one-time key reaches only a joining socket of the invite's own, and from shortly after the invite is used only that the invite is over", async () => {
   const { p2p, devices, listening } = host();
   const { code, expiresAt } = devices.invite();
   const tunnel = (await p2p.invite(code, expiresAt))!;
@@ -220,28 +247,122 @@ unixOnlyTest("an invite's one-time key reaches only a joining socket of the invi
   expect(tunnel.name).toBe(hostname().replace(/\.local$/, ""));
   expect(p2p.refusedKey(pinned.pin.key)).not.toBeNull();
   p2p.inviteUsed(code.toLowerCase());
-  expect((await commandsRead(3))[2]).toEqual({ unpin: { key: pinned.pin.key } });
+  const over = (await commandsRead(4))[3]!.pin!;
+  expect(over).toMatchObject({ key: pinned.pin.key, address: tunnel.joinAddress });
   expect(listening.has(joinSocket)).toBe(false);
   expect(listening.has(joinSockets[1]![0])).toBe(true);
+  for (const path of ["/join-challenges", "/join", "/"]) {
+    const answer = await askedThrough(over.socket, path, { method: "POST", body: JSON.stringify({ code }) });
+    expect(answer.status).toBe(403);
+    expect(problemInHeader(answer.headers.get(PROBLEM_HEADER))).toEqual({ code: "invite-code-wrong" });
+    expect(await answer.text()).toBe("This invite code is wrong, used or expired. Ask for a new one.");
+  }
 });
 
-unixOnlyTest("a withdrawn invite's one-time key is let go at once, with its socket", async () => {
+unixOnlyTest("a withdrawn invite's one-time key reaches its joining socket no more from the moment it is withdrawn, only that the invite is over", async () => {
   const { p2p, listening } = host();
   const code = "ROOM-ABCD-EFGH-JKLM";
   await p2p.invite(code, Date.now() + 60_000);
   const [pinned] = await commandsRead(1);
   p2p.inviteWithdrawn(inviteKey(code));
-  expect((await commandsRead(2))[1]).toEqual({ unpin: { key: pinned.pin.key } });
+  const over = (await commandsRead(3))[2]!.pin!;
+  expect(over).toMatchObject({ key: pinned.pin.key, address: pinned.pin.address });
+  expect(over.socket).not.toBe(pinned.pin.socket);
   expect([...listening.values()].some((end) => "inviteKey" in end)).toBe(false);
   expect(() => p2p.inviteWithdrawn(inviteKey(code))).not.toThrow();
+  expect((await askedThrough(over.socket, "/join-challenges", { method: "POST" })).status).toBe(403);
 });
 
-unixOnlyTest("an invite's one-time key is let in no more once the invite expires", async () => {
+unixOnlyTest("keys that are over are answered so many times a minute, each kind together and apart from joining, and then told to wait", async () => {
+  const clock = { now: Date.now() };
+  const { p2p, devices, store } = host({}, () => clock.now);
+  const { device } = devices.admit("Phone", store.ownerId());
+  p2p.register(device.id, newKeyPair().publicKey);
+  p2p.forget(device.id);
+  const deviceOver = (await commandsRead(3))[2]!.pin!.socket;
+  await p2p.invite("ROOM-ABCD-EFGH-JKLM", clock.now + 60_000);
+  p2p.inviteWithdrawn(inviteKey("ROOM-ABCD-EFGH-JKLM"));
+  const inviteOver = (await commandsRead(6))[5]!.pin!.socket;
+  const statuses = (socket: string | undefined, times: number) => Promise.all(Array.from({ length: times }, () => askedThrough(socket, "/ws").then(({ status }) => status)));
+
+  expect(new Set(await statuses(deviceOver, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE))).toEqual(new Set([401]));
+  expect((await askedThrough(deviceOver, "/ws")).status).toBe(429);
+  expect(new Set(await statuses(inviteOver, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE))).toEqual(new Set([403]));
+  const waiting = await askedThrough(inviteOver, "/join", { method: "POST" });
+  expect([waiting.status, problemInHeader(waiting.headers.get(PROBLEM_HEADER))]).toEqual([429, { code: "join-too-often" }]);
+  clock.now += 61_000;
+  expect((await askedThrough(deviceOver, "/ws")).status).toBe(401);
+});
+
+unixOnlyTest("an invite's one-time key reaches only that the invite is over once it expires", async () => {
   const { p2p, devices } = host();
   const { code } = devices.invite();
   await p2p.invite(code, Date.now() + 50);
   const [pinned] = await commandsRead(1);
-  expect((await commandsRead(2))[1]).toEqual({ unpin: { key: pinned.pin.key } });
+  const over = (await commandsRead(3))[2]!.pin!;
+  expect(over).toMatchObject({ key: pinned.pin.key, address: pinned.pin.address });
+  expect((await askedThrough(over.socket, "/join", { method: "POST" })).status).toBe(403);
+});
+
+unixOnlyTest("a waiting invite's one-time key is let in again after a restart on a joining socket of its own, and one whose invite expired meanwhile is over", async () => {
+  const first = host();
+  const waitingCode = "ABCD-EFGH-JKLM";
+  const expiringCode = "BCDE-FGHJ-KLMN";
+  first.store.addInvite(inviteKey(waitingCode), Date.now() + 60_000);
+  first.store.addInvite(inviteKey(expiringCode), Date.now() + 1_000);
+  const waiting = (await first.p2p.invite(waitingCode, Date.now() + 60_000))!;
+  const expiring = (await first.p2p.invite(expiringCode, Date.now() + 1_000))!;
+  const keyAt = new Map((await commandsRead(2)).map(({ pin }) => [pin!.address, pin!.key]));
+  first.p2p.stop();
+  writeFileSync(commandsFile, "");
+
+  const { listening } = startedAgain(first.store, () => Date.now() + 2_000);
+  const pins = (await commandsRead(2)).map(({ pin }) => pin);
+  const joinSocket = [...listening].find(([, end]) => "inviteKey" in end && end.inviteKey === inviteKey(waitingCode))?.[0];
+  expect([...listening.values()].filter((end) => "inviteKey" in end)).toEqual([{ inviteKey: inviteKey(waitingCode) }]);
+  expect(pins).toContainEqual({ key: keyAt.get(waiting.joinAddress)!, address: waiting.joinAddress, socket: joinSocket });
+  const over = pins.find((pin) => pin?.address === expiring.joinAddress);
+  expect(over?.key).toBe(keyAt.get(expiring.joinAddress)!);
+  expect(over?.socket).not.toBe(joinSocket);
+  expect((await askedThrough(over?.socket, "/join-challenges", { method: "POST" })).status).toBe(403);
+  expect(first.store.waitingInviteJoinKeys(Date.now() + 2_000).map(({ codeKey }) => codeKey)).toEqual([inviteKey(waitingCode)]);
+});
+
+unixOnlyTest("an invite keeps its one-time key in the store by its public half alone, never the private one its link carries", async () => {
+  const { p2p, devices, store } = host();
+  const { code, expiresAt } = devices.invite();
+  const tunnel = (await p2p.invite(code, expiresAt))!;
+  const [pinned] = await commandsRead(1);
+  expect(store.waitingInviteJoinKeys(Date.now())).toEqual([{ codeKey: inviteKey(code), key: pinned!.pin!.key, address: tunnel.joinAddress, expiresAt }]);
+  expect(JSON.stringify(store.waitingInviteJoinKeys(Date.now()))).not.toContain(tunnel.joinKey);
+});
+
+unixOnlyTest("a key that is over is told so again after a restart, until its time is up, and then not at all", async () => {
+  const clock = { now: Date.now() };
+  const first = host({}, () => clock.now);
+  const { device } = first.devices.admit("Phone", first.store.ownerId());
+  const key = newKeyPair().publicKey;
+  first.p2p.register(device.id, key);
+  first.p2p.forget(device.id);
+  first.devices.revoke(device.id);
+  await commandsRead(2);
+  first.p2p.stop();
+  writeFileSync(commandsFile, "");
+
+  clock.now += 29 * DAY;
+  startedAgain(first.store, () => clock.now);
+  const [pinnedAgain] = await commandsRead(1);
+  expect(pinnedAgain!.pin).toMatchObject({ key });
+  expect((await askedThrough(pinnedAgain!.pin!.socket, "/ws")).status).toBe(401);
+  p2p!.stop();
+  writeFileSync(commandsFile, "");
+
+  clock.now += 2 * DAY;
+  startedAgain(first.store, () => clock.now);
+  await Bun.sleep(200);
+  expect(readFileSync(commandsFile, "utf8")).toBe("");
+  expect(first.store.keysOver()).toEqual([]);
+  expect(p2p!.refusedKey(key)).toBeNull();
 });
 
 test("a sidecar that can't start is tried again later, and the host keeps running", async () => {

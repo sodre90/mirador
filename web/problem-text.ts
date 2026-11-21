@@ -212,6 +212,12 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.machineNeedsWholeInvite(problem.machine);
     case "invite-from-another-machine":
       return words.inviteFromAnotherMachine(problem.machine);
+    case "dial-folder-too-long":
+      return words.dialFolderTooLong(problem.folder);
+    case "dial-folder-unusable-character":
+      return words.dialFolderUnusableCharacter(problem.folder);
+    case "dial-folder-not-own":
+      return words.dialFolderNotOwn(problem.folder);
     case "machine-certificate-untrusted":
       return words.machineCertificateUntrusted(problem.machine);
     case "machine-gave-no-token":

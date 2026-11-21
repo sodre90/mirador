@@ -1,6 +1,6 @@
 import { connect, createServer, type Server } from "node:net";
 import { expect, test, type Page } from "@playwright/test";
-import { cpSync, mkdirSync } from "node:fs";
+import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   addWorkspace,
@@ -15,6 +15,9 @@ import {
   workspaceCard,
 } from "./helpers.ts";
 import { CANVAS_SHELL_PATH } from "../shared/canvas-document.ts";
+import { roomInviteLink } from "../shared/machines.ts";
+import { SIDECAR_SHA256 } from "../host/p2p/sidecar-download.ts";
+import { tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
 import { freePorts } from "./free-ports.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -362,4 +365,43 @@ test("pages of other sites cannot join for their visitors", async () => {
     body: JSON.stringify({ code: "AAAA-AAAA-AAAA" }),
   });
   expect(await otherOrigin.text()).toBe("forbidden origin");
+});
+
+/**
+ * A Mirador whose data folder's path has a space, which the sockets a dial forwards from can't be named with; short
+ * enough that its sockets' paths would not be too long, which is said first.
+ */
+class HostWithASpaceInItsDataFolder extends TestHost {
+  override readonly dataDir = join("/tmp", `mirador e2e ${crypto.randomUUID().slice(0, 8)}`);
+}
+
+test("a computer whose data folder can't hold a dial's sockets says so when a machine's link reaches it peer to peer alone", async ({ page }) => {
+  test.skip(process.platform === "win32", "Windows dials from ports, not sockets");
+  test.skip(!SIDECAR_SHA256[`${process.platform}-${process.arch}`], "no mirador-p2p release to dial with on this platform");
+  const spaced = new HostWithASpaceInItsDataFolder();
+  const tunnel: InviteTunnel = {
+    hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=",
+    hostAddress: "fd12:3456:789a:1::1",
+    port: 4600,
+    broker: { address: "203.0.113.7:47800", key: "3Q85Sl/Vr65bJz+OyEhIQtyAeBRDJQqqkVWJgryS2WE=" },
+    joinKey: "tne9fR0CU9toO26+5x2ggHdtuq+Z0kfmk/nqAnFmkyg=",
+    joinAddress: "fd12:3456:789a:1:8f1e:22c4:aa01:93b7",
+    name: "Studio",
+  };
+  try {
+    await spaced.start();
+    await signIn(page, spaced);
+    await page.getByRole("button", { name: "Machines…" }).click();
+    const machines = page.getByRole("dialog", { name: "Machines" });
+    await machines.getByLabel("Address or invite link").fill(roomInviteLink(tunnelOrigin(tunnel), "ROOM-ABCD-EFGH-JKLM", null, tunnel));
+    await machines.getByRole("button", { name: "Add and join" }).click();
+    await expect(page.locator(".notice")).toHaveText(
+      `Peer to peer can't work from this computer's Mirador data folder, as its path has a character the sockets it needs can't be named with, such as a colon, a space or a letter outside ASCII: ${join(spaced.dataDir, "machine-tunnels")}. Start Mirador with a data folder of plain letters, set in MIRADOR_DATA_DIR.`,
+    );
+    await expect(machines.locator(".machine-list li")).toHaveText(["No machines yet."]);
+  } finally {
+    await spaced.stop();
+    await spaced.cleanUp();
+    rmSync(spaced.dataDir, { recursive: true, force: true });
+  }
 });
