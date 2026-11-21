@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, spyOn, test } from "bun:test";
+import { signInRevoked } from "../host/machine-sign-in.ts";
+import type { MachineReach } from "../host/machine-tunnels.ts";
 import { MachineWatch } from "../host/machine-watch.ts";
 import { Store } from "../host/store.ts";
-import type { MachineStatus } from "../shared/model.ts";
+import type { Machine, MachineStatus } from "../shared/model.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, type ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 
@@ -111,7 +113,7 @@ describe("MachineWatch", () => {
       machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")], machines: [], hostId: "home-server-id" });
       await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
       expect(logged).toHaveBeenCalledTimes(2);
-      expect(logged).toHaveBeenCalledWith(expect.stringContaining(`skipped a message from ${machine.origin.replace(/^http/, "ws")}/ws`), expect.any(Error));
+      expect(logged).toHaveBeenCalledWith(expect.stringContaining("skipped a message on /ws of a machine"), expect.any(Error));
     } finally {
       logged.mockRestore();
     }
@@ -249,5 +251,100 @@ describe("MachineWatch", () => {
     await Bun.sleep(100);
     expect(machine.signIns).toEqual([]);
     expect(watch.statuses()).toEqual([]);
+  });
+});
+
+describe("a machine reached through a dial's forward", () => {
+  const places = { hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=", hostAddress: "fd12:3456:789a:1::1", port: 4600, broker: { address: "p2p.example.com:47800", key: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=" } };
+  const HEARTBEAT_MS = 100;
+
+  /** The forward and the machine beyond it: it answers pings until it goes quiet, as when its owner unpinned this computer, after which nothing answers at all. */
+  function machineBeyondForward() {
+    const sockets: Socket[] = [];
+    const state = { quiet: false };
+    const server = Bun.serve<{ path: string }>({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, server) => {
+        if (state.quiet) return new Promise<Response>(() => {});
+        return server.upgrade(request, { data: { path: new URL(request.url).pathname } }) ? undefined : new Response("no", { status: 400 });
+      },
+      websocket: {
+        open: (socket) => void sockets.push(socket),
+        message(socket, message) {
+          if (!state.quiet && JSON.parse(String(message)).type === "ping") socket.send(JSON.stringify({ type: "pong" }));
+        },
+      },
+    });
+    cleanUp.push(() => server.stop(true));
+    return { origin: `http://127.0.0.1:${server.port}`, sockets, state };
+  }
+
+  function watchingThrough(forwardOrigin: string) {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "m1", name: "Ann's machine", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
+    store.setMachineTunnelPlaces("m1", places);
+    store.setMachineDeviceToken("m1", "device-token");
+    store.setMachineJoinedAs("m1", { asPerson: true, relayKey: "relay-key" });
+    const dial = { running: true };
+    const reach: Pick<MachineReach, "reached" | "stillReaches"> = {
+      reached: async (machine: Machine) => ({ ...machine, origin: forwardOrigin }),
+      stillReaches: () => dial.running,
+    };
+    const statuses: MachineStatus[] = [];
+    const signedOut: string[] = [];
+    const watch = new MachineWatch(store, THIS_HOST, (status) => statuses.push(status), () => {}, () => {}, (machineId) => signedOut.push(machineId), reach, HEARTBEAT_MS);
+    cleanUp.push(() => watch.stopAll());
+    watch.startAll();
+    return { watch, store, statuses, signedOut, dial, reach };
+  }
+
+  test("asks the machine to answer now and then, and says it stopped answering once it goes quiet, though the forward keeps the socket open", async () => {
+    const machine = machineBeyondForward();
+    const { watch, statuses } = watchingThrough(machine.origin);
+    await eventually(() => expect(watch.statuses()[0]!.reachable).toBe(true));
+    await Bun.sleep(HEARTBEAT_MS * 5);
+    expect(statuses.map(({ reachable }) => reachable)).toEqual([true]);
+
+    machine.state.quiet = true;
+    await eventually(() => expect(watch.statuses()[0]!.reachable).toBe(false));
+    await Bun.sleep(HEARTBEAT_MS * 5);
+    expect(watch.statuses()[0]!.reachable).toBe(false);
+  });
+
+  test("takes the person out of the machine's rooms only by a close that came while the dial's process held the forward", async () => {
+    const machine = machineBeyondForward();
+    const { store, signedOut, dial } = watchingThrough(machine.origin);
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    dial.running = false;
+    machine.sockets.forEach((socket) => socket.close(OUT_OF_ROOMS_CLOSE_CODE, "out of every room"));
+    await Bun.sleep(300);
+    expect(signedOut).toEqual([]);
+    expect(store.findMachine("m1")?.outOfRooms).toBe(false);
+  });
+
+  test("counts a 401 as this computer revoked only when it came while the dial's process held the forward the whole time, and sends no token through one it no longer holds", async () => {
+    const asked: string[] = [];
+    const turnsAway = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: async (request) => {
+        asked.push(request.headers.get("cookie") ?? "");
+        await Bun.sleep(100);
+        return new Response("unauthorized", { status: 401 });
+      },
+    });
+    cleanUp.push(() => turnsAway.stop(true));
+    const { store, dial, reach } = watchingThrough("http://127.0.0.1:1");
+    const reached = { ...store.findMachine("m1")!, origin: `http://127.0.0.1:${turnsAway.port}` };
+    expect(await signInRevoked(store, reached, reach)).toBe(true);
+
+    const asking = signInRevoked(store, reached, reach);
+    await Bun.sleep(30);
+    dial.running = false;
+    expect(await asking).toBe(false);
+
+    expect(await signInRevoked(store, reached, reach)).toBe(false);
+    expect(asked).toEqual(["mirador_token=device-token", "mirador_token=device-token"]);
   });
 });

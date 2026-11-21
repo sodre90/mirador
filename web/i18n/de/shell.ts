@@ -309,6 +309,7 @@ export const shell: Messages["shell"] = {
     outOfRooms: "Sein Besitzer hat dich aus dem letzten Raum genommen, in dem du dort warst, und damit ist dieser Computer abgemeldet. Bitte um eine neue Einladung und tritt mit ihrem Code bei.",
     someoneElses: "Rechner von jemand anderem, in dessen Räumen du bist",
     roomInviteFirst: "Du wurdest in einen Raum dort eingeladen. Tritt mit dem Code oder Link der Raumeinladung bei.",
+    peerToPeer: "per Peer-to-Peer",
   },
   conversationTitle: {
     label: "Name der Unterhaltung",

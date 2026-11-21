@@ -5,7 +5,10 @@ import { join } from "node:path";
 import { authorityFingerprint, ownServingCertificate } from "../host/certificates.ts";
 import { DeviceService, inviteKey } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
-import { forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
+import { fetchAnswered, forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
+import type { MachineReach } from "../host/machine-tunnels.ts";
+import { freeLoopbackPortPair } from "../host/p2p/dial.ts";
+import type { Machine } from "../shared/model.ts";
 import type { RelayedSocket } from "../host/machine-relays.ts";
 import { newChallenge, NO_AUTHORITY, ownerKey, signedRoomJoin, type OwnerKey } from "../host/person-keys.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
@@ -278,6 +281,133 @@ describe("a machine this computer joined as a person", () => {
   });
 });
 
+describe("a machine reached through a dial's forward", () => {
+  const cleanUps: (() => void)[] = [];
+  afterEach(() => cleanUps.splice(0).forEach((cleanUp) => cleanUp()));
+  const relayKey = "k".repeat(43);
+  const places = { hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=", hostAddress: "fd12:3456:789a:1::1", port: 4600, broker: { address: "p2p.example.com:47800", key: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=" } };
+
+  /** Stands in for a dial's forward and the machine beyond it, at the port pair a dial would take, saying what it was asked. */
+  async function forwardToMachine(says: string) {
+    const port = await freeLoopbackPortPair();
+    const asked: string[] = [];
+    const answer = (where: string) => (request: Request) => {
+      asked.push(`${where} ${new URL(request.url).pathname} ${request.headers.get("cookie")}`);
+      return new Response(`${says}'s ${where}`);
+    };
+    const servers = [Bun.serve({ hostname: "::1", port, fetch: answer("page") }), Bun.serve({ hostname: "::1", port: port + 1, fetch: answer("canvas") })];
+    cleanUps.push(() => servers.forEach((server) => server.stop(true)));
+    return { origin: `http://[::1]:${port}`, asked };
+  }
+
+  function machineThrough(firstForward: string) {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "theirs", name: "Theirs", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
+    store.setMachineTunnelPlaces("theirs", places);
+    store.setMachineDeviceToken("theirs", "person-device-token");
+    store.setMachineJoinedAs("theirs", { asPerson: true, relayKey });
+    const dial = { origin: firstForward, running: true };
+    const reach: MachineReach = {
+      reached: async (machine: Machine) => ({ ...machine, origin: dial.origin }),
+      stillReaches: () => dial.running,
+      dialToJoin: () => Promise.reject(new Error("not joining here")),
+      start: () => {},
+    };
+    const [relayPort, canvasPort] = freePorts(2) as [number, number];
+    const signedOut: string[] = [];
+    const relays = new MachineRelays(store, [relayPort, canvasPort], "http://127.0.0.1:4601", () => false, () => {}, (machineId) => signedOut.push(machineId), unusedOwnerKey, reach);
+    relays.startAll();
+    cleanUps.push(() => relays.stopAll());
+    return { dial, signedOut, relay: `http://127.0.0.1:${relayPort}`, canvasRelay: `http://127.0.0.1:${canvasPort}` };
+  }
+
+  test("sends nothing through a forward its dial's process no longer holds, which anyone may have taken since: no request, no token", async () => {
+    const forward = await forwardToMachine("Theirs");
+    const { dial, relay, canvasRelay, signedOut } = machineThrough(forward.origin);
+    dial.running = false;
+    expect((await fetch(`${relay}/${relayKey}/gone`, { headers: { origin: "null" } })).status).toBe(502);
+    expect((await fetch(`${relay}/app.js`)).status).toBe(502);
+    expect((await fetch(`${canvasRelay}/d3.min.js`)).status).toBe(502);
+    await Bun.sleep(100);
+    expect(forward.asked).toEqual([]);
+    expect(signedOut).toEqual([]);
+  });
+
+  test("sends the invite's code through the joining dial's forward only while its process holds it", async () => {
+    const posted: string[] = [];
+    const machine = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => {
+        if (request.method === "POST") posted.push(new URL(request.url).pathname);
+        return Response.json({ mirador: true });
+      },
+    });
+    cleanUps.push(() => machine.stop(true));
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "theirs", name: "Theirs", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
+    store.setMachineTunnelPlaces("theirs", places);
+    let stopped = false;
+    const reach: MachineReach = {
+      reached: async () => null,
+      stillReaches: () => false,
+      dialToJoin: async () => ({ forward: Promise.resolve({ origin: `http://127.0.0.1:${machine.port}`, running: false }), stop: () => (stopped = true) }),
+      start: () => {},
+    };
+    const relays = new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey, reach);
+    const invite = { ...places, joinKey: places.hostKey, joinAddress: "fd12:3456:789a:1::9" };
+    await expect(relays.join("theirs", "ROOM-ABCD-EFGH-JKLM", null, invite)).rejects.toThrow("Theirs can't be reached right now.");
+    expect(posted).toEqual([]);
+    expect(stopped).toBe(true);
+  });
+
+  test("loads canvas pages from beside the forward the machine is reached through now, which moves each time its dial starts again", async () => {
+    const [before, after] = [await forwardToMachine("Before"), await forwardToMachine("After")];
+    const { dial, canvasRelay } = machineThrough(before.origin);
+    expect(await (await fetch(`${canvasRelay}/d3.min.js`)).text()).toBe("Before's canvas");
+    dial.origin = after.origin;
+    expect(await (await fetch(`${canvasRelay}/d3.min.js`)).text()).toBe("After's canvas");
+    expect(before.asked).toEqual(["canvas /d3.min.js null"]);
+  });
+});
+
+describe("a request to a machine through a forward", () => {
+  test("fails once the machine has not started answering in time, as a forward takes it at once even with the machine gone", async () => {
+    const silent = Bun.listen({ hostname: "127.0.0.1", port: 0, socket: { data() {} } });
+    try {
+      const startedAt = Date.now();
+      expect(await fetchAnswered(`http://127.0.0.1:${silent.port}/`, {}, 200)).toBeNull();
+      expect(Date.now() - startedAt).toBeLessThan(2000);
+    } finally {
+      silent.stop(true);
+    }
+  });
+
+  test("takes as long as it takes to send the answer's body once the machine started answering", async () => {
+    const slowBody = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: () =>
+        new Response(
+          new ReadableStream({
+            async start(controller) {
+              controller.enqueue(new TextEncoder().encode("first "));
+              await Bun.sleep(400);
+              controller.enqueue(new TextEncoder().encode("last"));
+              controller.close();
+            },
+          }),
+        ),
+    });
+    try {
+      const response = await fetchAnswered(`http://127.0.0.1:${slowBody.port}/`, {}, 200);
+      expect(await response?.text()).toBe("first last");
+    } finally {
+      slowBody.stop(true);
+    }
+  });
+});
+
 describe("relay ports", () => {
 
   test("keep a machine on its port from before, and move it into the range the desktop app lets its window load", () => {
@@ -427,6 +557,16 @@ describe("joining a machine that made its own certificate", () => {
     await machine.join("FROM-LINK", authorityFingerprint(machine.authority));
     expect(machine.codesReceived).toEqual(["FIRST", "FROM-LINK"]);
     expect(machine.store.machineAuthority("box")).toBe(machine.authority);
+  });
+
+  test("from a link whose tunnel this computer can't dial, trusts the machine's own authority only by the link's fingerprint, never on first use", async () => {
+    const machine = machineOnTheNetwork();
+    await expect(machine.join("NO-FINGERPRINT", null, null, { trustsOnFirstUse: false })).rejects.toThrow(
+      "This invite link reaches Box peer to peer, and doesn't say which certificate to expect at its address, so the code was not sent there.",
+    );
+    expect(machine.codesReceived).toEqual([]);
+    await machine.join("WITH-FINGERPRINT", authorityFingerprint(machine.authority), null, { trustsOnFirstUse: false });
+    expect(machine.codesReceived).toEqual(["WITH-FINGERPRINT"]);
   });
 
   test("sends no code to a machine whose certificate is not from the authority it offers", async () => {

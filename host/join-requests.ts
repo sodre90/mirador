@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { isIPv4, isIPv6 } from "node:net";
 import { commitmentTo, matchingNumber, newNonce, typedNumber, type JoinRequestAnswer, type JoinRequestOpened } from "../shared/join-requests.ts";
-import type { JoinRequest } from "../shared/model.ts";
+import type { ClientAddress, JoinRequest } from "../shared/model.ts";
 import { deviceName, hashed, type DeviceService } from "./devices.ts";
+import type { TunnelEnd } from "./p2p/service.ts";
 import type { Store, StoredJoinRequest } from "./store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 
@@ -172,6 +173,16 @@ export class JoinRequestService {
     if (!request || request.requesterNonce === null || request.answer !== null) throw new HostProblemError({ code: "join-request-no-longer-waiting" });
     return request;
   }
+}
+
+/**
+ * Who a request counts against, for limits: its address, or the Tailscale user a proxy here says it is. Requests
+ * through the tunnel come from no address, so each tunnel end is a sender of its own, one invite's one-time key or one
+ * device, and none can use up another's tries.
+ */
+export function senderForLimits(end: TunnelEnd | undefined, { fromAddress, tailscaleUser }: ClientAddress) {
+  if (end) return "deviceId" in end ? `tunnel device ${end.deviceId}` : `tunnel invite ${end.inviteKey}`;
+  return tailscaleUser ?? fromAddress;
 }
 
 /** Lets each sender do something at most `most` times a minute; by default, keeps one sender from filling the few places for waiting requests. */

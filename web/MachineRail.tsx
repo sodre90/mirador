@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { markInitials } from "../shared/marks.ts";
 import { spacedNumber } from "../shared/join-requests.ts";
-import { inviteIn, type MachineToJoin } from "../shared/machines.ts";
+import type { MachineToJoin } from "../shared/machines.ts";
 import type { Machine, MachineSeen, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
@@ -95,7 +95,7 @@ function useAddedMachineShown(machines: Machine[], show: (machineId: string) => 
     show(added.id);
   }, [added?.id]);
   return useCallback(({ name, origin }: MachineSeen) => {
-    if (addingOrigin.current !== origin && connection.send({ type: "machine.add", name, address: origin })) addingOrigin.current = origin;
+    if (addingOrigin.current !== origin && connection.send({ type: "machine.add", requestId: crypto.randomUUID(), name, address: origin })) addingOrigin.current = origin;
   }, []);
 }
 
@@ -104,11 +104,14 @@ function WaitingBadge({ waiting }: { waiting: WaitingFor[] }) {
   return <span className={`rail-waiting tone-${mostUrgentTone(waiting)}`}>{waiting.length}</span>;
 }
 
+/** Where the machine is reached, as a person reads it: its address, which a machine reached peer to peer has none of. */
+export const reachedAt = (machine: Machine) => (machine.peerToPeer ? words.peerToPeer : machine.origin);
+
 const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
   [
     machine.name,
     machine.asPerson && words.someoneElses,
-    machine.origin,
+    reachedAt(machine),
     !machine.joined && words.notJoinedYet,
     status?.reachable === false && words.notAnswering,
     status?.waiting.length && words.waitingForYou(status.waiting.length),
@@ -275,7 +278,7 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
   };
   const join = (event: FormEvent) => {
     event.preventDefault();
-    tryToJoin((requestId) => ({ type: "machine.join", requestId, machineId: machine.id, ...inviteIn(text) }));
+    tryToJoin((requestId) => ({ type: "machine.join", requestId, machineId: machine.id, invite: text }));
   };
   const askToJoin = () => tryToJoin((requestId) => ({ type: "machine.ask-to-join", requestId, machineId: machine.id }));
 

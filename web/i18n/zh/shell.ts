@@ -280,6 +280,7 @@ export const shell: Messages["shell"] = {
     outOfRooms: "它的所有者把你移出了你在那里的最后一个房间，这台电脑因此已退出登录。请向对方要一个新的邀请，并用其邀请码加入。",
     someoneElses: "别人的机器，你在它的房间里",
     roomInviteFirst: "你被邀请进入那边的一个房间。用房间邀请的邀请码或邀请链接加入。",
+    peerToPeer: "点对点连接",
   },
   conversationTitle: {
     label: "对话名称",

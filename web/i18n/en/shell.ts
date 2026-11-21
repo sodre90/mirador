@@ -297,6 +297,7 @@ export const shell = {
     outOfRooms: "Its owner took you out of the last room you were in there, which signed this computer out. Ask them for a new invite, and join with its code.",
     someoneElses: "Someone else's machine, where you are in their rooms",
     roomInviteFirst: "You were invited into a room there. Join with the room invite's code or link.",
+    peerToPeer: "peer to peer",
   },
   conversationTitle: {
     label: "Conversation name",

@@ -285,6 +285,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "machine.status": HIDDEN,
     "machine.join-asked": HIDDEN,
     "machine.join-answered": HIDDEN,
+    "machine.added": HIDDEN,
     "join-requests.listed": HIDDEN,
     "join-request.answered": HIDDEN,
     "settings.saved": (message) => [message],

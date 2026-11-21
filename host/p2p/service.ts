@@ -63,8 +63,11 @@ export function peerToPeerSettings(environment: Record<string, string | undefine
   return { binary, broker: { address, key }, ...(deviceBroker && { deviceBroker }), ...(candidates?.length && { candidates }) };
 }
 
-/** Who a tunnel listener's connections come from: a paired device, or anyone holding an invite's one-time key. */
-export type TunnelEnd = { deviceId: string } | { joining: true };
+/**
+ * Who a tunnel listener's connections come from: a paired device, or whoever holds the one-time key of the invite whose
+ * code `inviteKey` keeps, as each invite's key reaches a socket of its own.
+ */
+export type TunnelEnd = { deviceId: string } | { inviteKey: string };
 
 /** A server listening on a Unix socket for one end of the tunnel. */
 export interface TunnelListener {
@@ -85,6 +88,7 @@ export class TunnelRefused extends Error {
 
 interface JoinKey {
   publicKey: string;
+  listener: TunnelListener;
   expires: ReturnType<typeof setTimeout>;
 }
 
@@ -98,8 +102,9 @@ function localCandidates(udpPort: number) {
 
 /**
  * Devices reach this host peer to peer through the sidecar: each paired device's tunnel connections arrive on a Unix
- * socket of its own, so the socket says which device it is, and an invite's one-time key reaches only a socket that
- * serves joining. Every key, a one-time key too, also reaches the canvas server, which serves no one's data.
+ * socket of its own, so the socket says which device it is, and an invite's one-time key reaches only a socket of that
+ * invite's own, which serves joining with that invite alone. Every key, a one-time key too, also reaches the canvas
+ * server, which serves no one's data.
  */
 export class PeerToPeer {
   private readonly identity: TunnelIdentity;
@@ -107,7 +112,6 @@ export class PeerToPeer {
   private readonly sidecar: Sidecar;
   private readonly listeners = new Map<string, TunnelListener>();
   private readonly joinKeys = new Map<string, JoinKey>();
-  private joinListener: TunnelListener | null = null;
   private serve: ServeTunnel | null = null;
   private sidecarStarted: Promise<boolean> | null = null;
   private status: PeerToPeerStatus = "waiting";
@@ -124,8 +128,8 @@ export class PeerToPeer {
   ) {
     this.identity = tunnelIdentity(folder);
     this.socketFolder = join(folder, "s");
-    const joinSocket = this.joinSocket();
-    if (Buffer.byteLength(joinSocket) > LONGEST_SOCKET_PATH) throw new Error(`Peer to peer needs a shorter data folder: ${joinSocket} is too long for a Unix socket.`);
+    const longestSocket = this.socketFor("device", "any");
+    if (Buffer.byteLength(longestSocket) > LONGEST_SOCKET_PATH) throw new Error(`Peer to peer needs a shorter data folder: ${longestSocket} is too long for a Unix socket.`);
     const { keyFile, prefix, udpPort } = this.identity;
     this.sidecar = new Sidecar(
       [
@@ -150,7 +154,6 @@ export class PeerToPeer {
     this.serve = serve;
     this.statusChanged = statusChanged;
     mkdirSync(this.socketFolder, { recursive: true, mode: 0o700 });
-    this.joinListener = this.listen(this.joinSocket(), { joining: true });
     const tunnels = this.store.deviceTunnels();
     tunnels.forEach(({ deviceId, key, address }) => this.letIn(deviceId, key, address));
     if (tunnels.length > 0) void this.sidecarRunning();
@@ -235,8 +238,16 @@ export class PeerToPeer {
     this.sidecar.stop();
     this.listeners.forEach((listener) => listener.stop());
     this.listeners.clear();
-    this.joinListener?.stop();
-    this.joinKeys.forEach(({ expires }) => clearTimeout(expires));
+    this.joinKeys.forEach(({ expires, listener }) => {
+      clearTimeout(expires);
+      listener.stop();
+    });
+    this.joinKeys.clear();
+  }
+
+  /** This host's own key in the tunnel, which every device and joiner's handshake checks it holds. */
+  get publicKey() {
+    return this.identity.publicKey;
   }
 
   places(): TunnelPlaces {
@@ -283,18 +294,20 @@ export class PeerToPeer {
   }
 
   /**
-   * A one-time key for the invite with `code`, which reaches only the joining socket and the canvas server, and only
-   * until the invite expires; null when the sidecar can't run or the broker doesn't answer, as devices would then find
-   * no way in, so the invite offers no tunnel that goes nowhere.
+   * A one-time key for the invite with `code`, which reaches only a joining socket of the invite's own and the canvas
+   * server, and only until the invite expires; null when the sidecar can't run or the broker doesn't answer, as devices
+   * would then find no way in, so the invite offers no tunnel that goes nowhere.
    */
   async invite(code: string, expiresAt: number, waitForBrokerMs = INVITE_WAITS_FOR_BROKER_MS): Promise<InviteTunnel | null> {
-    if (!(await this.sidecarRunning()) || !(await this.brokerReached(waitForBrokerMs))) return null;
+    if (!this.serve || !(await this.sidecarRunning()) || !(await this.brokerReached(waitForBrokerMs))) return null;
     const { privateKey, publicKey } = newKeyPair();
     const joinAddress = newDeviceAddress(this.identity.prefix);
     const forInvite = inviteKey(code);
+    const socket = this.socketFor("invite", forInvite);
+    const listener = this.listen(socket, { inviteKey: forInvite });
     const expires = setTimeout(() => this.letJoinKeyGo(forInvite), Math.max(0, expiresAt - this.now()));
-    this.joinKeys.set(forInvite, { publicKey, expires });
-    this.sidecar.pin({ key: publicKey, address: joinAddress, socket: this.joinSocket() });
+    this.joinKeys.set(forInvite, { publicKey, listener, expires });
+    this.sidecar.pin({ key: publicKey, address: joinAddress, socket });
     return { ...this.places(), joinKey: privateKey, joinAddress, name: this.store.machineName() };
   }
 
@@ -305,15 +318,22 @@ export class PeerToPeer {
     joinKey.expires = setTimeout(() => this.letJoinKeyGo(inviteKey(code)), this.joinKeyKeptAfterUseMs);
   }
 
+  /** At once, for an invite withdrawn or gone with its room: `forInvite` is its code as `inviteKey` keeps it. */
+  inviteWithdrawn(forInvite: string) {
+    this.letJoinKeyGo(forInvite);
+  }
+
   private letJoinKeyGo(forInvite: string) {
     const joinKey = this.joinKeys.get(forInvite);
     if (!joinKey) return;
     this.joinKeys.delete(forInvite);
+    clearTimeout(joinKey.expires);
     this.sidecar.unpin(joinKey.publicKey);
+    joinKey.listener.stop();
   }
 
   private letIn(deviceId: string, key: string, address: string) {
-    const socket = this.deviceSocket(deviceId);
+    const socket = this.socketFor("device", deviceId);
     if (!this.listeners.has(deviceId) && this.serve) this.listeners.set(deviceId, this.listen(socket, { deviceId }));
     this.sidecar.pin({ key, address, socket });
   }
@@ -324,11 +344,9 @@ export class PeerToPeer {
     return this.serve!(socket, end);
   }
 
-  private joinSocket() {
-    return join(this.socketFolder, "join.sock");
-  }
-
-  private deviceSocket(deviceId: string) {
-    return join(this.socketFolder, `${createHash("sha256").update(deviceId).digest("hex").slice(0, 12)}.sock`);
+  /** Every socket's name is as long, a device's and an invite's alike, and none can be another's. */
+  private socketFor(kind: "device" | "invite", id: string) {
+    const name = kind === "device" ? id : `invite ${id}`;
+    return join(this.socketFolder, `${createHash("sha256").update(name).digest("hex").slice(0, 12)}.sock`);
   }
 }

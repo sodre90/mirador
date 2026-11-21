@@ -386,14 +386,15 @@ export type ClientMessage =
   | { type: "voice.engine.remove" }
   /** Refused for a model the voice settings use. */
   | { type: "voice.engine.remove-model"; model: string }
-  /** address is what the user typed or pasted: a name on the network, an address, or an invite link. */
-  | { type: "machine.add"; name: string; address: string }
+  /** address is what the user typed or pasted: a name on the network, an address, or an invite link; name may be empty. */
+  | { type: "machine.add"; requestId: string; name: string; address: string }
   | { type: "machine.remove"; machineId: string }
   | { type: "machine.set-color"; machineId: string; color: Pastel | null }
   /** Keeps a machine one of this computer's machines has joined out of the rail; machine.show-again brings it back. */
   | { type: "machine.hide"; machine: MachineSeen }
   | { type: "machine.show-again"; machine: MachineSeen }
-  | { type: "machine.join"; requestId: string; machineId: string; code: string; authorityFingerprint: string | null }
+  /** invite is what the user pasted: an invite's code, or its whole link, which a machine reached peer to peer needs. */
+  | { type: "machine.join"; requestId: string; machineId: string; invite: string }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
   | { type: "search"; requestId: string; query: string }
   | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[]; permissions: PermissionPreset }
@@ -568,7 +569,8 @@ export type ServerMessage =
   | { type: "room.upserted"; room: Room }
   | { type: "room.deleted"; roomId: string }
   /** `code` is shown once, here: the host keeps only its hash. */
-  | { type: "room.invited"; requestId: string; invite: RoomInvite; code: string }
+  /** To the owner's page that asked alone: its code, and the tunnel's one-time key with it, let whoever holds them in. */
+  | { type: "room.invited"; requestId: string; invite: RoomInvite; code: string; tunnel: InviteTunnel | null }
   /** The room invites nobody has used yet, each time one is made, used or withdrawn; those of a deleted room go with it. */
   | { type: "room-invites.listed"; invites: RoomInvite[] }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on. */
@@ -719,6 +721,11 @@ export type ServerMessage =
   /** The machine has the request; it waits there until someone types the number this host shows. */
   | { type: "machine.join-asked"; requestId: string; number: string }
   | { type: "machine.join-answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }
+  /**
+   * machineId is null when nothing was added; roomId, the room a room invite's link let this computer's owner into. A
+   * problem joining leaves the machine added, unless the link carried the machine's tunnel: then nothing stays added.
+   */
+  | { type: "machine.added"; requestId: string; machineId: string | null; roomId: string | null; problem: string | null; problemAbout?: HostProblem }
   | { type: "join-requests.listed"; joinRequests: JoinRequest[] }
   /** problem says why it was not approved, e.g. a wrong number, which denies it. */
   | { type: "join-request.answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }

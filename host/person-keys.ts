@@ -6,6 +6,7 @@ const ED25519_PUBLIC_KEY_BYTES = 32;
 const ED25519_SIGNATURE_BYTES = 64;
 const CHALLENGE_BYTES = 32;
 const ROOM_JOIN_PURPOSE = "Mirador: join a room with this key";
+const ROOM_JOIN_THROUGH_TUNNEL_PURPOSE = "Mirador: join a room with this key, through the machine's peer-to-peer tunnel";
 
 /** Who this Mirador's owner is to other machines: a key pair made once, whose public half other machines know them by. */
 export interface OwnerKey {
@@ -42,22 +43,28 @@ export function ownerKey(dataDir: string): OwnerKey {
 export const NO_AUTHORITY = "none";
 
 /**
- * What joining a room signs: the inviting machine's challenge, the invite, the address the joiner reached that machine
- * at, the certificate authority it trusted that machine's certificate by, and the key that joins.
+ * How the joiner reached the machine it joins: at an address of the machine, as host and port, with the fingerprint of
+ * the machine's own certificate authority it pinned there or NO_AUTHORITY; or through the machine's peer-to-peer tunnel,
+ * whose handshake proved the machine holds the key the invite named.
  */
-export interface RoomJoin {
+export type ReachedAt = { host: string; authorityFingerprint: string } | { tunnelKey: string };
+
+/**
+ * What joining a room signs: the inviting machine's challenge, the invite, how the joiner reached that machine, and the
+ * key that joins. Through the tunnel the statement has a purpose of its own, so no proof made for an address reads as one
+ * made through a tunnel, or the other way round.
+ */
+export type RoomJoin = ReachedAt & {
   challenge: string;
   /** The invite's code as `inviteKey` keeps it. */
   inviteKey: string;
-  /** Host and port, as the joiner addressed the inviting machine. */
-  host: string;
-  /** The fingerprint of the machine's own certificate authority the joiner pinned, or NO_AUTHORITY. */
-  authorityFingerprint: string;
   publicKey: string;
-}
+};
 
-export const roomJoinStatement = ({ challenge, inviteKey, host, authorityFingerprint, publicKey }: RoomJoin) =>
-  [ROOM_JOIN_PURPOSE, challenge, inviteKey, host, authorityFingerprint, publicKey].join("\n");
+export const roomJoinStatement = (join: RoomJoin) =>
+  "tunnelKey" in join
+    ? [ROOM_JOIN_THROUGH_TUNNEL_PURPOSE, join.challenge, join.inviteKey, join.tunnelKey, join.publicKey].join("\n")
+    : [ROOM_JOIN_PURPOSE, join.challenge, join.inviteKey, join.host, join.authorityFingerprint, join.publicKey].join("\n");
 
 export function signedRoomJoin(join: RoomJoin, signature: unknown) {
   if (!isPublicKey(join.publicKey) || !isSignature(signature)) return false;

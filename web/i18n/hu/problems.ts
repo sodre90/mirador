@@ -109,7 +109,8 @@ export const problems: Messages["problems"] = {
     "invite-code-missing": "Hiányzik a meghívókód.",
     "invite-code-wrong": "Ez a meghívókód hibás, már felhasználták, vagy lejárt. Kérj újat.",
     "room-invite-needs-mirador": "Ez a meghívó egy embert enged be egy szobába, a saját Miradorjából: ott add hozzá ezt a gépet a Gépek alatt, majd csatlakozz a kóddal.",
-    "room-invite-not-through-tunnel": "Szobameghívóval ennek a gépnek a címén lehet csatlakozni, nem a peer-to-peer alagúton át.",
+    "room-invite-not-through-tunnel": "Szobameghívóval csak akkor kap helyet valaki a peer-to-peer alagútban, ha azon át csatlakozik, a meghívó saját egyszer használatos kulcsával.",
+    "peer-to-peer-unavailable-here": "Ezen a számítógépen nem érhető el az egyenrangú (peer to peer) kapcsolat, pedig ez a meghívó azt kívánja: a mirador-p2p nem tölthető le, vagy nincs ehhez a rendszerhez.",
     "room-invite-loopback-from-afar": "Szobameghívóval 127.0.0.1 vagy localhost címen csak erről a számítógépről lehet csatlakozni.",
     "join-too-often": "Túl sokszor próbáltak csatlakozni ehhez a géphez. Próbáld újra egy perc múlva.",
     "room-join-unproven": "A szobába lépéshez aláírás kell a bemutatott kulccsal, a gép legutóbbi kihívására ehhez a meghívóhoz, ahhoz a címhez, ahol kérték, és ahhoz a tanúsítványkiadóhoz, amellyel megbíztak benne. Próbálj újra csatlakozni.",
@@ -248,6 +249,10 @@ export const problems: Messages["problems"] = {
   machineCertificateNotItsOwn: (machine, hostname) =>
     `A gép (${machine}) tanúsítványát nem a saját tanúsítványkiadója adta ki, vagy nem ez a név szerepel benne: ${hostname}.`,
   machineDidNotAnswer: (machine) => `Nem válaszolt: ${machine}. Fut rajta a Mirador?`,
+  machineUnreachableNow: (machine) =>
+    `A gép (${machine}) most nem érhető el. Lehet, hogy a Miradora nem fut vagy nincs hálózaton, vagy a meghívót már felhasználták, illetve lejárt. Próbáld újra később, vagy kérj új meghívót.`,
+  machineNeedsWholeInvite: (machine) => `A gépet (${machine}) peer to peer kapcsolattal éred el, így a csatlakozáshoz a teljes meghívólink kell, nem csak a kódja.`,
+  inviteFromAnotherMachine: (machine) => `Ez a meghívó nem a géptől (${machine}) jött, hanem egy másiktól. Illeszd be a Gépek alatt, ott hozzáadja a saját gépét.`,
   machineCertificateUntrusted: (machine) => `Ez a számítógép nem bízik a gép (${machine}) tanúsítványában, és ${machine} nem kínál saját tanúsítványkiadót.`,
   machineGaveNoToken: (machine) => `A gép (${machine}) token nélkül engedte be ezt a számítógépet.`,
   machineIgnoredRoomInvite: (machine) =>
@@ -256,6 +261,10 @@ export const problems: Messages["problems"] = {
     `Ez a számítógép személyként lép be a gép (${machine}) szobáiba, ezért csak egy szobameghívó kódja engedi be oda, és nem kér csatlakozást. Ha ezt a számítógépet a tulajdonos egyik készülékévé tennéd ott, távolítsd el a gépet (${machine}), és add hozzá újra.`,
   machineAuthorityNotInLink: (machine) =>
     `A gép (${machine}) tanúsítványkiadója nem az, amelyik a meghívólinkben szerepel, ezért a kód nem ment el. Lehet, hogy valami a hálózaton ennek adja ki magát: ${machine}.`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `Ez a meghívólink peer to peer kapcsolattal éri el a gépet (${machine}), és nem mondja meg, milyen tanúsítványra számíts a címén, ezért a kód nem ment el oda. Illeszd be a linket a Gépek alatt egy olyan számítógépen, ahol működik a peer to peer kapcsolat.`,
+  inviteAddressUnprotected: (address) =>
+    `Ezen a számítógépen nem érhető el a peer to peer kapcsolat, a meghívó címét (${address}) pedig nem védi HTTPS, ezért a kód nem ment el oda. Csatlakozz egy olyan számítógépről, ahol működik a peer to peer kapcsolat.`,
   machineAuthorityChanged: (machine) =>
     `A gép (${machine}) tanúsítványkiadója megváltozott, amióta ez a számítógép csatlakozott hozzá, ezért a kód nem ment el. Ha a Miradorát újra beállították, csatlakozz egy onnan kapott meghívólinkkel.`,
   joinRequestDenied: (machine) => `A gép (${machine}) elutasította a kérést. Ha ott rosszul írták be a számot, kérd újra.`,

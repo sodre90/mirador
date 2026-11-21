@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
-import { JoinRequestService, SenderAndOverallLimit, SenderLimit } from "../host/join-requests.ts";
+import { JoinRequestService, SenderAndOverallLimit, SenderLimit, senderForLimits } from "../host/join-requests.ts";
 import { Store } from "../host/store.ts";
 import { commitmentTo, matchingNumber, newNonce, spacedNumber } from "../shared/join-requests.ts";
 
@@ -197,6 +197,16 @@ test("joins are limited for each sender and for all senders together, and one se
   expect(["b", "c", "d"].map((sender) => limit.allows(sender))).toEqual([true, false, false]);
   clock.now += 60_001;
   expect(["d", "e", "f", "g"].map((sender) => limit.allows(sender))).toEqual([true, true, true, false]);
+});
+
+test("each end of the tunnel asks to join as a sender of its own, though every request through the tunnel comes from the same place", () => {
+  const throughTunnel = { fromAddress: "the peer-to-peer tunnel", tailscaleUser: null };
+  const limit = new SenderLimit(() => 0, 1);
+  const ends = [{ deviceId: "laptop" }, { deviceId: "phone" }, { inviteKey: "invite-1" }, { inviteKey: "invite-2" }];
+  expect(ends.map((end) => limit.allows(senderForLimits(end, throughTunnel)))).toEqual([true, true, true, true]);
+  expect(limit.allows(senderForLimits({ deviceId: "laptop" }, throughTunnel))).toBe(false);
+  expect(senderForLimits(undefined, { fromAddress: "192.168.1.23", tailscaleUser: null })).toBe("192.168.1.23");
+  expect(senderForLimits(undefined, { fromAddress: "127.0.0.1", tailscaleUser: "ann@example.com" })).toBe("ann@example.com");
 });
 
 test("the number has six digits, and is shown in two groups of three", async () => {

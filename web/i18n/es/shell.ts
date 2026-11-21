@@ -304,6 +304,7 @@ export const shell: Messages["shell"] = {
     outOfRooms: "Su propietario te sacó de la última sala en la que estabas allí, y con eso este equipo cerró la sesión. Pídele una nueva invitación y únete con su código.",
     someoneElses: "Máquina de otra persona, en cuyas salas estás",
     roomInviteFirst: "Te invitaron a una sala de allí. Únete con el código o el enlace de la invitación a la sala.",
+    peerToPeer: "peer to peer",
   },
   conversationTitle: {
     label: "Nombre de la conversación",

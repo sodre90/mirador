@@ -107,7 +107,8 @@ export const problems = {
     "invite-code-missing": "The invite code is missing.",
     "invite-code-wrong": "This invite code is wrong, used or expired. Ask for a new one.",
     "room-invite-needs-mirador": "This invite lets a person into a room, from their own Mirador: add this machine under Machines there, then join it with the code.",
-    "room-invite-not-through-tunnel": "A room invite joins at this machine's address, not through the peer-to-peer tunnel.",
+    "room-invite-not-through-tunnel": "A room invite gets a place in the peer-to-peer tunnel only when it joins through the tunnel, with its own one-time key.",
+    "peer-to-peer-unavailable-here": "Peer to peer isn't available on this computer, and this invite needs it: mirador-p2p could not be downloaded, or there is none for this system.",
     "room-invite-loopback-from-afar": "A room invite joins at 127.0.0.1 or localhost only from this computer itself.",
     "join-too-often": "There were too many tries to join this machine. Try again in a minute.",
     "room-join-unproven": "Joining a room needs a signature, with the key it presents, over this machine's latest challenge for the invite, the address it was asked at and the certificate authority it was trusted by. Try joining again.",
@@ -246,6 +247,10 @@ export const problems = {
   machineCertificateNotItsOwn: (machine: string, hostname: string) =>
     `${machine}'s certificate is not from its own certificate authority, or does not name ${hostname}.`,
   machineDidNotAnswer: (machine: string) => `${machine} did not answer. Is its Mirador running?`,
+  machineUnreachableNow: (machine: string) =>
+    `${machine} can't be reached right now. Its Mirador may be off or offline, or the invite was used or has expired. Try again later, or ask for a new invite.`,
+  machineNeedsWholeInvite: (machine: string) => `${machine} is reached peer to peer, so joining it takes the whole invite link, not just its code.`,
+  inviteFromAnotherMachine: (machine: string) => `That invite is from another machine than ${machine}. Paste it under Machines, where it adds its own.`,
   machineCertificateUntrusted: (machine: string) =>
     `This computer doesn't trust ${machine}'s certificate, and ${machine} offers no certificate authority of its own.`,
   machineGaveNoToken: (machine: string) => `${machine} let this computer in without a token.`,
@@ -255,6 +260,10 @@ export const problems = {
     `This computer joins ${machine} as a person in its rooms, so only a room invite's code lets it in there, and it does not ask to join. To make this computer one of the owner's devices there, remove ${machine} and add it again.`,
   machineAuthorityNotInLink: (machine: string) =>
     `${machine}'s certificate authority is not the one in the invite link, so the code was not sent. Something on the network may be posing as ${machine}.`,
+  machineAuthorityNotInTunnelLink: (machine: string) =>
+    `This invite link reaches ${machine} peer to peer, and doesn't say which certificate to expect at its address, so the code was not sent there. Paste the link under Machines on a computer where peer to peer works.`,
+  inviteAddressUnprotected: (address: string) =>
+    `Peer to peer isn't available on this computer, and the invite's address, ${address}, is not protected by HTTPS, so the code was not sent there. Join from a computer where peer to peer works.`,
   machineAuthorityChanged: (machine: string) =>
     `${machine}'s certificate authority changed since this computer joined it, so the code was not sent. If its Mirador was set up again, join with an invite link from it.`,
   joinRequestDenied: (machine: string) => `${machine} denied the request. If the number was typed there wrongly, ask again.`,

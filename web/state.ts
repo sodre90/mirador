@@ -629,6 +629,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "conversation.rewind-failed":
       return state;
     case "join-request.answered":
+    case "machine.added":
       return message.problem ? withNotice(state, describedText(message.problem, message.problemAbout)) : state;
     case "join-requests.listed":
       return { ...state, joinRequests: message.joinRequests };

@@ -63,6 +63,11 @@ export interface Machine {
   asPerson: boolean;
   /** For a machine joined as a person, the unguessable start of the path its relay shows it at: only what asks there gets this host's sign-in. */
   relayKey: string | null;
+  /**
+   * This host reaches the machine through the machine's peer-to-peer tunnel, not at an address: its origin then names
+   * the machine's address inside the tunnel, which says nothing to a person.
+   */
+  peerToPeer: boolean;
 }
 
 /**

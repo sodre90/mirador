@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
-import { DeviceService } from "../host/devices.ts";
+import { DeviceService, inviteKey } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
 import { PeerToPeer, peerToPeerSettings, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
@@ -184,18 +184,36 @@ unixOnlyTest("a revoked device is let in no more, and its listener closes", asyn
   expect((await commandsRead(2)).at(-1)).toEqual({ unpin: { key } });
 });
 
-unixOnlyTest("an invite's one-time key reaches only the joining socket, until shortly after the invite is used", async () => {
+unixOnlyTest("an invite's one-time key reaches only a joining socket of the invite's own, until shortly after the invite is used", async () => {
   const { p2p, devices, listening } = host();
   const { code, expiresAt } = devices.invite();
   const tunnel = (await p2p.invite(code, expiresAt))!;
-  const joinSocket = [...listening].find(([, end]) => "joining" in end)?.[0];
+  const other = devices.invite();
+  await p2p.invite(other.code, other.expiresAt);
+  const joinSockets = [...listening].filter(([, end]) => "inviteKey" in end);
+  expect(joinSockets.map(([, end]) => end)).toEqual([{ inviteKey: inviteKey(code) }, { inviteKey: inviteKey(other.code) }]);
+  const joinSocket = joinSockets[0]![0];
+  expect(joinSockets[1]![0]).not.toBe(joinSocket);
   const [pinned] = await commandsRead(1);
   expect(pinned.pin).toMatchObject({ address: tunnel.joinAddress, socket: joinSocket });
   expect(isTunnelKey(tunnel.joinKey)).toBe(true);
   expect(tunnel.name).toBe(hostname().replace(/\.local$/, ""));
   expect(p2p.refusedKey(pinned.pin.key)).not.toBeNull();
   p2p.inviteUsed(code.toLowerCase());
+  expect((await commandsRead(3))[2]).toEqual({ unpin: { key: pinned.pin.key } });
+  expect(listening.has(joinSocket)).toBe(false);
+  expect(listening.has(joinSockets[1]![0])).toBe(true);
+});
+
+unixOnlyTest("a withdrawn invite's one-time key is let go at once, with its socket", async () => {
+  const { p2p, listening } = host();
+  const code = "ROOM-ABCD-EFGH-JKLM";
+  await p2p.invite(code, Date.now() + 60_000);
+  const [pinned] = await commandsRead(1);
+  p2p.inviteWithdrawn(inviteKey(code));
   expect((await commandsRead(2))[1]).toEqual({ unpin: { key: pinned.pin.key } });
+  expect([...listening.values()].some((end) => "inviteKey" in end)).toBe(false);
+  expect(() => p2p.inviteWithdrawn(inviteKey(code))).not.toThrow();
 });
 
 unixOnlyTest("an invite's one-time key is let in no more once the invite expires", async () => {

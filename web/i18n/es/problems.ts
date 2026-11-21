@@ -109,7 +109,8 @@ export const problems: Messages["problems"] = {
     "invite-code-missing": "Falta el código de invitación.",
     "invite-code-wrong": "Este código de invitación es incorrecto, ya se usó o caducó. Pide uno nuevo.",
     "room-invite-needs-mirador": "Esta invitación deja entrar a una persona en una sala, desde su propio Mirador: agrega allí esta máquina en Máquinas y únete con el código.",
-    "room-invite-not-through-tunnel": "Una invitación a una sala se usa en la dirección de esta máquina, no a través del túnel peer to peer.",
+    "room-invite-not-through-tunnel": "Una invitación a una sala obtiene un lugar en el túnel peer to peer solo si se une a través del túnel, con su propia clave de un solo uso.",
+    "peer-to-peer-unavailable-here": "La conexión peer to peer no está disponible en este equipo, y esta invitación la necesita: no se pudo descargar mirador-p2p, o no lo hay para este sistema.",
     "room-invite-loopback-from-afar": "Con una invitación a una sala solo se une en 127.0.0.1 o localhost desde este mismo equipo.",
     "join-too-often": "Hubo demasiados intentos de unirse a esta máquina. Inténtalo de nuevo en un minuto.",
     "room-join-unproven": "Para unirse a una sala hace falta una firma, con la clave que presenta, sobre el último desafío de esta máquina para la invitación, la dirección en que se pidió y la autoridad de certificación con la que se confió en ella. Intenta unirte de nuevo.",
@@ -247,6 +248,10 @@ export const problems: Messages["problems"] = {
   tailscaleServeExited: (exitCode) => `tailscale serve terminó con el código ${exitCode}`,
   machineCertificateNotItsOwn: (machine, hostname) => `El certificado de ${machine} no es de su propia autoridad de certificación, o no nombra ${hostname}.`,
   machineDidNotAnswer: (machine) => `${machine} no respondió. ¿Está en marcha su Mirador?`,
+  machineUnreachableNow: (machine) =>
+    `Ahora no se puede llegar a ${machine}. Puede que su Mirador esté apagado o sin conexión, o que la invitación ya se haya usado o haya caducado. Inténtalo más tarde, o pide una invitación nueva.`,
+  machineNeedsWholeInvite: (machine) => `A ${machine} se llega peer to peer, así que para unirse hace falta el enlace de invitación completo, no solo su código.`,
+  inviteFromAnotherMachine: (machine) => `Esa invitación es de otra máquina, no de ${machine}. Pégala en Máquinas, donde añade la suya.`,
   machineCertificateUntrusted: (machine) =>
     `Este equipo no confía en el certificado de ${machine}, y ${machine} no ofrece una autoridad de certificación propia.`,
   machineGaveNoToken: (machine) => `${machine} dejó entrar a este equipo sin un token.`,
@@ -256,6 +261,10 @@ export const problems: Messages["problems"] = {
     `Este equipo entra en ${machine} como persona en sus salas, así que solo el código de una invitación a una sala lo deja entrar allí, y no pide unirse. Para que este equipo sea uno de los dispositivos del dueño allí, quita ${machine} y agrégala de nuevo.`,
   machineAuthorityNotInLink: (machine) =>
     `La autoridad de certificación de ${machine} no es la del enlace de invitación, así que no se envió el código. Puede que algo en la red se esté haciendo pasar por ${machine}.`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `Este enlace de invitación llega a ${machine} peer to peer, y no dice qué certificado esperar en su dirección, así que el código no se envió allí. Pega el enlace en Máquinas en un equipo donde funcione peer to peer.`,
+  inviteAddressUnprotected: (address) =>
+    `La conexión peer to peer no está disponible en este equipo, y la dirección de la invitación, ${address}, no está protegida con HTTPS, así que el código no se envió allí. Únete desde un equipo donde funcione peer to peer.`,
   machineAuthorityChanged: (machine) =>
     `La autoridad de certificación de ${machine} cambió desde que este equipo se unió a ella, así que no se envió el código. Si su Mirador se configuró de nuevo, únete con un enlace de invitación suyo.`,
   joinRequestDenied: (machine) => `${machine} rechazó la solicitud. Si allí se escribió mal el número, vuelve a pedirlo.`,

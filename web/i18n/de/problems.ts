@@ -109,7 +109,8 @@ export const problems: Messages["problems"] = {
     "invite-code-missing": "Der Einladungscode fehlt.",
     "invite-code-wrong": "Dieser Einladungscode ist falsch, schon benutzt oder abgelaufen. Bitte um einen neuen.",
     "room-invite-needs-mirador": "Diese Einladung lässt eine Person aus ihrem eigenen Mirador in einen Raum: Füge dort diesen Rechner unter Rechner hinzu und tritt dann mit dem Code bei.",
-    "room-invite-not-through-tunnel": "Mit einer Raumeinladung tritt man an der Adresse dieses Rechners bei, nicht durch den Peer-to-Peer-Tunnel.",
+    "room-invite-not-through-tunnel": "Mit einer Raumeinladung bekommt man nur dann einen Platz im Peer-to-Peer-Tunnel, wenn man durch den Tunnel beitritt, mit ihrem eigenen Einmalschlüssel.",
+    "peer-to-peer-unavailable-here": "Peer-to-Peer ist auf diesem Computer nicht verfügbar, und diese Einladung braucht es: mirador-p2p ließ sich nicht herunterladen, oder es gibt keins für dieses System.",
     "room-invite-loopback-from-afar": "Mit einer Raumeinladung tritt man unter 127.0.0.1 oder localhost nur von diesem Computer selbst bei.",
     "join-too-often": "Es gab zu viele Versuche, diesem Rechner beizutreten. Versuche es in einer Minute erneut.",
     "room-join-unproven": "Um einem Raum beizutreten, braucht es eine Signatur mit dem vorgelegten Schlüssel über die letzte Challenge dieses Rechners für die Einladung, die Adresse, an der sie angefragt wurde, und die Zertifizierungsstelle, der dabei vertraut wurde. Versuche erneut beizutreten.",
@@ -249,6 +250,10 @@ export const problems: Messages["problems"] = {
   machineCertificateNotItsOwn: (machine, hostname) =>
     `Das Zertifikat von ${machine} stammt nicht von seiner eigenen Zertifizierungsstelle oder nennt ${hostname} nicht.`,
   machineDidNotAnswer: (machine) => `${machine} hat nicht geantwortet. Läuft dort Mirador?`,
+  machineUnreachableNow: (machine) =>
+    `${machine} ist gerade nicht erreichbar. Vielleicht ist Mirador dort aus oder offline, oder die Einladung wurde schon benutzt oder ist abgelaufen. Versuch es später noch einmal oder bitte um eine neue Einladung.`,
+  machineNeedsWholeInvite: (machine) => `${machine} wird per Peer-to-Peer erreicht, daher braucht der Beitritt den ganzen Einladungslink, nicht nur seinen Code.`,
+  inviteFromAnotherMachine: (machine) => `Diese Einladung kommt von einem anderen Rechner als ${machine}. Füge sie unter Rechner ein, dort fügt sie ihren eigenen hinzu.`,
   machineCertificateUntrusted: (machine) =>
     `Dieser Computer vertraut dem Zertifikat von ${machine} nicht, und ${machine} bietet keine eigene Zertifizierungsstelle an.`,
   machineGaveNoToken: (machine) => `${machine} hat diesen Computer ohne Token hereingelassen.`,
@@ -258,6 +263,10 @@ export const problems: Messages["problems"] = {
     `Dieser Computer tritt ${machine} als Person in seinen Räumen bei, darum lässt ihn dort nur der Code einer Raumeinladung hinein, und er stellt keine Beitrittsanfrage. Um diesen Computer dort zu einem Gerät des Besitzers zu machen, entferne ${machine} und füge ihn erneut hinzu.`,
   machineAuthorityNotInLink: (machine) =>
     `Die Zertifizierungsstelle von ${machine} ist nicht die aus dem Einladungslink, daher wurde der Code nicht gesendet. Möglicherweise gibt sich etwas im Netzwerk als ${machine} aus.`,
+  machineAuthorityNotInTunnelLink: (machine) =>
+    `Dieser Einladungslink erreicht ${machine} per Peer-to-Peer und sagt nicht, welches Zertifikat an seiner Adresse zu erwarten ist, daher wurde der Code nicht dorthin gesendet. Füge den Link unter Rechner auf einem Computer ein, auf dem Peer-to-Peer funktioniert.`,
+  inviteAddressUnprotected: (address) =>
+    `Peer-to-Peer ist auf diesem Computer nicht verfügbar, und die Adresse der Einladung, ${address}, ist nicht durch HTTPS geschützt, daher wurde der Code nicht dorthin gesendet. Tritt von einem Computer aus bei, auf dem Peer-to-Peer funktioniert.`,
   machineAuthorityChanged: (machine) =>
     `Die Zertifizierungsstelle von ${machine} hat sich geändert, seit dieser Computer beigetreten ist, daher wurde der Code nicht gesendet. Wenn Mirador dort neu eingerichtet wurde, tritt mit einem Einladungslink von dort bei.`,
   joinRequestDenied: (machine) => `${machine} hat die Anfrage abgelehnt. Falls die Zahl dort falsch eingegeben wurde, frag erneut.`,

@@ -285,6 +285,7 @@ export const shell: Messages["shell"] = {
     outOfRooms: "A tulajdonosa kivett abból az utolsó szobából, amelyben ott voltál, és ezzel ez a számítógép kijelentkezett. Kérj tőle új meghívót, és csatlakozz a kódjával.",
     someoneElses: "Valaki más gépe, ahol a szobáiban vagy",
     roomInviteFirst: "Meghívtak egy ottani szobába. Csatlakozz a szobameghívó kódjával vagy linkjével.",
+    peerToPeer: "peer to peer kapcsolattal",
   },
   conversationTitle: {
     label: "A beszélgetés neve",

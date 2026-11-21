@@ -1,8 +1,10 @@
 import { useState, type Dispatch } from "react";
 import { roomInviteLink } from "../shared/machines.ts";
 import type { Person, Profile, ReachabilitySettings, Workspace } from "../shared/model.ts";
+import type { ServerMessage } from "../shared/protocol.ts";
 import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
 import { ROOM_ROLES, type Room, type RoomApproval, type RoomInvite, type RoomRole, type RoomTaskApproval } from "../shared/rooms.ts";
+import { tunnelOrigin } from "../shared/tunnel.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { timeOf } from "./Devices.tsx";
@@ -160,9 +162,31 @@ function RoomPeopleField({
  * Invites into the room, each for one person with its role, who joins this machine with it from their own Mirador:
  * the one just made with its code, link and QR code, while it waits, and every waiting one, which can be withdrawn.
  */
+type MadeRoomInvite = Extract<ServerMessage, { type: "room.invited" }>;
+
+/**
+ * The invite's one link: at this machine's address when it has one, and through its peer-to-peer tunnel when it
+ * can, which needs no address at all. The person's Mirador tries what works.
+ */
+function roomInviteLinkOf({ code, tunnel }: MadeRoomInvite, reachability: ReachabilitySettings | null) {
+  const publicOrigin = reachability?.publicAddress?.origin ?? null;
+  if (publicOrigin) return roomInviteLink(publicOrigin, code, reachability?.authorityFingerprint ?? null, tunnel);
+  return tunnel && roomInviteLink(tunnelOrigin(tunnel), code, null, tunnel);
+}
+
+function CopyLinkButton({ link }: { link: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => void navigator.clipboard.writeText(link).then(() => setCopied(true));
+  return (
+    <button type="button" className="copy-invite-link" onClick={copy}>
+      {copied ? words.linkCopied : words.copyLink}
+    </button>
+  );
+}
+
 function RoomInvitesField({ room, invites, reachability }: { room: Room; invites: RoomInvite[]; reachability: ReachabilitySettings | null }) {
   const [role, setRole] = useState<RoomRole>("member");
-  const [made, setMade] = useState<{ invite: RoomInvite; code: string } | null>(null);
+  const [made, setMade] = useState<MadeRoomInvite | null>(null);
   const waiting = invites.filter(({ roomId }) => roomId === room.id);
   const makeInvite = async () => {
     try {
@@ -175,9 +199,9 @@ function RoomInvitesField({ room, invites, reachability }: { room: Room; invites
       // Disconnected; the host made no invite
     }
   };
-  const publicOrigin = reachability?.publicAddress?.origin ?? null;
   const shown = made && waiting.some(({ id }) => id === made.invite.id) ? made : null;
-  const link = shown && publicOrigin && roomInviteLink(publicOrigin, shown.code, reachability?.authorityFingerprint ?? null);
+  const link = shown && roomInviteLinkOf(shown, reachability);
+  const throughTunnelAlone = !reachability?.publicAddress && shown?.tunnel;
   return (
     <fieldset className="room-field room-invites-field">
       <legend>{words.invites}</legend>
@@ -206,8 +230,9 @@ function RoomInvitesField({ room, invites, reachability }: { room: Room; invites
             <>
               <QrCode text={link} label={words.inviteLinkQr} />
               <span>
-                {words.inviteLinkHint} <code className="invite-link">{link}</code>
+                {throughTunnelAlone ? words.inviteLinkPeerToPeerHint : words.inviteLinkHint} <code className="invite-link">{link}</code>
               </span>
+              <CopyLinkButton key={link} link={link} />
             </>
           ) : (
             <span className="hint">{words.inviteWithoutLink}</span>

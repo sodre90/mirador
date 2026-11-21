@@ -22,6 +22,7 @@ import { DeviceService } from "./devices.ts";
 import { ownerKey } from "./person-keys.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { MachineRelays } from "./machine-relays.ts";
+import { MachineTunnels } from "./machine-tunnels.ts";
 import { MachineWatch } from "./machine-watch.ts";
 import { ownPageOrigins } from "./addresses.ts";
 import { ConversationSearch } from "./search.ts";
@@ -46,6 +47,7 @@ import { NewerVersionWatcher, newerVersionLookup, pullCheckout } from "./newer-v
 import { desktopAppCode } from "../shared/desktop-app-code.ts";
 import { startServer } from "./server.ts";
 import { BUILT_IN_BROKER, PeerToPeer, peerToPeerSettings } from "./p2p/service.ts";
+import { dialProgram } from "./p2p/dial.ts";
 import { downloadedSidecar } from "./p2p/sidecar-download.ts";
 import { SourceWatcher } from "./source-watcher.ts";
 import { StatuslineService } from "./statusline.ts";
@@ -214,6 +216,7 @@ const p2pSettings = peerToPeerSettings(process.env, { sidecar: downloadedSidecar
 const p2p = p2pSettings && new PeerToPeer({ ...p2pSettings, canvasAssetsPort: config.canvasAssetsPort }, join(config.dataDir, "p2p"), store);
 const search = new ConversationSearch(store);
 const signedIn = signedInWith(config.browserToken, devices, store.ownerId());
+const tunnels = new MachineTunnels(store, join(config.dataDir, "machine-tunnels"), dialProgram(process.env, downloadedSidecar(config.dataDir)), config.relayPorts);
 const watch = new MachineWatch(
   store,
   { id: store.hostId(), origins: ownPageOrigins(config, certificate) },
@@ -221,6 +224,7 @@ const watch = new MachineWatch(
   () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() }),
   (notification) => hub.notifyThisComputer(notification),
   machineSignedOut,
+  tunnels,
 );
 const relays = new MachineRelays(
   store,
@@ -233,7 +237,9 @@ const relays = new MachineRelays(
   },
   machineSignedOut,
   ownersKey,
+  tunnels,
 );
+tunnels.startAll();
 relays.startAll();
 watch.startAll();
 const voiceDir = join(config.dataDir, "voice");
@@ -260,7 +266,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, notifications });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);
@@ -291,6 +297,7 @@ console.log(`data: ${config.dataDir}  agent logs: ${agentLogsDirectory(config.da
 if (network) console.log(`other devices: ${config.publicOrigin} (HTTPS on port ${network.port} of every network this machine is on)`);
 
 function machineSignedOut(machineId: string) {
+  tunnels.forget(machineId);
   store.forgetMachineDeviceToken(machineId);
   watch.stop(machineId);
   hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
@@ -309,6 +316,7 @@ async function stopServices() {
   networkAssetsServer?.stop(true);
   relays.stopAll();
   watch.stopAll();
+  tunnels.stopAll();
   keepAwake.stop();
   clearInterval(forgettingDeletedCanvases);
   apps.stop();
@@ -332,6 +340,7 @@ for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   });
 }
 process.on("exit", () => {
+  tunnels.stopAll();
   conversations.shutdown();
   voiceEngine.killServersNow();
 });

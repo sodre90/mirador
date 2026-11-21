@@ -21,7 +21,7 @@ import { KnownConversations } from "./known-conversations.ts";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
 import { OlderDeletePrompt, WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
 import { tellTheRailThePlace } from "./machine-place.ts";
-import { MachineFrames, MachineRail, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
+import { MachineFrames, MachineRail, reachedAt, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
 import { MachinesDialog, openMachine } from "./Machines.tsx";
 import { PluginsDialog } from "./Plugins.tsx";
 import { NewerVersionBanner } from "./NewerVersion.tsx";
@@ -296,7 +296,7 @@ function paletteEntries(
         ]
       : [];
   const machineActions = state.machines.map(
-    (machine): PaletteEntry => ({ id: `machine-${machine.id}`, label: words.openMachine(machine.name), detail: machine.origin, kind: "action", run: () => showMachine(machine) }),
+    (machine): PaletteEntry => ({ id: `machine-${machine.id}`, label: words.openMachine(machine.name), detail: reachedAt(machine), kind: "action", run: () => showMachine(machine) }),
   );
   const pluginWindowActions: PaletteEntry[] = canOpenItemWindows()
     ? Object.entries(state.pluginWindows).map(([plugin, title]) => ({ id: `plugin-window-${plugin}`, label: words.openPluginWindow(title), kind: "action", run: () => openPluginWindow(plugin) }))
@@ -929,6 +929,11 @@ export function App() {
           onOpen={(machine) => {
             closeOverlay();
             showMachine(machine);
+          }}
+          onJoined={(machineId, roomId) => {
+            closeOverlay();
+            if (roomId) machines.rememberPlace(machineId, `#/r/${roomId}`);
+            if (showsMachinesHere()) machines.show(machineId);
           }}
           onClose={closeOverlay}
         />
