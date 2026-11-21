@@ -5,12 +5,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { freePorts } from "../e2e/free-ports.ts";
 import { DeviceService } from "../host/devices.ts";
+import { DEVICE_ROUTES, OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES } from "../host/routes.ts";
 import { Store } from "../host/store.ts";
 import { PROBLEM_HEADER } from "../shared/host-problems.ts";
 import type { Person, Profile, Workspace } from "../shared/model.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import { TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
-import type { Room, RoomThread } from "../shared/rooms.ts";
+import { agentStandIn, type Room, type RoomThread } from "../shared/rooms.ts";
 
 /**
  * A real host, with the owner and three other people of the machine, each signed in on a device of their own: Mia and
@@ -208,6 +209,8 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.set-person-role": true,
   "room.remove-person": true,
   "room.approve": true,
+  "room.answer-task": true,
+  "room.set-peoples-tasks-wait": true,
   "room.delete": true,
   "room.subscribe": true,
   "room.unsubscribe": true,
@@ -215,9 +218,10 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "canvas.upserted", "error", "pong"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "canvas.upserted", "settings.saved", "error", "pong"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
+type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;
 type ProblemError = Extract<ServerMessage, { type: "error" }>;
 
 const problemCode = (message: ServerMessage) => (message.type === "error" ? (message as ProblemError).problem?.code : undefined);
@@ -379,6 +383,15 @@ async function ownerWritesIn(room: Room, text: string, tags: string[] = []) {
 
 const roomMessageSaying = (text: string) => isType("room.message", ({ message }) => message.text === text);
 
+async function settingOwnProfile(page: Page, name: string, color: string | null = null) {
+  const mark = page.mark;
+  const requestId = crypto.randomUUID();
+  page.send({ type: "person.set-own-profile", requestId, name, color });
+  return page.waitFor(isType("settings.saved", (saved) => saved.requestId === requestId), mark);
+}
+
+const problemOf = ({ problemAbout }: SettingsSaved) => problemAbout?.code ?? null;
+
 beforeAll(async () => {
   seed();
   await startHost();
@@ -461,6 +474,44 @@ describe("a person other than the owner", () => {
     expect(JSON.stringify(await owner.settledSince(0))).not.toContain("Mia in payroll");
   });
 
+  test("as a member asks a task of an agent that waits until the owner, told who asks and as what, allows it or declines it", async () => {
+    let [miaMark, ownerMark] = [miaPage.mark, owner.mark];
+    const asking = "@Builder SAY Mia's task answered";
+    miaPage.send({ type: "room.write", roomId: roomA.id, text: asking, tags: [profile.id], threadId: null });
+    const posted = (await miaPage.waitFor(roomMessageSaying(asking), miaMark)).message;
+    expect(posted).toMatchObject({ authorRole: "member", taskHeld: "waiting", tags: [profile.id] });
+    const { tasks } = await owner.waitFor(isType("room.approvals", ({ roomId, tasks }) => roomId === roomA.id && tasks.length === 1), ownerMark);
+    expect(tasks).toEqual([expect.objectContaining({ roomId: roomA.id, messageId: posted.id, profileIds: [profile.id], personId: mia.id, role: "member", text: asking })]);
+    agentConversationId = (await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && room.agents[0]!.conversationId !== null), ownerMark)).room.agents[0]!.conversationId!;
+    const refusing = miaPage.mark;
+    miaPage.send({ type: "room.answer-task", roomId: roomA.id, messageId: posted.id, answer: "allow" });
+    miaPage.send({ type: "room.set-peoples-tasks-wait", roomId: roomA.id, wait: false });
+    await miaPage.waitForErrors("only-the-owner", 2, refusing);
+    await Bun.sleep(SETTLE_MS);
+    expect(readFileSync(promptsFile, "utf8")).not.toContain("Mia's task answered");
+
+    owner.send({ type: "room.answer-task", roomId: roomA.id, messageId: posted.id, answer: "allow" });
+    await owner.waitFor(isType("room.approvals", ({ roomId, tasks }) => roomId === roomA.id && tasks.length === 0), ownerMark);
+    const answeredTo = isType("room.message", ({ message }) => message.answers === posted.id && "profileId" in message.author && message.text === "Mia's task answered");
+    await Promise.all([miaPage.waitFor(answeredTo, miaMark), owner.waitFor(answeredTo, ownerMark)]);
+    expect(readFileSync(promptsFile, "utf8")).toMatch(/\[member\] Mia tagged you there\.[\s\S]*#\d+ \[member\] Mia, .*\n> @Builder SAY Mia's task answered/);
+
+    [miaMark, ownerMark] = [miaPage.mark, owner.mark];
+    const declining = "@Builder SAY Mia's declined task";
+    miaPage.send({ type: "room.write", roomId: roomA.id, text: declining, tags: [profile.id], threadId: null });
+    const declined = (await miaPage.waitFor(roomMessageSaying(declining), miaMark)).message;
+    await owner.waitFor(isType("room.approvals", ({ tasks }) => tasks.some(({ messageId }) => messageId === declined.id)), ownerMark);
+    owner.send({ type: "room.answer-task", roomId: roomA.id, messageId: declined.id, answer: "deny" });
+    const declinedLine = await miaPage.waitFor(isType("room.message", ({ message }) => message.answers === declined.id), miaMark);
+    expect(declinedLine.message).toMatchObject({ author: { profileId: profile.id }, text: "", ended: "declined" });
+    await Bun.sleep(SETTLE_MS);
+    expect(readFileSync(promptsFile, "utf8")).not.toContain("Mia's declined task");
+
+    ownerMark = owner.mark;
+    owner.send({ type: "room.set-peoples-tasks-wait", roomId: roomA.id, wait: false });
+    await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && !room.peoplesTasksWait), ownerMark);
+  }, 40_000);
+
   test("as a guest writes, but tags no agent and follows up in no thread; as a member does both", async () => {
     let gusMark = gusPage.mark;
     gusPage.send({ type: "room.subscribe", roomId: roomA.id });
@@ -477,7 +528,8 @@ describe("a person other than the owner", () => {
     const tagged = await miaPage.waitFor(isType("room.message", ({ message }) => message.tags.includes(profile.id)), miaMark);
     miasThread = tagged.threads[0]!;
     const canvasItem = await miaPage.waitFor(isType("canvas.upserted", ({ item }) => item.kind === "show"), miaMark);
-    agentConversationId = canvasItem.item.conversationId;
+    expect(canvasItem.item.conversationId).toBe(agentStandIn(roomA.id, profile.id));
+    expect(tagged.message.taskHeld).toBeUndefined();
     await miaPage.waitFor(isType("room.message", ({ message }) => message.answers === tagged.message.id && "profileId" in message.author), miaMark);
     expect(JSON.stringify(gusPage.received)).not.toContain("Gus asks");
 
@@ -564,7 +616,7 @@ describe("a person other than the owner", () => {
 
   test("keeps their own name and colour, and gets a pong", async () => {
     const mark = miaPage.mark;
-    miaPage.send({ type: "person.set-own-profile", name: "Mia R", color: "rose" });
+    expect(problemOf(await settingOwnProfile(miaPage, "Mia R", "rose"))).toBeNull();
     const { people } = await miaPage.waitFor(isType("people.listed", ({ people }) => people.some(({ id, name }) => id === mia.id && name === "Mia R")), mark);
     expect(people.find(({ id }) => id === mia.id)?.color).toBe("rose");
     expect(people.map(({ id }) => id)).not.toContain(stan.id);
@@ -572,16 +624,34 @@ describe("a person other than the owner", () => {
     await miaPage.waitFor(isType("pong"), mark);
   });
 
+  test("takes no name the owner, an agent or another person of their rooms, or Mirador itself goes by, however it is written", async () => {
+    expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
+    const takenForMia = ["builder", "\uFF22\uFF55\uFF49\uFF4C\uFF44\uFF45\uFF52", "Bui\u200Blder", "GUS\u00A0", "Ann\u3164", "Member"];
+    for (const name of takenForMia) expect({ name, problem: problemOf(await settingOwnProfile(miaPage, name)) }).toEqual({ name, problem: "person-name-taken" });
+    expect(problemOf(await settingOwnProfile(miaPage, "\u202EnnA"))).toBe("person-name-reorders");
+    expect(problemOf(await settingOwnProfile(miaPage, "B\u0443ilder"))).toBe("person-name-mixes-scripts");
+    const takenForStan = ["ANN", "owner", "Someone without a name", "You"];
+    for (const name of takenForStan) expect({ name, problem: problemOf(await settingOwnProfile(stanPage, name)) }).toEqual({ name, problem: "person-name-taken" });
+    expect(problemOf(await settingOwnProfile(owner, "Builder"))).toBeNull();
+    expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
+  });
+
+  test("is told nothing of the names of people and agents outside their rooms, which they may take", async () => {
+    for (const name of ["Mia R", "builder", "Stan"]) expect({ name, problem: problemOf(await settingOwnProfile(stanPage, name)) }).toEqual({ name, problem: null });
+  });
+
+  test("changes their profile at most ten times a minute, while the owner changes theirs as often as they like", async () => {
+    const tries = Array.from({ length: 11 }, (_, index) => `Gus ${index}`);
+    const answers = [];
+    for (const name of tries) answers.push(problemOf(await settingOwnProfile(gusPage, name)));
+    expect(answers).toEqual([...Array<null>(10).fill(null), "profile-changing-too-fast"]);
+    for (const name of tries) expect(problemOf(await settingOwnProfile(owner, name.replace("Gus", "Ann")))).toBeNull();
+    expect(problemOf(await settingOwnProfile(owner, "Ann"))).toBeNull();
+  });
+
   test("reaches no route of the host's over HTTP but the page itself and joining", async () => {
-    const source = readFileSync(join(repoRoot, "host", "server.ts"), "utf8");
-    const routesOf = (name: string) => {
-      const start = source.indexOf(`const ${name} = refusingPeople({`);
-      expect(start).toBeGreaterThan(-1);
-      return source.slice(start, source.indexOf("\n  });", start));
-    };
-    const routeLines = [...`${routesOf("routesForDevices")}\n${routesOf("routesForThisMachine")}`.matchAll(/^\s*"(\/[^"]*)":\s*(.*)$/gm)];
-    expect(routeLines.length).toBeGreaterThan(20);
-    const open = new Set(["/", "/join", "/join-requests", "/join-requests/:id/reveal", "/join-requests/:id/poll", "/mirador-ca.pem", "/mirador-here", "/auth"]);
+    const routes = [...Object.entries(DEVICE_ROUTES), ...Object.entries(THIS_MACHINE_ROUTES)].flatMap(([path, methods]) => (methods === "any" ? ["GET", "POST"] : [...methods]).map((method) => [path, method] as const));
+    expect(routes.length).toBeGreaterThan(30);
     const filled = (path: string) =>
       path
         .replace(":conversationId", agentConversationId)
@@ -593,19 +663,17 @@ describe("a person other than the owner", () => {
         .replace(":sessionId", "session")
         .replace(":id", "request");
     const refused: string[] = [];
-    for (const [, path, handler] of routeLines) {
-      if (open.has(path!)) continue;
-      const methods = handler!.startsWith("{") ? [...handler!.matchAll(/([A-Z]+):/g)].map(([, method]) => method!) : ["GET", "POST"];
-      for (const method of methods) {
-        const response = await fetch(`http://127.0.0.1:${port}${filled(path!)}`, {
-          method,
-          headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}`, Origin: `http://127.0.0.1:${port}`, "Sec-Fetch-Site": "same-origin" },
-          ...(method === "POST" && { body: "{}" }),
-        });
-        expect({ path, method, status: response.status, problem: decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "") }).toEqual({ path, method, status: 403, problem: JSON.stringify({ code: "only-the-owner" }) });
-        refused.push(`${method} ${path}`);
-      }
+    for (const [path, method] of routes) {
+      if (OPEN_TO_PEOPLE.has(path)) continue;
+      const response = await fetch(`http://127.0.0.1:${port}${filled(path)}`, {
+        method,
+        headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}`, Origin: `http://127.0.0.1:${port}`, "Sec-Fetch-Site": "same-origin" },
+        ...(method === "POST" && { body: "{}" }),
+      });
+      expect({ path, method, status: response.status, problem: decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "") }).toEqual({ path, method, status: 403, problem: JSON.stringify({ code: "only-the-owner" }) });
+      refused.push(`${method} ${path}`);
     }
+    expect([...OPEN_TO_PEOPLE].toSorted()).toEqual(["/", "/auth", "/join", "/join-requests", "/join-requests/:id/poll", "/join-requests/:id/reveal", "/mirador-ca.pem", "/mirador-here"]);
     expect(refused).toEqual(expect.arrayContaining(["POST /conversations/:conversationId/images", "GET /conversations/:conversationId/images/:imageId", "GET /workspaces/:workspaceId/apps/:app/file", "POST /tunnel", "GET /devices"]));
     await expect(Page.open(port, tokens[mia.id]!, "/notifications")).rejects.toThrow();
     const page = await fetch(`http://127.0.0.1:${port}/`, { headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}` } });
@@ -669,7 +737,7 @@ describe("a person other than the owner", () => {
     expect([workspaces, conversations]).toEqual([[], []]);
     await Bun.sleep(SETTLE_MS);
     miaAgain.close();
-    const secretsFrom = (page: Page) => [workspace.id, projectDir, ownersConversationId, roomB.id, "Payroll", "Owner's secret plan", promptsFile, PRELAUNCH_SECRET, PLUGIN_OFF_SECRET, ...(page === stanPage ? [roomA.id, mia.id] : [stan.id])];
+    const secretsFrom = (page: Page) => [workspace.id, projectDir, ownersConversationId, agentConversationId, roomB.id, "Payroll", "Owner's secret plan", promptsFile, PRELAUNCH_SECRET, PLUGIN_OFF_SECRET, ...(page === stanPage ? [roomA.id, mia.id] : [stan.id])];
     for (const page of [miaPage, gusPage, stanPage, miaAgain]) {
       const types = new Set(page.received.map(({ type }) => type));
       expect([...types].filter((type) => !SHOWN_TO_PEOPLE.has(type))).toEqual([]);

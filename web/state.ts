@@ -16,7 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
-import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomTimeline } from "../shared/rooms.ts";
+import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -74,6 +74,8 @@ export interface AppState {
   roomConversations: Conversation[];
   /** The requests the agents of every room wait on, oldest first in each room. */
   roomApprovals: RoomApproval[];
+  /** The tasks of people other than the owner that wait for an approver, oldest first in each room. */
+  roomTasksWaiting: RoomTaskApproval[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
@@ -195,6 +197,7 @@ export const initialState: AppState = {
   rooms: [],
   roomConversations: [],
   roomApprovals: [],
+  roomTasksWaiting: [],
   selectedRoomId: null,
   roomTimeline: null,
   threadConversations: [],
@@ -319,9 +322,12 @@ function withRoomTimeline(state: AppState, roomId: string, change: (timeline: Ro
   return state.roomTimeline?.roomId === roomId ? { ...state, roomTimeline: { roomId, ...change(state.roomTimeline) } } : state;
 }
 
-/** An agent's page or question goes on the canvas of the room its conversation is in, while the page shows that room. */
+/**
+ * An agent's page or question goes on the canvas of the room its conversation is in, while the page shows that room;
+ * the room's agents name their conversation there, or, to a person other than the owner, its stand-in.
+ */
 function withRoomCanvasItem(state: AppState, item: CanvasItem): AppState {
-  const roomId = state.roomConversations.find(({ id }) => id === item.conversationId)?.roomId;
+  const roomId = state.rooms.find(({ agents }) => agents.some(({ conversationId }) => conversationId === item.conversationId))?.id;
   if (!roomId || !shownOnRoomCanvas(item)) return state;
   return withRoomTimeline(state, roomId, (timeline) => ({ ...timeline, canvas: upsert(timeline.canvas, withThisPagesAssetsOrigin(state, item)) }));
 }
@@ -373,6 +379,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomConversations: message.conversations.filter(({ roomId }) => roomId),
         rooms: message.rooms,
         roomApprovals: message.roomApprovals,
+        roomTasksWaiting: message.roomTasksWaiting,
         profiles: message.profiles,
         promptTemplates: message.promptTemplates,
         canvasUse: message.canvasUse,
@@ -638,7 +645,12 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "room.upserted":
       return { ...state, rooms: upsert(state.rooms, message.room) };
     case "room.deleted": {
-      const next = { ...state, rooms: state.rooms.filter(({ id }) => id !== message.roomId), roomApprovals: state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId) };
+      const next = {
+        ...state,
+        rooms: state.rooms.filter(({ id }) => id !== message.roomId),
+        roomApprovals: state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId),
+        roomTasksWaiting: state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId),
+      };
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
     case "room.timeline": {
@@ -650,12 +662,16 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         const knownThreads = new Set(timeline.threads.map(({ id }) => id));
         return {
           ...timeline,
-          messages: [...timeline.messages.filter(({ id }) => id !== message.message.id), message.message],
+          messages: [...timeline.messages.filter(({ id }) => id !== message.message.id), message.message].sort((a, b) => a.seq - b.seq),
           threads: [...timeline.threads, ...message.threads.filter(({ id }) => !knownThreads.has(id))],
         };
       });
     case "room.approvals":
-      return { ...state, roomApprovals: [...state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId), ...message.approvals] };
+      return {
+        ...state,
+        roomApprovals: [...state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId), ...message.approvals],
+        roomTasksWaiting: [...state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId), ...message.tasks],
+      };
   }
 }
 

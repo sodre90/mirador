@@ -2845,7 +2845,8 @@ input.picker-search {
   object-fit: cover;
 }
 
-.profile-picture-refused {
+.profile-picture-refused,
+.own-profile-refused {
   flex-basis: 100%;
   color: var(--danger);
 }
@@ -9695,6 +9696,11 @@ button.link.more-rows {
   font-weight: 600;
 }
 
+.room-quote .room-role-label {
+  flex: none;
+  align-self: flex-start;
+}
+
 .room-thread-line {
   display: flex;
   align-items: center;
@@ -9757,6 +9763,67 @@ button.link.more-rows {
 
 .room-approval-task {
   color: var(--muted);
+}
+
+.room-approval-task-text,
+.room-approval-sent-along-text {
+  max-height: calc(8lh + 12px);
+  overflow-y: auto;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.room-approval-task-text.whole {
+  max-height: none;
+}
+
+.room-approval-task-size,
+.room-approval-sent-along {
+  color: var(--muted);
+}
+
+.room-approval-task-size {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.room-approval-sent-along-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 40vh;
+  overflow-y: auto;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+}
+
+.room-approval-sent-along-author {
+  margin-right: 6px;
+  font-weight: 600;
+}
+
+.room-approval-outside {
+  color: var(--danger);
+}
+
+.room-role-label {
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: calc(11px * var(--font-scale));
+  font-weight: 500;
+}
+
+.room-message-too-long {
+  padding: 0 4px 4px;
+  color: var(--danger);
 }
 
 .room-approvals .permission-options {

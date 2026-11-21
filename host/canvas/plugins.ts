@@ -40,7 +40,7 @@ import { canvasViewPath, messageOf, type CanvasPlugin } from "../apps/plugins.ts
 import type { Hub } from "../hub.ts";
 import type { Store } from "../store.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
-import { offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
+import { NO_CANVAS_PLUGINS, offeredPluginsGuidance, PLUGIN_INSTALL_TOOL, type CanvasPluginGuidance } from "./guidance.ts";
 import { PLUGIN_LOAD_TOOL, USE_TOOL_TOOL } from "./tool-names.ts";
 import type { CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
@@ -263,9 +263,10 @@ export class CanvasPlugins {
     );
   }
 
-  /** The plugins a conversation gets: all but those its profile goes without. */
+  /** The plugins a conversation gets: all but those its profile goes without, and none in a room. */
   private pluginsOf(conversationId: string): CanvasPlugin[] {
     const conversation = this.store.findConversation(conversationId);
+    if (conversation?.roomId) return [];
     const turnedOff = this.pluginsOffFor(conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined);
     return this.plugins.filter(({ manifest }) => !turnedOff.includes(manifest.name));
   }
@@ -280,6 +281,7 @@ export class CanvasPlugins {
   /** The guidance of the plugins the conversation's profile has on, with what each adds for that profile, which a conversation a plugin's tool started doesn't get. */
   guidanceFor(conversationId: string): CanvasPluginGuidance {
     const conversation = this.store.findConversation(conversationId);
+    if (conversation?.roomId) return NO_CANVAS_PLUGINS;
     const plugins = this.pluginsOf(conversationId);
     const guidance = this.guidanceOf(plugins, (plugin) => this.waitsToBeLoaded(plugin, conversation));
     if (conversation?.startedBy) return this.withOfferedPlugins(guidance);

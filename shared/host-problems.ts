@@ -57,6 +57,7 @@ export type HostProblem =
   | { code: "unknown-machine-colour"; value: string }
   | { code: "answer-all-questions"; count: number }
   | { code: "tab-terminal-limit"; count: number }
+  | { code: "room-message-too-long"; most: number }
   | { code: "unknown-workspace"; id: string }
   | { code: "plugin-has-no-setting"; plugin: string; setting: string }
   | { code: "plugin-not-turnable"; plugin: string }

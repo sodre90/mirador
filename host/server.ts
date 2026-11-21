@@ -68,13 +68,15 @@ import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import { RoomService } from "./rooms.ts";
+import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
 import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
-import { personView } from "./person-view.ts";
+import { agentsOfRooms, peopleSeenBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { machineAddress } from "../shared/machines.ts";
-import { personName } from "../shared/people.ts";
+import { NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personName } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
-import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SocketData } from "./hub.ts";
+import { shownAsWritten } from "../shared/written-text.ts";
+import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SignedIn, type SocketData } from "./hub.ts";
 import { newestOnly } from "./newest-only.ts";
 import type { MachineRelays } from "./machine-relays.ts";
 import type { MachineWatch } from "./machine-watch.ts";
@@ -146,6 +148,7 @@ export interface HostServices {
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
+const MOST_PROFILE_CHANGES_A_MINUTE = 10;
 const problemReply = (problem: HostProblem): ServerMessage => ({ type: "error", message: englishProblem(problem), problem });
 const ONLY_OWN_PAGES_SET_UP_VOICE = problemReply({ code: "only-own-pages-set-up-voice" });
 const MODEL_IN_USE = problemReply({ code: "voice-model-in-use" });
@@ -245,6 +248,7 @@ export function startServer(services: HostServices) {
       followRoomPreset: (conversationId) => conversations.followRoomPreset(conversationId),
     },
     notifications,
+    config.dataDir,
   );
   hub.showsPeople(personView(store));
   conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
@@ -309,6 +313,16 @@ export function startServer(services: HostServices) {
 
   const refusedPerson = () => problemResponse({ code: "only-the-owner" }, 403);
 
+  /**
+   * Who signed in to make the request, who must be the owner unless the route is one of the few open to people: anyone
+   * else is refused, as is a request nobody signed in to.
+   */
+  function signedInCaller(request: Request, { openToPeople }: { openToPeople: boolean }): SignedIn | Response {
+    const signedIn = signedInAs(request);
+    if (!signedIn) return new Response("unauthorized", { status: 401 });
+    return signedIn.isOwner || openToPeople ? signedIn : refusedPerson();
+  }
+
   const personInRooms = (personId: string): PersonInRooms => ({
     roleIn: (roomId) => store.findRoom(roomId)?.people.find((person) => person.personId === personId)?.role ?? null,
   });
@@ -365,7 +379,9 @@ export function startServer(services: HostServices) {
     const refused = refusedSender(request);
     if (refused) return refused;
     if (!p2p) return new Response("This Mirador doesn't connect peer to peer.", { status: 404 });
-    const deviceId = signedInAs(request)?.deviceId;
+    const caller = signedInCaller(request, { openToPeople: false });
+    if (caller instanceof Response) return caller;
+    const { deviceId } = caller;
     if (!deviceId) return new Response("Only a device that joined this Mirador has a place in its tunnel.", { status: 401 });
     const { tunnelKey } = (await request.json().catch(() => ({}))) as { tunnelKey?: unknown };
     try {
@@ -377,6 +393,7 @@ export function startServer(services: HostServices) {
   }
 
   const askingToJoin = new SenderLimit();
+  const changingOwnProfile = new SenderLimit(Date.now, MOST_PROFILE_CHANGES_A_MINUTE);
   const sendJoinRequestsToEveryPage = () => hub.broadcast({ type: "join-requests.listed", joinRequests: joinRequests.waiting() });
 
   async function answerAboutJoining(request: Request, answer: (body: Record<string, unknown>) => Response | Promise<Response>) {
@@ -492,15 +509,21 @@ export function startServer(services: HostServices) {
     pluginUpdates.recount();
   }
 
-  /** Saves a setting from Settings for the next start, or says what is wrong with it. */
-  function problemSaving(save: () => void): DescribedProblem | { problem: null } {
+  /** Makes the change, or says what is wrong with it. */
+  function problemChanging(change: () => void): DescribedProblem | { problem: null } {
     try {
-      save();
+      change();
     } catch (error) {
       return problemFieldsOf(error, errorMessage(error));
     }
-    sendDevicesToEveryPage();
     return { problem: null };
+  }
+
+  /** Saves a setting from Settings for the next start, or says what is wrong with it. */
+  function problemSaving(save: () => void): DescribedProblem | { problem: null } {
+    const saved = problemChanging(save);
+    if (saved.problem === null) sendDevicesToEveryPage();
+    return saved;
   }
 
   function savePublicAddressFromSettings(address: PublicAddress | null) {
@@ -621,10 +644,11 @@ export function startServer(services: HostServices) {
     }
   }
 
-  /** Only the app's own pages, signed in with the browser cookie, may read or add a conversation's images and dropped files, or read an app's files. */
+  /** Only the owner's own pages, signed in with the browser cookie, may read or add a conversation's images and dropped files, or read an app's files. */
   function refusedPageRequest(request: Request) {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
-    if (!signedInAs(request)) return new Response("unauthorized", { status: 401 });
+    const caller = signedInCaller(request, { openToPeople: false });
+    if (caller instanceof Response) return caller;
     const site = request.headers.get("sec-fetch-site");
     if (site && site !== "same-origin") return new Response("forbidden", { status: 403 });
     if (request.method !== "GET" && !isPageOrigin(request)) return new Response("forbidden origin", { status: 403 });
@@ -935,10 +959,9 @@ export function startServer(services: HostServices) {
   /** The desktop app listens on /notifications with the same token and origin as the pages, and hears only system notifications. */
   function upgradeBrowser(request: Request, server: Bun.Server<SocketData>, role: SocketData["role"]) {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
-    const signedIn = signedInAs(request);
-    if (!signedIn) return new Response("unauthorized", { status: 401 });
+    const signedIn = signedInCaller(request, { openToPeople: SOCKETS_OPEN_TO_PEOPLE.has(role) });
+    if (signedIn instanceof Response) return signedIn;
     if (!isPageOrigin(request)) return new Response("forbidden origin", { status: 403 });
-    if (role === "notifier" && !signedIn.isOwner) return refusedPerson();
     const readsDeflatedMessages = request.headers.has(DEFLATED_MESSAGES_HEADER);
     const { searchParams } = new URL(request.url);
     const readsProfileLaunch = signedIn.isOwner && searchParams.has(PROFILE_LAUNCH_PARAMETER);
@@ -1104,11 +1127,34 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.script-program", scriptProgram: store.scriptProgramSetting() });
   }
 
+  /**
+   * A person other than the owner may change it only so often, and may not take a name that shows its letters in
+   * another order than they are written, mixes alphabets in a word, or reads as one they see: the owner's, an agent's or
+   * another person's of their rooms, or one the host and pages say in an author's place. What they write is kept as
+   * everyone reads it.
+   */
   function setOwnProfile(personId: string, name: string, color: Pastel | null) {
     if (color !== null && !isPastel(color)) throw new HostProblemError({ code: "unknown-colour", value: color });
-    store.setPersonProfile(personId, { name: personName(name), color });
+    if (personId === store.ownerId()) return keepOwnProfile(personId, personName(name), color);
+    if (!changingOwnProfile.allows(personId)) throw new HostProblemError({ code: "profile-changing-too-fast" });
+    const refused = nameRefused(name);
+    if (refused) throw new HostProblemError({ code: refused });
+    const named = personName(shownAsWritten(name));
+    if (nameTaken(named, namesSeenBy(personId))) throw new HostProblemError({ code: "person-name-taken" });
+    keepOwnProfile(personId, named, color);
+  }
+
+  function keepOwnProfile(personId: string, name: string, color: Pastel | null) {
+    store.setPersonProfile(personId, { name, color });
     hub.broadcast({ type: "people.listed", people: store.listPeople() });
   }
+
+  /** Only names the person sees, so that whether one is taken tells them of nobody they don't. */
+  const namesSeenBy = (personId: string) => [
+    ...peopleSeenBy(store, personId).flatMap(({ id, name }) => (id === personId ? [] : [name])),
+    ...agentsOfRooms(store, store.roomsOf(personId)).map(({ name }) => name),
+    ...NAMES_KEPT_BY_MIRADOR,
+  ];
 
   /** The picture every page shows next to the user's messages; null leaves the person icon. */
   function setAvatar(image: string | null) {
@@ -1300,7 +1346,7 @@ export function startServer(services: HostServices) {
       case "settings.set-avatar":
         return setAvatar(message.image);
       case "person.set-own-profile":
-        return setOwnProfile(socket.data.personId, message.name, message.color);
+        return reply({ type: "settings.saved", requestId: message.requestId, ...problemChanging(() => setOwnProfile(socket.data.personId, message.name, message.color)) });
       case "conversation.create":
         await conversations.start(message.workspaceId, message.launch, message.prompt, message.startsIn, socket.data.personId);
         return;
@@ -1839,6 +1885,10 @@ export function startServer(services: HostServices) {
         return rooms.removePerson(message.roomId, message.personId);
       case "room.approve":
         return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
+      case "room.answer-task":
+        return rooms.answerTask(message.roomId, message.messageId, message.answer, socket.data.personId);
+      case "room.set-peoples-tasks-wait":
+        return rooms.setPeoplesTasksWait(message.roomId, message.wait);
       case "room.delete":
         return rooms.delete(message.roomId);
       case "room.subscribe": {
@@ -1857,16 +1907,12 @@ export function startServer(services: HostServices) {
     }
   }
 
-  /** A person other than the owner reaches the page itself over HTTP, and what anyone reaches before signing in; every other route is the owner's. */
-  const OPEN_TO_PEOPLE = new Set(["/", "/join", "/join-requests", "/join-requests/:id/reveal", "/join-requests/:id/poll", "/mirador-ca.pem", "/mirador-here", "/auth"]);
-
   function refusingPeople<R extends Record<string, unknown>>(routes: R): R {
     return withEachHandler(routes, (path, handler) =>
       OPEN_TO_PEOPLE.has(path) ? handler : (request, server) => (signedInAs(request)?.isOwner === false ? refusedPerson() : handler(request, server)),
     );
   }
 
-  /** All the network listener serves: what pages of other devices use. */
   const routesForDevices = refusingPeople({
     "/": index,
     "/join": { POST: join },
@@ -1893,15 +1939,14 @@ export function startServer(services: HostServices) {
     "/mirador-ca.pem": serveAuthority,
     "/mirador-here": here,
     "/tunnel": { POST: registerTunnel },
-  });
-  /** Only this machine's own browser, agents and scripts sign in with these tokens, so they are served on 127.0.0.1 alone. */
+  } satisfies RouteHandlers<typeof DEVICE_ROUTES>);
   const routesForThisMachine = refusingPeople({
     "/auth": authenticate,
     "/mcp/:conversationId": (request: Bun.BunRequest<"/mcp/:conversationId">) => serveMcp(request, request.params.conversationId),
     "/sessions/:sessionId/messages": { POST: receiveScriptMessage },
     "/sessions/:sessionId/job-waits": { POST: receiveJobWait },
     "/devices": { GET: listDevicesForCommandLine },
-  });
+  } satisfies RouteHandlers<typeof THIS_MACHINE_ROUTES>);
 
   function sendSnapshot(socket: BrowserSocket) {
     if (!claudeProgram.found) void lookUpClaudeProgram(store.claudeProgramSetting());
@@ -1912,6 +1957,7 @@ export function startServer(services: HostServices) {
       conversations: conversations.list(),
       rooms: rooms.list(),
       roomApprovals: rooms.allApprovals(),
+      roomTasksWaiting: rooms.allTasksWaiting(),
       profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),

@@ -1,4 +1,4 @@
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { addWorkspace, allowNotifications, clickNotification, createProfile, notificationsShown, openProfileTab, signIn } from "./helpers.ts";
@@ -53,7 +53,7 @@ async function openNewRoom(page: Page, room: string, agents: string[], preset?: 
   const dialog = page.getByRole("dialog", { name: "New room" });
   await dialog.getByLabel("Room name").fill(room);
   for (const agent of agents) await dialog.getByLabel(agent, { exact: true }).check();
-  await expect(dialog.getByLabel("Reading is free, edits and commands ask")).toBeChecked();
+  await expect(dialog.getByLabel("Reading the workspace is free, the rest asks")).toBeChecked();
   if (preset) await dialog.getByLabel(preset).check();
   await dialog.getByRole("button", { name: "Create room" }).click();
   await expect(page.getByRole("heading", { name: `# ${room}` })).toBeVisible();
@@ -232,4 +232,111 @@ test("a request waiting and a finished answer to your message notify while you l
     await expect(page.getByRole("heading", { name: "# Away" })).toBeVisible();
     await expect(page).toHaveURL(new RegExp(`${awayRoom}$`));
   });
+});
+
+test("a member's task waits until the owner, told who asks and as what, allows it or declines it, unless people's tasks start without asking", async ({ page, browser }) => {
+  const mia = host.admitPerson("Mia");
+  await allowNotifications(page);
+  await signIn(page, host);
+  await openNewRoom(page, "People", ["Builder"]);
+  const settings = page.getByRole("dialog", { name: "Room settings" });
+  const openSettings = () => roomRow(page, "People").getByRole("button", { name: "Settings of People" }).click();
+  await openSettings();
+  await expect(settings.locator(".room-people-reach")).toHaveText(
+    "Through the agents, people here read the workspace's files and reach what else you allow: edits and commands ask you first. Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
+  );
+  await expect(settings.getByLabel("People's tasks start without asking me")).not.toBeChecked();
+  await settings.getByLabel("Role of Mia").selectOption({ label: "Member" });
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings).toBeHidden();
+  await openNewRoom(page, "Lookout", ["Reviewer"]);
+
+  const miaContext = await browser.newContext();
+  await miaContext.addCookies([mia.cookie]);
+  const miaPage = await miaContext.newPage();
+  await miaPage.goto(host.origin);
+  await roomRow(miaPage, "People").click();
+  const strip = roomStrip(page);
+  const builderPrompts = () => readFileSync(join(host.root, "Builder-prompts"), "utf8");
+  const miasTask = "@Builder Build the page\n\n\nSAY Done for Mia";
+
+  await test.step("Mia's tag waits, and the owner is told who asks, as what, for what, and what goes to the agent with it", async () => {
+    await roomRow(page, "People").click();
+    await roomComposer(page, "People").fill("Lunch at noon");
+    await roomComposer(page, "People").press("Enter");
+    await expect(page.locator(".room-timeline .room-entry", { hasText: "Lunch at noon" })).toHaveCount(1);
+    await roomRow(page, "Lookout").click();
+    await tag(miaPage, "People", "Builder", "Build the page\n\n\n\n\n\nSAY Done for Mia");
+    await expect(workingLine(miaPage, "Builder starts once this task is allowed.")).toBeVisible();
+    await expect.poll(async () => (await notificationsShown(page)).map(({ body }) => body)).toEqual(["project · Wants permission: a task of Mia, member"]);
+    await expect(roomRow(page, "People")).toHaveAttribute("data-waiting-tone", "decision");
+    await expect(roomRow(page, "People").locator(".waiting-pill")).toHaveText("Needs you");
+    await roomRow(page, "People").click();
+    await expect(strip.locator(".room-approval-asker")).toHaveText("Mia (Member) gives Builder a task");
+    await expect(strip.locator(".room-approval-task-text")).toHaveText(miasTask);
+    await expect(strip.locator(".room-approval-task-lines")).toHaveText("4 lines");
+    await strip.getByRole("button", { name: "Show all" }).click();
+    await expect(strip.locator(".room-approval-task-text.whole")).toHaveText(miasTask);
+    await expect(strip.getByRole("button", { name: "Show less" })).toHaveAttribute("aria-expanded", "true");
+    await expect(strip.locator(".room-approval-sent-along > div").first()).toHaveText("1 other unread message goes to the agents with it. Show them");
+    await strip.getByRole("button", { name: "Show them" }).click();
+    const riding = strip.locator(".room-approval-sent-along-list li");
+    await expect(riding).toHaveCount(1);
+    await expect(riding.locator(".room-role-label")).toHaveText("Owner");
+    await expect(riding.locator(".room-approval-sent-along-text")).toHaveText("Lunch at noon");
+    await expect(page.locator(".room-timeline .room-entry", { hasText: "Build the page" }).locator(".room-role-label")).toHaveText("Member");
+    await expect(workingLine(page, "Builder starts once this task is allowed.")).toBeVisible();
+    expect(builderPrompts()).not.toContain("Done for Mia");
+  });
+
+  await test.step("allowed, the task starts, and its answer reaches both", async () => {
+    await answer(strip, "Allow");
+    await expect(answerSaying(page, "Done for Mia")).toHaveCount(1);
+    await expect(answerSaying(miaPage, "Done for Mia")).toHaveCount(1);
+    await expect(strip).toHaveCount(0);
+    await expect(roomRow(page, "People").locator(".waiting-pill")).toHaveCount(0);
+    expect(builderPrompts()).toContain("> Lunch at noon");
+  });
+
+  await test.step("declined, the room says so and the agent is sent nothing", async () => {
+    await tag(miaPage, "People", "Builder", "SAY Never sent");
+    await expect(strip.locator(".room-approval-task-text")).toHaveText("@Builder SAY Never sent");
+    await expect(strip.locator(".room-approval-task-lines")).toHaveText("1 line");
+    await expect(strip.locator(".room-approval-sent-along")).toHaveCount(0);
+    await answer(strip, "Deny");
+    for (const each of [page, miaPage]) await expect(each.locator(".room-timeline .notice-line", { hasText: "The task was declined." })).toHaveCount(1);
+    await expect(strip).toHaveCount(0);
+    expect(builderPrompts()).not.toContain("Never sent");
+  });
+
+  await test.step("taken out of the room, Mia's waiting task is declined at once", async () => {
+    await tag(miaPage, "People", "Builder", "SAY Left behind");
+    await expect(strip.locator(".room-approval-task-text")).toHaveText("@Builder SAY Left behind");
+    await openSettings();
+    await settings.getByLabel("Role of Mia").selectOption({ label: "Not in the room" });
+    await settings.getByRole("button", { name: "Save" }).click();
+    await expect(settings).toBeHidden();
+    await expect(page.locator(".room-timeline .notice-line", { hasText: "The task was declined." })).toHaveCount(2);
+    await expect(strip).toHaveCount(0);
+    expect(builderPrompts()).not.toContain("Left behind");
+    await openSettings();
+    await settings.getByLabel("Role of Mia").selectOption({ label: "Member" });
+    await settings.getByRole("button", { name: "Save" }).click();
+    await expect(settings).toBeHidden();
+    await roomRow(miaPage, "People").click();
+  });
+
+  await test.step("once people's tasks start without asking, Mia's tag starts at once", async () => {
+    await openSettings();
+    await settings.getByLabel("People's tasks start without asking me").check();
+    await settings.getByRole("button", { name: "Save" }).click();
+    await expect(settings).toBeHidden();
+    await tag(miaPage, "People", "Builder", "SAY Straight away");
+    await expect(answerSaying(miaPage, "Straight away")).toHaveCount(1);
+    await expect(strip).toHaveCount(0);
+    await openSettings();
+    await expect(settings.getByLabel("People's tasks start without asking me")).toBeChecked();
+  });
+
+  await miaContext.close();
 });

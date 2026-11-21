@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
-import type { Room, RoomApproval, RoomMessage, RoomRole, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { Room, RoomApproval, RoomMessage, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -157,8 +157,8 @@ export type ClientMessage =
   | { type: "notification.shown"; notificationId: string }
   /** The user's picture as a small square PNG data URL the page drew; null takes it away, leaving the person icon. */
   | { type: "settings.set-avatar"; image: string | null }
-  /** The name and colour of the person the socket signed in as, shown with every message they write. */
-  | { type: "person.set-own-profile"; name: string; color: Pastel | null }
+  /** The name and colour of the person the socket signed in as, shown with every message they write. Answered with settings.saved. */
+  | { type: "person.set-own-profile"; requestId: string; name: string; color: Pastel | null }
   /** Without a launch, the conversation starts on the workspace's default as the host has it when the message arrives. */
   /** With a prompt, the new conversation's agent starts on it at once. */
   /** Without `startsIn`, where the workspace starts its conversations. */
@@ -404,6 +404,10 @@ export type ClientMessage =
   | { type: "room.remove-person"; roomId: string; personId: string }
   /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
   | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
+  /** Answers a task of a person other than the owner that waits: allowing sends it to its agents, denying tells the room it was declined. */
+  | { type: "room.answer-task"; roomId: string; messageId: string; answer: "allow" | "deny" }
+  /** Whether the tasks people other than the owner give the room's agents wait for an approver, from the next one on. */
+  | { type: "room.set-peoples-tasks-wait"; roomId: string; wait: boolean }
   /** Deletes the room with its agents' conversations in it. */
   | { type: "room.delete"; roomId: string }
   /** The host answers `room.timeline`, then sends the room's new messages as `room.message` until `room.unsubscribe`. */
@@ -422,6 +426,8 @@ export type ServerMessage =
       rooms: Room[];
       /** The permission requests the rooms' agents wait on, oldest first. */
       roomApprovals: RoomApproval[];
+      /** The tasks of people other than the owner that wait for an approver, oldest first. */
+      roomTasksWaiting: RoomTaskApproval[];
       profiles: Profile[];
       promptTemplates: PromptTemplate[];
       canvasUse: CanvasUse;
@@ -553,10 +559,10 @@ export type ServerMessage =
   | { type: "room.deleted"; roomId: string }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on. */
   | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[] } & RoomTimeline)
-  /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, and moves to the end. */
+  /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, in its place by its seq. */
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
-  /** All the room's agents wait on, oldest first, each time a request starts or stops waiting. */
-  | { type: "room.approvals"; roomId: string; approvals: RoomApproval[] }
+  /** All the room's agents wait on, and the people's tasks that wait for an approver, oldest first, each time one starts or stops waiting. */
+  | { type: "room.approvals"; roomId: string; approvals: RoomApproval[]; tasks: RoomTaskApproval[] }
   | {
       type: "conversation.history";
       conversationId: string;

@@ -6,13 +6,46 @@ import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { signedInWith } from "../host/sign-in.ts";
 import { Store } from "../host/store.ts";
-import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
+import { comparableName, LONGEST_PERSON_NAME, NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personName } from "../shared/people.ts";
 import { TOKEN_COOKIE } from "../shared/protocol.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "mirador-people-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
 const databasePath = () => join(scratch, `state-${crypto.randomUUID()}.sqlite`);
+
+test("names that read the same compare the same, whatever their case, look-alike letters, spaces or invisible characters", () => {
+  expect(["Mia", " mia ", "MIA", "\uFF2D\uFF49\uFF41", "Mi\u200Ba", "M\u00ADia", "\u202EMia"].map(comparableName)).toEqual(Array<string>(7).fill("mia"));
+  expect(["Mia  Rose", "Mia Rose", "Mia\tRose", "mia\u3000rose", "Mia\u00A0Rose"].map(comparableName)).toEqual(Array<string>(5).fill("mia rose"));
+  expect(comparableName("M\u00EDa")).toBe("mia");
+});
+
+test("names that only look alike compare the same: Cyrillic and Greek look-alike letters, stray marks, fillers and blanks", () => {
+  const lookingLikeAnn = ["\u0410nn", "Ann\u034F", "Ann\uFE0F", "Ann\u3164", "Ann\u2800", "A\u0301nn", "A\u0332nn"];
+  expect(lookingLikeAnn.map(comparableName)).toEqual(Array(lookingLikeAnn.length).fill("ann"));
+  expect(comparableName("Ann\u2800\u2800Lee")).toBe("ann lee");
+  expect(comparableName("\u041C\u0456\u0430")).toBe("mia");
+  expect(nameTaken("\u039Fwner", NAMES_KEPT_BY_MIRADOR)).toBe(true);
+});
+
+test("a person other than the owner may not take a name that shows its letters in another order, or mixes alphabets in a word", () => {
+  expect(["\u202EnnA", "Ann\u2066x\u2069", "A\u200Fnn"].map(nameRefused)).toEqual(Array(3).fill("person-name-reorders"));
+  expect(["\u0410nn", "\u039Fwner", "B\u0443ilder", "Ann-\u0405mith"].map(nameRefused)).toEqual(Array(4).fill("person-name-mixes-scripts"));
+  expect(["Ann", "\u041C\u0430\u0440\u0438\u044F", "Anna \u041C\u0430\u0440\u0438\u044F", "\u5C71\u7530 \u592A\u90CE", "\u3084\u307E\u7530", "\uAE40\u6C11\u6D19", "Zo\u00EB 2", "Mia R"].map(nameRefused)).toEqual(Array(8).fill(null));
+});
+
+test("a name is taken when it reads as one already taken, and a blank one never is", () => {
+  expect(nameTaken("\uFF2F\uFF37\uFF2E\uFF25\uFF32", NAMES_KEPT_BY_MIRADOR)).toBe(true);
+  expect(nameTaken("someone  without a name", NAMES_KEPT_BY_MIRADOR)).toBe(true);
+  expect(nameTaken("you", NAMES_KEPT_BY_MIRADOR)).toBe(true);
+  expect(["Tulajdonos", "besitzer", "Alguien sin nombre", "所有者", "Jemand ohne Namen", "Du"].filter((name) => !nameTaken(name, NAMES_KEPT_BY_MIRADOR))).toEqual([]);
+  const standIns = ["An agent no longer in the room", "Egy ágens, amely már nincs a szobában", "From Mirador", "Von einem Skript", "member", "Gast", "成员", "Ágens"];
+  expect(standIns.filter((name) => !nameTaken(name, NAMES_KEPT_BY_MIRADOR))).toEqual([]);
+  expect(nameTaken("Builder\u200D", ["builder"])).toBe(true);
+  expect(nameTaken("Builder 2", ["builder"])).toBe(false);
+  expect(nameTaken("", ["", "Mia"])).toBe(false);
+  expect(nameTaken("\u200B ", [""])).toBe(false);
+});
 
 test("a new machine has one person, its owner, with no name or colour yet", () => {
   const store = new Store(":memory:");

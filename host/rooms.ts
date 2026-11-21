@@ -1,12 +1,16 @@
 import { lstatSync, realpathSync } from "node:fs";
+import { homedir, userInfo } from "node:os";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
+import { AGENT_GONE, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME } from "../shared/people.ts";
 import {
   allowedByPreset,
   isPermissionPreset,
+  reachedByTaskAllowance,
   taskAllowanceOf,
+  worksOnFiles,
   type AskedPermission,
   type PermissionPreset,
   type RoomApprovalAnswer,
@@ -14,25 +18,36 @@ import {
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   agentTaggedTurnsAfter,
+  authorRoleOf,
   catchUpPrompt,
+  catchUpShown,
   isRoomRole,
+  keptFromAgents,
   mayWriteAs,
   personMessageBehind,
+  ROOM_MESSAGE_MOST_CHARACTERS,
   roomHistory,
+  roomMessageLength,
   shownOnRoomCanvas,
   taskOf,
+  taskWaits,
   writtenByAgent,
+  type AuthorOf,
   type Room,
   type RoomApproval,
   type RoomAuthor,
   type RoomHistoryQuery,
   type RoomMessage,
+  type RoomMessageSentAlong,
   type RoomRole,
+  type RoomTaskApproval,
   type RoomThread,
   type RoomTimeline,
 } from "../shared/rooms.ts";
+import { shownAsWritten } from "../shared/written-text.ts";
 import type { RoomPermissionRules, WaitingPermission } from "./conversations.ts";
 import type { Hub } from "./hub.ts";
+import { SenderLimit } from "./join-requests.ts";
 import type { Store } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 
@@ -56,15 +71,18 @@ export interface TagsNamed {
   others: string[];
 }
 
-const OWNER_WITHOUT_A_NAME = "Owner";
-const PERSON_WITHOUT_A_NAME = "A person without a name";
-const AGENT_GONE = "An agent no longer in the room";
+/** How many messages a person other than the owner may write in rooms a minute. */
+export const MOST_ROOM_MESSAGES_A_MINUTE = 30;
+
+export type TaskAnswer = "allow" | "deny";
 
 const distinct = (ids: string[]) => [...new Set(ids)];
 const hasAgent = (room: Room, profileId: string) => room.agents.some((agent) => agent.profileId === profileId);
 const sameName = (named: string, name: string) => named.trim().replace(/^@/, "").toLowerCase() === name.toLowerCase();
 
 const leadsOut = (relativePath: string) => relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath);
+const isWithin = (root: string, place: string) => !leadsOut(relative(root, place));
+const overlap = (one: string, other: string) => isWithin(one, other) || isWithin(other, one);
 
 function realPathOrNull(path: string) {
   try {
@@ -72,6 +90,39 @@ function realPathOrNull(path: string) {
   } catch {
     return null;
   }
+}
+
+/** The home a path an agent names may start from, with ~ or ~ and the name of the user the host runs as; null for a user the host can't name. */
+export interface HostsHome {
+  directory: string;
+  user: string | null;
+}
+
+function userRunningTheHost() {
+  try {
+    return userInfo().username;
+  } catch {
+    return null;
+  }
+}
+
+const NAMES_A_HOME = /^~([^/\\]*)(?=$|[/\\])/;
+const EXPANDS_A_VARIABLE = /\$[\w{]|%\w+%/;
+const IS_A_URL = /^[a-z][a-z\d+.-]+:\/\//i;
+
+/**
+ * The absolute path a path an agent names stands for, taken from `base` unless it starts from a home: ~, or ~ and the
+ * name of the user the host runs as, is that user's home. Null for a path that may stand for another place than it
+ * reads as, so it counts as outside: one that starts from another user's home or in a form not known here, or one
+ * holding a variable or a URL that a tool may expand.
+ */
+export function absolutePathNamed(path: string, base: string, home: HostsHome): string | null {
+  if (EXPANDS_A_VARIABLE.test(path) || IS_A_URL.test(path)) return null;
+  const fromHome = NAMES_A_HOME.exec(path);
+  if (!fromHome) return resolve(base, path);
+  const [startingFromHome, user] = fromHome;
+  if (user !== "" && user !== home.user) return null;
+  return resolve(home.directory, `.${path.slice(startingFromHome.length)}`);
 }
 
 /** A link on the way can lead out of the workspace, so the real place of the nearest existing entry decides; null where none can be read. */
@@ -90,8 +141,10 @@ function realPlaceOf(path: string): string | null {
  * and the final answer of the turn that takes is posted to the room, in the thread. An agent's answer can tag other agents
  * of the room as a person's message does, a few turns at most after a person last wrote.
  *
- * What the agents may do without asking is the room's permission preset; whatever else they ask waits for an approver,
- * who can let the same kind of request through for the rest of the task's turn.
+ * What the agents may do without asking is the room's permission preset, and never anything in Mirador's own data;
+ * whatever else they ask waits for an approver, who can let the same kind of request through for the rest of the task's
+ * turn. A task a person other than the owner gives the agents waits for an approver too, unless the room lets people's
+ * tasks start by themselves.
  */
 export class RoomService implements RoomPermissionRules {
   /** The agents each conversation's answer tags, named while its turn on a room message runs. */
@@ -104,6 +157,10 @@ export class RoomService implements RoomPermissionRules {
     private readonly hub: Hub,
     private readonly sessions: RoomSessions,
     private readonly notifications: Pick<SystemNotifications, "notify">,
+    /** Mirador's data directory, with its tokens and database, which the agents never reach without asking. */
+    private readonly dataDir: string,
+    private readonly writing = new SenderLimit(Date.now, MOST_ROOM_MESSAGES_A_MINUTE),
+    private readonly home: HostsHome = { directory: homedir(), user: userRunningTheHost() },
   ) {}
 
   list(): Room[] {
@@ -119,6 +176,7 @@ export class RoomService implements RoomPermissionRules {
       agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null })),
       permissions: knownPreset(permissions),
       people: [],
+      peoplesTasksWait: true,
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -150,20 +208,34 @@ export class RoomService implements RoomPermissionRules {
     room.agents.forEach(({ conversationId }) => conversationId && void this.sessions.followRoomPreset(conversationId).catch(() => {}));
   }
 
-  /** Lets the person into the room with the role, or gives them that role there, from their next message on. */
-  setPersonRole(roomId: string, personId: string, role: RoomRole) {
+  /** From the next task of a person other than the owner on; the tasks already waiting go on waiting. */
+  setPeoplesTasksWait(roomId: string, wait: boolean) {
     this.existingRoom(roomId);
-    if (!isRoomRole(role)) throw new Error(`There is no room role "${role}".`);
-    if (personId === this.store.ownerId() || !this.store.listPeople().some(({ id }) => id === personId)) throw new HostProblemError({ code: "room-person-unknown" });
-    this.store.setRoomPersonRole(roomId, personId, role);
-    this.peopleChanged(roomId);
+    this.store.setRoomPeoplesTasksWait(roomId, wait);
+    this.publish(roomId);
   }
 
-  /** The person's open pages lose the room at once. */
+  /**
+   * Lets the person into the room with the role, unless their name reads as one already there, or gives them that role
+   * there, from their next message on; made a guest, they ask the agents nothing, so their tasks still waiting are declined.
+   */
+  setPersonRole(roomId: string, personId: string, role: RoomRole) {
+    const room = this.existingRoom(roomId);
+    if (!isRoomRole(role)) throw new Error(`There is no room role "${role}".`);
+    if (personId === this.store.ownerId() || !this.store.listPeople().some(({ id }) => id === personId)) throw new HostProblemError({ code: "room-person-unknown" });
+    const comingIn = !room.people.some((person) => person.personId === personId);
+    if (comingIn && this.nameTakenIn(room, personId)) throw new HostProblemError({ code: "room-person-name-taken" });
+    this.store.setRoomPersonRole(roomId, personId, role);
+    this.peopleChanged(roomId);
+    this.declineTasksNoLongerAsked(roomId);
+  }
+
+  /** The person's open pages lose the room at once, and their tasks still waiting are declined. */
   removePerson(roomId: string, personId: string) {
     this.existingRoom(roomId);
     this.store.removeRoomPerson(roomId, personId);
     this.peopleChanged(roomId);
+    this.declineTasksNoLongerAsked(roomId);
   }
 
   delete(roomId: string) {
@@ -174,15 +246,58 @@ export class RoomService implements RoomPermissionRules {
     if (room.people.length > 0) this.peopleListed();
   }
 
-  /** Whether the room's preset, or what an approver let through for the rest of the turn, lets the request through without asking. */
+  /**
+   * Whether the room's preset, or what an approver let through for the rest of the turn, lets the request through without
+   * asking; never one that may reach Mirador's own data.
+   */
   allowsByItself(conversationId: string, asked: AskedPermission): boolean {
     const room = this.roomOf(conversationId);
-    if (!room) return false;
-    return this.allowedForTurn.get(conversationId)?.has(taskAllowanceOf(asked)) === true || allowedByPreset(room.permissions, asked, (path) => this.insideWorkspace(room, path));
+    if (!room || this.mayReachMiradorsData(room, asked)) return false;
+    const freelyReachable = (path: string) => this.freelyReachable(room, path);
+    const allowedForTheTask = this.allowedForTurn.get(conversationId)?.has(taskAllowanceOf(asked)) === true && reachedByTaskAllowance(asked, freelyReachable);
+    return allowedForTheTask || allowedByPreset(room.permissions, asked, freelyReachable);
   }
 
   waitingChanged(roomId: string) {
-    this.hub.broadcast({ type: "room.approvals", roomId, approvals: this.approvals(roomId) });
+    this.hub.broadcast({ type: "room.approvals", roomId, approvals: this.approvals(roomId), tasks: this.tasksWaiting(roomId) });
+  }
+
+  /** The tasks of people other than the owner that wait for an approver, oldest first. */
+  tasksWaiting(roomId: string): RoomTaskApproval[] {
+    const room = this.store.findRoom(roomId);
+    if (!room) return [];
+    const ownerId = this.store.ownerId();
+    return this.store.listRoomTasksWaiting(roomId).map((message) => ({
+      roomId,
+      messageId: message.id,
+      profileIds: this.agentsAsked(message),
+      personId: (message.author as { personId: string }).personId,
+      role: authorRoleOf(message, ownerId),
+      text: message.text,
+      sentAlong: this.sentAlongWith(room, message),
+      at: message.at,
+      approvers: this.approversOf(room),
+    }));
+  }
+
+  allTasksWaiting(): RoomTaskApproval[] {
+    return this.list().flatMap(({ id }) => this.tasksWaiting(id));
+  }
+
+  /**
+   * Allowing a waiting task sends it to the agents it asks that are still in the room, each with what it has missed of
+   * the room by now, as a tag does; denying it posts a declined answer in each of their threads, and no agent hears of it.
+   * A task whose writer may no longer ask it of the agents is declined, whatever the answer.
+   */
+  answerTask(roomId: string, messageId: string, answer: TaskAnswer, personId: string) {
+    const room = this.existingRoom(roomId);
+    this.assertMayApprove(room, personId);
+    if (answer !== "allow" && answer !== "deny") throw new Error(`There is no answer "${answer}" to a task.`);
+    const waiting = this.store.findRoomMessage(messageId);
+    if (waiting?.roomId !== roomId || !taskWaits(waiting) || writtenByAgent(waiting.author)) throw new HostProblemError({ code: "room-task-not-waiting" });
+    if (answer === "allow" && this.writerMayStillAsk(room, waiting)) this.allowTask(room, waiting);
+    else this.declineTask(room, waiting);
+    this.waitingChanged(roomId);
   }
 
   /** The requests the room's agents wait on, oldest first. */
@@ -201,14 +316,14 @@ export class RoomService implements RoomPermissionRules {
     return this.list().flatMap(({ id }) => this.approvals(id));
   }
 
-  /** Allowing for the task lets the same kind of request through until the turn ends, the ones already waiting in it too. */
+  /** Allowing for the task lets the same kind of request through until the turn ends, the ones already waiting in it too; one that reads or changes files outside the workspace still asks. */
   approve(conversationId: string, permissionId: string, answer: RoomApprovalAnswer, personId: string) {
     const room = this.roomOf(conversationId);
     if (!room) throw new HostProblemError({ code: "room-gone" });
     this.assertMayApprove(room, personId);
     const waiting = this.sessions.waitingPermissions(conversationId).find(({ request }) => request.permissionId === permissionId);
     if (!waiting) throw new HostProblemError({ code: "permission-no-longer-pending" });
-    if (answer === "allow-for-task") this.allowForTurn(conversationId, waiting.asked);
+    if (answer === "allow-for-task") this.allowForTurn(conversationId, waiting);
     else this.sessions.answerPermission(conversationId, permissionId, answer === "allow");
   }
 
@@ -233,17 +348,34 @@ export class RoomService implements RoomPermissionRules {
 
   /**
    * A person's message, in the room or as a follow-up in a thread. Each agent it tags gets a thread of its own for it,
-   * and with the thread's agent of a follow-up, is sent what it has missed of the room.
+   * and with the thread's agent of a follow-up, is sent what it has missed of the room; unless a person other than the
+   * owner wrote it in a room whose people's tasks wait, when it waits for an approver instead.
    */
   write(roomId: string, personId: string, text: string, tags: string[], threadId: string | null): RoomMessage {
     const room = this.existingRoom(roomId);
-    this.assertMayWrite(room, personId, tags, threadId);
+    const role = this.roleWriting(room, personId, tags, threadId);
+    const written = role === null ? text : shownAsWritten(text);
+    if (roomMessageLength(written) > ROOM_MESSAGE_MOST_CHARACTERS) throw new HostProblemError({ code: "room-message-too-long", most: ROOM_MESSAGE_MOST_CHARACTERS });
     const tagged = distinct(tags);
     const thread = threadId === null ? null : this.followedUp(room, threadId, tagged);
     if (tagged.some((profileId) => !this.answers(room, profileId))) throw new HostProblemError({ code: "room-message-misaddressed" });
-    const message = this.store.appendRoomMessage({ id: crypto.randomUUID(), roomId, at: Date.now(), author: { personId }, text: text.trim(), tags: tagged, threadId });
+    if (role !== null && !this.writing.allows(personId)) throw new HostProblemError({ code: "room-writing-too-fast" });
+    const asked = thread ? [thread.profileId] : tagged;
+    const waits = role !== null && room.peoplesTasksWait && asked.length > 0;
+    const message = this.store.appendRoomMessage({
+      id: crypto.randomUUID(),
+      roomId,
+      at: Date.now(),
+      author: { personId },
+      ...(role !== null && { authorRole: role }),
+      text: written.trim(),
+      tags: tagged,
+      threadId,
+      ...(waits && { taskHeld: "waiting" as const }),
+    });
     this.post(message, tagged);
-    (thread ? [thread.profileId] : tagged).forEach((profileId) => this.ask(room, profileId, message, personId));
+    if (waits) this.holdTask(room, message, asked);
+    else asked.forEach((profileId) => this.ask(room, profileId, message, personId));
     return message;
   }
 
@@ -306,7 +438,7 @@ export class RoomService implements RoomPermissionRules {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation?.roomId || conversation.profileId === null || !this.store.findRoom(conversation.roomId)) return null;
     const sent = this.store.listRoomMessagesBetween(conversation.roomId, 0, this.store.roomSeenThrough(conversation.roomId, conversation.profileId));
-    return roomHistory(sent, query, (author) => this.nameOf(author));
+    return roomHistory(sent.filter((message) => !keptFromAgents(message)), query, this.authorOf);
   }
 
   private approvalOf(room: Room, profileId: string, conversationId: string, { request, asked: { toolKind, paths }, at }: WaitingPermission, messagesById: Map<string, RoomMessage>): RoomApproval {
@@ -317,9 +449,10 @@ export class RoomService implements RoomPermissionRules {
       profileId,
       request,
       file: toolKind === "execute" ? null : (paths[0] ?? null),
+      outsideWorkspace: worksOnFiles(toolKind) && paths.some((path) => !this.freelyReachable(room, path)),
       at,
       threadId: (asked && this.threadOf(asked, profileId)?.id) ?? null,
-      task: asked ? taskOf(asked, messagesById) : null,
+      task: asked ? taskOf(asked, messagesById, this.store.ownerId()) : null,
       approvers: this.approversOf(room),
     };
   }
@@ -333,12 +466,16 @@ export class RoomService implements RoomPermissionRules {
     if (!this.approversOf(room).includes(personId)) throw new HostProblemError({ code: "room-approval-not-yours" });
   }
 
-  /** The owner writes anything in every room; anyone else as their role there lets them, and nothing in a room they are not in. */
-  private assertMayWrite(room: Room, personId: string, tags: string[], threadId: string | null) {
-    if (personId === this.store.ownerId()) return;
+  /**
+   * The owner writes anything in every room; anyone else as their role there lets them, and nothing in a room they are
+   * not in. The writer's role in the room, null for the owner.
+   */
+  private roleWriting(room: Room, personId: string, tags: string[], threadId: string | null): RoomRole | null {
+    if (personId === this.store.ownerId()) return null;
     const role = room.people.find((person) => person.personId === personId)?.role;
     if (!role) throw new HostProblemError({ code: "room-gone" });
     if (!mayWriteAs(role, tags, threadId)) throw new HostProblemError({ code: "room-guests-only-write" });
+    return role;
   }
 
   /** Someone waits for the answer: an approver who tagged the agent, or followed up in its thread. */
@@ -346,12 +483,11 @@ export class RoomService implements RoomPermissionRules {
     return !writtenByAgent(asked.author) && this.approversOf(room).includes(asked.author.personId);
   }
 
-  private allowForTurn(conversationId: string, asked: AskedPermission) {
-    const allowance = taskAllowanceOf(asked);
-    this.allowedForTurn.set(conversationId, new Set([...(this.allowedForTurn.get(conversationId) ?? []), allowance]));
+  private allowForTurn(conversationId: string, answered: WaitingPermission) {
+    this.allowedForTurn.set(conversationId, new Set([...(this.allowedForTurn.get(conversationId) ?? []), taskAllowanceOf(answered.asked)]));
     this.sessions
       .waitingPermissions(conversationId)
-      .filter((waiting) => taskAllowanceOf(waiting.asked) === allowance)
+      .filter((waiting) => waiting.request.permissionId === answered.request.permissionId || this.allowsByItself(conversationId, waiting.asked))
       .forEach(({ request }) => this.sessions.answerPermission(conversationId, request.permissionId, true));
   }
 
@@ -360,28 +496,148 @@ export class RoomService implements RoomPermissionRules {
     return roomId ? this.store.findRoom(roomId) : undefined;
   }
 
-  private insideWorkspace(room: Room, path: string) {
+  /** Inside the room's workspace, once links are followed; a path that may stand for another place than it reads as is not. */
+  private freelyReachable(room: Room, path: string) {
     const workspace = this.store.findWorkspace(room.workspaceId);
     const root = workspace ? realPathOrNull(workspace.path) : null;
-    const place = workspace ? realPlaceOf(resolve(workspace.path, path)) : null;
-    return root !== null && place !== null && !leadsOut(relative(root, place));
+    const place = workspace ? this.realPlaceNamed(path, workspace.path) : null;
+    return root !== null && place !== null && isWithin(root, place);
+  }
+
+  private realPlaceNamed(path: string, base: string) {
+    const named = absolutePathNamed(path, base, this.home);
+    return named === null ? null : realPlaceOf(named);
+  }
+
+  /** A file tool that names no file may reach any; otherwise, whether a path it names leads into Mirador's data. */
+  private mayReachMiradorsData(room: Room, { toolKind, paths }: AskedPermission) {
+    if (paths.length === 0) return worksOnFiles(toolKind);
+    return paths.some((path) => this.leadsIntoMiradorsData(room, path));
+  }
+
+  /** Whether the path, once links are followed, lies in Mirador's data directory or holds it; a path that leads nowhere readable, or may stand for another place than it reads as, might. */
+  private leadsIntoMiradorsData(room: Room, path: string) {
+    const workspace = this.store.findWorkspace(room.workspaceId);
+    const place = this.realPlaceNamed(path, workspace?.path ?? process.cwd());
+    const data
+ = realPathOrNull(this.dataDir) ?? resolve(this.dataDir);
+    return place === null || overlap(data, place);
+  }
+
+  /** The agents a message asks: those it tags, or the agent of the thread it follows up in. */
+  private agentsAsked(message: RoomMessage) {
+    if (message.threadId === null || message.answers !== undefined) return message.tags;
+    const thread = this.store.findRoomThread(message.threadId);
+    return thread ? [thread.profileId] : [];
+  }
+
+  private allowTask(room: Room, waiting: RoomMessage) {
+    const task = this.store.answerRoomTask(waiting.id, null)!;
+    this.hub.publishToRoom(room.id, { type: "room.message", message: task, threads: [] });
+    const writerId = (task.author as { personId: string }).personId;
+    this.agentsAsked(task)
+      .filter((profileId) => this.answers(room, profileId))
+      .forEach((profileId) => this.ask(room, profileId, task, writerId));
+  }
+
+  private declineTask(room: Room, waiting: RoomMessage) {
+    const task = this.store.answerRoomTask(waiting.id, "declined")!;
+    this.hub.publishToRoom(room.id, { type: "room.message", message: task, threads: [] });
+    this.agentsAsked(task)
+      .filter((profileId) => this.answers(room, profileId))
+      .forEach((profileId) => this.decline(task, profileId));
+  }
+
+  /** Whether the person's name reads as the owner's, another person's in the room or one of its agents', whom the room shows and frames by name. */
+  private nameTakenIn(room: Room, personId: string) {
+    const people = this.store.listPeople();
+    const others = new Set([this.store.ownerId(), ...room.people.map((person) => person.personId)].filter((id) => id !== personId));
+    const named = people.find(({ id }) => id === personId)?.name ?? "";
+    const agents = room.agents.flatMap(({ profileId }) => this.store.findProfile(profileId)?.name ?? []);
+    return nameTaken(named, [...people.filter(({ id }) => others.has(id)).map(({ name }) => name), ...agents]);
+  }
+
+  /** The writer is still in the room, in a role that lets them ask what the task asks. */
+  private writerMayStillAsk(room: Room, task: RoomMessage) {
+    if (writtenByAgent(task.author)) return false;
+    const { personId } = task.author;
+    const role = room.people.find((person) => person.personId === personId)?.role;
+    return role !== undefined && mayWriteAs(role, task.tags, task.threadId);
+  }
+
+  /** The tasks still waiting whose writers left the room, or may no longer ask them, are declined at once. */
+  private declineTasksNoLongerAsked(roomId: string) {
+    const room = this.existingRoom(roomId);
+    const noLongerAsked = this.store.listRoomTasksWaiting(roomId).filter((task) => !this.writerMayStillAsk(room, task));
+    noLongerAsked.forEach((task) => this.declineTask(room, task));
+    if (noLongerAsked.length > 0) this.waitingChanged(roomId);
+  }
+
+  /** The task waits, and approvers hear of it as of a request: through the conversation of the first agent it asks. */
+  private holdTask(room: Room, task: RoomMessage, asked: string[]) {
+    const agent = room.agents.find(({ profileId }) => profileId === asked[0])!;
+    const conversationId = agent.conversationId ?? this.startSession(room, agent.profileId);
+    const { role, name } = this.authorOf(task);
+    this.notifications.notify(conversationId, { kind: "permission", tool: `a task of ${name}, ${role}` });
+    this.waitingChanged(room.id);
+  }
+
+  /** The declined task's answer, which no agent wrote: it tells the room the agent was never asked. */
+  private decline(task: RoomMessage, profileId: string) {
+    const thread = this.threadOf(task, profileId);
+    if (!thread) return;
+    const declined = this.store.appendRoomMessage({
+      id: crypto.randomUUID(),
+      roomId: task.roomId,
+      at: Date.now(),
+      author: { profileId },
+      text: "",
+      tags: [],
+      threadId: thread.id,
+      answers: task.id,
+      ended: "declined",
+    });
+    this.post(declined, []);
+  }
+
+  /** The room's messages up to and with the one the agent is asked that it has not seen and may read; never its own. */
+  private unseenBy(room: Room, profileId: string, asked: RoomMessage) {
+    return this.store
+      .listRoomMessagesBetween(room.id, this.store.roomSeenThrough(room.id, profileId), asked.seq)
+      .filter((each) => !keptFromAgents(each) && !(writtenByAgent(each.author) && each.author.profileId === profileId));
+  }
+
+  /** What the catch-ups of the agents a waiting task asks would show them besides the task, were it allowed now. */
+  private sentAlongWith(room: Room, task: RoomMessage): RoomMessageSentAlong[] {
+    const ownerId = this.store.ownerId();
+    const riding = this.agentsAsked(task)
+      .filter((profileId) => this.answers(room, profileId))
+      .flatMap((profileId) => catchUpShown([...this.unseenBy(room, profileId, task), task]).slice(0, -1));
+    return [...new Map(riding.map((message) => [message.id, message])).values()]
+      .toSorted((a, b) => a.seq - b.seq)
+      .map((message) => ({ messageId: message.id, author: message.author, role: authorRoleOf(message, ownerId), text: message.text }));
+  }
+
+  /** What rides along with a waiting task changes as its agents read the room, and as an answer is written anew. */
+  private tasksMayCarryOthers(roomId: string) {
+    if (this.store.listRoomTasksWaiting(roomId).length > 0) this.waitingChanged(roomId);
   }
 
   private ask(room: Room, profileId: string, message: RoomMessage, personId: string | undefined) {
     const agent = room.agents.find((each) => each.profileId === profileId)!;
     const conversationId = agent.conversationId ?? this.startSession(room, profileId);
-    const unseen = this.store
-      .listRoomMessagesBetween(room.id, this.store.roomSeenThrough(room.id, profileId), message.seq)
-      .filter(({ author }) => !(writtenByAgent(author) && author.profileId === profileId));
+    const seenThrough = this.store.roomSeenThrough(room.id, profileId);
+    const unseen = this.unseenBy(room, profileId, message);
     const prompt = catchUpPrompt({
       roomName: room.name,
-      unseen,
-      nameOf: (author) => this.nameOf(author),
-      firstInRoom: agent.conversationId === null,
+      unseen: unseen.length > 0 ? unseen : [message],
+      authorOf: this.authorOf,
+      firstInRoom: agent.conversationId === null || seenThrough === 0,
       otherAgents: this.otherAgentNames(room, profileId),
     });
     this.store.markRoomSeen(room.id, profileId, message.seq);
     this.sessions.send(conversationId, prompt, [], { authorId: personId, afterTurn: true, roomMessageId: message.id }).catch(() => {});
+    this.tasksMayCarryOthers(room.id);
   }
 
   /** The message goes to every page that shows the room, with a thread for each agent it tags. */
@@ -389,6 +645,7 @@ export class RoomService implements RoomPermissionRules {
     const threads = tagged.map((profileId) => ({ id: crypto.randomUUID(), roomId: message.roomId, messageId: message.id, profileId }));
     threads.forEach((started) => this.store.insertRoomThread(started));
     this.hub.publishToRoom(message.roomId, { type: "room.message", message, threads });
+    this.tasksMayCarryOthers(message.roomId);
   }
 
   private takeTagsFor(conversationId: string, answering: string) {
@@ -450,6 +707,9 @@ export class RoomService implements RoomPermissionRules {
     if (started) return started;
     return message.threadId !== null && message.answers === undefined ? this.store.findRoomThread(message.threadId) : undefined;
   }
+
+  /** The role the host knows a message's author by, and their name, as agents are told them. */
+  private readonly authorOf: AuthorOf = (message) => ({ role: authorRoleOf(message, this.store.ownerId()), name: this.nameOf(message.author) });
 
   private nameOf(author: RoomAuthor) {
     if (writtenByAgent(author)) return this.store.findProfile(author.profileId)?.name ?? AGENT_GONE;

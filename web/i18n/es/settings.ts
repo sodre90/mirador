@@ -18,7 +18,7 @@ export const settings: Messages["settings"] = {
   },
   ownProfile: {
     title: "Tu perfil",
-    hint: "Aparece con los mensajes que escribes, en todos los navegadores y dispositivos que se conectan al host. Sin nombre, dicen “Tú”.",
+    hint: (nameless) => `Aparece con los mensajes que escribes, en todos los navegadores y dispositivos que se conectan al host. Sin nombre, dicen “Tú” para ti y “${nameless}” para los demás.`,
     name: "Nombre",
     colour: "Color",
   },

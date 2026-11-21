@@ -108,6 +108,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.unknownMachineColour(problem.value);
     case "answer-all-questions":
       return words.answerAllQuestions(problem.count);
+    case "room-message-too-long":
+      return words.roomMessageTooLong(problem.most);
     case "tab-terminal-limit":
       return words.tabTerminalLimit(problem.count);
     case "unknown-workspace":

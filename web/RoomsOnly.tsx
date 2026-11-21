@@ -68,6 +68,7 @@ export function RoomsOnlyApp({ state, dispatch, banner }: { state: AppState; dis
             ownerId={state.ownerId}
             ownerPicture={null}
             approvals={[]}
+            tasks={[]}
             you={state.you}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnCanvas(room.id, itemId)}
@@ -110,7 +111,7 @@ export function RoomsOnlyApp({ state, dispatch, banner }: { state: AppState; dis
       </div>
       {ownProfileOpen && you && (
         <Modal label={t.settings.ownProfile.title} className="own-profile-dialog" onClose={() => setOwnProfileOpen(false)}>
-          <OwnProfileSettings person={you} />
+          <OwnProfileSettings person={you} nameless={t.rooms.nameless} />
         </Modal>
       )}
     </div>

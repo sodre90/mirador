@@ -21,8 +21,8 @@ test.afterAll(async () => {
 const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Launch, @ tags an agent…" });
 const roomEntries = (page: Page) => page.locator(".room-timeline .room-entry");
 const thread = (page: Page, agent: string) => page.getByRole("complementary", { name: `Thread of ${agent}` });
-/** A message as an agent is sent it: a line with its number, author and time, then its text after "> ". */
-const framed = (author: string, text: string) => `#\\d+ ${author}, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC:\\n> ${literally(text)}\\n`;
+/** A message as an agent is sent it: a line with its number, its author's role and name and the time, then its text after "> ". */
+const framed = (author: "Owner" | "Builder", text: string) => `#\\d+ \\[${author === "Owner" ? "owner" : "agent"}\\] ${author}, \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2} UTC:\\n> ${literally(text)}\\n`;
 
 async function write(page: Page, text: string) {
   await roomComposer(page).fill(text);
@@ -95,7 +95,7 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await tag(page, "Reviewer", "@Re", "SAY Looks good");
     await expect(roomEntries(page).locator(".message.agent")).toHaveText(["Shipped it", "Notes written", "Looks good"]);
     const prompt = recordedPrompts("Reviewer");
-    expect(prompt).toContain("Owner tagged you there.");
+    expect(prompt).toContain("[owner] Owner tagged you there.");
     for (const [author, text] of [
       ["Owner", "Morning all"],
       ["Owner", "The release is Friday"],
@@ -118,6 +118,20 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await expect(thread(page, "Builder").locator(".tool-title")).toHaveText(["Read the room", "Read the room"]);
     await expect(thread(page, "Builder").locator(".message.agent")).toHaveText(["Shipped it", "Notes written"]);
     await thread(page, "Builder").getByRole("button", { name: "Close thread" }).click();
+  });
+
+  await test.step("a message longer than a room holds stays in the composer, which says so", async () => {
+    const composer = page.locator(".room-composer").first();
+    const longest = "x".repeat(20_000);
+    await roomComposer(page).fill(`${longest}y`);
+    await expect(composer.locator(".room-message-too-long")).toHaveText("20,001 characters: a room message holds at most 20,000.");
+    await expect(composer.getByRole("button", { name: "Send" })).toBeDisabled();
+    await roomComposer(page).press("Enter");
+    await expect(roomComposer(page)).toHaveValue(`${longest}y`);
+    await roomComposer(page).fill(`  ${longest}  `);
+    await expect(composer.locator(".room-message-too-long")).toHaveCount(0);
+    await expect(composer.getByRole("button", { name: "Send" })).toBeEnabled();
+    await roomComposer(page).fill("");
   });
 
   await test.step("deleting the room takes it away", async () => {

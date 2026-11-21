@@ -89,6 +89,7 @@ import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
+import { ROOM_CANVAS_TOOLS } from "./canvas/tool-names.ts";
 import { agentLogsDirectory, type HostConfig } from "./config.ts";
 import type { Hub } from "./hub.ts";
 import type { DroppedFiles } from "./dropped-files.ts";
@@ -389,10 +390,25 @@ const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity"
  */
 const readsSettingsPerSession = (harness: HarnessId) => harness === "claude" || harness === "pi" || harness === "codex" || harness === "copilot";
 
+/** What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id and room. */
+export type ProcessLaunch = Launch & { id?: string; roomId?: string };
+
+/**
+ * The agent process serving a conversation. Antigravity keeps one canvas MCP server per process, the one its first
+ * session registered, so every conversation on one profile would reach that first conversation's canvas; it takes a
+ * process of its own. So does a room's conversation, on every agent: opencode keeps one canvas server per folder, and a
+ * room's agent shares no process, canvas server or environment with the owner's conversations or another room's. The
+ * others share one per profile.
+ */
+export const agentProcessKey = (profile: Pick<Profile, "id" | "harness">, { id, roomId }: ProcessLaunch) =>
+  id && (profile.harness === "antigravity" || roomId) ? `${profile.id}/${id}` : profile.id;
+
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
-  /** Agent processes by `processKey`: one per profile, except Antigravity's conversations, which each get their own. */
+  /** Agent processes by `agentProcessKey`: one per profile, except Antigravity's conversations and rooms', which each get their own. */
   private readonly agentProcesses = new Map<string, HarnessProcess>();
+  /** Room conversations' agent processes, each stopped once it has sat idle for `roomAgentIdleMs` since its last turn ended. */
+  private readonly idleRoomProcesses = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly sessions = new ConversationSessions();
   private readonly subagentSessions = new SubagentSessions();
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
@@ -1376,7 +1392,7 @@ export class ConversationService {
   }
 
   private async restartAgentProcessOf(conversation: Conversation) {
-    const harness = this.agentProcesses.get(this.processKey(this.profileOf(conversation), conversation));
+    const harness = this.agentProcesses.get(agentProcessKey(this.profileOf(conversation), conversation));
     if (!harness) return;
     this.continueStoppedTurns(await this.killAgent(harness, { kind: "restarted-for-reload" }));
   }
@@ -1624,6 +1640,24 @@ export class ConversationService {
     if (!this.stopping && turnSeq !== undefined) this.hearTurnEnd(conversationId, turnSeq);
     this.sendNextQueuedMessage(conversationId);
     if (!this.nudgeAfterStall(conversationId, turn, endedOnItsOwn)) this.followUpOnCanvasUse(conversationId, turn, endedOnItsOwn);
+    this.stopRoomProcessOnceIdle(conversationId);
+  }
+
+  /** A room's agents are tagged now and then, so their processes, one per room conversation, would otherwise pile up. */
+  private stopRoomProcessOnceIdle(conversationId: string) {
+    if (!this.store.findConversation(conversationId)?.roomId) return;
+    clearTimeout(this.idleRoomProcesses.get(conversationId));
+    const timer = setTimeout(() => this.stopIdleRoomProcess(conversationId), this.config.roomAgentIdleMs);
+    timer.unref();
+    this.idleRoomProcesses.set(conversationId, timer);
+  }
+
+  private stopIdleRoomProcess(conversationId: string) {
+    this.idleRoomProcesses.delete(conversationId);
+    const runtime = this.runtimes.get(conversationId);
+    const busy = runtime?.running || runtime?.pendingPermissions.size || runtime?.queuedMessages.length;
+    if (this.stopping || !runtime?.harness || busy) return;
+    void this.killAgent(runtime.harness, { kind: "stopped" });
   }
 
   /**
@@ -2435,10 +2469,12 @@ export class ConversationService {
   }
 
   /**
-   * An Antigravity conversation's own agent process serves only it, so it goes with the conversation or with the profile
-   * it moves off. With no profile left to name it by, as when the conversation was deleted already, its id finds the key.
+   * A conversation's own agent process, an Antigravity conversation's or a room's, serves only it, so it goes with the
+   * conversation or with the profile it moves off. With no profile left to name it by, as when the conversation was
+   * deleted already, its id finds the key.
    */
-  private stopDedicatedHarness(profileId: string | null, conversationId: string) {
+  private stopDedicatedHarness(
+profileId: string | null, conversationId: string) {
     const keys = profileId ? [`${profileId}/${conversationId}`] : [...this.agentProcesses.keys()].filter((key) => key.endsWith(`/${conversationId}`));
     keys.forEach((key) => {
       const harness = this.agentProcesses.get(key);
@@ -2663,6 +2699,12 @@ export class ConversationService {
     return sessionId;
   }
 
+  /** The canvas tools that only show things in Mirador run without asking; in a room, only the room's. */
+  private preAllowsCanvasTool(conversationId: string, tool: string | null) {
+    if (this.get(conversationId).roomId) return tool !== null && ROOM_CANVAS_TOOLS.includes(tool);
+    return isPreAllowedCanvasTool(tool, this.canvasPlugins(conversationId).toolNames);
+  }
+
   /** A test host's own Claude Code works without the settings and instructions of the user who runs the tests. */
   private async sessionRequest(conversationId: string) {
     const conversation = this.get(conversationId);
@@ -2679,6 +2721,7 @@ export class ConversationService {
         withoutUserSettings,
         canvasPlugins,
         idleCompaction,
+        inRoom: Boolean(conversation.roomId),
       }),
       ...(systemPrompt && { systemPrompt }),
     };
@@ -2862,23 +2905,14 @@ export class ConversationService {
     };
   }
 
-  /**
-   * The agent process serving a conversation. Antigravity keeps one canvas MCP server per process, the one its first
-   * session registered, so every conversation on one profile would reach that first conversation's canvas; it takes a
-   * process of its own. The others share one per profile.
-   */
-  private processKey(profile: Profile, launch: Launch & { id?: string }) {
-    return profile.harness === "antigravity" && launch.id ? `${profile.id}/${launch.id}` : profile.id;
-  }
-
-  private harnessFor(launch: Launch & { id?: string }): HarnessProcess {
+  private harnessFor(launch: ProcessLaunch): HarnessProcess {
     const profile = this.profileOf(launch);
-    const key = this.processKey(profile, launch);
+    const key = agentProcessKey(profile, launch);
     const existing = this.agentProcesses.get(key);
     if (existing) return existing;
     const spec = harnessSpec(profile, this.store.claudeProgramSetting());
     const harness = new HarnessProcess(
-      { ...spec, environment: { ...spec.environment, ...this.scriptEnvironment(spec.environment.PATH), ...this.testModelEnvironment(launch) } },
+      { ...spec, environment: { ...spec.environment, ...this.scriptEnvironmentFor(launch, spec.environment.PATH), ...this.testModelEnvironment(launch) } },
       {
         onSessionUpdate: (notification) => this.handleSessionUpdate(notification),
         onPermissionRequest: (request, signal) => this.handlePermissionRequest(request, signal),
@@ -2901,6 +2935,11 @@ export class ConversationService {
   private onUsersOwnSetup({ harness, profileId }: Launch) {
     const profile = profileId === null ? undefined : this.store.findProfile(profileId);
     return harness === "claude" && !profile?.environment.trim();
+  }
+
+  /** A room's agent works on tasks of people other than the owner too, so it gets no token to reach the host with as the owner's scripts do. */
+  private scriptEnvironmentFor({ roomId }: ProcessLaunch, path: string | undefined) {
+    return roomId ? {} : this.scriptEnvironment(path);
   }
 
   /** The mirador command, and where it reaches the host from the agent or a script it starts (mirador message, mirador when-done). */
@@ -3261,7 +3300,7 @@ export class ConversationService {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
     const reports = this.store.toolCallReports(conversationId, request.toolCall.toolCallId);
-    if (allowOptionId && isPreAllowedCanvasTool(canvasToolAskedFor(request.toolCall, reports), this.canvasPlugins(conversationId).toolNames)) {
+    if (allowOptionId && this.preAllowsCanvasTool(conversationId, canvasToolAskedFor(request.toolCall, reports))) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
     if (this.get(conversationId).sideChatOf) return turnedDown(request.options);

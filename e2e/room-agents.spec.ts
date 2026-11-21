@@ -121,8 +121,8 @@ test("an agent tags another with room_tag, which answers in a thread of its own 
   await reviewerAnswer.getByRole("button", { name: "Open thread" }).click();
   await expect(thread(page, "Reviewer").locator(".message.agent")).toHaveText(["Your final answer of this turn will tag Reviewer.", "Noted."]);
   const prompt = recordedPrompts("Reviewer");
-  expect(prompt).toContain("Builder tagged you there.");
-  expect(prompt).toMatch(new RegExp(`#\\d+ Builder, [^\\n]+ UTC:\\n> ${literally("Your final answer of this turn will tag Reviewer.")}\\n$`));
+  expect(prompt).toContain("[agent] Builder tagged you there.");
+  expect(prompt).toMatch(new RegExp(`#\\d+ \\[agent\\] Builder, [^\\n]+ UTC:\\n> ${literally("Your final answer of this turn will tag Reviewer.")}\\n$`));
 });
 
 test(`two agents tagging each other are stopped after ${AGENT_TAGGED_TURNS_AFTER_A_PERSON} turns, with a line saying so`, async ({ page }) => {

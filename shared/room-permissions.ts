@@ -42,23 +42,33 @@ export interface AskedPermission {
 const READING: (ToolKind | null)[] = ["read", "search"];
 const CHANGING_FILES: (ToolKind | null)[] = ["edit", "delete", "move"];
 
+/** A tool that reads or changes files, which may reach any of them when it names none. */
+export const worksOnFiles = (toolKind: ToolKind | null) => READING.includes(toolKind) || CHANGING_FILES.includes(toolKind);
+
 /**
- * Whether the host lets a request of a room's agent through by itself: reading, unless everything asks; and in the
- * workspace preset, changes to files that all lie inside the room's workspace. Commands and everything else wait for an
- * approver, since the host can't tell where a command reaches.
+ * Whether the host lets a request of a room's agent through by itself: reading files that all lie inside the room's
+ * workspace, unless everything asks; and in the workspace preset, changes to such files too. A read or search that names
+ * no path asks, as it may reach anywhere; so do commands and everything else, since the host can't tell where a command
+ * reaches. `freelyReachable` says whether a path lies where the room's agents may go unasked.
  */
-export function allowedByPreset(preset: PermissionPreset, { toolKind, paths }: AskedPermission, insideWorkspace: (path: string) => boolean): boolean {
+export function allowedByPreset(preset: PermissionPreset, { toolKind, paths }: AskedPermission, freelyReachable: (path: string) => boolean): boolean {
   if (preset === "ask-everything") return false;
-  if (READING.includes(toolKind)) return true;
-  return preset === "work-freely" && CHANGING_FILES.includes(toolKind) && paths.length > 0 && paths.every(insideWorkspace);
+  const reachesOnlyFreely = paths.length > 0 && paths.every(freelyReachable);
+  if (READING.includes(toolKind)) return reachesOnlyFreely;
+  return preset === "work-freely" && CHANGING_FILES.includes(toolKind) && reachesOnlyFreely;
 }
 
 /**
  * What "Allow for this task" lets through until the turn ends: the same command, a tool of the same kind, or, for a tool
- * whose kind says nothing of what it does (an MCP tool, say), the same tool.
+ * whose kind says nothing of what it does (an MCP tool, say), the same tool. A tool that reads or changes files it lets
+ * through only inside the workspace, as `reachedByTaskAllowance` says.
  */
 export function taskAllowanceOf({ toolKind, title, command }: AskedPermission): string {
   if (toolKind === "execute") return `command ${command ?? title}`;
   if (toolKind === null || toolKind === "other") return `tool ${title}`;
   return `kind ${toolKind}`;
 }
+
+/** "Allow for this task" lets a tool that reads or changes files reach only those inside the room's workspace: one that names a path outside, or none, asks each time. */
+export const reachedByTaskAllowance = ({ toolKind, paths }: AskedPermission, freelyReachable: (path: string) => boolean) =>
+  !worksOnFiles(toolKind) || (paths.length > 0 && paths.every(freelyReachable));

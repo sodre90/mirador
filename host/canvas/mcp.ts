@@ -1,4 +1,4 @@
-import { createMcpHandler, McpServer, type McpHttpHandler, type ServerContext } from "@modelcontextprotocol/server";
+import { createMcpHandler, McpServer, type McpHttpHandler, type RegisteredTool, type ServerContext } from "@modelcontextprotocol/server";
 import * as z from "zod/v4";
 import type { ConversationService } from "../conversations.ts";
 import { CANVAS_SERVER_NAME } from "../acp/harnesses.ts";
@@ -97,6 +97,23 @@ const ANSWER_COMES_LATER: Record<AnswerWaitGivenUp, string> = {
 
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text" as const, text }] });
 
+const CALLER_UNKNOWN = "Mirador knows no conversation of the session this call came from, so the canvas ran nothing.";
+const CALLER_ELSEWHERE = "This canvas server serves only its own conversation, and this call came from another, so the canvas ran nothing.";
+
+type ToolCallbackOfAnyKind = (...args: unknown[]) => unknown;
+
+/** Each tool first finds the conversation that called it, so that a call that finds none, or not one this server serves, is refused by every tool, whether or not the tool reads its caller. */
+function everyToolFindingItsCallerFirst(server: McpServer, callingConversation: (ctx: ServerContext) => Promise<string>) {
+  const register = server.registerTool.bind(server) as unknown as (name: string, config: unknown, callback: ToolCallbackOfAnyKind) => RegisteredTool;
+  const afterFindingTheCaller =
+    (callback: ToolCallbackOfAnyKind): ToolCallbackOfAnyKind =>
+    async (...args) => {
+      await callingConversation(args.at(-1) as ServerContext);
+      return callback(...args);
+    };
+  server.registerTool = ((name: string, config: unknown, callback: ToolCallbackOfAnyKind) => register(name, config, afterFindingTheCaller(callback))) as unknown as typeof server.registerTool;
+}
+
 /** opencode 2 names the session that calls a tool, its subagents' included. */
 const OPENCODE_SESSION_META = "ai.opencode/sessionID";
 
@@ -149,20 +166,28 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
+  const inRoom = Boolean(store?.findConversation(conversationId)?.roomId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
-  const instructions = canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
+  const instructions = inRoom ? canvasInstructions(assetsOrigin) : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
   cutInstructionsWarning.check(harness, instructions);
   const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
   /**
    * The conversations on one opencode agent process each add their canvas server under the same name, and opencode keeps
-   * only the last one added: every call reaches that conversation's address, whichever conversation made it.
+   * only the last one added: every call reaches that conversation's address, whichever conversation made it. opencode 2
+   * names the session that calls, which finds its conversation; a session that finds none is refused. A room's
+   * conversation runs on an agent process of its own, so its address serves it alone, and no other conversation's
+   * address serves a room's.
    */
   const callingConversation = async ({ mcpReq }: ServerContext) => {
     const sessionId = mcpReq._meta?.[OPENCODE_SESSION_META];
-    return (typeof sessionId === "string" && (await conversations.conversationOfSession(sessionId))) || conversationId;
+    const caller = sessionId === undefined ? conversationId : typeof sessionId === "string" ? await conversations.conversationOfSession(sessionId) : undefined;
+    if (caller === undefined) throw new Error(CALLER_UNKNOWN);
+    if (caller !== conversationId && (inRoom || Boolean(store?.findConversation(caller)?.roomId))) throw new Error(CALLER_ELSEWHERE);
+    return caller;
   };
+  everyToolFindingItsCallerFirst(server, callingConversation);
 
   server.registerTool(
     "show",
@@ -242,6 +267,11 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     },
   );
 
+  if (inRoom) {
+    if (rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+    return server;
+  }
+
   server.registerTool(
     "when_done",
     {
@@ -297,7 +327,6 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   if (store) registerUsageStatsTool(server, store, callingConversation, () => canvasPlugins?.toolTitles() ?? {}, reviewFree);
   if (store) registerPlanUsageTool(server, store, conversations, callingConversation, reviewFree);
   if (store?.findConversation(conversationId)?.worktree) registerLandTool(server, conversations, callingConversation, loadedUpFront);
-  if (rooms && store?.findConversation(conversationId)?.roomId) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
 
   return server;
 }

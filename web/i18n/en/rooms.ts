@@ -1,5 +1,5 @@
 import type { PermissionPreset } from "../../../shared/room-permissions.ts";
-import type { RoomRole } from "../../../shared/rooms.ts";
+import type { RoomAuthorRole, RoomRole } from "../../../shared/rooms.ts";
 
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
@@ -27,6 +27,7 @@ export const rooms = {
   placeholder: (room: string) => `Write in ${room}, @ tags an agent…`,
   followUpPlaceholder: (agent: string) => `Follow up with ${agent}…`,
   send: "Send",
+  messageTooLong: (count: string, most: string) => `${count} characters: a room message holds at most ${most}.`,
   tagMenu: "Agents of the room",
   working: (agent: string) => `${agent} is working…`,
   waiting: (agent: string) => `${agent} answers after its current task.`,
@@ -35,6 +36,8 @@ export const rooms = {
   closeThread: "Close thread",
   stopped: "Stopped before it finished.",
   failed: "The turn failed.",
+  declined: "The task was declined.",
+  taskWaits: (agent: string) => `${agent} starts once this task is allowed.`,
   noAnswer: "Ended without an answer in words.",
   agentGone: "An agent no longer in the room",
   tagged: (agents: string) => `Tagged ${agents}`,
@@ -45,16 +48,24 @@ export const rooms = {
   permissions: "What the agents may do without asking",
   presets: {
     "ask-everything": "Ask for everything",
-    "read-freely": "Reading is free, edits and commands ask",
+    "read-freely": "Reading the workspace is free, the rest asks",
     "work-freely": "Work freely inside the workspace",
   } satisfies Record<PermissionPreset, string>,
   permissionsHint:
-    "Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default, isn't held to it.",
+    "Reading outside the workspace, a read or search that names no file, and Mirador's own data always ask. Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default and Codex does when it reads, isn't held to it.",
   approvalsWaiting: "Requests waiting for approval",
   asks: (agent: string) => `${agent} asks`,
-  approvalTask: (person: string, text: string) => `Task of ${person}: “${text}”`,
+  approvalTask: (person: string, role: string, text: string) => `Task of ${person} (${role}): “${text}”`,
+  taskFrom: (person: string, role: string, agents: string) => `${person} (${role}) gives ${agents} a task`,
   yourTask: (text: string) => `Your task: “${text}”`,
   approvalPosition: (count: number) => `1 of ${count}`,
+  taskLines: (count: number) => counted(count, "line", "lines"),
+  showWholeTask: "Show all",
+  showLessOfTask: "Show less",
+  sentAlong: (count: number) => (count === 1 ? "1 other unread message goes to the agents with it." : `${count} other unread messages go to the agents with it.`),
+  showSentAlong: "Show them",
+  hideSentAlong: "Hide them",
+  outsideWorkspace: "It names a path outside the workspace, so “Allow for this task” lets only this request through.",
   allow: "Allow",
   allowForTask: "Allow for this task",
   deny: "Deny",
@@ -65,8 +76,18 @@ export const rooms = {
   people: "People",
   peopleHint: "A member writes, tags the agents and follows up in their threads; a guest only writes. Neither answers the agents' requests nor changes the room.",
   noPeople: "Nobody else uses this machine yet.",
+  peopleReach: {
+    "ask-everything": "Through the agents, people here reach what you allow: reading, edits and commands ask you first.",
+    "read-freely": "Through the agents, people here read the workspace's files and reach what else you allow: edits and commands ask you first.",
+    "work-freely": "Through the agents, people here read and change the workspace's files and reach what else you allow: commands ask you first.",
+  } satisfies Record<PermissionPreset, string>,
+  peopleReachBeyond:
+    "Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
+  peoplesTasksStart: "People's tasks start without asking me",
+  peoplesTasksHint: "Otherwise a member's tag or follow-up reaches no agent until you allow it.",
   notInRoom: "Not in the room",
   roles: { member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
+  authorRoles: { owner: "Owner", member: "Member", guest: "Guest", agent: "Agent" } satisfies Record<RoomAuthorRole, string>,
   roleOf: (person: string) => `Role of ${person}`,
   nameless: "Someone without a name",
   inNoRoom: "You are in no room yet. When the owner of this machine adds you to one, it shows here.",

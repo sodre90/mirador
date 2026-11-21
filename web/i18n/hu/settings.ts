@@ -18,7 +18,7 @@ export const settings: Messages["settings"] = {
   },
   ownProfile: {
     title: "A profilod",
-    hint: "Az üzeneteid mellett látszik minden böngészőben és készüléken, amely csatlakozik a hosthoz. Név nélkül az üzeneteiden „Te” áll.",
+    hint: (nameless) => `Az üzeneteid mellett látszik minden böngészőben és készüléken, amely csatlakozik a hosthoz. Név nélkül neked „Te” áll az üzeneteiden, mindenki másnak ez: ${nameless}.`,
     name: "Név",
     colour: "Szín",
   },

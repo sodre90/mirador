@@ -70,6 +70,7 @@ const roomsIn = (message: ServerMessage): Room[] => (message.type === "snapshot"
 
 test("a person the owner lets into a room sees only that room on their own browser, reads it live, and may do there what their role allows, from the moment it changes", async ({ page, browser }) => {
   const mia = host.admitPerson("Mia");
+  const ownerTraffic = trafficOf(page);
   await signIn(page, host);
   const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
@@ -114,21 +115,27 @@ test("a person the owner lets into a room sees only that room on their own brows
     await expect(roomMessages(page)).toHaveText(["Morning from Mia"]);
   });
 
-  await test.step("Mia reads what the owner and the agent write as they write it, and as a member tags the agent herself", async () => {
+  await test.step("Mia reads what the owner and the agent write as they write it, labelled a member, and as one tags the agent herself once the owner allows it", async () => {
     await tagBuilder(page, "SAY Shipped it");
     await expect(roomMessages(miaPage)).toHaveText(["Morning from Mia", "@Builder SAY Shipped it", "Shipped it"]);
     await expect(miaPage.locator(".room-timeline .room-entry .author")).toContainText(["Mia", "Owner", "Builder"]);
+    for (const each of [page, miaPage]) await expect(each.locator(".room-timeline .room-entry .room-role-label")).toHaveText(["Member"]);
     await tagBuilder(miaPage, "SAY Notes for Mia");
+    const strip = page.locator(".room-timeline ~ .room-approvals");
+    await expect(strip.locator(".room-approval-asker")).toHaveText("Mia (Member) gives Builder a task");
+    await expect(roomMessages(miaPage).last()).toHaveText("@Builder SAY Notes for Mia");
+    await strip.getByRole("button", { name: "Allow", exact: true }).click();
     await expect(roomMessages(miaPage).last()).toHaveText("Notes for Mia");
     await expect(roomMessages(page).last()).toHaveText("Notes for Mia");
   });
 
-  const agentConversationId = miaTraffic.received
+  const agentConversationId = ownerTraffic.received
     .flatMap(roomsIn)
     .flatMap(({ agents }) => agents)
     .map(({ conversationId }) => conversationId)
-    .findLast(Boolean);
+    .findLast(Boolean)!;
   expect(agentConversationId).toBeTruthy();
+  expect(JSON.stringify(miaTraffic.received)).not.toContain(agentConversationId);
 
   await test.step("Mia reaches no conversation and no room she is not in by its address", async () => {
     for (const address of [`#/c/${ownConversationId}`, `#/c/${agentConversationId}`, `#/r/${hiddenRoomId}`]) {
@@ -159,23 +166,30 @@ test("a person the owner lets into a room sees only that room on their own brows
     await thread.getByRole("button", { name: "Close thread" }).click();
   });
 
+  await test.step("Mia can't take the name of the room's agent, and is told why; she names herself anew, and the owner's page names her messages so", async () => {
+    await miaPage.getByRole("button", { name: "Your profile" }).click();
+    const profile = miaPage.getByRole("dialog", { name: "Your profile" });
+    await expect(profile).toContainText("Without a name, they say You to you and Someone without a name to everyone else.");
+    const name = profile.getByLabel("Name");
+    await name.fill("builder");
+    await name.press("Enter");
+    await expect(profile.getByRole("alert")).toHaveText("That name is taken: the owner, an agent or another person here goes by it, or Mirador says it in a name's place. Choose another.");
+    await name.fill("Mia Rossi");
+    await name.press("Enter");
+    await expect(profile.getByRole("alert")).toHaveCount(0);
+    await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
+  });
+
   await test.step("taken out of the room, Mia's open page loses it at once", async () => {
     await setRoleOfMia(page, "Launch", "Not in the room");
     await expect(roomsListed(miaPage)).toHaveCount(0);
     await expect(miaPage.getByRole("heading", { name: "You are in no room yet. When the owner of this machine adds you to one, it shows here." })).toBeVisible();
   });
 
-  await test.step("Mia names herself anew, and the owner's page names her messages so", async () => {
-    await miaPage.getByRole("button", { name: "Your profile" }).click();
-    const name = miaPage.getByRole("dialog", { name: "Your profile" }).getByLabel("Name");
-    await name.fill("Mia Rossi");
-    await name.press("Enter");
-    await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
-  });
-
   expect(miaTraffic.sent.filter(({ type }) => !(PERSON_MESSAGE_TYPES as readonly string[]).includes(type))).toEqual([]);
   expect(miaTraffic.refused).toEqual([]);
   expect(new Set(miaTraffic.socketPaths)).toEqual(new Set(["/ws"]));
+  expect(JSON.stringify(miaTraffic.received)).not.toContain(agentConversationId);
 
   await miaContext.close();
 });

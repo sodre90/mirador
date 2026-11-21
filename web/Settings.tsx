@@ -162,7 +162,7 @@ export function SettingsDialog({
   const pages: Record<SettingsPage, () => ReactNode> = {
     appearance: () => (
       <>
-        {you && <OwnProfileSettings person={you} />}
+        {you && <OwnProfileSettings person={you} nameless={t.chat.author.owner} />}
         <ProfilePictureSettings picture={avatar} />
         <AppearanceSettings />
       </>
@@ -346,17 +346,19 @@ function PictureChoice<Option extends string>({
   );
 }
 
-export function OwnProfileSettings({ person }: { person: Person }) {
+/** `nameless` is what everyone else reads in place of the person's name while they have none. */
+export function OwnProfileSettings({ person, nameless }: { person: Person; nameless: string }) {
   const [name, setName] = useState(person.name);
+  const [refusal, setRefusal] = useState<string | null>(null);
   useEffect(() => setName(person.name), [person.name]);
-  const save = (profile: Pick<Person, "name" | "color">) => connection.send({ type: "person.set-own-profile", ...profile });
+  const save = async (profile: Pick<Person, "name" | "color">) => setRefusal(await saveSetting((requestId) => ({ type: "person.set-own-profile", requestId, ...profile })));
   const saveName = () => {
-    if (personName(name) !== person.name) save({ name, color: person.color });
+    if (personName(name) !== person.name) void save({ name, color: person.color });
   };
   return (
     <section className="own-profile">
       <h3>{text.ownProfile.title}</h3>
-      <p className="hint">{text.ownProfile.hint}</p>
+      <p className="hint">{text.ownProfile.hint(nameless)}</p>
       <div className="sending-settings">
         <label>
           {text.ownProfile.name}
@@ -372,9 +374,14 @@ export function OwnProfileSettings({ person }: { person: Person }) {
         </label>
         <div className="own-profile-colour">
           {text.ownProfile.colour}
-          <ColorSwatches label={text.ownProfile.colour} chosen={person.color} focusChosen={false} onChoose={(color) => save({ name, color })} />
+          <ColorSwatches label={text.ownProfile.colour} chosen={person.color} focusChosen={false} onChoose={(color) => void save({ name, color })} />
         </div>
       </div>
+      {refusal && (
+        <p className="hint own-profile-refused" role="alert">
+          {refusal}
+        </p>
+      )}
     </section>
   );
 }

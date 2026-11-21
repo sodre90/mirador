@@ -64,8 +64,8 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "push.unregister": OWNER_ONLY,
   "notification.shown": OWNER_ONLY,
   "settings.set-avatar": OWNER_ONLY,
-  "person.set-own-profile": ({ name, color }) => {
-    if (typeof name !== "string" || !(color === null || isPastel(color))) throw unreadable();
+  "person.set-own-profile": ({ requestId, name, color }) => {
+    if (typeof requestId !== "string" || typeof name !== "string" || !(color === null || isPastel(color))) throw unreadable();
   },
   "conversation.create": OWNER_ONLY,
   "conversation.move": OWNER_ONLY,
@@ -207,6 +207,8 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.set-person-role": OWNER_ONLY,
   "room.remove-person": OWNER_ONLY,
   "room.approve": OWNER_ONLY,
+  "room.answer-task": OWNER_ONLY,
+  "room.set-peoples-tasks-wait": OWNER_ONLY,
   "room.delete": OWNER_ONLY,
   "room.subscribe": ({ roomId }, person) => void roleOf(person, roomId),
   "room.unsubscribe": ({ roomId }) => {

@@ -4,7 +4,7 @@ import { delimiter, dirname, join } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile } from "../../shared/model.ts";
 import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
-import { PRE_ALLOWED_CANVAS_TOOLS } from "../canvas/tool-names.ts";
+import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
 import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
@@ -227,7 +227,8 @@ export function profileEnvironment(profile: Profile | null): Record<string, stri
 
 /**
  * opencode needs nothing: it offers no question tool over ACP, puts the canvas server's own instructions in its prompt,
- * and the user's own opencode permission settings apply unchanged.
+ * and the user's own opencode permission settings apply unchanged. An agent in a room hears of no canvas tool but the
+ * room's.
  */
 export function sessionMeta(
   harness: HarnessId,
@@ -237,11 +238,13 @@ export function sessionMeta(
     withoutUserSettings = false,
     canvasPlugins = NO_CANVAS_PLUGINS,
     idleCompaction = true,
-  }: { canvasAssetsOrigin: string; withoutUserSettings?: boolean; canvasPlugins?: CanvasPluginGuidance; idleCompaction?: boolean },
+    inRoom = false,
+  }: { canvasAssetsOrigin: string; withoutUserSettings?: boolean; canvasPlugins?: CanvasPluginGuidance; idleCompaction?: boolean; inRoom?: boolean },
 ) {
-  if (harness === "claude") return claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction });
-  if (harness === "pi") return piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
-  if (harness === "antigravity") return antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
+  if (harness === "claude") return inRoom ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction }) : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction });
+  if (harness === "pi") return inRoom ? { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
+  if (harness === "antigravity")
+    return inRoom ? { antigravity: { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } } : antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   return undefined;
 }
 
@@ -271,9 +274,16 @@ export function antigravitySessionMeta(canvasUse: CanvasUse, canvasAssetsOrigin:
 }
 
 function canvasPromptAppendix(canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins: CanvasPluginGuidance) {
-  const canvasServerInstructions = `# Canvas server instructions\n${canvasInstructions(canvasAssetsOrigin, canvasPlugins)}`;
-  return [canvasServerInstructions, ...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), titleGuidance()].join("\n\n");
+  return [...canvasPromptParts(canvasUse, canvasAssetsOrigin, canvasPlugins), titleGuidance()].join("\n\n");
 }
+
+/** A room's agent is not asked to name its conversation, which only the owner opens, nor told of plugins. */
+const roomCanvasPromptAppendix = (canvasUse: CanvasUse, canvasAssetsOrigin: string) => canvasPromptParts(canvasUse, canvasAssetsOrigin, NO_CANVAS_PLUGINS).join("\n\n");
+
+const canvasPromptParts = (canvasUse: CanvasUse, canvasAssetsOrigin: string, canvasPlugins: CanvasPluginGuidance) => [
+  `# Canvas server instructions\n${canvasInstructions(canvasAssetsOrigin, canvasPlugins)}`,
+  ...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []),
+];
 
 /**
  * Session options Claude Code reads from `_meta.claudeCode.options` (claude-agent-acp).
@@ -292,5 +302,14 @@ export function claudeSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = 
         disallowedTools: ["AskUserQuestion"],
       },
     },
+  };
+}
+
+/** A room's agent hears of no job waits or plugins, and only the room's canvas tools run without asking. */
+export function claudeRoomSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = false, idleCompaction = true } = {}) {
+  const meta = claudeSessionMeta(canvasUse, { withoutUserSettings, idleCompaction });
+  return {
+    systemPrompt: { append: canvasUse === "often" ? canvasUseGuidance() : "" },
+    claudeCode: { options: { ...meta.claudeCode.options, allowedTools: ROOM_CANVAS_TOOLS.map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`) } },
   };
 }

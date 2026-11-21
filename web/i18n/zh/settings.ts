@@ -18,7 +18,7 @@ export const settings: Messages["settings"] = {
   },
   ownProfile: {
     title: "个人资料",
-    hint: "显示在你写的消息旁，加入这个 host 的每个浏览器和设备都能看到。没有名字时，消息上显示“你”。",
+    hint: (nameless) => `显示在你写的消息旁，加入这个 host 的每个浏览器和设备都能看到。没有名字时，你看到的是“你”，其他人看到的是“${nameless}”。`,
     name: "名字",
     colour: "颜色",
   },

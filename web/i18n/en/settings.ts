@@ -16,7 +16,7 @@ export const settings = {
   },
   ownProfile: {
     title: "Your profile",
-    hint: "Shown with the messages you write, on every browser and device that joins the host. Without a name, they say You.",
+    hint: (nameless: string) => `Shown with the messages you write, on every browser and device that joins the host. Without a name, they say You to you and ${nameless} to everyone else.`,
     name: "Name",
     colour: "Colour",
   },

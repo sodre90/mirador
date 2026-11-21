@@ -24,9 +24,10 @@ describe("a room's permission preset", () => {
     expect([asked("read", ["/project/a.ts"]), asked("search"), asked("edit", ["/project/a.ts"]), asked("execute", [], "ls")].map(allowed)).toEqual([false, false, false, false]);
   });
 
-  test("free reading lets reads and searches through, anywhere, and asks for everything else", () => {
+  test("free reading lets reads and searches inside the workspace through, and asks for everything else", () => {
     const allowed = allowedUnder("read-freely");
-    expect([asked("read", ["/project/a.ts"]), asked("read", ["/etc/hosts"]), asked("search")].map(allowed)).toEqual([true, true, true]);
+    expect([asked("read", ["/project/a.ts"]), asked("search", ["/project/src"]), asked("read", ["/project/a.ts", "/project/b.ts"])].map(allowed)).toEqual([true, true, true]);
+    expect([asked("read", ["/etc/hosts"]), asked("search"), asked("read"), asked("read", ["/project/a.ts", "/etc/hosts"])].map(allowed)).toEqual([false, false, false, false]);
     expect([asked("edit", ["/project/a.ts"]), asked("delete", ["/project/a.ts"]), asked("execute", [], "ls"), asked("fetch"), asked("other"), asked(null)].map(allowed)).toEqual([
       false,
       false,
@@ -41,6 +42,12 @@ describe("a room's permission preset", () => {
     const allowed = allowedUnder("work-freely");
     expect([asked("edit", ["/project/a.ts"]), asked("delete", ["/project/b.ts"]), asked("move", ["/project/a.ts", "/project/c.ts"])].map(allowed)).toEqual([true, true, true]);
     expect([asked("edit", ["/etc/hosts"]), asked("move", ["/project/a.ts", "/tmp/a.ts"]), asked("edit")].map(allowed)).toEqual([false, false, false]);
+  });
+
+  test("working freely reads freely only inside the workspace too", () => {
+    const allowed = allowedUnder("work-freely");
+    expect([asked("read", ["/project/a.ts"]), asked("search", ["/project/src"])].map(allowed)).toEqual([true, true]);
+    expect([asked("read", ["/etc/hosts"]), asked("search"), asked("read")].map(allowed)).toEqual([false, false, false]);
   });
 
   test("working freely still asks before commands, fetches and tools of no known kind", () => {

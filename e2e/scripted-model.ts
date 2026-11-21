@@ -177,6 +177,12 @@ export class ScriptedModel {
     return (this.latestReplyRequest().tools ?? []).find(({ function: tool }) => tool.name.endsWith(name))?.function.description;
   }
 
+  /** The names of the tools offered with the latest request for a reply whose user messages hold `text`, which tells one conversation's requests from another's. */
+  toolsOfferedWith(text: string) {
+    const request = this.requests.findLast(({ tools, messages }) => (tools ?? []).length > 0 && messages.some((message) => message.role === "user" && textOf(message).includes(text)));
+    return (request?.tools ?? []).map(({ function: { name } }) => name);
+  }
+
   /** The description Codex gave the model of a namespace of tools, such as an MCP server's, in the latest request with it. */
   namespaceDescription(name: string) {
     const namespaceIn = (request: ResponsesRequest) => request.tools?.find((tool) => tool.type === "namespace" && tool.name === name);
@@ -207,7 +213,8 @@ export class ScriptedModel {
     if (last?.role === "tool") return { text: `Tool result: ${toolResultOf(last)}` };
     const text = withoutAntigravityWrapping(textOf(last)).trim();
     const canvasTool = (action: string) => tools.find((name) => name.includes("canvas") && name.endsWith(action))!;
-    const script = text.split("\n").at(-1)!.trim(); // opencode 2 puts its own lines before a subagent's prompt
+    const script = text.split("\n").at(-1)!.trim().replace(/^> ?/, ""); // opencode 2 puts its own lines before a subagent's prompt; a room quotes each line of its messages
+
     const [directive, ...rest] = script.split(" ");
     const argument = rest.join(" ");
     if (directive === "RUN") return { call: shellCall(tools, argument) };

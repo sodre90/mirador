@@ -36,7 +36,7 @@ import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checkli
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
-import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread } from "../shared/rooms.ts";
+import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
 
@@ -212,6 +212,9 @@ const addedColumns = [
   { table: "conversations", column: "agent_commands_at", definition: "INTEGER" },
   { table: "workspace_groups", column: "parent_id", definition: "TEXT" },
   { table: "devices", column: "person_id", definition: "TEXT REFERENCES people(id)" },
+  { table: "rooms", column: "peoples_tasks_wait", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "room_messages", column: "author_role", definition: "TEXT" },
+  { table: "room_messages", column: "task_held", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -395,6 +398,7 @@ interface RoomRow {
   name: string;
   workspace_id: string;
   permissions: PermissionPreset;
+  peoples_tasks_wait: number;
   created_at: number;
 }
 
@@ -411,6 +415,8 @@ interface RoomMessageRow {
   answers: string | null;
   ended: RoomAnswerEnd | null;
   tags_dropped: string | null;
+  author_role: RoomRole | null;
+  task_held: TaskHeld | null;
 }
 
 interface RoomThreadRow {
@@ -426,12 +432,14 @@ const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
   seq: row.seq,
   at: row.at,
   author: row.profile_id !== null ? { profileId: row.profile_id } : { personId: row.person_id! },
+  ...(row.author_role !== null && { authorRole: row.author_role }),
   text: row.text,
   tags: JSON.parse(row.tags) as string[],
   threadId: row.thread_id,
   ...(row.answers !== null && { answers: row.answers }),
   ...(row.ended !== null && { ended: row.ended }),
   ...(row.tags_dropped !== null && { tagsDropped: JSON.parse(row.tags_dropped) as string[] }),
+  ...(row.task_held !== null && { taskHeld: row.task_held }),
 });
 
 const toRoomThread = ({ id, room_id, message_id, profile_id }: RoomThreadRow): RoomThread => ({ id, roomId: room_id, messageId: message_id, profileId: profile_id });
@@ -1003,7 +1011,9 @@ export class Store {
   }
 
   insertRoom(room: Room) {
-    this.db.query("INSERT INTO rooms (id, name, workspace_id, permissions, created_at) VALUES (?, ?, ?, ?, ?)").run(room.id, room.name, room.workspaceId, room.permissions, room.createdAt);
+    this.db
+      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, created_at) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
     room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
   }
@@ -1018,7 +1028,7 @@ export class Store {
     return row ? this.toRoom(row) : undefined;
   }
 
-  private toRoom({ id, name, workspace_id, permissions, created_at }: RoomRow): Room {
+  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, created_at }: RoomRow): Room {
     const agents = this.db.query("SELECT profile_id, conversation_id FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as { profile_id: string; conversation_id: string | null }[];
     const people = this.db.query("SELECT person_id AS personId, role FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPerson[];
     return {
@@ -1028,6 +1038,7 @@ export class Store {
       agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })),
       permissions,
       people,
+      peoplesTasksWait: peoples_tasks_wait === 1,
       createdAt: created_at,
     };
   }
@@ -1049,6 +1060,10 @@ export class Store {
 
   renameRoom(id: string, name: string) {
     this.db.query("UPDATE rooms SET name = ? WHERE id = ?").run(name, id);
+  }
+
+  setRoomPeoplesTasksWait(id: string, wait: boolean) {
+    this.db.query("UPDATE rooms SET peoples_tasks_wait = ? WHERE id = ?").run(wait ? 1 : 0, id);
   }
 
   setRoomPermissions(id: string, permissions: PermissionPreset) {
@@ -1084,7 +1099,9 @@ export class Store {
     const seq = this.nextRoomSeq(message.roomId);
     const author = writtenByAgent(message.author) ? { personId: null, profileId: message.author.profileId } : { personId: message.author.personId, profileId: null };
     this.db
-      .query("INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, text, tags, thread_id, answers, ended, tags_dropped) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .query(
+        "INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, author_role, text, tags, thread_id, answers, ended, tags_dropped, task_held) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      )
       .run(
         message.id,
         message.roomId,
@@ -1092,14 +1109,27 @@ export class Store {
         message.at,
         author.personId,
         author.profileId,
+        message.authorRole ?? null,
         message.text,
         JSON.stringify(message.tags),
         message.threadId,
         message.answers ?? null,
         message.ended ?? null,
         message.tagsDropped ? JSON.stringify(message.tagsDropped) : null,
+        message.taskHeld ?? null,
       );
     return { ...message, seq };
+  }
+
+  /** The waiting task, now that an approver answered it, held from the agents for good or not at all: it keeps its place in the room. */
+  answerRoomTask(id: string, held: Exclude<TaskHeld, "waiting"> | null): RoomMessage | undefined {
+    this.db.query("UPDATE room_messages SET task_held = ? WHERE id = ?").run(held, id);
+    return this.findRoomMessage(id);
+  }
+
+  /** The tasks of people other than the owner that wait for an approver, oldest first. */
+  listRoomTasksWaiting(roomId: string): RoomMessage[] {
+    return (this.db.query("SELECT * FROM room_messages WHERE room_id = ? AND task_held = 'waiting' ORDER BY seq").all(roomId) as RoomMessageRow[]).map(toRoomMessage);
   }
 
   /** The message under the same id, as written anew: what it says and how it ended change, and it moves to the end of the room. */

@@ -8,13 +8,19 @@ import {
   askedInThread,
   canvasItemsOfAnswers,
   eventsAnswering,
+  ROOM_MESSAGE_MOST_CHARACTERS,
+  roomMessageLength,
   shownInRoom,
+  taskWaits,
   unanswered,
   writtenByAgent,
   type Room,
   type RoomApproval,
   type RoomAuthor,
   type RoomMessage,
+  type RoomMessageSentAlong,
+  type RoomTaskApproval,
+
   type RoomThread,
   type RoomTimeline,
 } from "../shared/rooms.ts";
@@ -23,7 +29,7 @@ import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, Pers
 import { connection } from "./connection.ts";
 import type { EditRequest } from "./edit-approval.ts";
 import { hints } from "./hints.ts";
-import { t } from "./i18n/index.ts";
+import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
 import { ConversationWithSide } from "./SideChat.tsx";
@@ -65,6 +71,7 @@ function AuthorName({ author, agentsById }: { author: RoomAuthor; agentsById: Ma
 function answerEnding(message: RoomMessage) {
   if (message.ended === "stopped") return words.stopped;
   if (message.ended === "failed") return words.failed;
+  if (message.ended === "declined") return words.declined;
   return message.text ? null : words.noAnswer;
 }
 
@@ -79,6 +86,7 @@ function RoomEntry({ message, quoted, agentsById, children }: { message: RoomMes
       <div className="entry-body">
         <div className="author">
           <AuthorName author={message.author} agentsById={agentsById} />
+          {message.authorRole && <span className="room-role-label">{words.roles[message.authorRole]}</span>}
           <Timestamp at={message.at} />
         </div>
         {quoted && (
@@ -86,6 +94,7 @@ function RoomEntry({ message, quoted, agentsById, children }: { message: RoomMes
             <span className="room-quote-author">
               <AuthorName author={quoted.author} agentsById={agentsById} />
             </span>
+            {quoted.authorRole && <span className="room-role-label">{words.roles[quoted.authorRole]}</span>}
             <span className="room-quote-text">{quoted.text}</span>
           </blockquote>
         )}
@@ -168,8 +177,10 @@ function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; ag
     textarea.current?.setSelectionRange(next.caret, next.caret);
   };
   const tagMenu = useTagMenu({ agents, text, caret, take });
+  const length = roomMessageLength(text);
+  const tooLong = length > ROOM_MESSAGE_MOST_CHARACTERS;
   const send = () => {
-    if (!text.trim()) return;
+    if (!text.trim() || tooLong) return;
     onSend(
       text,
       tagged.filter(({ name }) => text.includes(`@${name}`)).map(({ profileId }) => profileId),
@@ -203,11 +214,16 @@ function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; ag
           onKeyDown={onKeyDown}
         />
         <div className="composer-actions">
-          <button type="button" className="primary" disabled={!text.trim()} onClick={send}>
+          <button type="button" className="primary" disabled={!text.trim() || tooLong} onClick={send}>
             {words.send}
           </button>
         </div>
       </div>
+      {tooLong && (
+        <div className="notice-line room-message-too-long" role="alert">
+          {words.messageTooLong(formatNumber(length), formatNumber(ROOM_MESSAGE_MOST_CHARACTERS))}
+        </div>
+      )}
     </div>
   );
 }
@@ -217,21 +233,106 @@ const writeIn = (roomId: string, text: string, tags: string[], threadId: string 
 const approve = ({ conversationId, request }: RoomApproval, answer: RoomApprovalAnswer) =>
   connection.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer });
 
-/** The requests of the room's agents that wait for you, oldest first: the first with its answers, and how many wait in all. */
-function ApprovalStrip({ approvals, agentsById, you }: { approvals: RoomApproval[]; agentsById: Map<string, RoomAgentShown>; you: string | null }) {
-  const first = approvals[0];
-  const personName = usePersonName(first?.task?.personId ?? null);
+const answerTask = ({ roomId, messageId }: RoomTaskApproval, answer: "allow" | "deny") => connection.send({ type: "room.answer-task", roomId, messageId, answer });
+
+type WaitingForYou = { kind: "request"; approval: RoomApproval; at: number } | { kind: "task"; task: RoomTaskApproval; at: number };
+
+/** What waits for you in the room, oldest first: the agents' requests, and the tasks people other than the owner gave them. */
+const waitingInOrder = (approvals: RoomApproval[], tasks: RoomTaskApproval[]): WaitingForYou[] =>
+  [...approvals.map((approval) => ({ kind: "request" as const, approval, at: approval.at })), ...tasks.map((task) => ({ kind: "task" as const, task, at: task.at }))].toSorted(
+    (a, b) => a.at - b.at,
+  );
+
+/** What waits for you in the room, oldest first: the first with its answers, and how many wait in all. */
+function ApprovalStrip({ approvals, tasks = [], agentsById, you }: { approvals: RoomApproval[]; tasks?: RoomTaskApproval[]; agentsById: Map<string, RoomAgentShown>; you: string | null }) {
+  const waiting = waitingInOrder(approvals, tasks);
+  const first = waiting[0];
   if (!first) return null;
+  const count = waiting.length > 1 && <span className="room-approval-count">{words.approvalPosition(waiting.length)}</span>;
+  return first.kind === "task" ? (
+    <TaskApproval key={first.task.messageId} task={first.task} agentsById={agentsById} count={count} />
+  ) : (
+    <RequestApproval approval={first.approval} agentsById={agentsById} you={you} count={count} />
+  );
+}
+
+/**
+ * A person's task that reaches no agent until you allow it: who gives it, in what role, to which agents, all it says,
+ * and the room's other messages its agents would be sent with it.
+ */
+function TaskApproval({ task, agentsById, count }: { task: RoomTaskApproval; agentsById: Map<string, RoomAgentShown>; count: ReactNode }) {
+  const personName = usePersonName(task.personId);
+  const [wholeShown, setWholeShown] = useState(false);
+  return (
+    <section className="room-approvals room-task-approval" aria-label={words.approvalsWaiting} data-task-message-id={task.messageId}>
+      <div className="room-approval-head">
+        <span className="room-approval-asker">{words.taskFrom(personName, words.authorRoles[task.role], agentNames(task.profileIds, agentsById))}</span>
+        {count}
+      </div>
+      <div className={`room-approval-task-text${wholeShown ? " whole" : ""}`}>{task.text}</div>
+      <div className="room-approval-task-size">
+        <span className="room-approval-task-lines">{words.taskLines(task.text.split("\n").length)}</span>
+        <button type="button" className="link" aria-expanded={wholeShown} onClick={() => setWholeShown(!wholeShown)}>
+          {wholeShown ? words.showLessOfTask : words.showWholeTask}
+        </button>
+      </div>
+      {task.sentAlong.length > 0 && <MessagesSentAlong messages={task.sentAlong} agentsById={agentsById} />}
+      <div className="permission-options">
+        <button type="button" className="option-allow_once" onClick={() => answerTask(task, "allow")}>
+          {words.allow}
+        </button>
+        <button type="button" onClick={() => answerTask(task, "deny")}>
+          {words.deny}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function MessagesSentAlong({ messages, agentsById }: { messages: RoomMessageSentAlong[]; agentsById: Map<string, RoomAgentShown> }) {
+  const [listed, setListed] = useState(false);
+  return (
+    <div className="room-approval-sent-along">
+      <div>
+        <span>{words.sentAlong(messages.length)}</span>{" "}
+        <button type="button" className="link" aria-expanded={listed} onClick={() => setListed(!listed)}>
+          {listed ? words.hideSentAlong : words.showSentAlong}
+        </button>
+      </div>
+      {listed && (
+        <ol className="room-approval-sent-along-list">
+          {messages.map(({ messageId, author, role, text }) => (
+            <li key={messageId} data-room-message={messageId}>
+              <span className="room-approval-sent-along-author">
+                <AuthorName author={author} agentsById={agentsById} />
+              </span>
+              <span className="room-role-label">{words.authorRoles[role]}</span>
+              <div className="room-approval-sent-along-text">{text}</div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
+function RequestApproval({ approval: first, agentsById, you, count }: { approval: RoomApproval; agentsById: Map<string, RoomAgentShown>; you: string | null; count: ReactNode }) {
+  const personName = usePersonName(first.task?.personId ?? null);
   const detail = first.request.command ?? first.file;
   return (
     <section className="room-approvals" aria-label={words.approvalsWaiting} data-permission-id={first.request.permissionId}>
       <div className="room-approval-head">
         <span className="room-approval-asker">{words.asks(agentsById.get(first.profileId)?.name ?? words.agentGone)}</span>
         <span className="room-approval-subject">{pendingPermissionNeeded(first.request)}</span>
-        {approvals.length > 1 && <span className="room-approval-count">{words.approvalPosition(approvals.length)}</span>}
+        {count}
       </div>
       {detail && <code className="room-approval-detail">{detail}</code>}
-      {first.task && <div className="room-approval-task">{first.task.personId === you ? words.yourTask(first.task.text) : words.approvalTask(personName, first.task.text)}</div>}
+      {first.outsideWorkspace && <div className="room-approval-outside">{words.outsideWorkspace}</div>}
+      {first.task && (
+        <div className="room-approval-task">
+          {first.task.personId === you ? words.yourTask(first.task.text) : words.approvalTask(personName, words.authorRoles[first.task.role], first.task.text)}
+        </div>
+      )}
       <div className="permission-options">
         <button type="button" className="option-allow_once" onClick={() => approve(first, "allow")}>
           {words.allow}
@@ -276,8 +377,15 @@ function ThreadColumn({
   onClose: () => void;
 }) {
   const asked = askedInThread(timeline, thread);
-  const workingOn = unanswered(timeline).some((pending) => pending.thread.id === thread.id);
-  const workingLine = waitsInThread(approvals, thread.id) ? words.waitingForApproval(agent.name) : isBusy(agent.conversation) ? words.working(agent.name) : words.waiting(agent.name);
+  const pendingHere = unanswered(timeline).filter((pending) => pending.thread.id === thread.id);
+  const workingOn = pendingHere.length > 0;
+  const workingLine = pendingHere.every(({ message }) => taskWaits(message))
+    ? words.taskWaits(agent.name)
+    : waitsInThread(approvals, thread.id)
+      ? words.waitingForApproval(agent.name)
+      : isBusy(agent.conversation)
+        ? words.working(agent.name)
+        : words.waiting(agent.name);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -308,14 +416,18 @@ function ThreadColumn({
   );
 }
 
-/** What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it works on it, waits for approval in it, or comes to it later. */
+/**
+ * What the room shows of its agents' work under way: a line for each message an agent has to answer, and whether it
+ * works on it, waits for approval in it, comes to it later, or waits for its task to be allowed.
+ */
 function workUnderWay(timeline: RoomTimeline, agentsById: Map<string, RoomAgentShown>, approvals: RoomApproval[]) {
   const pending = unanswered(timeline);
+  const sent = pending.filter(({ message }) => !taskWaits(message));
   return pending.map(({ message, thread }) => {
     const agent = agentsById.get(thread.profileId);
     const name = agent?.name ?? words.agentGone;
-    const first = pending.find((each) => each.thread.profileId === thread.profileId)?.message === message;
-    const text = waitsInThread(approvals, thread.id) ? words.waitingForApproval(name) : first ? words.working(name) : words.waiting(name);
+    const first = sent.find((each) => each.thread.profileId === thread.profileId)?.message === message;
+    const text = taskWaits(message) ? words.taskWaits(name) : waitsInThread(approvals, thread.id) ? words.waitingForApproval(name) : first ? words.working(name) : words.waiting(name);
     return { key: `${message.id}-${thread.id}`, thread, text };
   });
 }
@@ -330,6 +442,7 @@ export function RoomView({
   ownerId,
   ownerPicture,
   approvals,
+  tasks,
   you,
   dispatch,
   onOpenOnCanvas,
@@ -344,6 +457,8 @@ export function RoomView({
   ownerPicture: string | null;
   /** The requests the room's agents wait on, oldest first. */
   approvals: RoomApproval[];
+  /** The tasks of people other than the owner that wait for an approver, oldest first. */
+  tasks: RoomTaskApproval[];
   you: string | null;
   dispatch: Dispatch<AppAction>;
   onOpenOnCanvas: (itemId: string) => void;
@@ -356,6 +471,7 @@ export function RoomView({
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
   const tagsAgents = !isGuestIn(room, you);
   const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
+  const tasksWaitingForYou = tasks.filter(({ approvers }) => you !== null && approvers.includes(you));
   const thread = timeline?.threads.find(({ id }) => id === threadId) ?? null;
   const threadAgent = thread ? agentsById.get(thread.profileId) : undefined;
   const threadConversationId = threadAgent?.conversation?.id ?? null;
@@ -400,7 +516,7 @@ export function RoomView({
         {timeline && workUnderWay(timeline, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <div ref={timelineEnd} />
       </div>
-      <ApprovalStrip approvals={waitingForYou} agentsById={agentsById} you={you} />
+      <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
         agents={tagsAgents ? agents.filter(({ profile }) => profile) : []}

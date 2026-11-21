@@ -18,7 +18,7 @@ export const settings: Messages["settings"] = {
   },
   ownProfile: {
     title: "Dein Profil",
-    hint: "Neben den Nachrichten, die du schreibst, in jedem Browser und auf jedem Gerät, das dem Host beitritt. Ohne Namen steht dort „Du“.",
+    hint: (nameless) => `Neben den Nachrichten, die du schreibst, in jedem Browser und auf jedem Gerät, das dem Host beitritt. Ohne Namen steht dort für dich „Du“ und für alle anderen „${nameless}“.`,
     name: "Name",
     colour: "Farbe",
   },

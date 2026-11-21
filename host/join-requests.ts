@@ -174,11 +174,14 @@ export class JoinRequestService {
   }
 }
 
-/** Keeps one sender from filling the few places for waiting requests. */
+/** Lets each sender do something at most `most` times a minute; by default, keeps one sender from filling the few places for waiting requests. */
 export class SenderLimit {
   private readonly askedAt = new Map<string, number[]>();
 
-  constructor(private readonly now: () => number = Date.now) {}
+  constructor(
+    private readonly now: () => number = Date.now,
+    private readonly most = MOST_ASKED_PER_SENDER_A_MINUTE,
+  ) {}
 
   allows(sender: string) {
     const aMinuteAgo = this.now() - 60_000;
@@ -188,7 +191,7 @@ export class SenderLimit {
       else this.askedAt.delete(someSender);
     });
     const recent = this.askedAt.get(sender) ?? [];
-    if (recent.length >= MOST_ASKED_PER_SENDER_A_MINUTE) return false;
+    if (recent.length >= this.most) return false;
     this.askedAt.set(sender, [...recent, this.now()]);
     return true;
   }

@@ -174,7 +174,7 @@ export const hints: Messages["hints"] = {
   findMatchCase: "Kis- és nagybetű megkülönböztetése.",
   runningSubagent: "Egy dolgozó alágens. Kattints, hogy megnyisd a kártyáját a beszélgetésben, és lásd, mit csinált eddig.",
   approvalWaiting: "Az ágens vagy valamelyik alágense feljebb a beszélgetésben a jóváhagyásodra vár. Kattints, hogy odaugorj.",
-  roomAllowForTask: "Engedélyezi ezt a kérést, és az ágens azonos fajta kéréseit, vagy ugyanazt a parancsot, magától átengedi, amíg a köre véget nem ér.",
+  roomAllowForTask: "Engedélyezi ezt a kérést, és az ágens azonos fajta kéréseit a munkaterületen belül, vagy ugyanazt a parancsot, magától átengedi, amíg a köre véget nem ér.",
   jumpToLatest: "Ugrás a beszélgetés végére; onnan a nézet követi, ami érkezik.",
   subagentTokens: (read, written, fresh) =>
     `Bemeneti tokenek: ${read} a gyorsítótárból olvasva, ${written} oda írva, ${fresh} új. Az alágens Claude Code-átiratából számolva.`,

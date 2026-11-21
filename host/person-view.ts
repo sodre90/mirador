@@ -1,7 +1,7 @@
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import { shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
+import { agentStandIn, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
 import type { Store } from "./store.ts";
 
@@ -11,16 +11,23 @@ type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 
 type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { type: K }>, socket: SocketData) => ServerMessage[];
 
-/** A room as a person in it sees it: of its people only themselves, and nothing of the workspace its agents work in. */
-const roomSeenBy = ({ id, name, agents, permissions, people, createdAt }: Room, personId: string): Room => ({
+/**
+ * A room as a person in it sees it: of its people only themselves, nothing of the workspace its agents work in, and in
+ * place of each agent's conversation there, which they never open, a stand-in that names none.
+ */
+const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, createdAt }: Room, personId: string): Room => ({
   id,
   name,
   workspaceId: "",
-  agents: agents.map(({ profileId, conversationId }) => ({ profileId, conversationId })),
+  agents: agents.map(({ profileId, conversationId }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId) })),
   permissions,
   people: people.filter((person) => person.personId === personId),
+  peoplesTasksWait,
   createdAt,
 });
+
+/** A page or question of a room's agent as people in the room see it: its agent's stand-in in place of its conversation. */
+const canvasItemSeen = (item: CanvasItem, roomId: string, profileId: string): CanvasItem => ({ ...item, conversationId: agentStandIn(roomId, profileId) });
 
 /** A room's agent as people in the room see it: its name and the agent it runs on, none of its settings. */
 const agentSeen = ({ id, name, harness }: Profile): Profile => ({
@@ -39,6 +46,18 @@ const agentSeen = ({ id, name, harness }: Profile): Profile => ({
   createdAt: 0,
 });
 
+/** The agents of the rooms, by their profiles. */
+export function agentsOfRooms(store: Pick<Store, "listProfiles">, rooms: Room[]) {
+  const agentIds = new Set(rooms.flatMap(({ agents }) => agents.map(({ profileId }) => profileId)));
+  return store.listProfiles().filter(({ id }) => agentIds.has(id));
+}
+
+/** The people a person other than the owner sees: the owner, who is in every room, themselves, and everyone who shares a room with them. */
+export function peopleSeenBy(store: Pick<Store, "roomsOf" | "listPeople" | "ownerId">, personId: string) {
+  const seen = new Set([store.ownerId(), personId, ...store.roomsOf(personId).flatMap(({ people }) => people.map((person) => person.personId))]);
+  return store.listPeople().filter(({ id }) => seen.has(id));
+}
+
 /**
  * What a signed-in person other than the machine's owner sees of each message the host sends: their rooms, the people
  * and agents in them, and those rooms' messages and canvases, as made for them; nothing else. A message type missing here
@@ -48,18 +67,10 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
 
-  const agentsOf = (rooms: Room[]) => {
-    const agentIds = new Set(rooms.flatMap(({ agents }) => agents.map(({ profileId }) => profileId)));
-    return store.listProfiles().filter(({ id }) => agentIds.has(id));
-  };
+  const agentsOf = (rooms: Room[]) => agentsOfRooms(store, rooms);
   const isAgentOfTheirRooms = (profileId: string, socket: SocketData) =>
     store.roomsOf(socket.personId).some(({ agents }) => agents.some((agent) => agent.profileId === profileId));
-
-  /** The owner, who is in every room, and everyone who shares a room with the person. */
-  const peopleSeenBy = (personId: string) => {
-    const seen = new Set([store.ownerId(), personId, ...store.roomsOf(personId).flatMap(({ people }) => people.map((person) => person.personId))]);
-    return store.listPeople().filter(({ id }) => seen.has(id));
-  };
+  const peopleSeen = (personId: string) => peopleSeenBy(store, personId);
 
   /** The room as it is now for a person in it, with its agents, which they may not have been told of; for a person just taken out of it, that it is gone. */
   const roomNewsFor = (room: Room, socket: SocketData): ServerMessage[] => {
@@ -72,9 +83,19 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
     return shownIf(socket.roomsShown.delete(room.id), { type: "room.deleted", roomId: room.id });
   };
 
-  const onCanvasOfTheirRoom = (item: CanvasItem, socket: SocketData) => {
-    const roomId = store.findConversation(item.conversationId)?.roomId;
-    return shownOnRoomCanvas(item) && typeof roomId === "string" && isIn(socket, roomId);
+  const canvasItemFor = (item: CanvasItem, socket: SocketData): ServerMessage[] => {
+    const conversation = store.findConversation(item.conversationId);
+    const roomId = conversation?.roomId;
+    if (!shownOnRoomCanvas(item) || typeof roomId !== "string" || conversation?.profileId == null || !isIn(socket, roomId)) return [];
+    return [{ type: "canvas.upserted", item: canvasItemSeen(item, roomId, conversation.profileId) }];
+  };
+
+  const timelineCanvasSeen = (roomId: string, items: CanvasItem[]) => {
+    const agents = store.findRoom(roomId)?.agents ?? [];
+    return items.flatMap((item) => {
+      const profileId = agents.find(({ conversationId }) => conversationId === item.conversationId)?.profileId;
+      return profileId === undefined ? [] : [canvasItemSeen(item, roomId, profileId)];
+    });
   };
 
   const snapshotFor = ({ hostRunId }: Snapshot, socket: SocketData): Snapshot => {
@@ -87,6 +108,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
       conversations: [],
       rooms: rooms.map((room) => roomSeenBy(room, socket.personId)),
       roomApprovals: [],
+      roomTasksWaiting: [],
       profiles: agentsOf(rooms).map(agentSeen),
       promptTemplates: [],
       canvasUse: "as-needed",
@@ -95,7 +117,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
       editor: { setting: { editor: "first-found" }, found: [], opensIn: null },
       pushRelay: { address: null, tokenSet: false, grantRelay: null, miradorRelay: null },
       avatar: null,
-      people: peopleSeenBy(socket.personId),
+      people: peopleSeen(socket.personId),
       ownerId: store.ownerId(),
       you: socket.personId,
       installedAgents: [],
@@ -150,7 +172,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
     "settings.machine-name": HIDDEN,
     "settings.push-relay": HIDDEN,
     "settings.avatar": HIDDEN,
-    "people.listed": (_, socket) => [{ type: "people.listed", people: peopleSeenBy(socket.personId) }],
+    "people.listed": (_, socket) => [{ type: "people.listed", people: peopleSeen(socket.personId) }],
     "voice.settings": HIDDEN,
     "voice.engine": HIDDEN,
     "workspace.upserted": HIDDEN,
@@ -162,7 +184,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
     "room.created": HIDDEN,
     "room.upserted": ({ room }, socket) => roomNewsFor(room, socket),
     "room.deleted": (message, socket) => shownIf(socket.roomsShown.delete(message.roomId), message),
-    "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), message),
+    "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas) }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
     "room.approvals": HIDDEN,
     "conversation.history": HIDDEN,
@@ -179,7 +201,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
     "conversation.rewind-done": HIDDEN,
     "conversation.rewound": HIDDEN,
     "conversation.rewind-failed": HIDDEN,
-    "canvas.upserted": (message, socket) => shownIf(onCanvasOfTheirRoom(message.item, socket), message),
+    "canvas.upserted": ({ item }, socket) => canvasItemFor(item, socket),
     "canvas.exported": HIDDEN,
     "canvas.saved-to-project": HIDDEN,
     "canvas.export-failed": HIDDEN,
@@ -248,7 +270,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
     "machine.join-answered": HIDDEN,
     "join-requests.listed": HIDDEN,
     "join-request.answered": HIDDEN,
-    "settings.saved": HIDDEN,
+    "settings.saved": (message) => [message],
     "search.results": HIDDEN,
   };
 

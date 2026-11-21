@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { claudeSessionMeta, piSessionMeta, sessionMeta } from "../host/acp/harnesses.ts";
+import { claudeRoomSessionMeta, claudeSessionMeta, piSessionMeta, sessionMeta } from "../host/acp/harnesses.ts";
 import { canvasInstructions, canvasUseGuidance, titleGuidance } from "../host/canvas/guidance.ts";
 import type { CanvasUse } from "../shared/model.ts";
 
@@ -18,6 +18,23 @@ test("Claude Code runs every tool of the canvas's own without a permission promp
 });
 
 const ASSETS_ORIGIN = "https://assets.example:4601";
+
+test("a room's agent runs only the room's canvas tools without asking, and hears of no other, whatever its harness", () => {
+  const otherCanvasTools = ["when_done", "when-done", "title_conversation", "usage_stats", "plan_usage", "use_tool", "plugin_install", "app_open", "land"];
+  expect(claudeRoomSessionMeta("often").claudeCode.options.allowedTools).toEqual([
+    "mcp__canvas__show",
+    "mcp__canvas__ask",
+    "mcp__canvas__room_history",
+    "mcp__canvas__room_tag",
+  ]);
+  for (const harness of ["claude", "pi", "antigravity", "opencode", "codex"] as const) {
+    for (const canvasUse of ["often", "as-needed"] as const) {
+      const told = JSON.stringify(sessionMeta(harness, canvasUse, { canvasAssetsOrigin: ASSETS_ORIGIN, inRoom: true }) ?? null);
+      expect({ harness, canvasUse, named: otherCanvasTools.filter((tool) => told.includes(tool)) }).toEqual({ harness, canvasUse, named: [] });
+    }
+  }
+  expect(JSON.stringify(sessionMeta("pi", "often", { canvasAssetsOrigin: ASSETS_ORIGIN, inRoom: true }))).toContain(JSON.stringify(canvasInstructions(ASSETS_ORIGIN)).slice(1, -1));
+});
 const appendedForPi = (canvasUse: CanvasUse) => piSessionMeta(canvasUse, ASSETS_ORIGIN).systemPrompt.append;
 
 test("pi gets the canvas server's instructions, and the canvas guidance only when Settings ask for the canvas often", () => {

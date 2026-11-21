@@ -5,11 +5,17 @@ import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
 const model = new ScriptedModel();
-const PROFILE = "scripted opencode";
+const PROFILE = "Scripted";
 
-test.beforeAll(async () => {
+test.beforeAll(async ({ browser }) => {
   await model.start();
   await host.start();
+  const page = await browser.newPage();
+  await signIn(page, host);
+  await addWorkspace(page, host.projectDir);
+  const dialog = await createProfile(page, PROFILE, scriptedOpencodeEnvironment(model, host.root), "", "opencode");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await page.close();
 });
 test.afterAll(async () => {
   await host.stop();
@@ -21,6 +27,7 @@ const open = (page: Page, conversationId: string) => page.locator(`li[data-reord
 const shownTitle = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe").locator("h1");
 
 async function startedConversation(page: Page) {
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · opencode` });
   const conversationId = await startConversation(page);
   await sendMessage(page, "hello");
   await waitForTurnToEnd(page);
@@ -30,10 +37,6 @@ async function startedConversation(page: Page) {
 test("each opencode conversation on one agent gets its own canvas calls, and its subagents' too", async ({ page }) => {
   test.setTimeout(180_000);
   await signIn(page, host);
-  await addWorkspace(page, host.projectDir);
-  const dialog = await createProfile(page, PROFILE, scriptedOpencodeEnvironment(model, host.root), "", "opencode");
-  await dialog.getByRole("button", { name: "Close" }).click();
-  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · opencode` });
   const first = await startedConversation(page);
   const second = await startedConversation(page);
 
@@ -61,4 +64,83 @@ test("each opencode conversation on one agent gets its own canvas calls, and its
   await expect(subagent.locator(".subagent-work .message.agent")).toHaveCount(1);
   const subagentReply = ((await subagent.locator(".subagent-work .message.agent").textContent()) ?? "").trim();
   await expect(page.locator(".timeline:visible .message.agent:not(.subagent-work .message)").filter({ hasText: subagentReply })).toHaveText(/^Tool result: <subagent /);
+});
+
+const roomComposer = (page: Page, room: string) => page.getByRole("textbox", { name: `Write in ${room}, @ tags an agent…` });
+const roomAnswerSaying = (page: Page, text: string) => page.locator(".room-timeline .room-entry").filter({ has: page.locator(".message.agent", { hasText: text }) });
+
+/** The canvas tools offered with the conversation's request that holds `marker`, by their own names. */
+const canvasToolsOfferedWith = (marker: string) =>
+  model
+    .toolsOfferedWith(marker)
+    .filter((name) => name.includes("canvas"))
+    .map((name) => name.replace(/^.*canvas[_-]/, ""))
+    .toSorted();
+
+async function openNewRoom(page: Page, room: string) {
+  await page.getByRole("button", { name: "New room" }).click();
+  const dialog = page.getByRole("dialog", { name: "New room" });
+  await dialog.getByLabel("Room name").fill(room);
+  await dialog.getByLabel(PROFILE, { exact: true }).check();
+  await dialog.getByRole("button", { name: "Create room" }).click();
+  await expect(page.getByRole("heading", { name: `# ${room}` })).toBeVisible();
+}
+
+/** Tags the agent from the @ menu and puts `line` on a line of its own, the last of the prompt the scripted model reads. */
+async function tagInRoom(page: Page, room: string, line: string, answered = line) {
+  await roomComposer(page, room).fill(`@${PROFILE.slice(0, 2)}`);
+  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: `@${PROFILE}` }).click();
+  await roomComposer(page, room).fill(`@${PROFILE}\n${line}`);
+  await roomComposer(page, room).press("Enter");
+  await expect(roomAnswerSaying(page, answered).first()).toBeVisible({ timeout: 60_000 });
+}
+
+const ROOM_TOOLS = ["ask", "room_history", "room_tag", "show"];
+
+async function expectRoomKeepsItsTools(page: Page, room: string) {
+  const marker = `tools of ${room}`;
+  await tagInRoom(page, room, marker);
+  expect(canvasToolsOfferedWith(marker)).toEqual(ROOM_TOOLS);
+  await tagInRoom(page, room, `SHOW Page of ${room}`, "Tool result: ");
+  await expect(shownTitle(page)).toHaveText(`Page of ${room}`);
+}
+
+async function expectOwnersConversationKeepsItsTools(page: Page, conversationId: string, name: string) {
+  await open(page, conversationId);
+  const marker = `tools of ${name}`;
+  await sendMessage(page, marker);
+  await waitForTurnToEnd(page);
+  const offered = canvasToolsOfferedWith(marker);
+  expect(offered).toEqual(expect.arrayContaining(["ask", "show", "title_conversation", "usage_stats", "when_done"]));
+  expect(offered).not.toContain("room_history");
+  expect(offered).not.toContain("room_tag");
+  await sendMessage(page, `CALL title_conversation {"title":"Titled ${name}"}`);
+  await waitForTurnToEnd(page);
+  await expect(page.locator(`li[data-reorder-id="${conversationId}"]`)).toContainText(`Titled ${name}`);
+  await sendMessage(page, `SHOW Page of ${name}`);
+  await expect(shownTitle(page)).toHaveText(`Page of ${name}`, { timeout: 60_000 });
+  await waitForTurnToEnd(page);
+}
+
+test("an owner's conversation and a room's on one opencode profile and folder each keep exactly their own canvas tools, whichever started first", async ({ page }) => {
+  test.setTimeout(360_000);
+  await signIn(page, host);
+
+  await test.step("the owner's conversation first, then the room's", async () => {
+    const owners = await startedConversation(page);
+    await openNewRoom(page, "Lobby");
+    await tagInRoom(page, "Lobby", "hello from the lobby");
+    await expectRoomKeepsItsTools(page, "Lobby");
+    await expectOwnersConversationKeepsItsTools(page, owners, "the owner's first conversation");
+  });
+
+  await test.step("the room's conversation first, then the owner's", async () => {
+    await openNewRoom(page, "Annex");
+    await tagInRoom(page, "Annex", "hello from the annex");
+    const owners = await startedConversation(page);
+    await expectOwnersConversationKeepsItsTools(page, owners, "the owner's second conversation");
+    await page.locator(".sidebar .rooms li", { hasText: "# Annex" }).click();
+    await expect(page.getByRole("heading", { name: "# Annex" })).toBeVisible();
+    await expectRoomKeepsItsTools(page, "Annex");
+  });
 });

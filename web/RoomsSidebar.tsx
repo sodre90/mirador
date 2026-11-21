@@ -1,7 +1,7 @@
 import { useState, type Dispatch } from "react";
 import type { Person, Profile, Workspace } from "../shared/model.ts";
 import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
-import { ROOM_ROLES, type Room, type RoomApproval, type RoomRole } from "../shared/rooms.ts";
+import { ROOM_ROLES, type Room, type RoomApproval, type RoomRole, type RoomTaskApproval } from "../shared/rooms.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { waitingHints } from "./hints.ts";
@@ -12,9 +12,9 @@ import { waitingLabels } from "./waiting.ts";
 
 const words = t.rooms;
 
-/** The rooms where an agent waits for you to answer its request. */
-export const roomsWaitingFor = (you: string | null, approvals: RoomApproval[]) =>
-  new Set(approvals.filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }) => roomId));
+/** The rooms where an agent waits for you to answer its request, or a person's task waits for you to allow it. */
+export const roomsWaitingFor = (you: string | null, waiting: (RoomApproval | RoomTaskApproval)[]) =>
+  new Set(waiting.filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }) => roomId));
 
 export function RoomsSection({
   rooms,
@@ -94,11 +94,31 @@ function sendRoleChanges(roomId: string, before: Record<string, RoleInRoom>, aft
     );
 }
 
-/** The people of the machine besides its owner, each in the room as a member or a guest, or not in it. */
-function RoomPeopleField({ people, roles, onChange }: { people: Person[]; roles: Record<string, RoleInRoom>; onChange: (personId: string, role: RoleInRoom) => void }) {
+/**
+ * The people of the machine besides its owner, each in the room as a member or a guest, or not in it; what they can
+ * reach through the agents with the room's preset; and whether their tasks start without the owner allowing each.
+ */
+function RoomPeopleField({
+  people,
+  roles,
+  permissions,
+  tasksStartUnasked,
+  onChange,
+  onTasksStartUnaskedChange,
+}: {
+  people: Person[];
+  roles: Record<string, RoleInRoom>;
+  permissions: PermissionPreset;
+  tasksStartUnasked: boolean;
+  onChange: (personId: string, role: RoleInRoom) => void;
+  onTasksStartUnaskedChange: (unasked: boolean) => void;
+}) {
   return (
     <fieldset className="room-field room-people-field">
       <legend>{words.people}</legend>
+      <span className="hint room-people-reach">
+        {words.peopleReach[permissions]} {words.peopleReachBeyond}
+      </span>
       {people.length === 0 && <span className="hint">{words.noPeople}</span>}
       {people.map((person) => {
         const name = person.name || words.nameless;
@@ -117,6 +137,11 @@ function RoomPeopleField({ people, roles, onChange }: { people: Person[]; roles:
         );
       })}
       {people.length > 0 && <span className="hint">{words.peopleHint}</span>}
+      <label className="room-agent-choice room-tasks-unasked">
+        <input type="checkbox" checked={tasksStartUnasked} onChange={(event) => onTasksStartUnaskedChange(event.target.checked)} />
+        {words.peoplesTasksStart}
+      </label>
+      <span className="hint">{words.peoplesTasksHint}</span>
     </fieldset>
   );
 }
@@ -147,6 +172,7 @@ export function RoomDialog({
   const [agentIds, setAgentIds] = useState<string[]>(room?.agents.map(({ profileId }) => profileId) ?? []);
   const [permissions, setPermissions] = useState<PermissionPreset>(room?.permissions ?? DEFAULT_PERMISSION_PRESET);
   const [roles, setRoles] = useState(() => rolesIn(room));
+  const [tasksStartUnasked, setTasksStartUnasked] = useState(room !== null && !room.peoplesTasksWait);
   const toggle = (profileId: string) => setAgentIds((ticked) => (ticked.includes(profileId) ? ticked.filter((id) => id !== profileId) : [...ticked, profileId]));
   const canSave = name.trim() !== "" && workspaceId !== "";
   const save = () => {
@@ -155,6 +181,7 @@ export function RoomDialog({
       if (name.trim() !== room.name) connection.send({ type: "room.rename", roomId: room.id, name });
       connection.send({ type: "room.set-agents", roomId: room.id, profileIds: agentIds });
       if (permissions !== room.permissions) connection.send({ type: "room.set-permissions", roomId: room.id, permissions });
+      if (tasksStartUnasked === room.peoplesTasksWait) connection.send({ type: "room.set-peoples-tasks-wait", roomId: room.id, wait: !tasksStartUnasked });
       sendRoleChanges(room.id, rolesIn(room), roles);
       return onClose();
     }
@@ -221,7 +248,10 @@ export function RoomDialog({
           <RoomPeopleField
             people={people.filter(({ id }) => id !== ownerId)}
             roles={roles}
+            permissions={permissions}
+            tasksStartUnasked={tasksStartUnasked}
             onChange={(personId, role) => setRoles((before) => ({ ...before, [personId]: role }))}
+            onTasksStartUnaskedChange={setTasksStartUnasked}
           />
         )}
         <div className="form-actions">
