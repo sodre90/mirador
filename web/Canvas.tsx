@@ -2,7 +2,7 @@ import type { PlanEntry } from "@agentclientprotocol/sdk/unstable";
 import { Fragment, createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type FormEvent, type KeyboardEvent, type RefObject } from "react";
 import { buildCanvasDocument, canvasHiddenMessage, canvasPageMessage, canvasRoomMessage, canvasShellUrl, canvasTextScaleMessage, canvasThemeMessage, isCanvasFrameMessage, type CanvasFrameMessage, type CanvasPagePolicy } from "../shared/canvas-document.ts";
 import { appKey, type AppDocumentState, type InstalledApp, type OpenApp } from "../shared/apps.ts";
-import { answersSummary, questionsOf } from "../shared/ask.ts";
+import { answersSummary, answerTo, isOwnAnswer, questionsOf } from "../shared/ask.ts";
 import type { AskItem, AskQuestion, CanvasItem, ShowItem } from "../shared/model.ts";
 import { AppView } from "./AppView.tsx";
 import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
@@ -337,6 +337,7 @@ function AskQuestionFields({
     ...(question.optionWidth && { "--option-width": `${question.optionWidth}px` }),
   } as CSSProperties;
   const isChosen = (label: string) => (waiting ? draft.choice === label : chosenLabel === label);
+  const ownAnswerGiven = !waiting && chosenLabel !== undefined && isOwnAnswer(question, chosenLabel) ? chosenLabel : undefined;
 
   return (
     <>
@@ -371,6 +372,15 @@ function AskQuestionFields({
             )}
           </label>
         ))}
+        {ownAnswerGiven !== undefined && (
+          <div className="ask-option chosen ask-own-answer">
+            <span className="ask-option-head">
+              <input type="radio" name={radioName} aria-label={words.ask.ownAnswer} checked disabled readOnly />
+              <span className="ask-option-label">{words.ask.ownAnswer}</span>
+            </span>
+            <span className="ask-own-answer-text">{ownAnswerGiven}</span>
+          </div>
+        )}
       </div>
       {waiting && (
         <div className="ask-extras">
@@ -411,20 +421,12 @@ function answerOnEnter(event: KeyboardEvent<HTMLTextAreaElement>) {
 
 const deliveredNote = (answer: NonNullable<AskItem["answer"]>) => (answer.deliveredAs === "tool-result" ? words.ask.returnedToAgent : words.ask.sentAsNextMessage);
 
-function AnsweredSeveral({ answer }: { answer: NonNullable<AskItem["answer"]> }) {
+function AnsweredSeveral({ answer, count }: { answer: NonNullable<AskItem["answer"]>; count: number }) {
   return (
     <div className="ask-answer">
-      {words.ask.youAnswered}
-      <ol className="ask-review">
-        {(answer.answers ?? []).map((entry, index) => (
-          <li key={index}>
-            {entry.question} <strong>{entry.label}</strong>
-            {entry.note && <> — “{entry.note}”</>}
-          </li>
-        ))}
-      </ol>
-      {answer.note && <div>{words.ask.noteOnAllAnswers(answer.note)}</div>}
+      {words.ask.youAnsweredCount(count)}
       <span className="delivered">{deliveredNote(answer)}</span>
+      {answer.note && <div>{words.ask.noteOnAllAnswers(answer.note)}</div>}
     </div>
   );
 }
@@ -483,7 +485,7 @@ function AskView({
           <span className="delivered">{deliveredNote(item.answer)}</span>
         </div>
       )}
-      {item.status === "answered" && item.answer && several && <AnsweredSeveral answer={item.answer} />}
+      {item.status === "answered" && item.answer && several && <AnsweredSeveral answer={item.answer} count={questions.length} />}
       {item.status === "cancelled" && <div className="ask-answer">{words.ask.withdrawn}</div>}
       {item.status === "waiting" && !answerable && <div className="ask-answer">{t.rooms.ownerAnswers}</div>}
       {pagesBeforeShown.map((before) => (
@@ -520,6 +522,28 @@ function AskView({
           assetsOrigin={assetsOrigin}
         />
       )}
+      {several &&
+        !waiting &&
+        questions.map((question, index) => {
+          const answer = answerTo(item, index);
+          return (
+            <section key={index} className="ask-question">
+              <p className="ask-progress">{words.ask.questionOf(index + 1, questions.length)}</p>
+              <h4>{question.question}</h4>
+              <AskQuestionFields
+                question={question}
+                draft={drafts[index]!}
+                onChange={(change) => changeDraft(index, change)}
+                waiting={false}
+                chosenLabel={answer?.label}
+                idPrefix={`${item.id}-${index}`}
+                radioName={`ask-${item.id}-${index}`}
+                assetsOrigin={assetsOrigin}
+              />
+              {answer?.note && <div className="ask-question-note">{words.ask.yourNote(answer.note)}</div>}
+            </section>
+          );
+        })}
       {waiting && !several && (
         <div className="ask-submit">
           <span className="ask-selection">{currentAnswer ? <>{words.ask.yourAnswer} <strong>{currentAnswer}</strong></> : words.ask.pickAnOption}</span>

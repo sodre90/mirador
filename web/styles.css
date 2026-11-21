@@ -9110,6 +9110,28 @@ body.reordering * {
   font-size: calc(12px * var(--font-scale));
 }
 
+.ask-question {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.ask-question h4 {
+  margin: 0;
+  font-size: calc(14px * var(--font-scale));
+  font-weight: 600;
+}
+
+.ask-question-note {
+  color: var(--muted);
+}
+
+.ask-own-answer-text {
+  white-space: pre-wrap;
+}
+
 .ask-review {
   margin: 4px 0;
   padding-left: 22px;

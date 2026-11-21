@@ -89,8 +89,27 @@ test("several questions come one page at a time, can be changed on a review page
     ].join("\n"),
   );
   await expect(page.locator(".settled-note")).toHaveText("✓ Answer sent: “Blue · Huge and round”");
-  await openFromCanvasHistory(page, "2 questions: Which color?");
-  await expect(ask.locator(".ask-answer")).toContainText("Note on all the answers: “Keep it short”");
+
+  await test.step("in the canvas history each question shows with its options and the answer marked, the user's own words and notes too", async () => {
+    await openFromCanvasHistory(page, "2 questions: Which color?");
+    await expect(ask.locator(".ask-answer")).toContainText("You answered 2 questions");
+    await expect(ask.locator(".ask-answer")).toContainText("Note on all the answers: “Keep it short”");
+    const questions = ask.locator(".ask-question");
+    await expect(questions).toHaveCount(2);
+    const [color, size] = [questions.nth(0), questions.nth(1)];
+    await expect(color).toContainText("Question 1 of 2");
+    await expect(color.getByRole("heading", { name: "Which color?" })).toBeVisible();
+    await expect(color.getByRole("radio", { name: "Blue", exact: true })).toBeChecked();
+    await expect(color.getByRole("radio", { name: "Blue", exact: true })).toBeDisabled();
+    await expect(color.getByRole("radio", { name: "Red", exact: true })).not.toBeChecked();
+    await expect(color.locator(".ask-question-note")).toHaveCount(0);
+    await expect(size).toContainText("Question 2 of 2");
+    await expect(size.getByRole("heading", { name: "Which size?" })).toBeVisible();
+    await expect(size.getByRole("radio", { name: "Large" })).not.toBeChecked();
+    await expect(size.getByRole("radio", { name: "Your own answer" })).toBeChecked();
+    expect(await size.locator(".ask-own-answer-text").innerText()).toBe("Huge\nand round");
+    await expect(size.locator(".ask-question-note")).toHaveText("Your note: “fits the wall”");
+  });
 });
 
 test("your own answer to one question can run over several lines with Shift+Enter, and Enter sends it", async ({ page }) => {
@@ -118,6 +137,9 @@ test("your own answer to one question can run over several lines with Shift+Ente
   expect(await toolResult).toBe("The user chose: First line\nSecond line");
   await openFromCanvasHistory(page, "What should it say?");
   expect(await ask.locator(".ask-answer strong").innerText()).toBe("First line\nSecond line");
+  await expect(ask.getByRole("radio", { name: "Your own answer" })).toBeChecked();
+  await expect(ask.getByRole("radio", { name: "Hello" })).not.toBeChecked();
+  expect(await ask.locator(".ask-own-answer-text").innerText()).toBe("First line\nSecond line");
 });
 
 test("Enter in the note sends the answer with it, and with nothing picked it neither sends nor starts a line", async ({ page }) => {

@@ -7,6 +7,16 @@ export function questionsOf(item: AskItem): AskQuestion[] {
   return [{ question: item.question, html: item.html, options: item.options, allowOther: item.allowOther, optionWidth: item.optionWidth }];
 }
 
+/** What the user answered to the question at `index` of an answered ask: their answer to one of several, or the one answer of a single question. */
+export function answerTo(item: AskItem, index: number): AskAnswerEntry | undefined {
+  if (!item.answer) return undefined;
+  if (item.questions) return item.answer.answers?.[index];
+  return index === 0 ? { label: item.answer.label, note: item.answer.note } : undefined;
+}
+
+/** An answer the user wrote themselves rather than picked from the question's options. */
+export const isOwnAnswer = (question: AskQuestion, answer: string) => !question.options.some(({ label }) => label === answer);
+
 /**
  * The question still waiting for an answer that went out last: the one the agent can be waiting on, since only the turn
  * under way asks, where an earlier turn may have left an older one open.
