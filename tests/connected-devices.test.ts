@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
-import { connectedFrom, deviceStatus, otherConnectedDevices } from "../shared/devices.ts";
+import { connectedFrom, deviceStatus, ownersOtherConnectedDevices, whoseDevice } from "../shared/devices.ts";
 import type { ClientAddress, DeviceConnection, ListedDevice } from "../shared/model.ts";
 import { connectedDevicesLabel } from "../web/connected-devices.ts";
 
@@ -53,11 +53,27 @@ describe("device wording", () => {
     expect(connectedFrom({ ...laptopAddress, pages: 1 })).toBe("from 192.168.1.23");
   });
 
-  test("the sidebar counts the connected devices besides the one looking, and says other on a device that is one of them", () => {
-    const devices = [device("phone", { ...phoneAddress, pages: 1 }), device("laptop", { ...laptopAddress, pages: 1 }), device("tablet", null)];
-    expect(otherConnectedDevices(devices, null).map(({ id }) => id)).toEqual(["phone", "laptop"]);
-    expect(otherConnectedDevices(devices, "phone").map(({ id }) => id)).toEqual(["laptop"]);
+  test("the sidebar counts the owner's connected devices besides the one looking, never a person's, and says other on a device that is one of them", () => {
+    const personsMirador = { ...device("persons-mirador", { ...laptopAddress, pages: 1 }), personId: "dora" };
+    const devices = [device("phone", { ...phoneAddress, pages: 1 }), device("laptop", { ...laptopAddress, pages: 1 }), device("tablet", null), personsMirador];
+    expect(ownersOtherConnectedDevices(devices, null, "owner").map(({ id }) => id)).toEqual(["phone", "laptop"]);
+    expect(ownersOtherConnectedDevices(devices, "phone", "owner").map(({ id }) => id)).toEqual(["laptop"]);
     expect(connectedDevicesLabel(2, false)).toBe("2 devices connected");
     expect(connectedDevicesLabel(1, true)).toBe("1 other device connected");
+  });
+});
+
+describe("whose device mirador devices says it is", () => {
+  const device = (personId: string): ListedDevice => ({ id: personId, name: personId, personId, joinedAt: 0, lastSeenAt: 0, connection: null });
+  const people = [
+    { id: "owner", name: "Ann", color: null },
+    { id: "dora", name: "Dora", color: null },
+    { id: "nameless", name: "", color: null },
+  ];
+
+  test("a person's device names the person, the owner's nothing", () => {
+    expect(whoseDevice(device("owner"), { people, ownerId: "owner" })).toBe("");
+    expect(whoseDevice(device("dora"), { people, ownerId: "owner" })).toBe("Dora, in rooms only");
+    expect(whoseDevice(device("nameless"), { people, ownerId: "owner" })).toBe("Someone without a name, in rooms only");
   });
 });

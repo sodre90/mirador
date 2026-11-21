@@ -31,13 +31,15 @@ test("in a browser there is no desktop app menu", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Desktop app…" })).toHaveCount(0);
 });
 
-test("inside the Linux desktop app, the sidebar offers the tray's menu and sends the chosen action with the app's nonce", async ({ page }) => {
+test("inside the Linux desktop app, the sidebar asks for the tray's menu and sends the chosen action with the app's nonce, which no frame of the window has", async ({ page }) => {
   const sentToDesktopApp = await actAsDesktopApp(page, menuWith(false));
   await signIn(page, host);
   const button = page.getByRole("button", { name: "Desktop app…" });
   await button.click();
   const menu = page.getByRole("menu", { name: "Desktop app" });
   await expect(menu).toContainText("Host: running, started by this app");
+  const menuRequests = (await sentToDesktopApp()).filter(({ type }) => type === "desktop-menu-request");
+  expect(menuRequests).toEqual([{ type: "desktop-menu-request", nonce: "nonce-1" }]);
   await expect(menu.getByRole("menuitem", { name: "Restart host" })).toBeEnabled();
   await expect(menu.getByRole("menuitemcheckbox", { name: "Open at login" })).toHaveAttribute("aria-checked", "false");
 

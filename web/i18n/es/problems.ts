@@ -263,7 +263,7 @@ export const problems: Messages["problems"] = {
   machineIgnoredRoomInvite: (machine) =>
     `Ese es el código de una invitación a una sala, pero ${machine} no lo tomó como tal, así que este equipo no se unió. Puede que la invitación haya caducado o ya se haya usado; pide una nueva.`,
   machineJoinedAsPerson: (machine) =>
-    `Este equipo entra en ${machine} como persona en sus salas, así que solo el código de una invitación a una sala lo deja entrar allí, y no pide unirse. Para que este equipo sea uno de los dispositivos del dueño allí, quita ${machine} y agrégala de nuevo.`,
+    `Este equipo entra en ${machine} como persona en sus salas, así que solo el código de una invitación a una sala lo deja entrar allí, y no pide unirse. Para que este equipo sea uno de los dispositivos propios del dueño, quita ${machine} en Máquinas y agrégala de nuevo con la invitación de dispositivo.`,
   machineAuthorityNotInLink: (machine) =>
     `La autoridad de certificación de ${machine} no es la del enlace de invitación, así que no se envió el código. Puede que algo en la red se esté haciendo pasar por ${machine}.`,
   machineAuthorityNotInTunnelLink: (machine) =>

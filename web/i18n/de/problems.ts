@@ -265,7 +265,7 @@ export const problems: Messages["problems"] = {
   machineIgnoredRoomInvite: (machine) =>
     `Das ist der Code einer Raumeinladung, aber ${machine} hat ihn nicht als solchen angenommen, darum ist dieser Computer nicht beigetreten. Die Einladung ist vielleicht abgelaufen oder schon benutzt; bitte um eine neue.`,
   machineJoinedAsPerson: (machine) =>
-    `Dieser Computer tritt ${machine} als Person in seinen Räumen bei, darum lässt ihn dort nur der Code einer Raumeinladung hinein, und er stellt keine Beitrittsanfrage. Um diesen Computer dort zu einem Gerät des Besitzers zu machen, entferne ${machine} und füge ihn erneut hinzu.`,
+    `Dieser Computer tritt ${machine} als Person in seinen Räumen bei, darum lässt ihn dort nur der Code einer Raumeinladung hinein, und er stellt keine Beitrittsanfrage. Um diesen Computer zu einem eigenen Gerät des Besitzers zu machen, entferne ${machine} unter Rechner und füge ihn mit der Geräteeinladung erneut hinzu.`,
   machineAuthorityNotInLink: (machine) =>
     `Die Zertifizierungsstelle von ${machine} ist nicht die aus dem Einladungslink, daher wurde der Code nicht gesendet. Möglicherweise gibt sich etwas im Netzwerk als ${machine} aus.`,
   machineAuthorityNotInTunnelLink: (machine) =>

@@ -6,8 +6,8 @@ import { DeviceService } from "./devices.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { SIGN_IN_CODE_LIFETIME_MINUTES, SignInCodes, signInLink } from "./sign-in-codes.ts";
 import { Store } from "./store.ts";
-import { connectedFrom, deviceStatus, joinedOn } from "../shared/devices.ts";
-import type { JoinRequest, ListedDevice } from "../shared/model.ts";
+import { connectedFrom, deviceStatus, joinedOn, whoseDevice, type DevicesAndPeople } from "../shared/devices.ts";
+import type { JoinRequest } from "../shared/model.ts";
 import { isContainerName, isPid, isSshHost, waitSetUpReply, type JobWaitRequest } from "../shared/job-waits.ts";
 import { inviteLink } from "../shared/machines.ts";
 import { UsageData } from "./usage-data.ts";
@@ -101,16 +101,25 @@ async function listDevices() {
   const response = await fetch(`${config.appOrigin}/devices`, { headers: { Authorization: `Bearer ${config.browserToken}` } }).catch(() => null);
   if (!response) console.log(`Mirador is not running at ${config.appOrigin}, so no device is connected to it.`);
   else if (!response.ok) console.log(`Mirador at ${config.appOrigin} would not say which devices are connected (${response.status} ${await response.text()}).`);
-  const devices = response?.ok ? ((await response.json()) as { devices: ListedDevice[] }).devices : storedDevices(config.databasePath);
-  if (devices.length === 0) return console.log("No device has joined this Mirador yet. Let one in with mirador invite.");
-  printColumns(devices.map((device) => [device.name, deviceStatus(device), device.connection ? connectedFrom(device.connection) : "", `joined ${joinedOn(device.joinedAt)}`]));
+  const listed = response?.ok ? ((await response.json()) as DevicesAndPeople) : storedDevices(config.databasePath);
+  if (listed.devices.length === 0) return console.log("No device has joined this Mirador yet. Let one in with mirador invite.");
+  printColumns(
+    listed.devices.map((device) => [
+      device.name,
+      whoseDevice(device, listed),
+      deviceStatus(device),
+      device.connection ? connectedFrom(device.connection) : "",
+      `joined ${joinedOn(device.joinedAt)}`,
+    ]),
+  );
 }
 
-function storedDevices(databasePath: string): ListedDevice[] {
+function storedDevices(databasePath: string): DevicesAndPeople {
   const store = new Store(databasePath);
-  const devices = new DeviceService(store).list();
+  const devices = new DeviceService(store).list().map((device) => ({ ...device, connection: null }));
+  const listed = { devices, people: store.listPeople(), ownerId: store.ownerId() };
   store.close();
-  return devices.map((device) => ({ ...device, connection: null }));
+  return listed;
 }
 
 /** Lined up, leaving out a column nobody has a value in. */

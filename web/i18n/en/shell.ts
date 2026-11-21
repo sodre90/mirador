@@ -301,6 +301,12 @@ export const shell = {
     roomInviteFirst: "You were invited into a room there. Join with the room invite's code or link.",
     roomInviteLinkFirst: "You were invited into a room there. Join with the room invite's whole link: its code alone is not enough.",
     peerToPeer: "peer to peer",
+    linkToOpen: {
+      title: (machine: string) => `Open a link from ${machine}?`,
+      leadsTo: "Someone else's machine opens no link by itself. This one leads to:",
+      open: "Open",
+      cancel: "Cancel",
+    },
   },
   conversationTitle: {
     label: "Conversation name",

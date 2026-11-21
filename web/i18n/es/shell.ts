@@ -308,6 +308,12 @@ export const shell: Messages["shell"] = {
     roomInviteFirst: "Te invitaron a una sala de allí. Únete con el código o el enlace de la invitación a la sala.",
     roomInviteLinkFirst: "Te invitaron a una sala de allí. Únete con el enlace completo de la invitación a la sala: su código solo no basta.",
     peerToPeer: "peer to peer",
+    linkToOpen: {
+      title: (machine) => `¿Abrir un enlace de ${machine}?`,
+      leadsTo: "La máquina de otra persona no abre enlaces por sí sola. Este lleva a:",
+      open: "Abrir",
+      cancel: "Cancelar",
+    },
   },
   conversationTitle: {
     label: "Nombre de la conversación",

@@ -1,4 +1,5 @@
 import { isConversationOrder, type ConversationOrder } from "../shared/conversation-order.ts";
+import type { DevicesAndPeople } from "../shared/devices.ts";
 import { isMorningMinutes } from "../shared/reminders.ts";
 import { editorState } from "./editor.ts";
 import { isEditorSetting, type EditorSetting } from "../shared/editors.ts";
@@ -85,7 +86,7 @@ import type { MachineRelays } from "./machine-relays.ts";
 import type { MachineWatch } from "./machine-watch.ts";
 import type { MachineTunnels } from "./machine-tunnels.ts";
 import { wayToMachine } from "./machine-trust.ts";
-import { cookieValue, sameSecret, signedInWith } from "./sign-in.ts";
+import { sameSecret, signedInWith } from "./sign-in.ts";
 import { MAX_DROPPED_FILE_BYTES, type DroppedFiles } from "./dropped-files.ts";
 import { MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { imagesOf, lowDataEvent, pageEvent, wholeToolOutput } from "./low-data.ts";
@@ -472,15 +473,8 @@ export function startServer(services: HostServices) {
   /** A person in no room here any more has nothing left to sign in for: their devices go at once, with their sockets and places in the tunnel. */
   function signOutPeopleInNoRoom(personIds: string[]) {
     const leaving = new Set(personIds.filter((personId) => personId !== store.ownerId()));
-    devices
-      .list()
-      .filter(({ personId }) => leaving.has(personId))
-      .forEach(({ id }) => {
-        p2p?.forget(id);
-        devices.revoke(id);
-      });
-    hub.disconnectWhere((socket) => leaving.has(socket.data.personId), "out of every room", OUT_OF_ROOMS_CLOSE_CODE);
-    sendDevicesToEveryPage();
+    const theirDevices = devices.list().filter(({ personId }) => leaving.has(personId));
+    revokeDevices(theirDevices.map(({ id }) => id), { reason: "out of every room", code: OUT_OF_ROOMS_CLOSE_CODE });
   }
 
   /** A device that joined some other way, or has a new key, takes its place in the tunnel here. */
@@ -645,10 +639,14 @@ export function startServer(services: HostServices) {
     saveNetwork(config.dataDir, on);
   }
 
-  function revokeDevice(deviceId: string) {
-    p2p?.forget(deviceId);
-    devices.revoke(deviceId);
-    hub.disconnectWhere((socket) => socket.data.deviceId === deviceId, "device revoked");
+  /** Their places in the tunnel go before the devices themselves, then the sockets they had open; a person signs in only with a device of theirs. */
+  function revokeDevices(deviceIds: string[], closing: { reason: string; code?: number } = { reason: "device revoked" }) {
+    deviceIds.forEach((deviceId) => {
+      p2p?.forget(deviceId);
+      devices.revoke(deviceId);
+    });
+    const revoked = new Set(deviceIds);
+    hub.disconnectWhere((socket) => socket.data.deviceId !== null && revoked.has(socket.data.deviceId), closing.reason, closing.code);
     sendDevicesToEveryPage();
   }
 
@@ -1954,7 +1952,7 @@ export function startServer(services: HostServices) {
           reply({ type: "address.found", requestId: message.requestId, ...found }),
         );
       case "device.revoke":
-        return revokeDevice(message.deviceId);
+        return revokeDevices([message.deviceId]);
       case "settings.set-public-address":
         return reply({ type: "settings.saved", requestId: message.requestId, ...problemSaving(() => savePublicAddressFromSettings(message.address)) });
       case "settings.set-network":
@@ -2179,7 +2177,8 @@ export function startServer(services: HostServices) {
 
   /** For `mirador devices`, which signs in with the host's own token, as this machine's browser does. */
   function listDevicesForCommandLine(request: Request) {
-    return refusedAgentRequest(request, config.browserToken) ?? Response.json({ devices: listedDevices() });
+    const listed: DevicesAndPeople = { devices: listedDevices(), people: store.listPeople(), ownerId: store.ownerId() };
+    return refusedAgentRequest(request, config.browserToken) ?? Response.json(listed);
   }
 
   function upgradeSockets(request: Request, server: Bun.Server<SocketData>) {

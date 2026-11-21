@@ -6,7 +6,7 @@ import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService, inviteKey } from "../host/devices.ts";
 import { hostAddressIn, isTunnelKey, newDeviceAddress, newKeyPair, tunnelIdentity } from "../host/p2p/identity.ts";
-import { BUILT_IN_BROKER, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
+import { BUILT_IN_BROKER, MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE, MOST_KEYS_OVER_OF_A_KIND, PeerToPeer, peerToPeerSettings, peerToPeerUnlessBuiltInFails, type PeerToPeerSettings, type TunnelEnd } from "../host/p2p/service.ts";
 import { Sidecar } from "../host/p2p/sidecar.ts";
 import type { PeerToPeerStatus } from "../shared/protocol.ts";
 import { PROBLEM_HEADER, problemInHeader } from "../shared/host-problems.ts";
@@ -273,25 +273,49 @@ unixOnlyTest("a withdrawn invite's one-time key reaches its joining socket no mo
   expect((await askedThrough(over.socket, "/join-challenges", { method: "POST" })).status).toBe(403);
 });
 
-unixOnlyTest("keys that are over are answered so many times a minute, each kind together and apart from joining, and then told to wait", async () => {
+unixOnlyTest("each key that is over is answered so many times a minute on a socket of its own, apart from joining, so one asking often keeps no other from learning it is over", async () => {
   const clock = { now: Date.now() };
   const { p2p, devices, store } = host({}, () => clock.now);
-  const { device } = devices.admit("Phone", store.ownerId());
-  p2p.register(device.id, newKeyPair().publicKey);
-  p2p.forget(device.id);
-  const deviceOver = (await commandsRead(3))[2]!.pin!.socket;
+  const [phone, laptop] = ["Phone", "Laptop"].map((name) => devices.admit(name, store.ownerId()).device.id);
+  p2p.register(phone!, newKeyPair().publicKey);
+  p2p.register(laptop!, newKeyPair().publicKey);
+  p2p.forget(phone!);
+  p2p.forget(laptop!);
+  const pins = await commandsRead(6);
+  const [phoneOver, laptopOver] = [pins[3]!.pin!.socket, pins[5]!.pin!.socket];
+  expect(phoneOver).not.toBe(laptopOver);
   await p2p.invite("ROOM-ABCD-EFGH-JKLM", clock.now + 60_000);
   p2p.inviteWithdrawn(inviteKey("ROOM-ABCD-EFGH-JKLM"));
-  const inviteOver = (await commandsRead(6))[5]!.pin!.socket;
+  const inviteOver = (await commandsRead(9))[8]!.pin!.socket;
   const statuses = (socket: string | undefined, times: number) => Promise.all(Array.from({ length: times }, () => askedThrough(socket, "/ws").then(({ status }) => status)));
 
-  expect(new Set(await statuses(deviceOver, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE))).toEqual(new Set([401]));
-  expect((await askedThrough(deviceOver, "/ws")).status).toBe(429);
-  expect(new Set(await statuses(inviteOver, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE))).toEqual(new Set([403]));
+  expect(new Set(await statuses(phoneOver, MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE))).toEqual(new Set([401]));
+  expect((await askedThrough(phoneOver, "/ws")).status).toBe(429);
+  expect((await askedThrough(laptopOver, "/ws")).status).toBe(401);
+  expect(new Set(await statuses(inviteOver, MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE))).toEqual(new Set([403]));
   const waiting = await askedThrough(inviteOver, "/join", { method: "POST" });
   expect([waiting.status, problemInHeader(waiting.headers.get(PROBLEM_HEADER))]).toEqual([429, { code: "join-too-often" }]);
   clock.now += 61_000;
-  expect((await askedThrough(deviceOver, "/ws")).status).toBe(401);
+  expect((await askedThrough(phoneOver, "/ws")).status).toBe(401);
+});
+
+unixOnlyTest("a key that is over, pushed out by newer ones of its kind, reaches nothing from then on, and its socket closes", async () => {
+  const { p2p, devices, store } = host();
+  const deviceIds = Array.from({ length: MOST_KEYS_OVER_OF_A_KIND + 1 }, (_, index) => devices.admit(`Device ${index}`, store.ownerId()).device.id);
+  const keys = deviceIds.map((deviceId) => {
+    const key = newKeyPair().publicKey;
+    p2p.register(deviceId, key);
+    return key;
+  });
+  deviceIds.forEach((deviceId) => p2p.forget(deviceId));
+  const commands = await commandsRead(keys.length + 2 * keys.length + 1);
+  const firstOver = commands.find(({ pin }) => pin?.key === keys[0] && pin.socket_only)!.pin!.socket!;
+  expect(commands.at(-3)).toEqual({ unpin: { key: keys[0]! } });
+  expect(existsSync(firstOver)).toBe(false);
+  expect(store.isKeyOver(keys[0]!)).toBe(false);
+  const lastOver = commands.at(-1)!.pin!;
+  expect(lastOver).toMatchObject({ key: keys.at(-1), socket_only: true });
+  expect((await askedThrough(lastOver.socket, "/ws")).status).toBe(401);
 });
 
 unixOnlyTest("an invite's one-time key reaches only that the invite is over once it expires", async () => {

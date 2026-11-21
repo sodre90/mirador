@@ -39,7 +39,7 @@ export type DesktopAppearance = "light" | "dark" | "system";
 export const isDesktopAppearance = (value: unknown): value is DesktopAppearance => value === "light" || value === "dark" || value === "system";
 
 export type DesktopMenuMessage =
-  | { type: "desktop-menu-request" }
+  | { type: "desktop-menu-request"; nonce: string }
   | { type: "desktop-action"; nonce: string; action: string }
   | { type: "desktop-nonce-request" }
   | { type: "desktop-open-link"; nonce: string; url: string }

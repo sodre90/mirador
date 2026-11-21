@@ -166,6 +166,43 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(roomMessages(frame)).toHaveText(["Hello from Dora"]);
   });
 
+  await test.step("a link in the room opens from the owner's machine once the person has seen where it leads, and never by the machine's page alone", async () => {
+    const address = `${owners.origin}/mirador-here`;
+    const ownersComposer = page.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
+    await ownersComposer.fill(`Read [the notes](${address})`);
+    await ownersComposer.press("Enter");
+    const link = frame.getByRole("link", { name: "the notes" });
+    const prompt = visitor.getByRole("alertdialog", { name: "Open a link from Ann's machine?" });
+    await link.click();
+    await expect(prompt.locator(".link-host")).toHaveText(new URL(owners.origin).host);
+    await expect(prompt.locator(".link-address")).toHaveText(address);
+    await expect(prompt.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await prompt.getByRole("button", { name: "Cancel" }).click();
+    await expect(prompt).toHaveCount(0);
+
+    await link.click();
+    const opened = visitor.context().waitForEvent("page");
+    await prompt.getByRole("button", { name: "Open", exact: true }).click();
+    const tab = await opened;
+    await expect.poll(() => tab.url()).toBe(address);
+    expect(await tab.evaluate(() => [window.opener, document.referrer])).toEqual([null, ""]);
+    await tab.close();
+    await expect(prompt).toHaveCount(0);
+
+    const machineFrame = visitor.locator('iframe[title="Ann\'s machine"]');
+    const inside = (await (await machineFrame.elementHandle())!.contentFrame())!;
+    const askedUnclicked = (afterMs: number) =>
+      inside.evaluate((afterMs) => setTimeout(() => window.parent.postMessage({ type: "mirador:open-link", url: "https://example.com/never-clicked" }, "*"), afterMs), afterMs);
+    await askedUnclicked(0);
+    await visitor.waitForTimeout(500);
+    await expect(prompt).toHaveCount(0);
+    await machineFrame.focus();
+    // Playwright's evaluate counts as a click for a few seconds, which the page asks after.
+    await askedUnclicked(6_000);
+    await visitor.waitForTimeout(7_000);
+    await expect(prompt).toHaveCount(0);
+  });
+
   await test.step("the person tags the agent, the owner allows the task, and both read the answer", async () => {
     await composer.fill("@Bu");
     await frame.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: "@Builder" }).click();
@@ -238,6 +275,20 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(settings.locator(".device-list li", { hasText: "Mirador on " })).toHaveCount(0);
     await settings.getByRole("button", { name: "Close" }).click();
     await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(OUT_OF_ROOMS, { timeout: 30_000 });
+  });
+
+  await test.step("a device invite of the owner's, typed into the place of a machine joined as a person, sends no code to join with, and says how to make this computer the owner's device instead", async () => {
+    const settings = await openSettings(page, "Devices");
+    await settings.getByRole("button", { name: "Invite a device" }).click();
+    const deviceCode = (await settings.locator(".invite-code").textContent())!;
+    await settings.getByRole("button", { name: "Close" }).click();
+    await joinPanel.getByLabel("Invite code or link").fill(deviceCode);
+    await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
+    await expect(joinPanel.locator(".join-problem")).toHaveText(
+      "This computer joins Ann's machine as a person in its rooms, so only a room invite's code lets it in there, and it does not ask to join. To make this computer one of its owner's own devices, remove Ann's machine under Machines, and add it again with the device invite.",
+    );
+    await expect(visitor.locator('iframe[title="Ann\'s machine"]')).toHaveCount(0);
+    await joinPanel.getByLabel("Invite code or link").fill("");
   });
 
   const lettingBackIn = await makeMemberInvite(page);

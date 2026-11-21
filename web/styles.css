@@ -9046,7 +9046,8 @@ body.reordering * {
 }
 
 .join-request,
-.file-to-open {
+.file-to-open,
+.link-to-open {
   padding: 12px 14px;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -9055,19 +9056,22 @@ body.reordering * {
 }
 
 .join-request h2,
-.file-to-open h2 {
+.file-to-open h2,
+.link-to-open h2 {
   margin: 0 0 4px;
   font-size: calc(14px * var(--font-scale));
 }
 
 .join-request p,
-.file-to-open p {
+.file-to-open p,
+.link-to-open p {
   margin: 0 0 10px;
   color: var(--muted);
   font-size: calc(12.5px * var(--font-scale));
 }
 
-.file-to-open {
+.file-to-open,
+.link-to-open {
   position: fixed;
   top: 16px;
   left: 50%;
@@ -9076,12 +9080,20 @@ body.reordering * {
   transform: translateX(-50%);
 }
 
-.file-to-open p {
+.file-to-open p,
+.link-to-open p {
   overflow-wrap: anywhere;
 }
 
+.link-to-open .link-host {
+  color: var(--text);
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 600;
+}
+
 .join-request form,
-.file-to-open .actions {
+.file-to-open .actions,
+.link-to-open .actions {
   display: flex;
   gap: 8px;
 }

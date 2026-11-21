@@ -8,7 +8,7 @@ import { inviteKey, isRoomInviteCode } from "./devices.ts";
 import { isChallenge, NO_AUTHORITY, roomJoinStatement, type OwnerKey, type ReachedAt } from "./person-keys.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { ANSWER_WAIT_MS, answersWithin, DIRECT_REACH, type MachineReach } from "./machine-tunnels.ts";
-import { offeredAuthority, trusting } from "./machine-trust.ts";
+import { offeredAuthority, refuseUnprotectedAddress, trusting } from "./machine-trust.ts";
 import { atAddress, fetchThrough, webSocketTo, type Way } from "./p2p/dial.ts";
 import { newKeyPair } from "./p2p/identity.ts";
 import { errorResponse, problemResponse } from "./problem-response.ts";
@@ -70,6 +70,17 @@ export interface RelayedSocket {
   /** What the machine sent before the page's end of the socket opened. */
   waiting: (string | ArrayBuffer)[];
   closedBeforeOpen: { code: number; reason: string } | null;
+}
+
+/**
+ * Another site's page, or someone else's machine's page in its opaque origin, with which WebKit sends this host's
+ * Strict cookie on the scripts and images it loads; and, of this computer's other ports, anything but this host's page
+ * loading the machine into its frame, which the browser says is a same-site navigation.
+ */
+function askedFromAnotherPage(request: Request) {
+  const site = request.headers.get("sec-fetch-site");
+  const loadsTheFrame = request.method === "GET" && request.headers.get("sec-fetch-mode") === "navigate";
+  return site === "cross-site" || (site === "same-site" && !loadsTheFrame);
 }
 
 const refusedJoinFromPage = () => new Response("This computer asks to join its machines itself, from its own window.", { status: 403 });
@@ -259,8 +270,10 @@ export class MachineRelays {
    * Joins the machine as this host's device with a code from one of its invites, and from then on trusts the
    * certificate authority it joined it by. The code is sent only once the machine's certificate checks out. For the
    * code of a room invite there, which the machine challenges, this computer's owner joins as a person in that room,
-   * which it answers with. A machine reached peer to peer is joined through its tunnel, with the whole invite. Without
-   * `trustsOnFirstUse`, a machine's own certificate authority is trusted only by the fingerprint in the link.
+   * which it answers with. A machine reached peer to peer is joined through its tunnel, with the whole invite; one
+   * reached at its address, with a link that carries its tunnel, only where nothing on the way reads the code, as when
+   * the link is pasted under Machines. Without `trustsOnFirstUse`, a machine's own certificate authority is trusted only
+   * by the fingerprint in the link.
    */
   async join(
     machineId: string,
@@ -272,6 +285,7 @@ export class MachineRelays {
     const machine = this.store.findMachine(machineId);
     if (!machine) throw new HostProblemError({ code: "machine-gone" });
     if (machine.peerToPeer) return this.joinThroughTunnel(machine, code, tunnel);
+    if (tunnel) refuseUnprotectedAddress(machine.origin);
     const authority = await this.authorityToTrust(machine, linkFingerprint, trustsOnFirstUse);
     const post = (path: string, body: object) =>
       fetch(`${machine.origin}${path}`, {
@@ -299,9 +313,11 @@ export class MachineRelays {
   /**
    * Through the machine's tunnel, with the invite's one-time key, which reaches joining there alone: the owner's
    * signature names the machine's key in the tunnel, and this host sends a tunnel key of its own, which its dial reaches
-   * the machine with from then on. The invite must be from the machine whose tunnel this host added it by.
+   * the machine with from then on. The invite must be from the machine whose tunnel this host added it by, and a room
+   * invite where its owner joined as a person, as at its address.
    */
   private async joinThroughTunnel(machine: Machine, code: string, invite: InviteTunnel | null) {
+    if (machine.asPerson && !isRoomInviteCode(code)) throw new HostProblemError({ code: "machine-joined-as-person", machine: machine.name });
     if (!invite) throw new HostProblemError({ code: "machine-needs-whole-invite", machine: machine.name });
     const known = this.store.machineTunnel(machine.id)?.places;
     const isFromMachine = (places: { hostKey: string; hostAddress: string }) => places.hostKey === known?.hostKey && places.hostAddress === known.hostAddress;
@@ -498,6 +514,7 @@ export class MachineRelays {
     if (!relayOrigin) return new Response("forbidden host", { status: 403 });
     if (asksForServiceWorker(request)) return noServiceWorker();
     if (machine.asPerson) return this.relayForPerson(machine, relayOrigin, request, server);
+    if (askedFromAnotherPage(request)) return new Response("forbidden site", { status: 403 });
     if (!this.signedInAsOwner(request)) return new Response("unauthorized", { status: 401 });
     const origin = request.headers.get("origin");
     if (origin !== null && !relayOrigins.includes(origin)) return new Response("forbidden origin", { status: 403 });

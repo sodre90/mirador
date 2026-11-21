@@ -120,6 +120,19 @@ describe("a machine's canvas assets", () => {
     expect([response.status, await response.text()]).toEqual([403, "forbidden host"]);
   });
 
+  test("of a machine of this computer's owner, are asked for only by its own frame, never by another site's page, someone else's machine's, or another port's but for loading the frame", async () => {
+    const pageRelay = relaysFor(machineThatSays("its canvas origin"));
+    const statusWith = (headers: Record<string, string>, method = "GET") => fetch(`${pageRelay}/`, { method, headers }).then(({ status }) => status);
+    expect(await statusWith({ "sec-fetch-site": "cross-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "script" })).toBe(403);
+    expect(await statusWith({ "sec-fetch-site": "cross-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" })).toBe(403);
+    expect(await statusWith({ "sec-fetch-site": "same-site", "sec-fetch-mode": "no-cors", "sec-fetch-dest": "image" })).toBe(403);
+    expect(await statusWith({ "sec-fetch-site": "same-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" }, "POST")).toBe(403);
+    expect(await statusWith({ "sec-fetch-site": "same-site", "sec-fetch-mode": "navigate", "sec-fetch-dest": "iframe" })).toBe(200);
+    expect(await statusWith({ "sec-fetch-site": "same-origin", "sec-fetch-mode": "cors", "sec-fetch-dest": "empty" })).toBe(200);
+    expect(await statusWith({ "sec-fetch-site": "none", "sec-fetch-mode": "navigate", "sec-fetch-dest": "document" })).toBe(200);
+    expect(await statusWith({})).toBe(200);
+  });
+
   test("come from this computer's own canvas server for a machine too old to say where its are", async () => {
     expect(await canvasAssetsOriginTold(relaysFor(machineThatSays("nothing about it")))).toBe("http://127.0.0.1:4601");
   });
@@ -399,6 +412,35 @@ describe("a machine reached through a dial's forward", () => {
     await expect(relays.join("theirs", "ROOM-ABCD-EFGH-JKLM", null, invite)).rejects.toThrow("Theirs can't be reached right now.");
     expect(posted).toEqual([]);
     expect(stopped).toBe(true);
+  });
+
+  test("takes no device invite's code through the tunnel of a machine its owner joined as a person, and says to add the machine again with it, dialing nothing", async () => {
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "theirs", name: "Theirs", origin: `http://[${places.hostAddress}]:4600`, createdAt: 1 });
+    store.setMachineTunnelPlaces("theirs", places);
+    store.setMachineJoinedAs("theirs", { asPerson: true, relayKey: null });
+    let dialed = 0;
+    const reach: MachineReach = {
+      reached: async () => null,
+      stillReaches: () => false,
+      wayTo: () => null,
+      canvasWayTo: () => null,
+      dialToJoin: async () => {
+        dialed += 1;
+        return { forward: Promise.resolve(null), stop: () => {} };
+      },
+      start: () => {},
+    };
+    const relays = new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey, reach);
+    const invite = { ...places, joinKey: places.hostKey, joinAddress: "fd12:3456:789a:1::9" };
+    expect(await relays.join("theirs", "ABCD-EFGH-JKLM", null, invite).catch((error) => (error as HostProblemError).problem)).toEqual({ code: "machine-joined-as-person", machine: "Theirs" });
+    await expect(relays.join("theirs", "ABCD-EFGH-JKLM")).rejects.toThrow("remove Theirs under Machines, and add it again with the device invite");
+    expect(dialed).toBe(0);
+    expect(store.machineDeviceToken("theirs")).toBeNull();
+
+    store.setMachineJoinedAs("theirs", { asPerson: false });
+    expect(await relays.join("theirs", "ABCD-EFGH-JKLM", null, invite).catch((error) => (error as HostProblemError).problem)).toEqual({ code: "machine-unreachable-now", machine: "Theirs" });
+    expect(dialed).toBe(1);
   });
 
   test("loads canvas pages through the canvas socket of the forward the machine is reached through now, which moves each time its dial starts again", async () => {
@@ -723,6 +765,20 @@ describe("joining a machine that made its own certificate", () => {
     await expect(relays.join("box", "ABCD-EFGH-JKLM")).rejects.toThrow("This computer joins Box as a person in its rooms, so only a room invite's code lets it in there");
     expect(joins).toEqual([]);
     expect(store.machineDeviceToken("box")).toBeNull();
+  });
+
+  test("with a link that carries the machine's tunnel, sends the code to the machine's address only where nothing on the way reads it, as pasting the link under Machines does", async () => {
+    const { joins, relays, store } = roomInviteMachine(newChallenge());
+    const key = "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=";
+    const tunnel = { hostKey: key, hostAddress: "fd12:3456:789a:1::1", port: 4600, broker: { address: "p2p.example.com:47800", key }, joinKey: key, joinAddress: "fd12:3456:789a:1::9" };
+    store.insertMachine({ id: "far", name: "Far", origin: "http://203.0.113.7:4600", createdAt: 2 });
+    expect(await relays.join("far", "ROOM-ABCD-EFGH-JKLM", null, tunnel).catch((error) => (error as HostProblemError).problem)).toEqual({
+      code: "invite-address-unprotected",
+      address: "http://203.0.113.7:4600",
+    });
+    expect(store.machineDeviceToken("far")).toBeNull();
+    await relays.join("box", "ROOM-ABCD-EFGH-JKLM", null, tunnel);
+    expect(joins).toHaveLength(1);
   });
 
   test("never asks to join a machine it joins as a person, which would make this computer its owner's device", async () => {

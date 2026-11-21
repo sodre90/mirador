@@ -1,6 +1,8 @@
 import { desktopNonce, inDesktopApp, sendToDesktopApp } from "./desktop-bridge.ts";
 
 const OPEN_LINK_MESSAGE = "mirador:open-link";
+/** Longer than any link worth reading before it opens. */
+const LONGEST_LINK_ASKED_FOR = 2048;
 
 function webAddress(address: string) {
   if (!URL.canParse(address)) return null;
@@ -31,6 +33,9 @@ function openOutsideLinksWith(open: (url: string) => void, canOpen = () => true)
 
 const inAFrame = () => window.parent !== window;
 
+/** Someone else's machine, in this computer's rail: a frame in an opaque origin, which opens no window of its own. */
+const inSomeoneElsesFrame = () => inAFrame() && window.origin === "null";
+
 const askTheParentPageToOpen = (url: string) => window.parent.postMessage({ type: OPEN_LINK_MESSAGE, url }, "*");
 
 function askTheAppToOpen(url: string) {
@@ -53,6 +58,7 @@ function machineFrameSending(event: MessageEvent) {
  * opens nothing on them. A machine shown in the rail is a frame of this page, and passes its links on to it.
  */
 export function openOutsideLinksInTheBrowser() {
+  if (inSomeoneElsesFrame()) return openOutsideLinksWith(askTheParentPageToOpen);
   if (!inDesktopApp()) return;
   if (inAFrame()) return openOutsideLinksWith(askTheParentPageToOpen);
   // An app built before this never hands over a nonce, and still opens links from its window's navigation events.
@@ -68,7 +74,19 @@ export function openOutsideLinksInTheBrowser() {
 export function openWebAddress(address: string) {
   const url = webAddress(address);
   if (!url) return;
-  if (inDesktopApp() && inAFrame()) askTheParentPageToOpen(url.href);
+  if (inSomeoneElsesFrame() || (inDesktopApp() && inAFrame())) askTheParentPageToOpen(url.href);
   else if (inDesktopApp() && desktopNonce() !== null) askTheAppToOpen(url.href);
   else window.open(url.href, "_blank", "noopener");
+}
+
+/** The web address a frame's page asks this page to open, when it asks for one: never a file, a script or any other scheme. */
+export function linkAskedFor(data: unknown) {
+  if (!isOpenLinkMessage(data) || data.url.length > LONGEST_LINK_ASKED_FOR) return null;
+  return webAddress(data.url);
+}
+
+/** A link someone else's machine asked for, once the person chose to open it: never with this page as its opener or referrer. */
+export function openLinkFromSomeoneElsesMachine(url: URL) {
+  if (inDesktopApp() && desktopNonce() !== null) askTheAppToOpen(url.href);
+  else window.open(url.href, "_blank", "noopener,noreferrer");
 }

@@ -263,7 +263,7 @@ export const problems: Messages["problems"] = {
   machineIgnoredRoomInvite: (machine) =>
     `Ez egy szobameghívó kódja, de a gép (${machine}) nem annak vette, ezért ez a számítógép nem csatlakozott hozzá. A meghívó talán lejárt, vagy már felhasználták; kérj újat.`,
   machineJoinedAsPerson: (machine) =>
-    `Ez a számítógép személyként lép be a gép (${machine}) szobáiba, ezért csak egy szobameghívó kódja engedi be oda, és nem kér csatlakozást. Ha ezt a számítógépet a tulajdonos egyik készülékévé tennéd ott, távolítsd el a gépet (${machine}), és add hozzá újra.`,
+    `Ez a számítógép személyként lép be a gép (${machine}) szobáiba, ezért csak egy szobameghívó kódja engedi be oda, és nem kér csatlakozást. Ha ezt a számítógépet a tulajdonos saját készülékévé tennéd, távolítsd el a gépet (${machine}) a Gépek alatt, és add hozzá újra a készülékmeghívóval.`,
   machineAuthorityNotInLink: (machine) =>
     `A gép (${machine}) tanúsítványkiadója nem az, amelyik a meghívólinkben szerepel, ezért a kód nem ment el. Lehet, hogy valami a hálózaton ennek adja ki magát: ${machine}.`,
   machineAuthorityNotInTunnelLink: (machine) =>

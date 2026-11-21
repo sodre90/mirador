@@ -27,7 +27,7 @@ const JOIN_KEY_KEPT_AFTER_USE_MS = 10_000;
  */
 const KEY_OVER_FOR_MS: Record<KeyOverKind, number> = { device: 30 * 24 * 60 * 60_000, invite: 24 * 60 * 60_000 };
 /** At most this many of each kind at once, the newest kept, so invites never push out removed devices' keys: each is a pin of the sidecar and a row of the store. */
-const MOST_KEYS_OVER_OF_A_KIND = 50;
+export const MOST_KEYS_OVER_OF_A_KIND = 50;
 /** How often the keys over whose time ran out are let go. */
 const KEYS_OVER_LET_GO_EVERY_MS = 60 * 60_000;
 
@@ -40,11 +40,8 @@ const ANSWER_TO_KEY_OVER: Record<KeyOverKind, () => Response> = {
   device: () => new Response("unauthorized", { status: 401 }),
   invite: () => problemResponse({ code: "invite-code-wrong" }, 403),
 };
-/**
- * Answers a minute to the keys over of each kind together, as one socket can't tell them apart; a budget of their own,
- * so they can't use up joining's.
- */
-export const MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE = 120;
+/** Answers a minute to each key that is over, on a socket of its own, so one asking often makes no other wait; a budget apart from joining's. */
+export const MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE = 120;
 const ANSWER_TO_KEY_OVER_TOO_OFTEN: Record<KeyOverKind, () => Response> = {
   device: () => new Response("too many requests", { status: 429 }),
   invite: () => problemResponse({ code: "join-too-often" }, 429),
@@ -154,9 +151,9 @@ function localCandidates(udpPort: number) {
  * invite's own, which serves joining with that invite alone. Every key, a one-time key too, also reaches the canvas
  * server, which serves no one's data.
  *
- * A key that is over, a revoked device's or an ended invite's, is let in a while longer, to one of two sockets that
- * answer nothing but that it is over, so the Mirador holding it learns so instead of hearing nothing; at most
- * MOST_KEYS_OVER of them, for KEY_OVER_FOR_MS each, kept in the store across restarts.
+ * A key that is over, a revoked device's or an ended invite's, is let in a while longer, to a socket of its own that
+ * answers nothing but that it is over, so the Mirador holding it learns so instead of hearing nothing; at most
+ * MOST_KEYS_OVER_OF_A_KIND of each kind, for KEY_OVER_FOR_MS each, kept in the store across restarts.
  */
 export class PeerToPeer {
   private readonly identity: TunnelIdentity;
@@ -164,7 +161,8 @@ export class PeerToPeer {
   private readonly sidecar: Sidecar;
   private readonly listeners = new Map<string, TunnelListener>();
   private readonly joinKeys = new Map<string, JoinKey>();
-  private readonly keysOverListeners = new Map<KeyOverKind, TunnelListener>();
+  /** By the key that is over. */
+  private readonly keysOverListeners = new Map<string, TunnelListener>();
   private readonly answersToKeysOver: SenderLimit;
   private keysOverLettingGo: ReturnType<typeof setInterval> | null = null;
   private serve: ServeTunnel | null = null;
@@ -182,7 +180,7 @@ export class PeerToPeer {
     private readonly joinKeyKeptAfterUseMs = JOIN_KEY_KEPT_AFTER_USE_MS,
   ) {
     this.identity = tunnelIdentity(folder);
-    this.answersToKeysOver = new SenderLimit(now, MOST_ANSWERS_TO_KEYS_OVER_A_MINUTE);
+    this.answersToKeysOver = new SenderLimit(now, MOST_ANSWERS_TO_A_KEY_OVER_A_MINUTE);
     this.socketFolder = join(folder, "s");
     const longestSocket = this.socketFor("device", "any");
     if (Buffer.byteLength(longestSocket) > LONGEST_SOCKET_PATH) throw new Error(`Peer to peer needs a shorter data folder: ${longestSocket} is too long for a Unix socket.`);
@@ -222,7 +220,7 @@ export class PeerToPeer {
     this.store.takeExpiredInviteJoinKeys(this.now()).forEach((expired) => this.rememberKeyOver(expired, "invite"));
     const letIn = new Set([...tunnels, ...waitingJoinKeys].map(({ key }) => key));
     const keysOver = this.store.keysOver().filter(({ key }) => !letIn.has(key));
-    keysOver.forEach(({ key, address, kind }) => this.sidecar.pin({ key, address, socket: this.keysOverSocket(kind), socket_only: true }));
+    keysOver.forEach(({ key, address, kind }) => this.sidecar.pin({ key, address, socket: this.keyOverSocket(key, kind), socket_only: true }));
     this.keysOverLettingGo = setInterval(() => this.letKeysOverGo(), KEYS_OVER_LET_GO_EVERY_MS);
     if (tunnels.length + waitingJoinKeys.length + keysOver.length > 0) void this.sidecarRunning();
   }
@@ -419,31 +417,43 @@ export class PeerToPeer {
   private keyOver(over: PublicTunnelKey, kind: KeyOverKind) {
     this.rememberKeyOver(over, kind);
     this.sidecar.unpin(over.key);
-    this.sidecar.pin({ ...over, socket: this.keysOverSocket(kind), socket_only: true });
+    this.sidecar.pin({ ...over, socket: this.keyOverSocket(over.key, kind), socket_only: true });
   }
 
   /** In the store, so it is over after a restart too; the oldest of its kind past MOST_KEYS_OVER_OF_A_KIND go at once. */
   private rememberKeyOver(over: PublicTunnelKey, kind: KeyOverKind) {
-    this.store.addKeyOver({ ...over, kind, until: this.now() + KEY_OVER_FOR_MS[kind] }, MOST_KEYS_OVER_OF_A_KIND).forEach((key) => this.sidecar.unpin(key));
+    this.store.addKeyOver({ ...over, kind, until: this.now() + KEY_OVER_FOR_MS[kind] }, MOST_KEYS_OVER_OF_A_KIND).forEach((key) => this.letKeyOverGo(key));
   }
 
   private letKeysOverGo() {
-    this.store.takeKeysOverEndedBy(this.now()).forEach((key) => this.sidecar.unpin(key));
+    this.store.takeKeysOverEndedBy(this.now()).forEach((key) => this.letKeyOverGo(key));
   }
 
-  /** Where keys of the kind that are over reach, listened on from when the first needs it. */
-  private keysOverSocket(kind: KeyOverKind) {
-    const socket = this.socketFor("over", kind);
-    if (!this.keysOverListeners.has(kind)) {
+  /** Reaches nothing from now on, and its socket closes. */
+  private letKeyOverGo(key: string) {
+    this.sidecar.unpin(key);
+    this.keysOverListeners.get(key)?.stop();
+    this.keysOverListeners.delete(key);
+  }
+
+  /** Where the key that is over reaches, listened on before it is pinned there, as the sidecar may connect at once. */
+  private keyOverSocket(key: string, kind: KeyOverKind) {
+    const socket = this.socketFor("over", key);
+    if (!this.keysOverListeners.has(key)) {
       rmSync(socket, { force: true });
-      const server = Bun.serve({ unix: socket, fetch: () => this.answerToKeyOver(kind) });
-      this.keysOverListeners.set(kind, { stop: () => void server.stop(true) });
+      const server = Bun.serve({ unix: socket, fetch: () => this.answerToKeyOver(key, kind) });
+      this.keysOverListeners.set(key, {
+        stop: () => {
+          void server.stop(true);
+          rmSync(socket, { force: true });
+        },
+      });
     }
     return socket;
   }
 
-  private answerToKeyOver(kind: KeyOverKind) {
-    return (this.answersToKeysOver.allows(kind) ? ANSWER_TO_KEY_OVER : ANSWER_TO_KEY_OVER_TOO_OFTEN)[kind]();
+  private answerToKeyOver(key: string, kind: KeyOverKind) {
+    return (this.answersToKeysOver.allows(key) ? ANSWER_TO_KEY_OVER : ANSWER_TO_KEY_OVER_TOO_OFTEN)[kind]();
   }
 
   private letIn(deviceId: string, key: string, address: string) {

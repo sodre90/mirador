@@ -104,4 +104,18 @@ test("the devices connected now show in the sidebar, in Settings → Devices wit
     expect(printed).toMatch(/\nPhone {3}last seen .+ {3}joined .+\n$/);
     await host.start();
   });
+
+  await test.step("a person's device, connected to the rooms they are in, is left out of the sidebar's count, and mirador devices says whose it is", async () => {
+    await page.reload();
+    const mia = host.admitPerson("Mia");
+    const miaContext = await browser.newContext();
+    await miaContext.addCookies([mia.cookie]);
+    await (await miaContext.newPage()).goto(host.origin);
+    const settings = await openSettings(page, "Devices");
+    await expect(settings.locator(".device-list li", { hasText: "Mia's browser" })).toHaveClass(/connected/);
+    await settings.getByRole("button", { name: "Close" }).click();
+    await expect(inSidebar).toHaveCount(0);
+    expect(miradorDevices()).toMatch(/\nMia's browser {3}Mia, in rooms only {3}connected now, 1 page open {3}from \S+ +joined .+\n$/);
+    await miaContext.close();
+  });
 });

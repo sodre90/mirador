@@ -262,7 +262,7 @@ export const problems = {
   machineIgnoredRoomInvite: (machine: string) =>
     `That is a room invite's code, but ${machine} did not take it as one, so this computer did not join it. The invite may have expired or been used; ask for a new one.`,
   machineJoinedAsPerson: (machine: string) =>
-    `This computer joins ${machine} as a person in its rooms, so only a room invite's code lets it in there, and it does not ask to join. To make this computer one of the owner's devices there, remove ${machine} and add it again.`,
+    `This computer joins ${machine} as a person in its rooms, so only a room invite's code lets it in there, and it does not ask to join. To make this computer one of its owner's own devices, remove ${machine} under Machines, and add it again with the device invite.`,
   machineAuthorityNotInLink: (machine: string) =>
     `${machine}'s certificate authority is not the one in the invite link, so the code was not sent. Something on the network may be posing as ${machine}.`,
   machineAuthorityNotInTunnelLink: (machine: string) =>

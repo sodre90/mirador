@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type KeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent, type ReactNode, type RefObject } from "react";
-import { otherConnectedDevices } from "../shared/devices.ts";
+import { ownersOtherConnectedDevices } from "../shared/devices.ts";
 import {
   type Conversation,
   type Profile,
@@ -866,10 +866,10 @@ function WaitingEdge({ side, hidden, onClick }: { side: "above" | "below"; hidde
   );
 }
 
-/** How many devices are connected now, besides the one looking; nothing while none is, or when switched off in Settings. */
-function ConnectedDevices({ listed, onOpen }: { listed: DevicesListed | null; onOpen: () => void }) {
+/** How many of the owner's devices are connected now, besides the one looking; nothing while none is, or when switched off in Settings. */
+function ConnectedDevices({ listed, ownerId, onOpen }: { listed: DevicesListed | null; ownerId: string | null; onOpen: () => void }) {
   const shown = useConnectedDevicesInSidebar();
-  const connected = listed ? otherConnectedDevices(listed.devices, listed.thisDeviceId) : [];
+  const connected = listed && ownerId ? ownersOtherConnectedDevices(listed.devices, listed.thisDeviceId, ownerId) : [];
   if (!shown || !listed || connected.length === 0) return null;
   return (
     <button type="button" className="link connected-devices" data-hint={hints.connectedDevices(connected.map(({ name }) => name))} onClick={onOpen}>
@@ -1009,7 +1009,7 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
         <ConversationMenu conversation={conversationInMenu} at={conversationMenu} dispatch={dispatch} onClose={() => setConversationMenu(null)} />
       )}
       <footer>
-        <ConnectedDevices listed={state.devices} onOpen={() => openOverlay({ kind: "settings", page: "devices" })} />
+        <ConnectedDevices listed={state.devices} ownerId={state.ownerId} onOpen={() => openOverlay({ kind: "settings", page: "devices" })} />
         <DesktopMenu />
         <div className="footer-buttons">
           <FooterButton shape="settings" name={words.settings} about={hints.settings} onClick={() => openOverlay({ kind: "settings" })} />

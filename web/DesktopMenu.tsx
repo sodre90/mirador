@@ -1,16 +1,26 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { DESKTOP_MENU_EVENT, type DesktopMenu as Menu, type DesktopMenuItem } from "../shared/desktop-menu.ts";
-import { sendToDesktopApp } from "./desktop-bridge.ts";
+import { DESKTOP_MENU_EVENT, DESKTOP_NONCE_EVENT, type DesktopMenu as Menu, type DesktopMenuItem } from "../shared/desktop-menu.ts";
+import { desktopNonce, sendToDesktopApp } from "./desktop-bridge.ts";
 import { t } from "./i18n/index.ts";
 
-/** The menu the Linux desktop app hands its window; in a browser, or on macOS with its menu bar, there is none. */
+/**
+ * The menu the Linux desktop app hands its window; in a browser, or on macOS with its menu bar, there is none. Asked
+ * for once, with the nonce, as soon as the page has it: the app hands the page its nonce again whenever any frame asks.
+ */
 function useDesktopMenu() {
   const [menu, setMenu] = useState<Menu | null>(null);
   useEffect(() => {
     const show = (event: Event) => setMenu((event as CustomEvent<Menu>).detail);
+    const askForMenu = (nonce: string) => sendToDesktopApp({ type: "desktop-menu-request", nonce });
+    const askWithNonceGiven = (event: Event) => askForMenu((event as CustomEvent<string>).detail);
     window.addEventListener(DESKTOP_MENU_EVENT, show);
-    sendToDesktopApp({ type: "desktop-menu-request" });
-    return () => window.removeEventListener(DESKTOP_MENU_EVENT, show);
+    const known = desktopNonce();
+    if (known) askForMenu(known);
+    else window.addEventListener(DESKTOP_NONCE_EVENT, askWithNonceGiven, { once: true });
+    return () => {
+      window.removeEventListener(DESKTOP_MENU_EVENT, show);
+      window.removeEventListener(DESKTOP_NONCE_EVENT, askWithNonceGiven);
+    };
   }, []);
   return menu;
 }

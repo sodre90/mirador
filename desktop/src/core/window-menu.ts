@@ -59,15 +59,16 @@ export type PageRequest =
   | { type: "window-title"; title: string };
 
 /**
- * Any frame in the window can post to the app, the agents' canvas pages included; only the page the app handed the
- * nonce to can make it act, and the canvas frames, from another origin, never see it.
+ * Any frame in the window can post to the app, the agents' canvas pages and other machines' pages included, and the app
+ * can't tell which did; only the page the app handed the nonce to can make it act, or show it the menu, and the frames,
+ * from other origins, never see the nonce. Anyone may ask for the nonce, which the app hands to its window's page alone.
  */
 export function pageRequest(detail: unknown, nonce: string): PageRequest | null {
   if (typeof detail !== "object" || detail === null) return null;
   const message = detail as Record<string, unknown>;
-  if (message.type === "desktop-menu-request") return { type: "menu" };
   if (message.type === "desktop-nonce-request") return { type: "nonce" };
   if (message.nonce !== nonce) return null;
+  if (message.type === "desktop-menu-request") return { type: "menu" };
   if (message.type === "desktop-action" && isTrayAction(message.action)) return { type: "action", action: message.action };
   if (message.type === "desktop-close-window") return { type: "close-window" };
   if (message.type === "desktop-appearance" && isDesktopAppearance(message.appearance)) return { type: "appearance", appearance: message.appearance };

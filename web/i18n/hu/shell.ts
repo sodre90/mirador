@@ -289,6 +289,12 @@ export const shell: Messages["shell"] = {
     roomInviteFirst: "Meghívtak egy ottani szobába. Csatlakozz a szobameghívó kódjával vagy linkjével.",
     roomInviteLinkFirst: "Meghívtak egy ottani szobába. Csatlakozz a szobameghívó teljes linkjével: a kódja egymagában nem elég.",
     peerToPeer: "peer to peer kapcsolattal",
+    linkToOpen: {
+      title: (machine) => `Megnyitod a linket innen: ${machine}?`,
+      leadsTo: "Valaki más gépe magától nem nyit meg linket. Ez ide vezet:",
+      open: "Megnyitás",
+      cancel: "Mégse",
+    },
   },
   conversationTitle: {
     label: "A beszélgetés neve",

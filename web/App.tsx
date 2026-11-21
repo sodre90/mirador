@@ -21,6 +21,7 @@ import { KnownConversations } from "./known-conversations.ts";
 import { FileToOpenPrompt } from "./FileToOpenPrompt.tsx";
 import { OlderDeletePrompt, WorkspaceDeletePrompt, WorktreeDeletePrompt, WorktreesDialog } from "./Worktrees.tsx";
 import { tellTheRailThePlace } from "./machine-place.ts";
+import { LinkFromMachinePrompt } from "./LinkFromMachinePrompt.tsx";
 import { MachineFrames, MachineRail, reachedAt, showsMachinesHere, useShownMachine } from "./MachineRail.tsx";
 import { MachinesDialog, openMachine } from "./Machines.tsx";
 import { PluginsDialog } from "./Plugins.tsx";
@@ -863,6 +864,7 @@ export function App() {
           onPlace={machines.rememberPlace}
         />
       )}
+      {railShown && <LinkFromMachinePrompt />}
       <HintLayer />
       {conversation && open && <SelectionActions conversationId={conversation.id} onAsk={(text) => askInSideChat(conversation.id, text)} />}
       <JoinRequestPrompts joinRequests={state.joinRequests} />

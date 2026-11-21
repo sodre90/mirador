@@ -284,6 +284,12 @@ export const shell: Messages["shell"] = {
     roomInviteFirst: "你被邀请进入那边的一个房间。用房间邀请的邀请码或邀请链接加入。",
     roomInviteLinkFirst: "你被邀请进入那边的一个房间。请用房间邀请的完整邀请链接加入：只有邀请码是不够的。",
     peerToPeer: "点对点连接",
+    linkToOpen: {
+      title: (machine) => `打开来自 ${machine} 的链接？`,
+      leadsTo: "别人的机器不会自己打开链接。这个链接指向：",
+      open: "打开",
+      cancel: "取消",
+    },
   },
   conversationTitle: {
     label: "对话名称",

@@ -62,8 +62,11 @@ describe("menu in the window", () => {
     expect(desktopUpdate(true, { ...build, stage: "blocked", blockedBy: "Mirador could not install it" })).toEqual({ stage: "blocked", version: "0.4.1", blockedBy: "Mirador could not install it" });
   });
 
-  test("acts only on an action that carries the nonce, while anyone may ask for the menu", () => {
-    expect(pageRequest({ type: "desktop-menu-request" }, "n-1")).toEqual({ type: "menu" });
+  test("acts only on an action that carries the nonce, and shows the menu only to a request that carries it, as any frame of the window can ask", () => {
+    expect(pageRequest({ type: "desktop-menu-request", nonce: "n-1" }, "n-1")).toEqual({ type: "menu" });
+    expect(pageRequest({ type: "desktop-menu-request" }, "n-1")).toBeNull();
+    expect(pageRequest({ type: "desktop-menu-request", nonce: "guess" }, "n-1")).toBeNull();
+    expect(pageRequest({ type: "desktop-nonce-request" }, "n-1")).toEqual({ type: "nonce" });
     expect(pageRequest({ type: "desktop-action", nonce: "n-1", action: "quit" }, "n-1")).toEqual({ type: "action", action: "quit" });
     expect(pageRequest({ type: "desktop-action", nonce: "n-1", action: "install-update" }, "n-1")).toEqual({ type: "action", action: "install-update" });
     expect(pageRequest({ type: "desktop-action", nonce: "n-1", action: "check-for-update" }, "n-1")).toEqual({ type: "action", action: "check-for-update" });

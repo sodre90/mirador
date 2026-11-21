@@ -251,7 +251,7 @@ export const problems: Messages["problems"] = {
   machineCertificateUntrusted: (machine) => `这台电脑不信任 ${machine} 的证书，而 ${machine} 也没有提供自己的证书颁发机构。`,
   machineGaveNoToken: (machine) => `${machine} 让这台电脑加入了，却没有给出令牌。`,
   machineIgnoredRoomInvite: (machine) => `这是房间邀请的代码，但 ${machine} 没有把它当作房间邀请，所以这台电脑没有加入。邀请可能已过期或已被使用，请再要一个。`,
-  machineJoinedAsPerson: (machine) => `这台电脑以个人身份进入 ${machine} 的房间，所以只有房间邀请的代码能让它进入那里，它也不会申请加入。要让这台电脑成为那里所有者的设备之一，请移除 ${machine} 再重新添加。`,
+  machineJoinedAsPerson: (machine) => `这台电脑以个人身份进入 ${machine} 的房间，所以只有房间邀请的代码能让它进入那里，它也不会申请加入。要让这台电脑成为所有者自己的设备之一，请在“机器”中移除 ${machine}，再用设备邀请重新添加。`,
   machineAuthorityNotInLink: (machine) => `${machine} 的证书颁发机构不是邀请链接中的那个，因此没有发送邀请码。网络上可能有东西在冒充 ${machine}。`,
   machineAuthorityNotInTunnelLink: (machine) =>
     `这个邀请链接通过点对点连接到 ${machine}，没有说明它的地址上应该是哪个证书，因此没有把邀请码发送到那里。请在能使用点对点连接的电脑上，把链接粘贴到“机器”里。`,
