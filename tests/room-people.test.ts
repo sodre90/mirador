@@ -220,10 +220,12 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.subscribe": true,
   "room.unsubscribe": true,
   "room.write": true,
+  "room.writing": true,
+  "room.usage.get": true,
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "canvas.upserted", "settings.saved", "error", "pong"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;

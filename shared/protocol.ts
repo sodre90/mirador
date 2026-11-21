@@ -1,7 +1,8 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
-import type { Room, RoomApproval, RoomInvite, RoomMessage, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { RoomUsage } from "./room-usage.ts";
+import type { Room, RoomApproval, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -343,6 +344,8 @@ export type ClientMessage =
       sideChatId?: string;
       /** The room the page shows instead of a conversation. */
       roomId?: string;
+      /** Whether the page is in sight, though perhaps not in focus: a room it shows has you there while it is. */
+      visible: boolean;
     }
   /** Asks the host to answer with pong, so a device can tell a socket that went quiet from one that died on the way. */
   | { type: "ping" }
@@ -421,7 +424,11 @@ export type ClientMessage =
   | { type: "room.subscribe"; roomId: string }
   | { type: "room.unsubscribe"; roomId: string }
   /** `tags` are profile ids of the room's agents; a follow-up in a thread (`threadId`) tags none, as it goes to the thread's agent. */
-  | { type: "room.write"; roomId: string; text: string; tags: string[]; threadId: string | null };
+  | { type: "room.write"; roomId: string; text: string; tags: string[]; threadId: string | null }
+  /** You type in the room's message box (`threadId` null) or a thread's, or stopped with it emptied; never what you type. */
+  | { type: "room.writing"; roomId: string; threadId: string | null; writing: boolean }
+  /** What the room's agents took since then; the host answers `room.usage.got`. */
+  | { type: "room.usage.get"; requestId: string; roomId: string; since: number | null };
 
 export type ServerMessage =
   | {
@@ -580,6 +587,9 @@ export type ServerMessage =
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
   /** All the room's agents wait on, and the people's tasks that wait for an approver, oldest first, each time one starts or stops waiting. */
   | { type: "room.approvals"; roomId: string; approvals: RoomApproval[]; tasks: RoomTaskApproval[] }
+  /** Who is in a subscribed room now and who of them writes there, after `room.timeline` and each time it changes. */
+  | ({ type: "room.presence"; roomId: string } & RoomPresence)
+  | { type: "room.usage.got"; requestId: string; usage: RoomUsage }
   | {
       type: "conversation.history";
       conversationId: string;

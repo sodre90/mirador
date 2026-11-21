@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
+import type { RoomUsage } from "../shared/room-usage.ts";
 import { AGENT_GONE, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import {
   allowedByPreset,
@@ -49,6 +50,7 @@ import { shownAsWritten } from "../shared/written-text.ts";
 import type { RoomRules, TurnListener, WaitingPermission } from "./conversations.ts";
 import type { Hub } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
+import { EVENTS_OF_TURNS, roomUsage } from "./room-usage.ts";
 import type { Store } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 
@@ -382,6 +384,18 @@ export class RoomService implements RoomRules, TurnListener {
   timeline(roomId: string): RoomTimeline {
     this.existingRoom(roomId);
     return { messages: this.store.listRoomMessages(roomId), threads: this.store.listRoomThreads(roomId) };
+  }
+
+  /**
+   * What the room's agents took for their turns since then, read from their conversations in the room: an agent taken
+   * out of it, or a workspace the room left, takes its conversation there with it, and what it took.
+   */
+  usage(roomId: string, since: number | null): RoomUsage {
+    const agents = this.existingRoom(roomId).agents.map(({ profileId, conversationId }) => ({
+      profileId,
+      events: conversationId ? this.store.listEventsOfTypes(conversationId, EVENTS_OF_TURNS) : [],
+    }));
+    return roomUsage(roomId, since, agents, this.store.listRoomMessages(roomId));
   }
 
   /** The pages and questions the room's agents made in their conversations there, oldest first. */

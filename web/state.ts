@@ -16,7 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
-import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
+import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -85,6 +85,8 @@ export interface AppState {
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
   roomTimeline: (RoomTimelineWithCanvas & { roomId: string }) | null;
+  /** Who is in the shown room now, and who of them writes there, once the host said. */
+  roomPresence: (RoomPresence & { roomId: string }) | null;
   /** The agents' conversations whose threads are shown beside their room, subscribed as the kept conversations are. */
   threadConversations: OpenConversation[];
   profiles: Profile[];
@@ -208,6 +210,7 @@ export const initialState: AppState = {
   roomInvites: [],
   selectedRoomId: null,
   roomTimeline: null,
+  roomPresence: null,
   threadConversations: [],
   profiles: [],
   promptTemplates: [],
@@ -316,10 +319,11 @@ function selectShowing(state: AppState, conversationId: string | null): AppState
 
 function selectRoom(state: AppState, roomId: string): AppState {
   if (state.selectedRoomId === roomId) return { ...state, selectedConversationId: null };
-  return { ...state, selectedConversationId: null, selectedRoomId: roomId, roomTimeline: null, threadConversations: [] };
+  return { ...state, selectedConversationId: null, selectedRoomId: roomId, roomTimeline: null, roomPresence: null, threadConversations: [] };
 }
 
-const leavingRoom = (state: AppState): AppState => (state.selectedRoomId === null ? state : { ...state, selectedRoomId: null, roomTimeline: null, threadConversations: [] });
+const leavingRoom = (state: AppState): AppState =>
+  state.selectedRoomId === null ? state : { ...state, selectedRoomId: null, roomTimeline: null, roomPresence: null, threadConversations: [] };
 
 function keepingThreadConversations(state: AppState, conversationIds: string[]): AppState {
   if (conversationIds.join(" ") === state.threadConversations.map(({ conversationId }) => conversationId).join(" ")) return state;
@@ -696,6 +700,12 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomApprovals: [...state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId), ...message.approvals],
         roomTasksWaiting: [...state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId), ...message.tasks],
       };
+    case "room.presence": {
+      const { roomId, here, writing } = message;
+      return state.selectedRoomId === roomId ? { ...state, roomPresence: { roomId, here, writing } } : state;
+    }
+    case "room.usage.got":
+      return state;
   }
 }
 

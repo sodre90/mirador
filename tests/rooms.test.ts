@@ -1239,13 +1239,28 @@ describe("telling the owner of a room's answers", () => {
     notifications.notify(builder, { kind: "error", message: "boom" });
     notifications.notify(builder, { kind: "question", question: "Which?" });
     expect(told()).toEqual(["permission", "finished", "question"]);
-    page.data.presence = { conversationId: null, attentive: false, sideChatId: null, roomId: room.id };
+    page.data.presence = { conversationId: null, attentive: false, sideChatId: null, roomId: room.id, visible: true };
     notifications.notify(builder, { kind: "permission", tool: "ls" });
     expect(told()).toHaveLength(4);
-    page.data.presence = { conversationId: null, attentive: true, sideChatId: null, roomId: room.id };
+    page.data.presence = { conversationId: null, attentive: true, sideChatId: null, roomId: room.id, visible: true };
     notifications.notify(builder, { kind: "permission", tool: "ls" });
     notifications.notify(builder, { kind: "question", question: "Which?" });
     expect(told()).toHaveLength(4);
+  });
+
+  test("a person other than the owner looking at the room keeps none of its agents' news from the owner", () => {
+    const { store, hub, page, rooms, room, ownerId, received, conversationOf } = machineWithRooms();
+    const mia = "mia";
+    store.insertPerson({ id: mia, name: "Mia", color: null });
+    rooms.setPersonRole(room.id, mia, "member");
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const miasPage = { data: socketData("page", { deviceId: "d1", personId: mia, isOwner: false }), send: () => {} };
+    miasPage.data.presence = { conversationId: conversationOf("p1"), attentive: true, sideChatId: conversationOf("p1"), roomId: room.id, visible: true };
+    hub.add(miasPage as unknown as BrowserSocket);
+    page.data.presence = { conversationId: null, attentive: false, sideChatId: null, roomId: null, visible: false };
+    new SystemNotifications(store, hub).notify(conversationOf("p1"), { kind: "permission", tool: "ls" });
+    expect(received.filter(({ type }) => type === "system-notification")).toHaveLength(1);
+    expect([hub.isRoomWatched(room.id), hub.isWatched(conversationOf("p1")), hub.isShown(conversationOf("p1"))]).toEqual([false, false, false]);
   });
 
   test("reading the room takes from phones what they were told of its agents that waits no longer, as an answer finished or a task held", () => {

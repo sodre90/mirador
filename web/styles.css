@@ -9733,6 +9733,90 @@ button.link.more-rows {
   content: none;
 }
 
+.room-here-count {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-here-count::before,
+.room-here-mark {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.room-people {
+  position: fixed;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 80px));
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  color: var(--text);
+  font-size: calc(13px * var(--font-scale));
+}
+
+.room-people h3 {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: calc(11.5px * var(--font-scale));
+  font-weight: 600;
+}
+
+.room-people ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-people li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-people .avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  font-size: calc(11px * var(--font-scale));
+}
+
+.room-agent-working {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-writing {
+  padding: 2px 0 0 38px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  font-style: italic;
+}
+
+.room-writing:empty {
+  padding: 0;
+}
+
 .room-dialog h2 {
   margin: 0 0 12px;
 }
@@ -9942,6 +10026,55 @@ button.link.more-rows {
 
 .room-delete {
   margin-right: auto;
+}
+
+.room-usage-period {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-usage {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: calc(12px * var(--font-scale));
+  font-variant-numeric: tabular-nums;
+}
+
+.room-usage thead td:first-child {
+  width: 34%;
+}
+
+.room-usage caption {
+  padding: 4px 0 2px;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+}
+
+.room-usage :is(th, td) {
+  padding: 2px 6px;
+  text-align: right;
+}
+
+.room-usage th[scope="row"] {
+  overflow: hidden;
+  padding-left: 0;
+  font-weight: 500;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-usage thead th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.room-usage tfoot :is(th, td) {
+  border-top: 1px solid var(--border);
+  font-weight: 600;
 }
 
 /* A bar this narrow keeps its room for the title; ⌥B, /btw and selected text still open a side chat. */

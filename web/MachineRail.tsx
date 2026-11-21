@@ -10,7 +10,7 @@ import { hints } from "./hints.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
-import { placeIn } from "./machine-place.ts";
+import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
 import { pastelVariables } from "./pastels.ts";
 import { mostUrgentTone } from "./waiting.ts";
 
@@ -228,6 +228,7 @@ function MachineFrame({
   useEffect(() => {
     if (opening && opening !== openedWith.current) frame.current!.contentWindow!.location.href = conversationAddress(machine, opening.conversationId);
   }, [opening]);
+  useEffect(() => tellTheMachineItIsShown(frame.current, shown), [shown]);
   useEffect(() => {
     if (machine.asPerson) return;
     const rememberPlace = (event: MessageEvent) => {
@@ -245,6 +246,7 @@ function MachineFrame({
       title={machine.name}
       src={address}
       {...frameTrust(machine)}
+      onLoad={() => tellTheMachineItIsShown(frame.current, shown)}
     />
   );
 }

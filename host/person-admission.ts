@@ -15,6 +15,7 @@ type Admission<K extends ClientMessage["type"]> = (message: Extract<ClientMessag
 
 const unreadable = () => new Error("The host could not read that message.");
 const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((each) => typeof each === "string");
+const isIdOrNone = (value: unknown) => value === null || typeof value === "string";
 
 /** A room the person is not in is as good as gone for them. */
 function roleOf(person: PersonInRooms, roomId: unknown): RoomRole {
@@ -163,7 +164,12 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "terminal.close": OWNER_ONLY,
   "terminal.close-tab": OWNER_ONLY,
   "terminal.clear": OWNER_ONLY,
-  "presence": OWNER_ONLY,
+  /** A room the person is not in, or none at all, is ignored where it is used rather than refused here, so that nothing tells them it exists. */
+  "presence": ({ conversationId, attentive, sideChatId, roomId, visible }) => {
+    if (!isIdOrNone(conversationId) || typeof attentive !== "boolean" || typeof visible !== "boolean" || ![sideChatId, roomId].every((id) => id === undefined || typeof id === "string")) {
+      throw unreadable();
+    }
+  },
   "ping": () => {},
   "page.error": OWNER_ONLY,
   "host.restart": OWNER_ONLY,
@@ -218,9 +224,13 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     if (typeof roomId !== "string") throw unreadable();
   },
   "room.write": ({ roomId, text, tags, threadId }, person) => {
-    if (typeof text !== "string" || !isStringList(tags) || !(threadId === null || typeof threadId === "string")) throw unreadable();
+    if (typeof text !== "string" || !isStringList(tags) || !isIdOrNone(threadId)) throw unreadable();
     if (!mayWriteAs(roleOf(person, roomId), tags, threadId)) throw new HostProblemError({ code: "room-guests-only-write" });
   },
+  "room.writing": ({ roomId, threadId, writing }) => {
+    if (typeof roomId !== "string" || !isIdOrNone(threadId) || typeof writing !== "boolean") throw unreadable();
+  },
+  "room.usage.get": OWNER_ONLY,
 };
 
 /** The message, from what a person other than the owner sent, when they may send it; anything else throws what refuses it. */

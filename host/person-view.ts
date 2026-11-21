@@ -1,6 +1,7 @@
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
+import type { RoomPresence } from "../shared/rooms.ts";
 import { agentStandIn, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
 import type { Store } from "./store.ts";
@@ -75,7 +76,7 @@ export const namesOthersGoBy = (store: PeopleSeen & Pick<Store, "listProfiles">,
  * and agents in them, and those rooms' messages and canvases, as made for them; nothing else. A message type missing here
  * does not compile.
  */
-export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation">): ShownToPerson {
+export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation" | "findRoomThread">): ShownToPerson {
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
 
@@ -108,6 +109,13 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       const profileId = agents.find(({ conversationId }) => conversationId === item.conversationId)?.profileId;
       return profileId === undefined ? [] : [canvasItemSeen(item, roomId, profileId)];
     });
+  };
+
+  /** Of who is in their room now, only the people they see, each writing in the room or in one of its threads. */
+  const presenceSeen = (roomId: string, { here, writing }: RoomPresence, socket: SocketData): RoomPresence => {
+    const seen = new Set(peopleSeen(socket.personId).map(({ id }) => id));
+    const inTheRoom = (threadId: string | null) => threadId === null || store.findRoomThread(threadId)?.roomId === roomId;
+    return { here: here.filter((personId) => seen.has(personId)), writing: writing.filter(({ personId, threadId }) => seen.has(personId) && inTheRoom(threadId)) };
   };
 
   const snapshotFor = ({ hostRunId }: Snapshot, socket: SocketData): Snapshot => {
@@ -203,6 +211,8 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas) }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
     "room.approvals": HIDDEN,
+    "room.presence": ({ roomId, here, writing }, socket) => shownIf(isIn(socket, roomId), { type: "room.presence", roomId, ...presenceSeen(roomId, { here, writing }, socket) }),
+    "room.usage.got": HIDDEN,
     "conversation.history": HIDDEN,
     "conversation.earlier": HIDDEN,
     "tool-output.got": HIDDEN,

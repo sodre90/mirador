@@ -369,6 +369,19 @@ describe("conversations", () => {
   });
 });
 
+describe("rooms", () => {
+  test("an agent's conversation in a room goes by the room's name as it is now, and the agent's", () => {
+    const store = seededStore();
+    store.saveProfile(profile("p1", "Builder", "opencode"));
+    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null }], permissions: "ask-everything", people: [], peoplesTasksWait: true, createdAt: 1 });
+    store.insertConversation({ ...conversation("c3", "w1", "opencode", "Launch: Builder", "p1"), roomId: "r1" });
+    store.renameRoom("r1", "Liftoff");
+    write(store, "c3", 0, message);
+    write(store, "c3", 1, { type: "turn-end", stopReason: "end_turn" });
+    expect(reportOn(store).conversations!.busiest.map(({ title }) => title)).toEqual(["Liftoff: Builder"]);
+  });
+});
+
 describe("period and workspace", () => {
   test("only events in the period count, and a workspace named by name or folder narrows the report to it", () => {
     const store = seededStore();

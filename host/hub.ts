@@ -14,6 +14,8 @@ export interface Presence {
   attentive: boolean;
   sideChatId: string | null;
   roomId: string | null;
+  /** In sight, though perhaps not in focus. */
+  visible: boolean;
 }
 
 const showsIn = (presence: Presence, conversationId: string) => presence.conversationId === conversationId || presence.sideChatId === conversationId;
@@ -96,7 +98,7 @@ export const socketData = (
   lowDataSubscriptions: new Set<string>(),
   roomSubscriptions: new Set<string>(),
   terminalConversationId: null,
-  presence: { conversationId: null, attentive: false, sideChatId: null, roomId: null },
+  presence: { conversationId: null, attentive: false, sideChatId: null, roomId: null, visible: false },
 });
 
 export type BrowserSocket = ServerWebSocket<SocketData>;
@@ -166,17 +168,27 @@ export class Hub {
     this.sockets.forEach((socket) => this.deliver(socket, message));
   }
 
+  /** Only the owner's pages show conversations, and only they count as someone looking for what the owner is told of. */
+  private ownersPresence() {
+    return [...this.sockets].flatMap(({ data: { isOwner, presence } }) => (isOwner ? [presence] : []));
+  }
+
   /** Pages keep recently opened conversations subscribed, hidden; this is whether one is showing it. */
   isShown(conversationId: string) {
-    return [...this.sockets].some(({ data: { presence } }) => showsIn(presence, conversationId));
+    return this.ownersPresence().some((presence) => showsIn(presence, conversationId));
   }
 
   isWatched(conversationId: string) {
-    return [...this.sockets].some(({ data: { presence } }) => presence.attentive && showsIn(presence, conversationId));
+    return this.ownersPresence().some((presence) => presence.attentive && showsIn(presence, conversationId));
   }
 
   isRoomWatched(roomId: string) {
-    return [...this.sockets].some(({ data: { presence } }) => presence.attentive && presence.roomId === roomId);
+    return this.ownersPresence().some((presence) => presence.attentive && presence.roomId === roomId);
+  }
+
+  /** The people with a page in sight that shows the room, whoever they are; who of them may be there is the room's to say. */
+  peopleShowing(roomId: string): Set<string> {
+    return new Set([...this.sockets].flatMap(({ data: { personId, presence } }) => (presence.visible && presence.roomId === roomId ? [personId] : [])));
   }
 
   /**

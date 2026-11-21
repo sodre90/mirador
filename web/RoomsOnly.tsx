@@ -83,6 +83,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             ownerPicture={null}
             approvals={[]}
             tasks={[]}
+            presence={state.roomPresence?.roomId === room.id ? state.roomPresence : null}
             you={state.you}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnCanvas(room.id, itemId)}

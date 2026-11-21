@@ -99,6 +99,24 @@ export interface RoomMessage {
   taskHeld?: TaskHeld;
 }
 
+/** Someone writing in a room: who, and where, in the room itself (null) or in one of its threads. */
+export interface RoomWriter {
+  personId: string;
+  threadId: string | null;
+}
+
+/** Who is in a room right now: the people with a page showing it, and those of them writing there; the owner too. */
+export interface RoomPresence {
+  here: string[];
+  writing: RoomWriter[];
+}
+
+/** A page tells the host you write at most this often while you type. */
+export const WRITING_SIGNAL_EVERY_MS = 3_000;
+
+/** How long someone shows as writing after their last keystroke the host heard of. */
+export const WRITING_SHOWN_MS = 6_000;
+
 /** One task of one agent: the message that tagged it, then the follow-ups written to it there. */
 export interface RoomThread {
   id: string;

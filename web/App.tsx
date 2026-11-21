@@ -784,6 +784,7 @@ export function App() {
             ownerPicture={state.avatar}
             approvals={state.roomApprovals.filter(({ roomId }) => roomId === shownRoom.id)}
             tasks={state.roomTasksWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
+            presence={state.roomPresence?.roomId === shownRoom.id ? state.roomPresence : null}
             you={state.you}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnRoomCanvas(shownRoom.id, itemId)}

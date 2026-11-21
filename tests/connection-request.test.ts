@@ -39,9 +39,11 @@ describe("Connection.send", () => {
     connection.send({ type: "conversation.subscribe", conversationId: "c1" });
     connection.send({ type: "room.subscribe", roomId: "r1" });
     connection.dispatchMessage(snapshotFor("mia"));
-    expect(connection.send({ type: "presence", conversationId: null, attentive: true, roomId: "r1" })).toBe(false);
+    expect(connection.send({ type: "room.usage.get", requestId: "u1", roomId: "r1", since: null })).toBe(false);
+    expect(connection.send({ type: "presence", conversationId: null, attentive: true, roomId: "r1", visible: true })).toBe(true);
+    expect(connection.send({ type: "room.writing", roomId: "r1", threadId: null, writing: true })).toBe(true);
     expect(connection.send({ type: "room.write", roomId: "r1", text: "hello", tags: [], threadId: null })).toBe(true);
-    expect(sentMessages.map(({ type }) => type)).toEqual(["room.subscribe", "room.write"]);
+    expect(sentMessages.map(({ type }) => type)).toEqual(["room.subscribe", "presence", "room.writing", "room.write"]);
   });
 });
 

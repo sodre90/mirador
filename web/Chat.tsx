@@ -791,12 +791,20 @@ export function PersonAvatar({ personId }: { personId: string | null }) {
 }
 
 /** A person who gave no name is You to themselves, and the owner or someone without a name to the others. */
-export function usePersonName(personId: string | null) {
-  const { ownerId, you } = useContext(MessageWriters);
-  const person = usePerson(personId);
+function nameOf({ people, ownerId, you }: { people: Person[]; ownerId: string | null; you: string | null }, personId: string | null) {
+  const person = people.find(({ id }) => id === personId);
   if (person?.name) return person.name;
   if (personId === null || personId === you) return words.author.you;
   return personId === ownerId ? words.author.owner : personGoesBy(person, t.rooms.nameless);
+}
+
+export function usePersonName(personId: string | null) {
+  return nameOf(useContext(MessageWriters), personId);
+}
+
+export function usePersonNames(personIds: string[]) {
+  const writers = useContext(MessageWriters);
+  return personIds.map((personId) => nameOf(writers, personId));
 }
 
 export function PersonName({ personId }: { personId: string | null }) {

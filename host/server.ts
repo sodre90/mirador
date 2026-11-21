@@ -73,6 +73,7 @@ import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
 import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
+import { RoomPresenceService } from "./room-presence.ts";
 import { namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { inviteIn, LONGEST_MACHINE_NAME, machineAddress } from "../shared/machines.ts";
@@ -259,6 +260,7 @@ export function startServer(services: HostServices) {
   conversations.deletesWithAllItHoldsBy(deleteConversation);
   hub.showsPeople(personView(store));
   const roomInvites = new RoomInvites(store, devices, ownerKey.publicKey);
+  const roomPresence = new RoomPresenceService(store, hub);
   rooms.hearPeopleOutOfEveryRoomWith(signOutPeopleInNoRoom);
   const { network } = config.reachability;
   const localHosts = [`127.0.0.1:${config.port}`, `localhost:${config.port}`];
@@ -1874,10 +1876,11 @@ export function startServer(services: HostServices) {
       case "page.error":
         return console.log(`page error: ${message.message.slice(0, PAGE_ERROR_LOG_LIMIT)}\n${message.stack.slice(0, PAGE_ERROR_LOG_LIMIT)}`);
       case "presence": {
-        const { conversationId, attentive, sideChatId = null, roomId = null } = message;
-        socket.data.presence = { conversationId, attentive, sideChatId, roomId };
-        if (attentive) [conversationId, sideChatId].forEach((seen) => seen && conversations.markSeen(seen));
-        if (attentive && roomId) notifications.roomRead(roomId);
+        roomPresence.reported(socket.data, message);
+        const { conversationId, attentive, sideChatId, roomId } = socket.data.presence;
+        if (!socket.data.isOwner || !attentive) return;
+        [conversationId, sideChatId].forEach((seen) => seen && conversations.markSeen(seen));
+        if (roomId) notifications.roomRead(roomId);
         return;
       }
       case "terminal.clear":
@@ -2017,9 +2020,11 @@ export function startServer(services: HostServices) {
       case "room.set-permissions":
         return rooms.setPermissions(message.roomId, message.permissions);
       case "room.set-person-role":
-        return rooms.setPersonRole(message.roomId, message.personId, message.role);
+        rooms.setPersonRole(message.roomId, message.personId, message.role);
+        return roomPresence.peopleChanged(message.roomId);
       case "room.remove-person":
-        return rooms.removePerson(message.roomId, message.personId);
+        rooms.removePerson(message.roomId, message.personId);
+        return roomPresence.peopleChanged(message.roomId);
       case "room.invite": {
         const invited = roomInvites.invite(message.roomId, message.role);
         sendRoomInvitesToEveryPage();
@@ -2040,18 +2045,24 @@ export function startServer(services: HostServices) {
       case "room.delete":
         roomInvites.withdrawAllInto(message.roomId).forEach((withdrawn) => p2p?.inviteWithdrawn(withdrawn));
         rooms.delete(message.roomId);
+        roomPresence.roomGone(message.roomId);
         return sendRoomInvitesToEveryPage();
       case "room.subscribe": {
         const timeline = rooms.timeline(message.roomId);
         socket.data.roomSubscriptions.add(message.roomId);
-        return reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId) });
+        reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId) });
+        return reply({ type: "room.presence", roomId: message.roomId, ...roomPresence.presenceIn(message.roomId) });
       }
       case "room.unsubscribe":
         socket.data.roomSubscriptions.delete(message.roomId);
         return;
       case "room.write":
-        rooms.write(message.roomId, socket.data.personId, message.text, message.tags, message.threadId);
-        return;
+        roomPresence.wrote(socket.data.personId, message.roomId);
+        return rooms.write(message.roomId, socket.data.personId, message.text, message.tags, message.threadId);
+      case "room.writing":
+        return roomPresence.signalled(socket.data, message.roomId, message.threadId, message.writing);
+      case "room.usage.get":
+        return reply({ type: "room.usage.got", requestId: message.requestId, usage: rooms.usage(message.roomId, message.since) });
       default:
         return message satisfies never;
     }
@@ -2203,6 +2214,7 @@ export function startServer(services: HostServices) {
     },
     close(socket, code, reason) {
       hub.remove(socket);
+      roomPresence.closed(socket.data);
       desktopApp.disconnected(socket);
       if (socket.data.deviceId) deviceCameOrLeft(socket.data.deviceId);
       if (code !== 1000 && code !== 1001) console.log(`browser socket closed: ${code} ${reason}`);

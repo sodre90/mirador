@@ -1,5 +1,5 @@
 import { flushSync } from "react-dom";
-import { useEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
 import type { CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
@@ -21,13 +21,17 @@ import {
   type RoomAuthor,
   type RoomMessage,
   type RoomMessageSentAlong,
+  type RoomPresence,
+  type RoomRole,
   type RoomTaskApproval,
   type RoomThread,
   type RoomTimeline,
+  type RoomWriter,
   type WorkPending,
 } from "../shared/rooms.ts";
+import { placedBelowOnItsSide, useClosing } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
-import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName } from "./Chat.tsx";
+import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { useEarlierHistory } from "./earlier-history.ts";
 import type { EditRequest } from "./edit-approval.ts";
@@ -35,6 +39,7 @@ import { hints } from "./hints.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
+import { writersIn, writingLine, WritingSignals } from "./room-writing.ts";
 import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
@@ -162,15 +167,31 @@ function useTagMenu({ agents, text, caret, take }: { agents: RoomAgentShown[]; t
   return { onKeyDown, textareaAttributes: suggestionAttributes(TAG_MENU_ID, open, pickedIndex), menu };
 }
 
-/** A message box for the room, whose @ tags its agents, or, without agents to tag, for a thread's follow-ups. */
-function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; agents: RoomAgentShown[]; onSend: (text: string, tags: string[]) => void }) {
+/**
+ * A message box for the room, whose @ tags its agents, or, without agents to tag, for a thread's follow-ups; the room's
+ * people see that you write in it while you do.
+ */
+function RoomComposer({
+  placeholder,
+  agents,
+  onSend,
+  tellWriting,
+}: {
+  placeholder: string;
+  agents: RoomAgentShown[];
+  onSend: (text: string, tags: string[]) => void;
+  tellWriting: (writing: boolean) => void;
+}) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
   const [tagged, setTagged] = useState<RoomAgentShown[]>([]);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const typingAidAttributes = useTypingAidAttributes();
+  const [writingSignals] = useState(() => new WritingSignals(tellWriting));
+  useEffect(() => () => writingSignals.stopped(), []);
   const take = (agent: RoomAgentShown) => {
     const next = withMention(text, caret, { path: agent.name, directory: false });
+    writingSignals.typed(next.text);
     flushSync(() => {
       setText(next.text);
       setCaret(next.caret);
@@ -188,6 +209,7 @@ function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; ag
       text,
       tagged.filter(({ name }) => text.includes(`@${name}`)).map(({ profileId }) => profileId),
     );
+    writingSignals.sent();
     setText("");
     setTagged([]);
   };
@@ -212,6 +234,7 @@ function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; ag
           onChange={(event) => {
             setText(event.target.value);
             setCaret(event.target.selectionStart);
+            writingSignals.typed(event.target.value);
           }}
           onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
           onKeyDown={onKeyDown}
@@ -232,6 +255,18 @@ function RoomComposer({ placeholder, agents, onSend }: { placeholder: string; ag
 }
 
 const writeIn = (roomId: string, text: string, tags: string[], threadId: string | null) => connection.send({ type: "room.write", roomId, text, tags, threadId });
+
+const tellWritingIn = (roomId: string, threadId: string | null) => (writing: boolean) => connection.send({ type: "room.writing", roomId, threadId, writing });
+
+/** Who of the others writes in the room itself, or in the thread, now. */
+function WritingLine({ writing, threadId, you }: { writing: RoomWriter[]; threadId: string | null; you: string | null }) {
+  const line = writingLine(usePersonNames(writersIn(writing, threadId, you)));
+  return (
+    <div className="room-writing" aria-live="polite">
+      {line}
+    </div>
+  );
+}
 
 const approve = ({ conversationId, request }: RoomApproval, answer: RoomApprovalAnswer) =>
   connection.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer });
@@ -367,6 +402,7 @@ function ThreadColumn({
   waitingForYou,
   you,
   followsUp,
+  writing,
   onClose,
 }: {
   thread: RoomThread;
@@ -379,6 +415,7 @@ function ThreadColumn({
   waitingForYou: RoomApproval[];
   you: string | null;
   followsUp: boolean;
+  writing: RoomWriter[];
   onClose: () => void;
 }) {
   const asked = askedInThread(timeline, thread);
@@ -416,9 +453,17 @@ function ThreadColumn({
           </div>
         ))}
         {workingOn && <div className="working">{workingLine}</div>}
+        <WritingLine writing={writing} threadId={thread.id} you={you} />
       </div>
       <ApprovalStrip approvals={waitingForYou.filter(({ threadId }) => threadId === thread.id)} agentsById={agentsById} you={you} />
-      {followsUp && <RoomComposer placeholder={words.followUpPlaceholder(agent.name)} agents={[]} onSend={(text) => writeIn(thread.roomId, text, [], thread.id)} />}
+      {followsUp && (
+        <RoomComposer
+          placeholder={words.followUpPlaceholder(agent.name)}
+          agents={[]}
+          onSend={(text) => writeIn(thread.roomId, text, [], thread.id)}
+          tellWriting={tellWritingIn(thread.roomId, thread.id)}
+        />
+      )}
     </aside>
   );
 }
@@ -448,6 +493,73 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
   });
 }
 
+type RoleShown = "owner" | RoomRole | null;
+
+/**
+ * The room's people as this page knows them, each with their role where it is known: the owner, everyone the room
+ * lets in, of whom a person other than the owner is told only of themselves, and whoever else is here now.
+ */
+function peopleOfRoom(room: Room, ownerId: string | null, here: string[]): { personId: string; role: RoleShown }[] {
+  const known: { personId: string; role: RoleShown }[] = [...(ownerId ? [{ personId: ownerId, role: "owner" as const }] : []), ...room.people];
+  const knownIds = new Set(known.map(({ personId }) => personId));
+  return [...known, ...here.filter((personId) => !knownIds.has(personId)).map((personId) => ({ personId, role: null }))];
+}
+
+/** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work. */
+function RoomPeople({ room, agents, here, ownerId }: { room: Room; agents: RoomAgentShown[]; here: string[]; ownerId: string | null }) {
+  const opener = useRef<HTMLButtonElement>(null);
+  const popover = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<CSSProperties | null>(null);
+  useClosing(placement !== null, [opener, popover], () => setPlacement(null));
+  const hereNow = new Set(here);
+  return (
+    <>
+      <button
+        ref={opener}
+        type="button"
+        className="room-here-count"
+        data-hint={words.peopleOfRoom}
+        aria-haspopup="dialog"
+        aria-expanded={placement !== null}
+        onClick={() => setPlacement(placement || !opener.current ? null : placedBelowOnItsSide(opener.current))}
+      >
+        {words.hereCount(here.length)}
+      </button>
+      {placement && (
+        <div ref={popover} className="room-people" role="dialog" aria-label={words.peopleOfRoom} style={placement}>
+          <h3>{words.people}</h3>
+          <ul aria-label={words.people}>
+            {peopleOfRoom(room, ownerId, here).map(({ personId, role }) => (
+              <li key={personId}>
+                <PersonAvatar personId={personId} />
+                <PersonName personId={personId} />
+                {role && <span className="room-role-label">{words.authorRoles[role]}</span>}
+                {hereNow.has(personId) && <span className="room-here-mark" role="img" aria-label={words.isHere} data-hint={words.isHere} />}
+              </li>
+            ))}
+          </ul>
+          {agents.length > 0 && (
+            <>
+              <h3>{words.agents}</h3>
+              <ul aria-label={words.agents}>
+                {agents.map(({ profileId, name, profile, answering }) => (
+                  <li key={profileId}>
+                    <span className={`avatar agent-${profile?.harness ?? "gone"}`} aria-hidden="true">
+                      {profile ? agentMarks[profile.harness] : "?"}
+                    </span>
+                    <span>{name}</span>
+                    {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 export function RoomView({
   room,
   timeline,
@@ -459,6 +571,7 @@ export function RoomView({
   ownerPicture,
   approvals,
   tasks,
+  presence,
   you,
   dispatch,
   onOpenOnCanvas,
@@ -475,6 +588,8 @@ export function RoomView({
   approvals: RoomApproval[];
   /** The tasks of people other than the owner that wait for an approver, oldest first. */
   tasks: RoomTaskApproval[];
+  /** Who is in the room now and who of them writes, once the host said. */
+  presence: RoomPresence | null;
   you: string | null;
   dispatch: Dispatch<AppAction>;
   onOpenOnCanvas: (itemId: string) => void;
@@ -500,6 +615,7 @@ export function RoomView({
     [timeline, room.agents],
   );
   const pending = timeline ? workPending(timeline, room.agents) : [];
+  const writing = presence?.writing ?? [];
   const timelineEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     timelineEnd.current?.scrollIntoView({ block: "end" });
@@ -517,6 +633,7 @@ export function RoomView({
             </li>
           ))}
         </ul>
+        {presence && <RoomPeople room={room} agents={agents} here={presence.here} ownerId={ownerId} />}
       </header>
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}
@@ -531,6 +648,7 @@ export function RoomView({
           );
         })}
         {workUnderWay(pending, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
+        <WritingLine writing={writing} threadId={null} you={you} />
         <div ref={timelineEnd} />
       </div>
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
@@ -538,6 +656,7 @@ export function RoomView({
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
         agents={tagsAgents ? agents.filter(({ profile }) => profile) : []}
         onSend={(text, tags) => writeIn(room.id, text, tags, null)}
+        tellWriting={tellWritingIn(room.id, null)}
       />
     </>
   );
@@ -555,6 +674,7 @@ export function RoomView({
         waitingForYou={waitingForYou}
         you={you}
         followsUp={tagsAgents}
+        writing={writing}
         onClose={() => setThreadId(null)}
       />
     ) : null;

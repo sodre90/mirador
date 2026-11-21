@@ -4,16 +4,18 @@ import type { Person, Profile, ReachabilitySettings, Workspace } from "../shared
 import { personGoesBy } from "../shared/people.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
+import { ROOM_USAGE_PERIODS, sinceOf, type RoomUsage, type RoomUsagePeriod, type Spend } from "../shared/room-usage.ts";
 import { ROOM_ROLES, type Room, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { timeOf } from "./Devices.tsx";
 import { waitingHints } from "./hints.ts";
-import { t } from "./i18n/index.ts";
+import { formatNumber, t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import { QrCode } from "./QrCode.tsx";
 import type { AppAction } from "./state.ts";
+import { compactTokenCount, formatCost } from "./usage.ts";
 import { waitingLabels } from "./waiting.ts";
 
 const words = t.rooms;
@@ -269,6 +271,106 @@ function RoomInvitesField({ room, invites, reachability }: { room: Room; invites
   );
 }
 
+const USAGE_PERIODS = Object.keys(ROOM_USAGE_PERIODS) as RoomUsagePeriod[];
+
+function SpendRow({ name, spend, withCost }: { name: string; spend: Spend; withCost: boolean }) {
+  const { inputTokens, outputTokens, cachedReadTokens, cachedWriteTokens } = spend.tokens;
+  const cached = cachedReadTokens + cachedWriteTokens;
+  return (
+    <tr>
+      <th scope="row">{name}</th>
+      <td>{formatNumber(spend.turns)}</td>
+      <td data-hint={formatNumber(inputTokens)}>{compactTokenCount(inputTokens)}</td>
+      <td data-hint={formatNumber(outputTokens)}>{compactTokenCount(outputTokens)}</td>
+      <td data-hint={formatNumber(cached)}>{compactTokenCount(cached)}</td>
+      {withCost && <td>{spend.cost ? formatCost(spend.cost) : "–"}</td>}
+    </tr>
+  );
+}
+
+/**
+ * What the room's agents took for their turns over a period, for the owner alone: in all, by agent, and by the person
+ * whose message started each turn.
+ */
+function RoomUsageField({ room, profiles, people, ownerId }: { room: Room; profiles: Profile[]; people: Person[]; ownerId: string | null }) {
+  const [period, setPeriod] = useState<RoomUsagePeriod>("month");
+  const [usage, setUsage] = useState<RoomUsage | null>(null);
+  useEffect(() => {
+    let wanted = true;
+    setUsage(null);
+    connection
+      .sendAndAwait(
+        (requestId) => ({ type: "room.usage.get", requestId, roomId: room.id, since: sinceOf(period, Date.now()) }),
+        (message, requestId) => (message.type === "room.usage.got" && message.requestId === requestId ? message.usage : undefined),
+      )
+      .then(
+        (got) => wanted && setUsage(got),
+        () => {},
+      );
+    return () => {
+      wanted = false;
+    };
+  }, [room.id, period]);
+  const agentName = (profileId: string) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone;
+  const personName = (personId: string) => personGoesBy(people.find(({ id }) => id === personId), personId === ownerId ? t.chat.author.you : words.nameless);
+  const withCost = Boolean(usage?.total.cost);
+  const heading = (
+    <tr>
+      <td />
+      <th scope="col">{words.usageTurns}</th>
+      <th scope="col">{words.usageInput}</th>
+      <th scope="col">{words.usageOutput}</th>
+      <th scope="col">{words.usageCached}</th>
+      {withCost && <th scope="col">{words.usageCost}</th>}
+    </tr>
+  );
+  return (
+    <fieldset className="room-field room-usage-field">
+      <legend>{words.usage}</legend>
+      <label className="room-usage-period">
+        {words.usagePeriod}
+        <select value={period} onChange={(event) => setPeriod(event.target.value as RoomUsagePeriod)}>
+          {USAGE_PERIODS.map((each) => (
+            <option key={each} value={each}>
+              {words.usagePeriods[each]}
+            </option>
+          ))}
+        </select>
+      </label>
+      {!usage && <span className="hint">{words.loading}</span>}
+      {usage && usage.total.turns === 0 && <span className="hint">{words.usageNone}</span>}
+      {usage && usage.total.turns > 0 && (
+        <>
+          <table className="room-usage" aria-label={words.usageByAgent}>
+            <caption>{words.usageByAgent}</caption>
+            <thead>{heading}</thead>
+            <tbody>
+              {usage.agents.map(({ profileId, spend }) => (
+                <SpendRow key={profileId} name={agentName(profileId)} spend={spend} withCost={withCost} />
+              ))}
+            </tbody>
+            <tfoot>
+              <SpendRow name={words.usageTotal} spend={usage.total} withCost={withCost} />
+            </tfoot>
+          </table>
+          {usage.people.length > 0 && (
+            <table className="room-usage" aria-label={words.usageByPerson}>
+              <caption>{words.usageByPerson}</caption>
+              <thead>{heading}</thead>
+              <tbody>
+                {usage.people.map(({ personId, spend }) => (
+                  <SpendRow key={personId} name={personName(personId)} spend={spend} withCost={withCost} />
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      )}
+      <span className="hint">{words.usageHint}</span>
+    </fieldset>
+  );
+}
+
 /**
  * Makes a room, or changes one: its name, agents, what they may do without asking and who else is in it, and its
  * invites; a room's workspace stays the one it was made in.
@@ -385,6 +487,7 @@ export function RoomDialog({
           />
         )}
         {room && <RoomInvitesField room={room} invites={invites} reachability={reachability} />}
+        {room && <RoomUsageField room={room} profiles={profiles} people={people} ownerId={ownerId} />}
         <div className="form-actions">
           {room && (
             <ConfirmButton className="link danger room-delete" label={words.deleteRoom} hint={words.deleteHint} armedText={words.deleteArmed} armedHint={words.deleteArmedHint} onConfirm={deleteRoom}>

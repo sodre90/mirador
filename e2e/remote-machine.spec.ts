@@ -305,8 +305,22 @@ test("a machine added by its address alone asks for an invite code in this compu
   await server.close();
 });
 
+/** Whether the page of a machine shown in this computer's rail last told its host that someone looks at it. */
+function lookedAtInTheRail(page: Page) {
+  let lastSaid: boolean | undefined;
+  page.on("websocket", (socket) => {
+    if (new URL(socket.url()).port === String(laptop.port)) return;
+    socket.on("framesent", ({ payload }) => {
+      const sent = JSON.parse(String(payload)) as { type: string; attentive?: boolean };
+      if (sent.type === "presence") lastSaid = sent.attentive;
+    });
+  });
+  return () => lastSaid;
+}
+
 test("a machine left hidden for ten minutes lets go of its page, which comes back on the conversation it showed last", async ({ page }) => {
   await page.clock.install();
+  const machinePageLookedAt = lookedAtInTheRail(page);
   await allowNotifications(page);
   await signIn(page, laptop);
   const rail = page.getByRole("navigation", { name: "Machines" });
@@ -325,6 +339,7 @@ test("a machine left hidden for ten minutes lets go of its page, which comes bac
     await expect.poll(() => conversationInFrame(page)).toBeTruthy();
     const asking = conversationInFrame(page)!;
     await thisComputer.click();
+    await expect.poll(machinePageLookedAt).toBe(false);
     void callCanvasTool(host, asking, "ask", { question: "Keep going?", options: [{ label: "Yes" }, { label: "No" }] }).catch(() => {});
     const homeServerAsks = "Home server · server-only · Asks: Keep going?";
     await expect.poll(() => notificationsShown(page)).toContainEqual(expect.objectContaining({ body: homeServerAsks }));

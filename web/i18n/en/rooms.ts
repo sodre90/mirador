@@ -1,4 +1,5 @@
 import type { PermissionPreset } from "../../../shared/room-permissions.ts";
+import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomAuthorRole, RoomRole } from "../../../shared/rooms.ts";
 
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
@@ -113,4 +114,25 @@ export const rooms = {
   machineOfNamelessOwner: "This is another person's Mirador.",
   invitedTo: (rooms: string) => `You were invited to: ${rooms}.`,
   outOfRooms: "You are in no room on this machine any more. Its owner can invite you again.",
+  hereCount: (count: number) => `${count} here`,
+  peopleOfRoom: "People in the room",
+  isHere: "Here now",
+  agentWorking: "Working",
+  oneWriting: (person: string) => `${person} is writing…`,
+  twoWriting: (people: string) => `${people} are writing…`,
+  severalWriting: "Several people are writing…",
+  usage: "Usage",
+  usagePeriod: "Period",
+  usagePeriods: { week: "Last 7 days", month: "Last 30 days", all: "All time" } satisfies Record<RoomUsagePeriod, string>,
+  usageByAgent: "By agent",
+  usageByPerson: "By person who asked",
+  usageTotal: "All agents",
+  usageTurns: "Turns",
+  usageInput: "Input",
+  usageOutput: "Output",
+  usageCached: "Cache",
+  usageCost: "Cost",
+  usageNone: "No turns in this period.",
+  usageHint:
+    "Tokens as the agents report them at the end of each turn; Input leaves out what came from the cache. A turn counts toward the person whose message started it, also when an agent tagged another on the way. Only you see this.",
 };

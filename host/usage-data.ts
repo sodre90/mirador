@@ -64,13 +64,17 @@ export class UsageData {
     return this.db.query("SELECT name, harness FROM profiles ORDER BY name COLLATE NOCASE").all() as UsageProfile[];
   }
 
-  /** Every conversation, with its workspace, its profile and when its latest event was written; null for one without any. */
+  /**
+   * Every conversation, with its workspace, its profile and when its latest event was written; null for one without any.
+   * An agent's conversation in a room goes by the room's name as it is now, and the agent's.
+   */
   conversations(): UsageConversation[] {
     return this.db
       .query(
-        `SELECT c.id, c.title, c.harness, c.workspace_id AS workspaceId, w.name AS workspaceName, c.profile_id AS profileId, p.name AS profileName,
+        `SELECT c.id, CASE WHEN r.id IS NULL THEN c.title ELSE r.name || ': ' || COALESCE(p.name, c.title) END AS title,
+           c.harness, c.workspace_id AS workspaceId, w.name AS workspaceName, c.profile_id AS profileId, p.name AS profileName,
            (SELECT at FROM events WHERE conversation_id = c.id ORDER BY seq DESC LIMIT 1) AS lastEventAt
-         FROM conversations c JOIN workspaces w ON w.id = c.workspace_id LEFT JOIN profiles p ON p.id = c.profile_id`,
+         FROM conversations c JOIN workspaces w ON w.id = c.workspace_id LEFT JOIN profiles p ON p.id = c.profile_id LEFT JOIN rooms r ON r.id = c.room_id`,
       )
       .all() as UsageConversation[];
   }

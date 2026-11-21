@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { bodyWithWorkspace, type SystemNotification } from "../shared/system-notifications.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
+import { isShownByTheRail, whenTheRailShowsOrHides } from "./machine-place.ts";
 import { inLanguage } from "./notification-text.ts";
 
 /** This browser notifies only while you want it to and have allowed the page to; either alone is not enough. */
@@ -64,27 +65,43 @@ function show(received: SystemNotification, open: OpenConversation) {
 /** A conversation of this machine, or of another one when the notification came from there. */
 type OpenConversation = (conversationId: string, machineId?: string) => void;
 
-const isLookedAt = () => document.visibilityState === "visible" && document.hasFocus();
+const isInSight = () => document.visibilityState === "visible" && isShownByTheRail();
+const isLookedAt = () => isInSight() && document.hasFocus();
 
 /**
- * Keeps the host told which conversation this page shows and whether you are looking at it, and shows the system
- * notifications the host sends about the others. Focus moving into the canvas frame blurs the window for a moment, so
- * the report waits for focus to settle.
+ * Keeps the host told which conversation or room this page shows, whether it is in sight and whether you are looking at
+ * it, and shows the system notifications the host sends about the others. Focus moving into the canvas frame blurs the
+ * window for a moment, so the report waits for focus to settle; one still waiting when the page shows something else
+ * would say the page shows what it no longer does.
  */
 export function useSystemNotifications(selectedConversationId: string | null, sideChatId: string | null, roomId: string | null, connected: boolean, open: OpenConversation) {
   useEffect(() => {
     if (!connected) return;
     const report = () =>
-      connection.send({ type: "presence", conversationId: selectedConversationId, attentive: isLookedAt(), ...(sideChatId && { sideChatId }), ...(roomId && { roomId }) });
-    const reportOnceSettled = () => setTimeout(report);
+      connection.send({
+        type: "presence",
+        conversationId: selectedConversationId,
+        attentive: isLookedAt(),
+        visible: isInSight(),
+        ...(sideChatId && { sideChatId }),
+        ...(roomId && { roomId }),
+      });
+    let settling: ReturnType<typeof setTimeout> | undefined;
+    const reportOnceSettled = () => {
+      clearTimeout(settling);
+      settling = setTimeout(report);
+    };
     report();
     window.addEventListener("focus", reportOnceSettled);
     window.addEventListener("blur", reportOnceSettled);
     document.addEventListener("visibilitychange", reportOnceSettled);
+    const stopHearingTheRail = whenTheRailShowsOrHides(report);
     return () => {
+      clearTimeout(settling);
       window.removeEventListener("focus", reportOnceSettled);
       window.removeEventListener("blur", reportOnceSettled);
       document.removeEventListener("visibilitychange", reportOnceSettled);
+      stopHearingTheRail();
     };
   }, [selectedConversationId, sideChatId, roomId, connected]);
 
