@@ -108,6 +108,11 @@ export const problems: Messages["problems"] = {
     "sentence-too-long-to-speak": "A mondat túl hosszú ahhoz, hogy felolvassa.",
     "invite-code-missing": "Hiányzik a meghívókód.",
     "invite-code-wrong": "Ez a meghívókód hibás, már felhasználták, vagy lejárt. Kérj újat.",
+    "room-invite-needs-mirador": "Ez a meghívó egy embert enged be egy szobába, a saját Miradorjából: ott add hozzá ezt a gépet a Gépek alatt, majd csatlakozz a kóddal.",
+    "room-invite-not-through-tunnel": "Szobameghívóval ennek a gépnek a címén lehet csatlakozni, nem a peer-to-peer alagúton át.",
+    "room-invite-loopback-from-afar": "Szobameghívóval 127.0.0.1 vagy localhost címen csak erről a számítógépről lehet csatlakozni.",
+    "join-too-often": "Túl sokszor próbáltak csatlakozni ehhez a géphez. Próbáld újra egy perc múlva.",
+    "room-join-unproven": "A szobába lépéshez aláírás kell a bemutatott kulccsal, a gép legutóbbi kihívására ehhez a meghívóhoz, ahhoz a címhez, ahol kérték, és ahhoz a tanúsítványkiadóhoz, amellyel megbíztak benne. Próbálj újra csatlakozni.",
     "voice-not-set-up": "A hang még nincs beállítva ezen a Macen.",
     "voice-not-set-up-here": "A hang még nincs beállítva ezen a Macen. A Beállítások → Hang részben állíthatod be.",
     "voice-being-removed": "A hang eltávolítása folyamatban van erről a Macről.",
@@ -245,6 +250,10 @@ export const problems: Messages["problems"] = {
   machineDidNotAnswer: (machine) => `Nem válaszolt: ${machine}. Fut rajta a Mirador?`,
   machineCertificateUntrusted: (machine) => `Ez a számítógép nem bízik a gép (${machine}) tanúsítványában, és ${machine} nem kínál saját tanúsítványkiadót.`,
   machineGaveNoToken: (machine) => `A gép (${machine}) token nélkül engedte be ezt a számítógépet.`,
+  machineIgnoredRoomInvite: (machine) =>
+    `Ez egy szobameghívó kódja, de a gép (${machine}) nem annak vette, ezért ez a számítógép nem csatlakozott hozzá. A meghívó talán lejárt, vagy már felhasználták; kérj újat.`,
+  machineJoinedAsPerson: (machine) =>
+    `Ez a számítógép személyként lép be a gép (${machine}) szobáiba, ezért csak egy szobameghívó kódja engedi be oda, és nem kér csatlakozást. Ha ezt a számítógépet a tulajdonos egyik készülékévé tennéd ott, távolítsd el a gépet (${machine}), és add hozzá újra.`,
   machineAuthorityNotInLink: (machine) =>
     `A gép (${machine}) tanúsítványkiadója nem az, amelyik a meghívólinkben szerepel, ezért a kód nem ment el. Lehet, hogy valami a hálózaton ennek adja ki magát: ${machine}.`,
   machineAuthorityChanged: (machine) =>

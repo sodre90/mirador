@@ -274,13 +274,17 @@ export const shell: Messages["shell"] = {
     requestShowsBefore: "Az ottani Mirador a saját képernyőjén mutatja a kérést, és a hozzá csatlakozott készülékeken; vagy futtasd ott ezt:",
     requestShowsAfter: ".",
     notJoinedBefore: "Ez a számítógép még nem csatlakozott ehhez a géphez:",
-    notJoinedAfter: (host) => ` (${host}). Kérd a csatlakozást, és hagyd jóvá ott annak a számnak a beírásával, amelyet ez a számítógép akkor mutat.`,
+    notJoinedAfter: (host) =>
+      ` (${host}). A csatlakozás kérése a gép tulajdonosának saját készülékévé teszi ezt a számítógépet, teljes hozzáféréssel a géphez: csak saját géphez kérj csatlakozást, majd hagyd jóvá ott annak a számnak a beírásával, amelyet ez a számítógép mutat. Valaki más szobameghívóval enged be a szobájába.`,
     askToJoin: "Csatlakozás kérése",
     inviteBefore: "Vagy csatlakozz meghívókóddal. Ilyet a Beállítások → Készülékek oldalán kapsz, egy hozzá csatlakozott készüléktől, vagy futtasd rajta ezt:",
     inviteAfter: ".",
     inviteCode: "Meghívókód vagy -link",
     joining: "Csatlakozás…",
     joinButton: "Csatlakozás",
+    outOfRooms: "A tulajdonosa kivett abból az utolsó szobából, amelyben ott voltál, és ezzel ez a számítógép kijelentkezett. Kérj tőle új meghívót, és csatlakozz a kódjával.",
+    someoneElses: "Valaki más gépe, ahol a szobáiban vagy",
+    roomInviteFirst: "Meghívtak egy ottani szobába. Csatlakozz a szobameghívó kódjával vagy linkjével.",
   },
   conversationTitle: {
     label: "A beszélgetés neve",

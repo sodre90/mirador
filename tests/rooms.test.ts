@@ -36,6 +36,7 @@ import {
   type FramedAuthor,
   type Room,
   type RoomApproval,
+  type RoomInvite,
   type RoomMessage,
   type RoomTask,
   type RoomTaskApproval,
@@ -774,6 +775,16 @@ describe("a page that shows a room", () => {
     const state = waiting.reduce(serverSent, initialState);
     expect(state.roomApprovals.map(({ request }) => request.permissionId)).toEqual(["q3", "q2"]);
     expect(serverSent(state, { type: "room.deleted", roomId: "r2" }).roomApprovals.map(({ request }) => request.permissionId)).toEqual(["q2"]);
+  });
+
+  test("keeps the waiting room invites as the host last listed them, and drops those of a room deleted", () => {
+    const invites = [
+      { id: "i1", roomId: "r1", role: "member", expiresAt: 2 },
+      { id: "i2", roomId: "r2", role: "guest", expiresAt: 3 },
+    ] satisfies RoomInvite[];
+    const state = serverSent(initialState, { type: "room-invites.listed", invites });
+    expect(state.roomInvites).toEqual(invites);
+    expect(serverSent(state, { type: "room.deleted", roomId: "r2" }).roomInvites.map(({ id }) => id)).toEqual(["i1"]);
   });
 });
 

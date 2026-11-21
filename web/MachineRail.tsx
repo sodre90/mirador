@@ -24,7 +24,15 @@ export const showsMachinesHere = () => ["127.0.0.1", "localhost"].includes(locat
 
 const words = t.shell.machines;
 
-const relayAddress = (machine: Machine) => `${location.protocol}//${location.hostname}:${machine.relayPort}/`;
+/** Someone else's machine is shown under its relay's key, which its frame alone knows. */
+const relayAddress = (machine: Machine) => `${location.protocol}//${location.hostname}:${machine.relayPort}/${machine.asPerson ? `${machine.relayKey ?? ""}/` : ""}`;
+
+/**
+ * Someone else's machine runs in an opaque origin, with no allow-same-origin: no cookie of 127.0.0.1, no storage or
+ * service worker shared with anything, no microphone or clipboard, and no way to navigate this window or open one of
+ * its own outside the sandbox. A machine of this computer's owner gets this window's microphone and clipboard.
+ */
+const frameTrust = (machine: Machine) => (machine.asPerson ? { sandbox: "allow-scripts allow-forms", "data-someone-elses": "" } : { allow: "clipboard-read; clipboard-write; microphone" });
 
 /** For the stylesheet: the machine's pastel, which its rail button, mark and strip draw with. */
 export const colorAttributes = (color: Pastel | null) => (color ? { "data-color": color, style: pastelVariables(color) } : {});
@@ -99,6 +107,7 @@ function WaitingBadge({ waiting }: { waiting: WaitingFor[] }) {
 const machineHint = (machine: Machine, status: MachineStatus | undefined) =>
   [
     machine.name,
+    machine.asPerson && words.someoneElses,
     machine.origin,
     !machine.joined && words.notJoinedYet,
     status?.reachable === false && words.notAnswering,
@@ -171,7 +180,7 @@ export function MachineRail({
           <button
             key={machine.id}
             type="button"
-            className={`rail-machine ${machine.id === shownId ? "shown" : ""} ${away ? "away" : ""}`}
+            className={`rail-machine ${machine.id === shownId ? "shown" : ""} ${away ? "away" : ""} ${machine.asPerson ? "someone-elses" : ""}`}
             {...colorAttributes(machine.color)}
             aria-label={machine.name}
             aria-current={machine.id === shownId}
@@ -217,6 +226,7 @@ function MachineFrame({
     if (opening && opening !== openedWith.current) frame.current!.contentWindow!.location.href = conversationAddress(machine, opening.conversationId);
   }, [opening]);
   useEffect(() => {
+    if (machine.asPerson) return;
     const rememberPlace = (event: MessageEvent) => {
       const sent = placeIn(event.data);
       if (sent !== null && event.source === frame.current?.contentWindow && event.origin === new URL(address).origin) onPlace(machine.id, sent);
@@ -231,12 +241,17 @@ function MachineFrame({
       {...colorAttributes(striped ? machine.color : null)}
       title={machine.name}
       src={address}
-      allow="clipboard-read; clipboard-write; microphone"
+      {...frameTrust(machine)}
     />
   );
 }
 
-/** In a machine's place until this computer has joined it, as the machine shows nothing to a computer without an invite. */
+/**
+ * In a machine's place until this computer has joined it, as the machine shows nothing to a computer without an invite.
+ * Asking to join, which its owner approves, makes this computer one of the owner's own devices, so it is offered only
+ * for a machine this computer has no record of joining as a person: one added from a room invite's link, joined with
+ * a room invite before, or whose owner took this computer's person out of their last room there takes a code alone.
+ */
 function JoinMachinePanel({ machine }: { machine: Machine }) {
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
@@ -281,17 +296,25 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
         </div>
       ) : (
         <>
-          <p>
-            {words.notJoinedBefore} <strong>{machine.name}</strong>
-            {words.notJoinedAfter(new URL(machine.origin).host)}
-          </p>
-          <button type="button" className="primary" disabled={joining} onClick={askToJoin}>
-            {words.askToJoin}
-          </button>
-          <p>
-            {words.inviteBefore} <code>mirador invite</code>
-            {words.inviteAfter}
-          </p>
+          {machine.outOfRooms ? (
+            <p className="join-out-of-rooms">{words.outOfRooms}</p>
+          ) : machine.asPerson ? (
+            <p className="join-room-invite">{words.roomInviteFirst}</p>
+          ) : (
+            <>
+              <p>
+                {words.notJoinedBefore} <strong>{machine.name}</strong>
+                {words.notJoinedAfter(new URL(machine.origin).host)}
+              </p>
+              <button type="button" className="primary" disabled={joining} onClick={askToJoin}>
+                {words.askToJoin}
+              </button>
+              <p>
+                {words.inviteBefore} <code>mirador invite</code>
+                {words.inviteAfter}
+              </p>
+            </>
+          )}
           <form onSubmit={join}>
             <label>
               {words.inviteCode}
@@ -330,7 +353,7 @@ export function MachineFrames({
     .map((machine) =>
       machine.joined ? (
         <MachineFrame
-          key={machine.id}
+          key={`${machine.id} ${machine.relayKey ?? "own"}`}
           machine={machine}
           shown={machine.id === shownId}
           opening={opening?.machineId === machine.id ? opening : null}

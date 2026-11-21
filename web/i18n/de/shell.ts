@@ -298,7 +298,7 @@ export const shell: Messages["shell"] = {
     requestShowsAfter: " dort aus.",
     notJoinedBefore: "Dieser Computer ist",
     notJoinedAfter: (host) =>
-      ` unter ${host} noch nicht beigetreten. Bitte um Beitritt und genehmige ihn dort, indem du die Zahl eingibst, die dieser Computer dann anzeigt.`,
+      ` unter ${host} noch nicht beigetreten. Eine Beitrittsanfrage macht diesen Computer zu einem eigenen Gerät seines Besitzers, mit voller Kontrolle über diesen Rechner: Frag nur bei einem eigenen Rechner an und genehmige es dort, indem du die Zahl eingibst, die dieser Computer anzeigt. Jemand anderes lässt dich stattdessen mit einer Raumeinladung in einen Raum.`,
     askToJoin: "Beitritt anfragen",
     inviteBefore:
       "Oder tritt mit einem Einladungscode bei. Hol dir einen in seinen Einstellungen → Geräte, auf einem Gerät, das ihm beigetreten ist, oder führe",
@@ -306,6 +306,9 @@ export const shell: Messages["shell"] = {
     inviteCode: "Einladungscode oder -link",
     joining: "Beitritt läuft…",
     joinButton: "Beitreten",
+    outOfRooms: "Sein Besitzer hat dich aus dem letzten Raum genommen, in dem du dort warst, und damit ist dieser Computer abgemeldet. Bitte um eine neue Einladung und tritt mit ihrem Code bei.",
+    someoneElses: "Rechner von jemand anderem, in dessen Räumen du bist",
+    roomInviteFirst: "Du wurdest in einen Raum dort eingeladen. Tritt mit dem Code oder Link der Raumeinladung bei.",
   },
   conversationTitle: {
     label: "Name der Unterhaltung",

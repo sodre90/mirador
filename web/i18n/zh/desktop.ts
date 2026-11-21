@@ -27,7 +27,7 @@ export const desktop: Messages["desktop"] = {
     stoppedWithError: (message) => `因错误停止：${message}`,
     joinRequest: (name) => `${name} 请求加入 Mirador`,
     joinRequestBody: (address, tailscaleUser) =>
-      `来自 ${address}${tailscaleUser ? `，已登录 Tailscale 账号 ${tailscaleUser}` : ""}。打开 Mirador，输入它显示的数字即可批准。`,
+      `来自 ${address}${tailscaleUser ? `，已登录 Tailscale 账号 ${tailscaleUser}` : ""}。打开 Mirador，输入它显示的数字即可批准。批准后，它会成为你自己的设备之一，完全控制 Mirador；其他任何人请用房间邀请让他们进入。`,
   },
   more: (count) => `还有 ${count} 个…`,
   open: "打开",

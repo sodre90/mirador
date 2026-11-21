@@ -106,6 +106,11 @@ export const problems = {
     "sentence-too-long-to-speak": "The sentence is too long to speak.",
     "invite-code-missing": "The invite code is missing.",
     "invite-code-wrong": "This invite code is wrong, used or expired. Ask for a new one.",
+    "room-invite-needs-mirador": "This invite lets a person into a room, from their own Mirador: add this machine under Machines there, then join it with the code.",
+    "room-invite-not-through-tunnel": "A room invite joins at this machine's address, not through the peer-to-peer tunnel.",
+    "room-invite-loopback-from-afar": "A room invite joins at 127.0.0.1 or localhost only from this computer itself.",
+    "join-too-often": "There were too many tries to join this machine. Try again in a minute.",
+    "room-join-unproven": "Joining a room needs a signature, with the key it presents, over this machine's latest challenge for the invite, the address it was asked at and the certificate authority it was trusted by. Try joining again.",
     "voice-not-set-up": "Voice isn't set up on this Mac yet.",
     "voice-not-set-up-here": "Voice isn't set up on this Mac yet. Settings → Voice can set it up.",
     "voice-being-removed": "Voice is being removed from this Mac.",
@@ -244,6 +249,10 @@ export const problems = {
   machineCertificateUntrusted: (machine: string) =>
     `This computer doesn't trust ${machine}'s certificate, and ${machine} offers no certificate authority of its own.`,
   machineGaveNoToken: (machine: string) => `${machine} let this computer in without a token.`,
+  machineIgnoredRoomInvite: (machine: string) =>
+    `That is a room invite's code, but ${machine} did not take it as one, so this computer did not join it. The invite may have expired or been used; ask for a new one.`,
+  machineJoinedAsPerson: (machine: string) =>
+    `This computer joins ${machine} as a person in its rooms, so only a room invite's code lets it in there, and it does not ask to join. To make this computer one of the owner's devices there, remove ${machine} and add it again.`,
   machineAuthorityNotInLink: (machine: string) =>
     `${machine}'s certificate authority is not the one in the invite link, so the code was not sent. Something on the network may be posing as ${machine}.`,
   machineAuthorityChanged: (machine: string) =>

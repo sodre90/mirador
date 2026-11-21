@@ -36,7 +36,7 @@ import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checkli
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
-import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
 
@@ -144,6 +144,11 @@ const schema = `
   CREATE TABLE IF NOT EXISTS room_people (
     room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
     role TEXT NOT NULL, PRIMARY KEY (room_id, person_id));
+  CREATE TABLE IF NOT EXISTS room_invites (
+    id TEXT PRIMARY KEY, code_hash TEXT NOT NULL UNIQUE, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    role TEXT NOT NULL, expires_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS person_keys (
+    public_key TEXT PRIMARY KEY, person_id TEXT NOT NULL UNIQUE REFERENCES people(id) ON DELETE CASCADE);
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -215,6 +220,10 @@ const addedColumns = [
   { table: "rooms", column: "peoples_tasks_wait", definition: "INTEGER NOT NULL DEFAULT 1" },
   { table: "room_messages", column: "author_role", definition: "TEXT" },
   { table: "room_messages", column: "task_held", definition: "TEXT" },
+  { table: "room_people", column: "name_clash", definition: "TEXT" },
+  { table: "machines", column: "out_of_rooms", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "machines", column: "as_person", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "machines", column: "relay_key", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -333,15 +342,39 @@ const toProfile = (row: ProfileRow): Profile => ({
   createdAt: row.created_at,
 });
 
-type MachineRow = { id: string; name: string; origin: string; created_at: number; relay_port: number | null; joined: number; color: string | null; host_id: string | null };
+type MachineRow = {
+  id: string;
+  name: string;
+  origin: string;
+  created_at: number;
+  relay_port: number | null;
+  joined: number;
+  color: string | null;
+  host_id: string | null;
+  out_of_rooms: number;
+  as_person: number;
+  relay_key: string | null;
+};
 
-const MACHINE_COLUMNS = "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id FROM machines";
+const MACHINE_COLUMNS = "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id, out_of_rooms, as_person, relay_key FROM machines";
 
 type JobWaitRow = { id: string; conversation_id: string; job: string; ssh_host: string | null; message: string; resume: number; since: number };
 
 const toMachine = (row: unknown): Machine => {
-  const { id, name, origin, created_at, relay_port, joined, color, host_id } = row as MachineRow;
-  return { id, name, origin, createdAt: created_at, relayPort: relay_port, joined: joined === 1, color: isPastel(color) ? color : null, hostId: host_id };
+  const { id, name, origin, created_at, relay_port, joined, color, host_id, out_of_rooms, as_person, relay_key } = row as MachineRow;
+  return {
+    id,
+    name,
+    origin,
+    createdAt: created_at,
+    relayPort: relay_port,
+    joined: joined === 1,
+    color: isPastel(color) ? color : null,
+    hostId: host_id,
+    outOfRooms: out_of_rooms === 1,
+    asPerson: as_person === 1,
+    relayKey: relay_key,
+  };
 };
 
 const startedByOf = (row: ConversationRow) =>
@@ -441,6 +474,12 @@ const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
   ...(row.tags_dropped !== null && { tagsDropped: JSON.parse(row.tags_dropped) as string[] }),
   ...(row.task_held !== null && { taskHeld: row.task_held }),
 });
+
+type RoomPersonRow = { person_id: string; role: RoomRole; name_clash: string | null };
+
+const toRoomPerson = ({ person_id, role, name_clash }: RoomPersonRow): RoomPerson => ({ personId: person_id, role, ...(name_clash !== null && { nameClash: name_clash }) });
+
+const roomInviteColumns = "id, room_id AS roomId, role, expires_at AS expiresAt";
 
 const toRoomThread = ({ id, room_id, message_id, profile_id }: RoomThreadRow): RoomThread => ({ id, roomId: room_id, messageId: message_id, profileId: profile_id });
 
@@ -1030,14 +1069,14 @@ export class Store {
 
   private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, created_at }: RoomRow): Room {
     const agents = this.db.query("SELECT profile_id, conversation_id FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as { profile_id: string; conversation_id: string | null }[];
-    const people = this.db.query("SELECT person_id AS personId, role FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPerson[];
+    const people = this.db.query("SELECT person_id, role, name_clash FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPersonRow[];
     return {
       id,
       name,
       workspaceId: workspace_id,
       agents: agents.map(({ profile_id, conversation_id }) => ({ profileId: profile_id, conversationId: conversation_id })),
       permissions,
-      people,
+      people: people.map(toRoomPerson),
       peoplesTasksWait: peoples_tasks_wait === 1,
       createdAt: created_at,
     };
@@ -1049,6 +1088,16 @@ export class Store {
     return rows.map((row) => this.toRoom(row));
   }
 
+  /** Everyone who wrote in the rooms the person is in, those taken out of them since too. */
+  writersInRoomsOf(personId: string): string[] {
+    const rows = this.db
+      .query(
+        "SELECT DISTINCT room_messages.person_id FROM room_messages JOIN room_people ON room_people.room_id = room_messages.room_id WHERE room_people.person_id = ? AND room_messages.person_id IS NOT NULL",
+      )
+      .all(personId) as { person_id: string }[];
+    return rows.map(({ person_id }) => person_id);
+  }
+
   /** Lets the person into the room with the role, or gives them that role there. */
   setRoomPersonRole(roomId: string, personId: string, role: RoomRole) {
     this.db.query("INSERT INTO room_people (room_id, person_id, role) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET role = excluded.role").run(roomId, personId, role);
@@ -1056,6 +1105,46 @@ export class Store {
 
   removeRoomPerson(roomId: string, personId: string) {
     this.db.query("DELETE FROM room_people WHERE room_id = ? AND person_id = ?").run(roomId, personId);
+  }
+
+  setRoomPersonNameClash(roomId: string, personId: string, nameClash: string | null) {
+    this.db.query("UPDATE room_people SET name_clash = ? WHERE room_id = ? AND person_id = ?").run(nameClash, roomId, personId);
+  }
+
+  /** Whether the person had a name clash to forget. */
+  forgetNameClashesOf(personId: string) {
+    return this.db.query("UPDATE room_people SET name_clash = NULL WHERE person_id = ? AND name_clash IS NOT NULL").run(personId).changes > 0;
+  }
+
+  /** Of the people, those in no room. */
+  peopleInNoRoom(personIds: string[]): string[] {
+    const inSomeRoom = new Set((this.db.query("SELECT DISTINCT person_id FROM room_people").all() as { person_id: string }[]).map(({ person_id }) => person_id));
+    return personIds.filter((personId) => !inSomeRoom.has(personId));
+  }
+
+  addRoomInvite({ id, roomId, role, expiresAt }: RoomInvite, codeHash: string) {
+    this.db.query("INSERT INTO room_invites (id, code_hash, room_id, role, expires_at) VALUES (?, ?, ?, ?, ?)").run(id, codeHash, roomId, role, expiresAt);
+  }
+
+  /** Those not yet used, withdrawn or expired, soonest to expire first; every expired one goes. */
+  waitingRoomInvites(now: number): RoomInvite[] {
+    this.db.query("DELETE FROM room_invites WHERE expires_at <= ?").run(now);
+    return this.db.query(`SELECT ${roomInviteColumns} FROM room_invites ORDER BY expires_at, rowid`).all() as RoomInvite[];
+  }
+
+  /** The room invite with the code, unless it is used, withdrawn or expired. */
+  findRoomInvite(codeHash: string, now: number): RoomInvite | undefined {
+    return (this.db.query(`SELECT ${roomInviteColumns} FROM room_invites WHERE code_hash = ? AND expires_at > ?`).get(codeHash, now) as RoomInvite | null) ?? undefined;
+  }
+
+  /** Removes the room invite with the code, which can then let nobody else in; what it was, if it was there and still valid. */
+  takeRoomInvite(codeHash: string, now: number): RoomInvite | undefined {
+    return (this.db.query(`DELETE FROM room_invites WHERE code_hash = ? AND expires_at > ? RETURNING ${roomInviteColumns}`).get(codeHash, now) as RoomInvite | null) ?? undefined;
+  }
+
+  /** Whether it was still there to withdraw. */
+  deleteRoomInvite(id: string) {
+    return this.db.query("DELETE FROM room_invites WHERE id = ?").run(id).changes > 0;
   }
 
   renameRoom(id: string, name: string) {
@@ -1519,6 +1608,16 @@ export class Store {
     this.db.query("UPDATE machines SET device_token = NULL WHERE id = ?").run(id);
   }
 
+  setMachineOutOfRooms(id: string, outOfRooms: boolean) {
+    this.db.query("UPDATE machines SET out_of_rooms = ? WHERE id = ?").run(outOfRooms ? 1 : 0, id);
+  }
+
+  /** As one of the machine owner's devices, or as a person in its rooms with the relay's key; a person forgets the id the machine said it goes by. */
+  setMachineJoinedAs(id: string, joinedAs: { asPerson: false } | { asPerson: true; relayKey: string | null }) {
+    if (!joinedAs.asPerson) return this.db.query("UPDATE machines SET as_person = 0, relay_key = NULL WHERE id = ?").run(id);
+    this.db.query("UPDATE machines SET as_person = 1, relay_key = ?, host_id = NULL WHERE id = ?").run(joinedAs.relayKey, id);
+  }
+
   /** The certificate authority this host checks the machine's certificate against, when the computer's own don't vouch for it. */
   machineAuthority(id: string): string | null {
     return (this.db.query("SELECT authority FROM machines WHERE id = ?").get(id) as { authority: string | null } | null)?.authority ?? null;
@@ -1700,6 +1799,20 @@ export class Store {
 
   setPersonProfile(id: string, { name, color }: Pick<Person, "name" | "color">) {
     this.db.query("UPDATE people SET name = ?, color = ? WHERE id = ?").run(name, color, id);
+  }
+
+  /** The person who proved they hold the key when they joined; never the owner, who has no key here. */
+  personWithKey(publicKey: string): string | undefined {
+    return (this.db.query("SELECT person_id FROM person_keys WHERE public_key = ?").get(publicKey) as { person_id: string } | null)?.person_id;
+  }
+
+  addPersonKey(publicKey: string, personId: string) {
+    this.db.query("INSERT INTO person_keys (public_key, person_id) VALUES (?, ?)").run(publicKey, personId);
+  }
+
+  /** All of it or none of it, with no other writer in between. */
+  inOneTransaction<T>(work: () => T): T {
+    return this.db.transaction(work).immediate();
   }
 
   private hasPeople() {

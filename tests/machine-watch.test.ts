@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { MachineWatch } from "../host/machine-watch.ts";
 import { Store } from "../host/store.ts";
 import type { MachineStatus } from "../shared/model.ts";
-import type { ServerMessage } from "../shared/protocol.ts";
+import { OUT_OF_ROOMS_CLOSE_CODE, type ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 
 async function eventually(check: () => void, timeoutMs = 3_000) {
@@ -57,10 +57,11 @@ afterEach(() => {
 
 const THIS_HOST = { id: "this-laptop-id", origins: ["https://this-laptop.example.ts.net:4700"] };
 
-function watching(origin: string, joined = true) {
+function watching(origin: string, { joined = true, asPerson = false } = {}) {
   const store = new Store(":memory:");
   store.insertMachine({ id: "m1", name: "Home server", origin, createdAt: 1 });
   if (joined) store.setMachineDeviceToken("m1", "device-token");
+  if (asPerson) store.setMachineJoinedAs("m1", { asPerson: true, relayKey: "relay-key" });
   const statuses: MachineStatus[] = [];
   const notifications: SystemNotification[] = [];
   const signedOut: string[] = [];
@@ -193,6 +194,42 @@ describe("MachineWatch", () => {
     expect(watch.statuses()).toEqual([]);
   }, 10_000);
 
+  test("joined as a person in the machine's rooms, takes nothing the machine says, whoever it says this host is: no notifications, id, machines or waiting", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store, statuses, notifications, machineChanges } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(watch.statuses()[0]!.reachable).toBe(true));
+    expect(machine.signIns).toEqual([`/ws ${machine.origin} mirador_token=device-token`]);
+
+    const joinedThere = [{ id: "m9", name: "Office", origin: "https://office.example", joined: true, hostId: "this-laptop-id-forged" }];
+    machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question")], machines: joinedThere, hostId: THIS_HOST.id, you: "ann", ownerId: "ann" } as never);
+    machine.send("/ws", { type: "machines.changed", machines: joinedThere } as never);
+    machine.send("/ws", { type: "conversation.upserted", conversation: conversation("b", "finished") } as ServerMessage);
+    const notification: SystemNotification = { kind: "question", conversationId: "a", title: "Deploy", workspace: "infra", body: "Asks: Ship it?" };
+    machine.send("/ws", { type: "system-notification", notification });
+    await Bun.sleep(300);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [] }]);
+    expect(statuses.every(({ waiting, joinedThere }) => waiting.length === 0 && joinedThere.length === 0)).toBe(true);
+    expect(store.findMachine("m1")?.hostId).toBeNull();
+    expect(machineChanges).toEqual([]);
+    expect(notifications).toEqual([]);
+  });
+
+  test("joined as a person, signs out the moment the machine's owner takes this computer's person out of their last room", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store, signedOut } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    expect(store.findMachine("m1")?.outOfRooms).toBe(false);
+
+    machine.sockets.forEach((socket) => socket.close(OUT_OF_ROOMS_CLOSE_CODE, "out of every room"));
+    await eventually(() => expect(signedOut).toEqual(["m1"]));
+    expect(store.findMachine("m1")?.outOfRooms).toBe(true);
+    expect(watch.statuses()).toEqual([]);
+    await Bun.sleep(300);
+    expect(machine.signIns).toHaveLength(1);
+  });
+
   test("does not ask a machine it stopped watching whether it still lets this host in, so a host stopping never reads the store it closed", async () => {
     const neverAnswers = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Promise<Response>(() => {}) });
     cleanUp.push(() => neverAnswers.stop(true));
@@ -208,7 +245,7 @@ describe("MachineWatch", () => {
   test("leaves a machine this host has not joined alone", async () => {
     const machine = fakeMachine();
     cleanUp.push(() => machine.server.stop(true));
-    const { watch } = watching(machine.origin, false);
+    const { watch } = watching(machine.origin, { joined: false });
     await Bun.sleep(100);
     expect(machine.signIns).toEqual([]);
     expect(watch.statuses()).toEqual([]);

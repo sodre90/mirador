@@ -1,17 +1,19 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { spawn, type ChildProcess } from "node:child_process";
+import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { freePorts } from "../e2e/free-ports.ts";
-import { DeviceService } from "../host/devices.ts";
+import { DeviceService, inviteKey } from "../host/devices.ts";
+import { NO_AUTHORITY, roomJoinStatement } from "../host/person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES } from "../host/routes.ts";
 import { Store } from "../host/store.ts";
 import { PROBLEM_HEADER } from "../shared/host-problems.ts";
 import type { Person, Profile, Workspace } from "../shared/model.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
-import { TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
-import { agentStandIn, type Room, type RoomThread } from "../shared/rooms.ts";
+import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
+import { agentStandIn, type Room, type RoomRole, type RoomThread } from "../shared/rooms.ts";
 
 /**
  * A real host, with the owner and three other people of the machine, each signed in on a device of their own: Mia and
@@ -208,6 +210,8 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.set-permissions": true,
   "room.set-person-role": true,
   "room.remove-person": true,
+  "room.invite": true,
+  "room.withdraw-invite": true,
   "room.approve": true,
   "room.answer-task": true,
   "room.set-peoples-tasks-wait": true,
@@ -228,8 +232,11 @@ const problemCode = (message: ServerMessage) => (message.type === "error" ? (mes
 
 class Page {
   readonly received: ServerMessage[] = [];
+  /** The code the host closed it with. */
+  readonly closed: Promise<number>;
   private constructor(private readonly socket: WebSocket) {
     socket.addEventListener("message", (event) => this.received.push(JSON.parse(String(event.data)) as ServerMessage));
+    this.closed = new Promise((resolve) => socket.addEventListener("close", ({ code }) => resolve(code)));
   }
 
   static open(port: number, token: string, path = "/ws") {
@@ -391,6 +398,71 @@ async function settingOwnProfile(page: Page, name: string, color: string | null 
 }
 
 const problemOf = ({ problemAbout }: SettingsSaved) => problemAbout?.code ?? null;
+
+/** Sends each message type a person may not, naming what the owner has, and expects each refused and nothing else. */
+async function refusesAllButTheirOwnMessages(pages: Page[]) {
+  const refusedTypes = Object.keys(EVERY_CLIENT_MESSAGE).filter((type) => !(PERSON_MESSAGE_TYPES as readonly string[]).includes(type));
+  expect(refusedTypes.length).toBe(Object.keys(EVERY_CLIENT_MESSAGE).length - PERSON_MESSAGE_TYPES.length);
+  const naming = {
+    requestId: "probe",
+    conversationId: agentConversationId,
+    conversationIds: [ownersConversationId, agentConversationId],
+    workspaceId: workspace.id,
+    roomId: roomA.id,
+    profileId: profile.id,
+    personId: mia.id,
+    role: "member",
+    path: projectDir,
+    text: "probe",
+    name: "probe",
+    title: "probe",
+    prompt: "SAY probe",
+    launch: { harness: "opencode", profileId: profile.id },
+    permissionId: "probe",
+    inviteId: "probe",
+    answer: "allow",
+    profileIds: [profile.id],
+    permissions: "work-freely",
+    tags: [],
+    threadId: null,
+  };
+  for (const page of pages) {
+    const mark = page.mark;
+    refusedTypes.forEach((type) => page.send({ type, ...naming }));
+    await page.waitForErrors("only-the-owner", refusedTypes.length, mark);
+    const came = await page.settledSince(mark);
+    expect(came.every(({ type }) => type === "error")).toBe(true);
+  }
+}
+
+/** Asks for every route of the host's but the ones open to people, signed in with the token, and expects each refused; the ones it asked for. */
+async function routesRefusedTo(token: string) {
+  const routes = [...Object.entries(DEVICE_ROUTES), ...Object.entries(THIS_MACHINE_ROUTES)].flatMap(([path, methods]) => (methods === "any" ? ["GET", "POST"] : [...methods]).map((method) => [path, method] as const));
+  expect(routes.length).toBeGreaterThan(30);
+  const filled = (path: string) =>
+    path
+      .replace(":conversationId", agentConversationId)
+      .replace(":workspaceId", workspace.id)
+      .replace(":app", "media")
+      .replace(":imageId", "image")
+      .replace(":seq", "1")
+      .replace(":index", "0")
+      .replace(":sessionId", "session")
+      .replace(":id", "request");
+  const refused: string[] = [];
+  for (const [path, method] of routes) {
+    if (OPEN_TO_PEOPLE.has(path)) continue;
+    const response = await fetch(`http://127.0.0.1:${port}${filled(path)}`, {
+      method,
+      headers: { Cookie: `${TOKEN_COOKIE}=${token}`, Origin: `http://127.0.0.1:${port}`, "Sec-Fetch-Site": "same-origin" },
+      ...(method === "POST" && { body: "{}" }),
+    });
+    expect({ path, method, status: response.status, problem: decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "") }).toEqual({ path, method, status: 403, problem: JSON.stringify({ code: "only-the-owner" }) });
+    refused.push(`${method} ${path}`);
+  }
+  await expect(Page.open(port, token, "/notifications")).rejects.toThrow();
+  return refused;
+}
 
 beforeAll(async () => {
   seed();
@@ -562,37 +634,7 @@ describe("a person other than the owner", () => {
   }, 40_000);
 
   test("is refused every message type but their own few, whatever it names", async () => {
-    const refusedTypes = Object.keys(EVERY_CLIENT_MESSAGE).filter((type) => !(PERSON_MESSAGE_TYPES as readonly string[]).includes(type));
-    expect(refusedTypes.length).toBe(Object.keys(EVERY_CLIENT_MESSAGE).length - PERSON_MESSAGE_TYPES.length);
-    const naming = {
-      requestId: "probe",
-      conversationId: agentConversationId,
-      conversationIds: [ownersConversationId, agentConversationId],
-      workspaceId: workspace.id,
-      roomId: roomA.id,
-      profileId: profile.id,
-      personId: mia.id,
-      role: "member",
-      path: projectDir,
-      text: "probe",
-      name: "probe",
-      title: "probe",
-      prompt: "SAY probe",
-      launch: { harness: "opencode", profileId: profile.id },
-      permissionId: "probe",
-      answer: "allow",
-      profileIds: [profile.id],
-      permissions: "work-freely",
-      tags: [],
-      threadId: null,
-    };
-    for (const page of [miaPage, gusPage, stanPage]) {
-      const mark = page.mark;
-      refusedTypes.forEach((type) => page.send({ type, ...naming }));
-      await page.waitForErrors("only-the-owner", refusedTypes.length, mark);
-      const came = await page.settledSince(mark);
-      expect(came.every(({ type }) => type === "error")).toBe(true);
-    }
+    await refusesAllButTheirOwnMessages([miaPage, gusPage, stanPage]);
     const mark = owner.mark;
     const fresh = await Page.open(port, readFileSync(join(dataDir, "browser-token"), "utf8").trim());
     const { workspaces, rooms, conversations } = await fresh.waitFor(isType("snapshot"));
@@ -650,32 +692,9 @@ describe("a person other than the owner", () => {
   });
 
   test("reaches no route of the host's over HTTP but the page itself and joining", async () => {
-    const routes = [...Object.entries(DEVICE_ROUTES), ...Object.entries(THIS_MACHINE_ROUTES)].flatMap(([path, methods]) => (methods === "any" ? ["GET", "POST"] : [...methods]).map((method) => [path, method] as const));
-    expect(routes.length).toBeGreaterThan(30);
-    const filled = (path: string) =>
-      path
-        .replace(":conversationId", agentConversationId)
-        .replace(":workspaceId", workspace.id)
-        .replace(":app", "media")
-        .replace(":imageId", "image")
-        .replace(":seq", "1")
-        .replace(":index", "0")
-        .replace(":sessionId", "session")
-        .replace(":id", "request");
-    const refused: string[] = [];
-    for (const [path, method] of routes) {
-      if (OPEN_TO_PEOPLE.has(path)) continue;
-      const response = await fetch(`http://127.0.0.1:${port}${filled(path)}`, {
-        method,
-        headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}`, Origin: `http://127.0.0.1:${port}`, "Sec-Fetch-Site": "same-origin" },
-        ...(method === "POST" && { body: "{}" }),
-      });
-      expect({ path, method, status: response.status, problem: decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "") }).toEqual({ path, method, status: 403, problem: JSON.stringify({ code: "only-the-owner" }) });
-      refused.push(`${method} ${path}`);
-    }
-    expect([...OPEN_TO_PEOPLE].toSorted()).toEqual(["/", "/auth", "/join", "/join-requests", "/join-requests/:id/poll", "/join-requests/:id/reveal", "/mirador-ca.pem", "/mirador-here"]);
+    const refused = await routesRefusedTo(tokens[mia.id]!);
+    expect([...OPEN_TO_PEOPLE].toSorted()).toEqual(["/", "/auth", "/join", "/join-challenges", "/join-requests", "/join-requests/:id/poll", "/join-requests/:id/reveal", "/mirador-ca.pem", "/mirador-here"]);
     expect(refused).toEqual(expect.arrayContaining(["POST /conversations/:conversationId/images", "GET /conversations/:conversationId/images/:imageId", "GET /workspaces/:workspaceId/apps/:app/file", "POST /tunnel", "GET /devices"]));
-    await expect(Page.open(port, tokens[mia.id]!, "/notifications")).rejects.toThrow();
     const page = await fetch(`http://127.0.0.1:${port}/`, { headers: { Cookie: `${TOKEN_COOKIE}=${tokens[mia.id]}` } });
     expect(page.status).toBe(200);
   }, 60_000);
@@ -690,7 +709,7 @@ describe("a person other than the owner", () => {
     expect(came.some(({ type }) => type.startsWith("conversation."))).toBe(false);
   }, 30_000);
 
-  test("loses what a role took away, and a room they were taken out of, on the page they have open", async () => {
+  test("loses what a role took away on the page they have open, and, taken out of their last room, every way in at once, while their messages keep their name", async () => {
     let gusMark = gusPage.mark;
     owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "member" });
     await gusPage.waitFor(isType("room.upserted", ({ room }) => room.people[0]?.role === "member"), gusMark);
@@ -705,18 +724,24 @@ describe("a person other than the owner", () => {
     await miaPage.waitForError("room-guests-only-write", miaMark);
 
     gusMark = gusPage.mark;
+    const ownerMark = owner.mark;
+    const miaBeforeGusLeft = miaPage.mark;
     owner.send({ type: "room.remove-person", roomId: roomA.id, personId: gus.id });
     await gusPage.waitFor(isType("room.deleted", ({ roomId }) => roomId === roomA.id), gusMark);
+    expect(await gusPage.closed).toBe(OUT_OF_ROOMS_CLOSE_CODE);
+    const { devices } = await owner.waitFor(isType("devices.listed"), ownerMark);
+    expect(devices.some(({ personId }) => personId === gus.id)).toBe(false);
+    await expect(Page.open(port, tokens[gus.id]!)).rejects.toThrow();
     await ownerWritesIn(roomA, "After Gus left");
     await miaPage.waitFor(roomMessageSaying("After Gus left"), miaMark);
-    gusPage.send({ type: "room.write", roomId: roomA.id, text: "Gus is still here?", tags: [], threadId: null });
-    await gusPage.waitForError("room-gone", gusMark);
-    const subscribing = gusPage.mark;
-    gusPage.send({ type: "room.subscribe", roomId: roomA.id });
-    await gusPage.waitForError("room-gone", subscribing);
-    const sinceRemoval = await gusPage.settledSince(gusMark);
+    const sinceRemoval = gusPage.received.slice(gusMark);
     expect(sinceRemoval.some(roomMessageSaying("After Gus left"))).toBe(false);
     expect(sinceRemoval.some(isType("room.upserted"))).toBe(false);
+    const { people } = await owner.waitFor(isType("people.listed"), ownerMark);
+    const gusAsNamed = people.find(({ id }) => id === gus.id);
+    expect(gusAsNamed?.name).toStartWith("Gus");
+    const { people: seenByMia } = await miaPage.waitFor(isType("people.listed"), miaBeforeGusLeft);
+    expect(seenByMia.find(({ id }) => id === gus.id)).toEqual(gusAsNamed);
   }, 40_000);
 
   test("hears nothing of conversations, workspaces, settings or rooms of others while the owner works", async () => {
@@ -733,7 +758,7 @@ describe("a person other than the owner", () => {
     const { rooms, profiles, people, workspaces, conversations } = await miaAgain.waitFor(isType("snapshot"));
     expect(rooms.map(({ id, workspaceId, people }) => ({ id, workspaceId, people }))).toEqual([{ id: roomA.id, workspaceId: "", people: [{ personId: mia.id, role: "guest" }] }]);
     expect(profiles).toEqual([{ id: profile.id, name: "Builder", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 0 }]);
-    expect(people.map(({ id }) => id).toSorted()).toEqual([miaAgain.snapshot.ownerId, mia.id].toSorted());
+    expect(people.map(({ id }) => id).toSorted()).toEqual([miaAgain.snapshot.ownerId, mia.id, gus.id].toSorted());
     expect([workspaces, conversations]).toEqual([[], []]);
     await Bun.sleep(SETTLE_MS);
     miaAgain.close();
@@ -745,4 +770,349 @@ describe("a person other than the owner", () => {
       secretsFrom(page).forEach((secret) => expect(everything).not.toContain(secret));
     }
   }, 40_000);
+});
+
+/** A Mirador's owner as another machine knows them: by an Ed25519 key, whose public half is raw and in base64url. */
+function keyOf(privateKey: KeyObject) {
+  return {
+    publicKey: createPublicKey(privateKey).export({ format: "jwk" }).x!,
+    sign: (statement: string) => sign(null, Buffer.from(statement), privateKey).toString("base64url"),
+  };
+}
+
+type Key = ReturnType<typeof keyOf>;
+
+const newKey = () => keyOf(generateKeyPairSync("ed25519").privateKey);
+
+describe("a person a room invite lets in, from their own Mirador", () => {
+  let roomC: Room;
+  let roomD: Room;
+  const doraKey = newKey();
+  let dora: { personId: string; token: string; deviceId: string; page: Page };
+  let dorasSecondDevice: { token: string; deviceId: string; page: Page };
+  const hereAt = () => `127.0.0.1:${port}`;
+
+  const post = (path: string, body: unknown, host = hereAt()) =>
+    fetch(`http://127.0.0.1:${port}${path}`, { method: "POST", headers: { "content-type": "application/json", host }, body: JSON.stringify(body) });
+
+  const refusal = async (response: Response) => ({ status: response.status, problem: (JSON.parse(decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "null")) as { code: string } | null)?.code ?? null });
+
+  async function ownerInvites(room: Room, role: RoomRole) {
+    const mark = owner.mark;
+    const requestId = crypto.randomUUID();
+    owner.send({ type: "room.invite", requestId, roomId: room.id, role });
+    return owner.waitFor(isType("room.invited", (invited) => invited.requestId === requestId), mark);
+  }
+
+  async function challengeFor(code: string, host = hereAt()) {
+    const response = await post("/join-challenges", { code }, host);
+    return response.ok ? ((await response.json()) as { challenge: string }).challenge : null;
+  }
+
+  const presented = (key: Key, code: string, challenge: string, { host = hereAt(), authorityFingerprint = NO_AUTHORITY, name = "Dora" as unknown, color = "mint" as unknown } = {}) => ({
+    publicKey: key.publicKey,
+    name,
+    color,
+    challenge,
+    signature: key.sign(roomJoinStatement({ challenge, inviteKey: inviteKey(code), host, authorityFingerprint, publicKey: key.publicKey })),
+  });
+
+  async function joining(code: string, key: Key, options: Parameters<typeof presented>[3] = {}) {
+    const challenge = await challengeFor(code);
+    expect(challenge).not.toBeNull();
+    return post("/join", { code, name: "Dora's Mirador", person: presented(key, code, challenge!, options) });
+  }
+
+  async function joined(response: Response) {
+    expect(response.status).toBe(200);
+    const { token, deviceId } = (await response.json()) as { token: string; deviceId: string };
+    const page = await Page.open(port, token);
+    const snapshot = await page.waitFor(isType("snapshot"));
+    return { token, deviceId, page, snapshot };
+  }
+
+  beforeAll(async () => {
+    roomC = await ownerCreatesRoom("Garden");
+    roomD = await ownerCreatesRoom("Kitchen");
+  });
+
+  afterAll(() => [dora?.page, dorasSecondDevice?.page].forEach((page) => page?.close()));
+
+  test("joins exactly the invite's room, with exactly its role, as a person other than the owner", async () => {
+    const { code, invite } = await ownerInvites(roomC, "member");
+    expect(invite).toMatchObject({ roomId: roomC.id, role: "member" });
+    expect(code).toMatch(/^ROOM-[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/);
+    const mark = owner.mark;
+    const { token, deviceId, page, snapshot } = await joined(await joining(code, doraKey));
+    dora = { personId: snapshot.you, token, deviceId, page };
+    expect(snapshot.you).not.toBe(snapshot.ownerId);
+    expect(snapshot.rooms.map(({ id, people }) => ({ id, people }))).toEqual([{ id: roomC.id, people: [{ personId: dora.personId, role: "member" }] }]);
+    expect(snapshot.people.find(({ id }) => id === dora.personId)).toEqual({ id: dora.personId, name: "Dora", color: "mint" });
+    await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomC.id && room.people.some(({ personId, role }) => personId === dora.personId && role === "member")), mark);
+    await owner.waitFor(isType("room-invites.listed", ({ invites }) => !invites.some(({ id }) => id === invite.id)), mark);
+    const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => devices.some(({ id }) => id === deviceId)), mark);
+    expect(devices.find(({ id }) => id === deviceId)).toMatchObject({ name: "Dora's Mirador", personId: dora.personId });
+    const fresh = await Page.open(port, readFileSync(join(dataDir, "browser-token"), "utf8").trim());
+    const { rooms } = await fresh.waitFor(isType("snapshot"));
+    fresh.close();
+    expect(rooms.filter(({ people }) => people.some(({ personId }) => personId === dora.personId)).map(({ id }) => id)).toEqual([roomC.id]);
+  });
+
+  test("is let in by an invite once: not again, and not after the owner withdrew it", async () => {
+    const someoneElse = newKey();
+    const { code: used } = await ownerInvites(roomC, "member");
+    await joined(await joining(used, someoneElse, { name: "Ola" })).then(({ page }) => page.close());
+    expect(await challengeFor(used)).toBeNull();
+    expect(await refusal(await post("/join", { code: used, name: "Again", person: presented(newKey(), used, "A".repeat(43)) }))).toEqual({ status: 403, problem: "invite-code-wrong" });
+
+    const { code, invite } = await ownerInvites(roomC, "guest");
+    const challenge = (await challengeFor(code))!;
+    const mark = owner.mark;
+    owner.send({ type: "room.withdraw-invite", inviteId: invite.id });
+    await owner.waitFor(isType("room-invites.listed", ({ invites }) => !invites.some(({ id }) => id === invite.id)), mark);
+    expect(await refusal(await post("/join", { code, name: "Late", person: presented(newKey(), code, challenge) }))).toEqual({ status: 403, problem: "invite-code-wrong" });
+    expect(await challengeFor(code)).toBeNull();
+  });
+
+  test("never makes a person of a device invite, nor an owner's device of a room invite, whatever the request says", async () => {
+    let mark = owner.mark;
+    owner.send({ type: "devices.invite", requestId: "device-invite" });
+    const { code: deviceCode } = await owner.waitFor(isType("devices.invited", ({ requestId }) => requestId === "device-invite"), mark);
+    expect(await challengeFor(deviceCode)).toBeNull();
+    expect(await refusal(await post("/join", { code: deviceCode, name: "Sneaky", person: presented(newKey(), deviceCode, "A".repeat(43)) }))).toEqual({ status: 403, problem: "invite-code-wrong" });
+    expect(await refusal(await post("/join", { code: deviceCode, name: "Sneaky", person: null }))).toEqual({ status: 403, problem: "invite-code-wrong" });
+
+    const { code: roomCode } = await ownerInvites(roomC, "guest");
+    expect(await refusal(await post("/join", { code: roomCode, name: "Sneaky" }))).toEqual({ status: 403, problem: "room-invite-needs-mirador" });
+    const key = newKey();
+    const throughTunnel = { code: roomCode, name: "Sneaky", tunnelKey: "A".repeat(43), person: presented(key, roomCode, (await challengeFor(roomCode))!) };
+    expect(await refusal(await post("/join", throughTunnel))).toEqual({ status: 403, problem: "room-invite-not-through-tunnel" });
+    const ownerId = owner.snapshot.ownerId;
+    const crafted = { ...presented(key, roomCode, (await challengeFor(roomCode))!, { name: "Sneaky" }), personId: ownerId, id: ownerId, role: "owner", isOwner: true };
+    const { page, snapshot, token } = await joined(await post("/join", { code: roomCode, name: "Sneaky", person: crafted, personId: ownerId, role: "owner", isOwner: true }));
+    page.close();
+    expect(snapshot.you).not.toBe(ownerId);
+    expect(snapshot.rooms.map(({ id, people }) => ({ id, people }))).toEqual([{ id: roomC.id, people: [{ personId: snapshot.you, role: "guest" }] }]);
+    expect((await fetch(`http://127.0.0.1:${port}/devices`, { headers: { Cookie: `${TOKEN_COOKIE}=${token}` } })).status).toBe(403);
+
+    mark = owner.mark;
+    const ownersDevice = await joined(await post("/join", { code: deviceCode, name: "Owner's tablet" }));
+    ownersDevice.page.close();
+    expect(ownersDevice.snapshot.you).toBe(ownerId);
+    owner.send({ type: "device.revoke", deviceId: ownersDevice.deviceId });
+    await owner.waitFor(isType("devices.listed", ({ devices }) => !devices.some(({ id }) => id === ownersDevice.deviceId)), mark);
+  });
+
+  test("needs a signature, with the key it presents, over this invite, this host's challenge and this host's address; none works twice", async () => {
+    const { code } = await ownerInvites(roomC, "guest");
+    const key = newKey();
+    const attempt = async (person: (challenge: string) => unknown, { askedAt = hereAt(), sentTo = hereAt() } = {}) =>
+      refusal(await post("/join", { code, name: "Eve's Mirador", person: person((await challengeFor(code, askedAt))!) }, sentTo));
+    const unproven = { status: 403, problem: "room-join-unproven" };
+    const elsewhere = `localhost:${port}`;
+    expect(await attempt((challenge) => ({ publicKey: key.publicKey, name: "Eve", color: null, challenge }))).toEqual(unproven);
+    expect(await attempt((challenge) => ({ ...presented(key, code, challenge), signature: "" }))).toEqual(unproven);
+    expect(await attempt((challenge) => ({ ...presented(newKey(), code, challenge), publicKey: key.publicKey }))).toEqual(unproven);
+    expect(await attempt((challenge) => presented(key, "ABCD-EFGH-JKLM", challenge))).toEqual(unproven);
+    expect(await attempt((challenge) => presented(key, code, challenge, { host: elsewhere }))).toEqual(unproven);
+    expect(await attempt((challenge) => presented(key, code, challenge, { host: elsewhere }), { askedAt: elsewhere })).toEqual(unproven);
+    expect(await attempt((challenge) => presented(key, code, challenge, { authorityFingerprint: "an-authority-this-host-never-served" }))).toEqual(unproven);
+    expect(await attempt((challenge) => presented(key, code, `${challenge.slice(0, -1)}${challenge.endsWith("A") ? "B" : "A"}`))).toEqual(unproven);
+
+    const spent = (await challengeFor(code))!;
+    expect(await refusal(await post("/join", { code, name: "Eve's Mirador", person: { ...presented(key, code, spent), signature: newKey().sign("something else") } }))).toEqual(unproven);
+    expect(await refusal(await post("/join", { code, name: "Eve's Mirador", person: presented(key, code, spent) }))).toEqual(unproven);
+
+    const challenge = (await challengeFor(code, elsewhere))!;
+    const proven = { code, name: "Eve's Mirador", person: presented(key, code, challenge, { host: elsewhere, name: "Eve" }) };
+    const eve = await joined(await post("/join", proven, elsewhere));
+    eve.page.close();
+    expect(await refusal(await post("/join", proven, elsewhere))).toEqual({ status: 403, problem: "invite-code-wrong" });
+    const { code: next } = await ownerInvites(roomC, "guest");
+    expect(await refusal(await post("/join", { ...proven, code: next }, elsewhere))).toEqual(unproven);
+  });
+
+  test("is the same person when the same key joins with another invite: in both rooms, with two devices", async () => {
+    const { code } = await ownerInvites(roomD, "guest");
+    const mark = owner.mark;
+    const second = await joined(await joining(code, doraKey));
+    dorasSecondDevice = { token: second.token, deviceId: second.deviceId, page: second.page };
+    expect(second.snapshot.you).toBe(dora.personId);
+    const roleIn = (roomId: string) => second.snapshot.rooms.find(({ id }) => id === roomId)?.people;
+    expect(second.snapshot.rooms).toHaveLength(2);
+    expect([roleIn(roomC.id), roleIn(roomD.id)]).toEqual([[{ personId: dora.personId, role: "member" }], [{ personId: dora.personId, role: "guest" }]]);
+    const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => devices.some(({ id }) => id === second.deviceId)), mark);
+    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, second.deviceId].toSorted());
+    const { people } = await owner.waitFor(isType("people.listed"), mark);
+    expect(people.filter(({ name }) => name === "Dora")).toHaveLength(1);
+  });
+
+  test("loses only the device the owner revokes in Settings, and stays in their rooms with the others", async () => {
+    const { code } = await ownerInvites(roomC, "member");
+    const third = await joined(await joining(code, doraKey));
+    expect(third.snapshot.you).toBe(dora.personId);
+    const mark = owner.mark;
+    const doraMark = dora.page.mark;
+    owner.send({ type: "device.revoke", deviceId: third.deviceId });
+    expect(await third.page.closed).not.toBe(OUT_OF_ROOMS_CLOSE_CODE);
+    const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => !devices.some(({ id }) => id === third.deviceId)), mark);
+    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, dorasSecondDevice.deviceId].toSorted());
+    expect((await fetch(`http://127.0.0.1:${port}/ws`, { headers: { Cookie: `${TOKEN_COOKIE}=${third.token}` } })).status).toBe(401);
+    dora.page.send({ type: "ping" });
+    await dora.page.waitFor(isType("pong"), doraMark);
+    expect(dora.page.received.slice(doraMark).some(isType("room.deleted"))).toBe(false);
+    const again = await Page.open(port, dorasSecondDevice.token);
+    const { rooms } = await again.waitFor(isType("snapshot"));
+    again.close();
+    expect(rooms.map(({ id }) => id).toSorted()).toEqual([roomC.id, roomD.id].toSorted());
+  });
+
+  test("never costs the owner a device when the owner is named for removal from a room", async () => {
+    let mark = owner.mark;
+    owner.send({ type: "devices.invite", requestId: "owners-phone" });
+    const { code } = await owner.waitFor(isType("devices.invited", ({ requestId }) => requestId === "owners-phone"), mark);
+    const ownersPhone = await joined(await post("/join", { code, name: "Owner's phone" }));
+    const ownerId = owner.snapshot.ownerId;
+    expect(ownersPhone.snapshot.you).toBe(ownerId);
+
+    mark = owner.mark;
+    const phoneMark = ownersPhone.page.mark;
+    owner.send({ type: "room.remove-person", roomId: roomC.id, personId: ownerId });
+    await owner.waitForError("room-person-unknown", mark);
+    ownersPhone.page.send({ type: "ping" });
+    await ownersPhone.page.waitFor(isType("pong"), phoneMark);
+    owner.send({ type: "devices.list" });
+    const { devices } = await owner.waitFor(isType("devices.listed"), mark);
+    expect(devices.find(({ id }) => id === ownersPhone.deviceId)?.personId).toBe(ownerId);
+
+    owner.send({ type: "device.revoke", deviceId: ownersPhone.deviceId });
+    await ownersPhone.page.closed;
+  });
+
+  test("is joined by no machine that passes their signed join on to this host while giving its own address", async () => {
+    const { code, invite } = await ownerInvites(roomC, "guest");
+    const relaysAt = "relay.example:4600";
+    const forbiddenHost = { status: 403, problem: null };
+    expect(await refusal(await post("/join-challenges", { code }, relaysAt))).toEqual(forbiddenHost);
+    const challenge = (await challengeFor(code))!;
+    const signedForTheRelay = { code, name: "Relayed", person: presented(doraKey, code, challenge, { host: relaysAt }) };
+    expect(await refusal(await post("/join", signedForTheRelay, relaysAt))).toEqual(forbiddenHost);
+    expect(await refusal(await post("/join", signedForTheRelay))).toEqual({ status: 403, problem: "room-join-unproven" });
+    const mark = owner.mark;
+    owner.send({ type: "devices.list" });
+    const { devices } = await owner.waitFor(isType("devices.listed"), mark);
+    expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, dorasSecondDevice.deviceId].toSorted());
+    owner.send({ type: "room.withdraw-invite", inviteId: invite.id });
+    await owner.waitFor(isType("room-invites.listed", ({ invites }) => !invites.some(({ id }) => id === invite.id)), mark);
+  });
+
+  test("joins without a name when the name rules refuse theirs or Mirador says it, and the owner is told of one already in the room", async () => {
+    for (const name of ["Bуilder", "‮nnA", "Someone without a name", "You", "", 7, "x".repeat(500)]) {
+      const { code } = await ownerInvites(roomD, "guest");
+      const { page, snapshot } = await joined(await joining(code, newKey(), { name }));
+      page.close();
+      expect({ name, shown: snapshot.people.find(({ id }) => id === snapshot.you)?.name }).toEqual({ name, shown: "" });
+    }
+
+    const { code } = await ownerInvites(roomC, "guest");
+    const mark = owner.mark;
+    const clashing = await joined(await joining(code, newKey(), { name: "DORA" }));
+    expect(clashing.snapshot.people.find(({ id }) => id === clashing.snapshot.you)?.name).toBe("");
+    expect(clashing.snapshot.rooms[0]?.people).toEqual([{ personId: clashing.snapshot.you, role: "guest" }]);
+    const told = await owner.waitFor(isType("room.upserted", ({ room }) => room.people.some(({ personId }) => personId === clashing.snapshot.you)), mark);
+    expect(told.room.people.find(({ personId }) => personId === clashing.snapshot.you)).toEqual({ personId: clashing.snapshot.you, role: "guest", nameClash: "DORA" });
+    const named = owner.mark;
+    expect(problemOf(await settingOwnProfile(clashing.page, "Dorothea"))).toBeNull();
+    const cleared = await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomC.id && room.people.some(({ personId, nameClash }) => personId === clashing.snapshot.you && nameClash === undefined)), named);
+    expect(cleared.room.people.some(({ nameClash }) => nameClash !== undefined)).toBe(false);
+    clashing.page.close();
+  });
+
+  test("gets no owner's rights by presenting the owner's own key, and learns no more of it than of a proof that fails", async () => {
+    const ownersKey = keyOf(createPrivateKey(readFileSync(join(dataDir, "owner-key.pem"), "utf8")));
+    const { code } = await ownerInvites(roomC, "member");
+    const unproven = { status: 403, problem: "room-join-unproven" };
+    expect(await refusal(await joining(code, ownersKey))).toEqual(unproven);
+    expect(await refusal(await post("/join", { code, name: "Me?", person: { publicKey: ownersKey.publicKey } }))).toEqual(unproven);
+    expect(await refusal(await post("/join", { code, name: "Me?", person: { publicKey: newKey().publicKey } }))).toEqual(unproven);
+    expect(await challengeFor(code)).not.toBeNull();
+  });
+
+  test("is refused every message type but their own few, and every route but the page itself and joining", async () => {
+    await refusesAllButTheirOwnMessages([dora.page]);
+    const refused = await routesRefusedTo(dora.token);
+    expect(refused).toEqual(expect.arrayContaining(["POST /tunnel", "GET /devices"]));
+  }, 60_000);
+
+  test("loses every device and socket here at once when taken out of their last room, while their messages keep their name", async () => {
+    let mark = dora.page.mark;
+    dora.page.send({ type: "room.subscribe", roomId: roomC.id });
+    await dora.page.waitFor(isType("room.timeline", ({ roomId }) => roomId === roomC.id), mark);
+    dora.page.send({ type: "room.write", roomId: roomC.id, text: "Dora was here", tags: [], threadId: null });
+    const { message } = await dora.page.waitFor(roomMessageSaying("Dora was here"), mark);
+    expect(message.author).toEqual({ personId: dora.personId });
+
+    mark = dora.page.mark;
+    owner.send({ type: "room.remove-person", roomId: roomD.id, personId: dora.personId });
+    await dora.page.waitFor(isType("room.deleted", ({ roomId }) => roomId === roomD.id), mark);
+    dora.page.send({ type: "ping" });
+    await dora.page.waitFor(isType("pong"), mark);
+
+    const ownerMark = owner.mark;
+    owner.send({ type: "room.remove-person", roomId: roomC.id, personId: dora.personId });
+    expect(await Promise.all([dora.page.closed, dorasSecondDevice.page.closed])).toEqual([OUT_OF_ROOMS_CLOSE_CODE, OUT_OF_ROOMS_CLOSE_CODE]);
+    const { devices } = await owner.waitFor(isType("devices.listed"), ownerMark);
+    expect(devices.some(({ personId }) => personId === dora.personId)).toBe(false);
+    for (const token of [dora.token, dorasSecondDevice.token]) {
+      await expect(Page.open(port, token)).rejects.toThrow();
+      expect((await fetch(`http://127.0.0.1:${port}/ws`, { headers: { Cookie: `${TOKEN_COOKIE}=${token}` } })).status).toBe(401);
+    }
+
+    const fresh = await Page.open(port, readFileSync(join(dataDir, "browser-token"), "utf8").trim());
+    const { people } = await fresh.waitFor(isType("snapshot"));
+    const subscribed = fresh.mark;
+    fresh.send({ type: "room.subscribe", roomId: roomC.id });
+    const timeline = await fresh.waitFor(isType("room.timeline", ({ roomId }) => roomId === roomC.id), subscribed);
+    fresh.close();
+    expect(timeline.messages.find(({ text }) => text === "Dora was here")?.author).toEqual({ personId: dora.personId });
+    expect(people.find(({ id }) => id === dora.personId)?.name).toBe("Dora");
+  });
+
+  test("comes back as the same person when invited again", async () => {
+    const { code } = await ownerInvites(roomD, "member");
+    const back = await joined(await joining(code, doraKey));
+    back.page.close();
+    expect(back.snapshot.you).toBe(dora.personId);
+    expect(back.snapshot.rooms.map(({ id }) => id)).toEqual([roomD.id]);
+  });
+});
+
+describe("joining tried quickly, as by someone guessing invite codes", () => {
+  const triedFrom = async (sender: string, path: "/join" | "/join-challenges") => {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-forwarded-for": sender },
+      body: JSON.stringify({ code: "ABCD-EFGH-JKLM" }),
+    });
+    return { status: response.status, problem: decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "") };
+  };
+  const tooOften = { status: 429, problem: JSON.stringify({ code: "join-too-often" }) };
+  const triesFrom = async (sender: string, path: "/join" | "/join-challenges", count: number) => {
+    const statuses: number[] = [];
+    for (const _ of Array(count)) statuses.push((await triedFrom(sender, path)).status);
+    return statuses;
+  };
+
+  test("is refused past sixty tries a minute from one address, and past twice that from all addresses together", async () => {
+    expect(await triesFrom("203.0.113.1", "/join", 60)).not.toContain(429);
+    expect(await triedFrom("203.0.113.1", "/join")).toEqual(tooOften);
+
+    expect(await triesFrom("203.0.113.2", "/join-challenges", 60)).not.toContain(429);
+    expect(await triedFrom("203.0.113.2", "/join-challenges")).toEqual(tooOften);
+    expect((await triedFrom("203.0.113.3", "/join-challenges")).status).toBe(404);
+
+    const fromOneAddressEach = await Promise.all(Array.from({ length: 60 }, (_, index) => triedFrom(`198.51.100.${index}`, "/join-challenges")));
+    expect(fromOneAddressEach.map(({ status }) => status)).toContain(429);
+    expect(await triedFrom("192.0.2.1", "/join-challenges")).toEqual(tooOften);
+  });
 });

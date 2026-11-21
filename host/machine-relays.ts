@@ -1,11 +1,15 @@
+import { randomBytes } from "node:crypto";
 import { askToJoin as askToJoinThere } from "../shared/join-requests.ts";
 import type { Machine } from "../shared/model.ts";
 import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE } from "../shared/protocol.ts";
 import { HERE_PATH } from "./addresses.ts";
 import { authorityFingerprint } from "./certificates.ts";
+import { inviteKey, isRoomInviteCode } from "./devices.ts";
+import { isChallenge, NO_AUTHORITY, roomJoinStatement, type OwnerKey } from "./person-keys.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { offeredAuthority, trusting } from "./machine-trust.ts";
 import { errorResponse, problemResponse } from "./problem-response.ts";
+import { sameSecret } from "./sign-in.ts";
 import type { Store } from "./store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 
@@ -14,10 +18,38 @@ const CANVAS_ORIGIN_ASK_TIMEOUT_MS = 4000;
 /** About the hop to the relay, or this host's own sign-in, rather than what the page asks the machine for. */
 const UNFORWARDED_REQUEST_HEADERS = new Set(["host", "cookie", "origin", "referer", "connection", "upgrade", "keep-alive", "transfer-encoding", "content-length"]);
 /**
- * Cookies ignore ports, so a cookie the machine set would land on this host's own address and replace its sign-in.
- * fetch has already decoded the body, so its encoding and length no longer apply.
+ * Cookies and site data ignore ports, so a cookie the machine set would land on this host's own address and replace its
+ * sign-in, and Clear-Site-Data would sign this computer out of it. fetch has already decoded the body, so its encoding
+ * and length no longer apply.
  */
-const UNRELAYED_RESPONSE_HEADERS = new Set(["set-cookie", "content-encoding", "content-length", "transfer-encoding", "connection", "keep-alive"]);
+const UNRELAYED_RESPONSE_HEADERS = new Set(["set-cookie", "clear-site-data", "content-encoding", "content-length", "transfer-encoding", "connection", "keep-alive"]);
+/** What a page in a sandboxed frame without allow-same-origin sends as its Origin. */
+const OPAQUE_ORIGIN = "null";
+const RELAY_KEY_BYTES = 32;
+
+/** A machine's pages get no service worker at a relay's port, which would outlive the machine there and could control another machine's page given that port later. */
+const asksForServiceWorker = (request: Request) => request.headers.get("service-worker") === "script";
+const noServiceWorker = () => new Response("Machines shown here register no service workers.", { status: 403 });
+
+export const newRelayKey = () => randomBytes(RELAY_KEY_BYTES).toString("base64url");
+
+/** The path past the relay key, when the path starts with it; null for any other path. */
+export function pathPastKey(pathname: string, relayKey: string | null) {
+  if (!relayKey) return null;
+  const [, first = "", ...rest] = pathname.split("/");
+  return sameSecret(first, relayKey) ? `/${rest.join("/")}` : null;
+}
+
+/** Someone else's machine shows its rooms in an opaque origin, which loads the bundle's scripts and styles with CORS. */
+const withOpenCors = (headers: Headers) => {
+  headers.set("access-control-allow-origin", "*");
+  return headers;
+};
+
+const isPage = (response: Response) => response.headers.get("content-type")?.startsWith("text/html") ?? false;
+
+/** WebKit matches no address to 'self' in an opaque origin, so the page's own policy names the relay it came from as well, for its fetches. */
+export const connectingToRelay = (page: string, relayOrigin: string) => page.replaceAll("connect-src 'self'", `connect-src 'self' ${relayOrigin}`);
 
 export const thisHostAsDevice = (store: Store) => `Mirador on ${store.machineName()}`;
 
@@ -28,6 +60,8 @@ export interface RelayedSocket {
   waiting: (string | ArrayBuffer)[];
   closedBeforeOpen: { code: number; reason: string } | null;
 }
+
+const refusedJoinFromPage = () => new Response("This computer asks to join its machines itself, from its own window.", { status: 403 });
 
 /** Only 1000 and 3000–4999 may be sent when closing; others describe how a socket broke. */
 const sendableCloseCode = (code: number) => (code === 1000 || (code >= 3000 && code <= 4999) ? code : 1000);
@@ -70,10 +104,12 @@ async function canvasOriginOf(machine: Machine, authority: string | null) {
   return url.protocol === "https:" || url.protocol === "http:" ? url.origin : null;
 }
 
-export function relayedHeaders(upstream: Headers, machineOrigin: string, relayOrigin: string) {
+/** Redirects stay on the relay, under its key for a machine joined as a person: `keyPath` is "/" and the key, or empty. */
+export function relayedHeaders(upstream: Headers, machineOrigin: string, relayOrigin: string, keyPath = "") {
   const headers = new Headers([...upstream].filter(([name]) => !UNRELAYED_RESPONSE_HEADERS.has(name)));
   const location = headers.get("location");
-  if (location?.startsWith(machineOrigin)) headers.set("location", relayOrigin + location.slice(machineOrigin.length));
+  if (location?.startsWith(machineOrigin)) headers.set("location", relayOrigin + keyPath + location.slice(machineOrigin.length));
+  else if (keyPath && location?.startsWith("/") && !location.startsWith("//")) headers.set("location", keyPath + location);
   return headers;
 }
 
@@ -99,7 +135,8 @@ function openUpstream(url: string, headers: Headers, authority: string | null) {
 /**
  * Shows another machine's Mirador at a port of this host, signed in there as this host's device. Pages on this
  * computer open it in a frame with this host's own cookie, which the relay swaps for the device token, so no page
- * ever holds that token.
+ * ever holds that token. A machine joined as a person is someone else's: its frame runs in an opaque origin, which
+ * no cookie reaches and which keeps nothing, and the relay signs in only what asks under the machine's relay key.
  */
 export class MachineRelays {
   private readonly servers = new Map<string, Bun.Server<RelayedSocket>>();
@@ -113,6 +150,7 @@ export class MachineRelays {
     private readonly signedInAsOwner: (request: Request) => boolean,
     private readonly joined: (machineId: string) => void,
     private readonly signedOut: (machineId: string) => void,
+    private readonly ownerKey: OwnerKey,
   ) {}
 
   /** Each machine's page relay first, so no canvas relay takes a port a machine had before. */
@@ -157,24 +195,32 @@ export class MachineRelays {
 
   /**
    * Joins the machine as this host's device with a code from one of its invites, and from then on trusts the
-   * certificate authority it joined it by. The code is sent only once the machine's certificate checks out.
+   * certificate authority it joined it by. The code is sent only once the machine's certificate checks out. For the
+   * code of a room invite there, which the machine challenges, this computer's owner joins as a person in that room.
    */
   async join(machineId: string, code: string, linkFingerprint: string | null = null) {
     const machine = this.store.findMachine(machineId);
     if (!machine) throw new HostProblemError({ code: "machine-gone" });
     const authority = await this.authorityToTrust(machine, linkFingerprint);
-    const response = await fetch(`${machine.origin}/join`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ code, name: thisHostAsDevice(this.store) }),
-      ...trusting(authority),
-    }).catch(() => null);
-    if (!response && authority) throw new HostProblemError({ code: "machine-certificate-not-its-own", machine: machine.name, hostname: new URL(machine.origin).hostname });
+    const post = (path: string, body: object) =>
+      fetch(`${machine.origin}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        ...trusting(authority),
+      }).catch(() => null);
+    const challenged = await post("/join-challenges", { code });
+    if (!challenged && authority) throw new HostProblemError({ code: "machine-certificate-not-its-own", machine: machine.name, hostname: new URL(machine.origin).hostname });
+    if (!challenged) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
+    const person = challenged.ok ? this.ownerAsPerson(machine, code, authority, await challenged.json().catch(() => ({}))) : undefined;
+    if (!person && machine.asPerson) throw new HostProblemError({ code: "machine-joined-as-person", machine: machine.name });
+    if (!person && isRoomInviteCode(code)) throw new HostProblemError({ code: "machine-ignored-room-invite", machine: machine.name });
+    const response = await post("/join", { code, name: thisHostAsDevice(this.store), person });
     if (!response) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
     if (!response.ok) throw new Error(await response.text());
     const { token } = (await response.json()) as { token?: unknown };
     if (typeof token !== "string") throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
-    this.signInFromNowOn(machine, authority, token);
+    this.signInFromNowOn(machine, authority, token, person ? { asPerson: true, relayKey: newRelayKey() } : { asPerson: false });
   }
 
   /**
@@ -185,6 +231,7 @@ export class MachineRelays {
   async askToJoin(machineId: string, asked: (number: string) => void) {
     const machine = this.store.findMachine(machineId);
     if (!machine) throw new HostProblemError({ code: "machine-gone" });
+    if (machine.asPerson) throw new HostProblemError({ code: "machine-joined-as-person", machine: machine.name });
     const offered = await offeredAuthority(machine);
     const authority = offered?.authority ?? null;
     const send = (path: string, body: object) =>
@@ -195,12 +242,36 @@ export class MachineRelays {
         ...trusting(authority),
       }).catch(() => null);
     const token = await askToJoinThere(send, { name: thisHostAsDevice(this.store), authorityFingerprint: offered?.fingerprint ?? null, machineName: machine.name }, asked);
-    this.signInFromNowOn(machine, authority, token);
+    this.signInFromNowOn(machine, authority, token, { asPerson: false });
   }
 
-  private signInFromNowOn(machine: Machine, authority: string | null, token: string) {
+  /**
+   * This computer's owner as they present themselves to the machine's room: by their key, which signs the machine's
+   * challenge, the invite, the machine's address as this host reaches it and the certificate authority it trusts there,
+   * and by the name and colour of their profile.
+   */
+  private ownerAsPerson(machine: Machine, code: string, authority: string | null, { challenge }: { challenge?: unknown }) {
+    if (!isChallenge(challenge)) return undefined;
+    const { publicKey } = this.ownerKey;
+    const { name, color } = this.store.listPeople().find(({ id }) => id === this.store.ownerId())!;
+    const signature = this.ownerKey.sign(
+      roomJoinStatement({
+        challenge,
+        inviteKey: inviteKey(code),
+        host: new URL(machine.origin).host,
+        authorityFingerprint: authority ? authorityFingerprint(authority) : NO_AUTHORITY,
+        publicKey,
+      }),
+    );
+    return { publicKey, name, color, challenge, signature };
+  }
+
+  /** How it joined is this host's own record, from what it sent: a machine joined as a person is shown with no trust from then on. */
+  private signInFromNowOn(machine: Machine, authority: string | null, token: string, joinedAs: { asPerson: false } | { asPerson: true; relayKey: string }) {
     this.store.setMachineAuthority(machine.id, authority);
     this.store.setMachineDeviceToken(machine.id, token);
+    this.store.setMachineOutOfRooms(machine.id, false);
+    this.store.setMachineJoinedAs(machine.id, joinedAs);
     this.joined(machine.id);
   }
 
@@ -262,6 +333,7 @@ export class MachineRelays {
     if (!machine) return new Response("unknown machine", { status: 404 });
     const relayOrigin = `http://127.0.0.1:${port}`;
     if (request.headers.get("host") !== new URL(relayOrigin).host) return new Response("forbidden host", { status: 403 });
+    if (asksForServiceWorker(request)) return noServiceWorker();
     const canvasOrigin = await this.machineCanvasOrigin(machine);
     if (!canvasOrigin) return new Response(`${machine.name} did not say where its canvas assets are.`, { status: 502 });
     const url = new URL(request.url);
@@ -306,28 +378,66 @@ export class MachineRelays {
     const relayOrigins = [`http://127.0.0.1:${port}`, `http://localhost:${port}`];
     const relayOrigin = relayOrigins.find((origin) => new URL(origin).host === request.headers.get("host"));
     if (!relayOrigin) return new Response("forbidden host", { status: 403 });
+    if (asksForServiceWorker(request)) return noServiceWorker();
+    if (machine.asPerson) return this.relayForPerson(machine, relayOrigin, request, server);
     if (!this.signedInAsOwner(request)) return new Response("unauthorized", { status: 401 });
     const origin = request.headers.get("origin");
     if (origin !== null && !relayOrigins.includes(origin)) return new Response("forbidden origin", { status: 403 });
 
     const url = new URL(request.url);
     if (url.pathname === "/join" && request.method === "POST") return this.joinFromPage(machine, request);
-    if (url.pathname.startsWith("/join-requests")) return new Response("This computer asks to join its machines itself, from its own window.", { status: 403 });
+    if (url.pathname.startsWith("/join-requests")) return refusedJoinFromPage();
     const opensSocket = request.headers.get("upgrade")?.toLowerCase() === "websocket";
     if (opensSocket) await this.machineCanvasOrigin(machine, true);
     const headers = forwardedHeaders(request.headers, machine.origin, this.store.machineDeviceToken(machineId), await this.canvasAssetsOriginFor(machine));
-    if (opensSocket) return this.relaySocket(machine, url, headers, request, server);
+    if (opensSocket) return this.relaySocket(machine, `${url.pathname}${url.search}`, headers, request, server);
 
-    const response = await fetch(`${machine.origin}${url.pathname}${url.search}`, {
+    const response = await this.fetchFromMachine(machine, `${url.pathname}${url.search}`, request, headers);
+    if (!response) return new Response(`${machine.name} did not answer.`, { status: 502 });
+    if (response.status === 401) this.forgetRevokedSignIn(machineId);
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: relayedHeaders(response.headers, machine.origin, relayOrigin) });
+  }
+
+  /**
+   * Someone else's machine, shown in an opaque origin, which sends no cookie and says its Origin is "null": what asks
+   * under the relay key is signed in as this computer's person there, and nothing else is. The page's bundle, which the
+   * machine serves anyone, loads from the bare path, signed in as nobody. This computer joins it from its own window only.
+   */
+  private async relayForPerson(machine: Machine, relayOrigin: string, request: Request, server: Bun.Server<RelayedSocket>) {
+    const origin = request.headers.get("origin");
+    if (origin !== null && origin !== OPAQUE_ORIGIN) return new Response("forbidden origin", { status: 403 });
+    const url = new URL(request.url);
+    const path = pathPastKey(url.pathname, machine.relayKey);
+    const opensSocket = request.headers.get("upgrade")?.toLowerCase() === "websocket";
+    if (path === null) return this.relayPublicPart(machine, relayOrigin, url, request, opensSocket);
+    if (path === "/join" || path.startsWith("/join-requests")) return refusedJoinFromPage();
+    if (opensSocket) await this.machineCanvasOrigin(machine, true);
+    const headers = forwardedHeaders(request.headers, machine.origin, this.store.machineDeviceToken(machine.id), await this.canvasAssetsOriginFor(machine));
+    if (opensSocket) return this.relaySocket(machine, `${path}${url.search}`, headers, request, server);
+    const response = await this.fetchFromMachine(machine, `${path}${url.search}`, request, headers);
+    if (!response) return new Response(`${machine.name} did not answer.`, { status: 502 });
+    if (response.status === 401) this.forgetRevokedSignIn(machine.id);
+    const keyPath = `/${machine.relayKey}`;
+    const body = request.method === "GET" && isPage(response) ? connectingToRelay(await response.text(), relayOrigin) : response.body;
+    return new Response(body, { status: response.status, statusText: response.statusText, headers: withOpenCors(relayedHeaders(response.headers, machine.origin, relayOrigin, keyPath)) });
+  }
+
+  private async relayPublicPart(machine: Machine, relayOrigin: string, url: URL, request: Request, opensSocket: boolean) {
+    if (opensSocket || (request.method !== "GET" && request.method !== "HEAD")) return new Response("unauthorized", { status: 401 });
+    const headers = forwardedHeaders(request.headers, machine.origin, null, await this.canvasAssetsOriginFor(machine));
+    const response = await this.fetchFromMachine(machine, `${url.pathname}${url.search}`, request, headers);
+    if (!response) return new Response(`${machine.name} did not answer.`, { status: 502 });
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: withOpenCors(relayedHeaders(response.headers, machine.origin, relayOrigin)) });
+  }
+
+  private fetchFromMachine(machine: Machine, path: string, request: Request, headers: Headers) {
+    return fetch(`${machine.origin}${path}`, {
       method: request.method,
       headers,
       body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
       redirect: "manual",
-      ...trusting(this.store.machineAuthority(machineId)),
+      ...trusting(this.store.machineAuthority(machine.id)),
     }).catch(() => null);
-    if (!response) return new Response(`${machine.name} did not answer.`, { status: 502 });
-    if (response.status === 401) this.forgetRevokedSignIn(machineId);
-    return new Response(response.body, { status: response.status, statusText: response.statusText, headers: relayedHeaders(response.headers, machine.origin, relayOrigin) });
   }
 
   /** The machine turns a request away when it revoked this computer; the rail then offers this computer's own way to join again. */
@@ -336,8 +446,8 @@ export class MachineRelays {
   }
 
   /** The machine's end opens first, so a page the machine turns away sees its socket fail, as it would there. */
-  private async relaySocket(machine: Machine, url: URL, headers: Headers, request: Request, server: Bun.Server<RelayedSocket>) {
-    const upstream = await openUpstream(`${machine.origin.replace(/^http/, "ws")}${url.pathname}${url.search}`, headers, this.store.machineAuthority(machine.id));
+  private async relaySocket(machine: Machine, path: string, headers: Headers, request: Request, server: Bun.Server<RelayedSocket>) {
+    const upstream = await openUpstream(`${machine.origin.replace(/^http/, "ws")}${path}`, headers, this.store.machineAuthority(machine.id));
     if (!upstream) return new Response(`${machine.name} did not open the socket.`, { status: 502 });
     const data: RelayedSocket = { upstream, page: null, waiting: [], closedBeforeOpen: null };
     upstream.onmessage = (event) => (data.page ? data.page.send(event.data) : data.waiting.push(event.data));

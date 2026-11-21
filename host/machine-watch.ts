@@ -1,5 +1,5 @@
 import type { Conversation, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
-import { TOKEN_COOKIE, type ServerMessage } from "../shared/protocol.ts";
+import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { trusting } from "./machine-trust.ts";
@@ -21,7 +21,7 @@ class MachineSocket {
   constructor(
     private readonly url: string,
     private readonly signIn: () => Bun.WebSocketOptions | null,
-    private readonly events: { opened?: () => void; message: (message: ServerMessage) => void; closed?: () => void; refused?: () => void },
+    private readonly events: { opened?: () => void; message: (message: ServerMessage) => void; closed?: (code: number) => void; refused?: () => void },
   ) {}
 
   start() {
@@ -36,9 +36,9 @@ class MachineSocket {
       this.events.opened?.();
     };
     socket.onmessage = ({ data }) => this.receive(data);
-    socket.onclose = () => {
+    socket.onclose = ({ code }) => {
       this.socket = null;
-      this.events.closed?.();
+      this.events.closed?.(code);
       if (!opened && !this.stopped) this.events.refused?.();
       if (this.stopped) return;
       this.retry = setTimeout(() => this.start(), RECONNECT_DELAYS_MS[Math.min(this.failures++, RECONNECT_DELAYS_MS.length - 1)]);
@@ -85,6 +85,9 @@ const sameStatus = (one: MachineStatus, other: MachineStatus) =>
  * Keeps up with each joined machine while this host runs: whether it answers, which of its conversations wait for
  * you, and its notifications, which it passes on as this host's own. It listens as a page for the conversations and
  * as a desktop app for the notifications, so the machine tells this host instead of the frames this host shows it in.
+ * A machine this computer joined as a person in its rooms, by this host's own record, is someone else's: this host
+ * takes nothing it says, not its notifications, id, machines or waiting conversations, only whether it answers; when
+ * its owner takes the person out of the last of its rooms, this host is signed out at once.
  */
 export class MachineWatch {
   private readonly watched = new Map<string, WatchedMachine>();
@@ -115,17 +118,21 @@ export class MachineWatch {
       return token ? { headers: { Origin: machine.origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
     };
     const socketUrl = (path: string) => `${machine.origin.replace(/^http/, "ws")}${path}`;
-    watched.sockets = [
-      new MachineSocket(socketUrl("/ws"), signIn, {
-        opened: () => this.update(watched, { reachable: true }),
-        message: (message) => this.follow(watched, message),
-        closed: () => this.update(watched, { reachable: false }),
-        refused: () => signInRevoked(this.store, machineId).then((revoked) => revoked && this.signedOut(machineId)),
-      }),
-      new MachineSocket(socketUrl("/notifications"), signIn, {
-        message: (message) => message.type === "system-notification" && this.notify(this.passedOn(machine, message.notification)),
-      }),
-    ];
+    const page = new MachineSocket(socketUrl("/ws"), signIn, {
+      opened: () => this.update(watched, { reachable: true }),
+      message: (message) => {
+        if (!machine.asPerson) this.follow(watched, message);
+      },
+      closed: (code) => {
+        this.update(watched, { reachable: false });
+        if (code === OUT_OF_ROOMS_CLOSE_CODE) this.outOfRooms(machineId);
+      },
+      refused: () => signInRevoked(this.store, machineId).then((revoked) => revoked && this.signedOut(machineId)),
+    });
+    const notifications = new MachineSocket(socketUrl("/notifications"), signIn, {
+      message: (message) => message.type === "system-notification" && this.notify(this.passedOn(machine, message.notification)),
+    });
+    watched.sockets = machine.asPerson ? [page] : [page, notifications];
     this.watched.set(machineId, watched);
     watched.sockets.forEach((socket) => socket.start());
   }
@@ -159,6 +166,11 @@ export class MachineWatch {
         watched.waitingIn.delete(message.conversationId);
         return this.update(watched, { waiting: waitingList(watched) });
     }
+  }
+
+  private outOfRooms(machineId: string) {
+    this.store.setMachineOutOfRooms(machineId, true);
+    this.signedOut(machineId);
   }
 
   private learnHostId(machineId: string, hostId: string) {

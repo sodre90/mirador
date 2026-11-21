@@ -1,16 +1,17 @@
 import { expect, test } from "bun:test";
-import { authorityFingerprintIn, inviteIn, inviteLink, isHidden, joinCodeIn, machineAddress, machinesSeen, tunnelIn } from "../shared/machines.ts";
+import { authorityFingerprintIn, inviteIn, inviteLink, isHidden, isRoomInviteLink, joinCodeIn, machineAddress, machinesSeen, roomInviteLink, tunnelIn } from "../shared/machines.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 
 test("a machine is added by its name on the network, its address or an invite link from it", () => {
-  expect(machineAddress("home-server.tailnet.ts.net")).toEqual({ origin: "https://home-server.tailnet.ts.net", joinCode: null, authorityFingerprint: null });
+  expect(machineAddress("home-server.tailnet.ts.net")).toEqual({ origin: "https://home-server.tailnet.ts.net", joinCode: null, authorityFingerprint: null, forRoom: false });
   expect(machineAddress(" https://home-server.tailnet.ts.net/some/page ")).toMatchObject({ origin: "https://home-server.tailnet.ts.net", joinCode: null });
   expect(machineAddress("http://192.168.1.20:4600")).toMatchObject({ origin: "http://192.168.1.20:4600", joinCode: null });
   expect(machineAddress("https://home-server.tailnet.ts.net/#/join/ABCD-EFGH-JKLM")).toEqual({
     origin: "https://home-server.tailnet.ts.net",
     joinCode: "ABCD-EFGH-JKLM",
     authorityFingerprint: null,
+    forRoom: false,
   });
 });
 
@@ -19,7 +20,7 @@ const fingerprint = "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x_-";
 test("an invite link from a machine with its own certificate authority carries the authority's fingerprint after the code", () => {
   const link = inviteLink("https://box.local:4602", "ABCD-EFGH-JKLM", fingerprint);
   expect(link).toBe(`https://box.local:4602/#/join/ABCD-EFGH-JKLM/${fingerprint}`);
-  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint });
+  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: false });
   expect(joinCodeIn(`#/join/ABCD-EFGH-JKLM/${fingerprint}`)).toBe("ABCD-EFGH-JKLM");
   expect(authorityFingerprintIn(`#/join/ABCD-EFGH-JKLM/${fingerprint}`)).toBe(fingerprint);
   expect(inviteLink("https://box.example.ts.net", "ABCD-EFGH-JKLM")).toBe("https://box.example.ts.net/#/join/ABCD-EFGH-JKLM");
@@ -29,6 +30,22 @@ test("an invite link carries a fingerprint of any length, so a truncated one sti
   expect(inviteIn(inviteLink("https://box.example", "ABCD-EFGH-JKLM", "short-fp"))).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: "short-fp" });
   const truncated = fingerprint.slice(0, 42);
   expect(inviteIn(`https://box.example/#/join/ABCD-EFGH-JKLM/${truncated}`)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: truncated });
+});
+
+test("a room invite's link says it is one, so the machine it adds is joined as a person, and gives its code and fingerprint like a device invite's", () => {
+  const link = roomInviteLink("https://box.local:4602", "ABCD-EFGH-JKLM", fingerprint);
+  expect(link).toBe(`https://box.local:4602/#/room-invite/ABCD-EFGH-JKLM/${fingerprint}`);
+  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: true });
+  expect(machineAddress(roomInviteLink("https://box.example.ts.net", "ABCD-EFGH-JKLM"))).toEqual({
+    origin: "https://box.example.ts.net",
+    joinCode: "ABCD-EFGH-JKLM",
+    authorityFingerprint: null,
+    forRoom: true,
+  });
+  expect(inviteIn(link)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint });
+  expect(isRoomInviteLink(new URL(link).hash)).toBe(true);
+  expect(isRoomInviteLink(new URL(inviteLink("https://box.local:4602", "ABCD-EFGH-JKLM", fingerprint)).hash)).toBe(false);
+  expect(joinCodeIn(new URL(link).hash)).toBeNull();
 });
 
 const tunnel: InviteTunnel = {
@@ -74,7 +91,7 @@ test("takes the invite code and certificate authority's fingerprint out of a pas
   expect(inviteIn("  ABCD-EFGH-JKLM \n")).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null });
 });
 
-const machine = (id: string, origin: string, hostId: string | null = null): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId });
+const machine = (id: string, origin: string, hostId: string | null = null): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId, outOfRooms: false, asPerson: false, relayKey: null });
 const seen = (name: string, origin: string, hostId: string | null = null): MachineSeen => ({ name, origin, hostId });
 
 test("the machines this computer's machines have joined are offered once each, through the first that lists them, unless added here", () => {

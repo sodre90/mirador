@@ -269,13 +269,17 @@ export const shell: Messages["shell"] = {
     requestShowsBefore: "它的 Mirador 会在自己的屏幕上显示这个请求，也会显示在已加入它的设备上；或在那台机器上运行",
     requestShowsAfter: "。",
     notJoinedBefore: "这台电脑还没有加入",
-    notJoinedAfter: (host) => `（${host}）。申请加入，然后在那边输入这台电脑显示的数字来批准。`,
+    notJoinedAfter: (host) =>
+      `（${host}）。申请加入会让这台电脑成为它的所有者自己的设备之一，完全控制那台机器：只为你自己的机器申请加入，然后在那边输入这台电脑显示的数字来批准。别人会用房间邀请让你进入他们的房间。`,
     askToJoin: "申请加入",
     inviteBefore: "或者用邀请码加入。可在已加入它的设备上的 设置 → 设备 中获取，或在那台机器上运行",
     inviteAfter: "。",
     inviteCode: "邀请码或链接",
     joining: "正在加入…",
     joinButton: "加入",
+    outOfRooms: "它的所有者把你移出了你在那里的最后一个房间，这台电脑因此已退出登录。请向对方要一个新的邀请，并用其邀请码加入。",
+    someoneElses: "别人的机器，你在它的房间里",
+    roomInviteFirst: "你被邀请进入那边的一个房间。用房间邀请的邀请码或邀请链接加入。",
   },
   conversationTitle: {
     label: "对话名称",

@@ -21,7 +21,7 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, c
   workspaceId: "",
   agents: agents.map(({ profileId, conversationId }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId) })),
   permissions,
-  people: people.filter((person) => person.personId === personId),
+  people: people.flatMap(({ personId: each, role }) => (each === personId ? [{ personId, role }] : [])),
   peoplesTasksWait,
   createdAt,
 });
@@ -52,18 +52,30 @@ export function agentsOfRooms(store: Pick<Store, "listProfiles">, rooms: Room[])
   return store.listProfiles().filter(({ id }) => agentIds.has(id));
 }
 
-/** The people a person other than the owner sees: the owner, who is in every room, themselves, and everyone who shares a room with them. */
-export function peopleSeenBy(store: Pick<Store, "roomsOf" | "listPeople" | "ownerId">, personId: string) {
-  const seen = new Set([store.ownerId(), personId, ...store.roomsOf(personId).flatMap(({ people }) => people.map((person) => person.personId))]);
+type PeopleSeen = Pick<Store, "roomsOf" | "listPeople" | "ownerId" | "writersInRoomsOf">;
+
+/**
+ * The people a person other than the owner sees: the owner, who is in every room, themselves, everyone who shares a room
+ * with them, and everyone who wrote in those rooms, so messages of people since taken out keep their names.
+ */
+export function peopleSeenBy(store: PeopleSeen, personId: string) {
+  const sharingARoom = store.roomsOf(personId).flatMap(({ people }) => people.map((person) => person.personId));
+  const seen = new Set([store.ownerId(), personId, ...sharingARoom, ...store.writersInRoomsOf(personId)]);
   return store.listPeople().filter(({ id }) => seen.has(id));
 }
+
+/** The names of the people and agents a person other than the owner sees, their own left out: whether one is taken tells them of nobody they don't see. */
+export const namesOthersGoBy = (store: PeopleSeen & Pick<Store, "listProfiles">, personId: string) => [
+  ...peopleSeenBy(store, personId).flatMap(({ id, name }) => (id === personId ? [] : [name])),
+  ...agentsOfRooms(store, store.roomsOf(personId)).map(({ name }) => name),
+];
 
 /**
  * What a signed-in person other than the machine's owner sees of each message the host sends: their rooms, the people
  * and agents in them, and those rooms' messages and canvases, as made for them; nothing else. A message type missing here
  * does not compile.
  */
-export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeople" | "ownerId" | "listProfiles" | "findConversation">): ShownToPerson {
+export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listProfiles" | "findConversation">): ShownToPerson {
   const isIn = (socket: SocketData, roomId: string) => store.findRoom(roomId)?.people.some(({ personId }) => personId === socket.personId) === true;
   const shownIf = (shown: boolean, message: ServerMessage) => (shown ? [message] : []);
 
@@ -109,6 +121,7 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
       rooms: rooms.map((room) => roomSeenBy(room, socket.personId)),
       roomApprovals: [],
       roomTasksWaiting: [],
+      roomInvites: [],
       profiles: agentsOf(rooms).map(agentSeen),
       promptTemplates: [],
       canvasUse: "as-needed",
@@ -184,6 +197,8 @@ export function personView(store: Pick<Store, "roomsOf" | "findRoom" | "listPeop
     "room.created": HIDDEN,
     "room.upserted": ({ room }, socket) => roomNewsFor(room, socket),
     "room.deleted": (message, socket) => shownIf(socket.roomsShown.delete(message.roomId), message),
+    "room.invited": HIDDEN,
+    "room-invites.listed": HIDDEN,
     "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas) }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
     "room.approvals": HIDDEN,

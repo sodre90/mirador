@@ -210,6 +210,10 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.machineCertificateUntrusted(problem.machine);
     case "machine-gave-no-token":
       return words.machineGaveNoToken(problem.machine);
+    case "machine-joined-as-person":
+      return words.machineJoinedAsPerson(problem.machine);
+    case "machine-ignored-room-invite":
+      return words.machineIgnoredRoomInvite(problem.machine);
     case "machine-authority-not-in-link":
       return words.machineAuthorityNotInLink(problem.machine);
     case "machine-authority-changed":

@@ -1,12 +1,15 @@
 import { useState, type Dispatch } from "react";
-import type { Person, Profile, Workspace } from "../shared/model.ts";
+import { roomInviteLink } from "../shared/machines.ts";
+import type { Person, Profile, ReachabilitySettings, Workspace } from "../shared/model.ts";
 import { DEFAULT_PERMISSION_PRESET, PERMISSION_PRESETS, type PermissionPreset } from "../shared/room-permissions.ts";
-import { ROOM_ROLES, type Room, type RoomApproval, type RoomRole, type RoomTaskApproval } from "../shared/rooms.ts";
+import { ROOM_ROLES, type Room, type RoomApproval, type RoomInvite, type RoomRole, type RoomTaskApproval } from "../shared/rooms.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
+import { timeOf } from "./Devices.tsx";
 import { waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
+import { QrCode } from "./QrCode.tsx";
 import type { AppAction } from "./state.ts";
 import { waitingLabels } from "./waiting.ts";
 
@@ -101,6 +104,7 @@ function sendRoleChanges(roomId: string, before: Record<string, RoleInRoom>, aft
 function RoomPeopleField({
   people,
   roles,
+  nameClashes,
   permissions,
   tasksStartUnasked,
   onChange,
@@ -108,6 +112,8 @@ function RoomPeopleField({
 }: {
   people: Person[];
   roles: Record<string, RoleInRoom>;
+  /** The names people presented on joining that read as one already in the room, by person. */
+  nameClashes: Record<string, string>;
   permissions: PermissionPreset;
   tasksStartUnasked: boolean;
   onChange: (personId: string, role: RoleInRoom) => void;
@@ -122,18 +128,22 @@ function RoomPeopleField({
       {people.length === 0 && <span className="hint">{words.noPeople}</span>}
       {people.map((person) => {
         const name = person.name || words.nameless;
+        const nameClash = nameClashes[person.id];
         return (
-          <label key={person.id} className="room-person-choice">
-            <span>{name}</span>
-            <select aria-label={words.roleOf(name)} value={roles[person.id] ?? ""} onChange={(event) => onChange(person.id, (event.target.value || null) as RoleInRoom)}>
-              <option value="">{words.notInRoom}</option>
-              {ROOM_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {words.roles[role]}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div key={person.id}>
+            <label className="room-person-choice">
+              <span>{name}</span>
+              <select aria-label={words.roleOf(name)} value={roles[person.id] ?? ""} onChange={(event) => onChange(person.id, (event.target.value || null) as RoleInRoom)}>
+                <option value="">{words.notInRoom}</option>
+                {ROOM_ROLES.map((role) => (
+                  <option key={role} value={role}>
+                    {words.roles[role]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {nameClash && <span className="hint room-person-name-clash">{words.nameClash(nameClash)}</span>}
+          </div>
         );
       })}
       {people.length > 0 && <span className="hint">{words.peopleHint}</span>}
@@ -147,8 +157,86 @@ function RoomPeopleField({
 }
 
 /**
- * Makes a room, or changes one: its name, agents, what they may do without asking and who else is in it; a room's
- * workspace stays the one it was made in.
+ * Invites into the room, each for one person with its role, who joins this machine with it from their own Mirador:
+ * the one just made with its code, link and QR code, while it waits, and every waiting one, which can be withdrawn.
+ */
+function RoomInvitesField({ room, invites, reachability }: { room: Room; invites: RoomInvite[]; reachability: ReachabilitySettings | null }) {
+  const [role, setRole] = useState<RoomRole>("member");
+  const [made, setMade] = useState<{ invite: RoomInvite; code: string } | null>(null);
+  const waiting = invites.filter(({ roomId }) => roomId === room.id);
+  const makeInvite = async () => {
+    try {
+      const invited = await connection.sendAndAwait(
+        (requestId) => ({ type: "room.invite", requestId, roomId: room.id, role }),
+        (message, requestId) => (message.type === "room.invited" && message.requestId === requestId ? message : undefined),
+      );
+      setMade(invited);
+    } catch {
+      // Disconnected; the host made no invite
+    }
+  };
+  const publicOrigin = reachability?.publicAddress?.origin ?? null;
+  const shown = made && waiting.some(({ id }) => id === made.invite.id) ? made : null;
+  const link = shown && publicOrigin && roomInviteLink(publicOrigin, shown.code, reachability?.authorityFingerprint ?? null);
+  return (
+    <fieldset className="room-field room-invites-field">
+      <legend>{words.invites}</legend>
+      <span className="hint">{words.invitesHint}</span>
+      <div className="room-invite-make">
+        <label>
+          {words.inviteAs}
+          <select value={role} onChange={(event) => setRole(event.target.value as RoomRole)}>
+            {ROOM_ROLES.map((each) => (
+              <option key={each} value={each}>
+                {words.roles[each]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={() => void makeInvite()}>
+          {words.makeInvite}
+        </button>
+      </div>
+      {shown && (
+        <div className="invite room-invite" role="group" aria-label={words.inviteCode}>
+          <span>
+            {words.inviteCode} <code className="invite-code">{shown.code}</code> {words.inviteWorksUntil(timeOf(shown.invite.expiresAt))}
+          </span>
+          {link ? (
+            <>
+              <QrCode text={link} label={words.inviteLinkQr} />
+              <span>
+                {words.inviteLinkHint} <code className="invite-link">{link}</code>
+              </span>
+            </>
+          ) : (
+            <span className="hint">{words.inviteWithoutLink}</span>
+          )}
+        </div>
+      )}
+      {waiting.length > 0 && (
+        <ul className="room-invites" aria-label={words.waitingInvites}>
+          {waiting.map((invite) => {
+            const shownRole = words.roles[invite.role];
+            const until = timeOf(invite.expiresAt);
+            return (
+              <li key={invite.id}>
+                <span>{words.waitingInvite(shownRole, until)}</span>
+                <button type="button" className="link" aria-label={words.withdrawInviteOf(shownRole, until)} onClick={() => connection.send({ type: "room.withdraw-invite", inviteId: invite.id })}>
+                  {words.withdrawInvite}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </fieldset>
+  );
+}
+
+/**
+ * Makes a room, or changes one: its name, agents, what they may do without asking and who else is in it, and its
+ * invites; a room's workspace stays the one it was made in.
  */
 export function RoomDialog({
   room,
@@ -156,6 +244,8 @@ export function RoomDialog({
   profiles,
   people,
   ownerId,
+  invites,
+  reachability,
   dispatch,
   onClose,
 }: {
@@ -164,6 +254,9 @@ export function RoomDialog({
   profiles: Profile[];
   people: Person[];
   ownerId: string | null;
+  invites: RoomInvite[];
+  /** How other machines reach this one, which an invite's link needs; null until the host said. */
+  reachability: ReachabilitySettings | null;
   dispatch: Dispatch<AppAction>;
   onClose: () => void;
 }) {
@@ -248,12 +341,14 @@ export function RoomDialog({
           <RoomPeopleField
             people={people.filter(({ id }) => id !== ownerId)}
             roles={roles}
+            nameClashes={Object.fromEntries(room.people.flatMap(({ personId, nameClash }) => (nameClash ? [[personId, nameClash]] : [])))}
             permissions={permissions}
             tasksStartUnasked={tasksStartUnasked}
             onChange={(personId, role) => setRoles((before) => ({ ...before, [personId]: role }))}
             onTasksStartUnaskedChange={setTasksStartUnasked}
           />
         )}
+        {room && <RoomInvitesField room={room} invites={invites} reachability={reachability} />}
         <div className="form-actions">
           {room && (
             <ConfirmButton className="link danger room-delete" label={words.deleteRoom} hint={words.deleteHint} armedText={words.deleteArmed} armedHint={words.deleteArmedHint} onConfirm={deleteRoom}>

@@ -1,10 +1,10 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { joinedOn } from "../shared/devices.ts";
 import { askToJoin, spacedNumber } from "../shared/join-requests.ts";
-import { inviteLink, joinCodeIn } from "../shared/machines.ts";
+import { inviteLink, isRoomInviteLink, joinCodeIn } from "../shared/machines.ts";
 import { relativeTimeOf } from "../shared/relative-time.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
-import type { DeviceConnection, ListedDevice, PublicAddress, ReachabilitySettings } from "../shared/model.ts";
+import type { DeviceConnection, ListedDevice, Person, PublicAddress, ReachabilitySettings } from "../shared/model.ts";
 import type { PeerToPeerStatus, ServerMessage } from "../shared/protocol.ts";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { setConnectedDevicesInSidebar, useConnectedDevicesInSidebar } from "./connected-devices.ts";
@@ -21,6 +21,7 @@ const words = t.devices;
 
 /** Read before the app first draws: it then replaces the address's #part with the open conversation's. */
 const joinCodeInLink = joinCodeIn(location.hash);
+const openedFromRoomInvite = isRoomInviteLink(location.hash);
 
 function browserName(userAgent: string) {
   if (inDesktopApp()) return words.guessedName.desktopApp;
@@ -102,7 +103,9 @@ export function JoinMachine() {
   return (
     <div className="gate join-machine">
       <h1>{words.joinMachine.title}</h1>
-      {askedNumber ? (
+      {openedFromRoomInvite ? (
+        <p className="join-room-invite">{words.joinMachine.roomInviteHere}</p>
+      ) : askedNumber ? (
         <div className="join-asked" role="status" aria-label={words.joinMachine.waitingForApproval}>
           <p>
             {words.joinMachine.waitingOn} <strong>{location.hostname}</strong>
@@ -132,9 +135,12 @@ export function JoinMachine() {
               <input value={name} onChange={(event) => setName(event.target.value)} />
             </label>
             {!shownInAnotherMirador() && (
-              <button type="button" className="primary" disabled={joining || !name.trim()} onClick={() => void ask()}>
-                {words.joinMachine.askToJoin}
-              </button>
+              <>
+                <button type="button" className="primary" disabled={joining || !name.trim()} onClick={() => void ask()}>
+                  {words.joinMachine.askToJoin}
+                </button>
+                <p className="hint join-full-control">{words.joinMachine.askToJoinIsFullControl}</p>
+              </>
             )}
             <label>
               {words.joinMachine.inviteCode}
@@ -159,7 +165,7 @@ export function JoinMachine() {
 
 type Invite = Extract<ServerMessage, { type: "devices.invited" }>;
 
-const timeOf = (at: number) => new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
+export const timeOf = (at: number) => new Date(at).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" });
 /** How other devices reach this host: at an address a proxy gives it, over the network itself, or nowhere. */
 type ReachRoute = "address" | "network" | "none";
 
@@ -598,7 +604,8 @@ const deviceStatus = ({ connection, lastSeenAt }: ListedDevice) =>
 
 const connectedFrom = ({ fromAddress, tailscaleUser }: DeviceConnection) => words.list.from(tailscaleUser ? `${fromAddress} (${tailscaleUser})` : fromAddress);
 
-export function DeviceSettings({ listed }: { listed: DevicesListed | null }) {
+/** The devices that joined this machine, a person's other than the owner's saying whose, which reach only that person's rooms. */
+export function DeviceSettings({ listed, people, ownerId }: { listed: DevicesListed | null; people: Person[]; ownerId: string | null }) {
   const [invite, setInvite] = useState<Invite | null>(null);
   const [inviteRoute, setInviteRoute] = useState<InviteRoute>("tunnel");
   const shownInSidebar = useConnectedDevicesInSidebar();
@@ -633,6 +640,9 @@ export function DeviceSettings({ listed }: { listed: DevicesListed | null }) {
             <span className="device-dot" aria-hidden="true" />
             <span className="device-name">{device.name}</span>
             {device.id === listed.thisDeviceId && <span className="device-this">{words.list.thisDevice}</span>}
+            {device.personId !== ownerId && (
+              <span className="device-person">{words.list.personsDevice(people.find(({ id }) => id === device.personId)?.name || t.rooms.nameless)}</span>
+            )}
             <span className="device-seen">
               {deviceStatus(device)}
               {device.connection && ` · ${connectedFrom(device.connection)}`}

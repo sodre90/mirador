@@ -16,8 +16,21 @@ const NO_ROOMS_WAITING = new Set<string>();
 /** Signed in as a person other than the machine's owner, the page shows the rooms they are in, and nothing else of the machine. */
 export const seesOnlyTheirRooms = ({ you, ownerId }: Pick<AppState, "you" | "ownerId">) => you !== null && ownerId !== null && you !== ownerId;
 
-/** The page of a person other than the machine's owner: the list of their rooms, the room they opened, its canvas, and their own name and colour. */
-export function RoomsOnlyApp({ state, dispatch, banner }: { state: AppState; dispatch: Dispatch<AppAction>; banner: ReactNode }) {
+/** Whose machine this is, and the rooms they are in here. */
+function Welcome({ state }: { state: AppState }) {
+  const owner = state.people.find(({ id }) => id === state.ownerId)?.name;
+  return (
+    <p className="rooms-only-welcome">
+      {owner ? words.machineOf(owner) : words.machineOfNamelessOwner} {state.rooms.length > 0 && words.invitedTo(state.rooms.map(({ name }) => name).join(", "))}
+    </p>
+  );
+}
+
+/**
+ * The page of a person other than the machine's owner: the list of their rooms, the room they opened, its canvas, and
+ * their own name and colour. Taken out of their last room, they are signed out, and it says so.
+ */
+export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: AppState; dispatch: Dispatch<AppAction>; outOfRooms: boolean; banner: ReactNode }) {
   const layouts = useConversationLayouts();
   const [sidebarWidth] = useSidebarWidth();
   const [sidebarHidden, setSidebarHidden] = useSidebarHidden();
@@ -79,7 +92,8 @@ export function RoomsOnlyApp({ state, dispatch, banner }: { state: AppState; dis
               <LayoutToggles />
             </div>
             <div className="empty-state">
-              <h2>{state.rooms.length === 0 ? words.inNoRoom : words.noRoomOpen}</h2>
+              <h2>{outOfRooms ? words.outOfRooms : state.rooms.length === 0 ? words.inNoRoom : words.noRoomOpen}</h2>
+              {!outOfRooms && <Welcome state={state} />}
             </div>
           </>
         )}

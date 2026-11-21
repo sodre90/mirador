@@ -139,11 +139,11 @@ test("a device asking to join says where it asks from, and who it is signed in t
     kind: "join-request",
     title: "Phone asks to join Mirador",
     workspace: "",
-    body: "From 100.64.0.7. Open Mirador to approve it by typing the number it shows.",
+    body: "From 100.64.0.7. Open Mirador to approve it by typing the number it shows. Approving makes it one of your own devices, with full control of Mirador; let anyone else in with a room invite.",
     about: { kind: "join-request", request: { name: "Phone", fromAddress: "100.64.0.7", tailscaleUser: null } },
   });
   expect(joinRequestNotification({ ...request, tailscaleUser: "me@example.com" }).body).toBe(
-    "From 100.64.0.7, signed in to Tailscale as me@example.com. Open Mirador to approve it by typing the number it shows.",
+    "From 100.64.0.7, signed in to Tailscale as me@example.com. Open Mirador to approve it by typing the number it shows. Approving makes it one of your own devices, with full control of Mirador; let anyone else in with a room invite.",
   );
 });
 

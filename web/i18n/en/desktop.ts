@@ -30,7 +30,7 @@ export const desktop = {
     stoppedWithError: (message: string) => `Stopped with an error: ${message}`,
     joinRequest: (name: string) => `${name} asks to join Mirador`,
     joinRequestBody: (address: string, tailscaleUser: string | null) =>
-      `From ${address}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows.`,
+      `From ${address}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows. Approving makes it one of your own devices, with full control of Mirador; let anyone else in with a room invite.`,
   },
   more: (count: number) => `${count} more…`,
   open: "Open",

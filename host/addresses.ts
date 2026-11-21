@@ -1,5 +1,6 @@
 import type { FoundAddress } from "../shared/model.ts";
 import type { HostConfig } from "./config.ts";
+import { isLoopback } from "./hub.ts";
 
 /** Both of this machine's servers answer here, so an address can be checked before it is believed. */
 export const HERE_PATH = "/mirador-here";
@@ -18,6 +19,9 @@ const REMEMBERED = 3;
 const seen: string[] = [];
 
 const addressedLocally = (host: string) => ["127.0.0.1", "localhost", "[::1]", "::1"].includes(host.replace(/:\d+$/, ""));
+
+/** Every machine answers at a loopback address, so a request naming one names this host only when it comes from this computer. */
+export const loopbackNameFromAfar = (host: string, peerAddress: string) => addressedLocally(host) && !isLoopback(peerAddress);
 
 /** Every request from a device carries the address it reached us at, which is the one to offer when there is nothing else. */
 export function rememberAddressUsed(host: string | null) {

@@ -156,6 +156,10 @@ test("the laptop joins the server with an invite link and shows its own Mirador 
     await expect(machines).toHaveCount(0);
     await expect(serverButton).toHaveAttribute("aria-current", "true");
     await expect(page).toHaveURL(/#\/m\/[\w-]+$/);
+    const serverFrame = page.locator('iframe[title="Home server"]');
+    await expect(serverFrame).toHaveAttribute("allow", "clipboard-read; clipboard-write; microphone");
+    await expect(serverFrame).not.toHaveAttribute("sandbox");
+    await expect(serverButton).not.toHaveClass(/someone-elses/);
     const card = workspaceCard(frame, serverOnly);
     await card.getByRole("button", { name: "+ New conversation" }).click();
     await expect(frame.locator(".chat-header:visible .settings-model")).toBeAttached({ timeout: 60_000 });

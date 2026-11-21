@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
-import type { Room, RoomApproval, RoomMessage, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { Room, RoomApproval, RoomInvite, RoomMessage, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -69,6 +69,8 @@ export interface TerminalSplit {
 
 /** The cookie a signed-in page carries; the desktop app sends it too when it listens for system notifications. */
 export const TOKEN_COOKIE = "mirador_token";
+/** How the host closes the sockets of a person it took out of the last room they were in, whose devices it revoked with that. */
+export const OUT_OF_ROOMS_CLOSE_CODE = 4410;
 /**
  * Sent by the relay that shows a machine in the rail: the machine's pages there load canvas libraries, app views and
  * media through a relay on this computer's loopback, as this computer's browser may not trust the machine's certificate.
@@ -402,6 +404,9 @@ export type ClientMessage =
   /** Lets a person of this machine into the room with the role, or changes their role there. */
   | { type: "room.set-person-role"; roomId: string; personId: string; role: RoomRole }
   | { type: "room.remove-person"; roomId: string; personId: string }
+  /** An invite for one person into the room with the role, which they join this machine with from their own Mirador; the host answers `room.invited`. */
+  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole }
+  | { type: "room.withdraw-invite"; inviteId: string }
   /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
   | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
   /** Answers a task of a person other than the owner that waits: allowing sends it to its agents, denying tells the room it was declined. */
@@ -428,6 +433,8 @@ export type ServerMessage =
       roomApprovals: RoomApproval[];
       /** The tasks of people other than the owner that wait for an approver, oldest first. */
       roomTasksWaiting: RoomTaskApproval[];
+      /** The room invites nobody has used yet, soonest to expire first. */
+      roomInvites: RoomInvite[];
       profiles: Profile[];
       promptTemplates: PromptTemplate[];
       canvasUse: CanvasUse;
@@ -557,6 +564,10 @@ export type ServerMessage =
   | { type: "room.created"; requestId: string; roomId: string }
   | { type: "room.upserted"; room: Room }
   | { type: "room.deleted"; roomId: string }
+  /** `code` is shown once, here: the host keeps only its hash. */
+  | { type: "room.invited"; requestId: string; invite: RoomInvite; code: string }
+  /** The room invites nobody has used yet, each time one is made, used or withdrawn; those of a deleted room go with it. */
+  | { type: "room-invites.listed"; invites: RoomInvite[] }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on. */
   | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[] } & RoomTimeline)
   /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, in its place by its seq. */

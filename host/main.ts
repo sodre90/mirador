@@ -19,6 +19,7 @@ import { DAY_MS, workingCopyIdOf } from "../shared/model.ts";
 import { agentLogsDirectory, loadConfig } from "./config.ts";
 import { ConversationService } from "./conversations.ts";
 import { DeviceService } from "./devices.ts";
+import { ownerKey } from "./person-keys.ts";
 import { JoinRequestService } from "./join-requests.ts";
 import { MachineRelays } from "./machine-relays.ts";
 import { MachineWatch } from "./machine-watch.ts";
@@ -194,6 +195,7 @@ const pluginUpdates = new Lookout(
   (found) => hub.announcePluginUpdates(readyPluginUpdates.marked(found ?? [])),
 );
 const devices = new DeviceService(store);
+const ownersKey = ownerKey(config.dataDir);
 const joinRequests = new JoinRequestService(store, devices, ownAuthorityFingerprint);
 const signInCodes = new SignInCodes(store);
 const p2pSettings = peerToPeerSettings(process.env, { sidecar: downloadedSidecar(config.dataDir), broker: BUILT_IN_BROKER });
@@ -218,6 +220,7 @@ const relays = new MachineRelays(
     watch.start(machineId);
   },
   machineSignedOut,
+  ownersKey,
 );
 relays.startAll();
 watch.startAll();
@@ -245,7 +248,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, notifications });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, certificate, keepAwake, p2p, pushes, notifications });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

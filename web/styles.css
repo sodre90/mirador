@@ -8031,6 +8031,11 @@ body.reordering * {
   font-size: calc(11px * var(--font-scale));
 }
 
+.device-person {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .device-seen {
   flex: 1;
   color: var(--muted);
@@ -8941,6 +8946,19 @@ body.reordering * {
   font-size: calc(10px * var(--font-scale));
   line-height: calc(13px * var(--font-scale));
   text-align: center;
+}
+
+/* Someone else's machine, whose rooms this computer's owner is in: a hollow ring at its corner, whatever its colour. */
+.rail-machine.someone-elses::after {
+  content: "";
+  position: absolute;
+  bottom: -5px;
+  left: -5px;
+  width: 8px;
+  height: 8px;
+  border: 2px solid var(--muted);
+  border-radius: 50%;
+  background: var(--rail);
 }
 
 .rail-machine.shown {
@@ -9858,6 +9876,26 @@ button.link.more-rows {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.room-person-name-clash {
+  display: block;
+}
+
+.room-invite-make,
+.room-invite-make label,
+.room-invites li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-invites {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .room-delete {

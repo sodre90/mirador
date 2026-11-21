@@ -108,6 +108,11 @@ export const problems: Messages["problems"] = {
     "sentence-too-long-to-speak": "La frase es demasiado larga para leerla en voz alta.",
     "invite-code-missing": "Falta el código de invitación.",
     "invite-code-wrong": "Este código de invitación es incorrecto, ya se usó o caducó. Pide uno nuevo.",
+    "room-invite-needs-mirador": "Esta invitación deja entrar a una persona en una sala, desde su propio Mirador: agrega allí esta máquina en Máquinas y únete con el código.",
+    "room-invite-not-through-tunnel": "Una invitación a una sala se usa en la dirección de esta máquina, no a través del túnel peer to peer.",
+    "room-invite-loopback-from-afar": "Con una invitación a una sala solo se une en 127.0.0.1 o localhost desde este mismo equipo.",
+    "join-too-often": "Hubo demasiados intentos de unirse a esta máquina. Inténtalo de nuevo en un minuto.",
+    "room-join-unproven": "Para unirse a una sala hace falta una firma, con la clave que presenta, sobre el último desafío de esta máquina para la invitación, la dirección en que se pidió y la autoridad de certificación con la que se confió en ella. Intenta unirte de nuevo.",
     "voice-not-set-up": "La voz aún no está configurada en este Mac.",
     "voice-not-set-up-here": "La voz aún no está configurada en este Mac. Puedes configurarla en Configuración → Voz.",
     "voice-being-removed": "Se está quitando la voz de este Mac.",
@@ -245,6 +250,10 @@ export const problems: Messages["problems"] = {
   machineCertificateUntrusted: (machine) =>
     `Este equipo no confía en el certificado de ${machine}, y ${machine} no ofrece una autoridad de certificación propia.`,
   machineGaveNoToken: (machine) => `${machine} dejó entrar a este equipo sin un token.`,
+  machineIgnoredRoomInvite: (machine) =>
+    `Ese es el código de una invitación a una sala, pero ${machine} no lo tomó como tal, así que este equipo no se unió. Puede que la invitación haya caducado o ya se haya usado; pide una nueva.`,
+  machineJoinedAsPerson: (machine) =>
+    `Este equipo entra en ${machine} como persona en sus salas, así que solo el código de una invitación a una sala lo deja entrar allí, y no pide unirse. Para que este equipo sea uno de los dispositivos del dueño allí, quita ${machine} y agrégala de nuevo.`,
   machineAuthorityNotInLink: (machine) =>
     `La autoridad de certificación de ${machine} no es la del enlace de invitación, así que no se envió el código. Puede que algo en la red se esté haciendo pasar por ${machine}.`,
   machineAuthorityChanged: (machine) =>

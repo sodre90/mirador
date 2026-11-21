@@ -39,6 +39,7 @@ function JoinRequestPrompt({ request }: { request: JoinRequest }) {
         )}
         {words.approveOnly}
       </p>
+      <p className="join-request-full-control">{words.fullControl}</p>
       <form onSubmit={approve}>
         <input
           aria-label={words.number}

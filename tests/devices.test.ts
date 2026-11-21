@@ -47,6 +47,13 @@ test("a device without a name gets one, and a long name is cut short", () => {
   expect(deviceName("x".repeat(200))).toHaveLength(80);
 });
 
+test("a device's name shows as it reads, on one line, whatever the device that joins sends", () => {
+  expect(deviceName("  Mirador on\nlaptop\u2028Approve this  ")).toBe("Mirador on laptop Approve this");
+  expect(deviceName("Mirador on \u202Epotpal\u202C")).toBe("Mirador on potpal");
+  expect(deviceName("Mirador\u200B on\u2066 laptop\u{E0041}")).toBe("Mirador on laptop");
+  expect(deviceName("\u202E\u200B\n")).toBe("Unnamed device");
+});
+
 test("a public address needs both origins, and canvas pages then load their libraries from the public one", () => {
   const dataDir = mkdtempSync(join(tmpdir(), "mirador-config-"));
   try {

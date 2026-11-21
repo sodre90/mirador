@@ -151,6 +151,7 @@ export class RoomService implements RoomPermissionRules {
   private readonly tagsForAnswers = new Map<string, { answering: string; profileIds: string[] }>();
   /** What an approver let through for the rest of each conversation's turn, by `taskAllowanceOf`. */
   private readonly allowedForTurn = new Map<string, Set<string>>();
+  private outOfEveryRoom: (personIds: string[]) => void = () => {};
 
   constructor(
     private readonly store: Store,
@@ -165,6 +166,16 @@ export class RoomService implements RoomPermissionRules {
 
   list(): Room[] {
     return this.store.listRooms();
+  }
+
+  /** Told of the people a change took out of the last room they were in. */
+  hearPeopleOutOfEveryRoomWith(listener: (personIds: string[]) => void) {
+    this.outOfEveryRoom = listener;
+  }
+
+  /** A person an invite just let into the room: pages hear of them as of one the owner let in. */
+  personCameIn(roomId: string) {
+    this.peopleChanged(roomId);
   }
 
   create(name: string, workspaceId: string, profileIds: string[], permissions: PermissionPreset): Room {
@@ -230,12 +241,14 @@ export class RoomService implements RoomPermissionRules {
     this.declineTasksNoLongerAsked(roomId);
   }
 
-  /** The person's open pages lose the room at once, and their tasks still waiting are declined. */
+  /** The person's open pages lose the room at once, and their tasks still waiting are declined; out of their last room, they lose their devices here too. */
   removePerson(roomId: string, personId: string) {
     this.existingRoom(roomId);
+    if (personId === this.store.ownerId()) throw new HostProblemError({ code: "room-person-unknown" });
     this.store.removeRoomPerson(roomId, personId);
     this.peopleChanged(roomId);
     this.declineTasksNoLongerAsked(roomId);
+    this.tellOfPeopleInNoRoom([personId]);
   }
 
   delete(roomId: string) {
@@ -243,7 +256,9 @@ export class RoomService implements RoomPermissionRules {
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.delete(conversationId));
     this.store.deleteRoom(roomId);
     this.hub.broadcast({ type: "room.deleted", roomId });
-    if (room.people.length > 0) this.peopleListed();
+    if (room.people.length === 0) return;
+    this.peopleListed();
+    this.tellOfPeopleInNoRoom(room.people.map(({ personId }) => personId));
   }
 
   /**
@@ -736,6 +751,11 @@ export class RoomService implements RoomPermissionRules {
   private peopleChanged(roomId: string) {
     this.publish(roomId);
     this.peopleListed();
+  }
+
+  private tellOfPeopleInNoRoom(personIds: string[]) {
+    const inNoRoom = this.store.peopleInNoRoom(personIds);
+    if (inNoRoom.length > 0) this.outOfEveryRoom(inNoRoom);
   }
 
   /** Who shares a room decides whom each person other than the owner sees, so their pages hear of people again. */

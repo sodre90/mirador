@@ -116,6 +116,8 @@ export function SettingsDialog({
   pushRelay,
   avatar,
   you,
+  people,
+  ownerId,
   voiceSettings,
   voiceEngine,
   profiles,
@@ -143,6 +145,9 @@ export function SettingsDialog({
   avatar: string | null;
   /** The person this page signed in as; undefined until the host said who. */
   you: Person | undefined;
+  /** Whose each device is. */
+  people: Person[];
+  ownerId: string | null;
   voiceSettings: VoiceSettingsValue;
   voiceEngine: VoiceEngineStatus;
   profiles: Profile[];
@@ -199,7 +204,7 @@ export function SettingsDialog({
     devices: () => (
       <>
         <MachineNameSettings machineName={machineName} computerName={computerName} />
-        <DeviceSettings listed={devices} />
+        <DeviceSettings listed={devices} people={people} ownerId={ownerId} />
       </>
     ),
     notifications: () => (

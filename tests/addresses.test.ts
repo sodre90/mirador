@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { addressesThatAnswer, addressesUsed, rememberAddressUsed } from "../host/addresses.ts";
+import { addressesThatAnswer, addressesUsed, loopbackNameFromAfar, rememberAddressUsed } from "../host/addresses.ts";
 
 /** Stands in for one of this host's two servers: it answers the marker, or does not. */
 function serverThatAnswers(answering = true) {
@@ -51,4 +51,10 @@ test("the addresses devices reached this host at are remembered, newest first, w
 
   expect(addressesUsed()).toEqual(["box.example.ts.net", "macbook.example.ts.net:4600"]);
   expect(addressesUsed()).not.toContain("127.0.0.1:4600");
+});
+
+test("a request names a loopback address of this host only from this computer, as every machine has one", () => {
+  expect(["127.0.0.1:4600", "localhost:4600", "[::1]:4600"].map((host) => loopbackNameFromAfar(host, "192.168.1.20"))).toEqual([true, true, true]);
+  expect(["127.0.0.1", "::1", "::ffff:127.0.0.1"].map((peer) => loopbackNameFromAfar("127.0.0.1:4600", peer))).toEqual([false, false, false]);
+  expect(loopbackNameFromAfar("box.tailnet.ts.net", "100.64.0.7")).toBe(false);
 });

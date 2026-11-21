@@ -29,7 +29,7 @@ export const desktop: Messages["desktop"] = {
     stoppedWithError: (message) => `Mit einem Fehler gestoppt: ${message}`,
     joinRequest: (name) => `${name} möchte Mirador beitreten`,
     joinRequestBody: (address, tailscaleUser) =>
-      `Von ${address}${tailscaleUser ? `, bei Tailscale angemeldet als ${tailscaleUser}` : ""}. Öffne Mirador und genehmige es, indem du die angezeigte Zahl eingibst.`,
+      `Von ${address}${tailscaleUser ? `, bei Tailscale angemeldet als ${tailscaleUser}` : ""}. Öffne Mirador und genehmige es, indem du die angezeigte Zahl eingibst. Mit der Genehmigung wird es eines deiner eigenen Geräte, mit voller Kontrolle über Mirador; alle anderen lässt du mit einer Raumeinladung hinein.`,
   },
   more: (count) => `${count} weitere…`,
   open: "Öffnen",

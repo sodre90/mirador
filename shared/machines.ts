@@ -23,20 +23,34 @@ export function tunnelIn(hash: string) {
 export const inviteLink = (origin: string, code: string, authorityFingerprint: string | null = null, tunnel: InviteTunnel | null = null) =>
   `${origin}/#/join/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}${tunnel ? `?tunnel=${encodedInviteTunnel(tunnel)}` : ""}`;
 
+/** A room invite link's #part: the code, then the fingerprint of the machine's own certificate authority when it has one. */
+const roomInvitePath = /^#\/room-invite\/([\w-]+?)(?:\/([\w-]+))?$/;
+
+/** Into a room of someone else's machine, which another Mirador joins as a person there, never as one of its owner's devices. */
+export const roomInviteLink = (origin: string, code: string, authorityFingerprint: string | null = null) =>
+  `${origin}/#/room-invite/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}`;
+
+export const isRoomInviteLink = (hash: string) => roomInvitePath.test(hash);
+
 /** What someone pastes to join a machine: the invite code itself, or the whole invite link. */
 export function inviteIn(text: string) {
   const link = machineAddress(text);
   return { code: link?.joinCode ?? text.trim(), authorityFingerprint: link?.authorityFingerprint ?? null };
 }
 
-/** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it. */
-export function machineAddress(text: string): { origin: string; joinCode: string | null; authorityFingerprint: string | null } | null {
+/**
+ * What someone types or pastes for a machine: its name on the network, its address, or an invite link from it, which
+ * `forRoom` says is a room invite's.
+ */
+export function machineAddress(text: string): { origin: string; joinCode: string | null; authorityFingerprint: string | null; forRoom: boolean } | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
   try {
     const url = new URL(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash) };
+    const roomInvite = roomInvitePath.exec(url.hash);
+    if (roomInvite) return { origin: url.origin, joinCode: roomInvite[1]!, authorityFingerprint: roomInvite[2] ?? null, forRoom: true };
+    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash), forRoom: false };
   } catch {
     return null;
   }

@@ -5,6 +5,7 @@ import { speaksReplies, type Dictation as Dictated, type VoiceSettings } from ".
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { dictationStatus, pressed, released, spacedAtCaret, type DictationPhase, type ListeningFor, type Press } from "./dictation.ts";
 import { joinDrafts } from "./drafts.ts";
+import { focusedFrameSending } from "./focused-frame.ts";
 import { hints } from "./hints.ts";
 import { refusalText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
@@ -263,8 +264,7 @@ export function useDictation({
     const onHidden = () => document.hidden && latest.current.onRelease();
     /** The canvas page forwards presses but not letting go, which may come before the message box takes the focus. */
     const onFrameMessage = (event: MessageEvent) => {
-      const focused = document.activeElement;
-      if (!(focused instanceof HTMLIFrameElement) || event.source !== focused.contentWindow) return;
+      if (!focusedFrameSending(event)) return;
       if (isCanvasFrameMessage(event.data) && event.data.kind === "key" && dictates(event.data) && !aDialogIsOpen()) tapFromKeys();
     };
     window.addEventListener("keydown", onKeyDown, true);

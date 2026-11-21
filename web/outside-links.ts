@@ -41,9 +41,9 @@ function askTheAppToOpen(url: string) {
 const isOpenLinkMessage = (data: unknown): data is { type: string; url: string } =>
   typeof data === "object" && data !== null && (data as { type?: unknown }).type === OPEN_LINK_MESSAGE && typeof (data as { url?: unknown }).url === "string";
 
-/** A machine of the rail, shown in a frame of this page from its relay, whose page sent the message. */
+/** A machine of the rail, shown in a frame of this page from its relay, whose page sent the message: never someone else's, which opens nothing here. */
 function machineFrameSending(event: MessageEvent) {
-  const frames = [...document.querySelectorAll<HTMLIFrameElement>("iframe.machine-frame")];
+  const frames = [...document.querySelectorAll<HTMLIFrameElement>("iframe.machine-frame:not([data-someone-elses])")];
   return frames.find((frame) => frame.contentWindow === event.source && new URL(frame.src).origin === event.origin);
 }
 

@@ -286,13 +286,17 @@ export const shell = {
     requestShowsBefore: "Its Mirador shows the request on its own screen, and on the devices that have joined it; or run",
     requestShowsAfter: " there.",
     notJoinedBefore: "This computer has not joined",
-    notJoinedAfter: (host: string) => ` at ${host} yet. Ask to join, and approve it there by typing the number this computer then shows.`,
+    notJoinedAfter: (host: string) =>
+      ` at ${host} yet. Asking to join makes this computer one of its owner's own devices, with full control of that machine: ask only to join a machine of your own, then approve it there by typing the number this computer shows. Someone else lets you into a room of theirs with a room invite instead.`,
     askToJoin: "Ask to join",
     inviteBefore: "Or join with an invite code. Get one in its Settings → Devices, from a device that has joined it, or run",
     inviteAfter: " on it.",
     inviteCode: "Invite code or link",
     joining: "Joining…",
     joinButton: "Join",
+    outOfRooms: "Its owner took you out of the last room you were in there, which signed this computer out. Ask them for a new invite, and join with its code.",
+    someoneElses: "Someone else's machine, where you are in their rooms",
+    roomInviteFirst: "You were invited into a room there. Join with the room invite's code or link.",
   },
   conversationTitle: {
     label: "Conversation name",

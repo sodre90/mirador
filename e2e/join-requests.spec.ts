@@ -63,13 +63,17 @@ test("another Mirador asks to join over HTTPS, and gets in once someone at the m
   const askToJoin = join.getByRole("button", { name: "Ask to join" });
 
   await test.step("the machine's own screen gets a notification, and can deny the request", async () => {
+    await expect(join).toContainText("Asking to join makes this computer one of its owner's own devices, with full control of that machine");
     await askToJoin.click();
     await numberShownIn(join);
     await expect(prompt).toContainText("From 127.0.0.1");
+    await expect(prompt.locator(".join-request-full-control")).toHaveText(
+      "Approving makes it one of your own devices, with full control of this Mirador. Let anyone else into a room with a room invite instead.",
+    );
     expect(await notificationsShown(serverPage)).toEqual([
       {
         title: expect.stringMatching(/^Mirador on .+ asks to join Mirador$/),
-        body: "From 127.0.0.1. Open Mirador to approve it by typing the number it shows.",
+        body: "From 127.0.0.1. Open Mirador to approve it by typing the number it shows. Approving makes it one of your own devices, with full control of Mirador; let anyone else in with a room invite.",
         tag: "about-this-machine",
         closed: false,
       },
@@ -110,6 +114,9 @@ test("a browser on the network asks to join, asking again in place of the reques
   const phone = await browser.newPage({ ignoreHTTPSErrors: true, extraHTTPHeaders: { "x-forwarded-for": phoneOnTheLan } });
   await phone.goto(networkOrigin());
   const prompt = serverPage.getByRole("alertdialog", { name: "Phone asks to join" });
+  await expect(phone.locator(".join-full-control")).toHaveText(
+    "Asking to join makes this device one of the owner's own devices, with full control of this Mirador. Invited into someone else's room? Join it from your own Mirador, with the room invite.",
+  );
   const askToJoin = async () => {
     await phone.getByLabel("Name this device").fill("Phone");
     await phone.getByRole("button", { name: "Ask to join" }).click();

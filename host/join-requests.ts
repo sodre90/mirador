@@ -196,3 +196,18 @@ export class SenderLimit {
     return true;
   }
 }
+
+/** So many a minute from each sender, and from all senders together; a sender over its own limit uses none of the shared one. */
+export class SenderAndOverallLimit {
+  private readonly perSender: SenderLimit;
+  private readonly overall: SenderLimit;
+
+  constructor(now: () => number, mostPerSender: number, mostOverall: number) {
+    this.perSender = new SenderLimit(now, mostPerSender);
+    this.overall = new SenderLimit(now, mostOverall);
+  }
+
+  allows(sender: string) {
+    return this.perSender.allows(sender) && this.overall.allows("");
+  }
+}

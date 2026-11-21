@@ -36,7 +36,7 @@ import { promptTemplateProblem } from "../shared/prompt-templates.ts";
 import { joinRequestNotification } from "../shared/system-notifications.ts";
 import { NOTIFICATION_KINDS, type PushNotifications } from "./push-notifications.ts";
 import type { PushRelayRequest } from "../shared/push.ts";
-import { canvasAssetsOriginOnLoopback, DESKTOP_APP_CODE_PARAMETER, PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
+import { canvasAssetsOriginOnLoopback, DESKTOP_APP_CODE_PARAMETER, OUT_OF_ROOMS_CLOSE_CODE, PROFILE_LAUNCH_PARAMETER, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { claudeProgramLookUps, claudeProgramReport } from "./acp/claude-program.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
 import type { CanvasMcpEndpoints } from "./canvas/mcp.ts";
@@ -60,17 +60,19 @@ import { checkGroupMove, checkLanding, type SidebarNow } from "./sidebar-moves.t
 import { withChunksCoalesced } from "../shared/timeline.ts";
 import { authorityFingerprint as fingerprintOf, type ServingCertificate } from "./certificates.ts";
 import { publicAddressOf, SETTINGS_ADDRESS_NAMES, reachability, savedNetwork, saveNetwork, savedPublicAddress, savePublicAddress, type HostConfig } from "./config.ts";
-import { HERE_PATH, addressesThatAnswer, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
+import { HERE_PATH, addressesThatAnswer, loopbackNameFromAfar, addressesUsed, ownPageOrigins, rememberAddressUsed, type AddressCandidate } from "./addresses.ts";
 import { servePortOnTailnet, tailnetName, tailscaleCommand } from "./tailscale.ts";
 import { errorMessage, type ConversationService, type DeleteOptions } from "./conversations.ts";
 import { deviceName, type DeviceService } from "./devices.ts";
 import { JobWaitRefused } from "./job-waits.ts";
-import { JoinRequestRefused, SenderLimit, type JoinRequestService } from "./join-requests.ts";
+import { JoinRequestRefused, SenderAndOverallLimit, SenderLimit, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import { RoomService } from "./rooms.ts";
+import { reachedAt, RoomInvites } from "./room-invites.ts";
+import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
 import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
-import { agentsOfRooms, peopleSeenBy, personView } from "./person-view.ts";
+import { namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { machineAddress } from "../shared/machines.ts";
 import { NAMES_KEPT_BY_MIRADOR, nameRefused, nameTaken, personName } from "../shared/people.ts";
@@ -133,6 +135,8 @@ export interface HostServices {
   pluginUpdates: Lookout<PluginUpdate[]>;
   readyPluginUpdates: ReadyPluginUpdates;
   devices: DeviceService;
+  /** Who this machine's owner is to the machines they join, and whom no room invite here admits. */
+  ownerKey: OwnerKey;
   joinRequests: JoinRequestService;
   signInCodes: SignInCodes;
   search: ConversationSearch;
@@ -149,6 +153,9 @@ export interface HostServices {
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
 const MOST_PROFILE_CHANGES_A_MINUTE = 10;
+/** Far above what joining machines and devices one after another takes, and far below what trying invite codes would. */
+const MOST_JOINS_PER_SENDER_A_MINUTE = 60;
+const MOST_JOINS_A_MINUTE = 120;
 const problemReply = (problem: HostProblem): ServerMessage => ({ type: "error", message: englishProblem(problem), problem });
 const ONLY_OWN_PAGES_SET_UP_VOICE = problemReply({ code: "only-own-pages-set-up-voice" });
 const MODEL_IN_USE = problemReply({ code: "voice-model-in-use" });
@@ -223,6 +230,7 @@ export function startServer(services: HostServices) {
     pluginUpdates,
     readyPluginUpdates,
     devices,
+    ownerKey,
     joinRequests,
     signInCodes,
     search,
@@ -251,6 +259,8 @@ export function startServer(services: HostServices) {
     config.dataDir,
   );
   hub.showsPeople(personView(store));
+  const roomInvites = new RoomInvites(store, devices, ownerKey.publicKey);
+  rooms.hearPeopleOutOfEveryRoomWith(signOutPeopleInNoRoom);
   conversations.hearTurnEndsWith((conversationId, turnSeq) => rooms.turnEnded(conversationId, turnSeq));
   conversations.followsRoomPermissionsOf(rooms);
   mcp.offersRoomToolsFrom(rooms);
@@ -354,14 +364,20 @@ export function startServer(services: HostServices) {
   const admittedWith = (request: Request, token: string) => ({ "Set-Cookie": tokenCookie(token, request.headers.get("origin")?.startsWith("https://") ?? false) });
 
   /**
+   * Which of this host's invites the code is decides what joining makes, never what the joiner sends: a room invite a
+   * device of a person other than the owner, in its room; a device invite one of the owner's. A request made for the other
+   * kind uses neither up.
+   *
    * A device that joins with its tunnel key gets its place in the tunnel too. One that joins through the tunnel, with
    * an invite's one-time key, must send its own key, or it would have no way back in.
    */
-  async function join(request: Request) {
-    const refused = refusedSender(request);
+  async function join(request: Request, server: Bun.Server<SocketData>) {
+    const refused = refusedSender(request) ?? refusedTooOften(joining, request, server);
     if (refused) return refused;
-    const { code, name, tunnelKey } = (await request.json().catch(() => ({}))) as { code?: unknown; name?: unknown; tunnelKey?: unknown };
+    const { code, name, tunnelKey, person } = (await request.json().catch(() => ({}))) as { code?: unknown; name?: unknown; tunnelKey?: unknown; person?: unknown };
     if (typeof code !== "string") return problemResponse({ code: "invite-code-missing" }, 400);
+    if (roomInvites.waitsFor(code)) return joinRoom(request, server, code, name, person, tunnelKey);
+    if (person !== undefined) return problemResponse({ code: "invite-code-wrong" }, 403);
     const joiningThroughTunnel = tunnelEnds.has(request);
     const sendsKey = p2p !== null && (tunnelKey !== undefined || joiningThroughTunnel);
     const refusedKey = sendsKey ? p2p.refusedKey(tunnelKey) : null;
@@ -372,6 +388,66 @@ export function startServer(services: HostServices) {
     const tunnel = sendsKey ? p2p.register(joined.device.id, tunnelKey) : undefined;
     sendDevicesToEveryPage();
     return Response.json({ deviceId: joined.device.id, token: joined.token, tunnel }, { headers: admittedWith(request, joined.token) });
+  }
+
+  /** Invite codes can't be guessed, and are not tried quickly either: so many a minute from each address, and from all of them together. */
+  const joining = new SenderAndOverallLimit(Date.now, MOST_JOINS_PER_SENDER_A_MINUTE, MOST_JOINS_A_MINUTE);
+  const challengingJoins = new SenderAndOverallLimit(Date.now, MOST_JOINS_PER_SENDER_A_MINUTE, MOST_JOINS_A_MINUTE);
+  const refusedTooOften = (limit: SenderAndOverallLimit, request: Request, server: Bun.Server<SocketData>) => {
+    const { fromAddress, tailscaleUser } = clientAddressOf(request, server);
+    return limit.allows(tailscaleUser ?? fromAddress) ? null : problemResponse({ code: "join-too-often" }, 429);
+  };
+
+  /**
+   * Only another Mirador joins a room, at an address of this host's that its signature names: never through the tunnel,
+   * whose requests name none, and at a loopback address only from this computer, as every machine has those.
+   */
+  function refusedRoomJoin(request: Request, server: Bun.Server<SocketData>, tunnelKey: unknown) {
+    if (tunnelEnds.has(request) || tunnelKey !== undefined) return problemResponse({ code: "room-invite-not-through-tunnel" }, 403);
+    const fromAfar = loopbackNameFromAfar(request.headers.get("host") ?? "", server.requestIP(request)?.address ?? "");
+    return fromAfar ? problemResponse({ code: "room-invite-loopback-from-afar" }, 403) : null;
+  }
+
+  function joinRoom(request: Request, server: Bun.Server<SocketData>, code: string, name: unknown, person: unknown, tunnelKey: unknown) {
+    const refused = refusedRoomJoin(request, server, tunnelKey);
+    if (refused) return refused;
+    if (person === undefined) return problemResponse({ code: "room-invite-needs-mirador" }, 403);
+    try {
+      const joined = roomInvites.redeem(code, deviceName(name), person, reachedAt(request, authorityFingerprint));
+      rooms.personCameIn(joined.roomId);
+      sendRoomInvitesToEveryPage();
+      sendDevicesToEveryPage();
+      return Response.json({ deviceId: joined.device.id, token: joined.token });
+    } catch (error) {
+      if (error instanceof HostProblemError) return problemResponse(error.problem, 403);
+      throw error;
+    }
+  }
+
+  /** What the Mirador joining with a room invite's code signs, to show the key it presents is its own. */
+  async function challengeRoomJoin(request: Request, server: Bun.Server<SocketData>) {
+    const refused = refusedSender(request) ?? refusedTooOften(challengingJoins, request, server) ?? refusedRoomJoin(request, server, undefined);
+    if (refused) return refused;
+    const { code } = (await request.json().catch(() => ({}))) as { code?: unknown };
+    if (typeof code !== "string") return problemResponse({ code: "invite-code-missing" }, 400);
+    const challenge = roomInvites.challenge(code, request.headers.get("host") ?? "");
+    return challenge === null ? problemResponse({ code: "invite-code-wrong" }, 404) : Response.json({ challenge });
+  }
+
+  const sendRoomInvitesToEveryPage = () => hub.broadcast({ type: "room-invites.listed", invites: roomInvites.waiting() });
+
+  /** A person in no room here any more has nothing left to sign in for: their devices go at once, with their sockets and places in the tunnel. */
+  function signOutPeopleInNoRoom(personIds: string[]) {
+    const leaving = new Set(personIds.filter((personId) => personId !== store.ownerId()));
+    devices
+      .list()
+      .filter(({ personId }) => leaving.has(personId))
+      .forEach(({ id }) => {
+        p2p?.forget(id);
+        devices.revoke(id);
+      });
+    hub.disconnectWhere((socket) => leaving.has(socket.data.personId), "out of every room", OUT_OF_ROOMS_CLOSE_CODE);
+    sendDevicesToEveryPage();
   }
 
   /** A device that joined some other way, or has a new key, takes its place in the tunnel here. */
@@ -546,15 +622,19 @@ export function startServer(services: HostServices) {
   const broadcastMachines = () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
   const broadcastHiddenMachines = () => hub.broadcast({ type: "machines.hidden", machines: store.hiddenMachines() });
 
-  /** With an invite link, this host joins the machine right away; otherwise its place in the window asks for a code. */
+  /**
+   * With an invite link, this host joins the machine right away; otherwise its place in the window asks for a code. A
+   * room invite's link records that this computer's owner joins it as a person, which only a room invite then does.
+   */
   async function addMachine(name: string, address: string) {
     const parsed = machineAddress(address);
     if (!parsed) throw new HostProblemError({ code: "not-a-machine-address", address });
-    const { origin, joinCode, authorityFingerprint } = parsed;
+    const { origin, joinCode, authorityFingerprint, forRoom } = parsed;
     if (pageOrigins.includes(origin)) throw new HostProblemError({ code: "that-is-this-machine" });
     if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const id = crypto.randomUUID();
     store.insertMachine({ id, name: name.trim() || new URL(origin).hostname, origin, createdAt: Date.now() });
+    if (forRoom) store.setMachineJoinedAs(id, { asPerson: true, relayKey: null });
     store.showMachineAgain({ origin, hostId: null });
     relays.start(store.findMachine(id)!);
     broadcastMachines();
@@ -1142,6 +1222,7 @@ export function startServer(services: HostServices) {
     const named = personName(shownAsWritten(name));
     if (nameTaken(named, namesSeenBy(personId))) throw new HostProblemError({ code: "person-name-taken" });
     keepOwnProfile(personId, named, color);
+    if (store.forgetNameClashesOf(personId)) store.roomsOf(personId).forEach((room) => hub.broadcast({ type: "room.upserted", room }));
   }
 
   function keepOwnProfile(personId: string, name: string, color: Pastel | null) {
@@ -1149,12 +1230,7 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "people.listed", people: store.listPeople() });
   }
 
-  /** Only names the person sees, so that whether one is taken tells them of nobody they don't. */
-  const namesSeenBy = (personId: string) => [
-    ...peopleSeenBy(store, personId).flatMap(({ id, name }) => (id === personId ? [] : [name])),
-    ...agentsOfRooms(store, store.roomsOf(personId)).map(({ name }) => name),
-    ...NAMES_KEPT_BY_MIRADOR,
-  ];
+  const namesSeenBy = (personId: string) => [...namesOthersGoBy(store, personId), ...NAMES_KEPT_BY_MIRADOR];
 
   /** The picture every page shows next to the user's messages; null leaves the person icon. */
   function setAvatar(image: string | null) {
@@ -1883,6 +1959,12 @@ export function startServer(services: HostServices) {
         return rooms.setPersonRole(message.roomId, message.personId, message.role);
       case "room.remove-person":
         return rooms.removePerson(message.roomId, message.personId);
+      case "room.invite":
+        reply({ type: "room.invited", requestId: message.requestId, ...roomInvites.invite(message.roomId, message.role) });
+        return sendRoomInvitesToEveryPage();
+      case "room.withdraw-invite":
+        roomInvites.withdraw(message.inviteId);
+        return sendRoomInvitesToEveryPage();
       case "room.approve":
         return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
       case "room.answer-task":
@@ -1916,6 +1998,7 @@ export function startServer(services: HostServices) {
   const routesForDevices = refusingPeople({
     "/": index,
     "/join": { POST: join },
+    "/join-challenges": { POST: challengeRoomJoin },
     "/join-requests": { POST: openJoinRequest },
     "/join-requests/:id/reveal": { POST: revealJoinRequestNonce },
     "/join-requests/:id/poll": { POST: pollJoinRequest },
@@ -1958,6 +2041,7 @@ export function startServer(services: HostServices) {
       rooms: rooms.list(),
       roomApprovals: rooms.allApprovals(),
       roomTasksWaiting: rooms.allTasksWaiting(),
+      roomInvites: roomInvites.waiting(),
       profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),

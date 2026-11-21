@@ -250,6 +250,10 @@ test("a member's task waits until the owner, told who asks and as what, allows i
   await settings.getByRole("button", { name: "Save" }).click();
   await expect(settings).toBeHidden();
   await openNewRoom(page, "Lookout", ["Reviewer"]);
+  await roomRow(page, "Lookout").getByRole("button", { name: "Settings of Lookout" }).click();
+  await settings.getByLabel("Role of Mia").selectOption({ label: "Guest" });
+  await settings.getByRole("button", { name: "Save" }).click();
+  await expect(settings).toBeHidden();
 
   const miaContext = await browser.newContext();
   await miaContext.addCookies([mia.cookie]);
@@ -309,7 +313,7 @@ test("a member's task waits until the owner, told who asks and as what, allows i
     expect(builderPrompts()).not.toContain("Never sent");
   });
 
-  await test.step("taken out of the room, Mia's waiting task is declined at once", async () => {
+  await test.step("taken out of the room, though not out of every room, Mia's waiting task is declined at once", async () => {
     await tag(miaPage, "People", "Builder", "SAY Left behind");
     await expect(strip.locator(".room-approval-task-text")).toHaveText("@Builder SAY Left behind");
     await openSettings();

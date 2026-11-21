@@ -249,8 +249,8 @@ export class Hub {
     );
   }
 
-  disconnectWhere(isTarget: (socket: BrowserSocket) => boolean, reason: string) {
-    [...this.sockets, ...this.notifiers].filter(isTarget).forEach((socket) => socket.close(4401, reason));
+  disconnectWhere(isTarget: (socket: BrowserSocket) => boolean, reason: string, code = 4401) {
+    [...this.sockets, ...this.notifiers].filter(isTarget).forEach((socket) => socket.close(code, reason));
   }
 
   publishWhere(isRecipient: (socket: BrowserSocket) => boolean, message: ServerMessage) {

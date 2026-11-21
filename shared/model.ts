@@ -53,6 +53,16 @@ export interface Machine {
   color: Pastel | null;
   /** The id the machine's own Mirador goes by, once this host has reached it. */
   hostId: string | null;
+  /** Its owner took this computer's person out of the last room they were in there, which ended this computer's sign-in. */
+  outOfRooms: boolean;
+  /**
+   * This computer's owner is a person in the machine's rooms, not its owner: this host joined it with a room invite, or
+   * was given a room invite's link for it. Decided here when joining, never by what the machine says, as it is someone
+   * else's: the rail shows it with no trust.
+   */
+  asPerson: boolean;
+  /** For a machine joined as a person, the unguessable start of the path its relay shows it at: only what asks there gets this host's sign-in. */
+  relayKey: string | null;
 }
 
 /**

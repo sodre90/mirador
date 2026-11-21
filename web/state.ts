@@ -16,7 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
-import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
+import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -76,6 +76,8 @@ export interface AppState {
   roomApprovals: RoomApproval[];
   /** The tasks of people other than the owner that wait for an approver, oldest first in each room. */
   roomTasksWaiting: RoomTaskApproval[];
+  /** The room invites nobody has used yet, soonest to expire first; those of a deleted room went with it. */
+  roomInvites: RoomInvite[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
@@ -198,6 +200,7 @@ export const initialState: AppState = {
   roomConversations: [],
   roomApprovals: [],
   roomTasksWaiting: [],
+  roomInvites: [],
   selectedRoomId: null,
   roomTimeline: null,
   threadConversations: [],
@@ -380,6 +383,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         rooms: message.rooms,
         roomApprovals: message.roomApprovals,
         roomTasksWaiting: message.roomTasksWaiting,
+        roomInvites: message.roomInvites,
         profiles: message.profiles,
         promptTemplates: message.promptTemplates,
         canvasUse: message.canvasUse,
@@ -641,7 +645,10 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "plugin-updates.found":
       return { ...state, pluginUpdates: message.pluginUpdates };
     case "room.created":
+    case "room.invited":
       return state;
+    case "room-invites.listed":
+      return { ...state, roomInvites: message.invites };
     case "room.upserted":
       return { ...state, rooms: upsert(state.rooms, message.room) };
     case "room.deleted": {
@@ -650,6 +657,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         rooms: state.rooms.filter(({ id }) => id !== message.roomId),
         roomApprovals: state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId),
         roomTasksWaiting: state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId),
+        roomInvites: state.roomInvites.filter(({ roomId }) => roomId !== message.roomId),
       };
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }

@@ -92,7 +92,7 @@ export const joinRequestNotification = ({ name, fromAddress, tailscaleUser }: Jo
   kind: "join-request",
   title: `${name} asks to join Mirador`,
   workspace: "",
-  body: `From ${fromAddress}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows.`,
+  body: `From ${fromAddress}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows. Approving makes it one of your own devices, with full control of Mirador; let anyone else in with a room invite.`,
   about: { kind: "join-request", request: { name, fromAddress, tailscaleUser } },
 });
 

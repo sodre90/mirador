@@ -26,6 +26,16 @@ export type RoomAuthorRole = "owner" | RoomRole | "agent";
 export interface RoomPerson {
   personId: string;
   role: RoomRole;
+  /** The name they presented when an invite let them in, which read as one already in the room, so they came in without one; for the owner's eyes. */
+  nameClash?: string;
+}
+
+/** A waiting invite into a room, for one person with one role; its code is shown once, when it is made. */
+export interface RoomInvite {
+  id: string;
+  roomId: string;
+  role: RoomRole;
+  expiresAt: number;
 }
 
 /** Where people of this machine and its agents write together; nothing reaches an agent until a message tags it. */

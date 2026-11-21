@@ -3,13 +3,17 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { authorityFingerprint, ownServingCertificate } from "../host/certificates.ts";
-import { DeviceService } from "../host/devices.ts";
+import { DeviceService, inviteKey } from "../host/devices.ts";
 import { JoinRequestService } from "../host/join-requests.ts";
-import { forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, relayedHeaders } from "../host/machine-relays.ts";
+import { forwardedCanvasHeaders, forwardedHeaders, machineClosedSocket, MachineRelays, pageSocketOpened, pathPastKey, relayedHeaders } from "../host/machine-relays.ts";
 import type { RelayedSocket } from "../host/machine-relays.ts";
+import { newChallenge, NO_AUTHORITY, ownerKey, signedRoomJoin, type OwnerKey } from "../host/person-keys.ts";
+import { HostProblemError } from "../shared/host-problems.ts";
 import { Store } from "../host/store.ts";
 
 const machine = "https://home-server.example.ts.net";
+/** For machines that ask no one to join a room. */
+const unusedOwnerKey: OwnerKey = { publicKey: "", sign: () => "" };
 
 describe("forwardedHeaders", () => {
   test("signs in with the device token instead of this host's cookie, and says the page is the machine's own", () => {
@@ -83,7 +87,7 @@ describe("a machine's canvas assets", () => {
   function relaysFor(origin: string) {
     const store = new Store(":memory:");
     store.insertMachine({ id: "home", name: "Home server", origin, createdAt: 1 });
-    relays = new MachineRelays(store, freePorts(3), "http://127.0.0.1:4601", () => true, () => {}, () => {});
+    relays = new MachineRelays(store, freePorts(3), "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey);
     relays.startAll();
     return `http://127.0.0.1:${store.findMachine("home")!.relayPort}`;
   }
@@ -97,6 +101,12 @@ describe("a machine's canvas assets", () => {
     expect([pageRelay, "http://127.0.0.1:4601"]).not.toContain(canvasRelay);
     const answer = await fetch(`${canvasRelay}/apps/media/6af5ae1363fad878/view.js`, { headers: { cookie: "mirador_token=this-hosts-own" } });
     expect(await answer.json()).toEqual({ path: "/apps/media/6af5ae1363fad878/view.js", cookie: null, relay: canvasRelay });
+  });
+
+  test("register no service worker of the machine", async () => {
+    const canvasRelay = await canvasAssetsOriginTold(relaysFor(machineThatSays("its canvas origin")));
+    const response = await fetch(`${canvasRelay}/worker.js`, { headers: { "service-worker": "script" } });
+    expect(response.status).toBe(403);
   });
 
   test("answer only at the relay's own address", async () => {
@@ -119,6 +129,153 @@ describe("relayedHeaders", () => {
       location: "http://127.0.0.1:4620/#/c/1",
     });
   });
+
+  test("never lets the machine clear what the browser keeps for 127.0.0.1, this host's sign-in with it", () => {
+    const upstream = new Headers({ "clear-site-data": '"cookies", "storage", "cache"', "content-type": "text/html" });
+    expect(Object.fromEntries(relayedHeaders(upstream, machine, "http://127.0.0.1:4620"))).toEqual({ "content-type": "text/html" });
+  });
+
+  test("keeps the redirects of a machine joined as a person under the relay's key, whether they name its address or only a path", () => {
+    const keyPath = "/the-relay-key";
+    expect(relayedHeaders(new Headers({ location: `${machine}/` }), machine, "http://127.0.0.1:4620", keyPath).get("location")).toBe("http://127.0.0.1:4620/the-relay-key/");
+    expect(relayedHeaders(new Headers({ location: "/#/r/1" }), machine, "http://127.0.0.1:4620", keyPath).get("location")).toBe("/the-relay-key/#/r/1");
+    expect(relayedHeaders(new Headers({ location: "//elsewhere.example/" }), machine, "http://127.0.0.1:4620", keyPath).get("location")).toBe("//elsewhere.example/");
+  });
+});
+
+describe("pathPastKey", () => {
+  test("is the rest of a path that starts with the relay's key, and null for any other path or no key", () => {
+    expect(pathPastKey("/the-key/ws", "the-key")).toBe("/ws");
+    expect(pathPastKey("/the-key/", "the-key")).toBe("/");
+    expect(pathPastKey("/the-key", "the-key")).toBe("/");
+    expect(pathPastKey("/the-kez/ws", "the-key")).toBeNull();
+    expect(pathPastKey("/ws", "the-key")).toBeNull();
+    expect(pathPastKey("/the-key/ws", null)).toBeNull();
+  });
+});
+
+describe("a machine this computer joined as a person", () => {
+  const pageWithItsPolicy = `<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' blob:; script-src 'self'">`;
+  const cleanUps: (() => void)[] = [];
+  afterEach(() => cleanUps.splice(0).forEach((cleanUp) => cleanUp()));
+  const relayKey = "k".repeat(43);
+
+  /** Someone else's machine, which says what it was asked; its socket says the cookie it opened with. */
+  function someoneElsesMachine({ joinedAs = "person" as "person" | "device" } = {}) {
+    const asked: { path: string; cookie: string | null; method: string }[] = [];
+    const server = Bun.serve<string | null>({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request, server) => {
+        const url = new URL(request.url);
+        if (url.pathname === "/mirador-here") return Response.json({ mirador: true });
+        if (request.headers.get("upgrade") && server.upgrade(request, { data: request.headers.get("cookie") })) return undefined;
+        asked.push({ path: `${url.pathname}${url.search}`, cookie: request.headers.get("cookie"), method: request.method });
+        if (url.pathname === "/gone") return new Response("unauthorized", { status: 401 });
+        if (url.pathname === "/moved") return new Response(null, { status: 302, headers: { location: "/#/r/1" } });
+        if (url.pathname === "/page") return new Response(pageWithItsPolicy, { headers: { "content-type": "text/html;charset=utf-8" } });
+        return new Response("from the machine", { headers: { "clear-site-data": '"*"', "set-cookie": "mirador_token=theirs" } });
+      },
+      websocket: { open: (socket) => void socket.send(`cookie ${socket.data}`), message: () => {} },
+    });
+    const [relayPort, canvasPort] = freePorts(2) as [number, number];
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "theirs", name: "Theirs", origin: `http://127.0.0.1:${server.port}`, createdAt: 1 });
+    store.setMachineDeviceToken("theirs", "person-device-token");
+    store.setMachineJoinedAs("theirs", joinedAs === "person" ? { asPerson: true, relayKey } : { asPerson: false });
+    const signedOut: string[] = [];
+    const relays = new MachineRelays(store, [relayPort, canvasPort], "http://127.0.0.1:4601", () => false, () => {}, (machineId) => signedOut.push(machineId), unusedOwnerKey);
+    relays.startAll();
+    cleanUps.push(() => relays.stopAll(), () => server.stop(true));
+    return { asked, signedOut, relay: `http://127.0.0.1:${relayPort}`, store };
+  }
+
+  test("signs in only what asks under the relay's key, without this host's cookie, from the opaque origin its frame runs in", async () => {
+    const { asked, relay } = someoneElsesMachine();
+    const response = await fetch(`${relay}/${relayKey}/?x=1`, { headers: { origin: "null" } });
+    expect([response.status, response.headers.get("access-control-allow-origin"), await response.text()]).toEqual([200, "*", "from the machine"]);
+    expect(response.headers.has("clear-site-data") || response.headers.has("set-cookie")).toBe(false);
+    expect(asked).toEqual([{ path: "/?x=1", cookie: "mirador_token=person-device-token", method: "GET" }]);
+  });
+
+  test("lets the machine's page fetch from the relay it came from, which WebKit does not count as 'self' in an opaque origin, and nothing more", async () => {
+    const { relay } = someoneElsesMachine();
+    const page = await (await fetch(`${relay}/${relayKey}/page`, { headers: { origin: "null" } })).text();
+    expect(page).toBe(pageWithItsPolicy.replace("connect-src 'self' blob:", `connect-src 'self' ${relay} blob:`));
+    expect(await (await fetch(`${relay}/page`)).text()).toBe(pageWithItsPolicy);
+  });
+
+  test("serves the page's bundle at bare paths signed in as nobody, and nothing else there", async () => {
+    const { asked, relay } = someoneElsesMachine();
+    const bundle = await fetch(`${relay}/chunk-abc.js`, { headers: { origin: "null", cookie: "mirador_token=this-hosts-own" } });
+    expect([bundle.status, bundle.headers.get("access-control-allow-origin")]).toEqual([200, "*"]);
+    expect(asked).toEqual([{ path: "/chunk-abc.js", cookie: null, method: "GET" }]);
+    expect((await fetch(`${relay}/${"j".repeat(43)}/`)).status).toBe(200);
+    expect(asked.at(-1)).toEqual({ path: `/${"j".repeat(43)}/`, cookie: null, method: "GET" });
+    expect((await fetch(`${relay}/anything`, { method: "POST", body: "{}" })).status).toBe(401);
+    expect(asked).toHaveLength(2);
+  });
+
+  test("opens the machine's socket signed in only under the key", async () => {
+    const { relay } = someoneElsesMachine();
+    const socketAt = (path: string) =>
+      new Promise<string>((resolve) => {
+        const socket = new WebSocket(`${relay.replace("http", "ws")}${path}`, { headers: { origin: "null" } } as unknown as string[]);
+        socket.onmessage = (event) => resolve(String(event.data));
+        socket.onerror = () => resolve("refused");
+      });
+    expect(await socketAt(`/${relayKey}/ws`)).toBe("cookie mirador_token=person-device-token");
+    expect(await socketAt("/ws")).toBe("refused");
+  });
+
+  test("turns away pages of any other origin, this computer's own included", async () => {
+    const { asked, relay } = someoneElsesMachine();
+    for (const origin of ["http://127.0.0.1:4600", `${relay}`, "https://elsewhere.example"]) {
+      expect((await fetch(`${relay}/${relayKey}/`, { headers: { origin } })).status).toBe(403);
+    }
+    expect(asked).toEqual([]);
+  });
+
+  test("never joins for the machine's page, which could join this computer to anything", async () => {
+    const { asked, relay } = someoneElsesMachine();
+    const join = await fetch(`${relay}/${relayKey}/join`, { method: "POST", headers: { origin: "null", "content-type": "application/json" }, body: JSON.stringify({ code: "ABCD-EFGH-JKLM" }) });
+    expect(join.status).toBe(403);
+    expect((await fetch(`${relay}/${relayKey}/join-requests`, { method: "POST", headers: { origin: "null" } })).status).toBe(403);
+    expect(asked).toEqual([]);
+  });
+
+  test("keeps the machine's redirects under the key", async () => {
+    const { relay } = someoneElsesMachine();
+    const moved = await fetch(`${relay}/${relayKey}/moved`, { redirect: "manual" });
+    expect(moved.headers.get("location")).toBe(`/${relayKey}/#/r/1`);
+  });
+
+  test("checks whether this computer was signed out there only when what the machine turned away was signed in", async () => {
+    const { asked, relay } = someoneElsesMachine();
+    await fetch(`${relay}/gone`);
+    await Bun.sleep(100);
+    expect(asked.map(({ path }) => path)).toEqual(["/gone"]);
+    await fetch(`${relay}/${relayKey}/gone`);
+    await Bun.sleep(100);
+    expect(asked.map(({ path }) => path)).toEqual(["/gone", "/gone", "/ws"]);
+  });
+
+  test("a machine joined as a device still needs this host's own cookie", async () => {
+    const { asked, relay } = someoneElsesMachine({ joinedAs: "device" });
+    expect((await fetch(`${relay}/`)).status).toBe(401);
+    expect((await fetch(`${relay}/${relayKey}/`, { headers: { origin: "null" } })).status).toBe(401);
+    expect(asked).toEqual([]);
+  });
+
+  test("registers no service worker of any machine, whose worker would outlive it at the relay's port", async () => {
+    for (const joinedAs of ["person", "device"] as const) {
+      const { asked, relay } = someoneElsesMachine({ joinedAs });
+      const keyed = await fetch(`${relay}/${relayKey}/worker.js`, { headers: { "service-worker": "script", origin: "null" } });
+      const bare = await fetch(`${relay}/worker.js`, { headers: { "service-worker": "script" } });
+      expect([joinedAs, keyed.status, bare.status]).toEqual([joinedAs, 403, 403]);
+      expect(asked).toEqual([]);
+    }
+  });
 });
 
 describe("relay ports", () => {
@@ -130,7 +287,7 @@ describe("relay ports", () => {
     store.insertMachine({ id: "moved", name: "Moved", origin: "https://moved.example", createdAt: 2 });
     store.setMachineRelayPort("kept", kept);
     store.setMachineRelayPort("moved", outside);
-    const relays = new MachineRelays(store, [inRange, kept], "http://127.0.0.1:4601", () => true, () => {}, () => {});
+    const relays = new MachineRelays(store, [inRange, kept], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey);
     relays.startAll();
     try {
       expect(store.listMachines().map(({ id, relayPort }) => [id, relayPort])).toEqual([
@@ -190,7 +347,7 @@ describe("a machine's close reaching the page", () => {
     portFinder.stop(true);
     const store = new Store(":memory:");
     store.insertMachine({ id: "box", name: "Box", origin: `http://127.0.0.1:${machineServer.port}`, createdAt: 1 });
-    const relays = new MachineRelays(store, [relayPort], "http://127.0.0.1:4601", () => true, () => {}, () => {});
+    const relays = new MachineRelays(store, [relayPort], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey);
     relays.startAll();
     try {
       const events: string[] = [];
@@ -243,7 +400,7 @@ describe("joining a machine that made its own certificate", () => {
     cleanUps.push(() => server.stop(true));
     const store = new Store(":memory:");
     store.insertMachine({ id: "box", name: "Box", origin: `https://127.0.0.1:${server.port}`, createdAt: 1 });
-    const relays = new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {});
+    const relays = new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey);
     return { authority: offeredAuthority!, codesReceived, store, join: relays.join.bind(relays, "box") };
   }
 
@@ -309,8 +466,90 @@ describe("joining a machine that made its own certificate", () => {
     store.insertMachine({ id: "box", name: "Box", origin: `https://127.0.0.1:${server.port}`, createdAt: 1 });
     store.setMachineAuthority("box", ownAuthority().authority);
 
-    await new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}).askToJoin("box", (number) => void requests.approve(requests.waiting()[0]!.id, number));
+    await new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, unusedOwnerKey).askToJoin("box", (number) => void requests.approve(requests.waiting()[0]!.id, number));
     expect(store.machineAuthority("box")).toBe(certificate.authority);
     expect(machineStore.listDevices().map(({ name }) => name)).toEqual([expect.stringMatching(/^Mirador on /)]);
+  });
+
+  /** A machine whose invite is a room invite: it challenges whoever has the code, and records what joining sends, and what else it is asked. */
+  function roomInviteMachine(challenge: unknown) {
+    const joins: Record<string, unknown>[] = [];
+    const otherRequests: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      routes: {
+        "/join-challenges": { POST: () => Response.json({ challenge }) },
+        "/join": {
+          POST: async (request) => {
+            joins.push((await request.json()) as Record<string, unknown>);
+            return Response.json({ token: "person-device-token" });
+          },
+        },
+      },
+      fetch: (request) => {
+        otherRequests.push(new URL(request.url).pathname);
+        return new Response("join page", { status: 404 });
+      },
+    });
+    cleanUps.push(() => server.stop(true));
+    const dataDir = mkdtempSync(join(tmpdir(), "mirador-owner-key-"));
+    cleanUps.push(() => rmSync(dataDir, { recursive: true, force: true }));
+    const store = new Store(":memory:");
+    store.insertMachine({ id: "box", name: "Box", origin: `http://127.0.0.1:${server.port}`, createdAt: 1 });
+    const key = ownerKey(dataDir);
+    return { joins, otherRequests, store, key, host: `127.0.0.1:${server.port}`, relays: new MachineRelays(store, [], "http://127.0.0.1:4601", () => true, () => {}, () => {}, key) };
+  }
+
+  test("never joins as one of the owner's devices with a room invite's code, though the machine does not challenge it", async () => {
+    const { joins, store, relays } = roomInviteMachine("not a challenge");
+
+    for (const code of ["ROOM-ABCD-EFGH-JKLM", "room abcd efgh jklm"]) {
+      expect(await relays.join("box", code).catch((error) => (error as HostProblemError).problem)).toEqual({ code: "machine-ignored-room-invite", machine: "Box" });
+    }
+    expect(joins).toEqual([]);
+    expect(store.machineDeviceToken("box")).toBeNull();
+    expect(store.findMachine("box")).toMatchObject({ asPerson: false });
+  });
+
+  test("joins a room invite's room as this computer's owner, by the owner's key signed over the machine's challenge, the invite, the machine's address and the authority it trusts there", async () => {
+    const challenge = newChallenge();
+    const { joins, store, key, host, relays } = roomInviteMachine(challenge);
+    store.setPersonProfile(store.ownerId(), { name: "Dora", color: "mint" });
+    store.setMachineOutOfRooms("box", true);
+    store.setMachineHostId("box", "an-id-the-machine-said");
+
+    await relays.join("box", "ABCD-EFGH-JKLM");
+    const { person } = joins[0] as { person: { publicKey: string; name: string; color: string; challenge: string; signature: string } };
+    expect(person).toMatchObject({ publicKey: key.publicKey, name: "Dora", color: "mint", challenge });
+    const signed = { challenge: person.challenge, inviteKey: inviteKey("ABCD-EFGH-JKLM"), host, authorityFingerprint: NO_AUTHORITY, publicKey: key.publicKey };
+    expect(signedRoomJoin(signed, person.signature)).toBe(true);
+    expect(signedRoomJoin({ ...signed, host: host.replace("127.0.0.1", "localhost") }, person.signature)).toBe(false);
+    expect(signedRoomJoin({ ...signed, authorityFingerprint: "someone-in-between" }, person.signature)).toBe(false);
+    expect(store.machineDeviceToken("box")).toBe("person-device-token");
+    expect(store.findMachine("box")).toMatchObject({ outOfRooms: false, asPerson: true, relayKey: expect.stringMatching(/^[\w-]{43}$/), hostId: null });
+  });
+
+  test("signs nothing for a machine whose challenge is not one a Mirador makes, such as text that runs over more lines, and joins it as a device", async () => {
+    const { joins, relays, store } = roomInviteMachine(`${newChallenge()}\nother.example:4600`);
+    await relays.join("box", "ABCD-EFGH-JKLM");
+    expect(joins).toEqual([{ code: "ABCD-EFGH-JKLM", name: expect.stringMatching(/^Mirador on /) }]);
+    expect(store.findMachine("box")).toMatchObject({ asPerson: false, relayKey: null });
+  });
+
+  test("once joined as a person, sends no code to the machine when it skips the challenge, which would make this computer its owner's device", async () => {
+    const { joins, relays, store } = roomInviteMachine(undefined);
+    store.setMachineJoinedAs("box", { asPerson: true, relayKey: null });
+    await expect(relays.join("box", "ABCD-EFGH-JKLM")).rejects.toThrow("This computer joins Box as a person in its rooms, so only a room invite's code lets it in there");
+    expect(joins).toEqual([]);
+    expect(store.machineDeviceToken("box")).toBeNull();
+  });
+
+  test("never asks to join a machine it joins as a person, which would make this computer its owner's device", async () => {
+    const { otherRequests, relays, store } = roomInviteMachine(newChallenge());
+    store.setMachineJoinedAs("box", { asPerson: true, relayKey: null });
+    await expect(relays.askToJoin("box", () => {})).rejects.toThrow("This computer joins Box as a person in its rooms");
+    expect(otherRequests).toEqual([]);
+    expect(store.machineDeviceToken("box")).toBeNull();
   });
 });

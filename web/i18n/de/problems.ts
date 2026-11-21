@@ -108,6 +108,11 @@ export const problems: Messages["problems"] = {
     "sentence-too-long-to-speak": "Der Satz ist zu lang, um ihn vorzulesen.",
     "invite-code-missing": "Der Einladungscode fehlt.",
     "invite-code-wrong": "Dieser Einladungscode ist falsch, schon benutzt oder abgelaufen. Bitte um einen neuen.",
+    "room-invite-needs-mirador": "Diese Einladung lässt eine Person aus ihrem eigenen Mirador in einen Raum: Füge dort diesen Rechner unter Rechner hinzu und tritt dann mit dem Code bei.",
+    "room-invite-not-through-tunnel": "Mit einer Raumeinladung tritt man an der Adresse dieses Rechners bei, nicht durch den Peer-to-Peer-Tunnel.",
+    "room-invite-loopback-from-afar": "Mit einer Raumeinladung tritt man unter 127.0.0.1 oder localhost nur von diesem Computer selbst bei.",
+    "join-too-often": "Es gab zu viele Versuche, diesem Rechner beizutreten. Versuche es in einer Minute erneut.",
+    "room-join-unproven": "Um einem Raum beizutreten, braucht es eine Signatur mit dem vorgelegten Schlüssel über die letzte Challenge dieses Rechners für die Einladung, die Adresse, an der sie angefragt wurde, und die Zertifizierungsstelle, der dabei vertraut wurde. Versuche erneut beizutreten.",
     "voice-not-set-up": "Die Sprachfunktionen sind auf diesem Mac noch nicht eingerichtet.",
     "voice-not-set-up-here": "Die Sprachfunktionen sind auf diesem Mac noch nicht eingerichtet. Unter Einstellungen → Stimme lassen sie sich einrichten.",
     "voice-being-removed": "Die Sprachfunktionen werden gerade von diesem Mac entfernt.",
@@ -247,6 +252,10 @@ export const problems: Messages["problems"] = {
   machineCertificateUntrusted: (machine) =>
     `Dieser Computer vertraut dem Zertifikat von ${machine} nicht, und ${machine} bietet keine eigene Zertifizierungsstelle an.`,
   machineGaveNoToken: (machine) => `${machine} hat diesen Computer ohne Token hereingelassen.`,
+  machineIgnoredRoomInvite: (machine) =>
+    `Das ist der Code einer Raumeinladung, aber ${machine} hat ihn nicht als solchen angenommen, darum ist dieser Computer nicht beigetreten. Die Einladung ist vielleicht abgelaufen oder schon benutzt; bitte um eine neue.`,
+  machineJoinedAsPerson: (machine) =>
+    `Dieser Computer tritt ${machine} als Person in seinen Räumen bei, darum lässt ihn dort nur der Code einer Raumeinladung hinein, und er stellt keine Beitrittsanfrage. Um diesen Computer dort zu einem Gerät des Besitzers zu machen, entferne ${machine} und füge ihn erneut hinzu.`,
   machineAuthorityNotInLink: (machine) =>
     `Die Zertifizierungsstelle von ${machine} ist nicht die aus dem Einladungslink, daher wurde der Code nicht gesendet. Möglicherweise gibt sich etwas im Netzwerk als ${machine} aus.`,
   machineAuthorityChanged: (machine) =>

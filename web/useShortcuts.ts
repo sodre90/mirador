@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { isCanvasFrameMessage } from "../shared/canvas-document.ts";
+import { focusedFrameSending } from "./focused-frame.ts";
 import { commandFor, repeatsWhenHeld, typingStateOf, type ShortcutCommand } from "./shortcuts.ts";
 import { terminalKeyAction } from "./terminal-keys.ts";
 
@@ -24,9 +25,7 @@ export function useShortcuts(onCommand: (command: ShortcutCommand, fromCanvas: b
       latest.current(command, false);
     };
     const onFrameMessage = (event: MessageEvent) => {
-      const focused = document.activeElement;
-      if (!(focused instanceof HTMLIFrameElement) || event.source !== focused.contentWindow) return;
-      if (!isCanvasFrameMessage(event.data) || event.data.kind !== "key") return;
+      if (!focusedFrameSending(event) || !isCanvasFrameMessage(event.data) || event.data.kind !== "key") return;
       const command = commandFor(event.data, event.data.typing ? "typing" : "not-typing");
       if (command && (!event.data.repeat || repeatsWhenHeld(command))) latest.current(command, true);
     };

@@ -27,7 +27,7 @@ export const desktop: Messages["desktop"] = {
     stoppedWithError: (message) => `Hibával leállt: ${message}`,
     joinRequest: (name) => `Csatlakozni szeretne a Miradorhoz: ${name}`,
     joinRequestBody: (address, tailscaleUser) =>
-      `Innen: ${address}${tailscaleUser ? `, Tailscale-fiók: ${tailscaleUser}` : ""}. Nyisd meg a Miradort, és hagyd jóvá a kijelzett szám begépelésével.`,
+      `Innen: ${address}${tailscaleUser ? `, Tailscale-fiók: ${tailscaleUser}` : ""}. Nyisd meg a Miradort, és hagyd jóvá a kijelzett szám begépelésével. A jóváhagyással a saját készülékeid egyike lesz, teljes hozzáféréssel a Miradorhoz; bárki mást szobameghívóval engedj be.`,
   },
   more: (count) => `még ${count}…`,
   open: "Megnyitás",

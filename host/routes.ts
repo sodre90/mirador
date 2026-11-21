@@ -14,6 +14,7 @@ export type RouteHandlers<Routes extends Record<string, RouteMethods>> = {
 export const DEVICE_ROUTES = {
   "/": "any",
   "/join": ["POST"],
+  "/join-challenges": ["POST"],
   "/join-requests": ["POST"],
   "/join-requests/:id/reveal": ["POST"],
   "/join-requests/:id/poll": ["POST"],
@@ -51,7 +52,7 @@ export const THIS_MACHINE_ROUTES = {
 type Route = keyof typeof DEVICE_ROUTES | keyof typeof THIS_MACHINE_ROUTES;
 
 /** A person other than the owner reaches the page itself over HTTP, and what anyone reaches before signing in; every other route is the owner's. */
-export const OPEN_TO_PEOPLE: ReadonlySet<string> = new Set<Route>(["/", "/join", "/join-requests", "/join-requests/:id/reveal", "/join-requests/:id/poll", "/mirador-ca.pem", "/mirador-here", "/auth"]);
+export const OPEN_TO_PEOPLE: ReadonlySet<string> = new Set<Route>(["/", "/join", "/join-challenges", "/join-requests", "/join-requests/:id/reveal", "/join-requests/:id/poll", "/mirador-ca.pem", "/mirador-here", "/auth"]);
 
 /** A person other than the owner opens the page's own socket; every other socket is the owner's. */
 export const SOCKETS_OPEN_TO_PEOPLE = new Set<SocketData["role"]>(["page"]);

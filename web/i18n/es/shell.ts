@@ -293,13 +293,17 @@ export const shell: Messages["shell"] = {
     requestShowsBefore: "Su Mirador muestra la solicitud en su propia pantalla y en los dispositivos que se han unido; o ejecuta",
     requestShowsAfter: " allí.",
     notJoinedBefore: "Este equipo aún no se ha unido a",
-    notJoinedAfter: (host) => ` en ${host}. Pide unirte y apruébalo allí escribiendo el número que muestre entonces este equipo.`,
+    notJoinedAfter: (host) =>
+      ` en ${host}. Pedir unirte convierte este equipo en uno de los dispositivos propios de su dueño, con control total de esa máquina: pídelo solo para una máquina tuya y apruébalo allí escribiendo el número que muestre este equipo. Otra persona te deja entrar en una de sus salas con una invitación a la sala.`,
     askToJoin: "Pedir unirse",
     inviteBefore: "O únete con un código de invitación. Consíguelo en su Configuración → Dispositivos, desde un dispositivo que se haya unido, o ejecuta",
     inviteAfter: " en ella.",
     inviteCode: "Código o enlace de invitación",
     joining: "Uniéndose…",
     joinButton: "Unirse",
+    outOfRooms: "Su propietario te sacó de la última sala en la que estabas allí, y con eso este equipo cerró la sesión. Pídele una nueva invitación y únete con su código.",
+    someoneElses: "Máquina de otra persona, en cuyas salas estás",
+    roomInviteFirst: "Te invitaron a una sala de allí. Únete con el código o el enlace de la invitación a la sala.",
   },
   conversationTitle: {
     label: "Nombre de la conversación",

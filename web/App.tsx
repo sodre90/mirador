@@ -89,6 +89,7 @@ export function useReloadWhenHostRestarted(hostRunId: string | null) {
 
 export function HostBanner({ status, state }: { status: ConnectionStatus; state: AppState }) {
   if (state.hostRestarting) return <div className="banner connection">{t.shell.app.restartingHost}</div>;
+  if (status === "out-of-rooms") return null;
   if (status !== "open") return <div className="banner connection">{status === "connecting" ? t.shell.app.connecting : t.shell.app.reconnecting}</div>;
   if (!state.hostCodeChanged) return null;
   return (
@@ -615,7 +616,7 @@ export function App() {
   }, [state.selectedConversationId, state.selectedRoomId, state.conversationsPicked, machines.shownId]);
 
   if (status === "unauthorized") return <JoinMachine />;
-  if (seesOnlyTheirRooms(state)) return <RoomsOnlyApp state={state} dispatch={dispatch} banner={<HostBanner status={status} state={state} />} />;
+  if (seesOnlyTheirRooms(state)) return <RoomsOnlyApp state={state} dispatch={dispatch} outOfRooms={status === "out-of-rooms"} banner={<HostBanner status={status} state={state} />} />;
 
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
   const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);
@@ -942,6 +943,8 @@ export function App() {
           pushRelay={state.pushRelay}
           avatar={state.avatar}
           you={state.people.find(({ id }) => id === state.you)}
+          people={state.people}
+          ownerId={state.ownerId}
           voiceSettings={state.voiceSettings}
           voiceEngine={state.voiceEngine}
           profiles={state.profiles}
@@ -961,6 +964,8 @@ export function App() {
           profiles={state.profiles}
           people={state.people}
           ownerId={state.ownerId}
+          invites={state.roomInvites}
+          reachability={state.devices?.reachability ?? null}
           dispatch={dispatch}
           onClose={closeOverlay}
         />

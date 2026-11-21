@@ -95,6 +95,19 @@ test("a device let in with an invite is the owner's, and signs in as the owner, 
   expect(signedIn(withCookie("not-a-token"))).toBeNull();
 });
 
+test("a request with two token cookies signs in nobody, as a page of another port of this computer can add the second", () => {
+  const store = new Store(":memory:");
+  const devices = new DeviceService(store);
+  store.insertPerson({ id: "mia", name: "Mia", color: null });
+  const { token } = devices.admit("Mia's laptop", "mia");
+  const signedIn = signedInWith("browser-token", devices, store.ownerId());
+  const withCookies = (cookie: string) => new Request("http://127.0.0.1/", { headers: { cookie } });
+
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=${token}; ${TOKEN_COOKIE}=browser-token`))).toBeNull();
+  expect(signedIn(withCookies(`${TOKEN_COOKIE}=browser-token; theme=dark; ${TOKEN_COOKIE}=${token}`))).toBeNull();
+  expect(signedIn(withCookies(`theme=dark; ${TOKEN_COOKIE}=browser-token`))).toEqual({ deviceId: null, personId: store.ownerId(), isOwner: true });
+});
+
 test("a device of another person signs in as that person, who is not the owner", () => {
   const store = new Store(":memory:");
   const devices = new DeviceService(store);

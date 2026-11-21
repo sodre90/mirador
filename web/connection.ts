@@ -1,12 +1,22 @@
 import { sentByPeople } from "../shared/person-messages.ts";
-import { PROFILE_LAUNCH_PARAMETER, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
+import { OUT_OF_ROOMS_CLOSE_CODE, PROFILE_LAUNCH_PARAMETER, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 
-export type ConnectionStatus = "connecting" | "open" | "unauthorized" | "reconnecting";
+/** `out-of-rooms`: the host took the person this page signed in as out of their last room there, and with it every way back in. */
+export type ConnectionStatus = "connecting" | "open" | "unauthorized" | "reconnecting" | "out-of-rooms";
 
 type MessageListener = (message: ServerMessage) => void;
 type StatusListener = (status: ConnectionStatus) => void;
 
 const MAX_RETRY_DELAY_MS = 10_000;
+
+/** Beside the page rather than at the root: a machine shown as someone else's is under its relay's key, which signs in only what asks there. */
+const besideThePage = (path: string) => new URL(path, location.href);
+
+function socketAddress() {
+  const address = besideThePage(`ws?${PROFILE_LAUNCH_PARAMETER}`);
+  address.protocol = address.protocol.replace(/^http/, "ws");
+  return address;
+}
 
 export class Connection {
   private socket?: WebSocket;
@@ -21,7 +31,7 @@ export class Connection {
   status: ConnectionStatus = "connecting";
 
   connect() {
-    const socket = new WebSocket(`${location.origin.replace(/^http/, "ws")}/ws?${PROFILE_LAUNCH_PARAMETER}`);
+    const socket = new WebSocket(socketAddress());
     this.socket = socket;
     this.snapshotCame = false;
     let opened = false;
@@ -33,7 +43,8 @@ export class Connection {
     socket.onmessage = (event) => {
       this.dispatchMessage(JSON.parse(String(event.data)) as ServerMessage);
     };
-    socket.onclose = async () => {
+    socket.onclose = async ({ code }) => {
+      if (code === OUT_OF_ROOMS_CLOSE_CODE) return this.setStatus("out-of-rooms");
       if (!opened && (await this.isUnauthorized())) return this.setStatus("unauthorized");
       this.setStatus("reconnecting");
       setTimeout(() => this.connect(), this.retryDelay);
@@ -43,7 +54,7 @@ export class Connection {
 
   /** Sends at once, or as soon as the host's snapshot comes, so that what the user does while the page connects or reconnects counts. */
   send(message: ClientMessage): boolean {
-    if (this.status === "unauthorized" || !this.mayBeSent(message)) return false;
+    if (this.status === "unauthorized" || this.status === "out-of-rooms" || !this.mayBeSent(message)) return false;
     if (this.snapshotCame && this.socket?.readyState === WebSocket.OPEN) this.socket.send(JSON.stringify(message));
     else this.unsent.push(message);
     return true;
@@ -136,7 +147,7 @@ export class Connection {
   }
 
   private async isUnauthorized() {
-    const probe = await fetch("/ws").catch(() => null);
+    const probe = await fetch(besideThePage("ws")).catch(() => null);
     return probe?.status === 401;
   }
 }

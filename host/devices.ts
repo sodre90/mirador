@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomInt } from "node:crypto";
 import type { Device } from "../shared/model.ts";
+import { oneLine, shownAsWritten } from "../shared/written-text.ts";
 import type { Store } from "./store.ts";
 
 const INVITE_LIFETIME_MILLISECONDS = 15 * 60_000;
@@ -15,12 +16,32 @@ const withoutSeparators = (code: string) => code.toUpperCase().replace(/[^A-Z0-9
 export const inviteKey = (code: string) => hashed(withoutSeparators(code));
 const inGroupsOfFour = (code: string) => code.match(/.{1,4}/g)!.join("-");
 
+/** No device invite's code holds an O, so a code that starts with these letters is a room invite's wherever it is typed. */
+const ROOM_INVITE_MARK = "ROOM";
+
+export const isRoomInviteCode = (code: string) => withoutSeparators(code).startsWith(ROOM_INVITE_MARK);
+
 export interface Invite {
   code: string;
   expiresAt: number;
 }
 
-export const deviceName = (name: unknown) => (typeof name === "string" && name.trim() ? name.trim().slice(0, DEVICE_NAME_LENGTH) : "Unnamed device");
+/** A new invite's code, as it is shown, and when it stops working. */
+export function newInvite(now: number): Invite {
+  const code = Array.from({ length: INVITE_LENGTH }, () => INVITE_ALPHABET[randomInt(INVITE_ALPHABET.length)]).join("");
+  return { code: inGroupsOfFour(code), expiresAt: now + INVITE_LIFETIME_MILLISECONDS };
+}
+
+export function newRoomInvite(now: number): Invite {
+  const { code, expiresAt } = newInvite(now);
+  return { code: `${ROOM_INVITE_MARK}-${code}`, expiresAt };
+}
+
+/** On one line and as everyone reads it, like a person's name, as the device that sent it is not trusted yet. */
+export function deviceName(name: unknown) {
+  const shown = typeof name === "string" ? oneLine(shownAsWritten(name)).slice(0, DEVICE_NAME_LENGTH).trim() : "";
+  return shown || "Unnamed device";
+}
 
 /** Other browsers and apps join this machine with a one-time invite code; each then signs in with a token of its own, until revoked. */
 export class DeviceService {
@@ -30,10 +51,9 @@ export class DeviceService {
   ) {}
 
   invite(): Invite {
-    const code = Array.from({ length: INVITE_LENGTH }, () => INVITE_ALPHABET[randomInt(INVITE_ALPHABET.length)]).join("");
-    const expiresAt = this.now() + INVITE_LIFETIME_MILLISECONDS;
-    this.store.addInvite(inviteKey(code), expiresAt);
-    return { code: inGroupsOfFour(code), expiresAt };
+    const invite = newInvite(this.now());
+    this.store.addInvite(inviteKey(invite.code), invite.expiresAt);
+    return invite;
   }
 
   /** Uses the invite up and gives the new device its token; null if the code is wrong, used or expired. */

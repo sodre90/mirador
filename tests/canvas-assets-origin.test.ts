@@ -16,6 +16,7 @@ function connectedAt(canvasAssetsOrigin: string): AppState {
     rooms: [],
     roomApprovals: [],
     roomTasksWaiting: [],
+    roomInvites: [],
     profiles: [],
     promptTemplates: [],
     canvasUse: "often",

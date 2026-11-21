@@ -10,6 +10,7 @@ import {
   type RefObject,
 } from "react";
 import { isCanvasFrameMessage } from "../shared/canvas-document.ts";
+import { focusedFrameSending } from "./focused-frame.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { DEFAULT_LEFT_SHARE, DEFAULT_TOP_SHARE, placement, swapPanes, type PaneId, type PaneLayout } from "./layout.ts";
@@ -99,8 +100,8 @@ function useFullscreen(
       if ((target === document.body || area.current?.contains(target)) && !keptByTerminal) setFullscreen(null);
     };
     const restoreOnCanvasPageEscape = (event: MessageEvent) => {
-      const focused = document.activeElement;
-      if (!(focused instanceof HTMLIFrameElement) || event.source !== focused.contentWindow || !area.current?.contains(focused)) return;
+      const focused = focusedFrameSending(event);
+      if (!focused || !area.current?.contains(focused)) return;
       if (isCanvasFrameMessage(event.data) && event.data.kind === "key" && event.data.key === "Escape" && !event.data.typing && !dialogOpen()) setFullscreen(null);
     };
     window.addEventListener("keydown", restoreOnEscape);

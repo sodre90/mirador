@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
-import { JoinRequestService, SenderLimit } from "../host/join-requests.ts";
+import { JoinRequestService, SenderAndOverallLimit, SenderLimit } from "../host/join-requests.ts";
 import { Store } from "../host/store.ts";
 import { commitmentTo, matchingNumber, newNonce, spacedNumber } from "../shared/join-requests.ts";
 
@@ -188,6 +188,15 @@ test("one sender asks at most five times a minute", () => {
   expect(limit.allows("192.168.1.24")).toBe(true);
   clock.now += 60_001;
   expect(limit.allows("192.168.1.23")).toBe(true);
+});
+
+test("joins are limited for each sender and for all senders together, and one sender over its own limit uses none of the others'", () => {
+  const clock = { now: 0 };
+  const limit = new SenderAndOverallLimit(() => clock.now, 2, 3);
+  expect(["a", "a", "a", "a"].map((sender) => limit.allows(sender))).toEqual([true, true, false, false]);
+  expect(["b", "c", "d"].map((sender) => limit.allows(sender))).toEqual([true, false, false]);
+  clock.now += 60_001;
+  expect(["d", "e", "f", "g"].map((sender) => limit.allows(sender))).toEqual([true, true, true, false]);
 });
 
 test("the number has six digits, and is shown in two groups of three", async () => {

@@ -180,10 +180,10 @@ test("a person the owner lets into a room sees only that room on their own brows
     await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
   });
 
-  await test.step("taken out of the room, Mia's open page loses it at once", async () => {
+  await test.step("taken out of her last room, Mia's open page loses it at once, and says she is in no room any more", async () => {
     await setRoleOfMia(page, "Launch", "Not in the room");
     await expect(roomsListed(miaPage)).toHaveCount(0);
-    await expect(miaPage.getByRole("heading", { name: "You are in no room yet. When the owner of this machine adds you to one, it shows here." })).toBeVisible();
+    await expect(miaPage.getByRole("heading", { name: "You are in no room on this machine any more. Its owner can invite you again." })).toBeVisible();
   });
 
   expect(miaTraffic.sent.filter(({ type }) => !(PERSON_MESSAGE_TYPES as readonly string[]).includes(type))).toEqual([]);
