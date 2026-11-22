@@ -95,7 +95,7 @@ describe("MachineWatch", () => {
     const { watch } = watching(machine.origin);
     await eventually(() => expect(machine.sockets).toHaveLength(2));
     expect(machine.signIns.toSorted()).toEqual([`/notifications ${machine.origin} mirador_token=device-token`, `/ws ${machine.origin} mirador_token=device-token`]);
-    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [] }]);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [], rooms: [] }]);
 
     machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question"), conversation("b", null)], machines: [], hostId: "home-server-id" });
     await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
@@ -214,11 +214,41 @@ describe("MachineWatch", () => {
     const notification: SystemNotification = { kind: "question", conversationId: "a", title: "Deploy", workspace: "infra", body: "Asks: Ship it?" };
     machine.send("/ws", { type: "system-notification", notification });
     await Bun.sleep(300);
-    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [] }]);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [], rooms: [] }]);
     expect(statuses.every(({ waiting, joinedThere }) => waiting.length === 0 && joinedThere.length === 0)).toBe(true);
     expect(store.findMachine("m1")?.hostId).toBeNull();
     expect(machineChanges).toEqual([]);
     expect(notifications).toEqual([]);
+  });
+
+  test("joined as a person, keeps the rooms the machine lists for its person, cleaned, as they change, and has them while the machine is away", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+
+    const room = (id: string, name: string) => ({ id, name, workspaceId: "w1", people: [], agents: [] });
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [room("r1", "Launch\nplan"), room("../x", "Escape")] } as never);
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ id: "r1", name: "Launch plan" }]));
+    machine.send("/ws", { type: "room.upserted", room: room("r2", "Ops") } as never);
+    machine.send("/ws", { type: "room.deleted", roomId: "r1" } as never);
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ id: "r2", name: "Ops" }]));
+    expect(store.machineRooms("m1")).toEqual([{ id: "r2", name: "Ops" }]);
+
+    watch.stopAll();
+    machine.server.stop(true);
+    watch.start("m1");
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: false, waiting: [], joinedThere: [], rooms: [{ id: "r2", name: "Ops" }] }]);
+  });
+
+  test("takes no rooms from a machine joined as a device: its own rooms are not the person's", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch } = watching(machine.origin);
+    await eventually(() => expect(machine.sockets.length).toBeGreaterThan(0));
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], hostId: "home", rooms: [{ id: "r1", name: "Launch" }] } as never);
+    await Bun.sleep(200);
+    expect(watch.statuses()[0]!.rooms).toEqual([]);
   });
 
   test("joined as a person, signs out the moment the machine's owner takes this computer's person out of their last room", async () => {
@@ -240,6 +270,7 @@ describe("MachineWatch", () => {
     store.insertMachine({ id: "device", name: "Home server", origin: "https://home.example:4600", createdAt: 1 });
     store.setMachineJoinedAs("person", { asPerson: true, relayKey: "relay-key" });
     ["person", "device"].forEach((machineId) => store.setMachineDeviceToken(machineId, "device-token"));
+    store.setMachineRooms("person", [{ id: "r1", name: "Launch" }]);
     const forgotten: string[] = [];
     const tunnels = { forget: (machineId: string) => forgotten.push(machineId) };
 
@@ -250,6 +281,7 @@ describe("MachineWatch", () => {
     expect(["person", "device"].map((machineId) => store.machineDeviceToken(machineId))).toEqual([null, null]);
     expect(store.findMachine("person")?.outOfRooms).toBe(true);
     expect(store.findMachine("device")?.outOfRooms).toBe(false);
+    expect(store.machineRooms("person")).toEqual([]);
   });
 
   test("does not ask a machine it stopped watching whether it still lets this host in, so a host stopping never reads the store it closed", async () => {

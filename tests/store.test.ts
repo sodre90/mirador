@@ -171,6 +171,15 @@ describe("Store", () => {
     expect(store.findConversation("c1")!.favourite).toBeUndefined();
   });
 
+  test("room invites connect peer to peer until the owner chooses this machine's address", () => {
+    const store = new Store(":memory:");
+    expect(store.roomInvitesConnect()).toBe("peer-to-peer");
+    store.setRoomInvitesConnect("address");
+    expect(store.roomInvitesConnect()).toBe("address");
+    store.setRoomInvitesConnect("peer-to-peer");
+    expect(store.roomInvitesConnect()).toBe("peer-to-peer");
+  });
+
   test("remembers the chosen conversation order, and starts from the custom one", () => {
     const { store } = seededStore();
     expect(store.chosenConversationOrder()).toEqual({ by: "custom", direction: "ascending" });

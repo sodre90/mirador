@@ -17,6 +17,8 @@ export const problems = {
     "room-gone": "The room no longer exists.",
     "room-needs-a-name": "Give the room a name.",
     "room-message-misaddressed": "That message tags an agent that is not in the room, or follows up in a thread it no longer has.",
+    "room-invite-needs-address": "Other machines reach this one at no address yet, so the invite can only connect peer to peer.",
+    "room-invite-needs-peer-to-peer": "Peer to peer isn't ready on this machine yet. Try again in a moment, or invite at this machine's address.",
     "session-already-open": "That session is already open in the app.",
     "nothing-to-fork-yet": "This conversation has no agent session to fork yet. Send it a message first.",
     "conversation-needs-name": "A conversation needs a name.",

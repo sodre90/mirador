@@ -19,6 +19,8 @@ export const problems: Messages["problems"] = {
     "room-gone": "La sala ya no existe.",
     "room-needs-a-name": "Ponle un nombre a la sala.",
     "room-message-misaddressed": "Ese mensaje etiqueta a un agente que no está en la sala, o sigue un hilo que ya no tiene.",
+    "room-invite-needs-address": "Ninguna otra máquina llega a esta en una dirección todavía, así que la invitación solo puede conectar de igual a igual.",
+    "room-invite-needs-peer-to-peer": "La conexión de igual a igual aún no está lista en esta máquina. Vuelve a intentarlo en un momento, o invita en la dirección de esta máquina.",
     "session-already-open": "Esa sesión ya está abierta en la aplicación.",
     "nothing-to-fork-yet": "Esta conversación aún no tiene una sesión del agente de la que hacer fork. Envíale un mensaje primero.",
     "conversation-needs-name": "Una conversación necesita un nombre.",

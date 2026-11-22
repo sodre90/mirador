@@ -72,13 +72,21 @@ export interface Machine {
 
 /**
  * What this host last heard from a joined machine: whether it answers, what each conversation waiting for you there
- * waits for, and the machines it has joined in turn, which this computer can join too.
+ * waits for, the machines it has joined in turn, which this computer can join too, and the rooms you are in there.
  */
 export interface MachineStatus {
   machineId: string;
   reachable: boolean;
   waiting: WaitingFor[];
   joinedThere: MachineSeen[];
+  /** Of a machine joined as a person: the rooms this computer's owner is in there, as it lists them, kept from when it last answered. */
+  rooms: JoinedRoom[];
+}
+
+/** A room this computer's owner is in on someone else's machine, as that machine lists it: shown with the machine, trusted for nothing. */
+export interface JoinedRoom {
+  id: string;
+  name: string;
 }
 
 /** A machine another machine has joined, known here by the name, address and id it has there. */

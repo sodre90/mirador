@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { machineAddress } from "../shared/machines.ts";
-import { addWorkspace, createProfile, openSettings, reloadFromRestartedHost, signIn } from "./helpers.ts";
+import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** mirador-p2p is built from its own repository, which only the owner's machines have; elsewhere this spec is skipped. */
@@ -17,6 +17,8 @@ let brokerKey = "";
 const peerToPeer = () => ({ MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: `localhost:${brokerPort}`, MIRADOR_P2P_BROKER_KEY: brokerKey });
 /** The owner's machine, which other machines reach at no address: only through its peer-to-peer tunnel. */
 const owners = new TestHost({ fakePrograms: true, environment: peerToPeer });
+/** A machine reached both ways, through its tunnel and at an address of its own, whose Settings pick the way its room invites connect. */
+const reachedBothWays = new TestHost({ environment: (port) => ({ ...peerToPeer(), ...reachedAtOwnPort(port) }) });
 /** The invited person's own Mirador, which dials the owner's tunnel itself. */
 const visitors = new TestHost({ environment: peerToPeer });
 let broker: ChildProcess | undefined;
@@ -43,35 +45,22 @@ test.beforeAll(async () => {
   brokerPort = await freePort();
   broker = spawn(binary, ["broker", `--udp=127.0.0.1:${brokerPort}`, `--key-file=${join(folder, "broker.key")}`], { stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, RUST_LOG: "warn" } });
   writeBunProgram(owners.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));
-  await Promise.all([owners.start(), visitors.start()]);
+  await Promise.all([owners.start(), visitors.start(), reachedBothWays.start()]);
 });
 
 test.afterAll(async () => {
-  await Promise.all([owners.stop(), visitors.stop()]);
+  await Promise.all([owners.stop(), visitors.stop(), reachedBothWays.stop()]);
   broker?.kill();
-  await Promise.all([owners.cleanUp(), visitors.cleanUp()]);
+  await Promise.all([owners.cleanUp(), visitors.cleanUp(), reachedBothWays.cleanUp()]);
 });
 
-const outOfRooms = "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste its whole link here.";
+const outOfRooms = "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste it here.";
 
-async function gardenSettings(page: Page) {
-  await page.locator(".sidebar .rooms li", { hasText: "# Garden" }).click();
-  await page.getByRole("button", { name: "Settings of Garden" }).click();
-  return page.getByRole("dialog", { name: "Room settings" });
-}
-
-async function makeInviteLink(page: Page) {
-  const dialog = await gardenSettings(page);
-  await dialog.getByRole("button", { name: "Make an invite" }).click();
-  const link = (await dialog.getByRole("group", { name: "Invite code" }).locator(".invite-link").textContent())!;
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  return link;
-}
-
-async function setRoleOfDora(page: Page, role: "Not in the room") {
-  const dialog = await gardenSettings(page);
-  await dialog.getByLabel("Role of Dora").selectOption({ label: role });
-  await dialog.getByRole("button", { name: "Save" }).click();
+async function removeDoraFromGarden(page: Page) {
+  const dialog = await openRoomSettings(page, "Garden");
+  await dialog.getByRole("button", { name: "Remove Dora" }).click();
+  await dialog.getByRole("button", { name: "Confirm: Remove Dora" }).click();
+  await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -116,24 +105,18 @@ test("a room invite's one link, made before the owner's machine restarted and pa
   await addWorkspace(page, owners.projectDir, "Builder · opencode");
 
   const link = await test.step("the owner makes a room and an invite, whose one link reaches the machine through its tunnel", async () => {
-    await page.getByRole("button", { name: "New room" }).click();
-    const create = page.getByRole("dialog", { name: "New room" });
-    await create.getByLabel("Room name").fill("Garden");
-    await create.getByLabel("Builder").check();
-    await create.getByRole("button", { name: "Create room" }).click();
-    await expect(page.getByRole("heading", { name: "# Garden" })).toBeVisible();
-    await page.getByRole("button", { name: "Settings of Garden" }).click();
-    const dialog = page.getByRole("dialog", { name: "Room settings" });
-    await dialog.getByRole("button", { name: "Make an invite" }).click();
-    const invite = dialog.getByRole("group", { name: "Invite code" });
-    await expect(invite).toContainText("Send them this link. They paste it under Machines in their own Mirador, which joins this machine peer to peer:");
-    await expect(invite.getByRole("button", { name: "Copy link" })).toBeVisible();
-    const shown = (await invite.locator(".invite-link").textContent())!;
+    await createRoom(page, "Garden", ["Builder"]);
+    await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
+    const dialog = page.getByRole("dialog", { name: "Invite someone to Garden" });
+    await expect(dialog.getByLabel("Directly, peer to peer")).toBeChecked();
+    await expect(dialog.getByLabel(/^At this machine's address/)).toHaveCount(0);
+    const shown = await copiedInvite(dialog);
     const parsed = machineAddress(shown)!;
     expect(parsed.forRoom).toBe(true);
     expect(parsed.tunnel).toMatchObject({ name: "Ann's Mac", port: 4600, broker: { address: `localhost:${brokerPort}`, key: brokerKey } });
     expect(parsed.origin).toBe(`http://[${parsed.tunnel!.hostAddress}]:4600`);
-    await dialog.getByRole("button", { name: "Cancel" }).click();
+    expect(parsed.authorityFingerprint).toBeNull();
+    await dialog.getByRole("button", { name: "Done" }).click();
     return shown;
   });
   usedLink = link;
@@ -215,7 +198,7 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     expect(visitorsDials()).not.toContain(dialBefore);
     await visitor.reload();
     await railButton.click();
-    await frame.locator(".sidebar .rooms li").filter({ hasText: "# Garden" }).click({ timeout: 60_000 });
+    await roomCard(frame, "Garden").click({ timeout: 60_000 });
     await expect(frame.locator(".room-timeline .room-entry .message")).toHaveText(["Hello through the tunnel"]);
     await composer.fill("Back after a restart");
     await composer.press("Enter");
@@ -227,11 +210,11 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     await reloadFromRestartedHost(page);
     await visitor.reload();
     await railButton.click();
-    await frame.locator(".sidebar .rooms li").filter({ hasText: "# Garden" }).click({ timeout: 60_000 });
+    await roomCard(frame, "Garden").click({ timeout: 60_000 });
     await expect(frame.locator(".room-timeline .room-entry .message")).toHaveText(["Hello through the tunnel", "Back after a restart"]);
     await composer.fill("And after the owner's restart");
     await composer.press("Enter");
-    await page.getByRole("button", { name: "# Garden" }).or(page.locator(".sidebar .rooms li", { hasText: "# Garden" })).first().click();
+    await roomCard(page, "Garden").click();
     await expect(roomMessages).toHaveText(["Hello through the tunnel", "Back after a restart", "And after the owner's restart"]);
   });
 
@@ -270,39 +253,36 @@ test("a used link says the invite is over, and a person taken out of the room or
     await machines.getByRole("button", { name: "Close" }).click();
   });
 
-  await test.step("with a new link, the person is in the room again", async () => {
-    const link = await makeInviteLink(page);
-    await visitor.getByRole("button", { name: "Machines…" }).click();
-    const machines = visitor.getByRole("dialog", { name: "Machines" });
-    await machines.getByLabel("Address or invite link").fill(link);
-    await machines.getByRole("button", { name: "Add and join" }).click();
-    await expect(machines).toHaveCount(0, { timeout: 60_000 });
+  await test.step("with a new invite pasted under Rooms → Join a room, the person is in the room again", async () => {
+    const link = await inviteIntoRoom(page, "Garden");
+    const join = await joinRoom(visitor, link);
+    await expect(join).toHaveCount(0, { timeout: 60_000 });
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
     await expect.poll(visitorsDials).toHaveLength(1);
   });
 
   await test.step("taken out of the room while their Mirador was off, the person learns it from their own Mirador once it starts, which dials the machine no more", async () => {
     await visitors.stop();
-    await setRoleOfDora(page, "Not in the room");
+    await removeDoraFromGarden(page);
     await owners.restart();
     await visitors.start();
     await reloadFromRestartedHost(page);
     await reloadFromRestartedHost(visitor);
     await railButton.click();
     await expect(joinPanel.locator(".join-out-of-rooms")).toHaveText(outOfRooms, { timeout: 60_000 });
-    await expect(joinPanel.getByLabel("Invite link")).toBeVisible();
+    await expect(joinPanel.getByLabel("Paste the invite")).toBeVisible();
     await expect.poll(tunnelFiles).toEqual([]);
   });
 
-  await test.step("a new invite's code alone, typed in the machine's place, is not enough, and its whole link lets the person in again", async () => {
-    const link = await makeInviteLink(page);
-    await joinPanel.getByLabel("Invite link").fill(machineAddress(link)!.joinCode!);
+  await test.step("a new invite's code alone, typed in the machine's place, is not enough, and the whole invite lets the person in again", async () => {
+    const link = await inviteIntoRoom(page, "Garden");
+    await joinPanel.getByLabel("Paste the invite").fill(machineAddress(link)!.joinCode!);
     await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
     await expect(joinPanel.locator(".join-problem")).toHaveText("Ann's Mac is reached peer to peer, so joining it takes the whole invite link, not just its code.");
-    await joinPanel.getByLabel("Invite link").fill(link);
+    await joinPanel.getByLabel("Paste the invite").fill(link);
     await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
     await expect(joinPanel).toHaveCount(0, { timeout: 60_000 });
-    await frame.locator(".sidebar .rooms li").filter({ hasText: "# Garden" }).click({ timeout: 60_000 });
+    await roomCard(frame, "Garden").click({ timeout: 60_000 });
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
     await expect.poll(visitorsDials).toHaveLength(1);
   });
@@ -317,4 +297,50 @@ test("a used link says the invite is over, and a person taken out of the room or
     await expect.poll(tunnelFiles).toEqual([]);
   });
   await visitor.close();
+});
+
+test("on a machine reached both ways, room invites connect peer to peer until Settings name its address, which then is the one an invite carries", async ({ page }) => {
+  await signIn(page, reachedBothWays);
+  await addWorkspace(page, reachedBothWays.projectDir);
+  await createRoom(page, "Porch", []);
+  const inviteDialog = async () => {
+    await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
+    return page.getByRole("dialog", { name: "Invite someone to Porch" });
+  };
+  const connectChoice = async () => {
+    const settings = await openSettings(page, "Devices");
+    return { settings, choice: settings.getByRole("group", { name: "Room invites connect" }) };
+  };
+
+  await test.step("an invite connects peer to peer at first, with no address in it", async () => {
+    const dialog = await inviteDialog();
+    await expect(dialog.getByLabel("Directly, peer to peer")).toBeChecked();
+    await expect(dialog.getByLabel(/^At this machine's address/)).not.toBeChecked();
+    const text = await copiedInvite(dialog);
+    expect(machineAddress(text)).toMatchObject({ forRoom: true, name: null });
+    expect(machineAddress(text)!.tunnel).not.toBeNull();
+    expect(machineAddress(text)!.origin).not.toBe(reachedBothWays.origin);
+    await dialog.getByRole("button", { name: "Done" }).click();
+  });
+
+  await test.step("Settings name peer to peer until the owner picks the address, which the host keeps", async () => {
+    const { settings, choice } = await connectChoice();
+    await expect(choice.getByLabel("Directly, peer to peer")).toBeChecked();
+    await choice.getByLabel("At this machine's address").check();
+    await settings.getByRole("button", { name: "Close" }).click();
+    await page.reload();
+    const reopened = await connectChoice();
+    await expect(reopened.choice.getByLabel("At this machine's address")).toBeChecked();
+    await reopened.settings.getByRole("button", { name: "Close" }).click();
+  });
+
+  await test.step("a new invite connects at the address, with no tunnel in it", async () => {
+    await roomCard(page, "Porch").click();
+    const dialog = await inviteDialog();
+    await expect(dialog.getByLabel(/^At this machine's address/)).toBeChecked();
+    await expect(dialog.getByLabel("Directly, peer to peer")).toBeEnabled();
+    const text = await copiedInvite(dialog);
+    expect(machineAddress(text)).toMatchObject({ origin: reachedBothWays.origin, forRoom: true, tunnel: null });
+    await dialog.getByRole("button", { name: "Done" }).click();
+  });
 });

@@ -2,7 +2,8 @@ import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
-import type { Room, RoomApproval, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { Room, RoomAgentModel, RoomApproval, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { RoomInviteConnect } from "./machines.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
 import type {
@@ -137,6 +138,8 @@ export type ClientMessage =
   | { type: "settings.set-reminder-morning"; minutes: number }
   | { type: "settings.set-conversation-order"; order: ConversationOrder }
   | { type: "settings.set-keep-deleted-canvas"; keep: KeepDeletedCanvas }
+  /** The way room invites connect unless the owner picks the other as they make one. */
+  | { type: "settings.set-room-invites-connect"; connect: RoomInviteConnect }
   | { type: "settings.set-older-after"; olderAfter: OlderAfter }
   | { type: "settings.set-conversations-shown"; shown: ConversationsShown }
   | { type: "settings.set-claude-program"; path: string }
@@ -400,17 +403,20 @@ export type ClientMessage =
   | { type: "machine.join"; requestId: string; machineId: string; invite: string }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
   | { type: "search"; requestId: string; query: string }
-  | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[]; permissions: PermissionPreset }
+  /** `models` holds the model and effort chosen for each agent, by its profile id; an agent not in it takes its profile's. */
+  | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[]; permissions: PermissionPreset; models: Record<string, RoomAgentModel> }
   | { type: "room.rename"; roomId: string; name: string }
   | { type: "room.set-agents"; roomId: string; profileIds: string[] }
+  /** The agent's model and effort in the room, from its next session there on, and in its open one at once. */
+  | { type: "room.set-agent-model"; roomId: string; profileId: string; model: string | null; effort: string | null }
   /** Its agents' conversations follow the preset from their next permission request on. */
   | { type: "room.set-permissions"; roomId: string; permissions: PermissionPreset }
   | { type: "room.set-workspace"; roomId: string; workspaceId: string }
   /** Lets a person of this machine into the room with the role, or changes their role there. */
   | { type: "room.set-person-role"; roomId: string; personId: string; role: RoomRole }
   | { type: "room.remove-person"; roomId: string; personId: string }
-  /** An invite for one person into the room with the role, which they join this machine with from their own Mirador; the host answers `room.invited`. */
-  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole }
+  /** An invite for one person into the room with the role, which they join this machine with from their own Mirador, the one way `connect` names; the host answers `room.invited`. */
+  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole; connect: RoomInviteConnect }
   | { type: "room.withdraw-invite"; inviteId: string }
   /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
   | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
@@ -578,7 +584,10 @@ export type ServerMessage =
   | { type: "room.deleted"; roomId: string }
   /** `code` is shown once, here: the host keeps only its hash. */
   /** To the owner's page that asked alone: its code, and the tunnel's one-time key with it, let whoever holds them in. */
-  | { type: "room.invited"; requestId: string; invite: RoomInvite; code: string; tunnel: InviteTunnel | null }
+  /** The invite's one text, a bearer secret until it is used, for the owner's page that asked alone; or why none could be made that way. */
+  | { type: "room.invited"; requestId: string; invite: RoomInvite | null; text: string | null; problem: string | null; problemAbout?: HostProblem }
+  /** The rooms someone other than the owner is in now, each time that changes. */
+  | { type: "rooms.people-here"; roomIds: string[] }
   /** The room invites nobody has used yet, each time one is made, used or withdrawn; those of a deleted room go with it. */
   | { type: "room-invites.listed"; invites: RoomInvite[] }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on. */
@@ -696,7 +705,7 @@ export type ServerMessage =
   | { type: "workspace.delete-asks"; workspaceId: string; uncommittedFiles: number }
   /** thisDeviceId is the device the receiving page signed in as; null when it signed in with the host's own link. */
   /** peerToPeer is null when this host doesn't connect peer to peer. */
-  | { type: "devices.listed"; devices: ListedDevice[]; thisDeviceId: string | null; reachability: ReachabilitySettings; peerToPeer: PeerToPeerStatus | null }
+  | { type: "devices.listed"; devices: ListedDevice[]; thisDeviceId: string | null; reachability: ReachabilitySettings; peerToPeer: PeerToPeerStatus | null; roomInvitesConnect: RoomInviteConnect }
   /** `folder` is where plugins are installed; `restartNeeded` once a plugin was added, updated or removed since Mirador started. */
   /** `official` is the catalog of official plugins; missing from a host older than it. */
   | { type: "plugins.listed"; folder: string; plugins: PluginInfo[]; official?: CatalogPlugin[]; restartNeeded: boolean }
@@ -731,7 +740,8 @@ export type ServerMessage =
   | { type: "machine.status"; status: MachineStatus }
   /** The machine has the request; it waits there until someone types the number this host shows. */
   | { type: "machine.join-asked"; requestId: string; number: string }
-  | { type: "machine.join-answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }
+  /** roomId: the room a room invite let this computer's owner into. */
+  | { type: "machine.join-answered"; requestId: string; roomId: string | null; problem: string | null; problemAbout?: HostProblem }
   /**
    * machineId is null when nothing was added; roomId, the room a room invite's link let this computer's owner into. A
    * problem joining leaves the machine added, unless the link carried the machine's tunnel: then nothing stays added.

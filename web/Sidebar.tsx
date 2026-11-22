@@ -13,7 +13,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
-import { RoomsSection } from "./RoomsSidebar.tsx";
+import { joinedRoomsOf, RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
@@ -878,7 +878,16 @@ function ConnectedDevices({ listed, ownerId, onOpen }: { listed: DevicesListed |
   );
 }
 
-export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispatch<AppAction> }) {
+export function Sidebar({
+  state,
+  dispatch,
+  onOpenJoinedRoom,
+}: {
+  state: AppState;
+  dispatch: Dispatch<AppAction>;
+  /** Opens a room of someone else's machine in its frame; none where this page can't show machines. */
+  onOpenJoinedRoom?: (machineId: string, roomId: string) => void;
+}) {
   const adding = state.overlay?.kind === "add-workspace";
   const setAdding = (open: boolean) => dispatch(open ? { type: "open-overlay", overlay: { kind: "add-workspace" } } : { type: "close-overlay" });
   const openOverlay = (overlay: Overlay) => dispatch({ type: "open-overlay", overlay });
@@ -974,7 +983,17 @@ export function Sidebar({ state, dispatch }: { state: AppState; dispatch: Dispat
         <span>{words.paletteBar}</span>
         <kbd>{shortcutKeys().palette}</kbd>
       </button>
-      <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} waitingRoomIds={roomsWaitingFor(state)} manages dispatch={dispatch} />
+      <RoomsSection
+        rooms={state.rooms}
+        profiles={state.profiles}
+        selectedRoomId={state.selectedRoomId}
+        waitingRoomIds={roomsWaitingFor(state)}
+        roomsWithPeopleHere={state.roomsWithPeopleHere}
+        joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
+        manages
+        dispatch={dispatch}
+        onOpenJoinedRoom={onOpenJoinedRoom}
+      />
       <header className="sidebar-header">
         <h1>{words.workspaces}</h1>
         <span className="sidebar-header-buttons">

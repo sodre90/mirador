@@ -27,9 +27,9 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "../shared/model.ts";
-import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isConversationsShown, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationsShown, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type Pastel } from "../shared/model.ts";
+import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isConversationsShown, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationsShown, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type JoinedRoom, type Pastel } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
-import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
+import { isRoomInviteConnect, joinedRoomsIn, LONGEST_MACHINE_NAME, type RoomInviteConnect } from "../shared/machines.ts";
 import type { TunnelPlaces } from "../shared/tunnel.ts";
 import { computerName } from "./machine-name.ts";
 import type { PushRegistration, PushRelaySetting } from "../shared/push.ts";
@@ -37,7 +37,7 @@ import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checkli
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
-import { writtenByAgent, type Room, type RoomAnswerEnd, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import { writtenByAgent, type Room, type RoomAgentModel, type RoomAnswerEnd, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
 
@@ -275,6 +275,9 @@ const addedColumns = [
   { table: "invites", column: "join_address", definition: "TEXT" },
   { table: "room_invites", column: "join_key", definition: "TEXT" },
   { table: "room_invites", column: "join_address", definition: "TEXT" },
+  { table: "room_agents", column: "model", definition: "TEXT" },
+  { table: "room_agents", column: "effort", definition: "TEXT" },
+  { table: "machines", column: "rooms", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -1109,6 +1112,7 @@ export class Store {
       .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, created_at) VALUES (?, ?, ?, ?, ?, ?)")
       .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
+    room.agents.forEach(({ profileId, model, effort }) => this.setRoomAgentModel(room.id, profileId, { model, effort }));
     room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
   }
 
@@ -1123,17 +1127,19 @@ export class Store {
   }
 
   private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, created_at }: RoomRow): Room {
-    const agents = this.db.query("SELECT profile_id, conversation_id, answering FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as {
+    const agents = this.db.query("SELECT profile_id, conversation_id, answering, model, effort FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as {
       profile_id: string;
       conversation_id: string | null;
       answering: string | null;
+      model: string | null;
+      effort: string | null;
     }[];
     const people = this.db.query("SELECT person_id, role, name_clash FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPersonRow[];
     return {
       id,
       name,
       workspaceId: workspace_id,
-      agents: agents.map(({ profile_id, conversation_id, answering }) => ({ profileId: profile_id, conversationId: conversation_id, answering })),
+      agents: agents.map(({ profile_id, conversation_id, answering, model, effort }) => ({ profileId: profile_id, conversationId: conversation_id, answering, model, effort })),
       permissions,
       people: people.map(toRoomPerson),
       peoplesTasksWait: peoples_tasks_wait === 1,
@@ -1241,6 +1247,10 @@ export class Store {
 
   deleteRoom(id: string) {
     this.db.query("DELETE FROM rooms WHERE id = ?").run(id);
+  }
+
+  setRoomAgentModel(roomId: string, profileId: string, { model, effort }: RoomAgentModel) {
+    this.db.query("UPDATE room_agents SET model = ?, effort = ? WHERE room_id = ? AND profile_id = ?").run(model, effort, roomId, profileId);
   }
 
   setRoomAgentConversation(roomId: string, profileId: string, conversationId: string) {
@@ -1436,6 +1446,16 @@ export class Store {
 
   setKeepDeletedCanvas(keep: KeepDeletedCanvas) {
     this.setSetting("keep_deleted_canvas", keep);
+  }
+
+  /** Peer to peer unless the owner chose the machine's address. */
+  roomInvitesConnect(): RoomInviteConnect {
+    const value = this.setting("room_invites_connect");
+    return isRoomInviteConnect(value) ? value : "peer-to-peer";
+  }
+
+  setRoomInvitesConnect(connect: RoomInviteConnect) {
+    this.setSetting("room_invites_connect", connect);
   }
 
   keepAwake(): KeepAwake {
@@ -1735,6 +1755,20 @@ export class Store {
 
   forgetMachineDeviceToken(id: string) {
     this.db.query("UPDATE machines SET device_token = NULL WHERE id = ?").run(id);
+  }
+
+  /** The rooms this computer's owner is in on the machine, as it last listed them; cleaned again as they are read, as the machine is someone else's. */
+  machineRooms(id: string): JoinedRoom[] {
+    const row = this.db.query("SELECT rooms FROM machines WHERE id = ?").get(id) as { rooms: string | null } | null;
+    try {
+      return joinedRoomsIn(JSON.parse(row?.rooms ?? "[]"));
+    } catch {
+      return [];
+    }
+  }
+
+  setMachineRooms(id: string, rooms: JoinedRoom[]) {
+    this.db.query("UPDATE machines SET rooms = ? WHERE id = ?").run(rooms.length > 0 ? JSON.stringify(rooms) : null, id);
   }
 
   setMachineOutOfRooms(id: string, outOfRooms: boolean) {

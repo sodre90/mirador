@@ -66,6 +66,7 @@ import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts"
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
 import { presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
+import { PROFILES_MODEL, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
@@ -1044,6 +1045,32 @@ export class ConversationService {
     const mode = this.roomPresetMode(this.get(conversationId));
     const modeOption = this.get(conversationId).configOptions.find(({ category }) => category === "mode");
     if (mode && modeOption && offersValue(modeOption, mode)) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
+  }
+
+  /** The model and effort the room's owner chose for the agent of a room's conversation; none for any other conversation. */
+  private roomAgentModel({ roomId, profileId }: Conversation): RoomAgentModel {
+    const room = roomId ? this.store.findRoom(roomId) : undefined;
+    return room?.agents.find((agent) => agent.profileId === profileId) ?? PROFILES_MODEL;
+  }
+
+  /**
+   * A room's session takes the model and effort its room's owner chose for its agent as it opens, new or resumed, and
+   * as they change: the model first, as the efforts on offer depend on it. One the agent does not offer now is left out
+   * without a word, as each session opening would otherwise say it again.
+   */
+  private async keepToRoomAgentModel(conversationId: string, sessionId: string) {
+    const { model, effort } = this.roomAgentModel(this.get(conversationId));
+    const modelOption = this.get(conversationId).configOptions.find(({ category }) => category === "model");
+    const modelChoice = model && modelOption ? modelChoiceFor(this.get(conversationId).configOptions, model) : null;
+    if (modelOption && modelChoice) await this.trySetConfigOption(conversationId, sessionId, modelOption.id, modelChoice);
+    const effortOption = this.get(conversationId).configOptions.find(({ category }) => category === "thought_level");
+    if (effort && effortOption && offersValue(effortOption, effort)) await this.trySetConfigOption(conversationId, sessionId, effortOption.id, effort);
+  }
+
+  /** A room agent's model and effort reach its open session at once; one not open takes them as it next opens. */
+  async followRoomAgentModel(conversationId: string) {
+    const sessionId = await this.runtimes.get(conversationId)?.sessionId?.catch(() => null);
+    if (sessionId) await this.keepToRoomAgentModel(conversationId, sessionId);
   }
 
   private async keepSideChatReadOnly(sideChatId: string, sessionId: string) {
@@ -2606,6 +2633,7 @@ profileId: string | null, conversationId: string) {
         replay.filter(({ update }) => SESSION_STATE_UPDATES.has(update.sessionUpdate)).forEach((notification) => this.handleSessionUpdate(notification));
         await this.restoreConfigChoices(conversationId, conversation.acpSessionId, conversation.configOptions);
         await this.keepToRoomPreset(conversationId, conversation.acpSessionId);
+        await this.keepToRoomAgentModel(conversationId, conversation.acpSessionId);
         return conversation.acpSessionId;
       } catch (reopenError) {
         this.closeSessionIfConversationDeleted(conversationId, harness, conversation.acpSessionId);
@@ -2624,6 +2652,7 @@ profileId: string | null, conversationId: string) {
     if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
     else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
     await this.keepToRoomPreset(conversationId, created.sessionId);
+    await this.keepToRoomAgentModel(conversationId, created.sessionId);
     runtime.startChoices = undefined;
     if (isFirstSession && conversation.harness === "pi" && !conversation.sideChatOf) this.offerNewerPi(conversationId, harness).catch(() => {});
     return created.sessionId;

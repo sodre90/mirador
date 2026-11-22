@@ -553,3 +553,87 @@ export async function actAsDesktopApp(page: Page, menu: DesktopMenu) {
 
 /** ⌘W as the macOS desktop app passes it to the page. */
 export const pressCommandWInTheApp = (page: Page) => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-close")));
+
+/** A room's card in the sidebar, by its name alone. */
+export const roomCard = (scope: Page | FrameLocator, name: string) =>
+  scope.locator(".sidebar .rooms li.room-card").filter({ has: scope.locator(".room-card-name", { hasText: new RegExp(`^${literally(name)}$`) }) });
+
+/** Opens the New room dialog from the Rooms section's "+", through its menu where the page offers joining a room too. */
+export async function openNewRoom(scope: Page | FrameLocator) {
+  const add = scope.locator(".sidebar .rooms > header button.workspace-new");
+  const opensMenu = (await add.getAttribute("aria-haspopup")) === "menu";
+  await add.click();
+  if (opensMenu) await scope.getByRole("menuitem", { name: "New room" }).click();
+  return scope.getByRole("dialog", { name: "New room" });
+}
+
+/** Makes a room with exactly these agents, each found by name in the agent search, and opens it. */
+export async function createRoom(scope: Page | FrameLocator, name: string, agents: string[], { workspace, preset }: { workspace?: string; preset?: string } = {}) {
+  const dialog = await openNewRoom(scope);
+  await dialog.getByLabel("Room name").fill(name);
+  const chosen = dialog.getByRole("list", { name: "Agents" }).getByRole("button", { name: /^Remove / });
+  while ((await chosen.count()) > 0) await chosen.first().click();
+  const search = dialog.getByRole("combobox", { name: "Find an agent" });
+  for (const agent of agents) {
+    await search.fill(agent);
+    await search.press("Enter");
+  }
+  await expect(dialog.getByRole("list", { name: "Agents" }).locator(".room-agent-chip-name")).toHaveText(agents);
+  if (workspace || preset) await dialog.getByText("More options").click();
+  if (workspace) await dialog.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: workspace });
+  if (preset) await dialog.getByLabel(preset).check();
+  await dialog.getByRole("button", { name: "Create room" }).click();
+  await expect(scope.getByRole("heading", { name: `# ${name}` })).toBeVisible();
+}
+
+/** Opens a room's settings from the ⋯ its card shows while pointed at, at a tab of them when given. */
+export async function openRoomSettings(scope: Page | FrameLocator, room: string, tab?: "People" | "Agents" | "Permissions" | "Usage") {
+  const card = roomCard(scope, room);
+  await card.hover();
+  await card.getByRole("button", { name: `Settings of ${room}` }).click();
+  const dialog = scope.getByRole("dialog", { name: "Room settings" });
+  if (tab) await dialog.getByRole("tab", { name: tab }).click();
+  return dialog;
+}
+
+/** Names this machine as the machines that join it see it, in Settings → Devices. */
+export async function nameMachine(page: Page, name: string) {
+  const settings = await openSettings(page, "Devices");
+  await settings.locator("input.machine-name").fill(name);
+  await settings.locator("input.machine-name").press("Enter");
+  await settings.getByRole("button", { name: "Close" }).click();
+}
+
+/** A host's address for the machines that join it: its own port and the one after for its canvas, as a proxy in front of it would give. */
+export const reachedAtOwnPort = (port: number) => ({ MIRADOR_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`, MIRADOR_PUBLIC_CANVAS_ORIGIN: `http://127.0.0.1:${port + 1}` });
+
+/** Makes an invite into the room from its bar, with the role and the way to connect when given, and reads its one text under "Show invite". */
+export async function inviteIntoRoom(page: Page, room: string, { role, connect }: { role?: "Member" | "Guest"; connect?: string | RegExp } = {}) {
+  await roomCard(page, room).click();
+  await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
+  const dialog = page.getByRole("dialog", { name: `Invite someone to ${room}` });
+  if (role) await dialog.getByLabel(role === "Member" ? "Member: can ask the agents" : "Guest: can chat").check();
+  if (connect) await dialog.getByLabel(connect).check();
+  const text = await copiedInvite(dialog);
+  await dialog.getByRole("button", { name: "Done" }).click();
+  return text;
+}
+
+/** Copies the invite dialog's invite and reads it under "Show invite", which a page that can't copy has opened already. */
+export async function copiedInvite(dialog: Locator) {
+  await dialog.getByRole("button", { name: "Copy invite" }).click();
+  await expect(dialog.getByText("Send it to them. In their Mirador: Rooms → Join a room.")).toBeVisible({ timeout: 60_000 });
+  const show = dialog.getByRole("button", { name: "Show invite" });
+  if ((await show.getAttribute("aria-expanded")) !== "true") await show.click();
+  return dialog.getByRole("textbox", { name: "Invite" }).inputValue();
+}
+
+/** Joins someone else's room from the Rooms section's "+", with the invite they sent. */
+export async function joinRoom(page: Page, invite: string) {
+  await page.locator(".sidebar .rooms > header button.workspace-new").click();
+  await page.getByRole("menuitem", { name: "Join a room" }).click();
+  const dialog = page.getByRole("dialog", { name: "Join a room" });
+  await dialog.getByLabel("Paste the invite").fill(invite);
+  await dialog.getByRole("button", { name: "Join", exact: true }).click();
+  return dialog;
+}

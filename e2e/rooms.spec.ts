@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, createProfile, literally, removeWorkspace, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, literally, openRoomSettings, removeWorkspace, roomCard, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -45,14 +45,9 @@ test("people write in a room, a tagged agent answers in its thread, and another 
   }
 
   await test.step("a room is made with both agents, in the workspace", async () => {
-    await page.getByRole("button", { name: "New room" }).click();
-    const dialog = page.getByRole("dialog", { name: "New room" });
-    await dialog.getByLabel("Room name").fill("Launch");
-    await dialog.getByLabel("Builder").check();
-    await dialog.getByLabel("Reviewer").check();
-    await dialog.getByRole("button", { name: "Create room" }).click();
-    await expect(page.getByRole("heading", { name: "# Launch" })).toBeVisible();
+    await createRoom(page, "Launch", ["Builder", "Reviewer"]);
     await expect(page.getByRole("list", { name: "Agents" }).getByRole("listitem")).toHaveText(["◆ Builder", "◆ Reviewer"]);
+    await expect(roomCard(page, "Launch").locator(".room-card-subline")).toHaveText("Builder, Reviewer");
   });
 
   await test.step("messages that tag no agent reach none", async () => {
@@ -135,8 +130,7 @@ test("people write in a room, a tagged agent answers in its thread, and another 
   });
 
   await test.step("deleting the room takes it away", async () => {
-    await page.getByRole("button", { name: "Settings of Launch" }).click();
-    const dialog = page.getByRole("dialog", { name: "Room settings" });
+    const dialog = await openRoomSettings(page, "Launch");
     await dialog.getByRole("button", { name: "Delete room" }).click();
     await dialog.getByRole("button", { name: "Confirm: Delete room" }).click();
     await expect(page.locator(".sidebar .rooms li")).toHaveCount(0);
@@ -155,12 +149,7 @@ test("a workspace a room works in stays until the room moves to another, where i
   await addWorkspaceFromSidebar(page, elsewhere);
   const profiles = await createProfile(page, "Mover", `FAKE_ACP_PROMPTS=${moverPrompts}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
-  await page.getByRole("button", { name: "New room" }).click();
-  const creating = page.getByRole("dialog", { name: "New room" });
-  await creating.getByLabel("Room name").fill("Moving");
-  await creating.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: "elsewhere" });
-  await creating.getByLabel("Mover").check();
-  await creating.getByRole("button", { name: "Create room" }).click();
+  await createRoom(page, "Moving", ["Mover"], { workspace: "elsewhere" });
   const composer = page.getByRole("textbox", { name: "Write in Moving, @ tags an agent…" });
   const tagMover = async (rest: string) => {
     await composer.fill("@Mo");
@@ -178,10 +167,9 @@ test("a workspace a room works in stays until the room moves to another, where i
   });
 
   await test.step("the room moves to another workspace, and its old one can go", async () => {
-    await page.getByRole("button", { name: "Settings of Moving" }).click();
-    const settings = page.getByRole("dialog", { name: "Room settings" });
+    const settings = await openRoomSettings(page, "Moving");
     await settings.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: "project" });
-    await settings.getByRole("button", { name: "Save" }).click();
+    await settings.getByRole("button", { name: "Done" }).click();
     await removeWorkspace(workspaceCard(page, elsewhere));
     await expect(workspaceCard(page, elsewhere)).toHaveCount(0);
     await expect(page.getByRole("heading", { name: "# Moving" })).toBeVisible();

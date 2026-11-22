@@ -13,6 +13,7 @@ import { PROBLEM_HEADER } from "../shared/host-problems.ts";
 import type { Person, Profile, Workspace } from "../shared/model.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
+import { inviteIn, machineAddress } from "../shared/machines.ts";
 import { agentStandIn, type Room, type RoomRole, type RoomThread } from "../shared/rooms.ts";
 
 /**
@@ -57,6 +58,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "settings.set-reminder-morning": true,
   "settings.set-conversation-order": true,
   "settings.set-keep-deleted-canvas": true,
+  "settings.set-room-invites-connect": true,
   "settings.set-older-after": true,
   "settings.set-conversations-shown": true,
   "settings.set-claude-program": true,
@@ -207,6 +209,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.create": true,
   "room.rename": true,
   "room.set-agents": true,
+  "room.set-agent-model": true,
   "room.set-permissions": true,
   "room.set-workspace": true,
   "room.set-person-role": true,
@@ -363,6 +366,8 @@ function hostEnvironment() {
     MIRADOR_DEFAULT_PLUGINS: "off",
     MIRADOR_PUSH_RELAY: "off",
     MIRADOR_P2P: "off",
+    MIRADOR_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
+    MIRADOR_PUBLIC_CANVAS_ORIGIN: `http://127.0.0.1:${port + 1}`,
   };
 }
 
@@ -381,7 +386,7 @@ async function startHost() {
 
 async function ownerCreatesRoom(name: string) {
   const mark = owner.mark;
-  owner.send({ type: "room.create", requestId: name, name, workspaceId: workspace.id, profileIds: [profile.id], permissions: "read-freely" });
+  owner.send({ type: "room.create", requestId: name, name, workspaceId: workspace.id, profileIds: [profile.id], permissions: "read-freely", models: {} });
   const { roomId } = await owner.waitFor(isType("room.created", ({ requestId }) => requestId === name), mark);
   return (await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomId), mark)).room;
 }
@@ -812,8 +817,9 @@ describe("a person a room invite lets in, from their own Mirador", () => {
   async function ownerInvites(room: Room, role: RoomRole) {
     const mark = owner.mark;
     const requestId = crypto.randomUUID();
-    owner.send({ type: "room.invite", requestId, roomId: room.id, role });
-    return owner.waitFor(isType("room.invited", (invited) => invited.requestId === requestId), mark);
+    owner.send({ type: "room.invite", requestId, roomId: room.id, role, connect: "address" });
+    const { invite, text } = await owner.waitFor(isType("room.invited", (invited) => invited.requestId === requestId), mark);
+    return { invite: invite!, text: text!, code: inviteIn(text!).code };
   }
 
   async function challengeFor(code: string, host = hereAt()) {
@@ -868,6 +874,22 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     const { rooms } = await fresh.waitFor(isType("snapshot"));
     fresh.close();
     expect(rooms.filter(({ people }) => people.some(({ personId }) => personId === dora.personId)).map(({ id }) => id)).toEqual([roomC.id]);
+  });
+
+  test("is invited by a text with one way to this machine: at its address with its name and no tunnel, and none left behind when peer to peer is off", async () => {
+    const { text, invite } = await ownerInvites(roomD, "guest");
+    expect(machineAddress(text)).toMatchObject({ origin: `http://127.0.0.1:${port}`, forRoom: true, tunnel: null, name: expect.any(String) });
+    owner.send({ type: "room.withdraw-invite", inviteId: invite.id });
+
+    const mark = owner.mark;
+    owner.send({ type: "room.invite", requestId: "p2p", roomId: roomD.id, role: "guest", connect: "peer-to-peer" });
+    const refused = await owner.waitFor(isType("room.invited", ({ requestId }) => requestId === "p2p"), mark);
+    expect(refused).toMatchObject({ invite: null, text: null, problemAbout: { code: "room-invite-needs-peer-to-peer" } });
+
+    owner.send({ type: "settings.set-room-invites-connect", connect: "address" });
+    expect((await owner.waitFor(isType("devices.listed", ({ roomInvitesConnect }) => roomInvitesConnect === "address"), mark)).roomInvitesConnect).toBe("address");
+    owner.send({ type: "settings.set-room-invites-connect", connect: "peer-to-peer" });
+    await owner.waitFor(isType("devices.listed", ({ roomInvitesConnect }) => roomInvitesConnect === "peer-to-peer"), mark);
   });
 
   test("is let in by an invite once: not again, and not after the owner withdrew it", async () => {

@@ -46,3 +46,6 @@ export function useTypingAidAttributes() {
   const { autocorrect, predictions } = useTypingAids();
   return { autoCorrect: autocorrect ? "on" : "off", writingsuggestions: predictions ? "true" : "false" } as const;
 }
+
+/** For a field that takes a name or a pasted text rather than prose: nothing may change what is typed or offer more of it. */
+export const NAME_FIELD_ATTRIBUTES = { autoCorrect: "off", autoCapitalize: "off", spellCheck: false, autoComplete: "off", writingsuggestions: "false" } as const;

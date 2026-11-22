@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, roomCard, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
 import { ScriptedModel, scriptedOpencodeEnvironment } from "./scripted-model.ts";
 import { TestHost } from "./test-host.ts";
 
@@ -77,14 +77,7 @@ const canvasToolsOfferedWith = (marker: string) =>
     .map((name) => name.replace(/^.*canvas[_-]/, ""))
     .toSorted();
 
-async function openNewRoom(page: Page, room: string) {
-  await page.getByRole("button", { name: "New room" }).click();
-  const dialog = page.getByRole("dialog", { name: "New room" });
-  await dialog.getByLabel("Room name").fill(room);
-  await dialog.getByLabel(PROFILE, { exact: true }).check();
-  await dialog.getByRole("button", { name: "Create room" }).click();
-  await expect(page.getByRole("heading", { name: `# ${room}` })).toBeVisible();
-}
+const openNewRoom = (page: Page, room: string) => createRoom(page, room, [PROFILE]);
 
 /** Tags the agent from the @ menu and puts `line` on a line of its own, the last of the prompt the scripted model reads. */
 async function tagInRoom(page: Page, room: string, line: string, answered = line) {
@@ -139,7 +132,7 @@ test("an owner's conversation and a room's on one opencode profile and folder ea
     await tagInRoom(page, "Annex", "hello from the annex");
     const owners = await startedConversation(page);
     await expectOwnersConversationKeepsItsTools(page, owners, "the owner's second conversation");
-    await page.locator(".sidebar .rooms li", { hasText: "# Annex" }).click();
+    await roomCard(page, "Annex").click();
     await expect(page.getByRole("heading", { name: "# Annex" })).toBeVisible();
     await expectRoomKeepsItsTools(page, "Annex");
   });

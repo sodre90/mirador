@@ -59,7 +59,7 @@ test("a room's agent runs in its preset's mode, not its profile's, ignores its p
   mkdirSync(project);
   store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: null, mode: "agent-full-access", effort: null, bypassPermissions: true, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null }], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: null, effort: null }], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 });
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const { agent, promptedIn } = codexAgent();
   const inRoom = conversations.startInRoom("r1", "w1", { harness: "codex", profileId: "p1" }, "Room: p");
@@ -74,4 +74,67 @@ test("a room's agent runs in its preset's mode, not its profile's, ignores its p
   await until(() => promptedIn.length === 2);
 
   expect(promptedIn).toEqual(["read-only", "workspace-write"]);
+});
+
+const modelAndEffortOn = (model: string, effort: string): SessionConfigOption[] => [
+  {
+    id: "model",
+    name: "Model",
+    category: "model",
+    type: "select",
+    currentValue: model,
+    options: ["default", "opus", "haiku"].map((value) => ({ value, name: value })),
+  },
+  { id: "effort", name: "Effort", category: "thought_level", type: "select", currentValue: effort, options: ["low", "high"].map((value) => ({ value, name: value })) },
+];
+
+/** An agent with models and efforts, which writes down what each message went out on. */
+function agentWithModels() {
+  const promptedOn: string[] = [];
+  const chosen = new Map<string, { model: string; effort: string }>();
+  let sessions = 0;
+  const optionsOf = (sessionId: string) => modelAndEffortOn(chosen.get(sessionId)!.model, chosen.get(sessionId)!.effort);
+  const agent = {
+    spec: { id: "codex", label: "Codex" },
+    start: async () => ({}),
+    newSession: async () => {
+      const sessionId = `session-${++sessions}`;
+      chosen.set(sessionId, { model: "default", effort: "low" });
+      return { sessionId, configOptions: optionsOf(sessionId) };
+    },
+    setConfigOption: async (sessionId: string, configId: string, value: string) => {
+      chosen.set(sessionId, { ...chosen.get(sessionId)!, [configId]: value });
+      return { configOptions: optionsOf(sessionId) };
+    },
+    prompt: async (sessionId: string) => {
+      promptedOn.push(`${chosen.get(sessionId)!.model} ${chosen.get(sessionId)!.effort}`);
+      return { stopReason: "end_turn" };
+    },
+    cancel: async () => {},
+    closeSession: async () => {},
+  };
+  return { agent, promptedOn };
+}
+
+test("a room's agent opens its session on the model and effort chosen for it in the room, over its profile's, and takes a new choice at once", async () => {
+  const store = new Store(":memory:");
+  const project = join(scratch, `project-${crypto.randomUUID()}`);
+  mkdirSync(project);
+  store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: "haiku", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
+  store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: "opus", effort: "high" }], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 });
+  const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
+  const { agent, promptedOn } = agentWithModels();
+  const inRoom = conversations.startInRoom("r1", "w1", { harness: "codex", profileId: "p1" }, "Room: p");
+  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, inRoom), agent);
+
+  await conversations.send(inRoom.id, "first", []);
+  await until(() => promptedOn.length === 1 && conversations.get(inRoom.id).status === "idle");
+  store.setRoomAgentModel("r1", "p1", { model: "default", effort: "low" });
+  await conversations.followRoomAgentModel(inRoom.id);
+  await conversations.send(inRoom.id, "second", []);
+  await until(() => promptedOn.length === 2);
+
+  expect(promptedOn).toEqual(["opus high", "default low"]);
+  expect(store.listEvents(inRoom.id).filter(({ event }) => event.type === "error")).toEqual([]);
 });

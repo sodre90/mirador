@@ -13,6 +13,7 @@ import type { Store } from "./store.ts";
  */
 export function forgetSignInAt(store: Store, tunnels: Pick<MachineTunnels, "forget">, machineId: string) {
   if (store.findMachine(machineId)?.asPerson) store.setMachineOutOfRooms(machineId, true);
+  store.setMachineRooms(machineId, []);
   tunnels.forget(machineId);
   store.forgetMachineDeviceToken(machineId);
 }

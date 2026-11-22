@@ -1,5 +1,6 @@
-import type { Machine, MachineSeen, MachineStatus } from "./model.ts";
-import { decodedInviteTunnel, encodedInviteTunnel, type InviteTunnel } from "./tunnel.ts";
+import type { JoinedRoom, Machine, MachineSeen, MachineStatus } from "./model.ts";
+import { base64UrlOf, decodedInviteTunnel, encodedInviteTunnel, textOfBase64Url, tunnelOrigin, type InviteTunnel } from "./tunnel.ts";
+import { oneLine, shownAsWritten } from "./written-text.ts";
 
 /** How long a name Settings give a machine can be, so it fits a device's lists. */
 export const LONGEST_MACHINE_NAME = 40;
@@ -28,8 +29,11 @@ export const tunnelIn = (hash: string) => tunnelOf(joinPath.exec(hash)?.[3]);
 export const inviteLink = (origin: string, code: string, authorityFingerprint: string | null = null, tunnel: InviteTunnel | null = null) =>
   `${origin}/#/join/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}${tunnel ? `?tunnel=${encodedInviteTunnel(tunnel)}` : ""}`;
 
-/** A room invite link's #part: the code, then the fingerprint of the machine's own certificate authority when it has one, then how to reach it peer to peer when it can. */
-const roomInvitePath = /^#\/room-invite\/([\w-]+?)(?:\/([\w-]+))?(?:\?tunnel=([\w-]+))?$/;
+/**
+ * A room invite link's #part: the code, then the fingerprint of the machine's own certificate authority when it has one,
+ * then either how to reach it peer to peer, or the machine's name, which a link to its address has nowhere else.
+ */
+const roomInvitePath = /^#\/room-invite\/([\w-]+?)(?:\/([\w-]+))?(?:\?(tunnel|name)=([\w-]+))?$/;
 
 /**
  * Into a room of someone else's machine, which another Mirador joins as a person there, never as one of its owner's
@@ -40,6 +44,39 @@ export const roomInviteLink = (origin: string, code: string, authorityFingerprin
   `${origin}/#/room-invite/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}${tunnel ? `?tunnel=${encodedInviteTunnel(tunnel)}` : ""}`;
 
 export const isRoomInviteLink = (hash: string) => roomInvitePath.test(hash);
+
+/** How a room invite reaches the machine: peer to peer, through its tunnel, or at the address it has on the network. */
+export type RoomInviteConnect = "peer-to-peer" | "address";
+
+export const ROOM_INVITE_CONNECTS: RoomInviteConnect[] = ["peer-to-peer", "address"];
+
+export const isRoomInviteConnect = (value: unknown): value is RoomInviteConnect => ROOM_INVITE_CONNECTS.includes(value as RoomInviteConnect);
+
+/** The way an invite connects unless its maker picks the other: the one Settings name when it works now, else the other. */
+export function inviteConnectFor(preferred: RoomInviteConnect, works: Record<RoomInviteConnect, boolean>): RoomInviteConnect | null {
+  return works[preferred] ? preferred : (ROOM_INVITE_CONNECTS.find((connect) => works[connect]) ?? null);
+}
+
+/** The one way a room invite carries: the machine's tunnel and no address, or its address, with its name, and no tunnel. */
+export type RoomInviteWay = { tunnel: InviteTunnel } | { origin: string; authorityFingerprint: string | null; machineName: string };
+
+/** Far longer than a machine's name encodes to, so that a longer one is turned away before it is read. */
+const LONGEST_ENCODED_NAME = 400;
+const LONGEST_NAME_IN_INVITE = 200;
+
+/** A room invite's whole text, which is all a person pastes into Join a room: a link that carries one way to the machine alone. */
+export function roomInviteText(code: string, way: RoomInviteWay) {
+  if ("tunnel" in way) return roomInviteLink(tunnelOrigin(way.tunnel), code, null, way.tunnel);
+  const name = way.machineName.trim();
+  return `${roomInviteLink(way.origin, code, way.authorityFingerprint)}${name ? `?name=${base64UrlOf(name)}` : ""}`;
+}
+
+/** The machine's name a room invite link to its address carries, decoded only when it is short enough; null for none or one that doesn't decode. */
+function nameOf(encoded: string | undefined) {
+  if (!encoded || encoded.length > LONGEST_ENCODED_NAME) return null;
+  const name = textOfBase64Url(encoded);
+  return name !== null && name.length <= LONGEST_NAME_IN_INVITE ? name : null;
+}
 
 /** The code in what reads as an invite link, however broken the rest of it is. */
 const codeInBrokenLink = (text: string) => /#\/(?:room-invite|join)\/([\w-]+)/.exec(text)?.[1] ?? null;
@@ -61,6 +98,8 @@ export interface MachineAddress {
   forRoom: boolean;
   /** How a room invite's link reaches the machine peer to peer, when it can. */
   tunnel: InviteTunnel | null;
+  /** The name a room invite's link to the machine's address gives it, as it came, for the host to clean. */
+  name: string | null;
 }
 
 /** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it; a room invite's link whose tunnel isn't one is none. */
@@ -71,10 +110,12 @@ export function machineAddress(text: string): MachineAddress | null {
     const url = new URL(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
     const roomInvite = roomInvitePath.exec(url.hash);
-    const tunnel = tunnelOf(roomInvite?.[3]);
-    if (roomInvite?.[3] && !tunnel) return null;
-    if (roomInvite) return { origin: url.origin, joinCode: roomInvite[1]!, authorityFingerprint: roomInvite[2] ?? null, forRoom: true, tunnel };
-    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash), forRoom: false, tunnel: null };
+    const carried = roomInvite?.[4];
+    const tunnel = roomInvite?.[3] === "tunnel" ? tunnelOf(carried) : null;
+    if (roomInvite?.[3] === "tunnel" && !tunnel) return null;
+    const name = roomInvite?.[3] === "name" ? nameOf(carried) : null;
+    if (roomInvite) return { origin: url.origin, joinCode: roomInvite[1]!, authorityFingerprint: roomInvite[2] ?? null, forRoom: true, tunnel, name };
+    return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash), forRoom: false, tunnel: null, name: null };
   } catch {
     return null;
   }
@@ -100,3 +141,36 @@ export function machinesSeen(machines: Machine[], statuses: MachineStatus[]): Ma
 }
 
 export const isHidden = (machine: MachineSeen, hidden: MachineSeen[]) => hidden.some((one) => sameMachine(machine, one));
+
+/** How many rooms of one machine its list shows at most, and how long a name of one may be there. */
+export const MOST_JOINED_ROOMS = 50;
+export const LONGEST_JOINED_ROOM_NAME = 80;
+
+/** The form a room's id has, which nothing else in a list or a link to a room may take. */
+export const isRoomId = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,64}$/.test(id);
+
+/** A room as someone else's machine lists it, made safe to show: an id of a room's form, and its name on one line, as everyone reads it, cut to length; null when either is not there. */
+export function joinedRoomIn(listed: unknown): JoinedRoom | null {
+  if (typeof listed !== "object" || listed === null) return null;
+  const { id, name } = listed as Record<string, unknown>;
+  if (!isRoomId(id) || typeof name !== "string") return null;
+  const shownName = oneLine(shownAsWritten(name.slice(0, LONGEST_JOINED_ROOM_NAME * 4))).slice(0, LONGEST_JOINED_ROOM_NAME).trim();
+  return shownName ? { id, name: shownName } : null;
+}
+
+/** The rooms someone else's machine lists for this computer's owner, each once, at most MOST_JOINED_ROOMS of them, as display data only. */
+export function joinedRoomsIn(listed: unknown): JoinedRoom[] {
+  if (!Array.isArray(listed)) return [];
+  const rooms = listed.slice(0, MOST_JOINED_ROOMS * 2).flatMap((each) => joinedRoomIn(each) ?? []);
+  return rooms.filter((room, index) => rooms.findIndex(({ id }) => id === room.id) === index).slice(0, MOST_JOINED_ROOMS);
+}
+
+/** The list with the room the machine says changed, in its place or last; a room past MOST_JOINED_ROOMS stays out. */
+export function withJoinedRoom(rooms: JoinedRoom[], listed: unknown): JoinedRoom[] {
+  const room = joinedRoomIn(listed);
+  if (!room) return rooms;
+  if (rooms.some(({ id }) => id === room.id)) return rooms.map((each) => (each.id === room.id ? room : each));
+  return rooms.length < MOST_JOINED_ROOMS ? [...rooms, room] : rooms;
+}
+
+export const withoutJoinedRoom = (rooms: JoinedRoom[], roomId: unknown) => rooms.filter(({ id }) => id !== roomId);

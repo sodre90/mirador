@@ -27,6 +27,7 @@ import {
   keptFromAgents,
   mayWriteAs,
   personMessageBehind,
+  PROFILES_MODEL,
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomHistory,
   roomMessageLength,
@@ -37,6 +38,7 @@ import {
   type AuthorOf,
   type Room,
   type RoomApproval,
+  type RoomAgentModel,
   type RoomAuthor,
   type RoomHistoryQuery,
   type RoomMessage,
@@ -63,6 +65,7 @@ export interface RoomSessions {
   waitingPermissions(conversationId: string): WaitingPermission[];
   answerPermission(conversationId: string, permissionId: string, allowed: boolean): void;
   followRoomPreset(conversationId: string): Promise<void>;
+  followRoomAgentModel(conversationId: string): Promise<void>;
 }
 
 /** What came of an agent naming agents to tag in its answer: those it will tag, and those it can't, by name. */
@@ -191,13 +194,14 @@ export class RoomService implements RoomRules, TurnListener {
     this.peopleChanged(roomId);
   }
 
-  create(name: string, workspaceId: string, profileIds: string[], permissions: PermissionPreset): Room {
+  /** `models` holds the model and effort chosen for each agent by its profile id; an agent not in it takes its profile's. */
+  create(name: string, workspaceId: string, profileIds: string[], permissions: PermissionPreset, models: Record<string, RoomAgentModel> = {}): Room {
     if (!this.store.findWorkspace(workspaceId)) throw new HostProblemError({ code: "workspace-gone" });
     const room = {
       id: crypto.randomUUID(),
       name: this.roomName(name),
       workspaceId,
-      agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null, answering: null })),
+      agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null, answering: null, ...checkedModel(models[profileId] ?? PROFILES_MODEL) })),
       permissions: knownPreset(permissions),
       people: [],
       peoplesTasksWait: true,
@@ -222,6 +226,15 @@ export class RoomService implements RoomRules, TurnListener {
     this.store.setRoomAgents(roomId, [...staying]);
     this.publish(roomId);
     this.waitingChanged(roomId);
+  }
+
+  /** From the agent's next session in the room on, and in its open one at once; an agent not in the room has none to change. */
+  setAgentModel(roomId: string, profileId: string, model: RoomAgentModel) {
+    const agent = this.existingRoom(roomId).agents.find((each) => each.profileId === profileId);
+    if (!agent) return;
+    this.store.setRoomAgentModel(roomId, profileId, checkedModel(model));
+    this.publish(roomId);
+    if (agent.conversationId) void this.sessions.followRoomAgentModel(agent.conversationId).catch(() => {});
   }
 
   /**
@@ -867,6 +880,19 @@ export class RoomService implements RoomRules, TurnListener {
     this.hub.broadcast({ type: "room.upserted", room });
     return room;
   }
+}
+
+/** Far longer than any model or effort an agent names, so that nothing longer is kept. */
+const LONGEST_MODEL_CHOICE = 200;
+
+const choiceOrNone = (value: unknown) => {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.length > LONGEST_MODEL_CHOICE) throw new Error("A model or effort is a name, or none.");
+  return value.trim() || null;
+};
+
+function checkedModel({ model, effort }: RoomAgentModel): RoomAgentModel {
+  return { model: choiceOrNone(model), effort: choiceOrNone(effort) };
 }
 
 function knownPreset(permissions: PermissionPreset) {

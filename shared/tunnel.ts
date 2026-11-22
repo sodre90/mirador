@@ -40,12 +40,21 @@ export const tunnelOrigin = ({ hostAddress, port }: TunnelPlaces) => new URL(`ht
 const LONGEST_NAME_IN_INVITE = 200;
 const LONGEST_BROKER_ADDRESS = 260;
 
-const toBase64Url = (text: string) =>
+export const base64UrlOf = (text: string) =>
   btoa(String.fromCharCode(...new TextEncoder().encode(text)))
     .replace(/\+/g, "-")
     .replace(/\//g, "_")
     .replace(/=+$/, "");
 const fromBase64Url = (text: string) => new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), (char) => char.charCodeAt(0)));
+
+/** The text a base64url string encodes as UTF-8; null when it is not one. */
+export function textOfBase64Url(encoded: string) {
+  try {
+    return fromBase64Url(encoded);
+  } catch {
+    return null;
+  }
+}
 
 /** WireGuard's encoding of a key: standard base64 of 32 bytes, in its one canonical form. */
 export const isTunnelKeyText = (key: unknown): key is string => typeof key === "string" && /^[A-Za-z0-9+/]{43}=$/.test(key) && btoa(atob(key)) === key;
@@ -74,7 +83,7 @@ function checkedPlaces(given: Record<string, unknown>): TunnelPlaces | null {
   return { hostKey, hostAddress, port, ...(canvasPort !== undefined && { canvasPort }), broker: { address: broker.address, key: broker.key } };
 }
 
-export const encodedInviteTunnel = (tunnel: InviteTunnel) => toBase64Url(JSON.stringify(tunnel));
+export const encodedInviteTunnel = (tunnel: InviteTunnel) => base64UrlOf(JSON.stringify(tunnel));
 
 /** What an invite link says of the tunnel, every field checked, as the link is pasted from anywhere; null when any is not what the host makes. */
 export function decodedInviteTunnel(encoded: string): InviteTunnel | null {

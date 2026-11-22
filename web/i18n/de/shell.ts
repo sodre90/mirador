@@ -307,11 +307,9 @@ export const shell: Messages["shell"] = {
     inviteLink: "Einladungslink",
     joining: "Beitritt läuft…",
     joinButton: "Beitreten",
-    outOfRooms: "Sein Besitzer hat diesen Computer von seinen Räumen dort abgemeldet. Bitte um eine neue Einladung und tritt mit ihrem Code bei.",
-    outOfRoomsPeerToPeer: "Sein Besitzer hat diesen Computer von seinen Räumen dort abgemeldet. Bitte um eine neue Einladung und füge hier ihren ganzen Link ein.",
+    outOfRooms: "Sein Besitzer hat diesen Computer von seinen Räumen dort abgemeldet. Bitte um eine neue Einladung und füge sie hier ein.",
     someoneElses: "Rechner von jemand anderem, in dessen Räumen du bist",
-    roomInviteFirst: "Du wurdest in einen Raum dort eingeladen. Tritt mit dem Code oder Link der Raumeinladung bei.",
-    roomInviteLinkFirst: "Du wurdest in einen Raum dort eingeladen. Tritt mit dem ganzen Link der Raumeinladung bei: Sein Code allein reicht nicht.",
+    roomInviteFirst: "Du wurdest in einen Raum dort eingeladen. Füge die Einladung hier ein.",
     peerToPeer: "per Peer-to-Peer",
     linkToOpen: {
       title: (machine) => `Link von ${machine} öffnen?`,

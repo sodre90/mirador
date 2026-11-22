@@ -19,7 +19,7 @@ export const devices: Messages["devices"] = {
     name: "给这台设备起个名字",
     askToJoin: "请求加入",
     askToJoinIsFullControl: "申请加入会让这个设备成为所有者自己的设备之一，完全控制这个 Mirador。被邀请进入别人的房间？请在你自己的 Mirador 中用房间邀请加入。",
-    roomInviteHere: "这个链接邀请你进入这个 Mirador 上的一个房间。打开你自己的 Mirador，在“机器”中粘贴这个链接即可加入。",
+    roomInviteHere: "这个邀请是给这个 Mirador 上的一个房间的。打开你自己的 Mirador，在“房间 → 加入房间”中粘贴它。",
     inviteCode: "邀请码",
     joining: "正在加入…",
     join: "加入",
@@ -75,6 +75,11 @@ export const devices: Messages["devices"] = {
     lockedAfter: "），所以不能在这里更改。",
     saved: "已保存。host 从下次启动起使用它。",
     restartHost: "重启 host",
+  },
+  roomInvites: {
+    title: "房间邀请的连接方式",
+    peerToPeer: "直接点对点连接",
+    address: "通过这台机器的地址",
   },
   invite: {
     qrLabel: "二维码形式的链接",

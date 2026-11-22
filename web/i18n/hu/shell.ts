@@ -283,11 +283,9 @@ export const shell: Messages["shell"] = {
     inviteLink: "Meghívólink",
     joining: "Csatlakozás…",
     joinButton: "Csatlakozás",
-    outOfRooms: "A tulajdonosa kijelentkeztette ezt a számítógépet az ottani szobáiból. Kérj tőle új meghívót, és csatlakozz a kódjával.",
-    outOfRoomsPeerToPeer: "A tulajdonosa kijelentkeztette ezt a számítógépet az ottani szobáiból. Kérj tőle új meghívót, és illeszd be ide a teljes linkjét.",
+    outOfRooms: "A tulajdonosa kijelentkeztette ezt a számítógépet az ottani szobáiból. Kérj tőle új meghívót, és illeszd be ide.",
     someoneElses: "Valaki más gépe, ahol a szobáiban vagy",
-    roomInviteFirst: "Meghívtak egy ottani szobába. Csatlakozz a szobameghívó kódjával vagy linkjével.",
-    roomInviteLinkFirst: "Meghívtak egy ottani szobába. Csatlakozz a szobameghívó teljes linkjével: a kódja egymagában nem elég.",
+    roomInviteFirst: "Meghívtak egy ottani szobába. Illeszd be ide a meghívót.",
     peerToPeer: "peer to peer kapcsolattal",
     linkToOpen: {
       title: (machine) => `Megnyitod a linket innen: ${machine}?`,

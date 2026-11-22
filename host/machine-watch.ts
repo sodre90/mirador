@@ -1,4 +1,5 @@
-import type { Conversation, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
+import { joinedRoomsIn, withJoinedRoom, withoutJoinedRoom } from "../shared/machines.ts";
+import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import type { SystemNotification } from "../shared/system-notifications.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
@@ -129,15 +130,33 @@ const waitingOf = (conversations: Conversation[]) =>
 const waitingList = ({ waitingIn }: WatchedMachine) => [...waitingIn.values()].sort();
 
 const sameStatus = (one: MachineStatus, other: MachineStatus) =>
-  one.reachable === other.reachable && one.waiting.join() === other.waiting.join() && JSON.stringify(one.joinedThere) === JSON.stringify(other.joinedThere);
+  one.reachable === other.reachable &&
+  one.waiting.join() === other.waiting.join() &&
+  JSON.stringify(one.joinedThere) === JSON.stringify(other.joinedThere) &&
+  JSON.stringify(one.rooms) === JSON.stringify(other.rooms);
+
+/** The rooms someone else's machine lists for this computer's owner after its message, each as `joinedRoomIn` cleans it. */
+function roomsAfter(rooms: JoinedRoom[], message: ServerMessage): JoinedRoom[] {
+  switch (message.type) {
+    case "snapshot":
+      return joinedRoomsIn(message.rooms);
+    case "room.upserted":
+      return withJoinedRoom(rooms, message.room);
+    case "room.deleted":
+      return withoutJoinedRoom(rooms, message.roomId);
+    default:
+      return rooms;
+  }
+}
 
 /**
  * Keeps up with each joined machine while this host runs: whether it answers, which of its conversations wait for
  * you, and its notifications, which it passes on as this host's own. It listens as a page for the conversations and
  * as a desktop app for the notifications, so the machine tells this host instead of the frames this host shows it in.
  * A machine this computer joined as a person in its rooms, by this host's own record, is someone else's: this host
- * takes nothing it says, not its notifications, id, machines or waiting conversations, only whether it answers; when
- * its owner takes the person out of the last of its rooms, this host is signed out at once.
+ * takes nothing it says, not its notifications, id, machines or waiting conversations, only whether it answers and the
+ * names of the rooms it lists for the person, cleaned, to show with the machine; when its owner takes the person out of
+ * the last of its rooms, this host is signed out at once.
  */
 export class MachineWatch {
   private readonly watched = new Map<string, WatchedMachine>();
@@ -164,16 +183,14 @@ export class MachineWatch {
     this.stop(machineId);
     const machine = this.store.findMachine(machineId);
     if (!machine?.joined) return;
-    const watched: WatchedMachine = { sockets: [], status: { machineId, reachable: false, waiting: [], joinedThere: [] }, waitingIn: new Map() };
+    const watched: WatchedMachine = { sockets: [], status: { machineId, reachable: false, waiting: [], joinedThere: [], rooms: this.store.machineRooms(machineId) }, waitingIn: new Map() };
     const signIn = (origin: string) => {
       const token = this.store.machineDeviceToken(machineId);
       return token ? { headers: { Origin: origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
     };
     const events = {
       opened: () => this.update(watched, { reachable: true }),
-      message: (message: ServerMessage) => {
-        if (!machine.asPerson) this.follow(watched, message);
-      },
+      message: (message: ServerMessage) => (machine.asPerson ? this.followRooms(watched, message) : this.follow(watched, message)),
       closed: (code: number, reached: Machine) => {
         this.update(watched, { reachable: false });
         if (code === OUT_OF_ROOMS_CLOSE_CODE && this.tunnels.stillReaches(reached)) this.signedOut(machineId);
@@ -218,6 +235,13 @@ export class MachineWatch {
         watched.waitingIn.delete(message.conversationId);
         return this.update(watched, { waiting: waitingList(watched) });
     }
+  }
+
+  private followRooms(watched: WatchedMachine, message: ServerMessage) {
+    const rooms = roomsAfter(watched.status.rooms, message);
+    if (JSON.stringify(rooms) === JSON.stringify(watched.status.rooms)) return;
+    this.store.setMachineRooms(watched.status.machineId, rooms);
+    this.update(watched, { rooms });
   }
 
   private learnHostId(machineId: string, hostId: string) {

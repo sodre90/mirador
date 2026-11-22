@@ -69,6 +69,7 @@ import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderAndOverallLimit, SenderLimit, senderForLimits, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import type { RoomService } from "./rooms.ts";
+import type { RoomRole } from "../shared/rooms.ts";
 import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
@@ -76,7 +77,7 @@ import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
 import { RoomPresenceService } from "./room-presence.ts";
 import { namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
-import { inviteIn, LONGEST_MACHINE_NAME, machineAddress } from "../shared/machines.ts";
+import { inviteIn, isRoomInviteConnect, LONGEST_MACHINE_NAME, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { oneLine, shownAsWritten } from "../shared/written-text.ts";
@@ -587,6 +588,7 @@ export function startServer(services: HostServices) {
     thisDeviceId: socket.data.deviceId,
     reachability: reachabilitySettings(),
     peerToPeer: p2p?.peerToPeerStatus() ?? null,
+    roomInvitesConnect: store.roomInvitesConnect(),
   });
   const sendDevicesToEveryPage = () => hub.sendEach(devicesListed);
   const pluginsListed = () => listedPlugins(plugins, catalog);
@@ -658,7 +660,7 @@ export function startServer(services: HostServices) {
     const { origin, tunnel, trustsOnFirstUse } = wayToMachine(parsed, whyNotDialing);
     if (store.findMachineByOrigin(origin)) throw new HostProblemError({ code: "machine-already-added", origin });
     const machineId = crypto.randomUUID();
-    const shownName = name.trim() || nameInInvite(parsed.tunnel) || new URL(origin).hostname;
+    const shownName = name.trim() || nameInInvite(parsed.tunnel?.name ?? parsed.name) || new URL(origin).hostname;
     store.insertMachine({ id: machineId, name: shownName, origin, createdAt: Date.now() });
     if (tunnel) store.setMachineTunnelPlaces(machineId, placesIn(tunnel));
     if (forRoom) store.setMachineJoinedAs(machineId, { asPerson: true, relayKey: null });
@@ -687,8 +689,8 @@ export function startServer(services: HostServices) {
   }
 
   /** The name the machine gave itself in the invite, on one line and as long as a machine's name may be, unless it reads other than it is written. */
-  function nameInInvite(tunnel: InviteTunnel | null) {
-    const name = oneLine(shownAsWritten(tunnel?.name ?? "")).slice(0, LONGEST_MACHINE_NAME).trim();
+  function nameInInvite(given: string | null) {
+    const name = oneLine(shownAsWritten(given ?? "")).slice(0, LONGEST_MACHINE_NAME).trim();
     return name && !nameRefused(name) ? name : null;
   }
 
@@ -1304,6 +1306,31 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.canvas-use", canvasUse });
   }
 
+  function setRoomInvitesConnect(connect: RoomInviteConnect) {
+    if (!isRoomInviteConnect(connect)) throw new Error(`There is no way for room invites to connect called "${connect}".`);
+    store.setRoomInvitesConnect(connect);
+    sendDevicesToEveryPage();
+  }
+
+  /**
+   * An invite into the room that carries one way to this machine, the one asked for: its peer-to-peer tunnel and no
+   * address, or its address and no tunnel. One that can't be made that way is withdrawn at once, and says why.
+   */
+  async function inviteIntoRoom(roomId: string, role: RoomRole, connect: RoomInviteConnect) {
+    if (!isRoomInviteConnect(connect)) throw new Error(`There is no way for room invites to connect called "${connect}".`);
+    const publicOrigin = config.reachability.publicAddress?.origin ?? null;
+    if (connect === "address" && !publicOrigin) throw new HostProblemError({ code: "room-invite-needs-address" });
+    if (connect === "peer-to-peer" && !p2p) throw new HostProblemError({ code: "room-invite-needs-peer-to-peer" });
+    const { invite, code } = roomInvites.invite(roomId, role);
+    sendRoomInvitesToEveryPage();
+    if (connect === "address") return { invite, text: roomInviteText(code, { origin: publicOrigin!, authorityFingerprint, machineName: store.machineName() }) };
+    const tunnel = await roomInvites.tunnelFor(code, invite.expiresAt, p2p);
+    if (tunnel) return { invite, text: roomInviteText(code, { tunnel }) };
+    roomInvites.withdraw(invite.id);
+    sendRoomInvitesToEveryPage();
+    throw new HostProblemError({ code: "room-invite-needs-peer-to-peer" });
+  }
+
   function setKeepDeletedCanvas(keep: KeepDeletedCanvas) {
     if (!isKeepDeletedCanvas(keep)) throw new HostProblemError({ code: "unknown-keep-deleted-canvas", value: String(keep) });
     store.setKeepDeletedCanvas(keep);
@@ -1448,6 +1475,8 @@ export function startServer(services: HostServices) {
         return setConversationsShown(message.shown);
       case "settings.set-keep-deleted-canvas":
         return setKeepDeletedCanvas(message.keep);
+      case "settings.set-room-invites-connect":
+        return setRoomInvitesConnect(message.connect);
       case "settings.set-claude-program":
         return setClaudeProgram(message.path);
       case "newer-version.check":
@@ -1998,23 +2027,25 @@ export function startServer(services: HostServices) {
             () => null,
             (error) => problemFieldsOf(error, errorMessage(error)),
           )
-          .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, ...(problem ?? { problem: null }) }));
+          .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, roomId: null, ...(problem ?? { problem: null }) }));
       case "machine.join": {
         const { code, authorityFingerprint, tunnel } = inviteIn(message.invite);
-        const problem = await relays.join(message.machineId, code, authorityFingerprint, tunnel, { trustsOnFirstUse: tunnel === null }).then(
-          () => null,
-          (error) => problemFieldsOf(error, errorMessage(error)),
+        const joined = await relays.join(message.machineId, code, authorityFingerprint, tunnel, { trustsOnFirstUse: tunnel === null }).then(
+          ({ roomId }) => ({ roomId, problem: null }),
+          (error) => ({ roomId: null, ...problemFieldsOf(error, errorMessage(error)) }),
         );
-        return reply({ type: "machine.join-answered", requestId: message.requestId, ...(problem ?? { problem: null }) });
+        return reply({ type: "machine.join-answered", requestId: message.requestId, ...joined });
       }
       case "search":
         return reply({ type: "search.results", requestId: message.requestId, conversations: search.find(message.query) });
       case "room.create":
-        return reply({ type: "room.created", requestId: message.requestId, roomId: rooms.create(message.name, message.workspaceId, message.profileIds, message.permissions).id });
+        return reply({ type: "room.created", requestId: message.requestId, roomId: rooms.create(message.name, message.workspaceId, message.profileIds, message.permissions, message.models).id });
       case "room.rename":
         return rooms.rename(message.roomId, message.name);
       case "room.set-agents":
         return rooms.setAgents(message.roomId, message.profileIds);
+      case "room.set-agent-model":
+        return rooms.setAgentModel(message.roomId, message.profileId, { model: message.model, effort: message.effort });
       case "room.set-workspace":
         return rooms.setWorkspace(message.roomId, message.workspaceId);
       case "room.set-permissions":
@@ -2025,11 +2056,11 @@ export function startServer(services: HostServices) {
       case "room.remove-person":
         rooms.removePerson(message.roomId, message.personId);
         return roomPresence.peopleChanged(message.roomId);
-      case "room.invite": {
-        const invited = roomInvites.invite(message.roomId, message.role);
-        sendRoomInvitesToEveryPage();
-        return void roomInvites.tunnelFor(invited.code, invited.invite.expiresAt, p2p).then((tunnel) => reply({ type: "room.invited", requestId: message.requestId, ...invited, tunnel }));
-      }
+      case "room.invite":
+        return void inviteIntoRoom(message.roomId, message.role, message.connect).then(
+          ({ invite, text }) => reply({ type: "room.invited", requestId: message.requestId, invite, text, problem: null }),
+          (error) => reply({ type: "room.invited", requestId: message.requestId, invite: null, text: null, ...problemFieldsOf(error, errorMessage(error)) }),
+        );
       case "room.withdraw-invite": {
         const withdrawn = roomInvites.withdraw(message.inviteId);
         if (withdrawn) p2p?.inviteWithdrawn(withdrawn);
@@ -2172,6 +2203,7 @@ export function startServer(services: HostServices) {
       pluginSettings: pluginSettings.all(),
     });
     hub.send(socket, { type: "join-requests.listed", joinRequests: joinRequests.waiting() });
+    hub.send(socket, { type: "rooms.people-here", roomIds: roomPresence.roomsWithPeopleHere() });
     hub.send(socket, voiceSettingsFor(socket));
     hub.send(socket, { type: "voice.engine", engine: voiceEngine.status() });
   }

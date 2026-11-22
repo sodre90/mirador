@@ -64,7 +64,9 @@ import { useShortcuts } from "./useShortcuts.ts";
 import { WorkspaceArea } from "./Workspace.tsx";
 import { RoomCanvas, RoomView } from "./Room.tsx";
 import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
-import { RoomDialog } from "./RoomsSidebar.tsx";
+import { newRoomWorkspace, NewRoomDialog } from "./NewRoom.tsx";
+import { JoinRoomDialog, RoomInviteDialog } from "./RoomInvite.tsx";
+import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
 
@@ -582,11 +584,18 @@ export function App() {
   useKeptConversationsSubscribed(status, [...state.kept, ...state.sideChats, ...state.threadConversations]);
   useRoomSubscribed(status, state.rooms.some(({ id }) => id === state.selectedRoomId) ? state.selectedRoomId : null);
 
+  /** A room of someone else's machine opens in that machine's frame, which shows nothing of this computer's own. */
+  const openJoinedRoom = (machineId: string, roomId: string | null) => {
+    if (!showsMachinesHere()) return;
+    if (!roomId) return machines.show(machineId);
+    machines.rememberPlace(machineId, `#/r/${roomId}`);
+    machines.openIn(machineId, `#/r/${roomId}`);
+  };
   const openConversation = useCallback(
     (conversationId: string, machineId?: string) => {
       const machine = state.machines.find(({ id }) => id === machineId);
       if (!machine) return dispatch({ type: "select", conversationId });
-      if (showsMachinesHere()) return machines.openIn(machine.id, conversationId);
+      if (showsMachinesHere()) return machines.openIn(machine.id, `#/c/${conversationId}`);
       openMachine(machine.origin, conversationId);
     },
     [state.machines],
@@ -678,6 +687,8 @@ export function App() {
   const overlay = state.overlay;
   const reminderConversation = overlay?.kind === "reminder" ? state.conversations.find(({ id }) => id === overlay.conversationId) : undefined;
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
+  const settingsRoom = overlay?.kind === "room" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
+  const invitedRoom = overlay?.kind === "room-invite" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
   const worktreesWorkspace = overlay?.kind === "worktrees" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const layoutToggles = {
     sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
@@ -830,7 +841,7 @@ export function App() {
       >
         {!sidebarHidden && (
           <>
-            <Sidebar state={state} dispatch={dispatch} />
+            <Sidebar state={state} dispatch={dispatch} onOpenJoinedRoom={showsMachinesHere() ? openJoinedRoom : undefined} />
             <Splitter
               label={t.shell.panes.resizeSidebar}
               share={sidebarWidth / layoutWidth}
@@ -935,8 +946,7 @@ export function App() {
           }}
           onJoined={(machineId, roomId) => {
             closeOverlay();
-            if (roomId) machines.rememberPlace(machineId, `#/r/${roomId}`);
-            if (showsMachinesHere()) machines.show(machineId);
+            openJoinedRoom(machineId, roomId);
           }}
           onClose={closeOverlay}
         />
@@ -983,16 +993,38 @@ export function App() {
       )}
       {sessionsWorkspace && <SessionsDialog workspace={sessionsWorkspace} profiles={state.profiles} dispatch={dispatch} onClose={closeOverlay} />}
       {worktreesWorkspace && <WorktreesDialog key={worktreesWorkspace.id} workspace={worktreesWorkspace} dispatch={dispatch} onClose={closeOverlay} />}
-      {overlay?.kind === "room" && (
-        <RoomDialog
-          room={state.rooms.find(({ id }) => id === overlay.roomId) ?? null}
+      {overlay?.kind === "new-room" && (
+        <NewRoomDialog
+          workspaces={state.workspaces}
+          profiles={state.profiles}
+          workspaceId={newRoomWorkspace(state.workspaces, state.conversations, state.selectedConversationId, state.rooms.find(({ id }) => id === state.selectedRoomId))}
+          dispatch={dispatch}
+          onClose={closeOverlay}
+        />
+      )}
+      {settingsRoom && overlay?.kind === "room" && (
+        <RoomSettingsDialog
+          key={settingsRoom.id}
+          room={settingsRoom}
+          tab={overlay.tab}
           workspaces={state.workspaces}
           profiles={state.profiles}
           people={state.people}
           ownerId={state.ownerId}
           invites={state.roomInvites}
-          reachability={state.devices?.reachability ?? null}
-          dispatch={dispatch}
+          roomConversations={state.roomConversations}
+          onInvite={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: settingsRoom.id } })}
+          onClose={closeOverlay}
+        />
+      )}
+      {invitedRoom && <RoomInviteDialog key={invitedRoom.id} room={invitedRoom} devices={state.devices} onClose={closeOverlay} />}
+      {overlay?.kind === "join-room" && (
+        <JoinRoomDialog
+          machines={state.machines}
+          onJoined={(machineId, roomId) => {
+            closeOverlay();
+            openJoinedRoom(machineId, roomId);
+          }}
           onClose={closeOverlay}
         />
       )}

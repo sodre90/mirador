@@ -12,6 +12,7 @@ import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
 import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
 import { pastelVariables } from "./pastels.ts";
+import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { mostUrgentTone } from "./waiting.ts";
 
 const machineFromHash = () => location.hash.match(/^#\/m\/([\w-]+)$/)?.[1] ?? null;
@@ -37,10 +38,11 @@ const frameTrust = (machine: Machine) => (machine.asPerson ? { sandbox: SOMEONE_
 /** For the stylesheet: the machine's pastel, which its rail button, mark and strip draw with. */
 export const colorAttributes = (color: Pastel | null) => (color ? { "data-color": color, style: pastelVariables(color) } : {});
 
-/** A conversation to open in a machine's frame, e.g. from that machine's notification; each request is a new object. */
-export interface ConversationToOpen {
+/** A place to open in a machine's frame, e.g. a conversation from that machine's notification, or a room; each request is a new object. */
+export interface PlaceToOpen {
   machineId: string;
-  conversationId: string;
+  /** The hash route on that machine, `#/c/<id>` or `#/r/<id>`. */
+  place: string;
 }
 
 /** A machine's page keeps streaming what its conversations do while hidden, so a machine left for this long lets go of it. */
@@ -53,7 +55,7 @@ export const HIDDEN_MACHINE_STAYS_LOADED_MS = 10 * 60_000;
 export function useShownMachine(machines: Machine[], machinesLoaded: boolean) {
   const [shownId, setShownId] = useState(machineFromHash);
   const [visited, setVisited] = useState(() => new Set(shownId ? [shownId] : []));
-  const [opening, setOpening] = useState<ConversationToOpen | null>(null);
+  const [opening, setOpening] = useState<PlaceToOpen | null>(null);
   const places = useRef(new Map<string, string>());
   const lettingGo = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const shown = machines.find(({ id }) => id === shownId) ?? null;
@@ -77,8 +79,8 @@ export function useShownMachine(machines: Machine[], machinesLoaded: boolean) {
     setShownId(machineId);
     if (machineId) setVisited((before) => new Set(before).add(machineId));
   }, []);
-  const openIn = useCallback((machineId: string, conversationId: string) => {
-    setOpening({ machineId, conversationId });
+  const openIn = useCallback((machineId: string, place: string) => {
+    setOpening({ machineId, place });
     show(machineId);
   }, []);
   const addAndShow = useAddedMachineShown(machines, show);
@@ -205,7 +207,6 @@ export function MachineRail({
   );
 }
 
-const conversationAddress = (machine: Machine, conversationId: string) => `${relayAddress(machine)}#/c/${conversationId}`;
 
 function MachineFrame({
   machine,
@@ -217,16 +218,16 @@ function MachineFrame({
 }: {
   machine: Machine;
   shown: boolean;
-  opening: ConversationToOpen | null;
+  opening: PlaceToOpen | null;
   striped: boolean;
   place: string;
   onPlace: (machineId: string, place: string) => void;
 }) {
   const frame = useRef<HTMLIFrameElement>(null);
   const openedWith = useRef(opening);
-  const [address] = useState(() => (opening ? conversationAddress(machine, opening.conversationId) : `${relayAddress(machine)}${place}`));
+  const [address] = useState(() => `${relayAddress(machine)}${opening?.place ?? place}`);
   useEffect(() => {
-    if (opening && opening !== openedWith.current) frame.current!.contentWindow!.location.href = conversationAddress(machine, opening.conversationId);
+    if (opening && opening !== openedWith.current) frame.current!.contentWindow!.location.href = `${relayAddress(machine)}${opening.place}`;
   }, [opening]);
   useEffect(() => tellTheMachineItIsShown(frame.current, shown), [shown]);
   useEffect(() => {
@@ -303,9 +304,9 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
       ) : (
         <>
           {machine.outOfRooms ? (
-            <p className="join-out-of-rooms">{machine.peerToPeer ? words.outOfRoomsPeerToPeer : words.outOfRooms}</p>
+            <p className="join-out-of-rooms">{words.outOfRooms}</p>
           ) : machine.asPerson ? (
-            <p className="join-room-invite">{machine.peerToPeer ? words.roomInviteLinkFirst : words.roomInviteFirst}</p>
+            <p className="join-room-invite">{words.roomInviteFirst}</p>
           ) : (
             <>
               <p>
@@ -323,14 +324,13 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
           )}
           <form onSubmit={join}>
             <label>
-              {machine.peerToPeer ? words.inviteLink : words.inviteCode}
+              {machine.asPerson ? t.rooms.pasteInvite : machine.peerToPeer ? words.inviteLink : words.inviteCode}
               <input
                 value={text}
                 onChange={(event) => setText(event.target.value)}
-                placeholder={machine.peerToPeer ? undefined : "ABCD-EFGH-JKLM"}
+                placeholder={machine.asPerson || machine.peerToPeer ? undefined : "ABCD-EFGH-JKLM"}
                 autoFocus
-                autoComplete="off"
-                spellCheck={false}
+                {...NAME_FIELD_ATTRIBUTES}
               />
             </label>
             <button type="submit" className="primary" disabled={joining || !text.trim()}>
@@ -356,7 +356,7 @@ export function MachineFrames({
   machines: Machine[];
   shownId: string | null;
   visited: Set<string>;
-  opening: ConversationToOpen | null;
+  opening: PlaceToOpen | null;
   placeOf: (machineId: string) => string;
   onPlace: (machineId: string, place: string) => void;
 }) {

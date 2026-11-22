@@ -278,11 +278,9 @@ export const shell: Messages["shell"] = {
     inviteLink: "邀请链接",
     joining: "正在加入…",
     joinButton: "加入",
-    outOfRooms: "它的所有者已让这台电脑退出了那边的房间。请向对方要一个新的邀请，并用其邀请码加入。",
-    outOfRoomsPeerToPeer: "它的所有者已让这台电脑退出了那边的房间。请向对方要一个新的邀请，并把完整的邀请链接粘贴到这里。",
+    outOfRooms: "它的所有者已让这台电脑退出了那边的房间。请向对方要一个新的邀请，并粘贴到这里。",
     someoneElses: "别人的机器，你在它的房间里",
-    roomInviteFirst: "你被邀请进入那边的一个房间。用房间邀请的邀请码或邀请链接加入。",
-    roomInviteLinkFirst: "你被邀请进入那边的一个房间。请用房间邀请的完整邀请链接加入：只有邀请码是不够的。",
+    roomInviteFirst: "你被邀请进入那边的一个房间。请把邀请粘贴到这里。",
     peerToPeer: "点对点连接",
     linkToOpen: {
       title: (machine) => `打开来自 ${machine} 的链接？`,

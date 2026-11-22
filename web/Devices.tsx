@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { joinedOn } from "../shared/devices.ts";
 import { askToJoin, spacedNumber } from "../shared/join-requests.ts";
-import { inviteLink, isRoomInviteLink, joinCodeIn } from "../shared/machines.ts";
+import { inviteLink, isRoomInviteLink, joinCodeIn, ROOM_INVITE_CONNECTS, type RoomInviteConnect } from "../shared/machines.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { relativeTimeOf } from "../shared/relative-time.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
@@ -16,6 +16,7 @@ import { describedText, refusalText } from "./host-error.ts";
 import { locale, t } from "./i18n/index.ts";
 import { QrCode } from "./QrCode.tsx";
 import { saveSetting } from "./saved-setting.ts";
+import { useSentChoice } from "./sent-choice.ts";
 import type { DevicesListed } from "./state.ts";
 
 const words = t.devices;
@@ -606,6 +607,23 @@ const deviceStatus = ({ connection, lastSeenAt }: ListedDevice) =>
 const connectedFrom = ({ fromAddress, tailscaleUser }: DeviceConnection) => words.list.from(tailscaleUser ? `${fromAddress} (${tailscaleUser})` : fromAddress);
 
 /** The devices that joined this machine, a person's other than the owner's saying whose, which reach only that person's rooms. */
+/** The way a room invite connects unless its maker picks the other as they make it. */
+function RoomInvitesConnectSetting({ connect: kept }: { connect: RoomInviteConnect }) {
+  const [connect, choose] = useSentChoice(kept, (connect) => connection.send({ type: "settings.set-room-invites-connect", connect }));
+  const labels: Record<RoomInviteConnect, string> = { "peer-to-peer": words.roomInvites.peerToPeer, address: words.roomInvites.address };
+  return (
+    <fieldset className="room-invites-connect">
+      <legend>{words.roomInvites.title}</legend>
+      {ROOM_INVITE_CONNECTS.map((each) => (
+        <label key={each}>
+          <input type="radio" name="room-invites-connect" checked={connect === each} onChange={() => choose(each)} />
+          {labels[each]}
+        </label>
+      ))}
+    </fieldset>
+  );
+}
+
 export function DeviceSettings({ listed, people, ownerId }: { listed: DevicesListed | null; people: Person[]; ownerId: string | null }) {
   const [invite, setInvite] = useState<Invite | null>(null);
   const [inviteRoute, setInviteRoute] = useState<InviteRoute>("tunnel");
@@ -684,6 +702,7 @@ export function DeviceSettings({ listed, people, ownerId }: { listed: DevicesLis
         )}
       </div>
       {listed && <ReachabilitySettingsSection settings={listed.reachability} />}
+      {listed && <RoomInvitesConnectSetting connect={listed.roomInvitesConnect} />}
     </>
   );
 }

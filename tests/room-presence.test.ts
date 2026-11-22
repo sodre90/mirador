@@ -162,6 +162,29 @@ describe("who is in a room", () => {
   });
 });
 
+describe("the rooms someone is in", () => {
+  test("are marked for the owner alone, by someone other than the owner there, and told again only when that changes", () => {
+    const { owner, mia, gus, stan, shows, close, sent } = machineWithPeople();
+    const peopleHereHeard = (page: typeof owner) => page.received.flatMap((message) => (message.type === "rooms.people-here" ? [message.roomIds] : []));
+    shows(owner, "launch");
+    sent();
+    expect(peopleHereHeard(owner)).toEqual([]);
+    shows(mia, "launch");
+    shows(gus, "launch");
+    sent();
+    shows(stan, "payroll");
+    sent();
+    expect(peopleHereHeard(owner)).toEqual([["launch"], ["launch", "payroll"]]);
+    close(mia);
+    sent();
+    expect(peopleHereHeard(owner)).toHaveLength(2);
+    close(gus);
+    sent();
+    expect(peopleHereHeard(owner).at(-1)).toEqual(["payroll"]);
+    for (const page of [mia, gus, stan]) expect(peopleHereHeard(page)).toEqual([]);
+  });
+});
+
 describe("who writes in a room", () => {
   test("is who typed there within the last seconds, while they are there, until they send the message or empty the box", () => {
     const { presence, ownerId, owner, mia, shows, sent, clock, lastHeard } = machineWithPeople();
@@ -331,6 +354,8 @@ describe("a person's presence and writing, as the host takes them", () => {
     };
     expect(view(presence, stan.socket.data)).toEqual([]);
     expect(view(presence, mia.socket.data)).toEqual([{ type: "room.presence", roomId: "launch", here: ["mia"], writing: [{ personId: "mia", threadId: "launch-thread" }] }]);
+    const withModels = { ...room("launch", "Launch", [{ personId: "mia", role: "member" }]), agents: [{ profileId: "p1", conversationId: "c1", answering: null, model: "opus", effort: "high" }] };
+    expect(view({ type: "room.upserted", room: withModels }, mia.socket.data)).toMatchObject([{ type: "room.upserted", room: { agents: [{ profileId: "p1", model: null, effort: null }] } }]);
     expect(view({ type: "room.usage.got", requestId: "u", usage: { roomId: "launch", since: null, total: { turns: 0, tokens: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedWriteTokens: 0 }, cost: null }, agents: [], people: [] } }, mia.socket.data)).toEqual([]);
   });
 });

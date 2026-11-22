@@ -35,10 +35,11 @@ export class RoomPresenceService {
   /** By room, then by person. */
   private readonly writing = new Map<string, Map<string, Writing>>();
   private readonly sendingSoon = new Map<string, unknown>();
+  private peopleHereTold = "";
 
   constructor(
-    private readonly store: Pick<Store, "findRoom" | "findRoomThread" | "ownerId">,
-    private readonly hub: Pick<Hub, "peopleShowing" | "publishToRoom">,
+    private readonly store: Pick<Store, "findRoom" | "findRoomThread" | "ownerId" | "listRooms">,
+    private readonly hub: Pick<Hub, "peopleShowing" | "publishToRoom" | "broadcast">,
     private readonly timers: Timers = realTimers,
     private readonly signals = new SenderLimit(Date.now, MOST_WRITING_SIGNALS_A_MINUTE),
   ) {}
@@ -95,6 +96,24 @@ export class RoomPresenceService {
     [...(this.writing.get(roomId)?.keys() ?? [])].forEach((personId) => this.forget(roomId, personId));
     this.timers.clear(this.sendingSoon.get(roomId));
     this.sendingSoon.delete(roomId);
+    this.tellOfPeopleHere();
+  }
+
+  /** The rooms someone other than the owner is in now, which the owner's list of rooms marks. */
+  roomsWithPeopleHere(): string[] {
+    const ownerId = this.store.ownerId();
+    return this.store
+      .listRooms()
+      .filter(({ id }) => this.presenceIn(id).here.some((personId) => personId !== ownerId))
+      .map(({ id }) => id);
+  }
+
+  /** Pages hear of it only when it changed; the host's view of each person sees to it that only the owner's do. */
+  private tellOfPeopleHere() {
+    const roomIds = this.roomsWithPeopleHere();
+    if (roomIds.join() === this.peopleHereTold) return;
+    this.peopleHereTold = roomIds.join();
+    this.hub.broadcast({ type: "rooms.people-here", roomIds });
   }
 
   /** Who is here, and who of them writes, of the people the room lets in now. */
@@ -140,6 +159,7 @@ export class RoomPresenceService {
       this.timers.set(() => {
         this.sendingSoon.delete(roomId);
         if (this.store.findRoom(roomId)) this.hub.publishToRoom(roomId, { type: "room.presence", roomId, ...this.presenceIn(roomId) });
+        this.tellOfPeopleHere();
       }, PRESENCE_SENT_AFTER_MS),
     );
   }

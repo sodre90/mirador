@@ -56,7 +56,7 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * each once the one before was answered: `{"kind": toolKind, "title": text}` with a `"command"` it would run or a
  * `"path"` it would read or change (an edit's comes with its diff), or `{"waitFor": path}`, which holds the turn until
  * that file exists; `{{folder}}` in them is the session's folder. It answers with what each request got, or "Done."
- * when none asked. Ending in `FOLDER`, the message is answered with the folder the session works in. `WAIT ` and a path there holds the turn until that file exists before it does the rest.
+ * when none asked. Ending in `FOLDER`, the message is answered with the folder the session works in; in `CHOICES`, with what the session is on. `WAIT ` and a path there holds the turn until that file exists before it does the rest.
  * `TOKENS ` there with input and output tokens and, if given, a cost in US dollars ends the turn with those tokens as
  * its own, after reporting that cost as the session's so far, as a turn's spend reaches the host. `My answer
  * to your question` is answered with "Going with " and the answer, once no file is at `FAKE_ACP_ANSWERS_HELD_BY`.
@@ -451,6 +451,7 @@ async function answerAsked(client: acp.AgentContext, sessionId: string, asked: s
     return sayText(client, sessionId, `PINGPONG ${itself} ${other}`);
   }
   if (asked.endsWith("FOLDER")) return sayText(client, sessionId, `Working in ${sessionFolders.get(sessionId)}`);
+  if (asked.endsWith("CHOICES")) return sayChoices(client, sessionId);
   return sayText(client, sessionId, after("SAY ") ?? "Noted.");
 }
 

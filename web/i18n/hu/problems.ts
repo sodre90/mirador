@@ -19,6 +19,8 @@ export const problems: Messages["problems"] = {
     "room-gone": "A szoba már nem létezik.",
     "room-needs-a-name": "Adj nevet a szobának.",
     "room-message-misaddressed": "Ez az üzenet olyan ágenst jelöl meg, amely nincs a szobában, vagy olyan témában folytatódik, amely már nincs meg.",
+    "room-invite-needs-address": "Más gépek még semmilyen címen nem érik el ezt a gépet, így a meghívó csak közvetlenül, egyenrangú kapcsolattal csatlakozhat.",
+    "room-invite-needs-peer-to-peer": "Az egyenrangú kapcsolat még nem áll készen ezen a gépen. Próbáld újra egy pillanat múlva, vagy hívj meg a gép címén.",
     "session-already-open": "Ez a munkamenet már nyitva van az alkalmazásban.",
     "nothing-to-fork-yet": "Ennek a beszélgetésnek még nincs ágens-munkamenete, amit elágaztatni lehetne. Előbb küldj neki egy üzenetet.",
     "conversation-needs-name": "A beszélgetésnek kell egy név.",

@@ -10077,6 +10077,325 @@ button.link.more-rows {
   font-weight: 600;
 }
 
+.rooms > header {
+  position: relative;
+}
+
+.add-room-menu {
+  position: fixed;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+
+.add-room-menu button {
+  padding: 6px 10px;
+  border-color: transparent;
+  background: none;
+  text-align: left;
+}
+
+.add-room-menu button:hover,
+.add-room-menu button:focus-visible {
+  background: var(--rail-hover);
+}
+
+.rooms li.room-card {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 5px;
+}
+
+.room-mark {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  color: #fff;
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+}
+
+.room-card-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.room-card-name,
+.room-card-subline {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-card-name {
+  font-weight: 500;
+}
+
+.room-card-subline {
+  color: var(--muted);
+  font-size: calc(11.5px * var(--font-scale));
+}
+
+.room-people-here {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+.rooms li.joined-room.away .room-mark {
+  opacity: 0.45;
+}
+
+.room-invites-heading {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+}
+
+.room-agent-model {
+  margin-left: 4px;
+  color: var(--muted);
+}
+
+.room-invite-button {
+  padding: 2px 8px;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-agent-chips,
+.room-settings-rows {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-agent-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-self: start;
+  gap: 6px;
+  padding: 3px 4px 3px 6px;
+  border-radius: 5px;
+  background: var(--rail-hover);
+  color: var(--text);
+  font-size: calc(12.5px * var(--font-scale));
+}
+
+.room-agent-chip .avatar,
+.room-settings-rows .avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.room-agent-chip-name {
+  font-weight: 500;
+}
+
+select.room-agent-choice-select {
+  max-width: 170px;
+  padding: 1px 20px 1px 4px;
+  background-position: right 6px center;
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+select.room-agent-choice-select:hover,
+select.room-agent-choice-select:focus-visible {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.room-model-next-session {
+  flex-basis: 100%;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.agent-search {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-search ul {
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
+  left: 0;
+  z-index: 30;
+  display: grid;
+  max-height: 200px;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+  list-style: none;
+}
+
+.agent-search li {
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.agent-search li:hover,
+.agent-search li[aria-selected="true"] {
+  background: var(--rail-hover);
+}
+
+.room-more-options summary,
+.what-it-means summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: calc(12.5px * var(--font-scale));
+}
+
+.room-more-options[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.what-it-means p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-general {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.room-general .room-delete {
+  align-self: flex-start;
+}
+
+.room-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.room-tabs button {
+  margin-bottom: -1px;
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: none;
+  color: var(--muted);
+}
+
+.room-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  color: var(--text);
+}
+
+.room-tab-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 160px;
+}
+
+.room-settings-rows li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-settings-row-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-add-person,
+.room-invite-someone {
+  align-self: flex-start;
+}
+
+.room-settings .form-actions,
+.room-invite-dialog .form-actions {
+  margin-top: 12px;
+}
+
+.room-invite-dialog .room-field {
+  margin-bottom: 12px;
+}
+
+.room-invite-copy {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.room-invite-made p {
+  margin: 10px 0 0;
+}
+
+.room-invite-text {
+  width: 100%;
+  min-height: 4.5em;
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: calc(11.5px * var(--font-scale));
+  word-break: break-all;
+}
+
+.room-invites-connect {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 16px 0 0;
+  padding: 0;
+  border: none;
+}
+
+.room-invites-connect legend {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.room-invites-connect label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 /* A bar this narrow keeps its room for the title; ⌥B, /btw and selected text still open a side chat. */
 @container (max-width: 480px) {
   .chat-header button.icon.side-chat-toggle {

@@ -22,7 +22,7 @@ export const devices: Messages["devices"] = {
     name: "Nombre de este dispositivo",
     askToJoin: "Pedir unirse",
     askToJoinIsFullControl: "Pedir unirte convierte este dispositivo en uno de los dispositivos propios del dueño, con control total de este Mirador. ¿Te invitaron a una sala de otra persona? Únete desde tu propio Mirador, con la invitación a la sala.",
-    roomInviteHere: "Este enlace te invita a una sala de este Mirador. Abre tu propio Mirador y pega el enlace en Máquinas para unirte.",
+    roomInviteHere: "Esta invitación es para una sala de este Mirador. Abre tu propio Mirador y pégala en Salas → Unirse a una sala.",
     inviteCode: "Código de invitación",
     joining: "Uniéndose…",
     join: "Unirse",
@@ -81,6 +81,11 @@ export const devices: Messages["devices"] = {
     lockedAfter: "), así que esto no se puede cambiar aquí.",
     saved: "Guardado. El host lo usa desde su próximo inicio.",
     restartHost: "Reiniciar host",
+  },
+  roomInvites: {
+    title: "Las invitaciones a salas se conectan",
+    peerToPeer: "Directamente, peer to peer",
+    address: "En la dirección de esta máquina",
   },
   invite: {
     qrLabel: "Enlace como código QR",

@@ -107,7 +107,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
       <div className={`layout ${sidebarHidden ? "sidebar-hidden" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
         {!sidebarHidden && (
           <nav className="sidebar">
-            <RoomsSection rooms={state.rooms} selectedRoomId={state.selectedRoomId} waitingRoomIds={NO_ROOMS_WAITING} manages={false} dispatch={dispatch} />
+            <RoomsSection rooms={state.rooms} profiles={state.profiles} selectedRoomId={state.selectedRoomId} waitingRoomIds={NO_ROOMS_WAITING} manages={false} dispatch={dispatch} />
             <div className="sidebar-scroll" />
             <footer>
               <button type="button" className="link" onClick={() => setOwnProfileOpen(true)}>

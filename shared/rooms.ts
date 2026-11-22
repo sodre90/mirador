@@ -3,8 +3,19 @@ import type { PermissionPreset } from "./room-permissions.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 import { LINE_BREAKS, oneLine, squareBracketsMadeRound } from "./written-text.ts";
 
+/**
+ * The model and effort the owner chose for a room's agent, as its agent names them; null leaves what its profile has.
+ * Each session of the agent in the room takes them as it opens, and an open one at once.
+ */
+export interface RoomAgentModel {
+  model: string | null;
+  effort: string | null;
+}
+
+export const PROFILES_MODEL: RoomAgentModel = { model: null, effort: null };
+
 /** An agent of a room, by its profile, and the conversation it works on the room's tasks in, made the first time it is tagged. */
-export interface RoomAgent {
+export interface RoomAgent extends RoomAgentModel {
   profileId: string;
   conversationId: string | null;
   /** The room message the agent's turn under way answers; null while it takes no turn. */

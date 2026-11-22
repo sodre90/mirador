@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
-import { addWorkspace, createProfile, literally, reloadFromRestartedHost, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, literally, reloadFromRestartedHost, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const ROOM_AGENT_IDLE_MS = 1_500;
@@ -79,12 +79,7 @@ async function openRoomWithBuilder(page: Page, builder: Builder) {
   await addWorkspace(page, builder.host.projectDir);
   const profiles = await createProfile(page, "Builder", builder.profileEnvironment(), "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
-  await page.getByRole("button", { name: "New room" }).click();
-  const dialog = page.getByRole("dialog", { name: "New room" });
-  await dialog.getByLabel("Room name").fill("Launch");
-  await dialog.getByLabel("Builder").check();
-  await dialog.getByRole("button", { name: "Create room" }).click();
-  await expect(page.getByRole("heading", { name: "# Launch" })).toBeVisible();
+  await createRoom(page, "Launch", ["Builder"]);
 }
 
 /** The agent's first answer, and the process and session its room conversation took the prompt in. */

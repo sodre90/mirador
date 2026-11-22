@@ -1,11 +1,11 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, openSettings, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room and its agent. */
-const owners = new TestHost({ fakePrograms: true });
+const owners = new TestHost({ fakePrograms: true, environment: reachedAtOwnPort });
 /** The invited person's own Mirador, which joins the owner's machine. */
 const visitors = new TestHost();
 const builderPrompts = () => join(owners.root, "builder-prompts");
@@ -63,21 +63,12 @@ test("the owner and a person in the room see who of them is here and who writes,
   const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await addWorkspace(page, owners.projectDir, "Builder · opencode");
+  await nameMachine(page, "Ann's machine");
   const ownersComposer = page.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
 
-  const code = await test.step("the owner makes a room and an invite into it for a member", async () => {
-    await page.getByRole("button", { name: "New room" }).click();
-    const create = page.getByRole("dialog", { name: "New room" });
-    await create.getByLabel("Room name").fill("Garden");
-    await create.getByLabel("Builder").check();
-    await create.getByRole("button", { name: "Create room" }).click();
-    await expect(page.getByRole("heading", { name: "# Garden" })).toBeVisible();
-    await page.getByRole("button", { name: "Settings of Garden" }).click();
-    const dialog = page.getByRole("dialog", { name: "Room settings" });
-    await dialog.getByRole("button", { name: "Make an invite" }).click();
-    const shown = (await dialog.getByRole("group", { name: "Invite code" }).locator(".invite-code").textContent())!;
-    await dialog.getByRole("button", { name: "Cancel" }).click();
-    return shown;
+  const invite = await test.step("the owner makes a room and an invite into it for a member", async () => {
+    await createRoom(page, "Garden", ["Builder"]);
+    return inviteIntoRoom(page, "Garden", { role: "Member" });
   });
 
   await test.step("alone in the room, the owner is the one here", async () => {
@@ -92,18 +83,10 @@ test("the owner and a person in the room see who of them is here and who writes,
   const rail = visitor.getByRole("navigation", { name: "Machines" });
   const visitorsComposer = frame.getByRole("textbox", { name: "Write in Garden, @ tags an agent…" });
 
-  await test.step("the person joins the owner's machine from their own Mirador and opens the room", async () => {
-    await visitor.getByRole("button", { name: "Machines…" }).click();
-    const machines = visitor.getByRole("dialog", { name: "Machines" });
-    await machines.getByLabel("Name").fill("Ann's machine");
-    await machines.getByLabel("Address or invite link").fill(owners.origin);
-    await machines.getByRole("button", { name: "Add", exact: true }).click();
-    await machines.locator(".machine-list li", { hasText: "Ann's machine" }).getByRole("button", { name: "Open", exact: true }).click();
-    const join = visitor.getByRole("region", { name: "Join Ann's machine" });
-    await join.getByLabel("Invite code or link").fill(code);
-    await join.getByRole("button", { name: "Join", exact: true }).click();
+  await test.step("the person joins the room from their own Mirador, which opens it", async () => {
+    const join = await joinRoom(visitor, invite);
     await expect(join).toHaveCount(0);
-    await frame.locator(".sidebar .rooms li").filter({ hasText: "# Garden" }).click();
+    await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
   });
 
   await test.step("each of them sees the other here while their page shows the room", async () => {
@@ -122,15 +105,11 @@ test("the owner and a person in the room see who of them is here and who writes,
   });
 
   await test.step("the owner is no longer here for the person while the owner's page shows another room, which the person learns nothing of", async () => {
-    await page.getByRole("button", { name: "New room" }).click();
-    const create = page.getByRole("dialog", { name: "New room" });
-    await create.getByLabel("Room name").fill("Shed");
-    await create.getByRole("button", { name: "Create room" }).click();
-    await expect(page.getByRole("heading", { name: "# Shed" })).toBeVisible();
+    await createRoom(page, "Shed", []);
     await expect(hereCount(frame)).toHaveText("1 here");
     expect((await peopleListed(frame)).people).toEqual(["Ann, Owner", "Dora, Member, Here now"]);
-    await expect(frame.locator(".sidebar .rooms li")).toHaveText(["# Garden"]);
-    await page.locator(".sidebar .rooms li", { hasText: "# Garden" }).click();
+    await expect(frame.locator(".sidebar .rooms .room-card-name")).toHaveText(["Garden"]);
+    await roomCard(page, "Garden").click();
     await expect(hereCount(frame)).toHaveText("2 here");
   });
 
@@ -179,8 +158,7 @@ test("the owner and a person in the room see who of them is here and who writes,
   });
 
   await test.step("the owner reads in the room's settings what the agent took, by agent and by the person whose message started each turn; the person sees no settings", async () => {
-    await page.getByRole("button", { name: "Settings of Garden" }).click();
-    const dialog = page.getByRole("dialog", { name: "Room settings" });
+    const dialog = await openRoomSettings(page, "Garden", "Usage");
     const byAgent = dialog.getByRole("table", { name: "By agent" });
     const byPerson = dialog.getByRole("table", { name: "By person who asked" });
     const rows = (table: Locator) => table.locator("tbody tr, tfoot tr").evaluateAll((all) => all.map((row) => [...row.children].map((cell) => cell.textContent)));
@@ -195,7 +173,7 @@ test("the owner and a person in the room see who of them is here and who writes,
     ]);
     await dialog.getByLabel("Period").selectOption({ label: "All time" });
     await expect(byAgent.locator("tbody tr").first()).toContainText("Builder");
-    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await dialog.getByRole("button", { name: "Done" }).click();
     await expect(frame.getByRole("button", { name: "Settings of Garden" })).toHaveCount(0);
     await expect(frame.getByText("Usage")).toHaveCount(0);
   });

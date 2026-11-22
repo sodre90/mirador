@@ -1,6 +1,7 @@
 import { flushSync } from "react-dom";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
 import type { CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
+import { categoryChoices, chosenModel } from "../shared/config-options.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
 import {
@@ -17,6 +18,7 @@ import {
   workPending,
   writtenByAgent,
   type Room,
+  type RoomAgentModel,
   type RoomApproval,
   type RoomAuthor,
   type RoomMessage,
@@ -43,6 +45,7 @@ import { writersIn, writingLine, WritingSignals } from "./room-writing.ts";
 import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
+import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
@@ -56,6 +59,8 @@ interface RoomAgentShown {
   conversation: Conversation | undefined;
   /** The room message the agent's turn under way answers. */
   answering: string | null;
+  /** Chosen for the agent in this room; only the owner is told. */
+  model: RoomAgentModel;
 }
 
 const isBusy = (conversation: Conversation | undefined) => conversation?.status === "running" || conversation?.status === "starting";
@@ -496,6 +501,18 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
 type RoleShown = "owner" | RoomRole | null;
 
 /**
+ * The model an agent of the room runs on, quietly beside its name: the one chosen in the room, else the one its session
+ * is on, by the name its session lists, else the one its agent offered when this page asked it.
+ */
+function ModelShown({ agent }: { agent: RoomAgentShown }) {
+  const live = agent.conversation?.configOptions ?? [];
+  const value = agent.model.model ?? chosenModel(live)?.id ?? agent.profile?.model;
+  const listed = categoryChoices(live, "model").length > 0 || !agent.profile ? live : offeredAlready(agent.profile.id);
+  const name = value && (categoryChoices(listed, "model").find((choice) => choice.value === value)?.name ?? value);
+  return name ? <span className="room-agent-model">{name}</span> : null;
+}
+
+/**
  * The room's people as this page knows them, each with their role where it is known: the owner, everyone the room
  * lets in, of whom a person other than the owner is told only of themselves, and whoever else is here now.
  */
@@ -505,8 +522,8 @@ function peopleOfRoom(room: Room, ownerId: string | null, here: string[]): { per
   return [...known, ...here.filter((personId) => !knownIds.has(personId)).map((personId) => ({ personId, role: null }))];
 }
 
-/** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work. */
-function RoomPeople({ room, agents, here, ownerId }: { room: Room; agents: RoomAgentShown[]; here: string[]; ownerId: string | null }) {
+/** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which model for the owner, who changes it there. */
+function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents: RoomAgentShown[]; here: string[]; ownerId: string | null; owns: boolean }) {
   const opener = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
@@ -542,12 +559,21 @@ function RoomPeople({ room, agents, here, ownerId }: { room: Room; agents: RoomA
             <>
               <h3>{words.agents}</h3>
               <ul aria-label={words.agents}>
-                {agents.map(({ profileId, name, profile, answering }) => (
+                {agents.map(({ profileId, name, profile, conversation, answering, model }) => (
                   <li key={profileId}>
                     <span className={`avatar agent-${profile?.harness ?? "gone"}`} aria-hidden="true">
                       {profile ? agentMarks[profile.harness] : "?"}
                     </span>
                     <span>{name}</span>
+                    {owns && (
+                      <ModelChoice
+                        agentName={name}
+                        profile={profile}
+                        conversation={conversation}
+                        chosen={model}
+                        onChange={(chosen) => connection.send({ type: "room.set-agent-model", roomId: room.id, profileId, ...chosen })}
+                      />
+                    )}
                     {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
                   </li>
                 ))}
@@ -595,10 +621,11 @@ export function RoomView({
   onOpenOnCanvas: (itemId: string) => void;
 }) {
   const [threadId, setThreadId] = useState<string | null>(null);
-  const agents = room.agents.map(({ profileId, conversationId, answering }): RoomAgentShown => {
+  const agents = room.agents.map(({ profileId, conversationId, answering, model, effort }): RoomAgentShown => {
     const profile = profiles.find(({ id }) => id === profileId);
-    return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId), answering };
+    return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId), answering, model: { model, effort } };
   });
+  const owns = you !== null && you === ownerId;
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
   const tagsAgents = !isGuestIn(room, you);
   const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
@@ -630,10 +657,16 @@ export function RoomView({
             <li key={agent.profileId} className="agent-chip">
               {agent.profile ? `${agentMarks[agent.profile.harness]} ` : ""}
               {agent.name}
+              {owns && <ModelShown agent={agent} />}
             </li>
           ))}
         </ul>
-        {presence && <RoomPeople room={room} agents={agents} here={presence.here} ownerId={ownerId} />}
+        {presence && <RoomPeople room={room} agents={agents} here={presence.here} ownerId={ownerId} owns={owns} />}
+        {owns && (
+          <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>
+            {words.inviteSomeone}
+          </button>
+        )}
       </header>
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}

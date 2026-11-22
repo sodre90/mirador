@@ -1,11 +1,28 @@
 import { expect, test } from "bun:test";
 import { isPrivateHostname, wayToMachine } from "../host/machine-trust.ts";
-import { authorityFingerprintIn, inviteIn, inviteLink, isHidden, isRoomInviteLink, joinCodeIn, machineAddress, machinesSeen, roomInviteLink, tunnelIn } from "../shared/machines.ts";
+import {
+  authorityFingerprintIn,
+  inviteConnectFor,
+  inviteIn,
+  inviteLink,
+  isHidden,
+  isRoomInviteLink,
+  joinCodeIn,
+  joinedRoomsIn,
+  machineAddress,
+  machinesSeen,
+  MOST_JOINED_ROOMS,
+  roomInviteLink,
+  roomInviteText,
+  tunnelIn,
+  withJoinedRoom,
+  withoutJoinedRoom,
+} from "../shared/machines.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
 import { checkedDeviceTunnel, tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
 
 test("a machine is added by its name on the network, its address or an invite link from it", () => {
-  expect(machineAddress("home-server.tailnet.ts.net")).toEqual({ origin: "https://home-server.tailnet.ts.net", joinCode: null, authorityFingerprint: null, forRoom: false, tunnel: null });
+  expect(machineAddress("home-server.tailnet.ts.net")).toEqual({ origin: "https://home-server.tailnet.ts.net", joinCode: null, authorityFingerprint: null, forRoom: false, tunnel: null, name: null });
   expect(machineAddress(" https://home-server.tailnet.ts.net/some/page ")).toMatchObject({ origin: "https://home-server.tailnet.ts.net", joinCode: null });
   expect(machineAddress("http://192.168.1.20:4600")).toMatchObject({ origin: "http://192.168.1.20:4600", joinCode: null });
   expect(machineAddress("https://home-server.tailnet.ts.net/#/join/ABCD-EFGH-JKLM")).toEqual({
@@ -14,6 +31,7 @@ test("a machine is added by its name on the network, its address or an invite li
     authorityFingerprint: null,
     forRoom: false,
     tunnel: null,
+    name: null,
   });
 });
 
@@ -22,7 +40,7 @@ const fingerprint = "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x_-";
 test("an invite link from a machine with its own certificate authority carries the authority's fingerprint after the code", () => {
   const link = inviteLink("https://box.local:4602", "ABCD-EFGH-JKLM", fingerprint);
   expect(link).toBe(`https://box.local:4602/#/join/ABCD-EFGH-JKLM/${fingerprint}`);
-  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: false, tunnel: null });
+  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: false, tunnel: null, name: null });
   expect(joinCodeIn(`#/join/ABCD-EFGH-JKLM/${fingerprint}`)).toBe("ABCD-EFGH-JKLM");
   expect(authorityFingerprintIn(`#/join/ABCD-EFGH-JKLM/${fingerprint}`)).toBe(fingerprint);
   expect(inviteLink("https://box.example.ts.net", "ABCD-EFGH-JKLM")).toBe("https://box.example.ts.net/#/join/ABCD-EFGH-JKLM");
@@ -37,13 +55,14 @@ test("an invite link carries a fingerprint of any length, so a truncated one sti
 test("a room invite's link says it is one, so the machine it adds is joined as a person, and gives its code and fingerprint like a device invite's", () => {
   const link = roomInviteLink("https://box.local:4602", "ABCD-EFGH-JKLM", fingerprint);
   expect(link).toBe(`https://box.local:4602/#/room-invite/ABCD-EFGH-JKLM/${fingerprint}`);
-  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: true, tunnel: null });
+  expect(machineAddress(link)).toEqual({ origin: "https://box.local:4602", joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: true, tunnel: null, name: null });
   expect(machineAddress(roomInviteLink("https://box.example.ts.net", "ABCD-EFGH-JKLM"))).toEqual({
     origin: "https://box.example.ts.net",
     joinCode: "ABCD-EFGH-JKLM",
     authorityFingerprint: null,
     forRoom: true,
     tunnel: null,
+    name: null,
   });
   expect(inviteIn(link)).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, tunnel: null });
   expect(isRoomInviteLink(new URL(link).hash)).toBe(true);
@@ -81,9 +100,9 @@ const encoded = (fields: object) => btoa(JSON.stringify(fields)).replace(/\+/g, 
 test("a room invite's link carries the way through the machine's tunnel, at the machine's address in the tunnel or at an address of its own", () => {
   const throughTunnelOnly = roomInviteLink(tunnelOrigin(tunnel), "ROOM-ABCD-EFGH-JKLM", null, tunnel);
   expect(throughTunnelOnly).toMatch(/^http:\/\/\[fd12:3456:789a:1::1\]:4600\/#\/room-invite\/ROOM-ABCD-EFGH-JKLM\?tunnel=[\w-]+$/);
-  expect(machineAddress(throughTunnelOnly)).toEqual({ origin: "http://[fd12:3456:789a:1::1]:4600", joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: true, tunnel });
+  expect(machineAddress(throughTunnelOnly)).toEqual({ origin: "http://[fd12:3456:789a:1::1]:4600", joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: true, tunnel, name: null });
   const withAddress = roomInviteLink("https://box.local:4602", "ROOM-ABCD-EFGH-JKLM", fingerprint, tunnel);
-  expect(machineAddress(withAddress)).toEqual({ origin: "https://box.local:4602", joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: true, tunnel });
+  expect(machineAddress(withAddress)).toEqual({ origin: "https://box.local:4602", joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: true, tunnel, name: null });
   expect(inviteIn(withAddress)).toEqual({ code: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, tunnel });
   expect(isRoomInviteLink(new URL(withAddress).hash)).toBe(true);
 });
@@ -196,8 +215,8 @@ test("the machines this computer's machines have joined are offered once each, t
   const laptop = machine("laptop", "https://laptop.example.ts.net:4700");
   const server = machine("server", "https://server.example.ts.net");
   const statuses = [
-    { machineId: "server", reachable: true, waiting: [], joinedThere: [seen("Pi", "https://pi.example.ts.net"), seen("Laptop", laptop.origin)] },
-    { machineId: "laptop", reachable: false, waiting: [], joinedThere: [seen("Home server", server.origin), seen("Raspberry", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net")] },
+    { machineId: "server", reachable: true, waiting: [], joinedThere: [seen("Pi", "https://pi.example.ts.net"), seen("Laptop", laptop.origin)], rooms: [] },
+    { machineId: "laptop", reachable: false, waiting: [], joinedThere: [seen("Home server", server.origin), seen("Raspberry", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net")], rooms: [] },
   ];
   expect(machinesSeen([laptop, server], statuses)).toEqual([
     { name: "Raspberry", origin: "https://pi.example.ts.net", hostId: null, throughMachineId: "laptop" },
@@ -218,6 +237,7 @@ test("a machine known at two addresses is one machine once its id is known, both
       reachable: true,
       waiting: [],
       joinedThere: [seen("Home server", "https://192.168.1.20:4700", "server-id"), seen("NAS", "https://nas.example.ts.net", "nas-id"), seen("NAS on the LAN", "https://192.168.1.30:4700", "nas-id")],
+      rooms: [],
     },
   ];
   expect(machinesSeen([laptop, server], statuses)).toEqual([{ name: "NAS", origin: "https://nas.example.ts.net", hostId: "nas-id", throughMachineId: "laptop" }]);
@@ -229,4 +249,62 @@ test("a hidden machine is the one at its address, or with its id at another", ()
   expect(isHidden(seen("NAS on the LAN", "https://192.168.1.30:4700", "nas-id"), hidden)).toBe(true);
   expect(isHidden(seen("Build box", "https://build.example.ts.net"), hidden)).toBe(false);
   expect(isHidden(seen("Unknown", "https://other.example.ts.net", null), [seen("Other", "https://another.example.ts.net", null)])).toBe(false);
+});
+
+test("a room invite's text carries one way to the machine: peer to peer its tunnel and no address, at its address no tunnel", () => {
+  const peerToPeer = roomInviteText("ROOM-ABCD-EFGH-JKLM", { tunnel });
+  expect(peerToPeer).toMatch(/^http:\/\/\[fd12:3456:789a:1::1\]:4600\/#\/room-invite\/ROOM-ABCD-EFGH-JKLM\?tunnel=[\w-]+$/);
+  expect(machineAddress(peerToPeer)).toEqual({ origin: tunnelOrigin(tunnel), joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: true, tunnel, name: null });
+
+  const atAddress = roomInviteText("ROOM-ABCD-EFGH-JKLM", { origin: "https://box.example.ts.net", authorityFingerprint: fingerprint, machineName: "Ann's Mac ✨" });
+  expect(atAddress).toMatch(new RegExp(`^https://box\\.example\\.ts\\.net/#/room-invite/ROOM-ABCD-EFGH-JKLM/${fingerprint}\\?name=[\\w-]+$`));
+  expect(atAddress).not.toContain("tunnel");
+  expect(machineAddress(atAddress)).toEqual({ origin: "https://box.example.ts.net", joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, forRoom: true, tunnel: null, name: "Ann's Mac ✨" });
+  expect(inviteIn(atAddress)).toEqual({ code: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: fingerprint, tunnel: null });
+  expect(isRoomInviteLink(new URL(atAddress).hash)).toBe(true);
+  expect(roomInviteText("ROOM-ABCD-EFGH-JKLM", { origin: "https://box.example.ts.net", authorityFingerprint: null, machineName: " " })).toBe("https://box.example.ts.net/#/room-invite/ROOM-ABCD-EFGH-JKLM");
+});
+
+test("a room invite's machine name is taken only short and well formed, and a broken one leaves the invite without a name", () => {
+  const withName = (encoded: string) => machineAddress(`https://box.example/#/room-invite/ROOM-ABCD-EFGH-JKLM?name=${encoded}`);
+  expect(withName("bm90IHV0Zi04")).toMatchObject({ joinCode: "ROOM-ABCD-EFGH-JKLM", name: "not utf-8" });
+  expect(withName("_w")).toMatchObject({ joinCode: "ROOM-ABCD-EFGH-JKLM", name: null });
+  expect(withName("QQ".repeat(300))).toMatchObject({ joinCode: "ROOM-ABCD-EFGH-JKLM", name: null });
+  expect(machineAddress("https://box.example/#/room-invite/ROOM-ABCD-EFGH-JKLM?name=a b")).toMatchObject({ forRoom: false, joinCode: null });
+  expect(machineAddress(`https://box.example/#/room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=bm90LWEtdHVubmVs`)).toBeNull();
+});
+
+test("the rooms someone else's machine lists are display data: ids of a room's form, names on one line as everyone reads them, cut to length, each once, a bounded few", () => {
+  expect(
+    joinedRoomsIn([
+      { id: "r1", name: " Launch\n\u202Eplan " },
+      { id: "r1", name: "Again" },
+      { id: "../../etc", name: "Escapes" },
+      { id: "r2", name: 7 },
+      { id: "r3", name: "\u200B\u0000" },
+      "not a room",
+      { id: "r4", name: "x".repeat(500) },
+    ]),
+  ).toEqual([
+    { id: "r1", name: "Launch plan" },
+    { id: "r4", name: "x".repeat(80) },
+  ]);
+  expect(joinedRoomsIn({ rooms: [] })).toEqual([]);
+  expect(joinedRoomsIn(Array.from({ length: 200 }, (_, index) => ({ id: `r${index}`, name: `Room ${index}` })))).toHaveLength(MOST_JOINED_ROOMS);
+
+  const listed = [{ id: "r1", name: "Launch" }];
+  expect(withJoinedRoom(listed, { id: "r1", name: "Launch day", people: [] })).toEqual([{ id: "r1", name: "Launch day" }]);
+  expect(withJoinedRoom(listed, { id: "r2", name: "Ops" })).toEqual([...listed, { id: "r2", name: "Ops" }]);
+  expect(withJoinedRoom(listed, { id: "bad id", name: "Ops" })).toBe(listed);
+  const full = Array.from({ length: MOST_JOINED_ROOMS }, (_, index) => ({ id: `r${index}`, name: `Room ${index}` }));
+  expect(withJoinedRoom(full, { id: "one-more", name: "More" })).toBe(full);
+  expect(withoutJoinedRoom(listed, "r1")).toEqual([]);
+});
+
+test("a room invite connects the way Settings name while it works, else the other way, and not at all when neither works", () => {
+  expect(inviteConnectFor("peer-to-peer", { "peer-to-peer": true, address: true })).toBe("peer-to-peer");
+  expect(inviteConnectFor("address", { "peer-to-peer": true, address: true })).toBe("address");
+  expect(inviteConnectFor("address", { "peer-to-peer": true, address: false })).toBe("peer-to-peer");
+  expect(inviteConnectFor("peer-to-peer", { "peer-to-peer": false, address: true })).toBe("address");
+  expect(inviteConnectFor("peer-to-peer", { "peer-to-peer": false, address: false })).toBeNull();
 });

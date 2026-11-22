@@ -2,11 +2,11 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { AGENT_TAGGED_TURNS_AFTER_A_PERSON } from "../shared/rooms.ts";
-import { addWorkspace, allowNotifications, answerCanvasQuestion, clickNotification, createProfile, literally, notificationsShown, signIn } from "./helpers.ts";
+import { addWorkspace, allowNotifications, answerCanvasQuestion, clickNotification, createProfile, createRoom, literally, notificationsShown, openNewRoom as openNewRoomDialog, openRoomSettings, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
-const promptsOf = { Builder: () => join(host.root, "builder-prompts"), Reviewer: () => join(host.root, "reviewer-prompts") };
+const promptsOf = { Builder: () => join(host.root, "builder-prompts"), Reviewer: () => join(host.root, "reviewer-prompts"), Modeller: () => join(host.root, "modeller-prompts") };
 const answersHeld = () => join(host.root, "answers-held");
 const recordedPrompts = (agent: keyof typeof promptsOf) => readFileSync(promptsOf[agent](), "utf8");
 
@@ -21,6 +21,8 @@ test.beforeAll(async ({ browser }) => {
     const profiles = await createProfile(page, agent, `FAKE_ACP_PROMPTS=${promptsOf[agent]()}\nFAKE_ACP_ANSWERS_HELD_BY=${answersHeld()}`, "", "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
   }
+  const modeller = await createProfile(page, "Modeller", `FAKE_ACP_PROMPTS=${promptsOf.Modeller()}\nFAKE_ACP_MODES=1\nFAKE_ACP_MODELS=1`, "", "opencode");
+  await modeller.getByRole("button", { name: "Close" }).click();
   await page.close();
 });
 test.afterAll(async () => {
@@ -38,13 +40,7 @@ const shownPage = (page: Page) => page.frameLocator(".canvas-panel:visible .canv
 
 async function openNewRoom(page: Page, room: string) {
   await signIn(page, host);
-  await page.getByRole("button", { name: "New room" }).click();
-  const dialog = page.getByRole("dialog", { name: "New room" });
-  await dialog.getByLabel("Room name").fill(room);
-  await dialog.getByLabel("Builder").check();
-  await dialog.getByLabel("Reviewer").check();
-  await dialog.getByRole("button", { name: "Create room" }).click();
-  await expect(page.getByRole("heading", { name: `# ${room}` })).toBeVisible();
+  await createRoom(page, room, ["Builder", "Reviewer"]);
 }
 
 async function write(page: Page, room: string, text: string) {
@@ -60,7 +56,6 @@ async function tag(page: Page, room: string, agent: string, rest: string) {
 }
 
 const canvasCall = (tool: string, input: unknown) => `CANVAS ${tool} ${JSON.stringify(input)}`;
-const roomRow = (page: Page, room: string) => page.locator(".sidebar .rooms li", { hasText: `# ${room}` });
 
 test("an agent's page shows on the room's canvas, its answer opens it there, the canvas hidden too, and it stays after a reload", async ({ page }) => {
   await openNewRoom(page, "Pages");
@@ -126,14 +121,14 @@ test("a question asked in a room while you look elsewhere notifies, marks the ro
   writeFileSync(go, "");
 
   await expect.poll(async () => (await notificationsShown(page)).map(({ body }) => body)).toEqual(["project · Asks: Which size?", "project · Finished, waiting for you"]);
-  await expect(roomRow(page, "Sizes")).toHaveAttribute("data-waiting-tone", "decision");
+  await expect(roomCard(page, "Sizes")).toHaveAttribute("data-waiting-tone", "decision");
   await expect(page).toHaveTitle("(1) Mirador");
   await clickNotification(page, "project · Asks: Which size?");
   await expect(page).toHaveURL(new RegExp(`${asksRoom}$`));
   await answersOf(page, "Builder").getByRole("button", { name: "Open on canvas" }).click();
   await answerCanvasQuestion(page, "Large");
   await expect(answerSaying(page, "Going with Large")).toHaveCount(1);
-  await expect(roomRow(page, "Sizes")).not.toHaveAttribute("data-waiting-tone");
+  await expect(roomCard(page, "Sizes")).not.toHaveAttribute("data-waiting-tone");
   await expect(page).toHaveTitle("Mirador");
 });
 
@@ -179,4 +174,49 @@ test("an agent reads back older messages of the room with room_history", async (
   await expect(readBack.locator(".message.agent")).toContainText("1 earlier message matches too: ask again with before 2.");
   await expect(readBack.locator(".message.agent")).toContainText("The release is Friday");
   await expect(readBack.locator(".message.agent")).not.toContainText("Morning all");
+});
+
+test("a new room's agent is found by name and set to a model there, which it answers on, and the owner changes it later in the room's settings and its bar", async ({ page }) => {
+  await signIn(page, host);
+  const dialog = await openNewRoomDialog(page);
+  const roomName = dialog.getByLabel("Room name");
+  await roomName.fill("Models");
+  for (const attribute of ["autocorrect", "autocapitalize", "autocomplete"]) await expect(roomName).toHaveAttribute(attribute, "off");
+  await expect(roomName).toHaveAttribute("spellcheck", "false");
+  const chosen = dialog.getByRole("list", { name: "Agents" }).getByRole("button", { name: /^Remove / });
+  while ((await chosen.count()) > 0) await chosen.first().click();
+  const search = dialog.getByRole("combobox", { name: "Find an agent" });
+  await expect(search).toHaveAttribute("spellcheck", "false");
+  await search.fill("nobody");
+  await expect(dialog.getByText("No agent by that name.")).toBeVisible();
+  await search.fill("mod");
+  await expect(dialog.getByRole("listbox", { name: "Find an agent" }).getByRole("option")).toHaveText(["Modeller"]);
+  await search.press("Enter");
+  await expect(dialog.getByRole("list", { name: "Agents" }).locator(".room-agent-chip-name")).toHaveText(["Modeller"]);
+  await dialog.getByRole("combobox", { name: "Model of Modeller" }).selectOption({ label: "Opus" });
+  await dialog.getByRole("combobox", { name: "Effort of Modeller" }).selectOption({ label: "High" });
+  await dialog.getByRole("button", { name: "Create room" }).click();
+  await expect(page.getByRole("heading", { name: "# Models" })).toBeVisible();
+  await expect(page.locator(".room-agents .room-agent-model")).toHaveText(["Opus"]);
+
+  await tag(page, "Models", "Modeller", "CHOICES");
+  await expect(answerSaying(page, "On model")).toHaveText(/On model opus, mode default, effort high\./);
+
+  await test.step("a model changed in the room's settings reaches its session at once", async () => {
+    const settings = await openRoomSettings(page, "Models", "Agents");
+    await settings.getByRole("combobox", { name: "Model of Modeller" }).selectOption({ label: "Haiku" });
+    await settings.getByRole("button", { name: "Done" }).click();
+    await expect(page.locator(".room-agents .room-agent-model")).toHaveText(["Haiku"]);
+    await tag(page, "Models", "Modeller", "CHOICES");
+    await expect(answerSaying(page, "On model haiku")).toHaveText(/On model haiku, mode default\./);
+  });
+
+  await test.step("and so does one changed from the room's bar", async () => {
+    await page.locator(".room-here-count").click();
+    const people = page.getByRole("dialog", { name: "People in the room" });
+    await people.getByRole("combobox", { name: "Model of Modeller" }).selectOption({ label: "Default (recommended)" });
+    await page.keyboard.press("Escape");
+    await tag(page, "Models", "Modeller", "CHOICES");
+    await expect(answerSaying(page, "On model default")).toHaveText(/On model default, mode default, effort high\./);
+  });
 });

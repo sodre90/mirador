@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, allowNotifications, clickNotification, createProfile, notificationsShown, openProfileTab, signIn } from "./helpers.ts";
+import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, notificationsShown, openProfileTab, openRoomSettings, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -45,19 +45,9 @@ const threadStrip = (page: Page, agent: string) => thread(page, agent).locator("
 const subjectOf = (strip: Locator) => strip.locator(".room-approval-subject");
 const detailOf = (strip: Locator) => strip.locator(".room-approval-detail");
 const workingLine = (page: Page, text: string) => page.locator(".room-timeline > .room-thread-line", { hasText: text });
-const roomRow = (page: Page, room: string) => page.locator(".sidebar .rooms li", { hasText: `# ${room}` });
 const answer = (strip: Locator, button: "Allow" | "Allow for this task" | "Deny") => strip.getByRole("button", { name: button, exact: true }).click();
 
-async function openNewRoom(page: Page, room: string, agents: string[], preset?: string) {
-  await page.getByRole("button", { name: "New room" }).click();
-  const dialog = page.getByRole("dialog", { name: "New room" });
-  await dialog.getByLabel("Room name").fill(room);
-  for (const agent of agents) await dialog.getByLabel(agent, { exact: true }).check();
-  await expect(dialog.getByLabel("Reading the workspace is free, the rest asks")).toBeChecked();
-  if (preset) await dialog.getByLabel(preset).check();
-  await dialog.getByRole("button", { name: "Create room" }).click();
-  await expect(page.getByRole("heading", { name: `# ${room}` })).toBeVisible();
-}
+const openNewRoom = (page: Page, room: string, agents: string[], preset?: string) => createRoom(page, room, agents, { preset });
 
 /** Tags the agent from the @ menu, then writes the rest of the message after the tag. */
 async function tag(page: Page, room: string, agent: string, rest: string) {
@@ -106,11 +96,10 @@ test("each permission preset lets through by itself what it names, and asks for 
   });
 
   await test.step("a changed preset holds from the agent's next request on", async () => {
-    await page.locator(".sidebar .rooms li", { hasText: "# Free" }).getByRole("button", { name: "Settings of Free" }).click();
-    const dialog = page.getByRole("dialog", { name: "Room settings" });
+    const dialog = await openRoomSettings(page, "Free", "Permissions");
     await expect(dialog.getByLabel("Work freely inside the workspace")).toBeChecked();
     await dialog.getByLabel("Ask for everything").check();
-    await dialog.getByRole("button", { name: "Save" }).click();
+    await dialog.getByRole("button", { name: "Done" }).click();
     await tag(page, "Free", "Builder", ask([read]));
     await expect(subjectOf(strip)).toHaveText("Permission needed: Read README.md");
     await answer(strip, "Allow");
@@ -155,8 +144,8 @@ test("two agents' requests queue oldest first, the room and the sidebar say what
   await expect(strip.locator(".room-approval-asker")).toHaveText("Builder asks");
   await expect(workingLine(page, "Builder is waiting for approval…")).toBeVisible();
   await expect(workingLine(page, "Reviewer is waiting for approval…")).toBeVisible();
-  await expect(roomRow(page, "Queue")).toHaveAttribute("data-waiting-tone", "decision");
-  await expect(roomRow(page, "Queue").locator(".waiting-pill")).toHaveText("Needs you");
+  await expect(roomCard(page, "Queue")).toHaveAttribute("data-waiting-tone", "decision");
+  await expect(roomCard(page, "Queue").locator(".waiting-pill")).toHaveText("Needs you");
 
   await workingLine(page, "Builder is waiting for approval…").getByRole("button", { name: "Open thread" }).click();
   await expect(threadStrip(page, "Builder").locator(".room-approval-asker")).toHaveText("Builder asks");
@@ -177,8 +166,8 @@ test("two agents' requests queue oldest first, the room and the sidebar say what
   await expect(reviewerCard).toHaveClass(/resolved/);
   await expect(reviewerCard.locator(".permission-outcome")).toHaveText("Reject");
   await expect(answerSaying(page, "Run ls: reject")).toHaveCount(1);
-  await expect(roomRow(page, "Queue")).not.toHaveClass(/waiting/);
-  await expect(roomRow(page, "Queue").locator(".waiting-pill")).toHaveCount(0);
+  await expect(roomCard(page, "Queue")).not.toHaveClass(/waiting/);
+  await expect(roomCard(page, "Queue").locator(".waiting-pill")).toHaveCount(0);
 });
 
 test("an agent whose profile is set to YOLO still asks in a room", async ({ page }) => {
@@ -216,7 +205,7 @@ test("a request waiting and a finished answer to your message notify while you l
   await test.step("an answer finished", async () => {
     const finish = join(host.root, "away-finish");
     await tag(page, "Away", "Builder", ask([{ waitFor: finish }]));
-    await roomRow(page, "Elsewhere").click();
+    await roomCard(page, "Elsewhere").click();
     await expect(page.getByRole("heading", { name: "# Elsewhere" })).toBeVisible();
     writeFileSync(finish, "");
     await expect.poll(bodies).toContain("project · Finished, waiting for you");
@@ -240,42 +229,46 @@ test("a member's task waits until the owner, told who asks and as what, allows i
   await signIn(page, host);
   await openNewRoom(page, "People", ["Builder"]);
   const settings = page.getByRole("dialog", { name: "Room settings" });
-  const openSettings = () => roomRow(page, "People").getByRole("button", { name: "Settings of People" }).click();
+  const openSettings = () => openRoomSettings(page, "People");
+  const addMia = () => settings.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
   await openSettings();
+  await settings.locator(".room-tab-panel").getByText("What does this mean?").click();
   await expect(settings.locator(".room-people-reach")).toHaveText(
     "Through the agents, people here read the workspace's files and reach what else you allow: edits and commands ask you first. Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
   );
   await expect(settings.getByLabel("People's tasks start without asking me")).not.toBeChecked();
-  await settings.getByLabel("Role of Mia").selectOption({ label: "Member" });
-  await settings.getByRole("button", { name: "Save" }).click();
+  await addMia();
+  await expect(settings.getByLabel("Role of Mia")).toHaveValue("member");
+  await settings.getByRole("button", { name: "Done" }).click();
   await expect(settings).toBeHidden();
   await openNewRoom(page, "Lookout", ["Reviewer"]);
-  await roomRow(page, "Lookout").getByRole("button", { name: "Settings of Lookout" }).click();
+  await openRoomSettings(page, "Lookout");
+  await addMia();
   await settings.getByLabel("Role of Mia").selectOption({ label: "Guest" });
-  await settings.getByRole("button", { name: "Save" }).click();
+  await settings.getByRole("button", { name: "Done" }).click();
   await expect(settings).toBeHidden();
 
   const miaContext = await browser.newContext();
   await miaContext.addCookies([mia.cookie]);
   const miaPage = await miaContext.newPage();
   await miaPage.goto(host.origin);
-  await roomRow(miaPage, "People").click();
+  await roomCard(miaPage, "People").click();
   const strip = roomStrip(page);
   const builderPrompts = () => readFileSync(join(host.root, "Builder-prompts"), "utf8");
   const miasTask = "@Builder Build the page\n\n\nSAY Done for Mia";
 
   await test.step("Mia's tag waits, and the owner is told who asks, as what, for what, and what goes to the agent with it", async () => {
-    await roomRow(page, "People").click();
+    await roomCard(page, "People").click();
     await roomComposer(page, "People").fill("Lunch at noon");
     await roomComposer(page, "People").press("Enter");
     await expect(page.locator(".room-timeline .room-entry", { hasText: "Lunch at noon" })).toHaveCount(1);
-    await roomRow(page, "Lookout").click();
+    await roomCard(page, "Lookout").click();
     await tag(miaPage, "People", "Builder", "Build the page\n\n\n\n\n\nSAY Done for Mia");
     await expect(workingLine(miaPage, "Builder starts once this task is allowed.")).toBeVisible();
     await expect.poll(async () => (await notificationsShown(page)).map(({ body }) => body)).toEqual(["project · Wants permission: a task of Mia, member"]);
-    await expect(roomRow(page, "People")).toHaveAttribute("data-waiting-tone", "decision");
-    await expect(roomRow(page, "People").locator(".waiting-pill")).toHaveText("Needs you");
-    await roomRow(page, "People").click();
+    await expect(roomCard(page, "People")).toHaveAttribute("data-waiting-tone", "decision");
+    await expect(roomCard(page, "People").locator(".waiting-pill")).toHaveText("Needs you");
+    await roomCard(page, "People").click();
     await expect(strip.locator(".room-approval-asker")).toHaveText("Mia (Member) gives Builder a task");
     await expect(strip.locator(".room-approval-task-text")).toHaveText(miasTask);
     await expect(strip.locator(".room-approval-task-lines")).toHaveText("4 lines");
@@ -298,7 +291,7 @@ test("a member's task waits until the owner, told who asks and as what, allows i
     await expect(answerSaying(page, "Done for Mia")).toHaveCount(1);
     await expect(answerSaying(miaPage, "Done for Mia")).toHaveCount(1);
     await expect(strip).toHaveCount(0);
-    await expect(roomRow(page, "People").locator(".waiting-pill")).toHaveCount(0);
+    await expect(roomCard(page, "People").locator(".waiting-pill")).toHaveCount(0);
     expect(builderPrompts()).toContain("> Lunch at noon");
   });
 
@@ -317,23 +310,24 @@ test("a member's task waits until the owner, told who asks and as what, allows i
     await tag(miaPage, "People", "Builder", "SAY Left behind");
     await expect(strip.locator(".room-approval-task-text")).toHaveText("@Builder SAY Left behind");
     await openSettings();
-    await settings.getByLabel("Role of Mia").selectOption({ label: "Not in the room" });
-    await settings.getByRole("button", { name: "Save" }).click();
+    await settings.getByRole("button", { name: "Remove Mia" }).click();
+    await settings.getByRole("button", { name: "Confirm: Remove Mia" }).click();
+    await settings.getByRole("button", { name: "Done" }).click();
     await expect(settings).toBeHidden();
     await expect(page.locator(".room-timeline .notice-line", { hasText: "The task was declined." })).toHaveCount(2);
     await expect(strip).toHaveCount(0);
     expect(builderPrompts()).not.toContain("Left behind");
     await openSettings();
-    await settings.getByLabel("Role of Mia").selectOption({ label: "Member" });
-    await settings.getByRole("button", { name: "Save" }).click();
+    await addMia();
+    await settings.getByRole("button", { name: "Done" }).click();
     await expect(settings).toBeHidden();
-    await roomRow(miaPage, "People").click();
+    await roomCard(miaPage, "People").click();
   });
 
   await test.step("once people's tasks start without asking, Mia's tag starts at once", async () => {
     await openSettings();
     await settings.getByLabel("People's tasks start without asking me").check();
-    await settings.getByRole("button", { name: "Save" }).click();
+    await settings.getByRole("button", { name: "Done" }).click();
     await expect(settings).toBeHidden();
     await tag(miaPage, "People", "Builder", "SAY Straight away");
     await expect(answerSaying(miaPage, "Straight away")).toHaveCount(1);

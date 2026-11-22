@@ -20,7 +20,7 @@ export const devices = {
     name: "Name this device",
     askToJoin: "Ask to join",
     askToJoinIsFullControl: "Asking to join makes this device one of the owner's own devices, with full control of this Mirador. Invited into someone else's room? Join it from your own Mirador, with the room invite.",
-    roomInviteHere: "This link invites you into a room on this Mirador. Open your own Mirador, and paste the link under Machines there to join.",
+    roomInviteHere: "This invite is for a room on this Mirador. Open your own Mirador, and paste it in Rooms → Join a room.",
     inviteCode: "Invite code",
     joining: "Joining…",
     join: "Join",
@@ -77,6 +77,11 @@ export const devices = {
     lockedAfter: "), so this can't be changed here.",
     saved: "Saved. The host uses it from its next start.",
     restartHost: "Restart host",
+  },
+  roomInvites: {
+    title: "Room invites connect",
+    peerToPeer: "Directly, peer to peer",
+    address: "At this machine's address",
   },
   invite: {
     qrLabel: "Link as a QR code",

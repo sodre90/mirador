@@ -2,7 +2,7 @@ import type { CanvasItem, Profile } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { RoomPresence } from "../shared/rooms.ts";
-import { agentStandIn, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
+import { agentStandIn, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
 import type { Store } from "./store.ts";
 
@@ -13,14 +13,15 @@ type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { type: K }>, socket: SocketData) => ServerMessage[];
 
 /**
- * A room as a person in it sees it: of its people only themselves, nothing of the workspace its agents work in, and in
- * place of each agent's conversation there, which they never open, a stand-in that names none.
+ * A room as a person in it sees it: of its people only themselves, nothing of the workspace its agents work in or the
+ * models the owner chose for them, and in place of each agent's conversation there, which they never open, a stand-in
+ * that names none.
  */
 const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, createdAt }: Room, personId: string): Room => ({
   id,
   name,
   workspaceId: "",
-  agents: agents.map(({ profileId, conversationId, answering }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId), answering })),
+  agents: agents.map(({ profileId, conversationId, answering }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId), answering, ...PROFILES_MODEL })),
   permissions,
   people: people.flatMap(({ personId: each, role }) => (each === personId ? [{ personId, role }] : [])),
   peoplesTasksWait,
@@ -213,6 +214,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room.approvals": HIDDEN,
     "room.presence": ({ roomId, here, writing }, socket) => shownIf(isIn(socket, roomId), { type: "room.presence", roomId, ...presenceSeen(roomId, { here, writing }, socket) }),
     "room.usage.got": HIDDEN,
+    "rooms.people-here": HIDDEN,
     "conversation.history": HIDDEN,
     "conversation.earlier": HIDDEN,
     "tool-output.got": HIDDEN,

@@ -19,6 +19,8 @@ export const problems: Messages["problems"] = {
     "room-gone": "该房间已不存在。",
     "room-needs-a-name": "请给房间起个名字。",
     "room-message-misaddressed": "这条消息标记了不在房间里的 Agent，或者回复了房间里已没有的话题。",
+    "room-invite-needs-address": "其他机器还无法通过任何地址访问这台机器，所以邀请只能点对点连接。",
+    "room-invite-needs-peer-to-peer": "这台机器的点对点连接还没准备好。稍后再试，或用这台机器的地址邀请。",
     "session-already-open": "该会话已在应用中打开。",
     "nothing-to-fork-yet": "这个对话还没有可以 fork 的 Agent 会话。请先给它发一条消息。",
     "conversation-needs-name": "对话需要一个名称。",

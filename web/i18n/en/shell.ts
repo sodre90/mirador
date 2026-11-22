@@ -295,11 +295,9 @@ export const shell = {
     inviteLink: "Invite link",
     joining: "Joining…",
     joinButton: "Join",
-    outOfRooms: "Its owner signed this computer out of their rooms there. Ask them for a new invite, and join with its code.",
-    outOfRoomsPeerToPeer: "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste its whole link here.",
+    outOfRooms: "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste it here.",
     someoneElses: "Someone else's machine, where you are in their rooms",
-    roomInviteFirst: "You were invited into a room there. Join with the room invite's code or link.",
-    roomInviteLinkFirst: "You were invited into a room there. Join with the room invite's whole link: its code alone is not enough.",
+    roomInviteFirst: "You were invited into a room there. Paste the invite here.",
     peerToPeer: "peer to peer",
     linkToOpen: {
       title: (machine: string) => `Open a link from ${machine}?`,

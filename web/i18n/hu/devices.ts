@@ -20,7 +20,7 @@ export const devices: Messages["devices"] = {
     name: "A készülék neve",
     askToJoin: "Csatlakozás kérése",
     askToJoinIsFullControl: "A csatlakozás kérése a tulajdonos saját készülékévé teszi ezt a készüléket, teljes hozzáféréssel ehhez a Miradorhoz. Valaki más szobájába hívtak? A saját Miradorodból csatlakozz, a szobameghívóval.",
-    roomInviteHere: "Ez a link egy szobába hív meg ezen a Miradoron. Nyisd meg a saját Miradorodat, és ott a Gépek alatt illeszd be a linket a csatlakozáshoz.",
+    roomInviteHere: "Ez a meghívó egy szobába szól ezen a Miradoron. Nyisd meg a saját Miradorodat, és illeszd be ott: Szobák → Csatlakozás egy szobához.",
     inviteCode: "Meghívókód",
     joining: "Csatlakozás…",
     join: "Csatlakozás",
@@ -78,6 +78,11 @@ export const devices: Messages["devices"] = {
     lockedAfter: "), ezért ez itt nem módosítható.",
     saved: "Mentve. A host a következő indulásától használja.",
     restartHost: "Host újraindítása",
+  },
+  roomInvites: {
+    title: "A szobameghívók így kapcsolódnak",
+    peerToPeer: "Közvetlenül, peer to peer",
+    address: "A gép címén",
   },
   invite: {
     qrLabel: "A link QR-kódként",

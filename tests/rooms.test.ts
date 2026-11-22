@@ -121,6 +121,7 @@ function machineWithRooms(dataDir = mkdtempSync(join(tmpdir(), "room-data-")), h
   const waiting = new Map<string, WaitingPermission[]>();
   const answered: { conversationId: string; permissionId: string; allowed: boolean }[] = [];
   const presetsFollowed: string[] = [];
+  const modelsFollowed: string[] = [];
   const notified: { conversationId: string; reason: NotificationReason }[] = [];
   const sessions: RoomSessions = {
     startInRoom: (roomId, workspaceId, launch, title) => ({ ...store.insertConversation(conversationIn(roomId, workspaceId, launch, title)) }),
@@ -135,6 +136,7 @@ function machineWithRooms(dataDir = mkdtempSync(join(tmpdir(), "room-data-")), h
       waiting.set(conversationId, (waiting.get(conversationId) ?? []).filter(({ request }) => request.permissionId !== permissionId));
     },
     followRoomPreset: async (conversationId) => void presetsFollowed.push(conversationId),
+    followRoomAgentModel: async (conversationId) => void modelsFollowed.push(conversationId),
   };
   const clock = { now: Date.UTC(2026, 10, 20, 9) };
   const notifications = { notify: (conversationId: string, reason: NotificationReason) => void notified.push({ conversationId, reason }) };
@@ -210,6 +212,7 @@ function machineWithRooms(dataDir = mkdtempSync(join(tmpdir(), "room-data-")), h
     waiting,
     answered,
     presetsFollowed,
+    modelsFollowed,
     notified,
   };
 }
@@ -579,6 +582,31 @@ describe("a room", () => {
     expect(() => rooms.assertNoneWorkIn("w2")).not.toThrow();
   });
 
+  test("keeps a model and effort for each of its agents, chosen as it is made or later, which the agent's conversation takes up at once", () => {
+    const { store, rooms, ownerId, received, modelsFollowed } = machineWithRooms();
+    const ops = rooms.create("Ops", "w1", ["p1", "p2"], DEFAULT_PERMISSION_PRESET, { p1: { model: " opus ", effort: "high" }, p3: { model: "haiku", effort: null } });
+    expect(store.findRoom(ops.id)!.agents.map(({ profileId, model, effort }) => ({ profileId, model, effort }))).toEqual([
+      { profileId: "p1", model: "opus", effort: "high" },
+      { profileId: "p2", model: null, effort: null },
+    ]);
+
+    rooms.setAgentModel(ops.id, "p2", { model: "haiku", effort: "" });
+    expect(store.findRoom(ops.id)!.agents[1]).toMatchObject({ model: "haiku", effort: null });
+    expect(received.findLast((message) => message.type === "room.upserted")).toMatchObject({ room: { id: ops.id, agents: [{ model: "opus" }, { model: "haiku" }] } });
+    expect(modelsFollowed).toEqual([]);
+
+    rooms.write(ops.id, ownerId, "@Builder go", ["p1"], null);
+    const conversationId = store.findRoom(ops.id)!.agents[0]!.conversationId!;
+    rooms.setAgentModel(ops.id, "p1", { model: "default", effort: "low" });
+    expect(modelsFollowed).toEqual([conversationId]);
+
+    rooms.setAgentModel(ops.id, "p3", { model: "opus", effort: null });
+    expect(store.findRoom(ops.id)!.agents.map(({ profileId }) => profileId)).toEqual(["p1", "p2"]);
+    expect(() => rooms.setAgentModel(ops.id, "p1", { model: "x".repeat(201), effort: null })).toThrow();
+    expect(() => rooms.setAgentModel(ops.id, "p1", { model: 5 as never, effort: null })).toThrow();
+    expect(store.findRoom(ops.id)!.agents[0]).toMatchObject({ model: "default", effort: "low" });
+  });
+
   test("deletes its agents' conversations with it", () => {
     const { rooms, room, ownerId, deleted, received, conversationOf } = machineWithRooms();
     rooms.write(room.id, ownerId, "@Builder ship it", ["p1"], null);
@@ -938,7 +966,7 @@ describe("a page that shows a room", () => {
   const builderInRoom = { ...conversationIn("r1", "w1", { harness: "opencode", profileId: "p1" }, "Launch: Builder"), position: 0 };
   const page = (id: string, conversationId: string, kind: CanvasItem["kind"] = "show") => ({ id, conversationId, kind, title: id, html: "", status: "shown", createdAt: 1 }) as CanvasItem;
   const serverSent = (state: AppState, message: ServerMessage) => reducer(state, { type: "server", message });
-  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null }], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 };
+  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null }], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 };
   const showingRoom = (messages: RoomMessage[], rooms = [launch]) =>
     serverSent(reducer({ ...initialState, rooms, roomConversations: [builderInRoom] }, { type: "select-room", roomId: "r1" }), {
       type: "room.timeline",
@@ -956,7 +984,7 @@ describe("a page that shows a room", () => {
 
   test("takes an agent's pages and questions off the canvas as soon as the agent is taken out of the room", () => {
     const reviewerInRoom = "reviewer-conversation";
-    const withReviewer = { ...launch, agents: [...launch.agents, { profileId: "p2", conversationId: reviewerInRoom, answering: null }] };
+    const withReviewer = { ...launch, agents: [...launch.agents, { profileId: "p2", conversationId: reviewerInRoom, answering: null, model: null, effort: null }] };
     const items = [page("plan", builderInRoom.id), page("review", reviewerInRoom), page("which", reviewerInRoom, "ask")];
     const state = items.reduce((before, item) => serverSent(before, { type: "canvas.upserted", item }), showingRoom([], [withReviewer]));
     expect(state.roomTimeline!.canvas.map(({ id }) => id)).toEqual(["plan", "review", "which"]);

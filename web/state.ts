@@ -16,6 +16,7 @@ import { defaultVoiceSettings, type VoiceSettings } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
 import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
+import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 
 export interface OpenConversation {
@@ -46,8 +47,13 @@ export type Overlay =
   | { kind: "worktrees"; workspaceId: string }
   | { kind: "add-workspace" }
   | { kind: "add-workspace-group"; parentId: string | null }
-  /** A room's settings, or with no `roomId`, a new room's. */
-  | { kind: "room"; roomId: string | null }
+  | { kind: "new-room" }
+  /** A room's settings, at one of their tabs. */
+  | { kind: "room"; roomId: string; tab?: RoomSettingsTab }
+  /** Making an invite into the room for one person. */
+  | { kind: "room-invite"; roomId: string }
+  /** Joining someone else's room with the invite they sent. */
+  | { kind: "join-room" }
   /** `rewind` takes the conversation and the files back; without it only the files are put back. */
   | { kind: "revert"; conversationId: string; turn: Turn; rewind?: boolean }
   | { kind: "settings"; page?: SettingsPage };
@@ -81,6 +87,8 @@ export interface AppState {
   roomTasksWaiting: RoomTaskApproval[];
   /** The room invites nobody has used yet, soonest to expire first; those of a deleted room went with it. */
   roomInvites: RoomInvite[];
+  /** The rooms someone other than the owner is in now. */
+  roomsWithPeopleHere: string[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
@@ -208,6 +216,7 @@ export const initialState: AppState = {
   roomApprovals: [],
   roomTasksWaiting: [],
   roomInvites: [],
+  roomsWithPeopleHere: [],
   selectedRoomId: null,
   roomTimeline: null,
   roomPresence: null,
@@ -669,6 +678,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return state;
     case "room-invites.listed":
       return { ...state, roomInvites: message.invites };
+    case "rooms.people-here":
+      return { ...state, roomsWithPeopleHere: message.roomIds };
     case "room.upserted":
       return withRoomTimeline({ ...state, rooms: upsert(state.rooms, message.room) }, message.room.id, (timeline) => ({ ...timeline, canvas: timeline.canvas.filter(madeByAgentOf(message.room)) }));
     case "room.deleted": {

@@ -302,11 +302,9 @@ export const shell: Messages["shell"] = {
     inviteLink: "Enlace de invitación",
     joining: "Uniéndose…",
     joinButton: "Unirse",
-    outOfRooms: "Su propietario cerró la sesión de este equipo en sus salas de allí. Pídele una nueva invitación y únete con su código.",
-    outOfRoomsPeerToPeer: "Su propietario cerró la sesión de este equipo en sus salas de allí. Pídele una nueva invitación y pega aquí su enlace completo.",
+    outOfRooms: "Su propietario cerró la sesión de este equipo en sus salas de allí. Pídele una nueva invitación y pégala aquí.",
     someoneElses: "Máquina de otra persona, en cuyas salas estás",
-    roomInviteFirst: "Te invitaron a una sala de allí. Únete con el código o el enlace de la invitación a la sala.",
-    roomInviteLinkFirst: "Te invitaron a una sala de allí. Únete con el enlace completo de la invitación a la sala: su código solo no basta.",
+    roomInviteFirst: "Te invitaron a una sala de allí. Pega aquí la invitación.",
     peerToPeer: "peer to peer",
     linkToOpen: {
       title: (machine) => `¿Abrir un enlace de ${machine}?`,

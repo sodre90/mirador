@@ -5,7 +5,7 @@ import { PROBLEM_HEADER } from "../shared/host-problems.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Room } from "../shared/rooms.ts";
-import { addWorkspace, createProfile, lastAgentMessage, openSettings, sendMessage, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, lastAgentMessage, openRoomSettings, openSettings, roomCard, sendMessage, signIn, startConversation } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -24,7 +24,7 @@ test.afterAll(async () => {
 const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Launch, @ tags an agent…" });
 const guestComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Launch…" });
 const roomMessages = (page: Page) => page.locator(".room-timeline .room-entry .message");
-const roomsListed = (page: Page) => page.locator(".sidebar .rooms li");
+const roomsListed = (page: Page) => page.locator(".sidebar .rooms .room-card-name");
 
 async function tagBuilder(page: Page, rest: string) {
   await roomComposer(page).fill("@Bu");
@@ -34,21 +34,23 @@ async function tagBuilder(page: Page, rest: string) {
 }
 
 async function makeRoom(page: Page, name: string) {
-  await page.getByRole("button", { name: "New room" }).click();
-  const dialog = page.getByRole("dialog", { name: "New room" });
-  await dialog.getByLabel("Room name").fill(name);
-  await dialog.getByLabel("Builder").check();
-  await dialog.getByRole("button", { name: "Create room" }).click();
-  await expect(page.getByRole("heading", { name: `# ${name}` })).toBeVisible();
+  await createRoom(page, name, ["Builder"]);
   await expect(page).toHaveURL(/#\/r\/.+$/);
   return page.url().match(/#\/r\/(.+)$/)![1]!;
 }
 
+/** Mia is let into the room with the role, given it there, or taken out of it, each as the room's settings apply it at once. */
 async function setRoleOfMia(page: Page, room: string, role: "Member" | "Guest" | "Not in the room") {
-  await page.getByRole("button", { name: `Settings of ${room}` }).click();
-  const dialog = page.getByRole("dialog", { name: "Room settings" });
-  await dialog.getByLabel("Role of Mia").selectOption({ label: role });
-  await dialog.getByRole("button", { name: "Save" }).click();
+  const dialog = await openRoomSettings(page, room);
+  const inRoom = (await dialog.getByLabel("Role of Mia").count()) > 0;
+  if (role === "Not in the room") {
+    await dialog.getByRole("button", { name: "Remove Mia" }).click();
+    await dialog.getByRole("button", { name: "Confirm: Remove Mia" }).click();
+  } else {
+    if (!inRoom) await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
+    await dialog.getByLabel("Role of Mia").selectOption({ label: role });
+  }
+  await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -87,9 +89,9 @@ test("a person the owner lets into a room sees only that room on their own brows
     const roomId = await makeRoom(page, "Secret");
     await makeRoom(page, "Launch");
     await setRoleOfMia(page, "Launch", "Member");
-    await page.getByRole("button", { name: "Settings of Launch" }).click();
-    await expect(page.getByRole("dialog", { name: "Room settings" }).getByLabel("Role of Mia")).toHaveValue("member");
-    await page.getByRole("dialog", { name: "Room settings" }).getByRole("button", { name: "Cancel" }).click();
+    const settings = await openRoomSettings(page, "Launch");
+    await expect(settings.getByLabel("Role of Mia")).toHaveValue("member");
+    await settings.getByRole("button", { name: "Done" }).click();
     return roomId;
   });
 
@@ -101,14 +103,14 @@ test("a person the owner lets into a room sees only that room on their own brows
   await test.step("Mia's browser shows the rooms she is in and nothing else of the machine", async () => {
     await miaPage.goto(host.origin);
     await expect(miaPage.getByRole("heading", { name: "Pick a room on the left." })).toBeVisible();
-    await expect(roomsListed(miaPage)).toHaveText(["# Launch"]);
+    await expect(roomsListed(miaPage)).toHaveText(["Launch"]);
     await expect(miaPage.locator(".sidebar .workspace")).toHaveCount(0);
-    for (const name of ["New room", "Settings of Launch", "Settings", "Plugins", "Profiles", "Machines"]) await expect(miaPage.getByRole("button", { name, exact: true })).toHaveCount(0);
+    for (const name of ["New room", "New room or join one", "Settings of Launch", "Settings", "Plugins", "Profiles", "Machines"]) await expect(miaPage.getByRole("button", { name, exact: true })).toHaveCount(0);
     await expect(miaPage.locator("body")).not.toContainText("Secret");
   });
 
   await test.step("Mia writes in the room, and the owner reads it at once", async () => {
-    await roomsListed(miaPage).filter({ hasText: "# Launch" }).click();
+    await roomCard(miaPage, "Launch").click();
     await expect(miaPage.getByRole("heading", { name: "# Launch" })).toBeVisible();
     await roomComposer(miaPage).fill("Morning from Mia");
     await roomComposer(miaPage).press("Enter");
@@ -143,7 +145,7 @@ test("a person the owner lets into a room sees only that room on their own brows
       await miaPage.goto(`${host.origin}/${address}`);
       await miaPage.reload();
       await expect(miaPage.getByRole("heading", { name: "Pick a room on the left." })).toBeVisible();
-      await expect(roomsListed(miaPage)).toHaveText(["# Launch"]);
+      await expect(roomsListed(miaPage)).toHaveText(["Launch"]);
       await expect(miaPage.locator("body")).not.toContainText("The plan nobody else reads");
       await expect(miaPage.locator("body")).not.toContainText("Secret");
       await expect(miaPage.locator(".notices .notice")).toHaveCount(0);
@@ -152,7 +154,7 @@ test("a person the owner lets into a room sees only that room on their own brows
   });
 
   await test.step("made a guest, Mia's open page lets her write, but neither tag the agent nor follow up in its thread", async () => {
-    await roomsListed(miaPage).filter({ hasText: "# Launch" }).click();
+    await roomCard(miaPage, "Launch").click();
     await setRoleOfMia(page, "Launch", "Guest");
     await guestComposer(miaPage).fill("@Bu");
     await expect(miaPage.getByRole("listbox", { name: "Agents of the room" })).toHaveCount(0);
@@ -213,12 +215,11 @@ test("a person the owner lets into a room sees only that room on their own brows
     host.admitPerson("");
     host.admitPerson("");
     await page.reload();
-    await page.getByRole("button", { name: "Settings of Launch" }).click();
-    const dialog = page.getByRole("dialog", { name: "Room settings" });
-    const nameless = dialog.locator(".room-person-choice > span").filter({ hasText: /^Someone without a name \d{4}$/ });
+    const dialog = await openRoomSettings(page, "Launch");
+    const nameless = dialog.getByRole("combobox", { name: "Add someone you let in before" }).locator("option").filter({ hasText: /^Someone without a name \d{4}$/ });
     await expect(nameless).toHaveCount(2);
     const [first, second] = await nameless.allTextContents();
     expect(first).not.toBe(second);
-    await expect(dialog.getByLabel(`Role of ${first}`)).toHaveValue("");
+    await expect(dialog.getByLabel(`Role of ${first}`)).toHaveCount(0);
   });
 });

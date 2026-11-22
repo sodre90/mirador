@@ -22,7 +22,7 @@ export const devices: Messages["devices"] = {
     name: "Name dieses Geräts",
     askToJoin: "Beitritt anfragen",
     askToJoinIsFullControl: "Eine Beitrittsanfrage macht dieses Gerät zu einem eigenen Gerät des Besitzers, mit voller Kontrolle über dieses Mirador. In den Raum von jemand anderem eingeladen? Tritt aus deinem eigenen Mirador bei, mit der Raumeinladung.",
-    roomInviteHere: "Dieser Link lädt dich in einen Raum auf diesem Mirador ein. Öffne dein eigenes Mirador und füge den Link dort unter Rechner ein, um beizutreten.",
+    roomInviteHere: "Diese Einladung gilt für einen Raum auf diesem Mirador. Öffne dein eigenes Mirador und füge sie dort unter Räume → Einem Raum beitreten ein.",
     inviteCode: "Einladungscode",
     joining: "Beitritt läuft…",
     join: "Beitreten",
@@ -80,6 +80,11 @@ export const devices: Messages["devices"] = {
     lockedAfter: "), daher lässt sich das hier nicht ändern.",
     saved: "Gespeichert. Der Host verwendet es ab seinem nächsten Start.",
     restartHost: "Host neu starten",
+  },
+  roomInvites: {
+    title: "Raumeinladungen verbinden",
+    peerToPeer: "Direkt, Peer-to-Peer",
+    address: "An der Adresse dieses Rechners",
   },
   invite: {
     qrLabel: "Link als QR-Code",

@@ -19,6 +19,8 @@ export const problems: Messages["problems"] = {
     "room-gone": "Den Raum gibt es nicht mehr.",
     "room-needs-a-name": "Gib dem Raum einen Namen.",
     "room-message-misaddressed": "Diese Nachricht markiert einen Agenten, der nicht im Raum ist, oder antwortet in einem Thread, den es dort nicht mehr gibt.",
+    "room-invite-needs-address": "Andere Rechner erreichen diesen noch unter keiner Adresse, daher kann die Einladung nur direkt (Peer-to-Peer) verbinden.",
+    "room-invite-needs-peer-to-peer": "Peer-to-Peer ist auf diesem Rechner noch nicht bereit. Versuch es gleich noch einmal oder lade unter der Adresse dieses Rechners ein.",
     "session-already-open": "Diese Sitzung ist in der App schon geöffnet.",
     "nothing-to-fork-yet": "Diese Unterhaltung hat noch keine Agentensitzung, die sich forken ließe. Schick ihr zuerst eine Nachricht.",
     "conversation-needs-name": "Eine Unterhaltung braucht einen Namen.",
