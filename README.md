@@ -424,7 +424,7 @@ Off macOS, Ctrl stands in for ⌘ and Alt for ⌥. The ⌥ bindings go by physic
 
 A native window around Mirador, for macOS, Linux and Windows ([full details](desktop/README.md)).
 
-- **Menu bar or tray app**: closing the window leaves it running, and on macOS the Dock icon hides until the window comes back. On macOS `⌘W` closes the open dialog, else the focused terminal's shell, and asks before it closes the window. The menu has the Mirador version and the host's status, a newer version when there is one, *Open*, *Restart host*, *Run host in the background*, *Open at login* and *Quit*. On a Linux desktop without a tray, *Desktop app…* in the sidebar has the same menu.
+- **Menu bar or tray app**: closing the window leaves it running, and on macOS the Dock icon hides until the window comes back. On macOS *Settings…* in the Mirador menu, `⌘,`, opens Settings, and `⌘W` closes the open dialog, else the focused terminal's shell, and asks before it closes the window. The menu has the Mirador version and the host's status, a newer version when there is one, *Open*, *Restart host*, *Run host in the background*, *Open at login* and *Quit*. On a Linux desktop without a tray, *Desktop app…* in the sidebar has the same menu.
 - **Uses a host that is already running** and never stops one it didn't start. Otherwise it starts one through your login shell, so agents see the same environment as in your terminal.
 - **Run the host in the background**: a LaunchAgent on macOS, a systemd user service on Linux, or a scheduled task on Windows, so the host keeps running without the app and starts at login.
 - **Open at login** (on by default).

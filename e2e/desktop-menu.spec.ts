@@ -1,8 +1,22 @@
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import type { DesktopMenu } from "../shared/desktop-menu.ts";
-import { actAsDesktopApp, addWorkspace, chooseInSettings, openSettings, pressCommandWInTheApp, signIn, startConversation } from "./helpers.ts";
+import {
+  actAsDesktopApp,
+  addWorkspace,
+  chooseInSettings,
+  createProfile,
+  openProfiles,
+  openSettings,
+  pressCommandCommaInTheApp,
+  pressCommandWInTheApp,
+  sendMessage,
+  signIn,
+  signInWithWorkspace,
+  startConversation,
+} from "./helpers.ts";
 import { keepShellBusy } from "./terminal-shell.ts";
-import { jobControlShell, TestHost } from "./test-host.ts";
+import { jobControlShell, TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ shell: jobControlShell });
 
@@ -90,6 +104,95 @@ test("inside a desktop app that hands over no nonce, as one built before it did,
   const popup = page.waitForEvent("popup");
   await page.getByRole("link", { name: "the docs" }).click();
   expect((await popup).url()).toContain("example.com");
+});
+
+test.describe("Settings… in the macOS app's menu", () => {
+  const hostForSettings = new TestHost({ fakePrograms: true });
+
+  test.beforeAll(async () => {
+    // An opencode that takes a prompt starting with WEDGE and never finishes it.
+    writeBunProgram(hostForSettings.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: join(hostForSettings.root, "prompts") });
+    await hostForSettings.start();
+  });
+  test.afterAll(async () => {
+    await hostForSettings.stop();
+    await hostForSettings.cleanUp();
+  });
+
+  test("inside the macOS desktop app, ⌘, opens Settings over the conversation shown, again after they were closed, with Esc closing them wherever the keys were, and in a window the app opens for them", async ({ page }) => {
+    await actAsDesktopApp(page, menuWith(false));
+    await signIn(page, hostForSettings);
+    await addWorkspace(page, hostForSettings.projectDir);
+    await startConversation(page);
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    const conversationAddress = page.url();
+    expect(conversationAddress).toContain("#/c/");
+
+    await pressCommandCommaInTheApp(page);
+    await expect(settings).toBeVisible();
+    expect(page.url()).toBe(conversationAddress);
+
+    await pressCommandWInTheApp(page);
+    await expect(settings).toHaveCount(0);
+    await pressCommandCommaInTheApp(page);
+    await expect(settings).toBeVisible();
+
+    await test.step("pressed with the keys in a frame, Esc still closes them", async () => {
+      await pressCommandWInTheApp(page);
+      await expect(settings).toHaveCount(0);
+      await page.evaluate(() => {
+        const frame = document.body.appendChild(document.createElement("iframe"));
+        frame.id = "frame-with-the-keys";
+        frame.focus();
+      });
+      await expect(page.locator("#frame-with-the-keys")).toBeFocused();
+      await pressCommandCommaInTheApp(page);
+      await expect(settings).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(settings).toHaveCount(0);
+    });
+
+    const openedForSettings = await page.context().newPage();
+    await openedForSettings.goto(`${hostForSettings.origin}/#/settings`);
+    await expect(openedForSettings.getByRole("dialog", { name: "Settings" })).toBeVisible();
+    await expect(openedForSettings).not.toHaveURL(/#\/settings/);
+  });
+
+  test("inside the macOS desktop app, ⌘, takes the keys from the message box, so Esc closes Settings and the running turn goes on, and it leaves another open dialog with its unsaved edits", async ({ page }) => {
+    await actAsDesktopApp(page, menuWith(false));
+    await signInWithWorkspace(page, hostForSettings);
+    const profiles = await createProfile(page, "wedged", "", "", "opencode");
+    await profiles.getByRole("button", { name: "Close" }).click();
+    await page.getByLabel("Agent", { exact: true }).selectOption({ label: "wedged · opencode" });
+    await startConversation(page, { withModels: false });
+    await sendMessage(page, "WEDGE on");
+    const status = page.locator(".chat-header:visible .badge");
+    await expect(status).toHaveText("running", { timeout: 30_000 });
+    const settings = page.getByRole("dialog", { name: "Settings" });
+    const messageBox = page.locator(".composer:visible textarea");
+
+    await test.step("Esc closes Settings opened from the message box, not the turn", async () => {
+      await messageBox.focus();
+      await pressCommandCommaInTheApp(page);
+      await expect(settings).toBeVisible();
+      await expect(messageBox).not.toBeFocused();
+      await page.keyboard.type("not for the message box");
+      await page.keyboard.press("Escape");
+      await expect(settings).toHaveCount(0);
+      await expect(messageBox).toHaveValue("");
+      await expect(page.locator(".composer:visible .stop")).toHaveText("Stop");
+      await expect(status).toHaveText("running");
+    });
+
+    await test.step("with unsaved edits in Profiles, ⌘, opens nothing over them", async () => {
+      const dialog = await openProfiles(page);
+      await dialog.getByLabel("Profile name").fill("Renamed");
+      await pressCommandCommaInTheApp(page);
+      await expect(dialog.getByLabel("Profile name")).toHaveValue("Renamed");
+      await expect(dialog.getByRole("img", { name: "Unsaved changes" }).first()).toBeVisible();
+      await expect(settings).toHaveCount(0);
+    });
+  });
 });
 
 test("inside the macOS desktop app, ⌘W closes the open dialog, else the focused terminal's shell or answers its question, and with nothing to close asks the app with its nonce", async ({ page }) => {

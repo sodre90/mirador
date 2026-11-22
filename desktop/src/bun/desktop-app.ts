@@ -1,5 +1,6 @@
 import { Utils } from "electrobun/main";
 import { readFileSync } from "node:fs";
+import { SETTINGS_ROUTE } from "../../../shared/desktop-menu.ts";
 import type { Language } from "../../../shared/i18n/languages.ts";
 import type { NewerVersion } from "../../../shared/newer-version.ts";
 import type { WaitingConversation } from "../../../shared/waiting.ts";
@@ -25,6 +26,7 @@ import {
   pageRequest,
   showMenuScript,
   showRouteScript,
+  showSettingsScript,
   showUpdateScript,
   windowMenu,
 } from "../core/window-menu.ts";
@@ -221,6 +223,14 @@ export class DesktopApp {
     if (!this.window.isOpen) return this.openWindow(route);
     this.window.runInPage(showRouteScript(route));
     this.window.bringToFront();
+  }
+
+  /** From an item's own window too, where Settings open in the main one. */
+  showSettings() {
+    if (!this.window.isOpen) return this.openWindow(SETTINGS_ROUTE);
+    this.window.runInPage(showSettingsScript);
+    this.window.bringToFront();
+    this.window.giveKeysToPage();
   }
 
   private openNewerVersionDownload() {

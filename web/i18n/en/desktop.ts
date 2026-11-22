@@ -53,6 +53,7 @@ export const desktop = {
   couldNotStart: (app: string, problem: string) => `${app} could not start: ${problem}`,
   detailsIn: (path: string) => `The details are in ${path}.`,
   menu: {
+    settings: "Settings…",
     hide: (app: string) => `Hide ${app}`,
     hideOthers: "Hide Others",
     showAll: "Show All",

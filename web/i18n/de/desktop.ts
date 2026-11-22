@@ -52,6 +52,7 @@ export const desktop: Messages["desktop"] = {
   couldNotStart: (app, problem) => `${app} konnte nicht starten: ${problem}`,
   detailsIn: (path) => `Die Details stehen in ${path}.`,
   menu: {
+    settings: "Einstellungen…",
     hide: (app) => `${app} ausblenden`,
     hideOthers: "Andere ausblenden",
     showAll: "Alle einblenden",
