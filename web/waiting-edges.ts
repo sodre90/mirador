@@ -22,6 +22,7 @@ export interface WaitingOutOfView {
 
 const NOTHING_OUT_OF_VIEW: WaitingOutOfView = { above: null, below: null };
 const WAITING_ROW = "[data-waiting-tone]";
+const STICKY_HEADING = "[data-sticky-heading]";
 
 const hiddenWaiting = (marks: WaitingMark[]): HiddenWaiting | null =>
   marks.length === 0
@@ -37,6 +38,25 @@ export function waitingOutOfView(marks: WaitingMark[], view: { top: number; bott
     above: hiddenWaiting(marks.filter(({ bottom }) => bottom <= view.top)),
     below: hiddenWaiting(marks.filter(({ top }) => top >= view.bottom)),
   };
+}
+
+/** How far down from the list's top edge a heading stuck there, or pushed out by the next one, hides the list; none while no heading is at the top. */
+export function coveredByHeading(headings: { top: number; bottom: number }[], listTop: number): number {
+  return Math.max(0, ...headings.filter(({ top }) => top <= listTop + 1).map(({ bottom }) => bottom - listTop));
+}
+
+/**
+ * The part of the list a person sees: below the heading stuck at its top, whose height the list's stylesheet gets as
+ * --covered-top, so the chip above shows under it.
+ */
+function viewUnderHeadings(scroller: HTMLElement) {
+  const { top, bottom } = scroller.getBoundingClientRect();
+  const covered = coveredByHeading(
+    [...scroller.querySelectorAll(STICKY_HEADING)].map((heading) => heading.getBoundingClientRect()),
+    top,
+  );
+  scroller.style.setProperty("--covered-top", `${covered}px`);
+  return { top: top + covered, bottom };
 }
 
 const sameHidden = (a: HiddenWaiting | null, b: HiddenWaiting | null) => a?.count === b?.count && a?.tone === b?.tone;
@@ -61,10 +81,9 @@ export function useWaitingOutOfView(scroller: RefObject<HTMLElement | null>) {
   const measure = useCallback(() => {
     const element = scroller.current;
     if (!element) return;
-    const { top, bottom } = element.getBoundingClientRect();
     const next = waitingOutOfView(
       waitingRowsIn(element).map(({ mark }) => mark),
-      { top, bottom },
+      viewUnderHeadings(element),
     );
     setOutOfView((current) => (sameOutOfView(current, next) ? current : next));
   }, [scroller]);
@@ -85,7 +104,7 @@ export function useWaitingOutOfView(scroller: RefObject<HTMLElement | null>) {
 
 /** Brings the nearest of the conversations waiting out of view on that side to the middle of the sidebar. */
 export function scrollToNearestWaiting(scroller: HTMLElement, side: "above" | "below") {
-  const view = scroller.getBoundingClientRect();
+  const view = viewUnderHeadings(scroller);
   const hidden = waitingRowsIn(scroller).filter(({ mark }) => (side === "above" ? mark.bottom <= view.top : mark.top >= view.bottom));
   const nearest = side === "above" ? hidden.at(-1) : hidden[0];
   nearest?.element.scrollIntoView({ block: "center" });

@@ -215,7 +215,7 @@ export function RoomsSection({
 }) {
   return (
     <section className="rooms" aria-label={words.rooms}>
-      <header>
+      <header data-sticky-heading>
         <div className="workspace-heading">
           <div className="workspace-name">{words.rooms}</div>
         </div>

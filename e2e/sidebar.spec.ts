@@ -2,7 +2,7 @@ import { mkdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, sep } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, createProfile, dragOnto, pickProfileIfAsked, removeWorkspace, signIn, startConversation, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, dragOnto, pickProfileIfAsked, removeWorkspace, roomCard, signIn, startConversation, workspaceCard } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -369,13 +369,85 @@ test("the Workspaces heading and its buttons stay at the top of the sidebar whil
   await signIn(page, host);
   for (const folder of folders) await addWorkspaceFromSidebar(page, folder);
   const heading = page.locator(".sidebar-header");
-  const placeBefore = await heading.boundingBox();
-
   const list = page.locator(".sidebar-scroll");
-  await list.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
-  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(0);
-  expect(await heading.boundingBox()).toEqual(placeBefore);
+  const headingReachedTop = await list.evaluate((element) => {
+    const top = element.querySelector(".sidebar-header")!.getBoundingClientRect().top - element.getBoundingClientRect().top + element.scrollTop;
+    element.scrollTo({ top });
+    return element.scrollTop;
+  });
+  expect((await heading.boundingBox())!.y).toBe((await list.boundingBox())!.y);
+  const placeAtTop = await heading.boundingBox();
 
-  await heading.getByRole("button", { name: "Add workspace" }).click();
+  await list.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+  await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(headingReachedTop);
+  expect(await heading.boundingBox()).toEqual(placeAtTop);
+
+  const addButton = (await heading.getByRole("button", { name: "Add workspace" }).boundingBox())!;
+  await page.mouse.click(addButton.x + addButton.width / 2, addButton.y + addButton.height / 2);
   await expect(page.locator(".add-workspace input")).toBeVisible();
+});
+
+test("the rooms scroll with the workspaces as one list, each section's heading staying at the top of it while its section is in view", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 420 });
+  const folders = ["listed-a", "listed-b", "listed-c", "listed-d", "listed-e", "listed-f"].map((name) => join(host.root, name));
+  folders.forEach((folder) => mkdirSync(folder, { recursive: true }));
+  await signIn(page, host);
+  for (const folder of folders) await addWorkspaceFromSidebar(page, folder);
+  const rooms = ["Atrium", "Balcony", "Cellar", "Den", "Eaves"];
+  for (const room of rooms) await createRoom(page, room, []);
+  const list = page.locator(".sidebar-scroll");
+  const roomsSection = page.locator(".sidebar-scroll > .rooms");
+  const roomsHeading = roomsSection.locator(":scope > header");
+  const workspacesHeading = page.locator(".sidebar-scroll > .sidebar-header");
+  const boxOf = async (locator: Locator) => (await locator.boundingBox())!;
+  const listTop = async () => (await boxOf(list)).y;
+  const scrollListTo = (top: number) => list.evaluate((element, to) => element.scrollTo({ top: to }), top);
+  const scrolled = () => list.evaluate((element) => element.scrollTop);
+
+  await test.step("at the top, the list starts with the Rooms section, its rooms between its heading and the Workspaces heading", async () => {
+    await scrollListTo(0);
+    expect((await boxOf(roomsHeading)).y).toBeGreaterThan(await listTop());
+    const lastRoom = await boxOf(roomCard(page, "Eaves"));
+    expect((await boxOf(workspacesHeading)).y).toBeGreaterThanOrEqual(lastRoom.y + lastRoom.height);
+    const workspace = await boxOf(workspaceCard(page, folders[0]!));
+    expect((await boxOf(roomsSection)).x).toBe(workspace.x);
+    expect((await boxOf(roomsSection)).width).toBe(workspace.width);
+  });
+
+  await test.step("scrolled into the rooms, the Rooms heading stays at the top while the first rooms scroll away under it", async () => {
+    await scrollListTo(60);
+    expect((await boxOf(roomsHeading)).y).toBe(await listTop());
+    const heading = await boxOf(roomsHeading);
+    expect((await boxOf(roomCard(page, "Atrium"))).y).toBeLessThan(heading.y + heading.height);
+    expect((await boxOf(workspacesHeading)).y).toBeGreaterThan(heading.y + heading.height);
+  });
+
+  const roomsEnd = await list.evaluate((element) => element.querySelector(".rooms")!.getBoundingClientRect().bottom - element.getBoundingClientRect().top + element.scrollTop);
+
+  await test.step("at the end of the rooms, the Workspaces heading pushes the Rooms heading out", async () => {
+    await scrollListTo(roomsEnd - 10);
+    const rooms = await boxOf(roomsHeading);
+    expect(rooms.y).toBeLessThan(await listTop());
+    expect(rooms.y + rooms.height).toBeLessThanOrEqual((await boxOf(workspacesHeading)).y);
+  });
+
+  await test.step("past the rooms, the Workspaces heading takes the Rooms heading's place, and keeps it to the end of the list", async () => {
+    await scrollListTo(roomsEnd + 20);
+    expect((await boxOf(workspacesHeading)).y).toBe(await listTop());
+    await expect(roomsHeading).not.toBeInViewport();
+    await list.evaluate((element) => element.scrollTo({ top: element.scrollHeight }));
+    await expect.poll(scrolled).toBeGreaterThan(roomsEnd + 20);
+    expect((await boxOf(workspacesHeading)).y).toBe(await listTop());
+  });
+
+  await test.step("opening a room leaves the list where it was scrolled", async () => {
+    await scrollListTo(60);
+    const at = await scrolled();
+    await roomCard(page, "Den").click();
+    await expect(page.getByRole("heading", { name: "# Den" })).toBeVisible();
+    expect(await scrolled()).toBe(at);
+    await roomCard(page, "Eaves").click();
+    await expect(page.getByRole("heading", { name: "# Eaves" })).toBeVisible();
+    expect(await scrolled()).toBe(at);
+  });
 });

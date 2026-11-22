@@ -983,32 +983,6 @@ export function Sidebar({
         <span>{words.paletteBar}</span>
         <kbd>{shortcutKeys().palette}</kbd>
       </button>
-      <RoomsSection
-        rooms={state.rooms}
-        profiles={state.profiles}
-        selectedRoomId={state.selectedRoomId}
-        waitingRoomIds={roomsWaitingFor(state)}
-        readings={state.roomReadings}
-        roomsWithPeopleHere={state.roomsWithPeopleHere}
-        joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
-        people={state.people}
-        broughtAgents={state.broughtAgents}
-        manages
-        dispatch={dispatch}
-        onOpenJoinedRoom={onOpenJoinedRoom}
-      />
-      <header className="sidebar-header">
-        <h1>{words.workspaces}</h1>
-        <span className="sidebar-header-buttons">
-          <ConversationOrderMenu order={state.conversationOrder} />
-          <button className="icon" aria-label={words.newGroup} data-hint={hints.addWorkspaceGroup} onClick={() => openOverlay({ kind: "add-workspace-group", parentId: null })}>
-            ⊞
-          </button>
-          <button className="icon" aria-label={words.addWorkspace} data-hint={hints.addWorkspace} data-shortcut={shortcutKeys().newWorkspace} onClick={() => setAdding(true)}>
-            +
-          </button>
-        </span>
-      </header>
       <div
         className="sidebar-scroll"
         ref={sidebar}
@@ -1016,6 +990,32 @@ export function Sidebar({
         onPointerLeave={() => dispatch({ type: "hold-turn-times", held: false })}
       >
         <WaitingEdge side="above" hidden={outOfView.above} onClick={() => scrollToWaiting("above")} />
+        <RoomsSection
+          rooms={state.rooms}
+          profiles={state.profiles}
+          selectedRoomId={state.selectedRoomId}
+          waitingRoomIds={roomsWaitingFor(state)}
+          readings={state.roomReadings}
+          roomsWithPeopleHere={state.roomsWithPeopleHere}
+          joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
+          people={state.people}
+          broughtAgents={state.broughtAgents}
+          manages
+          dispatch={dispatch}
+          onOpenJoinedRoom={onOpenJoinedRoom}
+        />
+        <header className="sidebar-header" data-sticky-heading>
+          <h1>{words.workspaces}</h1>
+          <span className="sidebar-header-buttons">
+            <ConversationOrderMenu order={state.conversationOrder} />
+            <button className="icon" aria-label={words.newGroup} data-hint={hints.addWorkspaceGroup} onClick={() => openOverlay({ kind: "add-workspace-group", parentId: null })}>
+              ⊞
+            </button>
+            <button className="icon" aria-label={words.addWorkspace} data-hint={hints.addWorkspace} data-shortcut={shortcutKeys().newWorkspace} onClick={() => setAdding(true)}>
+              +
+            </button>
+          </span>
+        </header>
         <WaitingList state={state} dispatch={dispatch} />
         {adding && <AddWorkspace profiles={state.profiles} onDone={() => setAdding(false)} />}
         {state.workspaces.length === 0 && !adding && (
