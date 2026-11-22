@@ -188,6 +188,7 @@ export const shell: Messages["shell"] = {
     resizeColumns: "调整左右窗格大小",
     resizeRows: "调整上下窗格大小",
     resizeSidebar: "调整侧边栏大小",
+    resizeSidePanel: "调整侧边窗格大小",
   },
   shortcuts: {
     title: "键盘快捷键",

@@ -9568,21 +9568,22 @@ button.link.more-rows {
   flex-direction: column;
 }
 
+.conversation-with-side > .splitter {
+  flex: 0 0 var(--splitter-width);
+}
+
 .side-chat {
   flex: none;
-  width: clamp(300px, 38%, 460px);
+  width: var(--side-chat-width);
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border-left: 1px solid var(--border);
   background: var(--bg);
 }
 
 .conversation-with-side.stacked .side-chat {
   width: auto;
-  height: 50%;
-  border-left: none;
-  border-top: 1px solid var(--border);
+  height: var(--side-chat-height);
   box-shadow: 0 -6px 16px rgb(0 0 0 / 0.08);
 }
 
@@ -9766,7 +9767,9 @@ button.link.more-rows {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  width: min(300px, calc(100vw - 24px));
+  width: max-content;
+  min-width: min(300px, calc(100vw - 24px));
+  max-width: min(440px, calc(100vw - 24px));
   max-height: min(420px, calc(100vh - 80px));
   overflow-y: auto;
   padding: 10px 12px;
@@ -9793,10 +9796,49 @@ button.link.more-rows {
   list-style: none;
 }
 
-.room-people li {
+.room-people li,
+.room-people-agent-line {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+}
+
+.room-people :is(.person-name, .room-people-agent-name) {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.room-people :is(.avatar, .room-role-label, .room-here-mark, .room-agent-working) {
+  flex: none;
+}
+
+.room-people li.room-people-agent {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+.room-people-agent-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  padding-left: 25px;
+}
+
+.room-people-agent-choices:empty {
+  display: none;
+}
+
+.room-people select.room-agent-choice-select {
+  min-width: 0;
+}
+
+.room-people select.room-agent-choice-select:first-child {
+  max-width: 220px;
 }
 
 .room-people .avatar {
@@ -10374,6 +10416,7 @@ select.room-agent-choice-select {
   background-color: transparent;
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
+  text-overflow: ellipsis;
 }
 
 select.room-agent-choice-select:hover,

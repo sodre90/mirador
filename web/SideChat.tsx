@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import type { Conversation } from "../shared/model.ts";
 import { latestReply } from "../shared/replies.ts";
 import { answerForMainChat, quoted, sideChatIsReadOnly } from "../shared/side-chats.ts";
@@ -7,9 +7,12 @@ import { focusPane } from "./actions.ts";
 import { useDraft } from "./drafts.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
+import { MIN_MAIN_CHAT_WIDTH, MIN_SIDE_CHAT_WIDTH, MIN_STACKED_CHAT_HEIGHT, sideChatHeightIn, sideChatWidthIn } from "./layout.ts";
+import { setSideChatSize, useSideChatSize } from "./paneLayouts.ts";
 import { shortcutKeys } from "./shortcuts.ts";
 import { shownTitle } from "./shown-title.ts";
 import { addToComposer, askInSideChat, closeSideChat, dropQuote, firstMessage, startSideChat } from "./side-chats.ts";
+import { Splitter } from "./Splitter.tsx";
 
 const words = t.sideChat;
 
@@ -19,25 +22,62 @@ const SIDE_BY_SIDE_WIDTH = 720;
 /** The conversation, with its side chat beside it, or under it in a narrow pane; the conversation's place stays the same either way. */
 export function ConversationWithSide({ main, side }: { main: ReactNode; side: ReactNode }) {
   const box = useRef<HTMLDivElement>(null);
-  const stacked = useNarrowerThan(box, SIDE_BY_SIDE_WIDTH);
+  const boxSize = useSizeOf(box);
+  const dragged = useSideChatSize();
+  const stacked = boxSize.width > 0 && boxSize.width < SIDE_BY_SIDE_WIDTH;
+  const sideSize =
+    boxSize.width > 0
+      ? ({ "--side-chat-width": `${sideChatWidthIn(boxSize.width, dragged.width)}px`, "--side-chat-height": `${sideChatHeightIn(boxSize.height, dragged.height)}px` } as CSSProperties)
+      : undefined;
   return (
-    <div ref={box} className={`conversation-with-side ${stacked ? "stacked" : ""}`}>
+    <div ref={box} className={`conversation-with-side ${stacked ? "stacked" : ""}`} style={sideSize}>
       <div className="main-chat">{main}</div>
+      {side && boxSize.width > 0 && <SideChatDivider box={box} boxSize={boxSize} stacked={stacked} />}
       {side}
     </div>
   );
 }
 
-function useNarrowerThan(element: RefObject<HTMLElement | null>, width: number) {
-  const [narrower, setNarrower] = useState(false);
-  useEffect(() => {
+/** Drags the side chat wider beside the conversation, or higher under it, as the sidebar's divider drags the sidebar. */
+function SideChatDivider({ box, boxSize, stacked }: { box: RefObject<HTMLDivElement | null>; boxSize: Size; stacked: boolean }) {
+  const dragged = useSideChatSize();
+  const along = stacked
+    ? { axis: "rows" as const, dimension: "height" as const, length: boxSize.height, sizeIn: sideChatHeightIn, mainMinimum: MIN_STACKED_CHAT_HEIGHT, sideMinimum: MIN_STACKED_CHAT_HEIGHT }
+    : { axis: "columns" as const, dimension: "width" as const, length: boxSize.width, sizeIn: sideChatWidthIn, mainMinimum: MIN_MAIN_CHAT_WIDTH, sideMinimum: MIN_SIDE_CHAT_WIDTH };
+  const sideAt = (share: number) => along.sizeIn(along.length, (1 - share) * along.length);
+  const shareOf = (sideSize: number) => 1 - sideSize / along.length;
+  return (
+    <Splitter
+      axis={along.axis}
+      label={t.shell.panes.resizeSidePanel}
+      share={shareOf(along.sizeIn(along.length, dragged[along.dimension]))}
+      resetShare={shareOf(along.sizeIn(along.length, null))}
+      minimumSize={along.mainMinimum}
+      secondMinimumSize={along.sideMinimum}
+      onDrag={(share) => box.current?.style.setProperty(`--side-chat-${along.dimension}`, `${sideAt(share)}px`)}
+      onChange={(share) => setSideChatSize({ [along.dimension]: sideAt(share) })}
+    />
+  );
+}
+
+interface Size {
+  width: number;
+  height: number;
+}
+
+/** The element's size as last laid out on screen, measured before it is first painted; a hidden element keeps the size it had. */
+function useSizeOf(element: RefObject<HTMLElement | null>) {
+  const [size, setSize] = useState<Size>({ width: 0, height: 0 });
+  useLayoutEffect(() => {
     const observed = element.current;
     if (!observed) return;
-    const observer = new ResizeObserver(([entry]) => entry && entry.contentRect.width > 0 && setNarrower(entry.contentRect.width < width));
+    const keep = ({ width, height }: Size) => width > 0 && setSize((current) => (current.width === width && current.height === height ? current : { width, height }));
+    keep(observed.getBoundingClientRect());
+    const observer = new ResizeObserver(([entry]) => entry && keep(entry.contentRect));
     observer.observe(observed);
     return () => observer.disconnect();
-  }, [width]);
-  return narrower;
+  }, []);
+  return size;
 }
 
 /** Beside the conversation: Esc puts it away, unless something in it took the key first, as a stop or a menu does. */

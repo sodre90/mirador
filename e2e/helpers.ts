@@ -637,3 +637,25 @@ export async function joinRoom(page: Page, invite: string) {
   await dialog.getByRole("button", { name: "Join", exact: true }).click();
   return dialog;
 }
+
+/** The popover lies inside the window and everything in it inside its box, with nothing to scroll sideways to. */
+export async function expectPopoverFits(popover: Locator) {
+  await expect
+    .poll(() =>
+      popover.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        const sticksOut = (rect: DOMRect) => rect.left < box.left - 0.5 || rect.right > box.right + 0.5 || rect.top < box.top - 0.5 || rect.bottom > box.bottom + 0.5;
+        const outside = [...element.querySelectorAll("*")].filter((each) => {
+          const rect = each.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && sticksOut(rect);
+        });
+        return {
+          sideways: element.scrollWidth - element.clientWidth,
+          scrolledBy: element.scrollLeft,
+          outside: outside.map((each) => each.outerHTML.slice(0, 80)),
+          inWindow: box.left >= 0 && box.top >= 0 && box.right <= window.innerWidth && box.bottom <= window.innerHeight,
+        };
+      }),
+    )
+    .toEqual({ sideways: 0, scrolledBy: 0, outside: [], inWindow: true });
+}

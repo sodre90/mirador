@@ -71,9 +71,17 @@ const nameOf = (choices: SessionConfigSelectOption[], value: string | null | und
 function ChoiceSelect({ label, choices, chosen, current, onChange }: { label: string; choices: SessionConfigSelectOption[]; chosen: string | null; current: string | null; onChange: (value: string) => void }) {
   const [shown, choose] = useSentChoice<string | null>(chosen, (value) => value !== null && onChange(value));
   const unlisted = shown !== null && !choices.some(({ value }) => value === shown);
+  const shownName = nameOf(choices, shown) ?? nameOf(choices, current) ?? words.asItsProfile;
   return (
-    <select className="room-agent-choice-select" aria-label={label} value={shown ?? ""} onChange={(event) => choose(event.target.value)} onClick={(event) => event.stopPropagation()}>
-      {shown === null && <option value="">{nameOf(choices, current) ?? words.asItsProfile}</option>}
+    <select
+      className="room-agent-choice-select"
+      aria-label={label}
+      data-hint={shownName}
+      value={shown ?? ""}
+      onChange={(event) => choose(event.target.value)}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {shown === null && <option value="">{shownName}</option>}
       {choices.map(({ value, name }) => (
         <option key={value} value={value}>
           {name}

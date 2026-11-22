@@ -204,6 +204,7 @@ export const shell: Messages["shell"] = {
     resizeColumns: "Cambiar el tamaño de los paneles izquierdo y derecho",
     resizeRows: "Cambiar el tamaño de los paneles superior e inferior",
     resizeSidebar: "Cambiar el tamaño de la barra lateral",
+    resizeSidePanel: "Cambiar el tamaño del panel lateral",
   },
   shortcuts: {
     title: "Atajos de teclado",

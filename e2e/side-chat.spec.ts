@@ -180,3 +180,38 @@ test("an agent that can't copy its session hears the conversation as text with t
   const brief = agentSaw().slice(agentSaw().lastIndexOf("<mirador-side-chat>"));
   expect(brief).toContain("<conversation>\nUser: SAY deploys go out on Tuesdays\n\nAssistant: deploys go out on Tuesdays\n</conversation>");
 });
+
+test("the divider beside a side chat drags it wider, keeps that width after a reload and gives way to the conversation in a smaller window, the arrow keys step it, and a double-click puts it back", async () => {
+  await startOn("Fresh");
+  await page.locator(".layout-toggles:visible").getByRole("button", { name: "Hide canvas" }).click();
+  await mainChat().getByRole("button", { name: "Side chat", exact: true }).click();
+  const divider = page.getByRole("separator", { name: "Resize the side panel" });
+  await expect(divider).toHaveAttribute("aria-orientation", "vertical");
+  const sideWidth = async () => (await sideChat().boundingBox())!.width;
+  const before = await sideWidth();
+  const box = (await divider.boundingBox())!;
+  const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x - 120, y, { steps: 10 });
+  await page.mouse.up();
+  const dragged = await sideWidth();
+  expect(Math.abs(dragged - (before + 120))).toBeLessThan(6);
+
+  await page.reload();
+  await expect(sideChat().locator(".side-chat-heading h2")).toHaveText("New question");
+  expect(Math.abs((await sideWidth()) - dragged)).toBeLessThan(1);
+
+  const viewport = page.viewportSize()!;
+  await page.setViewportSize({ width: 1100, height: viewport.height });
+  await expect.poll(sideWidth).toBeLessThan(dragged);
+  expect((await mainChat().boundingBox())!.width).toBeGreaterThanOrEqual(310);
+  await page.setViewportSize(viewport);
+  await expect.poll(sideWidth).toBe(dragged);
+
+  await divider.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(sideWidth).toBeLessThan(dragged - 10);
+  await divider.dblclick();
+  await expect.poll(async () => Math.abs((await sideWidth()) - before)).toBeLessThan(1);
+});

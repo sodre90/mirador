@@ -1,5 +1,18 @@
 import { expect, test } from "bun:test";
-import { FACTORY_DEFAULT, arrangements, inView, isPaneLayout, layoutFrom, placement, sidebarWidthWithinLimits, swapPanes, toggledInView, type PaneId } from "../web/layout.ts";
+import {
+  FACTORY_DEFAULT,
+  arrangements,
+  inView,
+  isPaneLayout,
+  layoutFrom,
+  placement,
+  sideChatHeightIn,
+  sideChatWidthIn,
+  sidebarWidthWithinLimits,
+  swapPanes,
+  toggledInView,
+  type PaneId,
+} from "../web/layout.ts";
 
 const everything: Record<PaneId, boolean> = { conversation: true, canvas: true, terminals: true };
 const layout = { ...layoutFrom(FACTORY_DEFAULT), leftShare: 0.4, topShare: 0.6 };
@@ -90,4 +103,24 @@ test("the sidebar keeps between 180 and 480 pixels wide, in whole pixels", () =>
   expect(sidebarWidthWithinLimits(90)).toBe(180);
   expect(sidebarWidthWithinLimits(300.6)).toBe(301);
   expect(sidebarWidthWithinLimits(900)).toBe(480);
+});
+
+test("a side chat never dragged starts at 38% of the room beside the conversation, between 300 and 460 pixels", () => {
+  expect(sideChatWidthIn(1000, null)).toBe(380);
+  expect(sideChatWidthIn(760, null)).toBe(300);
+  expect(sideChatWidthIn(1600, null)).toBe(460);
+});
+
+test("a dragged side chat keeps its width while it leaves the conversation 320 pixels and keeps 300 itself, and takes it back once the window grows", () => {
+  expect(sideChatWidthIn(1200, 650.4)).toBe(650);
+  expect(sideChatWidthIn(900, 650)).toBe(580);
+  expect(sideChatWidthIn(1200, 120)).toBe(300);
+  expect(sideChatWidthIn(1200, 1100)).toBe(880);
+});
+
+test("under the conversation, a side chat starts at half the height and leaves each of the two 160 pixels, or half of a box too low for that", () => {
+  expect(sideChatHeightIn(800, null)).toBe(400);
+  expect(sideChatHeightIn(800, 700)).toBe(640);
+  expect(sideChatHeightIn(800, 40)).toBe(160);
+  expect(sideChatHeightIn(240, 200)).toBe(120);
 });

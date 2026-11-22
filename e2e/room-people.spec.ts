@@ -5,7 +5,7 @@ import { PROBLEM_HEADER } from "../shared/host-problems.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import type { Room } from "../shared/rooms.ts";
-import { addWorkspace, createProfile, createRoom, lastAgentMessage, openRoomSettings, openSettings, roomCard, sendMessage, signIn, startConversation } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, expectPopoverFits, lastAgentMessage, openRoomSettings, openSettings, roomCard, sendMessage, signIn, startConversation } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -115,6 +115,15 @@ test("a person the owner lets into a room sees only that room on their own brows
     await roomComposer(miaPage).fill("Morning from Mia");
     await roomComposer(miaPage).press("Enter");
     await expect(roomMessages(page)).toHaveText(["Morning from Mia"]);
+  });
+
+  await test.step("Mia's list of who is in the room shows its agent without the owner's model pickers, inside its box and the window", async () => {
+    await miaPage.locator(".room-here-count").click();
+    const people = miaPage.getByRole("dialog", { name: "People in the room" });
+    await expect(people.locator(".room-people-agent-name")).toHaveText(["Builder"]);
+    await expect(people.getByRole("combobox")).toHaveCount(0);
+    await expectPopoverFits(people);
+    await miaPage.keyboard.press("Escape");
   });
 
   await test.step("Mia reads what the owner and the agent write as they write it, labelled a member, and as one tags the agent herself once the owner allows it", async () => {

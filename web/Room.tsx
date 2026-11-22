@@ -33,7 +33,7 @@ import {
   type RoomWriter,
   type WorkPending,
 } from "../shared/rooms.ts";
-import { placedBelowOnItsSide, useClosing } from "./BarMenu.tsx";
+import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames } from "./Chat.tsx";
 import { connection } from "./connection.ts";
@@ -580,6 +580,7 @@ function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents:
   const popover = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
   useClosing(placement !== null, [opener, popover], () => setPlacement(null));
+  useKeptInWindow(popover, placement);
   const hereNow = new Set(here);
   return (
     <>
@@ -612,21 +613,25 @@ function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents:
               <h3>{words.agents}</h3>
               <ul aria-label={words.agents}>
                 {agents.map(({ profileId, name, profile, conversation, answering, model }) => (
-                  <li key={profileId}>
-                    <span className={`avatar agent-${profile?.harness ?? "gone"}`} aria-hidden="true">
-                      {profile ? agentMarks[profile.harness] : "?"}
-                    </span>
-                    <span>{name}</span>
+                  <li key={profileId} className="room-people-agent">
+                    <div className="room-people-agent-line">
+                      <span className={`avatar agent-${profile?.harness ?? "gone"}`} aria-hidden="true">
+                        {profile ? agentMarks[profile.harness] : "?"}
+                      </span>
+                      <span className="room-people-agent-name">{name}</span>
+                      {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
+                    </div>
                     {owns && (
-                      <ModelChoice
-                        agentName={name}
-                        profile={profile}
-                        conversation={conversation}
-                        chosen={model}
-                        onChange={(chosen) => connection.send({ type: "room.set-agent-model", roomId: room.id, profileId, ...chosen })}
-                      />
+                      <div className="room-people-agent-choices">
+                        <ModelChoice
+                          agentName={name}
+                          profile={profile}
+                          conversation={conversation}
+                          chosen={model}
+                          onChange={(chosen) => connection.send({ type: "room.set-agent-model", roomId: room.id, profileId, ...chosen })}
+                        />
+                      </div>
                     )}
-                    {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
                   </li>
                 ))}
               </ul>

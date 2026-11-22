@@ -205,6 +205,7 @@ export const shell = {
     resizeColumns: "Resize the left and right panes",
     resizeRows: "Resize the top and bottom panes",
     resizeSidebar: "Resize the sidebar",
+    resizeSidePanel: "Resize the side panel",
   },
   shortcuts: {
     title: "Keyboard shortcuts",

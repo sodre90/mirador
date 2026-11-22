@@ -189,6 +189,7 @@ export const shell: Messages["shell"] = {
     resizeColumns: "A bal és a jobb panel átméretezése",
     resizeRows: "A felső és az alsó panel átméretezése",
     resizeSidebar: "Az oldalsáv átméretezése",
+    resizeSidePanel: "Az oldalsó panel átméretezése",
   },
   shortcuts: {
     title: "Billentyűparancsok",

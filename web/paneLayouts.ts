@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import {
   DEFAULT_SIDEBAR_WIDTH,
   FACTORY_DEFAULT,
@@ -17,6 +17,7 @@ const DEFAULT_KEY = "mirador-default-layout";
 const SIDEBAR_WIDTH_KEY = "mirador-sidebar-width";
 const SETTINGS_SIZE_KEY = "mirador-settings-size";
 const SIDEBAR_HIDDEN_KEY = "mirador-sidebar-hidden";
+const SIDE_CHAT_SIZE_KEY = "mirador-side-chat-size";
 
 function readJson(key: string): unknown {
   try {
@@ -97,6 +98,36 @@ export function useSidebarHidden() {
   useEffect(() => writeJson(SIDEBAR_HIDDEN_KEY, hidden), [hidden]);
   return [hidden, setHidden] as const;
 }
+
+/** The side chat's width beside the conversation and its height under it, in pixels, as last dragged; null: as it starts. */
+export interface SideChatSize {
+  width: number | null;
+  height: number | null;
+}
+
+const draggedSize = (value: unknown) => (typeof value === "number" && value > 0 ? value : null);
+
+function storedSideChatSize(): SideChatSize {
+  const stored = readJson(SIDE_CHAT_SIZE_KEY) as Record<string, unknown> | null;
+  return { width: draggedSize(stored?.width), height: draggedSize(stored?.height) };
+}
+
+let sideChatSize = storedSideChatSize();
+const sideChatSizeListeners = new Set<() => void>();
+
+const subscribeToSideChatSize = (listener: () => void) => {
+  sideChatSizeListeners.add(listener);
+  return () => void sideChatSizeListeners.delete(listener);
+};
+
+export function setSideChatSize(dragged: Partial<SideChatSize>) {
+  sideChatSize = { ...sideChatSize, ...dragged };
+  writeJson(SIDE_CHAT_SIZE_KEY, sideChatSize);
+  sideChatSizeListeners.forEach((listener) => listener());
+}
+
+/** The same beside every conversation and room, kept per browser, so a kept conversation shows the size dragged in another. */
+export const useSideChatSize = () => useSyncExternalStore(subscribeToSideChatSize, () => sideChatSize);
 
 interface DialogSize {
   width: number;

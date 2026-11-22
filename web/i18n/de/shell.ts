@@ -208,6 +208,7 @@ export const shell: Messages["shell"] = {
     resizeColumns: "Größe des linken und rechten Bereichs ändern",
     resizeRows: "Größe des oberen und unteren Bereichs ändern",
     resizeSidebar: "Größe der Seitenleiste ändern",
+    resizeSidePanel: "Größe des seitlichen Bereichs ändern",
   },
   shortcuts: {
     title: "Tastenkürzel",

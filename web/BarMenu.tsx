@@ -1,6 +1,7 @@
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 
 const POPOVER_GAP = 6;
+const WINDOW_EDGE = 8;
 
 /** Fixed, so the pane's bar doesn't clip what opens under its button. */
 export function placedBelow(element: HTMLElement): CSSProperties {
@@ -12,6 +13,26 @@ export function placedBelow(element: HTMLElement): CSSProperties {
 export function placedBelowOnItsSide(element: HTMLElement): CSSProperties {
   const { bottom, left } = element.getBoundingClientRect();
   return left < window.innerWidth / 2 ? { top: bottom + POPOVER_GAP, left } : placedBelow(element);
+}
+
+/** How far to move a box sideways to have it inside the window, clear of its edges; its left edge first, where it can't be. */
+export const shiftIntoWindow = ({ left, right }: { left: number; right: number }, windowWidth: number) =>
+  Math.max(WINDOW_EDGE - left, Math.min(windowWidth - WINDOW_EDGE - right, 0));
+
+/** Moves a fixed popover sideways once it is laid out, and again whenever it grows, so it stays in the window however wide it turns out. */
+export function useKeptInWindow(popover: RefObject<HTMLElement | null>, placement: CSSProperties | null) {
+  useLayoutEffect(() => {
+    const element = popover.current;
+    if (!element) return;
+    const keepInWindow = () => {
+      element.style.translate = "";
+      element.style.translate = `${shiftIntoWindow(element.getBoundingClientRect(), window.innerWidth)}px 0`;
+    };
+    keepInWindow();
+    const observer = new ResizeObserver(keepInWindow);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [placement]);
 }
 
 /** Fixed, for what opens from the bottom of the window: lined up with the element's left edge in the window's left half, else its right edge. */

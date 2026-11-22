@@ -2,7 +2,20 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { AGENT_TAGGED_TURNS_AFTER_A_PERSON } from "../shared/rooms.ts";
-import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, literally, notificationsShown, openNewRoom as openNewRoomDialog, openRoomSettings, roomCard, signIn } from "./helpers.ts";
+import {
+  addWorkspace,
+  allowNotifications,
+  clickNotification,
+  createProfile,
+  createRoom,
+  expectPopoverFits,
+  literally,
+  notificationsShown,
+  openNewRoom as openNewRoomDialog,
+  openRoomSettings,
+  roomCard,
+  signIn,
+} from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -225,5 +238,97 @@ test("a new room's agent is found by name and set to a model there, which it ans
     await page.keyboard.press("Escape");
     await tag(page, "Models", "Modeller", "CHOICES");
     await expect(answerSaying(page, "On model default")).toHaveText(/On model default, mode default, effort high\./);
+  });
+});
+
+/** Whole, on one line: its text neither wraps nor ends in an ellipsis. */
+const onOneLineWhole = (name: Locator) =>
+  name.evaluate((element) => {
+    const text = document.createRange();
+    text.selectNodeContents(element);
+    return text.getClientRects().length === 1 && element.scrollWidth <= element.clientWidth;
+  });
+
+test("the people of a room fit their popover, an agent's long name on one line with its long model and effort under it, in a wide window and a narrow one", async ({ page }) => {
+  const agent = "Claude Local Deepseek";
+  const longModel = "deepseek-v4.1-flash (opus-compatible, 1M context)";
+  await signIn(page, host);
+  const profiles = await createProfile(page, agent, `OPENCODE_FAKE_ACP_MODES=1\nOPENCODE_FAKE_ACP_MODELS=1\nOPENCODE_FAKE_ACP_EXTRA_MODEL='${longModel}'`, "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await createRoom(page, "Deepseek", [agent]);
+  const people = page.getByRole("dialog", { name: "People in the room" });
+  const model = people.getByRole("combobox", { name: `Model of ${agent}` });
+  const effort = people.getByRole("combobox", { name: `Effort of ${agent}` });
+
+  await page.locator(".room-here-count").click();
+  await model.selectOption({ label: longModel });
+  await expect(page.locator(".room-agents .room-agent-model")).toHaveText([longModel]);
+  await effort.selectOption({ label: "High" });
+  await expect(effort).toHaveValue("high");
+  await effort.focus();
+  await expectPopoverFits(people);
+  const name = people.locator(".room-people-agent-name");
+  expect(await onOneLineWhole(name)).toBe(true);
+  expect((await model.boundingBox())!.y).toBeGreaterThanOrEqual((await name.boundingBox())!.y + (await name.boundingBox())!.height);
+  await expect(model).toHaveAttribute("data-hint", longModel);
+  await page.keyboard.press("Escape");
+
+  await page.setViewportSize({ width: 540, height: 860 });
+  await page.locator(".room-here-count").click();
+  await effort.focus();
+  await expectPopoverFits(people);
+  await expect(model).toHaveValue(longModel);
+
+  await test.step("grown wider than the room beside its button, it moves back into the window", async () => {
+    await people.evaluate((element) => {
+      const wide = document.createElement("div");
+      wide.style.width = "400px";
+      wide.style.height = "1px";
+      element.append(wide);
+    });
+    await expect.poll(async () => (await people.boundingBox())!.width).toBeGreaterThan(400);
+    await expectPopoverFits(people);
+  });
+});
+
+test("the divider beside a thread drags it wider, and under it higher, and the room keeps both after a reload", async ({ page }) => {
+  await openNewRoom(page, "Widths");
+  await tag(page, "Widths", "Builder", "SAY Measured");
+  const openThread = () => answerSaying(page, "Measured").getByRole("button", { name: "Open thread" }).click();
+  const divider = page.getByRole("separator", { name: "Resize the side panel" });
+  const threadBox = async () => (await thread(page, "Builder").boundingBox())!;
+  const dragDividerBy = async (deltaX: number, deltaY: number) => {
+    const box = (await divider.boundingBox())!;
+    const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + deltaX, y + deltaY, { steps: 10 });
+    await page.mouse.up();
+  };
+  const canvasToggle = (name: string) => page.locator(".layout-toggles:visible").getByRole("button", { name });
+
+  await test.step("beside the room, wider", async () => {
+    await canvasToggle("Hide canvas").click();
+    await openThread();
+    await expect(divider).toHaveAttribute("aria-orientation", "vertical");
+    const before = (await threadBox()).width;
+    await dragDividerBy(-150, 0);
+    const dragged = (await threadBox()).width;
+    expect(Math.abs(dragged - (before + 150))).toBeLessThan(6);
+    await page.reload();
+    await openThread();
+    expect(Math.abs((await threadBox()).width - dragged)).toBeLessThan(1);
+  });
+
+  await test.step("under the room, in a pane too narrow for both side by side, higher", async () => {
+    await canvasToggle("Show canvas").click();
+    await expect(divider).toHaveAttribute("aria-orientation", "horizontal");
+    const before = (await threadBox()).height;
+    await dragDividerBy(0, -120);
+    const dragged = (await threadBox()).height;
+    expect(Math.abs(dragged - (before + 120))).toBeLessThan(6);
+    await page.reload();
+    await openThread();
+    expect(Math.abs((await threadBox()).height - dragged)).toBeLessThan(1);
   });
 });

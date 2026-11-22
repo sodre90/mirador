@@ -131,3 +131,24 @@ export const MIN_SIDEBAR_WIDTH = 180;
 export const MAX_SIDEBAR_WIDTH = 480;
 
 export const sidebarWidthWithinLimits = (width: number) => Math.round(Math.min(Math.max(width, MIN_SIDEBAR_WIDTH), MAX_SIDEBAR_WIDTH));
+
+export const MIN_SIDE_CHAT_WIDTH = 300;
+export const MIN_MAIN_CHAT_WIDTH = 320;
+export const MIN_STACKED_CHAT_HEIGHT = 160;
+
+/** Each of the two keeps its minimum, or half the box when the box is too small for both. */
+function sharedAlong(boxSize: number, wanted: number, sideMinimum: number, mainMinimum: number) {
+  const least = Math.min(sideMinimum, boxSize / 2);
+  const most = Math.max(boxSize - mainMinimum, boxSize / 2);
+  return Math.round(Math.min(Math.max(wanted, least), most));
+}
+
+const startingSideChatWidth = (boxWidth: number) => Math.min(Math.max(boxWidth * 0.38, 300), 460);
+
+/** The side chat's width beside the conversation, in a box this wide: as last dragged, else as it starts. */
+export const sideChatWidthIn = (boxWidth: number, dragged: number | null) =>
+  sharedAlong(boxWidth, dragged ?? startingSideChatWidth(boxWidth), MIN_SIDE_CHAT_WIDTH, MIN_MAIN_CHAT_WIDTH);
+
+/** The side chat's height under the conversation, in a box this high: as last dragged, else half of it. */
+export const sideChatHeightIn = (boxHeight: number, dragged: number | null) =>
+  sharedAlong(boxHeight, dragged ?? boxHeight / 2, MIN_STACKED_CHAT_HEIGHT, MIN_STACKED_CHAT_HEIGHT);

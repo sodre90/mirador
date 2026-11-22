@@ -66,7 +66,8 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  *
  * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
  * `FAKE_ACP_MODELS=1` a Model option before them too, whose Haiku has no Effort option, as Claude Code's hasn't, and
- * then `CHOICES` answers with what the session is on, such as "On model opus, mode default, effort high.". And
+ * then `CHOICES` answers with what the session is on, such as "On model opus, mode default, effort high.";
+ * `FAKE_ACP_EXTRA_MODEL` names one more model, after those, whose value is its name. And
  * `FAKE_ACP_ANSWERS_AFTER_MS` answers option changes and closes that late, as Claude Code does while its first
  * request waits for a model server to load the model. Starts, changes and closes go to the file in `FAKE_ACP_LOG`,
  * each with the name in `FAKE_ACP_NAME`. FAKE_ACP_IGNORES_SIGTERM=1 makes it survive SIGTERM, and FAKE_ACP_PID_FILE
@@ -92,6 +93,7 @@ const promptsFile = process.env.FAKE_ACP_PROMPTS;
 const availableCommands: acp.AvailableCommand[] | null = process.env.FAKE_ACP_COMMANDS ? JSON.parse(process.env.FAKE_ACP_COMMANDS) : null;
 const offersModes = process.env.FAKE_ACP_MODES === "1";
 const offersModels = process.env.FAKE_ACP_MODELS === "1";
+const extraModel = process.env.FAKE_ACP_EXTRA_MODEL;
 const answersAfterMs = Number(process.env.FAKE_ACP_ANSWERS_AFTER_MS ?? 0);
 const ignoresSigterm = process.env.FAKE_ACP_IGNORES_SIGTERM === "1";
 const offersSteering = process.env.FAKE_ACP_STEERS === "1";
@@ -155,6 +157,7 @@ const modelOption = (sessionId: string): acp.SessionConfigOption => ({
     { value: "default", name: "Default (recommended)", description: "Sonnet 5" },
     { value: "opus", name: "Opus" },
     { value: "haiku", name: "Haiku" },
+    ...(extraModel ? [{ value: extraModel, name: extraModel }] : []),
   ],
 });
 
