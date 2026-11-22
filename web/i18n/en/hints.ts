@@ -296,7 +296,7 @@ export const hints = {
     "Opens the agent's own sign-in in a terminal tab of this conversation, with its profile, so a profile with an account of its own signs that one in. Once it says you are signed in, send your message again.",
   queuedGrip: "Drag to change the order queued messages go out in: they leave from the top.",
   queuedDelivery: "How this message goes out: into the running turn once the agent's tools finish, or after the turn ends. Click to switch.",
-  steerMessage: "Adds the message to the running turn: Claude Code reads it at once, cutting off what it is writing, or, while it runs tools, as soon as they finish. pi reads it once it finishes writing or running its tools.",
+  steerMessage: "Adds the message to the running turn: Claude Code reads it at once, cutting off what it is writing, or, while it runs tools, as soon as they finish. A subagent it waits for doesn't hold the message back: the subagent goes on in the background. pi reads it once it finishes writing or running its tools.",
   afterTurnMessage: "Keeps the message until the running turn ends (or you press Stop), then sends it as your next message.",
   messageBox: "Formats as you type turns **bold**, *italic*, ~~strike~~, `code`, ``` code blocks, > quotes and - lists into formatting as you type them, as in Slack; ⌘B, ⌘I, ⌘⇧X and ⌘E format a selection. The agent gets the same markdown either way.",
   formatBar: "Formatting buttons over the message box. Settings › Conversations can keep them shown.",

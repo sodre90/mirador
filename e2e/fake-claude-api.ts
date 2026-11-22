@@ -49,6 +49,7 @@ const CALL_ID = "toolu_fake_call_";
 const BACKGROUND = "BACKGROUND ";
 const RUN = "RUN ";
 const SUBAGENT = "SUBAGENT ";
+const FOREGROUND_SUBAGENT = "FOREGROUND SUBAGENT ";
 const ADVISOR_AFTER_BASH = "ADVISOR AFTER BASH ";
 const ADVISOR_CUT_OFF = "ADVISOR CUT OFF ";
 /** How Claude Code's own message begins when it asks again after a reply stopped streaming. */
@@ -89,7 +90,8 @@ const answersEndedBackgroundCommand = ({ messages }: MessagesRequest) => {
  * rest in Bash. A message starting with `KEEP WRITING ` streams the rest as the reply, which then only pings and never
  * ends, until Claude Code drops it. A message
  * starting with `WRITE ` writes the file whose absolute path follows with the words after it. A message
- * starting with `SUBAGENT ` has a subagent do the rest, on the model Claude Code picks for it. A message starting with
+ * starting with `SUBAGENT ` has a subagent do the rest in the background, on the model Claude Code picks for it, and one
+ * starting with `FOREGROUND SUBAGENT ` has it do the rest while the agent waits for it. A message starting with
  * `CALL ` calls the tool named after it with the JSON input that follows, such as `CALL mcp__canvas__ask {"question": …}`,
  * and each further line starting with `CALL ` calls one more in the same reply; the reply to their results is
  * `Result: ` and what they gave back, or the text after a last line starting with `THEN `. While `replySuffix` is set,
@@ -245,7 +247,8 @@ export class FakeClaudeApi {
       const agent: Answer = { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose", run_in_background: true } };
       return this.send(body, response, [agent]);
     }
-    if (offersAgent(body) && typed.startsWith(SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(SUBAGENT.length))]);
+    if (offersAgent(body) && typed.startsWith(SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(SUBAGENT.length), true)]);
+    if (offersAgent(body) && typed.startsWith(FOREGROUND_SUBAGENT)) return this.send(body, response, [this.agentCall(typed.slice(FOREGROUND_SUBAGENT.length), false)]);
     const results = resultsOfCalls(body);
     if (results !== null) {
       this.callResults.push(results);
@@ -327,8 +330,8 @@ export class FakeClaudeApi {
     return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Write", input: { file_path: path, content: `${words.join(" ")}\n` } };
   }
 
-  private agentCall(prompt: string): Answer {
-    return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose", name: "scripted-subagent", run_in_background: true } };
+  private agentCall(prompt: string, inBackground: boolean): Answer {
+    return { type: "tool_use", id: `toolu_fake_${this.replies + 1}`, name: "Agent", input: { description: "Scripted subagent", prompt, subagent_type: "general-purpose", name: "scripted-subagent", run_in_background: inBackground } };
   }
 
   private advisorCall(): Answer {

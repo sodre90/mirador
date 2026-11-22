@@ -314,7 +314,7 @@ export const hints: Messages["hints"] = {
   queuedGrip: "Húzd, hogy módosítsd a sorba állított üzenetek kimenési sorrendjét: felülről indulnak.",
   queuedDelivery: "Hogyan megy ki ez az üzenet: a futó körbe, amint az ágens eszközei végeztek, vagy a kör vége után. Kattints a váltáshoz.",
   steerMessage:
-    "Az üzenetet a futó körhöz adja: a Claude Code azonnal elolvassa, megszakítva, amit éppen ír, vagy ha eszközöket futtat, amint azok végeztek. A pi akkor olvassa el, amikor befejezte az írást vagy az eszközei futtatását.",
+    "Az üzenetet a futó körhöz adja: a Claude Code azonnal elolvassa, megszakítva, amit éppen ír, vagy ha eszközöket futtat, amint azok végeztek. Egy alágens, amelyre vár, nem tartja vissza az üzenetet: az alágens a háttérben dolgozik tovább. A pi akkor olvassa el, amikor befejezte az írást vagy az eszközei futtatását.",
   afterTurnMessage: "Megtartja az üzenetet, amíg a futó kör véget nem ér (vagy meg nem nyomod a Leállítás gombot), majd a következő üzenetedként küldi el.",
   messageBox:
     "A „Formáz gépelés közben” a **félkövér**, *dőlt*, ~~áthúzott~~, `kód`, ``` kódblokk, > idézet és - lista jelöléseket menet közben formázássá alakítja, mint a Slackben; a ⌘B, ⌘I, ⌘⇧X és ⌘E egy kijelölést formáz. Az ágens mindkét esetben ugyanazt a markdownt kapja.",

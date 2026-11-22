@@ -322,7 +322,7 @@ export const hints: Messages["hints"] = {
   queuedGrip: "Arrastra para cambiar el orden en que salen los mensajes en cola: salen desde arriba.",
   queuedDelivery: "Cómo sale este mensaje: al turno en curso cuando terminan las herramientas del agente, o después de que termine el turno. Haz clic para cambiar.",
   steerMessage:
-    "Agrega el mensaje al turno en curso: Claude Code lo lee de inmediato, interrumpiendo lo que está escribiendo o, mientras ejecuta herramientas, en cuanto terminan. pi lo lee cuando termina de escribir o de ejecutar sus herramientas.",
+    "Agrega el mensaje al turno en curso: Claude Code lo lee de inmediato, interrumpiendo lo que está escribiendo o, mientras ejecuta herramientas, en cuanto terminan. Un subagente al que espera no retiene el mensaje: el subagente sigue en segundo plano. pi lo lee cuando termina de escribir o de ejecutar sus herramientas.",
   afterTurnMessage: "Guarda el mensaje hasta que termine el turno en curso (o pulses Detener) y luego lo envía como tu siguiente mensaje.",
   messageBox:
     "Se formatea al escribir convierte **negrita**, *cursiva*, ~~tachado~~, `código`, bloques de código con ```, citas con > y listas con - en formato mientras los escribes, como en Slack; ⌘B, ⌘I, ⌘⇧X y ⌘E dan formato a una selección. El agente recibe el mismo markdown en ambos casos.",

@@ -4,6 +4,13 @@ import { isInformational, isServerToolCallId } from "../shared/timeline.ts";
 
 const hasFinished = (status: acp.ToolCallStatus | null | undefined) => status === "completed" || status === "failed";
 
+const CLAUDE_CODE_SUBAGENT_TOOLS = new Set(["Agent", "Task"]);
+
+const startsClaudeCodeSubagent = (update: acp.ToolCall | acp.ToolCallUpdate) => {
+  const toolName = ((update._meta?.claudeCode ?? {}) as { toolName?: unknown }).toolName;
+  return typeof toolName === "string" && CLAUDE_CODE_SUBAGENT_TOOLS.has(toolName);
+};
+
 /**
  * What the agent writes or starts next: the model at work on the turn, which the agent must hold by then. The API
  * answers a server tool call before anything else follows it, in its reply or, when the reply leaves it pending, at the
@@ -19,6 +26,8 @@ export class OpenToolCalls {
   private readonly kinds = new Map<string, acp.ToolKind>();
   /** Known from the call's start only: a later update of a subagent's call can come without the mark of its subagent. */
   private readonly subagentCalls = new Set<string>();
+  /** The agent's own calls that started a subagent of Claude Code's, known once an update names the tool. */
+  private readonly subagentStarts = new Set<string>();
 
   get size() {
     return this.titles.size;
@@ -29,6 +38,11 @@ export class OpenToolCalls {
     return [...this.titles.keys()].find((toolCallId) => !this.subagentCalls.has(toolCallId)) ?? null;
   }
 
+  /** Of the open calls the agent made itself, leaving out those that started a subagent, the one started first. */
+  oldestOfMainAgentStartingNoSubagent() {
+    return [...this.titles.keys()].find((toolCallId) => !this.subagentCalls.has(toolCallId) && !this.subagentStarts.has(toolCallId)) ?? null;
+  }
+
   ids() {
     return [...this.titles.keys()];
   }
@@ -37,6 +51,7 @@ export class OpenToolCalls {
     this.titles.clear();
     this.kinds.clear();
     this.subagentCalls.clear();
+    this.subagentStarts.clear();
   }
 
   /** Whether the update finished a tool call, or showed one of the agent's server tool calls to have ended without its answer. */
@@ -56,6 +71,7 @@ export class OpenToolCalls {
       this.titles.set(update.toolCallId, update.title);
       if (update.kind) this.kinds.set(update.toolCallId, update.kind);
       if (madeBySubagent) this.subagentCalls.add(update.toolCallId);
+      this.followSubagentStart(update);
       return false;
     }
     if (update.sessionUpdate !== "tool_call_update") return false;
@@ -66,13 +82,19 @@ export class OpenToolCalls {
     if (!this.titles.has(update.toolCallId)) return false;
     if (update.title) this.titles.set(update.toolCallId, update.title);
     if (update.kind) this.kinds.set(update.toolCallId, update.kind);
+    this.followSubagentStart(update);
     return false;
+  }
+
+  private followSubagentStart(update: acp.ToolCall | acp.ToolCallUpdate) {
+    if (startsClaudeCodeSubagent(update) && !this.subagentCalls.has(update.toolCallId)) this.subagentStarts.add(update.toolCallId);
   }
 
   private forget(toolCallId: string) {
     this.titles.delete(toolCallId);
     this.kinds.delete(toolCallId);
     this.subagentCalls.delete(toolCallId);
+    this.subagentStarts.delete(toolCallId);
   }
 
   /** The kind of tool an open tool call is, when the agent said. */

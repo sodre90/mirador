@@ -71,6 +71,29 @@ describe("OpenToolCalls", () => {
     expect(open.oldestOfMainAgent()).toBe("subagent-read");
   });
 
+  test("of the agent's own open calls, leaves out those that started a Claude Code subagent, also when the tool's name comes with a later update", () => {
+    const named = (toolName: string) => ({ claudeCode: { toolName } });
+    const open = new OpenToolCalls();
+    open.follow({ ...started("explore", "Explore the repo"), _meta: named("Agent") });
+    open.follow(started("review", "Review the diff"));
+    open.follow(started("subagent-agent", "Nested agent"), true);
+    expect(open.oldestOfMainAgentStartingNoSubagent()).toBe("review");
+    open.follow(updated("review", { _meta: named("Task") }));
+    expect(open.oldestOfMainAgentStartingNoSubagent()).toBeNull();
+    expect(open.oldestOfMainAgent()).toBe("explore");
+    open.follow(started("run", "sleep 45"));
+    open.follow(updated("run", { _meta: named("Bash") }));
+    open.follow(started("pi-subagent", "subagent"));
+    open.follow(updated("pi-subagent", { _meta: { pi: { toolName: "subagent" } } }));
+    expect(open.oldestOfMainAgentStartingNoSubagent()).toBe("run");
+    open.follow(updated("run", { status: "completed" }));
+    expect(open.oldestOfMainAgentStartingNoSubagent()).toBe("pi-subagent");
+    open.follow(updated("pi-subagent", { status: "completed" }));
+    open.follow(updated("explore", { status: "completed" }));
+    open.follow(started("explore", "Explore again"));
+    expect(open.oldestOfMainAgentStartingNoSubagent()).toBe("explore");
+  });
+
   test("of the agent's own open calls, names the one started first, also once a later one has started or it has updated", () => {
     const open = new OpenToolCalls();
     open.follow(started("left-open", "Bash"));

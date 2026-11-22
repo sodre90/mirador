@@ -324,7 +324,7 @@ export const hints: Messages["hints"] = {
   queuedGrip: "Ziehe, um die Reihenfolge zu ändern, in der Nachrichten aus der Warteschlange rausgehen: Sie gehen von oben weg.",
   queuedDelivery: "Wie diese Nachricht rausgeht: in die laufende Runde, sobald die Tools des Agenten fertig sind, oder nach dem Ende der Runde. Klicke zum Umschalten.",
   steerMessage:
-    "Fügt die Nachricht der laufenden Runde hinzu: Claude Code liest sie sofort und unterbricht, was es gerade schreibt, oder, während es Tools ausführt, sobald diese fertig sind. pi liest sie, sobald es mit dem Schreiben oder dem Ausführen seiner Tools fertig ist.",
+    "Fügt die Nachricht der laufenden Runde hinzu: Claude Code liest sie sofort und unterbricht, was es gerade schreibt, oder, während es Tools ausführt, sobald diese fertig sind. Ein Subagent, auf den es wartet, hält die Nachricht nicht auf: Der Subagent arbeitet im Hintergrund weiter. pi liest sie, sobald es mit dem Schreiben oder dem Ausführen seiner Tools fertig ist.",
   afterTurnMessage: "Behält die Nachricht, bis die laufende Runde endet (oder du Stoppen drückst), und sendet sie dann als deine nächste Nachricht.",
   messageBox:
     "Formatiert beim Tippen wandelt **fett**, *kursiv*, ~~durchgestrichen~~, `Code`, Codeblöcke mit ```, Zitate mit > und Listen mit - beim Tippen in Formatierung um, wie in Slack; ⌘B, ⌘I, ⌘⇧X und ⌘E formatieren eine Auswahl. Der Agent bekommt so oder so dasselbe Markdown.",

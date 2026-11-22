@@ -3361,8 +3361,9 @@ profileId: string | null, conversationId: string) {
 
   /**
    * Messages that join the running turn. Not while a tool call of the agent's own is open: Claude Code would move a
-   * running command to the background, and a question or permission prompt the agent waits on with it. Its background
-   * subagents' calls don't count, as they keep running, and claude-agent-acp holds the turn open for those subagents.
+   * running command to the background, and a question or permission prompt the agent waits on with it. Its subagents
+   * and their calls don't count: Claude Code moves a subagent the agent waits for to the background, where it keeps
+   * running, and claude-agent-acp holds the turn open for the subagents it started.
    * Those the agent cannot take go back to the front of the queue, to go out when the turn ends.
    */
   private async steerWhileNoToolRuns(conversationId: string) {
@@ -3411,7 +3412,7 @@ profileId: string | null, conversationId: string) {
   }
 
   private oldestOwnToolCall({ openToolCalls }: Runtime) {
-    const toolCallId = openToolCalls.oldestOfMainAgent();
+    const toolCallId = openToolCalls.oldestOfMainAgentStartingNoSubagent();
     return toolCallId === null ? null : { toolCallId, kind: openToolCalls.kindOf(toolCallId) };
   }
 
@@ -4042,7 +4043,7 @@ function turnRequestWithin(events: StoredEvent[], wholeLog: StoredEvent[]): Turn
 
 interface SteeringState {
   hasSession: boolean;
-  /** An open tool call of the agent's own: its id, and its kind when the agent said. */
+  /** An open tool call of the agent's own that started no subagent: its id, and its kind when the agent said. */
   ownToolCall: { toolCallId: string; kind: acp.ToolKind | null } | null;
   queueHold: string | null;
   agentSteers: boolean;
