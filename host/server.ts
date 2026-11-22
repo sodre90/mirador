@@ -2088,6 +2088,14 @@ export function startServer(services: HostServices) {
         return notifications.roomRead(message.roomId);
       case "room.set-peoples-tasks-wait":
         return rooms.setPeoplesTasksWait(message.roomId, message.wait);
+      case "room.set-claude-setup":
+        return rooms.setClaudeSetup(message.roomId, message.setup);
+      case "room.set-agent-variable":
+        return rooms.chooseAgentVariable(message.roomId, message.profileId, message.name, message.given);
+      case "room.set-agent-host-environment":
+        return rooms.setAgentWholeHostEnvironment(message.roomId, message.profileId, message.given);
+      case "room.set-agents-read-guests":
+        return rooms.setAgentsReadGuests(message.roomId, message.read);
       case "room.delete":
         roomInvites.withdrawAllInto(message.roomId).forEach((withdrawn) => p2p?.inviteWithdrawn(withdrawn));
         rooms.delete(message.roomId);

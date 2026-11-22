@@ -56,7 +56,8 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * each once the one before was answered: `{"kind": toolKind, "title": text}` with a `"command"` it would run or a
  * `"path"` it would read or change (an edit's comes with its diff), or `{"waitFor": path}`, which holds the turn until
  * that file exists; `{{folder}}` in them is the session's folder. It answers with what each request got, or "Done."
- * when none asked. Ending in `FOLDER`, the message is answered with the folder the session works in; in `CHOICES`, with what the session is on. `WAIT ` and a path there holds the turn until that file exists before it does the rest.
+ * when none asked. `ENV ` and a variable's name there answers with its value in the agent's environment, or that it is
+ * not set. Ending in `FOLDER`, the message is answered with the folder the session works in; in `CHOICES`, with what the session is on. `WAIT ` and a path there holds the turn until that file exists before it does the rest.
  * `TOKENS ` there with input and output tokens and, if given, a cost in US dollars ends the turn with those tokens as
  * its own, after reporting that cost as the session's so far, as a turn's spend reaches the host. `My answer
  * to your question`, or a room person's `[member] Name answered your question`, is answered with "Going with " and the
@@ -74,10 +75,19 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones; a resumed session keeps the
  * canvas server the resume gave it.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
+ * Each of these may come named `OPENCODE_FAKE_ACP_…` instead, as a room's opencode agent gets them of its profile.
  * A side chat's brief, sent before its first question, is written to the prompts file but leaves the commands alone.
  * Its start, its sessions and the prompts it takes go to stderr, which the host stamps into the agent's log, so a kept
  * test host's log tells how far a turn got.
  */
+/** Standing in for opencode in a room, it takes its settings named as opencode's, which a room gives its opencode agent by default. */
+function takeSettingsNamedAsOpencodes() {
+  for (const [name, value] of Object.entries(process.env)) {
+    if (name.startsWith("OPENCODE_FAKE_ACP_")) process.env[name.slice("OPENCODE_".length)] ??= value;
+  }
+}
+
+takeSettingsNamedAsOpencodes();
 const promptsFile = process.env.FAKE_ACP_PROMPTS;
 const availableCommands: acp.AvailableCommand[] | null = process.env.FAKE_ACP_COMMANDS ? JSON.parse(process.env.FAKE_ACP_COMMANDS) : null;
 const offersModes = process.env.FAKE_ACP_MODES === "1";
@@ -453,6 +463,8 @@ async function answerAsked(client: acp.AgentContext, sessionId: string, asked: s
     await callCanvasTool(sessionId, "room_tag", { agents: [other] });
     return sayText(client, sessionId, `PINGPONG ${itself} ${other}`);
   }
+  const variable = after("ENV ");
+  if (variable !== null) return sayText(client, sessionId, variable in process.env ? `${variable} is ${process.env[variable]}` : `${variable} is not set`);
   if (asked.endsWith("FOLDER")) return sayText(client, sessionId, `Working in ${sessionFolders.get(sessionId)}`);
   if (asked.endsWith("CHOICES")) return sayChoices(client, sessionId);
   return sayText(client, sessionId, after("SAY ") ?? "Noted.");

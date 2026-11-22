@@ -7,6 +7,7 @@ import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
+import { UnconfinedMark } from "./RoomAgentSetup.tsx";
 import type { AppAction } from "./state.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 
@@ -39,6 +40,7 @@ function AgentChip({ profile, agent, onChange, onRemove }: { profile: Profile; a
         {agentMarks[profile.harness]}
       </span>
       <span className="room-agent-chip-name">{profile.name}</span>
+      <UnconfinedMark harness={profile.harness} />
       <ModelChoice agentName={profile.name} profile={profile} conversation={undefined} chosen={agent} onChange={onChange} />
       <button type="button" className="icon" aria-label={words.removeAgent(profile.name)} onClick={onRemove}>
         ×

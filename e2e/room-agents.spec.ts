@@ -18,10 +18,10 @@ test.beforeAll(async ({ browser }) => {
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   for (const agent of ["Builder", "Reviewer"] as const) {
-    const profiles = await createProfile(page, agent, `FAKE_ACP_PROMPTS=${promptsOf[agent]()}\nFAKE_ACP_ANSWERS_HELD_BY=${answersHeld()}`, "", "opencode");
+    const profiles = await createProfile(page, agent, `OPENCODE_FAKE_ACP_PROMPTS=${promptsOf[agent]()}\nOPENCODE_FAKE_ACP_ANSWERS_HELD_BY=${answersHeld()}`, "", "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
   }
-  const modeller = await createProfile(page, "Modeller", `FAKE_ACP_PROMPTS=${promptsOf.Modeller()}\nFAKE_ACP_MODES=1\nFAKE_ACP_MODELS=1`, "", "opencode");
+  const modeller = await createProfile(page, "Modeller", `OPENCODE_FAKE_ACP_PROMPTS=${promptsOf.Modeller()}\nOPENCODE_FAKE_ACP_MODES=1\nOPENCODE_FAKE_ACP_MODELS=1`, "", "opencode");
   await modeller.getByRole("button", { name: "Close" }).click();
   await page.close();
 });

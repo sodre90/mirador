@@ -6,9 +6,11 @@ import { replyOf } from "../shared/last-words.ts";
 import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
 import type { RoomUsage } from "../shared/room-usage.ts";
 import { mentionsIn, type RoomMention } from "../shared/room-mentions.ts";
+import { ALL_OF_CLAUDE_SETUP, CLAUDE_SETUP_PARTS, claudeSetupIn, isVariableName, narrows, narrowsClaudeSetup, profileVariablesInRoom, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
 import { AGENT_GONE, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import {
   allowedByPreset,
+  changesClaudeSetup,
   isPermissionPreset,
   reachedByTaskAllowance,
   taskAllowanceOf,
@@ -25,10 +27,10 @@ import {
   catchUpPrompt,
   catchUpShown,
   isRoomRole,
-  keptFromAgents,
   mayWriteAs,
   personMessageBehind,
   PROFILES_MODEL,
+  readByAgentsOf,
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomHistory,
   roomMessageLength,
@@ -38,6 +40,7 @@ import {
   writtenByAgent,
   type AuthorOf,
   type Room,
+  type RoomAgent,
   type RoomApproval,
   type RoomAgentModel,
   type RoomAuthor,
@@ -67,7 +70,19 @@ export interface RoomSessions {
   answerPermission(conversationId: string, permissionId: string, allowed: boolean): void;
   followRoomPreset(conversationId: string): Promise<void>;
   followRoomAgentModel(conversationId: string): Promise<void>;
+  /** The room's catch-ups waiting in the conversation's queue, taken out of it. */
+  takeQueuedRoomPrompts(conversationId: string): QueuedRoomPrompt[];
+  /** The agent takes up its changed setup on a fresh session of a fresh process, and is introduced to the room again; a change that leaves it with less stops its turn. */
+  startAfreshInRoom(conversationId: string, change: { stopsTurn: boolean }): void;
 }
+
+/** A catch-up waiting in an agent's queue: the room message it asks and who asked it. */
+export interface QueuedRoomPrompt {
+  roomMessageId: string;
+  authorId?: string;
+}
+
+const choicesStillNamed = (chosen: VariablesChosen, names: string[]) => Object.fromEntries(Object.entries(chosen).filter(([name]) => names.includes(name)));
 
 /** What came of an agent naming agents to tag in its answer: those it will tag, and those it can't, by name. */
 export interface TagsNamed {
@@ -210,10 +225,12 @@ export class RoomService implements RoomRules, TurnListener {
       id: crypto.randomUUID(),
       name: this.roomName(name),
       workspaceId,
-      agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null, answering: null, ...checkedModel(models[profileId] ?? PROFILES_MODEL) })),
+      agents: this.existingProfiles(profileIds).map((profileId) => ({ profileId, conversationId: null, answering: null, ...checkedModel(models[profileId] ?? PROFILES_MODEL), variables: {}, wholeHostEnvironment: false })),
       permissions: knownPreset(permissions),
       people: [],
       peoplesTasksWait: true,
+      claudeSetup: ALL_OF_CLAUDE_SETUP,
+      agentsReadGuests: true,
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -282,6 +299,73 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   /**
+   * The room's Claude Code agents that already work there start afresh on it: at once when idle or left with less,
+   * otherwise once their turn is over.
+   */
+  setClaudeSetup(roomId: string, setup: ClaudeSetup) {
+    const room = this.existingRoom(roomId);
+    const chosen = claudeSetupIn(setup);
+    if (CLAUDE_SETUP_PARTS.every((part) => chosen[part] === room.claudeSetup[part])) return;
+    this.store.setRoomClaudeSetup(roomId, chosen);
+    this.publish(roomId);
+    const stopsTurn = narrowsClaudeSetup(room.claudeSetup, chosen);
+    room.agents.filter(({ profileId }) => this.store.findProfile(profileId)?.harness === "claude").forEach((agent) => this.startAfresh(agent, stopsTurn));
+  }
+
+  /**
+   * Whether the agent gets its profile's value of the variable, which the profile sets and may keep from it; choices for
+   * names the profile no longer sets go. One that already works in the room starts afresh, as with `setClaudeSetup`.
+   */
+  chooseAgentVariable(roomId: string, profileId: string, name: string, given: boolean) {
+    if (!isVariableName(name) || typeof given !== "boolean") throw new Error("A variable is chosen by its name, given or not.");
+    const agent = this.existingRoom(roomId).agents.find((each) => each.profileId === profileId);
+    const profile = this.store.findProfile(profileId);
+    if (!agent || !profile) return;
+    const variables = profileVariablesInRoom(profile.harness, profile.environment, agent.variables);
+    const before = variables.find((variable) => variable.name === name);
+    if (!before) throw new Error("A variable is chosen among those its profile sets.");
+    if (before.fixed) return;
+    this.store.setRoomAgentVariables(roomId, profileId, { ...choicesStillNamed(agent.variables, variables.map((variable) => variable.name)), [name]: given });
+    this.publish(roomId);
+    if (given !== before.given) this.startAfresh(agent, narrows(before.given, given));
+  }
+
+  /** Whether the agent gets all of the host's environment; one that already works in the room starts afresh, as with `setClaudeSetup`. */
+  setAgentWholeHostEnvironment(roomId: string, profileId: string, given: boolean) {
+    if (typeof given !== "boolean") throw new Error("The host's whole environment is given or not.");
+    const agent = this.existingRoom(roomId).agents.find((each) => each.profileId === profileId);
+    if (!agent || agent.wholeHostEnvironment === given) return;
+    this.store.setRoomAgentWholeHostEnvironment(roomId, profileId, given);
+    this.publish(roomId);
+    this.startAfresh(agent, narrows(agent.wholeHostEnvironment, given));
+  }
+
+  /** From the agents' next catch-up on, those already waiting for their turn too, and what rides along with the tasks waiting. */
+  setAgentsReadGuests(roomId: string, read: boolean) {
+    this.existingRoom(roomId);
+    if (typeof read !== "boolean") throw new Error("Agents read guests or not.");
+    this.store.setRoomAgentsReadGuests(roomId, read);
+    this.publish(roomId);
+    if (!read) this.existingRoom(roomId).agents.forEach((agent) => this.catchUpAgainWhatWaits(roomId, agent));
+    this.tasksMayCarryOthers(roomId);
+  }
+
+  /** The agent's catch-ups waiting for its turn are taken back and made again, as the room now has them read. */
+  private catchUpAgainWhatWaits(roomId: string, { profileId, conversationId }: RoomAgent) {
+    const waiting = conversationId ? this.sessions.takeQueuedRoomPrompts(conversationId) : [];
+    if (!conversationId || waiting.length === 0) return;
+    this.store.setRoomSeenThrough(roomId, profileId, this.askedIn(conversationId, Number.MAX_SAFE_INTEGER)?.seq ?? 0);
+    waiting.forEach(({ roomMessageId, authorId }) => {
+      const asked = this.store.findRoomMessage(roomMessageId);
+      if (asked) this.ask(this.existingRoom(roomId), profileId, asked, authorId);
+    });
+  }
+
+  private startAfresh({ conversationId }: RoomAgent, stopsTurn: boolean) {
+    if (conversationId) this.sessions.startAfreshInRoom(conversationId, { stopsTurn });
+  }
+
+  /**
    * Lets the person into the room with the role, unless their name reads as one already there, or gives them that role
    * there, from their next message on; made a guest, they ask the agents nothing, so their tasks still waiting are declined.
    */
@@ -322,7 +406,7 @@ export class RoomService implements RoomRules, TurnListener {
    */
   allowsByItself(conversationId: string, asked: AskedPermission): boolean {
     const room = this.roomOf(conversationId);
-    if (!room || this.mayReachMiradorsData(room, asked)) return false;
+    if (!room || this.mayReachMiradorsData(room, asked) || changesClaudeSetup(asked, (path) => this.placeInWorkspace(room, path))) return false;
     const freelyReachable = (path: string) => this.freelyReachable(room, path);
     const allowedForTheTask = this.allowedForTurn.get(conversationId)?.has(taskAllowanceOf(asked)) === true && reachedByTaskAllowance(asked, freelyReachable);
     return allowedForTheTask || allowedByPreset(room.permissions, asked, freelyReachable);
@@ -553,9 +637,10 @@ export class RoomService implements RoomRules, TurnListener {
   /** The room_history tool: older messages of the room the caller was sent, framed as its catch-ups. Null for a conversation that is no agent's in a room. */
   readBack(conversationId: string, query: RoomHistoryQuery): string | null {
     const conversation = this.store.findConversation(conversationId);
-    if (!conversation?.roomId || conversation.profileId === null || !this.store.findRoom(conversation.roomId)) return null;
-    const sent = this.store.listRoomMessagesBetween(conversation.roomId, 0, this.store.roomSeenThrough(conversation.roomId, conversation.profileId));
-    return roomHistory(sent.filter((message) => !keptFromAgents(message)), query, this.authorOf);
+    const room = conversation?.roomId ? this.store.findRoom(conversation.roomId) : undefined;
+    if (!conversation || !room || conversation.profileId === null) return null;
+    const sent = this.store.listRoomMessagesBetween(room.id, 0, this.store.roomSeenThrough(room.id, conversation.profileId));
+    return roomHistory(sent.filter(readByAgentsOf(room, this.store.ownerId())), query, this.authorOf);
   }
 
   private approvalOf(room: Room, profileId: string, conversationId: string, { request, asked: { toolKind, paths }, at }: WaitingPermission, messagesById: Map<string, RoomMessage>): RoomApproval {
@@ -619,6 +704,10 @@ export class RoomService implements RoomRules, TurnListener {
     const root = workspace ? realPathOrNull(workspace.path) : null;
     const place = workspace ? this.realPlaceNamed(path, workspace.path) : null;
     return root !== null && place !== null && isWithin(root, place);
+  }
+
+  private placeInWorkspace(room: Room, path: string) {
+    return this.realPlaceNamed(path, this.store.findWorkspace(room.workspaceId)?.path ?? process.cwd());
   }
 
   private realPlaceNamed(path: string, base: string) {
@@ -722,14 +811,15 @@ export class RoomService implements RoomRules, TurnListener {
 
   /** The room's messages up to and with the one the agent is asked that it has not seen and may read; never its own. */
   private unseenBy(room: Room, profileId: string, asked: RoomMessage) {
+    const readByAgents = readByAgentsOf(room, this.store.ownerId());
     return this.store
       .listRoomMessagesBetween(room.id, this.store.roomSeenThrough(room.id, profileId), asked.seq)
-      .filter((each) => !keptFromAgents(each) && !(writtenByAgent(each.author) && each.author.profileId === profileId));
+      .filter((each) => readByAgents(each) && !(writtenByAgent(each.author) && each.author.profileId === profileId));
   }
 
   /** What an agent introduced to the room reads of it: every message through the one it is asked that agents may read, its own too. */
   private roomThrough(room: Room, asked: RoomMessage) {
-    return this.store.listRoomMessagesBetween(room.id, 0, asked.seq).filter((each) => !keptFromAgents(each));
+    return this.store.listRoomMessagesBetween(room.id, 0, asked.seq).filter(readByAgentsOf(room, this.store.ownerId()));
   }
 
   private catchUp(room: Room, profileId: string, unseen: RoomMessage[], asked: RoomMessage, introduced: boolean) {

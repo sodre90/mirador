@@ -9,6 +9,7 @@ import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { computerName } from "../host/machine-name.ts";
 import { LONGEST_MACHINE_NAME } from "../shared/machines.ts";
+import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 
 function seededStore() {
   const store = new Store(":memory:");
@@ -1141,7 +1142,7 @@ describe("Store", () => {
   test("an invite keeps its one-time key by its public half until it expires, and hands an expired one out once", () => {
     const store = new Store(":memory:");
     store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
-    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 });
+    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, createdAt: 1 });
     store.addInvite("device code", 100);
     store.addRoomInvite({ id: "i1", roomId: "r1", role: "member", expiresAt: 200 }, "room code");
     store.addInvite("keyless code", 100);

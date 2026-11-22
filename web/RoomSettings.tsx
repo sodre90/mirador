@@ -12,6 +12,7 @@ import { formatNumber, t } from "./i18n/index.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
+import { AgentSetupMeaning, AgentValues, ClaudeSetupField, UnconfinedLine } from "./RoomAgentSetup.tsx";
 import { useSentChoice } from "./sent-choice.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { compactTokenCount, formatCost } from "./usage.ts";
@@ -112,6 +113,7 @@ function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; p
   const nameOf = (personId: string) => personGoesBy(people.find(({ id }) => id === personId), words.nameless);
   const inRoom = new Set(room.people.map(({ personId }) => personId));
   const [peoplesTasksWait, setPeoplesTasksWait] = useSentChoice(room.peoplesTasksWait, (wait) => connection.send({ type: "room.set-peoples-tasks-wait", roomId: room.id, wait }));
+  const [agentsReadGuests, setAgentsReadGuests] = useSentChoice(room.agentsReadGuests, (read) => connection.send({ type: "room.set-agents-read-guests", roomId: room.id, read }));
   const letInBefore = people.filter(({ id }) => id !== ownerId && !inRoom.has(id));
   const setRole = (personId: string, role: RoomRole) => connection.send({ type: "room.set-person-role", roomId: room.id, personId, role });
   return (
@@ -152,8 +154,13 @@ function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; p
         <input type="checkbox" role="switch" checked={!peoplesTasksWait} onChange={(event) => setPeoplesTasksWait(!event.target.checked)} />
         {words.peoplesTasksStart}
       </label>
+      <label className="room-agent-choice room-agents-read-guests">
+        <input type="checkbox" role="switch" checked={agentsReadGuests} onChange={(event) => setAgentsReadGuests(event.target.checked)} />
+        {words.agentsReadGuests}
+      </label>
       <WhatItMeans>
         <p>{words.peoplesTasksHint}</p>
+        <p>{words.agentsReadGuestsHint}</p>
         <p>{words.peopleHint}</p>
         <p className="room-people-reach">
           {words.peopleReach[room.permissions]} {words.peopleReachBeyond}
@@ -183,11 +190,15 @@ function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; p
   );
 }
 
-/** The room's agents, each on its model and effort, which apply at once; taking one out deletes its conversation in the room. */
+/**
+ * The room's agents, each on its model and effort, which apply at once, with the values of its profile it gets; taking
+ * one out deletes its conversation in the room. Then what its Claude agents load of the owner's Claude Code setup.
+ */
 function AgentsTab({ room, profiles, roomConversations }: { room: Room; profiles: Profile[]; roomConversations: Conversation[] }) {
   const profileIds = room.agents.map(({ profileId }) => profileId);
   const setAgents = (ids: string[]) => connection.send({ type: "room.set-agents", roomId: room.id, profileIds: ids });
-  const row = ({ profileId, conversationId, model, effort }: RoomAgent) => {
+  const row = (agent: RoomAgent) => {
+    const { profileId, conversationId, model, effort } = agent;
     const profile = profiles.find(({ id }) => id === profileId);
     const name = profile?.name ?? words.agentGone;
     return (
@@ -212,6 +223,8 @@ function AgentsTab({ room, profiles, roomConversations }: { room: Room; profiles
         >
           {words.remove}
         </ConfirmButton>
+        {profile && <UnconfinedLine harness={profile.harness} />}
+        {profile && <AgentValues room={room} agent={agent} profile={profile} roomConversations={roomConversations} />}
       </li>
     );
   };
@@ -223,6 +236,10 @@ function AgentsTab({ room, profiles, roomConversations }: { room: Room; profiles
       </ul>
       {profiles.length === 0 ? <p className="hint">{words.noProfiles}</p> : <AgentSearch profiles={profiles} chosenIds={profileIds} label={words.addAgent} onAdd={(profileId) => setAgents([...profileIds, profileId])} />}
       <p className="hint">{words.agentsHint}</p>
+      <ClaudeSetupField room={room} profiles={profiles} roomConversations={roomConversations} />
+      <WhatItMeans>
+        <AgentSetupMeaning room={room} profiles={profiles} />
+      </WhatItMeans>
     </>
   );
 }

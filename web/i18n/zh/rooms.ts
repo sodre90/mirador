@@ -124,6 +124,34 @@ export const rooms: Messages["rooms"] = {
   peopleReachBeyond:
     "房间里的每个人都能读到 Agent 的回答，所以 Agent 读到的内容，他们也能读到。有些 Agent 不询问就会走得更远：Claude Code 会读取自己的工作区，Codex 会读取这台电脑上的任何文件，pi 和 opencode 可能什么都不问，你自己的 Agent 设置也可能允许命令。",
   peoplesTasksStart: "其他人的任务无需问我即可开始",
+  agentsReadGuests: "Agent 读取访客写的内容",
+  agentsReadGuestsHint: "访客不能给 Agent 布置任务，但他们写的内容会随下一个任务一起送到 Agent，并标明来自访客。关闭后，无论任务是否在等你批准，都没有 Agent 会读到。",
+  actsUnasked: "可能不经询问就行动",
+  actsUnaskedHint:
+    "在房间里，并非每个 Agent 都能被约束为先询问：Codex 会不经询问读取这台电脑上的任何文件，opencode 和 pi 可能不经询问就运行工具，Copilot 还没在房间里试过。只让你信任的人给这类 Agent 布置任务。",
+  environmentGiven: (given: number, all: number, wholeHostEnvironment: boolean) =>
+    `${all > 0 ? `来自其配置的值：${given} / ${all}` : "其配置未设置任何值"}${wholeHostEnvironment ? "，以及这台电脑环境中的一切" : ""}`,
+  valuesOf: (agent: string) => `${agent} 从其配置获得的值`,
+  valuesReadable: "任何能给这个 Agent 布置任务的人，都能让它读出它获得的值。",
+  wholeHostEnvironment: "这台电脑环境中的一切",
+  wholeHostEnvironmentHint: "其中可能有令牌和你的 SSH 代理，任何能给这个 Agent 布置任务的人都能让它使用它们。需要代理服务器、证书或通过 SSH 使用 git 时再打开。",
+  alwaysGiven: "始终提供：它指明 Agent 的程序和文件在哪里。",
+  valuesHint:
+    "Agent 获得这台电脑环境中的基本值，例如 PATH、HOME 和语言，以及它这一类 Agent 为程序、设置、模型和登录而读取的值，无论来自其配置还是这台电脑。打开其配置中的其他值后，任何能给它布置任务的人都能让它读出这个值。其配置中关闭的值不会被设置，即使打开了这台电脑环境中的一切。",
+  claudeSetup: "Claude Agent 从你的 Claude Code 设置中加载什么",
+  startClean: "全新开始",
+  claudeSetupParts: {
+    ownSettings: "你自己的设置",
+    workspaceSettings: "工作区的设置",
+    mcpServers: "MCP 服务器",
+    hooks: "Hook",
+    claudeMdAndMemory: "CLAUDE.md 文件和记忆",
+  },
+  claudeSetupHint:
+    "你自己的设置来自你的 Claude Code 文件夹：Hook、允许的命令、技能、MCP 服务器、CLAUDE.md 和规则；通过它们登录的 Agent（例如用 API 密钥助手）没有它们就无法登录。工作区的设置是它的 .claude 文件夹、CLAUDE.md 文件、技能和 .mcp.json。MCP 服务器、Hook，以及 CLAUDE.md 文件连同你对该工作区的记忆，无论来自哪里都会关闭。Mirador 自己的工具保留。被关闭的设置中的拒绝和询问规则以及沙箱仍然保留。",
+  startsAfresh: (agents: string[]) => `${agents.join("、")} 会重新开始，并再读一次房间。`,
+  stopsAndStartsAfresh: (agents: string[]) => `${agents.join("、")} 会停止进行中的轮次，重新开始，并再读一次房间。`,
+  applyChange: "更改",
   peoplesTasksHint: "否则，成员的标记或跟进要等你允许后才会到达 Agent。",
   roles: { member: "成员", guest: "访客" },
   authorRoles: { owner: "所有者", member: "成员", guest: "访客", agent: "Agent" },

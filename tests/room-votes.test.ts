@@ -110,6 +110,8 @@ function roomWithPeople() {
     answerPermission: () => {},
     followRoomPreset: async () => {},
     followRoomAgentModel: async () => {},
+    startAfreshInRoom: () => {},
+    takeQueuedRoomPrompts: () => [],
   };
   const rooms = new RoomService(store, hub, sessions, { notify: () => {} }, mkdtempSync(join(tmpdir(), "room-votes-")));
   const conversations = {

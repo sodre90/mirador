@@ -127,6 +127,39 @@ export const rooms: Messages["rooms"] = {
   peopleReachBeyond:
     "Alle im Raum lesen die Antworten der Agenten, was ein Agent liest, können also auch sie lesen. Manche Agenten gehen ohne Nachfrage weiter: Claude Code liest seinen Arbeitsbereich, Codex jede Datei auf diesem Computer, pi und opencode fragen womöglich gar nicht, und deine eigenen Agenteneinstellungen können Befehle erlauben.",
   peoplesTasksStart: "Aufgaben anderer Personen starten, ohne mich zu fragen",
+  agentsReadGuests: "Agenten lesen, was Gäste schreiben",
+  agentsReadGuestsHint:
+    "Gäste geben den Agenten keine Aufgaben, aber was sie schreiben, erreicht die Agenten mit der nächsten Aufgabe, als von einem Gast markiert. Ausgeschaltet liest es kein Agent, ob eine Aufgabe auf dich wartet oder nicht.",
+  actsUnasked: "Kann handeln, ohne zu fragen",
+  actsUnaskedHint:
+    "Nicht jeder Agent lässt sich in einem Raum ans Fragen binden: Codex liest jede Datei auf diesem Computer, ohne zu fragen, opencode und pi können Tools ohne Nachfrage ausführen, und Copilot ist in Räumen noch nicht erprobt. Lass nur Personen, denen du vertraust, einem solchen Agenten Aufgaben geben.",
+  environmentGiven: (given: number, all: number, wholeHostEnvironment: boolean) =>
+    `${all > 0 ? `Werte aus seinem Profil: ${given} von ${all}` : "Sein Profil setzt keine Werte"}${wholeHostEnvironment ? ", dazu alles aus der Umgebung dieses Computers" : ""}`,
+  valuesOf: (agent: string) => `Werte, die ${agent} aus seinem Profil bekommt`,
+  valuesReadable: "Wer diesem Agenten eine Aufgabe geben kann, kann ihn einen Wert lesen lassen, den er bekommt.",
+  wholeHostEnvironment: "Alles aus der Umgebung dieses Computers",
+  wholeHostEnvironmentHint: "Sie kann Tokens und deinen SSH-Agenten enthalten, und wer diesem Agenten eine Aufgabe geben kann, kann ihn sie nutzen lassen. Schalte es für einen Proxy, Zertifikate oder Git über SSH ein.",
+  alwaysGiven: "Immer dabei: Er sagt, wo Programm und Dateien des Agenten liegen.",
+  valuesHint:
+    "Ein Agent bekommt das Grundlegende der Umgebung dieses Computers, etwa PATH, HOME und die Sprache, und was seine Art für ihr Programm, ihre Einstellungen, ihr Modell und ihre Anmeldung liest, aus seinem Profil und von diesem Computer. Schaltest du einen anderen Wert seines Profils ein, kann jeder, der ihm eine Aufgabe geben kann, ihn diesen Wert lesen lassen. Ein ausgeschalteter Wert seines Profils bleibt ungesetzt, auch mit allem aus der Umgebung dieses Computers.",
+  claudeSetup: "Was Claude-Agenten von deinem Claude-Code-Setup laden",
+  startClean: "Sauber starten",
+  claudeSetupParts: {
+    ownSettings: "Deine eigenen Einstellungen",
+    workspaceSettings: "Die Einstellungen des Arbeitsbereichs",
+    mcpServers: "MCP-Server",
+    hooks: "Hooks",
+    claudeMdAndMemory: "CLAUDE.md-Dateien und Gedächtnis",
+  },
+  claudeSetupHint:
+    "Deine eigenen Einstellungen sind die deines Claude-Code-Ordners: Hooks, erlaubte Befehle, Skills, MCP-Server, CLAUDE.md und Regeln; ein Agent, der sich darüber anmeldet, etwa mit einem API-Key-Helper, kann es ohne sie nicht. Die des Arbeitsbereichs sind sein .claude-Ordner, seine CLAUDE.md-Dateien, Skills und .mcp.json. MCP-Server, Hooks sowie CLAUDE.md-Dateien mit deinem Gedächtnis des Arbeitsbereichs fallen weg, egal woher sie kommen. Miradors eigene Tools bleiben. Die Verbots- und Nachfrageregeln sowie die Sandbox weggelassener Einstellungen bleiben.",
+  startsAfresh: (agents: string[]) =>
+    agents.length === 1 ? `${agents[0]} fängt neu an und liest den Raum noch einmal, einmalig.` : `${agents.join(", ")} fangen neu an und lesen den Raum noch einmal, einmalig.`,
+  stopsAndStartsAfresh: (agents: string[]) =>
+    agents.length === 1
+      ? `${agents[0]} bricht die laufende Runde ab, fängt neu an und liest den Raum noch einmal, einmalig.`
+      : `${agents.join(", ")} brechen die laufenden Runden ab, fangen neu an und lesen den Raum noch einmal, einmalig.`,
+  applyChange: "Ändern",
   peoplesTasksHint: "Sonst erreicht die Markierung oder Nachfrage eines Mitglieds keinen Agenten, bis du sie erlaubst.",
   roles: { member: "Mitglied", guest: "Gast" },
   authorRoles: { owner: "Besitzer", member: "Mitglied", guest: "Gast", agent: "Agent" },

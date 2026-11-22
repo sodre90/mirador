@@ -85,7 +85,20 @@ import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
 import { loginShell, miradorCommandEnvironment } from "./acp/environment.ts";
-import { CANVAS_SERVER_NAME, harnessSpec, isAuthRequiredError, launchEnvironment, loginCommand, profileEnvironment, sessionMeta, sessionSystemPrompt } from "./acp/harnesses.ts";
+import {
+  CANVAS_SERVER_NAME,
+  harnessSpec,
+  isAuthRequiredError,
+  launchEnvironment,
+  loginCommand,
+  profileEnvironment,
+  sessionMeta,
+  sessionSystemPrompt,
+  settingSourcesLeftOut,
+  type EnvironmentGiven,
+} from "./acp/harnesses.ts";
+import { NO_PROTECTIONS, protectionsKept, settingsFiles, type SettingSource } from "./acp/claude-protections.ts";
+import { ALL_OF_CLAUDE_SETUP, environmentInRoom, NO_ENVIRONMENT_CHOICES, roomSetupFingerprint, type EnvironmentChoices } from "../shared/room-agent-setup.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type ConfigValue } from "./acp/harness.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
@@ -1067,6 +1080,55 @@ export class ConversationService {
     if (effort && effortOption && offersValue(effortOption, effort)) await this.trySetConfigOption(conversationId, sessionId, effortOption.id, effort);
   }
 
+  /**
+   * A room's agent takes up what its room now gives it on a fresh session of a fresh process, and is introduced to the
+   * room again. One at work stops at once when the change leaves it with less; otherwise it finishes its turn, and its
+   * next starts afresh, as its session was started under another setup than its room's.
+   */
+  startAfreshInRoom(conversationId: string, { stopsTurn }: { stopsTurn: boolean }) {
+    if (!this.runtimes.get(conversationId)?.running) return this.startAfresh(conversationId);
+    if (stopsTurn) this.stopAgentProcess(conversationId);
+  }
+
+  private startAfresh(conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    if (this.stopping || !conversation) return;
+    this.stopAgentProcess(conversationId);
+    if (conversation.acpSessionId === null) return;
+    this.forgetContextUsage(conversationId);
+    this.save({ ...conversation, acpSessionId: null });
+    this.append(conversationId, { type: "context-cleared" });
+  }
+
+  private stopAgentProcess(conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    const profile = conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined;
+    const harness = conversation && profile && this.agentProcesses.get(agentProcessKey(profile, conversation));
+    if (harness) void this.killAgent(harness, { kind: "stopped" });
+  }
+
+  /** A room's agent whose session was started under another setup than its room's now starts afresh before its next turn. */
+  private startAfreshOnChangedRoomSetup(conversationId: string) {
+    const conversation = this.get(conversationId);
+    if (conversation.acpSessionId !== null && !this.keepsRoomSetup(conversation)) this.startAfresh(conversationId);
+  }
+
+  private keepsRoomSetup(conversation: Conversation) {
+    return !conversation.roomId || this.store.roomSetupOfSession(conversation.id) === this.roomSetupOf(conversation);
+  }
+
+  private roomSetupOf({ roomId, profileId }: Conversation) {
+    const profile = profileId === null ? undefined : this.store.findProfile(profileId);
+    if (!roomId || !profile) return null;
+    const claudeSetup = this.store.findRoom(roomId)?.claudeSetup ?? ALL_OF_CLAUDE_SETUP;
+    return roomSetupFingerprint(profile.harness, profile.environment, this.environmentChoicesOf(roomId, profile.id), claudeSetup);
+  }
+
+  private recordRoomSetup(conversation: Conversation) {
+    const setup = this.roomSetupOf(conversation);
+    if (setup !== null) this.store.setRoomSetupOfSession(conversation.id, setup);
+  }
+
   /** A room agent's model and effort reach its open session at once; one not open takes them as it next opens. */
   async followRoomAgentModel(conversationId: string) {
     const sessionId = await this.runtimes.get(conversationId)?.sessionId?.catch(() => null);
@@ -1595,6 +1657,7 @@ export class ConversationService {
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
     if (isReloadCommand(text)) return this.reloadAgent(conversationId);
+    this.startAfreshOnChangedRoomSetup(conversationId);
     runtime.running = true;
     this.announceRunningTurnsCount();
     this.endUsageLimitWait(runtime);
@@ -2215,6 +2278,15 @@ export class ConversationService {
     return new Set([...this.store.sentImageIds(conversationId), ...queued.flatMap((message) => message.imageIds)]);
   }
 
+  takeQueuedRoomPrompts(conversationId: string): { roomMessageId: string; authorId?: string }[] {
+    const runtime = this.runtime(conversationId);
+    const taken = runtime.queuedMessages.flatMap(({ roomMessageId, authorId }) => (roomMessageId ? [{ roomMessageId, ...(authorId && { authorId }) }] : []));
+    if (taken.length === 0) return [];
+    this.setQueue(conversationId, runtime, runtime.queuedMessages.filter(({ roomMessageId }) => !roomMessageId));
+    this.publish(this.get(conversationId));
+    return taken;
+  }
+
   removeQueuedMessage(conversationId: string, messageId: string) {
     this.replaceQueue(conversationId, (queue) => queue.filter(({ id }) => id !== messageId), messageId);
   }
@@ -2623,7 +2695,7 @@ profileId: string | null, conversationId: string) {
 
     const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume) && !replaysHistoryOnResume(conversation.harness);
     const canLoad = Boolean(capabilities.agentCapabilities?.loadSession);
-    if (conversation.acpSessionId && (canResume || canLoad) && this.agentHasRecorded(conversationId)) {
+    if (conversation.acpSessionId && (canResume || canLoad) && this.agentHasRecorded(conversationId) && this.keepsRoomSetup(conversation)) {
       try {
         const replay: acp.SessionNotification[] = [];
         const resumed = canResume
@@ -2647,7 +2719,8 @@ profileId: string | null, conversationId: string) {
     this.closeSessionIfConversationDeleted(conversationId, harness, created.sessionId);
     this.muteNotifier(conversation, created.sessionId);
     this.bindSession(conversationId, created.sessionId, created.configOptions);
-    runtime.roomContextLost = Boolean(conversation.roomId) && !isFirstSession;
+    this.recordRoomSetup(conversation);
+    runtime.roomContextLost = Boolean(conversation.roomId) && (!isFirstSession || this.contextClearedBefore(conversationId));
     await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
     if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
     else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
@@ -2764,8 +2837,10 @@ profileId: string | null, conversationId: string) {
     const canvasPlugins = this.canvasPlugins(conversationId);
     const systemPrompt = sessionSystemPrompt(conversation.harness, canvasUse, canvasPlugins);
     const idleCompaction = conversation.profileId === null || this.store.findProfile(conversation.profileId)?.idleCompaction !== false;
+    const claudeSetup = conversation.roomId ? (this.store.findRoom(conversation.roomId)?.claudeSetup ?? ALL_OF_CLAUDE_SETUP) : ALL_OF_CLAUDE_SETUP;
+    const cwd = await recordedDirectory(this.workspaceOf(conversationId));
     return {
-      cwd: await recordedDirectory(this.workspaceOf(conversationId)),
+      cwd,
       mcpServers: [this.canvasServerFor(conversationId)],
       _meta: sessionMeta(conversation.harness, canvasUse, {
         canvasAssetsOrigin: this.config.canvasAssetsOrigin,
@@ -2773,9 +2848,17 @@ profileId: string | null, conversationId: string) {
         canvasPlugins,
         idleCompaction,
         inRoom: Boolean(conversation.roomId),
+        claudeSetup,
+        keptProtections: await this.claudeProtectionsKept(conversation, settingSourcesLeftOut(claudeSetup, withoutUserSettings), cwd),
       }),
       ...(systemPrompt && { systemPrompt }),
     };
+  }
+
+  /** A room's Claude Code session keeps the deny and ask rules and the sandbox of the settings it leaves out. */
+  private async claudeProtectionsKept(conversation: Conversation, leftOut: SettingSource[], cwd: string) {
+    if (!conversation.roomId || conversation.harness !== "claude" || leftOut.length === 0) return NO_PROTECTIONS;
+    return protectionsKept(leftOut, await settingsFiles(this.claudeConfigDirOf(conversation), cwd));
   }
 
   /** claude-notifier hooks into Claude Code only. */
@@ -2803,8 +2886,21 @@ profileId: string | null, conversationId: string) {
     if (choice) await this.trySetConfigOption(conversationId, sessionId, "model", choice);
   }
 
-  private claudeConfigDirOf({ profileId }: Conversation) {
-    return claudeConfigDir(profileEnvironment(profileId === null ? null : (this.store.findProfile(profileId) ?? null)));
+  private claudeConfigDirOf(conversation: Conversation) {
+    const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
+    return claudeConfigDir(profileEnvironment(profile ?? null, profile && this.environmentGivenTo(conversation, profile)));
+  }
+
+  /** A room's agent gets the environment its room gives it, or, its room gone, what a room gives by default. */
+  private environmentGivenTo({ roomId }: { roomId?: string | null }, profile: Profile): EnvironmentGiven | undefined {
+    if (!roomId) return undefined;
+    const choices = this.environmentChoicesOf(roomId, profile.id);
+    return (host, environment) => environmentInRoom(profile.harness, host, environment, choices);
+  }
+
+  private environmentChoicesOf(roomId: string, profileId: string): EnvironmentChoices {
+    const agent = this.store.findRoom(roomId)?.agents.find((each) => each.profileId === profileId);
+    return agent ? { variables: agent.variables, wholeHostEnvironment: agent.wholeHostEnvironment } : NO_ENVIRONMENT_CHOICES;
   }
 
   /**
@@ -2961,7 +3057,7 @@ profileId: string | null, conversationId: string) {
     const key = agentProcessKey(profile, launch);
     const existing = this.agentProcesses.get(key);
     if (existing) return existing;
-    const spec = harnessSpec(profile, this.store.claudeProgramSetting());
+    const spec = harnessSpec(profile, this.store.claudeProgramSetting(), this.environmentGivenTo(launch, profile));
     const harness = new HarnessProcess(
       { ...spec, environment: { ...spec.environment, ...this.scriptEnvironmentFor(launch, spec.environment.PATH), ...this.testModelEnvironment(launch) } },
       {
@@ -3108,7 +3204,8 @@ profileId: string | null, conversationId: string) {
     if (conversation.harness !== "copilot" || !conversation.acpSessionId) return null;
     let copilotHome: string;
     try {
-      copilotHome = copilotHomeOf(profileEnvironment(this.profileOf(conversation)));
+      const profile = this.profileOf(conversation);
+      copilotHome = copilotHomeOf(profileEnvironment(profile, this.environmentGivenTo(conversation, profile)));
     } catch {
       return null;
     }
@@ -3327,6 +3424,11 @@ profileId: string | null, conversationId: string) {
   /** A session Mirador continues or forks gets back on its canvas what the agent put there. */
   restoresCanvasWith(restoreCanvas: RestoreCanvas) {
     this.restoreCanvas = restoreCanvas;
+  }
+
+  /** A room's agent on a fresh session after one it was cleared of, as a change of what its room gives it does, lost all it was told there. */
+  private contextClearedBefore(conversationId: string) {
+    return this.store.listEventsOfTypes(conversationId, ["context-cleared"]).length > 0;
   }
 
   private takeRoomContextLost(runtime: Runtime) {

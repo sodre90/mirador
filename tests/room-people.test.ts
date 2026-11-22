@@ -14,6 +14,7 @@ import type { Person, Profile, Workspace } from "../shared/model.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { inviteIn, machineAddress } from "../shared/machines.ts";
+import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
 import { agentStandIn, type Room, type RoomRole, type RoomThread } from "../shared/rooms.ts";
 
 /**
@@ -221,6 +222,10 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.approve": true,
   "room.answer-task": true,
   "room.set-peoples-tasks-wait": true,
+  "room.set-claude-setup": true,
+  "room.set-agent-variable": true,
+  "room.set-agent-host-environment": true,
+  "room.set-agents-read-guests": true,
   "room.delete": true,
   "room.subscribe": true,
   "room.unsubscribe": true,
@@ -337,7 +342,7 @@ function seed() {
   writeFileSync(join(fakePrograms, "opencode"), `#!/bin/sh\nexec bun '${join(repoRoot, "e2e", "fake-acp-agent.ts")}' "$@"\n`);
   chmodSync(join(fakePrograms, "opencode"), 0o755);
   const store = new Store(join(dataDir, "state.sqlite"));
-  profile = { id: crypto.randomUUID(), name: "Builder", harness: "opencode", environment: `FAKE_ACP_PROMPTS=${promptsFile}`, prelaunch: `echo ${PRELAUNCH_SECRET}`, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [PLUGIN_OFF_SECRET], createdAt: Date.now() };
+  profile = { id: crypto.randomUUID(), name: "Builder", harness: "opencode", environment: `OPENCODE_FAKE_ACP_PROMPTS=${promptsFile}\nROOM_ONLY_SECRET_NAME=room-only`, prelaunch: `echo ${PRELAUNCH_SECRET}`, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [PLUGIN_OFF_SECRET], createdAt: Date.now() };
   store.saveProfile(profile);
   workspace = store.insertWorkspace({ id: crypto.randomUUID(), name: "project", path: projectDir, defaultLaunch: { harness: "opencode", profileId: profile.id }, createdAt: Date.now() });
   const devices = new DeviceService(store);
@@ -412,6 +417,8 @@ async function settingOwnProfile(page: Page, name: string, color: string | null 
 }
 
 const problemOf = ({ problemAbout }: SettingsSaved) => problemAbout?.code ?? null;
+
+const CLEAN_CLAUDE_SETUP: ClaudeSetup = { ownSettings: false, workspaceSettings: false, mcpServers: false, hooks: false, claudeMdAndMemory: false };
 
 /** Sends each message type a person may not, naming what the owner has, and expects each refused and nothing else. */
 async function refusesAllButTheirOwnMessages(pages: Page[]) {
@@ -737,12 +744,26 @@ describe("a person other than the owner", () => {
     expect(came.some(({ type }) => type.startsWith("conversation."))).toBe(false);
   }, 30_000);
 
+  test("changes nothing of what a room's agents are given or read, as a member or as a guest", async () => {
+    const ownerMark = owner.mark;
+    for (const page of [miaPage, gusPage]) {
+      const mark = page.mark;
+      page.send({ type: "room.set-claude-setup", roomId: roomA.id, setup: CLEAN_CLAUDE_SETUP });
+      page.send({ type: "room.set-agent-variable", roomId: roomA.id, profileId: profile.id, name: "ROOM_ONLY_SECRET_NAME", given: true });
+      page.send({ type: "room.set-agent-host-environment", roomId: roomA.id, profileId: profile.id, given: true });
+      page.send({ type: "room.set-agents-read-guests", roomId: roomA.id, read: false });
+      await page.waitForErrors("only-the-owner", 4, mark);
+    }
+    expect((await owner.settledSince(ownerMark)).some(isType("room.upserted", ({ room }) => room.id === roomA.id))).toBe(false);
+  });
+
   test("loses what a role took away on the page they have open, and, taken out of their last room, every way in at once, while their messages keep their name", async () => {
     let gusMark = gusPage.mark;
     owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "member" });
     await gusPage.waitFor(isType("room.upserted", ({ room }) => room.people[0]?.role === "member"), gusMark);
     gusPage.send({ type: "room.write", roomId: roomA.id, text: "@Builder SAY Gus is a member now", tags: [profile.id], threadId: null });
     await gusPage.waitFor(isType("room.message", ({ message }) => message.text.includes("Gus is a member now") && message.tags.length === 1), gusMark);
+    await gusPage.waitFor(roomMessageSaying("Gus is a member now"), gusMark);
 
     let miaMark = miaPage.mark;
     owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "guest" });
@@ -777,6 +798,12 @@ describe("a person other than the owner", () => {
     owner.send({ type: "settings.set-canvas-use", canvasUse: "often" });
     owner.send({ type: "workspace.set-color", workspaceId: workspace.id, color: "peach" });
     owner.send({ type: "conversation.rename", conversationId: ownersConversationId, title: "Owner's secret plan" });
+    owner.send({ type: "room.set-claude-setup", roomId: roomA.id, setup: CLEAN_CLAUDE_SETUP });
+    owner.send({ type: "room.set-agent-variable", roomId: roomA.id, profileId: profile.id, name: "ROOM_ONLY_SECRET_NAME", given: true });
+    owner.send({ type: "room.set-agent-host-environment", roomId: roomA.id, profileId: profile.id, given: true });
+    owner.send({ type: "room.set-agents-read-guests", roomId: roomA.id, read: false });
+    const { room: launchAsOwnerSees } = await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && !room.agentsReadGuests), ownerMark);
+    expect(launchAsOwnerSees).toMatchObject({ claudeSetup: CLEAN_CLAUDE_SETUP, agents: [expect.objectContaining({ variables: { ROOM_ONLY_SECRET_NAME: true }, wholeHostEnvironment: true })] });
     await ownerWritesIn(roomB, "@Builder SAY Payroll answer", [profile.id]);
     await owner.waitFor(roomMessageSaying("Payroll answer"), ownerMark);
     await owner.waitFor(isType("conversation.upserted", ({ conversation }) => conversation.title === "Owner's secret plan"), ownerMark);
@@ -785,12 +812,15 @@ describe("a person other than the owner", () => {
     const miaAgain = await Page.open(port, tokens[mia.id]!);
     const { rooms, profiles, people, workspaces, conversations } = await miaAgain.waitFor(isType("snapshot"));
     expect(rooms.map(({ id, workspaceId, people }) => ({ id, workspaceId, people }))).toEqual([{ id: roomA.id, workspaceId: "", people: [{ personId: mia.id, role: "guest" }] }]);
+    const settingsSeen = (seen: Room[]) => seen.map(({ claudeSetup, agentsReadGuests, agents }) => ({ claudeSetup, agentsReadGuests, variables: agents.map(({ variables }) => variables) }));
+    const roomsMiaWasSent = miaPage.received.filter(isType("room.upserted")).map(({ room }) => room);
+    expect([...settingsSeen(rooms), ...settingsSeen(roomsMiaWasSent)]).toEqual([...rooms, ...roomsMiaWasSent].map(() => ({ claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, variables: [{}] })));
     expect(profiles).toEqual([{ id: profile.id, name: "Builder", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 0 }]);
     expect(people.map(({ id }) => id).toSorted()).toEqual([miaAgain.snapshot.ownerId, mia.id, gus.id].toSorted());
     expect([workspaces, conversations]).toEqual([[], []]);
     await Bun.sleep(SETTLE_MS);
     miaAgain.close();
-    const secretsFrom = (page: Page) => [workspace.id, projectDir, ownersConversationId, agentConversationId, roomB.id, "Payroll", "Owner's secret plan", promptsFile, PRELAUNCH_SECRET, PLUGIN_OFF_SECRET, ...(page === stanPage ? [roomA.id, mia.id] : [stan.id])];
+    const secretsFrom = (page: Page) => [workspace.id, projectDir, ownersConversationId, agentConversationId, roomB.id, "Payroll", "Owner's secret plan", promptsFile, PRELAUNCH_SECRET, PLUGIN_OFF_SECRET, "ROOM_ONLY_SECRET_NAME", ...(page === stanPage ? [roomA.id, mia.id] : [stan.id])];
     for (const page of [miaPage, gusPage, stanPage, miaAgain]) {
       const types = new Set(page.received.map(({ type }) => type));
       expect([...types].filter((type) => !SHOWN_TO_PEOPLE.has(type))).toEqual([]);

@@ -45,6 +45,18 @@ const CHANGING_FILES: (ToolKind | null)[] = ["edit", "delete", "move"];
 /** A tool that reads or changes files, which may reach any of them when it names none. */
 export const worksOnFiles = (toolKind: ToolKind | null) => READING.includes(toolKind) || CHANGING_FILES.includes(toolKind);
 
+const CLAUDE_SETUP_FILES = ["claude.md", "claude.local.md", ".mcp.json"];
+
+/** Where Claude Code finds what its later sessions load, hooks, allowed commands and MCP servers among it: a `.claude` folder, a CLAUDE.md or .mcp.json, named in any case. */
+export const holdsClaudeSetup = (path: string) => {
+  const parts = path.toLowerCase().split(/[\\/]+/);
+  return parts.includes(".claude") || CLAUDE_SETUP_FILES.includes(parts.at(-1) ?? "");
+};
+
+/** A tool that would change what Claude Code's later sessions in the workspace load. */
+export const changesClaudeSetup = ({ toolKind, paths }: AskedPermission, placeOf: (path: string) => string | null) =>
+  !READING.includes(toolKind) && paths.some((path) => holdsClaudeSetup(path) || holdsClaudeSetup(placeOf(path) ?? ""));
+
 /**
  * Whether the host lets a request of a room's agent through by itself: reading files that all lie inside the room's
  * workspace, unless everything asks; and in the workspace preset, changes to such files too. A read or search that names

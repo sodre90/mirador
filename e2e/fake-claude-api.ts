@@ -131,6 +131,8 @@ export class FakeClaudeApi {
   readonly userMessages = new Map<string, string>();
   /** The media type of each image the user's newest message carried, by the text the user typed. */
   readonly images = new Map<string, string[]>();
+  /** The tools each request but a title's offered, by name, by the text the user typed last. */
+  readonly tools = new Map<string, string[]>();
   /** The model each request asked for, by the text the user typed last; a subagent's request goes by its prompt. */
   readonly models = new Map<string, string>();
   /** Every request's messages, role by role: what the agent's own history held when it answered. */
@@ -216,6 +218,7 @@ export class FakeClaudeApi {
     this.images.set(typed, imageTypesIn(body.messages.findLast(({ role }) => role === "user")?.content ?? ""));
     this.history.push(body.messages.map(({ role, content }) => `${role}: ${textOf(content)}`));
     this.models.set(typed, body.model);
+    if (!asksForTitle(body)) this.tools.set(typed, body.tools!.map(({ name }) => name));
     if (this.failing) {
       this.refused.push(typed);
       response.writeHead(502, { "content-type": "application/json" });

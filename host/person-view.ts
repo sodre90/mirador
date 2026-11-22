@@ -1,6 +1,7 @@
 import type { CanvasItem, Profile } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
+import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import type { RoomPresence } from "../shared/rooms.ts";
 import { agentStandIn, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
@@ -14,17 +15,26 @@ type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { 
 
 /**
  * A room as a person in it sees it: its people by id and role alone, whom they tag and see vote, nothing of the
- * workspace its agents work in or the models the owner chose for them, and in place of each agent's conversation there,
- * which they never open, a stand-in that names none.
+ * workspace its agents work in, the models the owner chose for them or what they are given, and in place of each
+ * agent's conversation there, which they never open, a stand-in that names none.
  */
 const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, createdAt }: Room): Room => ({
   id,
   name,
   workspaceId: "",
-  agents: agents.map(({ profileId, conversationId, answering }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId), answering, ...PROFILES_MODEL })),
+  agents: agents.map(({ profileId, conversationId, answering }) => ({
+    profileId,
+    conversationId: conversationId === null ? null : agentStandIn(id, profileId),
+    answering,
+    ...PROFILES_MODEL,
+    variables: {},
+    wholeHostEnvironment: false,
+  })),
   permissions,
   people: people.map(({ personId, role }) => ({ personId, role })),
   peoplesTasksWait,
+  claudeSetup: ALL_OF_CLAUDE_SETUP,
+  agentsReadGuests: true,
   createdAt,
 });
 

@@ -1,5 +1,6 @@
 import type { CanvasItem, PendingPermissionRequest, StoredEvent } from "./model.ts";
 import type { PermissionPreset } from "./room-permissions.ts";
+import type { ClaudeSetup, VariablesChosen } from "./room-agent-setup.ts";
 import type { RoomMention } from "./room-mentions.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 import { LINE_BREAKS, oneLine, squareBracketsMadeRound } from "./written-text.ts";
@@ -21,6 +22,10 @@ export interface RoomAgent extends RoomAgentModel {
   conversationId: string | null;
   /** The room message the agent's turn under way answers; null while it takes no turn. */
   answering: string | null;
+  /** Which of its profile's environment values it gets, where the owner chose otherwise than the default; for the owner's eyes. */
+  variables: VariablesChosen;
+  /** Whether it gets all of the host's environment rather than the basics and what its kind reads to run; for the owner's eyes. */
+  wholeHostEnvironment: boolean;
 }
 
 /**
@@ -65,6 +70,10 @@ export interface Room {
   people: RoomPerson[];
   /** Whether a task a person other than the owner gives its agents waits for an approver to allow it before any agent is sent it. */
   peoplesTasksWait: boolean;
+  /** What its Claude Code agents load of the owner's own Claude Code setup; for the owner's eyes. */
+  claudeSetup: ClaudeSetup;
+  /** Whether its agents read what guests write there, none of which is addressed to them; for the owner's eyes. */
+  agentsReadGuests: boolean;
   createdAt: number;
 }
 
@@ -338,6 +347,15 @@ export const taskWaits = ({ taskHeld }: RoomMessage) => taskHeld === "waiting";
 
 /** No agent reads a task an approver has not allowed, nor the line that says one was declined. */
 export const keptFromAgents = (message: RoomMessage) => message.taskHeld !== undefined || isDeclined(message);
+
+/** A person's message counts as a guest's unless the owner or a member wrote it. */
+const writtenByGuest = ({ author, authorRole }: RoomMessage, ownerId: string | null) => !writtenByAgent(author) && author.personId !== ownerId && authorRole !== "member";
+
+/** What the room's agents may read of it: neither what `keptFromAgents` keeps from them, nor, unless the room lets them, what guests wrote. */
+export const readByAgentsOf =
+  ({ agentsReadGuests }: Pick<Room, "agentsReadGuests">, ownerId: string | null) =>
+  (message: RoomMessage) =>
+    !keptFromAgents(message) && (agentsReadGuests || !writtenByGuest(message, ownerId));
 
 /**
  * The pages and questions each agent's answer brought onto the room's canvas. One made while the agent answered a

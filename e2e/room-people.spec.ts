@@ -74,7 +74,7 @@ test("a person the owner lets into a room sees only that room on their own brows
   const mia = host.admitPerson("Mia");
   const ownerTraffic = trafficOf(page);
   await signIn(page, host);
-  const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
+  const profiles = await createProfile(page, "Builder", `OPENCODE_FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await addWorkspace(page, host.projectDir, "Builder · opencode");
 

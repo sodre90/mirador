@@ -71,6 +71,10 @@ These terms stay the same everywhere:
 | Voice on this Mac (the local engine) | Hang ezen a Macen | Voz en este Mac | 这台 Mac 上的语音 | Sprachfunktionen auf diesem Mac |
 | push relay | push-továbbító | relé push | 推送中继 | Push-Relay (das) |
 | grant (a push relay's, which a phone holds) | engedély | permiso | 授权 | Freigabe |
+| value (one of a profile's environment variables, by name) | érték | valor | 值 | Wert |
+| hook (Claude Code's) | hook | hook | Hook | Hook |
+| start afresh (an agent, on a new session that reads the room again) | elölről kezd | empezar de nuevo | 重新开始 | neu anfangen |
+| start clean (a room's Claude agents, without the owner's setup) | tiszta lappal indul | empezar en limpio | 全新开始 | sauber starten |
 
 ## Hungarian
 

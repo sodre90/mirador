@@ -5,7 +5,7 @@ import { addWorkspace, allowNotifications, clickNotification, createProfile, cre
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
-const promptsKeptIn = (agent: string) => `FAKE_ACP_PROMPTS=${join(host.root, `${agent}-prompts`)}`;
+const promptsKeptIn = (agent: string) => `OPENCODE_FAKE_ACP_PROMPTS=${join(host.root, `${agent}-prompts`)}`;
 
 test.beforeAll(async ({ browser }) => {
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));

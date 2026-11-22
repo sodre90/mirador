@@ -52,7 +52,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
   await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
   await nameOwnProfile(page, "Ann");
   await nameMachine(page, "Ann's machine");
-  const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
+  const profiles = await createProfile(page, "Builder", `OPENCODE_FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await addWorkspace(page, owners.projectDir, "Builder · opencode");
 

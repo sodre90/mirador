@@ -8,6 +8,7 @@ import { isPublicKey, NO_AUTHORITY, ownerKey, roomJoinStatement } from "../host/
 import { reachedAt, RoomInvites, type ReachedAt } from "../host/room-invites.ts";
 import { Store } from "../host/store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
+import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 
 const HOST = "127.0.0.1:4600";
 const CODE = "ROOM-ABCD-EFGH-JKLM";
@@ -26,7 +27,7 @@ function machine(owners = keyPair()) {
   const now = () => clock.now;
   const store = new Store(":memory:");
   store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, createdAt: 1 });
   const invites = new RoomInvites(store, new DeviceService(store, now), owners.publicKey, now);
   return { now, store, clock, invites };
 }

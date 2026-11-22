@@ -49,7 +49,7 @@ function hostWithBuilder(environment: Record<string, string> = {}, { failingResu
   return {
     host,
     profileEnvironment: () =>
-      [`FAKE_ACP_PROMPTS=${promptsFile()}`, failingResumes ? "FAKE_ACP_RESUME_FAILS=1" : "FAKE_ACP_RESUMES=1", `FAKE_ACP_LOG=${agentLog()}`, "FAKE_ACP_NAME=Builder"].join("\n"),
+      [`OPENCODE_FAKE_ACP_PROMPTS=${promptsFile()}`, failingResumes ? "OPENCODE_FAKE_ACP_RESUME_FAILS=1" : "OPENCODE_FAKE_ACP_RESUMES=1", `OPENCODE_FAKE_ACP_LOG=${agentLog()}`, "OPENCODE_FAKE_ACP_NAME=Builder"].join("\n"),
     prompts: () => readFileSync(promptsFile(), "utf8"),
     agentLogLines: () => (existsSync(agentLog()) ? readFileSync(agentLog(), "utf8").split("\n").filter(Boolean) : []),
     /** Each prompt the agent took: the process that took it, and the session it went to. */

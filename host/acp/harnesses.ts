@@ -6,8 +6,10 @@ import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile
 import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
-import { applyEnvironment, parseEnvironment } from "../../shared/profile-environment.ts";
+import { applyEnvironment, parseEnvironment, type ProfileEnvironment } from "../../shared/profile-environment.ts";
+import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
+import { NO_PROTECTIONS, SETTING_SOURCES, type ClaudeProtections, type SettingSource } from "./claude-protections.ts";
 import { findAntigravity } from "./antigravity-program.ts";
 import { findCopilot } from "./copilot-program.ts";
 import { agentEnvironment } from "./environment.ts";
@@ -125,9 +127,9 @@ const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, "-").re
  * claude-agent-acp picks a session's model from its own ANTHROPIC_MODEL, and opencode
  * reads its configuration (OPENCODE_CONFIG_CONTENT, XDG_CONFIG_HOME, ...) at startup.
  */
-export function harnessSpec(profile: Profile, claudeProgramSetting: string): HarnessSpec {
+export function harnessSpec(profile: Profile, claudeProgramSetting: string, given = allOfIt): HarnessSpec {
   const { harness } = profile;
-  const environment = launchEnvironment(harness, profile, claudeProgramSetting);
+  const environment = launchEnvironment(harness, profile, claudeProgramSetting, given);
   return {
     id: harness,
     command: commandFor[harness](environment),
@@ -166,8 +168,8 @@ function withCanvasToolsPlugin(environment: Record<string, string>): Record<stri
  * The agent's environment, with the profile's on top. claude-agent-acp runs the Claude Code in CLAUDE_CODE_EXECUTABLE
  * rather than the copy its SDK bundles; a profile may name its own.
  */
-export function launchEnvironment(harness: HarnessId, profile: Profile | null, claudeProgramSetting: string): Record<string, string> {
-  const environment = profileEnvironment(profile);
+export function launchEnvironment(harness: HarnessId, profile: Profile | null, claudeProgramSetting: string, given = allOfIt): Record<string, string> {
+  const environment = profileEnvironment(profile, given);
   if (harness === "opencode") return withCanvasToolsPlugin(environment);
   if (harness === "pi") return piAcpEnvironment(environment);
   if (harness === "codex") return codexAcpEnvironment(environment);
@@ -216,13 +218,18 @@ function antigravityEnvironment(environment: Record<string, string>): Record<str
   return { ...environment, AGY_PATH: program };
 }
 
-export function profileEnvironment(profile: Profile | null): Record<string, string> {
+/** An agent process's environment of the host's and its profile's: the profile's on top of all the host's, or only what a room gives its agent. */
+export type EnvironmentGiven = (host: Record<string, string>, profile: ProfileEnvironment) => Record<string, string>;
+
+const allOfIt: EnvironmentGiven = applyEnvironment;
+
+export function profileEnvironment(profile: Profile | null, given = allOfIt): Record<string, string> {
   if (!profile) return agentEnvironment(hostEnvironment());
   const environment = parseEnvironment(profile.environment);
   if (environment.errors.length > 0) {
     throw new HostProblemError({ code: "profile-environment-invalid", profile: profile.name, errors: environment.errors.join("; ") });
   }
-  return applyEnvironment(agentEnvironment(hostEnvironment()), environment);
+  return given(agentEnvironment(hostEnvironment()), environment);
 }
 
 /**
@@ -239,9 +246,22 @@ export function sessionMeta(
     canvasPlugins = NO_CANVAS_PLUGINS,
     idleCompaction = true,
     inRoom = false,
-  }: { canvasAssetsOrigin: string; withoutUserSettings?: boolean; canvasPlugins?: CanvasPluginGuidance; idleCompaction?: boolean; inRoom?: boolean },
+    claudeSetup = ALL_OF_CLAUDE_SETUP,
+    keptProtections = NO_PROTECTIONS,
+  }: {
+    canvasAssetsOrigin: string;
+    withoutUserSettings?: boolean;
+    canvasPlugins?: CanvasPluginGuidance;
+    idleCompaction?: boolean;
+    inRoom?: boolean;
+    claudeSetup?: ClaudeSetup;
+    keptProtections?: ClaudeProtections;
+  },
 ) {
-  if (harness === "claude") return inRoom ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction }) : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction });
+  if (harness === "claude")
+    return inRoom
+      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections })
+      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction });
   if (harness === "pi") return inRoom ? { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   if (harness === "antigravity")
     return inRoom ? { antigravity: { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } } : antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
@@ -305,11 +325,54 @@ export function claudeSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = 
   };
 }
 
-/** A room's agent hears of no job waits or plugins, and only the room's canvas tools run without asking. */
-export function claudeRoomSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = false, idleCompaction = true } = {}) {
-  const meta = claudeSessionMeta(canvasUse, { withoutUserSettings, idleCompaction });
+/**
+ * Claude Code's accept-edits mode changes a CLAUDE.md unasked, and later sessions load it; it asks before the rest of
+ * these itself. In a room they ask, so the host can leave them to the owner.
+ */
+const ROOM_ASKS_BEFORE_EDITING = ["Edit(**/CLAUDE.md)", "Edit(**/CLAUDE.local.md)", "Edit(**/.claude/**)", "Edit(**/.mcp.json)"];
+
+/**
+ * A room's agent hears of no job waits or plugins, and only the room's canvas tools run without asking. It loads of the
+ * owner's Claude Code setup what the room's owner chose, keeping the protections of the settings it leaves out.
+ */
+export function claudeRoomSessionMeta(
+  canvasUse: CanvasUse,
+  { withoutUserSettings = false, idleCompaction = true, claudeSetup = ALL_OF_CLAUDE_SETUP, keptProtections = NO_PROTECTIONS }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections } = {},
+) {
+  const { env, disallowedTools } = claudeSessionMeta(canvasUse).claudeCode.options;
+  const { deny, ask, sandbox } = keptProtections;
+  const settings = {
+    ...(!idleCompaction && { idleCompaction: false }),
+    ...settingsLeavingOut(claudeSetup),
+    permissions: { ...(deny.length > 0 && { deny }), ask: [...ask, ...ROOM_ASKS_BEFORE_EDITING] },
+    ...(sandbox && { sandbox }),
+  };
+  const loaded = settingSourcesLoaded(claudeSetup, withoutUserSettings);
   return {
     systemPrompt: { append: canvasUse === "often" ? canvasUseGuidance() : "" },
-    claudeCode: { options: { ...meta.claudeCode.options, allowedTools: ROOM_CANVAS_TOOLS.map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`) } },
+    claudeCode: {
+      options: {
+        ...(loaded.length < SETTING_SOURCES.length && { settingSources: loaded }),
+        settings,
+        ...(!claudeSetup.mcpServers && { strictMcpConfig: true }),
+        env,
+        allowedTools: ROOM_CANVAS_TOOLS.map((tool) => `mcp__${CANVAS_SERVER_NAME}__${tool}`),
+        disallowedTools,
+      },
+    },
   };
 }
+
+/** Claude Code loads every source of settings unless told which: the owner's own, and the workspace's shared and local ones. */
+const settingSourcesLoaded = ({ ownSettings, workspaceSettings }: ClaudeSetup, withoutUserSettings: boolean): SettingSource[] =>
+  SETTING_SOURCES.filter((source) => (source === "user" ? ownSettings && !withoutUserSettings : workspaceSettings));
+
+/** The sources of settings a room's owner leaves out, whose protections its Claude Code sessions keep; a test host's skip the user's own altogether. */
+export const settingSourcesLeftOut = (claudeSetup: ClaudeSetup, withoutUserSettings: boolean) =>
+  SETTING_SOURCES.filter((source) => !settingSourcesLoaded(claudeSetup, false).includes(source) && !(withoutUserSettings && source === "user"));
+
+/** Claude Code's own settings that leave hooks, and CLAUDE.md files, rules and memory, out of a session, wherever they come from. */
+const settingsLeavingOut = ({ hooks, claudeMdAndMemory }: ClaudeSetup) => ({
+  ...(!hooks && { disableAllHooks: true }),
+  ...(!claudeMdAndMemory && { claudeMdExcludes: ["**/CLAUDE.md", "**/CLAUDE.local.md", "**/rules/**"], autoMemoryEnabled: false }),
+});

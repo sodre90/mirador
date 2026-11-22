@@ -37,6 +37,7 @@ import { pluginItemOfSavedChecklist, type SavedChecklist } from "./saved-checkli
 import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "./saved-walkthroughs.ts";
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
+import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
 import { writtenByAgent, type Room, type RoomAgentModel, type RoomAnswerEnd, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import type { RoomBallot } from "../shared/room-votes.ts";
@@ -290,6 +291,11 @@ const addedColumns = [
   { table: "room_agents", column: "effort", definition: "TEXT" },
   { table: "machines", column: "rooms", definition: "TEXT" },
   { table: "room_messages", column: "mentions", definition: "TEXT" },
+  { table: "rooms", column: "claude_setup", definition: "TEXT NOT NULL DEFAULT '{}'" },
+  { table: "rooms", column: "agents_read_guests", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "room_agents", column: "variables", definition: "TEXT NOT NULL DEFAULT '{}'" },
+  { table: "room_agents", column: "whole_host_environment", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "conversations", column: "room_setup", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -501,6 +507,8 @@ interface RoomRow {
   workspace_id: string;
   permissions: PermissionPreset;
   peoples_tasks_wait: number;
+  claude_setup: string;
+  agents_read_guests: number;
   created_at: number;
 }
 
@@ -549,6 +557,12 @@ const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
 const mentionsColumn = ({ mentions }: Pick<RoomMessage, "mentions">) => (mentions && mentions.length > 0 ? JSON.stringify(mentions) : null);
 
 type RoomPersonRow = { person_id: string; role: RoomRole; name_clash: string | null };
+
+function variablesChosenIn(text: string): VariablesChosen {
+  const chosen: unknown = JSON.parse(text);
+  if (typeof chosen !== "object" || chosen === null) return {};
+  return Object.fromEntries(Object.entries(chosen).filter(([name, given]) => isVariableName(name) && typeof given === "boolean"));
+}
 
 const toRoomPerson = ({ person_id, role, name_clash }: RoomPersonRow): RoomPerson => ({ personId: person_id, role, ...(name_clash !== null && { nameClash: name_clash }) });
 
@@ -1075,6 +1089,15 @@ export class Store {
     this.db.query("UPDATE conversations SET favourite = ? WHERE id = ?").run(favourite ? 1 : 0, conversationId);
   }
 
+  /** What a room agent's session was started under, as `roomSetupFingerprint` puts it; null for none. */
+  roomSetupOfSession(conversationId: string): string | null {
+    return (this.db.query("SELECT room_setup FROM conversations WHERE id = ?").get(conversationId) as { room_setup: string | null } | null)?.room_setup ?? null;
+  }
+
+  setRoomSetupOfSession(conversationId: string, setup: string) {
+    this.db.query("UPDATE conversations SET room_setup = ? WHERE id = ?").run(setup, conversationId);
+  }
+
   saveQueuedMessages(conversationId: string, messages: QueuedMessage[]) {
     this.db.query("UPDATE conversations SET queued_messages = ? WHERE id = ?").run(JSON.stringify(messages), conversationId);
   }
@@ -1125,8 +1148,8 @@ export class Store {
 
   insertRoom(room: Room) {
     this.db
-      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, created_at) VALUES (?, ?, ?, ?, ?, ?)")
-      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, room.createdAt);
+      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
     room.agents.forEach(({ profileId, model, effort }) => this.setRoomAgentModel(room.id, profileId, { model, effort }));
     room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
@@ -1142,23 +1165,35 @@ export class Store {
     return row ? this.toRoom(row) : undefined;
   }
 
-  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, created_at }: RoomRow): Room {
-    const agents = this.db.query("SELECT profile_id, conversation_id, answering, model, effort FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as {
+  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, created_at }: RoomRow): Room {
+    const agents = this.db.query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as {
       profile_id: string;
       conversation_id: string | null;
       answering: string | null;
       model: string | null;
       effort: string | null;
+      variables: string;
+      whole_host_environment: number;
     }[];
     const people = this.db.query("SELECT person_id, role, name_clash FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPersonRow[];
     return {
       id,
       name,
       workspaceId: workspace_id,
-      agents: agents.map(({ profile_id, conversation_id, answering, model, effort }) => ({ profileId: profile_id, conversationId: conversation_id, answering, model, effort })),
+      agents: agents.map(({ profile_id, conversation_id, answering, model, effort, variables, whole_host_environment }) => ({
+        profileId: profile_id,
+        conversationId: conversation_id,
+        answering,
+        model,
+        effort,
+        variables: variablesChosenIn(variables),
+        wholeHostEnvironment: whole_host_environment === 1,
+      })),
       permissions,
       people: people.map(toRoomPerson),
       peoplesTasksWait: peoples_tasks_wait === 1,
+      claudeSetup: claudeSetupIn(JSON.parse(claude_setup)),
+      agentsReadGuests: agents_read_guests === 1,
       createdAt: created_at,
     };
   }
@@ -1249,6 +1284,23 @@ export class Store {
     this.db.query("UPDATE rooms SET peoples_tasks_wait = ? WHERE id = ?").run(wait ? 1 : 0, id);
   }
 
+  setRoomClaudeSetup(id: string, setup: ClaudeSetup) {
+    this.db.query("UPDATE rooms SET claude_setup = ? WHERE id = ?").run(JSON.stringify(setup), id);
+  }
+
+  setRoomAgentsReadGuests(id: string, read: boolean) {
+    this.db.query("UPDATE rooms SET agents_read_guests = ? WHERE id = ?").run(read ? 1 : 0, id);
+  }
+
+  /** Which of its profile's values the room's agent gets where the owner chose otherwise than the default. */
+  setRoomAgentVariables(roomId: string, profileId: string, variables: VariablesChosen) {
+    this.db.query("UPDATE room_agents SET variables = ? WHERE room_id = ? AND profile_id = ?").run(JSON.stringify(variables), roomId, profileId);
+  }
+
+  setRoomAgentWholeHostEnvironment(roomId: string, profileId: string, given: boolean) {
+    this.db.query("UPDATE room_agents SET whole_host_environment = ? WHERE room_id = ? AND profile_id = ?").run(given ? 1 : 0, roomId, profileId);
+  }
+
   setRoomWorkspace(id: string, workspaceId: string) {
     this.db.query("UPDATE rooms SET workspace_id = ? WHERE id = ?").run(workspaceId, id);
   }
@@ -1290,6 +1342,10 @@ export class Store {
   /** No agent's turn runs on before the host starts. */
   forgetRoomAgentsAnswering() {
     this.db.query("UPDATE room_agents SET answering = NULL").run();
+  }
+
+  setRoomSeenThrough(roomId: string, profileId: string, seq: number) {
+    this.db.query("UPDATE room_agents SET seen_through = ? WHERE room_id = ? AND profile_id = ?").run(seq, roomId, profileId);
   }
 
   markRoomSeen(roomId: string, profileId: string, seq: number) {

@@ -2,6 +2,7 @@ import type { PermissionPreset } from "../../../shared/room-permissions.ts";
 import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomRole } from "../../../shared/rooms.ts";
+import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
 
 /** The parts of a room's settings, each on a tab of its own. */
 export type RoomSettingsTab = "people" | "agents" | "permissions" | "usage";
@@ -133,6 +134,39 @@ export const rooms = {
   peopleReachBeyond:
     "Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
   peoplesTasksStart: "People's tasks start without asking me",
+  agentsReadGuests: "Agents read what guests write",
+  agentsReadGuestsHint:
+    "Guests give the agents no tasks, but what they write reaches the agents with the next task, marked as a guest's. Turned off, no agent reads it, whether a task waits for you or not.",
+  actsUnasked: "Can act without asking",
+  actsUnaskedHint:
+    "Not every agent can be held to asking in a room: Codex reads any file on this computer unasked, opencode and pi may run tools unasked, and Copilot is untried in rooms. Let only people you trust give such an agent tasks.",
+  environmentGiven: (given: number, all: number, wholeHostEnvironment: boolean) =>
+    `${all > 0 ? `Values from its profile: ${given} of ${all}` : "Its profile sets no values"}${wholeHostEnvironment ? ", and everything from this computer's environment" : ""}`,
+  valuesOf: (agent: string) => `Values ${agent} gets from its profile`,
+  valuesReadable: "Anyone who can give this agent a task can make it read a value it gets.",
+  wholeHostEnvironment: "Everything from this computer's environment",
+  wholeHostEnvironmentHint: "It can hold tokens and your SSH agent, and anyone who can give this agent a task can make it use them. Turn it on for a proxy, certificates or git over SSH.",
+  alwaysGiven: "Always given: it says where the agent's program and files are.",
+  valuesHint:
+    "An agent gets the basics of this computer's environment, such as PATH, HOME and the language, and what its kind reads for its program, settings, model and sign-in, from its profile and from this computer. Turn on another value of its profile and everyone who can give it a task can make it read that value. A value of its profile that is off stays unset, even with everything from this computer's environment.",
+  claudeSetup: "What Claude agents load of your Claude Code setup",
+  startClean: "Start clean",
+  claudeSetupParts: {
+    ownSettings: "Your own settings",
+    workspaceSettings: "The workspace's settings",
+    mcpServers: "MCP servers",
+    hooks: "Hooks",
+    claudeMdAndMemory: "CLAUDE.md files and memory",
+  } satisfies Record<ClaudeSetupPart, string>,
+  claudeSetupHint:
+    "Your own settings are those of your Claude Code folder: hooks, allowed commands, skills, MCP servers, CLAUDE.md and rules; an agent that signs in through them, as with an API key helper, can't without them. The workspace's are its .claude folder, CLAUDE.md files, skills and .mcp.json. MCP servers, hooks, and CLAUDE.md files with your memory of the workspace go off wherever they come from. Mirador's own tools stay. The deny and ask rules and the sandbox of settings left out stay.",
+  startsAfresh: (agents: string[]) =>
+    agents.length === 1 ? `${agents[0]} starts afresh and reads the room again, once.` : `${agents.join(", ")} start afresh and read the room again, once.`,
+  stopsAndStartsAfresh: (agents: string[]) =>
+    agents.length === 1
+      ? `${agents[0]} stops any turn under way, starts afresh and reads the room again, once.`
+      : `${agents.join(", ")} stop any turns under way, start afresh and read the room again, once.`,
+  applyChange: "Change",
   peoplesTasksHint: "Otherwise a member's tag or follow-up reaches no agent until you allow it.",
   roles: { member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
   authorRoles: { owner: "Owner", member: "Member", guest: "Guest", agent: "Agent" } satisfies Record<RoomAuthorRole, string>,

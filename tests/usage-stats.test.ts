@@ -9,6 +9,7 @@ import { Store } from "../host/store.ts";
 import { UsageData } from "../host/usage-data.ts";
 import { toolReportApart, usageReportApart } from "../host/usage-reports.ts";
 import { failureReason, masked, sourceOf, toolReport, usagePeriod, usageReport, UsageQueryError, type ReportOptions, type UsageQuery } from "../host/usage-stats.ts";
+import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 
 const folder = mkdtempSync(join(tmpdir(), "mirador-usage-"));
 const stores: Store[] = [];
@@ -373,7 +374,7 @@ describe("rooms", () => {
   test("an agent's conversation in a room goes by the room's name as it is now, and the agent's", () => {
     const store = seededStore();
     store.saveProfile(profile("p1", "Builder", "opencode"));
-    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: null, effort: null }], permissions: "ask-everything", people: [], peoplesTasksWait: true, createdAt: 1 });
+    store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "ask-everything", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, createdAt: 1 });
     store.insertConversation({ ...conversation("c3", "w1", "opencode", "Launch: Builder", "p1"), roomId: "r1" });
     store.renameRoom("r1", "Liftoff");
     write(store, "c3", 0, message);

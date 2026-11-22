@@ -60,7 +60,7 @@ async function tagBuilder(composer: Locator, agentsMenu: Locator, rest: string) 
 test("the owner and a person in the room see who of them is here and who writes, and the owner reads what the room's agents took for whom", async ({ page, browser }) => {
   await signIn(page, owners);
   await nameOwnProfile(page, "Ann");
-  const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
+  const profiles = await createProfile(page, "Builder", `OPENCODE_FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await addWorkspace(page, owners.projectDir, "Builder · opencode");
   await nameMachine(page, "Ann's machine");

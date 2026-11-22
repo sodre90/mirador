@@ -1,5 +1,6 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
+import type { ClaudeSetup } from "./room-agent-setup.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type { Room, RoomAgentModel, RoomApproval, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
@@ -430,6 +431,14 @@ export type ClientMessage =
   | { type: "room.answer-task"; roomId: string; messageId: string; answer: "allow" | "deny" }
   /** Whether the tasks people other than the owner give the room's agents wait for an approver, from the next one on. */
   | { type: "room.set-peoples-tasks-wait"; roomId: string; wait: boolean }
+  /** What the room's Claude Code agents load of your own Claude Code setup; those already there start afresh and read the room again, once. */
+  | { type: "room.set-claude-setup"; roomId: string; setup: ClaudeSetup }
+  /** Whether the agent gets its profile's value of the variable, by name; already there, it starts afresh and reads the room again, once. */
+  | { type: "room.set-agent-variable"; roomId: string; profileId: string; name: string; given: boolean }
+  /** Whether the agent gets all of this computer's environment; already there, it starts afresh and reads the room again, once. */
+  | { type: "room.set-agent-host-environment"; roomId: string; profileId: string; given: boolean }
+  /** Whether the room's agents read what guests write there, from their next catch-up on. */
+  | { type: "room.set-agents-read-guests"; roomId: string; read: boolean }
   /** Deletes the room with its agents' conversations in it. */
   | { type: "room.delete"; roomId: string }
   /** The host answers `room.timeline`, then sends the room's new messages as `room.message` until `room.unsubscribe`. */

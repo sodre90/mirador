@@ -40,7 +40,7 @@ test("people write in a room, a tagged agent answers in its thread, and another 
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   for (const agent of ["Builder", "Reviewer"] as const) {
-    const profiles = await createProfile(page, agent, `FAKE_ACP_PROMPTS=${promptsOf[agent]()}`, "", "opencode");
+    const profiles = await createProfile(page, agent, `OPENCODE_FAKE_ACP_PROMPTS=${promptsOf[agent]()}`, "", "opencode");
     await profiles.getByRole("button", { name: "Close" }).click();
   }
 
@@ -147,7 +147,7 @@ test("a workspace a room works in stays until the room moves to another, where i
   writeFileSync(moverPrompts, "");
   await signInWithWorkspace(page, host);
   await addWorkspaceFromSidebar(page, elsewhere);
-  const profiles = await createProfile(page, "Mover", `FAKE_ACP_PROMPTS=${moverPrompts}`, "", "opencode");
+  const profiles = await createProfile(page, "Mover", `OPENCODE_FAKE_ACP_PROMPTS=${moverPrompts}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await createRoom(page, "Moving", ["Mover"], { workspace: "elsewhere" });
   const composer = page.getByRole("textbox", { name: "Write in Moving, @ tags an agent…" });

@@ -234,6 +234,10 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.approve": OWNER_ONLY,
   "room.answer-task": OWNER_ONLY,
   "room.set-peoples-tasks-wait": OWNER_ONLY,
+  "room.set-claude-setup": OWNER_ONLY,
+  "room.set-agent-variable": OWNER_ONLY,
+  "room.set-agent-host-environment": OWNER_ONLY,
+  "room.set-agents-read-guests": OWNER_ONLY,
   "room.delete": OWNER_ONLY,
   "room.subscribe": ({ roomId }, person) => void roleOf(person, roomId),
   "room.unsubscribe": ({ roomId }) => {

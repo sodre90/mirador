@@ -29,7 +29,7 @@ test.beforeAll(async ({ browser }) => {
   await settings.getByLabel("Name", { exact: true }).fill("Olivia");
   await settings.getByLabel("Name", { exact: true }).press("Enter");
   await settings.getByRole("button", { name: "Close" }).click();
-  const profiles = await createProfile(page, "Builder", `FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
+  const profiles = await createProfile(page, "Builder", `OPENCODE_FAKE_ACP_PROMPTS=${builderPrompts()}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
   await addWorkspace(page, host.projectDir, "Builder · opencode");
   await page.close();

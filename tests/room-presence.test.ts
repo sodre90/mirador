@@ -8,6 +8,7 @@ import { Store } from "../host/store.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { WRITING_SHOWN_MS, type Room, type RoomPresence } from "../shared/rooms.ts";
+import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 
 /** Timers that run only as the test moves time on, and tell how many still wait. */
 function fakeTimers() {
@@ -43,6 +44,8 @@ const room = (id: string, name: string, people: Room["people"]): Room => ({
   permissions: "ask-everything",
   people,
   peoplesTasksWait: true,
+  claudeSetup: ALL_OF_CLAUDE_SETUP,
+  agentsReadGuests: true,
   createdAt: 1,
 });
 
@@ -354,8 +357,8 @@ describe("a person's presence and writing, as the host takes them", () => {
     };
     expect(view(presence, stan.socket.data)).toEqual([]);
     expect(view(presence, mia.socket.data)).toEqual([{ type: "room.presence", roomId: "launch", here: ["mia"], writing: [{ personId: "mia", threadId: "launch-thread" }] }]);
-    const withModels = { ...room("launch", "Launch", [{ personId: "mia", role: "member" }]), agents: [{ profileId: "p1", conversationId: "c1", answering: null, model: "opus", effort: "high" }] };
-    expect(view({ type: "room.upserted", room: withModels }, mia.socket.data)).toMatchObject([{ type: "room.upserted", room: { agents: [{ profileId: "p1", model: null, effort: null }] } }]);
+    const withModels = { ...room("launch", "Launch", [{ personId: "mia", role: "member" }]), agents: [{ profileId: "p1", conversationId: "c1", answering: null, model: "opus", effort: "high", variables: { DEPLOY_TOKEN: true }, wholeHostEnvironment: true }] };
+    expect(view({ type: "room.upserted", room: withModels }, mia.socket.data)).toMatchObject([{ type: "room.upserted", room: { agents: [{ profileId: "p1", model: null, effort: null, variables: {}, wholeHostEnvironment: false }] } }]);
     expect(view({ type: "room.usage.got", requestId: "u", usage: { roomId: "launch", since: null, total: { turns: 0, tokens: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedWriteTokens: 0 }, cost: null }, agents: [], people: [] } }, mia.socket.data)).toEqual([]);
   });
 });

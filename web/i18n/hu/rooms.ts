@@ -126,6 +126,39 @@ export const rooms: Messages["rooms"] = {
   peopleReachBeyond:
     "A szobában mindenki olvassa az ágensek válaszait, így amit egy ágens elolvas, azt ők is elolvashatják. Egyes ágensek kérdezés nélkül tovább mennek: a Claude Code olvassa a munkaterületét, a Codex bármely fájlt ezen a számítógépen, a pi és az opencode talán semmit sem kérdez, a saját ágensbeállításaid pedig parancsokat engedhetnek meg.",
   peoplesTasksStart: "Mások feladatai engedélyem nélkül indulnak",
+  agentsReadGuests: "Az ágensek olvassák, amit a vendégek írnak",
+  agentsReadGuestsHint:
+    "A vendégek nem adnak feladatot az ágenseknek, de amit írnak, a következő feladattal eljut hozzájuk, vendégként jelölve. Kikapcsolva egy ágens sem olvassa, akár a jóváhagyásodra vár a feladat, akár nem.",
+  actsUnasked: "Kérdezés nélkül is cselekedhet",
+  actsUnaskedHint:
+    "Nem minden ágenst lehet egy szobában kérdezésre kötelezni: a Codex kérdezés nélkül bármelyik fájlt elolvassa ezen a számítógépen, az opencode és a pi kérdezés nélkül is futtathat eszközöket, a Copilotot pedig még nem próbáltuk ki szobában. Ilyen ágensnek csak olyanok adjanak feladatot, akikben megbízol.",
+  environmentGiven: (given: number, all: number, wholeHostEnvironment: boolean) =>
+    `${all > 0 ? `Értékek a profiljából: ${given}/${all}` : "A profilja nem állít be értéket"}${wholeHostEnvironment ? ", és minden ennek a számítógépnek a környezetéből" : ""}`,
+  valuesOf: (agent: string) => `A profiljából kapott értékek – ${agent}`,
+  valuesReadable: "Aki feladatot adhat ennek az ágensnek, el is olvastathatja vele a kapott értékeket.",
+  wholeHostEnvironment: "Minden ennek a számítógépnek a környezetéből",
+  wholeHostEnvironmentHint: "Tokeneket és az SSH-ügynöködet is tartalmazhatja, és bárki, aki feladatot adhat ennek az ágensnek, használtathatja vele őket. Proxyhoz, tanúsítványokhoz vagy SSH-n keresztüli githez kapcsold be.",
+  alwaysGiven: "Mindig megkapja: ez mondja meg, hol van az ágens programja és fájljai.",
+  valuesHint:
+    "Egy ágens megkapja ennek a számítógépnek az alapvető környezeti értékeit, például a PATH-t, a HOME-ot és a nyelvet, és azt, amit a fajtája a programjához, beállításaihoz, modelljéhez és bejelentkezéséhez olvas, a profiljából és erről a számítógépről. Ha a profilja egy másik értékét is bekapcsolod, bárki, aki feladatot adhat neki, el is olvastathatja vele. A profilja kikapcsolt értéke beállítatlan marad, akkor is, ha mindent megkap ennek a számítógépnek a környezetéből.",
+  claudeSetup: "Mit tölt be a Claude-ágens a saját Claude Code-beállításaidból",
+  startClean: "Tiszta lappal indul",
+  claudeSetupParts: {
+    ownSettings: "A saját beállításaid",
+    workspaceSettings: "A munkaterület beállításai",
+    mcpServers: "MCP-szerverek",
+    hooks: "Hookok",
+    claudeMdAndMemory: "CLAUDE.md-fájlok és memória",
+  },
+  claudeSetupHint:
+    "A saját beállításaid a Claude Code-mappádban vannak: hookok, engedélyezett parancsok, skillek, MCP-szerverek, CLAUDE.md és szabályok; az az ágens, amely ezeken keresztül jelentkezik be (például API-kulcs-segéddel), nélkülük nem tud. A munkaterületé a .claude mappája, a CLAUDE.md-fájljai, a skilljei és a .mcp.json. Az MCP-szerverek, a hookok, valamint a CLAUDE.md-fájlok a munkaterületről őrzött memóriáddal együtt bárhonnan jönnek is, kimaradnak. A Mirador saját eszközei megmaradnak. A kihagyott beállítások tiltó és rákérdező szabályai, valamint a sandbox megmaradnak.",
+  startsAfresh: (agents: string[]) =>
+    agents.length === 1 ? `Elölről kezdi, és egyszer újra elolvassa a szobát: ${agents[0]}.` : `Elölről kezdik, és egyszer újra elolvassák a szobát: ${agents.join(", ")}.`,
+  stopsAndStartsAfresh: (agents: string[]) =>
+    agents.length === 1
+      ? `Leállítja a folyamatban lévő körét, elölről kezdi, és egyszer újra elolvassa a szobát: ${agents[0]}.`
+      : `Leállítják a folyamatban lévő körüket, elölről kezdik, és egyszer újra elolvassák a szobát: ${agents.join(", ")}.`,
+  applyChange: "Módosítás",
   peoplesTasksHint: "Különben egy tag megjelölése vagy válasza csak akkor jut el az ágenshez, ha engedélyezed.",
   roles: { member: "Tag", guest: "Vendég" },
   authorRoles: { owner: "Tulajdonos", member: "Tag", guest: "Vendég", agent: "Ágens" },

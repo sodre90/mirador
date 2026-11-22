@@ -127,6 +127,39 @@ export const rooms: Messages["rooms"] = {
   peopleReachBeyond:
     "Todos en la sala leen las respuestas de los agentes, así que lo que lee un agente, también lo pueden leer ellos. Algunos agentes llegan más lejos sin preguntar: Claude Code lee su espacio de trabajo, Codex lee cualquier archivo de este equipo, pi y opencode pueden no preguntar nada, y tu propia configuración de agentes puede permitir comandos.",
   peoplesTasksStart: "Las tareas de otras personas empiezan sin preguntarme",
+  agentsReadGuests: "Los agentes leen lo que escriben los invitados",
+  agentsReadGuestsHint:
+    "Los invitados no dan tareas a los agentes, pero lo que escriben les llega con la siguiente tarea, marcado como de un invitado. Si lo desactivas, ningún agente lo lee, tanto si una tarea espera tu aprobación como si no.",
+  actsUnasked: "Puede actuar sin preguntar",
+  actsUnaskedHint:
+    "No a todos los agentes se les puede obligar a preguntar en una sala: Codex lee cualquier archivo de este equipo sin preguntar, opencode y pi pueden usar herramientas sin preguntar, y Copilot aún no se ha probado en salas. Deja que solo personas de confianza den tareas a un agente así.",
+  environmentGiven: (given: number, all: number, wholeHostEnvironment: boolean) =>
+    `${all > 0 ? `Valores de su perfil: ${given} de ${all}` : "Su perfil no define valores"}${wholeHostEnvironment ? ", y todo el entorno de este equipo" : ""}`,
+  valuesOf: (agent: string) => `Valores que ${agent} recibe de su perfil`,
+  valuesReadable: "Quien pueda darle una tarea a este agente puede hacer que lea un valor que recibe.",
+  wholeHostEnvironment: "Todo el entorno de este equipo",
+  wholeHostEnvironmentHint: "Puede contener tokens y tu agente SSH, y cualquiera que pueda darle una tarea a este agente puede hacer que los use. Actívalo para un proxy, certificados o git por SSH.",
+  alwaysGiven: "Siempre lo recibe: indica dónde están el programa y los archivos del agente.",
+  valuesHint:
+    "Un agente recibe lo básico del entorno de este equipo, como PATH, HOME y el idioma, y lo que su tipo lee para su programa, configuración, modelo e inicio de sesión, de su perfil y de este equipo. Si activas otro valor de su perfil, cualquiera que pueda darle una tarea puede hacer que lea ese valor. Un valor de su perfil que está desactivado queda sin definir, incluso con todo el entorno de este equipo.",
+  claudeSetup: "Qué cargan los agentes de Claude de tu configuración de Claude Code",
+  startClean: "Empezar en limpio",
+  claudeSetupParts: {
+    ownSettings: "Tu propia configuración",
+    workspaceSettings: "La configuración del espacio de trabajo",
+    mcpServers: "Servidores MCP",
+    hooks: "Hooks",
+    claudeMdAndMemory: "Archivos CLAUDE.md y memoria",
+  },
+  claudeSetupHint:
+    "Tu propia configuración es la de tu carpeta de Claude Code: hooks, comandos permitidos, skills, servidores MCP, CLAUDE.md y reglas; un agente que inicia sesión a través de ella, como con un ayudante de clave de API, no puede sin ella. La del espacio de trabajo es su carpeta .claude, sus archivos CLAUDE.md, sus skills y su .mcp.json. Los servidores MCP, los hooks y los archivos CLAUDE.md con tu memoria del espacio de trabajo se quitan vengan de donde vengan. Las herramientas propias de Mirador se quedan. Las reglas de denegar y de preguntar y el sandbox de la configuración que se quita se mantienen.",
+  startsAfresh: (agents: string[]) =>
+    agents.length === 1 ? `${agents[0]} empieza de nuevo y vuelve a leer la sala, una vez.` : `${agents.join(", ")} empiezan de nuevo y vuelven a leer la sala, una vez.`,
+  stopsAndStartsAfresh: (agents: string[]) =>
+    agents.length === 1
+      ? `${agents[0]} detiene el turno en curso, empieza de nuevo y vuelve a leer la sala, una vez.`
+      : `${agents.join(", ")} detienen los turnos en curso, empiezan de nuevo y vuelven a leer la sala, una vez.`,
+  applyChange: "Cambiar",
   peoplesTasksHint: "Si no, la etiqueta o el seguimiento de un miembro no llega a ningún agente hasta que lo permitas.",
   roles: { member: "Miembro", guest: "Invitado" },
   authorRoles: { owner: "Propietario", member: "Miembro", guest: "Invitado", agent: "Agente" },
