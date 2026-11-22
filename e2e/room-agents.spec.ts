@@ -48,6 +48,8 @@ const roomEntries = (page: Page) => page.locator(".room-timeline .room-entry");
 const answersOf = (page: Page, agent: string) => roomEntries(page).filter({ has: page.locator(".author", { hasText: agent }) });
 const answerSaying = (page: Page, text: string) => roomEntries(page).filter({ has: page.locator(".message.agent", { hasText: text }) });
 const thread = (page: Page, agent: string) => page.getByRole("complementary", { name: `Thread of ${agent}` });
+/** The entries of the agent's own conversation in its thread, under the room messages that asked it. */
+const workInThread = (page: Page, agent: string) => thread(page, agent).locator(".room-thread-turn > .timeline-entry:not(.room-entry)");
 const roomCanvas = (page: Page) => page.locator(".canvas-panel:visible");
 const shownPage = (page: Page) => page.frameLocator(".canvas-panel:visible .canvas-frame.show iframe");
 
@@ -129,6 +131,9 @@ test("a question asked in a room is voted on and confirmed there, its canvas onl
   await reply.getByRole("button", { name: "Open thread" }).click();
   await expect(thread(page, "Builder").locator(".message.agent")).toHaveText([/The question is now showing/, "Going with Blue"]);
   await expect(thread(page, "Builder")).not.toContainText("Unrelated done");
+  await expect(workInThread(page, "Builder").locator(".author").first()).toHaveText(/^Builder/);
+  await expect(workInThread(page, "Builder").locator(".avatar").first()).toHaveText("◆");
+  await expect(thread(page, "Builder")).not.toContainText("opencode");
 });
 
 test("a question asked in a room while you look elsewhere notifies, marks the room and counts in the tab's title until answered", async ({ page }) => {
@@ -215,6 +220,7 @@ test("a new room's agent is found by name and set to a model there, which it ans
   await expect(dialog.getByRole("list", { name: "Agents" }).locator(".room-agent-chip-name")).toHaveText(["Modeller"]);
   await dialog.getByRole("combobox", { name: "Model of Modeller" }).selectOption({ label: "Opus" });
   await dialog.getByRole("combobox", { name: "Effort of Modeller" }).selectOption({ label: "High" });
+  for (const picker of ["Model of Modeller", "Effort of Modeller"]) await expect(dialog.getByRole("combobox", { name: picker })).not.toHaveAttribute("data-hint");
   await dialog.getByRole("button", { name: "Create room" }).click();
   await expect(page.getByRole("heading", { name: "# Models" })).toBeVisible();
   await expect(page.locator(".room-agents .room-agent-model")).toHaveText(["Opus"]);
@@ -241,6 +247,30 @@ test("a new room's agent is found by name and set to a model there, which it ans
   });
 });
 
+/** Picks each option in turn within one task of the page, so the host's answer to a pick can't arrive before the next. */
+const pickBeforeTheHostAnswers = (scope: Locator, picks: { select: string; option: string }[]) =>
+  scope.evaluate(async (element, picks) => {
+    for (const { select: name, option } of picks) {
+      const select = element.querySelector<HTMLSelectElement>(`select[aria-label="${CSS.escape(name)}"]`)!;
+      select.value = [...select.options].find(({ text }) => text === option)!.value;
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      await Promise.resolve();
+    }
+  }, picks);
+
+/** Sizes the window so the room's bar is about this wide, the canvas beside the room taking its share of the rest. */
+async function sizeRoomBarTo(page: Page, width: number) {
+  const bar = page.locator(".room-header:visible");
+  const barWidthAt = async (windowWidth: number) => {
+    await page.setViewportSize({ width: windowWidth, height: 800 });
+    return (await bar.boundingBox())!.width;
+  };
+  const [narrow, wide] = [await barWidthAt(1200), await barWidthAt(1600)];
+  await barWidthAt(Math.round(1200 + ((width - narrow) * 400) / (wide - narrow)));
+}
+
+const endsInEllipsis = (label: Locator) => label.evaluate((element) => element.scrollWidth > element.clientWidth);
+
 /** Whole, on one line: its text neither wraps nor ends in an ellipsis. */
 const onOneLineWhole = (name: Locator) =>
   name.evaluate((element) => {
@@ -261,16 +291,26 @@ test("the people of a room fit their popover, an agent's long name on one line w
   const effort = people.getByRole("combobox", { name: `Effort of ${agent}` });
 
   await page.locator(".room-here-count").click();
-  await model.selectOption({ label: longModel });
-  await expect(page.locator(".room-agents .room-agent-model")).toHaveText([longModel]);
-  await effort.selectOption({ label: "High" });
-  await expect(effort).toHaveValue("high");
+  await test.step("a model and an effort picked in quick succession both stay, the effort never undoing the model", async () => {
+    await pickBeforeTheHostAnswers(people, [
+      { select: `Model of ${agent}`, option: longModel },
+      { select: `Effort of ${agent}`, option: "High" },
+    ]);
+    await expect(effort).toHaveValue("high");
+    await expect(model).toHaveValue(longModel);
+    await page.reload();
+    await expect(page.locator(".room-agents .room-agent-model")).toHaveText([longModel]);
+    await page.locator(".room-here-count").click();
+    await expect(model).toHaveValue(longModel);
+    await expect(effort).toHaveValue("high");
+  });
   await effort.focus();
   await expectPopoverFits(people);
   const name = people.locator(".room-people-agent-name");
   expect(await onOneLineWhole(name)).toBe(true);
   expect((await model.boundingBox())!.y).toBeGreaterThanOrEqual((await name.boundingBox())!.y + (await name.boundingBox())!.height);
   await expect(model).toHaveAttribute("data-hint", longModel);
+  await expect(effort).not.toHaveAttribute("data-hint");
   await page.keyboard.press("Escape");
 
   await page.setViewportSize({ width: 540, height: 860 });
@@ -288,6 +328,50 @@ test("the people of a room fit their popover, an agent's long name on one line w
     });
     await expect.poll(async () => (await people.boundingBox())!.width).toBeGreaterThan(400);
     await expectPopoverFits(people);
+  });
+});
+
+test("with a long model, the room's bar keeps to one line by cutting the agent's chip short, whole in a hint, and the room's settings give the agent's name the room it needs", async ({ page }) => {
+  const agent = "Claude Local Kimi";
+  const longModel = "kimi-k3-preview (sonnet-compatible, 512k context)";
+  await signIn(page, host);
+  const profiles = await createProfile(page, agent, `OPENCODE_FAKE_ACP_MODES=1\nOPENCODE_FAKE_ACP_MODELS=1\nOPENCODE_FAKE_ACP_EXTRA_MODEL='${longModel}'`, "", "opencode");
+  await profiles.getByRole("button", { name: "Close" }).click();
+  await createRoom(page, "Kimi", [agent, "Builder"]);
+  await page.locator(".room-here-count").click();
+  await page.getByRole("dialog", { name: "People in the room" }).getByRole("combobox", { name: `Model of ${agent}` }).selectOption({ label: longModel });
+  await page.keyboard.press("Escape");
+  const bar = page.locator(".room-header:visible");
+  const chipLabel = (name: string) => bar.locator(".room-agent-label", { hasText: name });
+  await expect(chipLabel(agent).locator(".room-agent-model")).toHaveText(longModel);
+  const inviteBesideTitle = async () => {
+    const [title, invite] = [await bar.locator(".room-title").boundingBox(), await bar.getByRole("button", { name: "Invite someone" }).boundingBox()];
+    return invite!.y < title!.y + title!.height;
+  };
+
+  await test.step("in a bar 880px wide, Invite someone stays on the line of the room's name, and only the long chip is cut short", async () => {
+    await sizeRoomBarTo(page, 880);
+    expect(await inviteBesideTitle()).toBe(true);
+    expect(await endsInEllipsis(chipLabel(agent))).toBe(true);
+    await expect(chipLabel(agent)).toHaveAttribute("data-hint", `${agent} · ${longModel}`);
+    expect(await endsInEllipsis(chipLabel("Builder"))).toBe(false);
+    await expect(chipLabel("Builder")).not.toHaveAttribute("data-hint");
+  });
+
+  await test.step("in a bar too narrow for a few letters of each chip, the bar wraps", async () => {
+    await sizeRoomBarTo(page, 460);
+    expect(await inviteBesideTitle()).toBe(false);
+  });
+
+  await test.step("the room's settings show the agent's whole name beside its model and effort, and cut it short with a hint only where too narrow", async () => {
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    const settings = await openRoomSettings(page, "Kimi", "Agents");
+    const name = settings.locator(".room-settings-agent-name", { hasText: agent });
+    expect(await onOneLineWhole(name)).toBe(true);
+    await expect(name).not.toHaveAttribute("data-hint");
+    await name.evaluate((element) => (element.closest("li")!.style.width = "120px"));
+    await expect(name).toHaveAttribute("data-hint", agent);
+    expect(await endsInEllipsis(name)).toBe(true);
   });
 });
 

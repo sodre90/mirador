@@ -4,6 +4,7 @@ import { categoryChoices } from "../shared/config-options.ts";
 import type { Conversation, Profile } from "../shared/model.ts";
 import type { RoomAgentModel } from "../shared/rooms.ts";
 import { connection } from "./connection.ts";
+import { chosenLabelCutShort, useCutShort } from "./cut-short.tsx";
 import { t } from "./i18n/index.ts";
 import { useSentChoice } from "./sent-choice.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
@@ -66,19 +67,21 @@ const nameOf = (choices: SessionConfigSelectOption[], value: string | null | und
 
 /**
  * One of the agent's choices, or while none is chosen in the room, what it runs on as its profile says: its
- * conversation's current choice, else its profile's, by name. Once chosen, only the agent's own choices are offered.
+ * conversation's current choice, else its profile's, by name, whole in a hint where the select cuts it short. Once
+ * chosen, only the agent's own choices are offered.
  */
-function ChoiceSelect({ label, choices, chosen, current, onChange }: { label: string; choices: SessionConfigSelectOption[]; chosen: string | null; current: string | null; onChange: (value: string) => void }) {
-  const [shown, choose] = useSentChoice<string | null>(chosen, (value) => value !== null && onChange(value));
+function ChoiceSelect({ label, choices, shown, current, onChange }: { label: string; choices: SessionConfigSelectOption[]; shown: string | null; current: string | null; onChange: (value: string) => void }) {
   const unlisted = shown !== null && !choices.some(({ value }) => value === shown);
   const shownName = nameOf(choices, shown) ?? nameOf(choices, current) ?? words.asItsProfile;
+  const [select, cutShort] = useCutShort<HTMLSelectElement>(chosenLabelCutShort, shownName);
   return (
     <select
+      ref={select}
       className="room-agent-choice-select"
       aria-label={label}
-      data-hint={shownName}
+      data-hint={cutShort ? shownName : undefined}
       value={shown ?? ""}
-      onChange={(event) => choose(event.target.value)}
+      onChange={(event) => onChange(event.target.value)}
       onClick={(event) => event.stopPropagation()}
     >
       {shown === null && <option value="">{shownName}</option>}
@@ -92,7 +95,10 @@ function ChoiceSelect({ label, choices, chosen, current, onChange }: { label: st
   );
 }
 
-/** The model a room's agent runs on and its effort, shown quietly and changed in place; nothing while its agent offers none. */
+/**
+ * The model a room's agent runs on and its effort, shown quietly and changed in place; nothing while its agent offers
+ * none. Each pick goes with the other as last picked, so a pick made before the host kept the one before never undoes it.
+ */
 export function ModelChoice({
   agentName,
   profile,
@@ -107,21 +113,15 @@ export function ModelChoice({
   onChange: (model: RoomAgentModel) => void;
 }) {
   const { models, efforts, takesModelNextSession } = useModelChoices(profile?.id ?? null, conversation);
+  const [model, pickModel] = useSentChoice(chosen.model, (picked) => onChange({ model: picked, effort }));
+  const [effort, pickEffort] = useSentChoice(chosen.effort, (picked) => onChange({ model, effort: picked }));
   if (!profile || models.length === 0) return null;
   const live = conversation?.configOptions ?? [];
   return (
     <>
-      <ChoiceSelect label={words.modelOf(agentName)} choices={models} chosen={chosen.model} current={currentOf(live, "model") ?? profile.model} onChange={(model) => onChange({ ...chosen, model })} />
-      {efforts.length > 0 && (
-        <ChoiceSelect
-          label={words.effortOf(agentName)}
-          choices={efforts}
-          chosen={chosen.effort}
-          current={currentOf(live, "thought_level") ?? profile.effort}
-          onChange={(effort) => onChange({ ...chosen, effort })}
-        />
-      )}
-      {takesModelNextSession && chosen.model !== null && <span className="hint room-model-next-session">{words.modelFromNextSession}</span>}
+      <ChoiceSelect label={words.modelOf(agentName)} choices={models} shown={model} current={currentOf(live, "model") ?? profile.model} onChange={pickModel} />
+      {efforts.length > 0 && <ChoiceSelect label={words.effortOf(agentName)} choices={efforts} shown={effort} current={currentOf(live, "thought_level") ?? profile.effort} onChange={pickEffort} />}
+      {takesModelNextSession && model !== null && <span className="hint room-model-next-session">{words.modelFromNextSession}</span>}
     </>
   );
 }

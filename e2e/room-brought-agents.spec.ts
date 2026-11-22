@@ -110,6 +110,17 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     await expect(agentChip(ann)).toHaveAttribute("data-hint", "On Mia's computer");
   });
 
+  await test.step("Ann's list of who is here shows it as Mia's, and fits it without scrolling sideways", async () => {
+    await ann.locator(".room-here-count").click();
+    const popover = ann.locator(".room-people");
+    await expect(popover).toContainText("Mia's Coder");
+    await expect(popover.locator(".room-agent-brought")).toBeVisible();
+    expect(await popover.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await screenshot(ann, "people-here-with-brought-agent");
+    await ann.keyboard.press("Escape");
+    await expect(popover).toHaveCount(0);
+  });
+
   await test.step("Ann's task waits on Mia's Mirador as a card with who wrote it, in what role, where, and all of it", async () => {
     await tagCoder("SAY Weeded the beds");
     await expect(coderConversation(mia).locator(".waiting-pill")).toBeVisible();

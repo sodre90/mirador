@@ -7,6 +7,7 @@ import { broughtAgentName, ROOM_ROLES, type Room, type RoomAgent, type RoomInvit
 import { agentMarks } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
+import { HintedWhenCutShort } from "./cut-short.tsx";
 import { timeOf } from "./Devices.tsx";
 import { formatNumber, t } from "./i18n/index.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
@@ -207,14 +208,18 @@ function AgentsTab({ room, profiles, people, roomConversations }: { room: Room; 
         <span className={`avatar agent-${profile?.harness ?? "gone"}`} aria-hidden="true">
           {profile ? agentMarks[profile.harness] : "?"}
         </span>
-        <span className="room-settings-row-name">{name}</span>
-        <ModelChoice
-          agentName={name}
-          profile={profile}
-          conversation={roomConversations.find(({ id }) => id === conversationId)}
-          chosen={{ model, effort }}
-          onChange={(chosen) => connection.send({ type: "room.set-agent-model", roomId: room.id, profileId, ...chosen })}
-        />
+        <HintedWhenCutShort className="room-settings-row-name room-settings-agent-name" whole={name}>
+          {name}
+        </HintedWhenCutShort>
+        <span className="room-settings-agent-choices">
+          <ModelChoice
+            agentName={name}
+            profile={profile}
+            conversation={roomConversations.find(({ id }) => id === conversationId)}
+            chosen={{ model, effort }}
+            onChange={(chosen) => connection.send({ type: "room.set-agent-model", roomId: room.id, profileId, ...chosen })}
+          />
+        </span>
         <ConfirmButton
           className="link danger"
           label={words.removeAgent(name)}

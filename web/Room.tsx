@@ -40,6 +40,7 @@ import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames } from "./Chat.tsx";
 import { connection } from "./connection.ts";
+import { HintedWhenCutShort } from "./cut-short.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
 import type { EditRequest } from "./edit-approval.ts";
 import { hints } from "./hints.ts";
@@ -494,7 +495,7 @@ function ThreadColumn({
         {asked.map((message) => (
           <div key={message.id} className="room-thread-turn">
             <RoomEntry message={message} agentsById={agentsById} />
-            {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} />}
+            {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} />}
           </div>
         ))}
         {workingOn && <div className="working">{workingLine}</div>}
@@ -550,15 +551,29 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
 type RoleShown = "owner" | RoomRole | null;
 
 /**
- * The model an agent of the room runs on, quietly beside its name: the one chosen in the room, else the one its session
- * is on, by the name its session lists, else the one its agent offered when this page asked it.
+ * The model an agent of the room runs on: the one chosen in the room, else the one its session is on, by the name its
+ * session lists, else the one its agent offered when this page asked it.
  */
-function ModelShown({ agent }: { agent: RoomAgentShown }) {
+function modelNameOf(agent: RoomAgentShown) {
   const live = agent.conversation?.configOptions ?? [];
   const value = agent.model.model ?? chosenModel(live)?.id ?? agent.profile?.model;
   const listed = categoryChoices(live, "model").length > 0 || !agent.profile ? live : offeredAlready(agent.profile.id);
-  const name = value && (categoryChoices(listed, "model").find((choice) => choice.value === value)?.name ?? value);
-  return name ? <span className="room-agent-model">{name}</span> : null;
+  return value ? (categoryChoices(listed, "model").find((choice) => choice.value === value)?.name ?? value) : null;
+}
+
+/** An agent in the room's bar: its mark and name, and for the owner its model quietly beside them; cut short where the bar is narrow, whole in a hint then. */
+function AgentChip({ agent, showsModel }: { agent: RoomAgentShown; showsModel: boolean }) {
+  const model = showsModel ? modelNameOf(agent) : null;
+  const whereItRuns = agent.brought && (agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer));
+  return (
+    <li className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={whereItRuns || undefined}>
+      <HintedWhenCutShort className="room-agent-label" whole={[agent.name, model, whereItRuns].filter(Boolean).join(" · ")}>
+        {agent.harness ? `${agentMarks[agent.harness]} ` : ""}
+        {agent.name}
+        {model && <span className="room-agent-model">{model}</span>}
+      </HintedWhenCutShort>
+    </li>
+  );
 }
 
 /** The room's people as this page knows them, each with their role where it is known: the owner, everyone the room lets in, and whoever else is here now. */
@@ -751,15 +766,13 @@ export function RoomView({
       <header className="chat-header room-header" data-pane-bar>
         <LayoutToggles />
         <h2 className="room-title"># {room.name}</h2>
-        <ul className="room-agents" aria-label={words.agents}>
-          {agents.map((agent) => (
-            <li key={agent.profileId} className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={agent.brought && (agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer))}>
-              {agent.harness ? `${agentMarks[agent.harness]} ` : ""}
-              {agent.name}
-              {owns && !agent.brought && <ModelShown agent={agent} />}
-            </li>
-          ))}
-        </ul>
+        {agents.length > 0 && (
+          <ul className="room-agents" aria-label={words.agents}>
+            {agents.map((agent) => (
+              <AgentChip key={agent.profileId} agent={agent} showsModel={owns && !agent.brought} />
+            ))}
+          </ul>
+        )}
         {presence && <RoomPeople room={room} agents={agents} here={presence.here} ownerId={ownerId} owns={owns} />}
         <MuteToggle roomId={room.id} muted={muted} />
         {owns && (

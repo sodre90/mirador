@@ -898,12 +898,12 @@ export function Timestamp({ at }: { at: number }) {
   );
 }
 
-function authorName(author: Author, harness: HarnessId) {
+function authorName(author: Author, agentName: string) {
   if (writtenByAPerson(author)) return <PersonName personId={author.personId} />;
   if (typeof author === "object") return <span data-hint={hints.pluginMessage}>{words.author.fromPlugin(author.plugin)}</span>;
   if (author === "mirador") return <span data-hint={hints.miradorMessage}>{words.author.fromMirador}</span>;
   if (author === "script") return <span data-hint={hints.scriptMessage}>{words.author.fromScript}</span>;
-  return agentNames[harness];
+  return agentName;
 }
 
 /** The events' timeline; while a reply streams in, only its last block changes, so the other entries are not rendered again. */
@@ -921,12 +921,15 @@ const TimestampedEntry = memo(function TimestampedEntry({
   block,
   startsGroup,
   harness,
+  agentName,
   conversationId,
   endsReply,
 }: {
   block: TimelineBlock;
   startsGroup: boolean;
   harness: HarnessId;
+  /** What the agent's replies are headed with. */
+  agentName: string;
   conversationId: string;
   /** Whether it is the turn's last text, under which the whole reply can be copied. */
   endsReply: boolean;
@@ -938,7 +941,7 @@ const TimestampedEntry = memo(function TimestampedEntry({
       <div className="entry-body">
         {startsGroup && author && (
           <div className="author">
-            {authorName(author, harness)}
+            {authorName(author, agentName)}
             <Timestamp at={block.at} />
           </div>
         )}
@@ -950,9 +953,10 @@ const TimestampedEntry = memo(function TimestampedEntry({
 
 /**
  * Events of a conversation drawn as its timeline draws them, with its approvals, but without its bars or message box: a
- * room's thread shows its agent's work so. Its turns cannot be undone from there.
+ * room's thread shows its agent's work so, its replies headed with the agent's name in the room. Its turns cannot be
+ * undone from there.
  */
-export function TimelineOfEvents({ conversation, events }: { conversation: Conversation; events: StoredEvent[] }) {
+export function TimelineOfEvents({ conversation, events, agentName }: { conversation: Conversation; events: StoredEvent[]; agentName: string }) {
   const built = useTimeline(events);
   const timeline = useMemo(() => built.map((block) => (block.kind === "user" ? { ...block, turnSeq: undefined } : block)), [built]);
   const timelineNow = useRef(timeline);
@@ -974,6 +978,7 @@ export function TimelineOfEvents({ conversation, events }: { conversation: Conve
                   block={block}
                   startsGroup={index === 0 || startsAuthorGroup(timeline, index)}
                   harness={conversation.harness}
+                  agentName={agentName}
                   conversationId={conversation.id}
                   endsReply={endsOfReplies.has(block.key)}
                 />
@@ -2445,6 +2450,7 @@ export function ChatPanel({
                               block={block}
                               startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
                               harness={conversation.harness}
+                              agentName={agentNames[conversation.harness]}
                               conversationId={conversation.id}
                               endsReply={endsOfReplies.has(block.key)}
                             />

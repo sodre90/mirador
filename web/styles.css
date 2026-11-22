@@ -9765,9 +9765,16 @@ button.link.more-rows {
   font-weight: 600;
 }
 
+/*
+ * The chips take what the bar has left and cut their labels short, the longest first and down to a few letters, before
+ * the bar wraps: a grid shares the room out equally and gives a chip no more than its whole label.
+ */
 .room-agents {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, max-content);
+  flex: 1 1 0;
+  min-width: min(100%, calc(96px * var(--font-scale)));
   gap: 4px;
   margin: 0;
   padding: 0;
@@ -9776,6 +9783,13 @@ button.link.more-rows {
 
 .room-agents .agent-chip::after {
   content: none;
+}
+
+.room-agent-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .room-here-count {
@@ -10638,6 +10652,7 @@ select.room-agent-choice-select:focus-visible {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .room-settings-row-name {
@@ -10646,6 +10661,23 @@ select.room-agent-choice-select:focus-visible {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/*
+ * An agent's name keeps the room it needs beside its avatar; its model and effort move under it, at the right, before
+ * it is cut short.
+ */
+.room-settings-agent-name {
+  flex: 1 1 auto;
+  max-width: calc(100% - 28px);
+}
+
+.room-settings-agent-choices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 4px;
+  margin-left: auto;
 }
 
 .room-add-person,
