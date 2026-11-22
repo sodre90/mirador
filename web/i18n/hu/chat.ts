@@ -58,6 +58,7 @@ export const chat: Messages["chat"] = {
     now: (step) => `most: ${step}`,
     atWork: "Dolgozó alágensek",
     tokens: (input, output) => `${input} be · ${output} ki`,
+    close: "Kártya bezárása",
   },
   permission: {
     approvalsWaiting: "Várakozó jóváhagyások",

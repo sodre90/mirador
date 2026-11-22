@@ -126,4 +126,18 @@ test("a subagent's work folds into its card, and the header counts the subagents
     await expect(watchLatest, "a call left unfinished is no longer shown running").toHaveClass(/tool-pending/);
     await expect(lint).toHaveClass(/tool-pending/);
   });
+
+  await test.step("a card taller than the conversation closes from its end too, and keeps its bar in sight", async () => {
+    const closeAtEnd = (card: Locator) => card.getByRole("button", { name: "Close card" });
+    const watchBar = watch.locator(":scope > summary");
+    await expect(explore).toHaveAttribute("open");
+    await expect(closeAtEnd(explore), "a short card closes from its bar alone").toHaveCount(0);
+    await expect(watch).toHaveAttribute("open");
+    await closeAtEnd(watch).scrollIntoViewIfNeeded();
+    await expect(watchBar).not.toBeInViewport();
+    await closeAtEnd(watch).click();
+    await expect(watch).not.toHaveAttribute("open");
+    await expect(watchBar).toBeInViewport();
+    await expect(closeAtEnd(watch)).toHaveCount(0);
+  });
 });

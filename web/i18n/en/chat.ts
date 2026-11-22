@@ -64,6 +64,7 @@ export const chat = {
     now: (step: string) => `now: ${step}`,
     atWork: "Subagents at work",
     tokens: (input: string, output: string) => `${input} in · ${output} out`,
+    close: "Close card",
   },
   permission: {
     approvalsWaiting: "Approvals waiting",

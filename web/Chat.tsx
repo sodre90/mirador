@@ -502,8 +502,28 @@ function useClock(ticking: boolean) {
   return now;
 }
 
+/** Whether the element stands taller than the conversation's view, so that its top is out of sight while its end is in it. */
+function useTallerThanTimeline(ref: RefObject<HTMLElement | null>) {
+  const [taller, setTaller] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    const timeline = element?.closest(".timeline");
+    if (!element || !timeline) return;
+    const observer = new ResizeObserver(() => setTaller(element.offsetHeight > timeline.clientHeight));
+    observer.observe(element);
+    observer.observe(timeline);
+    return () => observer.disconnect();
+  }, [ref]);
+  return taller;
+}
 
 function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock; conversationId: string; harness: HarnessId }) {
+  const card = useRef<HTMLDetailsElement>(null);
+  const closesAtItsEnd = useTallerThanTimeline(card);
+  const close = () => {
+    card.current!.open = false;
+    card.current!.scrollIntoView({ block: "nearest" });
+  };
   const state = useContext(SubagentStates).get(block.toolCallId) ?? "done";
   const now = useClock(state === "running");
   const { subagent_type, model, prompt } = subagentInput(block);
@@ -519,7 +539,7 @@ function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock
     runsInBackground(block) && words.subagent.inBackground,
   ].filter(Boolean);
   return (
-    <details className={`tool subagent subagent-${state}`} data-tool-call-id={block.toolCallId}>
+    <details ref={card} className={`tool subagent subagent-${state}`} data-tool-call-id={block.toolCallId}>
       <summary>
         <span className="tool-status" aria-label={words.subagent.state[state]}>
           {subagentIcons[state]}
@@ -547,6 +567,11 @@ function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock
       ))}
       <RawJson label={words.tool.input} value={block.rawInput} />
       <RawOutput block={block} conversationId={conversationId} />
+      {closesAtItsEnd && (
+        <button type="button" className="link subagent-close" onClick={close}>
+          {words.subagent.close}
+        </button>
+      )}
     </details>
   );
 }

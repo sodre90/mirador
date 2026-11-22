@@ -3575,6 +3575,11 @@ button.approval-waiting:hover {
   display: none;
 }
 
+button.subagent-close {
+  display: block;
+  margin-top: 4px;
+}
+
 .tool-output,
 .raw pre {
   background: var(--code-bg);

@@ -58,6 +58,7 @@ export const chat: Messages["chat"] = {
     now: (step) => `当前：${step}`,
     atWork: "子 Agent 工作中",
     tokens: (input, output) => `输入 ${input} · 输出 ${output}`,
+    close: "收起卡片",
   },
   permission: {
     approvalsWaiting: "待批准",
