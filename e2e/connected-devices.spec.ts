@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
-import { openSettings, signIn } from "./helpers.ts";
+import { openSettings, reloadFromRestartedHost, signIn } from "./helpers.ts";
 import { spawnProgramSync, TestHost } from "./test-host.ts";
 
 const host = new TestHost();
@@ -106,7 +106,7 @@ test("the devices connected now show in the sidebar, in Settings → Devices wit
   });
 
   await test.step("a person's device, connected to the rooms they are in, is left out of the sidebar's count, and mirador devices says whose it is", async () => {
-    await page.reload();
+    await reloadFromRestartedHost(page);
     const mia = host.admitPerson("Mia");
     const miaContext = await browser.newContext();
     await miaContext.addCookies([mia.cookie]);

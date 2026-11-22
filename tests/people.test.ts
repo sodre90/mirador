@@ -168,7 +168,7 @@ test("a device let in with an invite is the owner's, and signs in as the owner, 
   const store = new Store(":memory:");
   const devices = new DeviceService(store);
   const { device, token } = devices.join(devices.invite().code, "Phone")!;
-  const signedIn = signedInWith("browser-token", devices, store.ownerId());
+  const signedIn = (request: Request) => signedInWith("browser-token", devices, store.ownerId())(request, true);
   const withCookie = (value: string) => new Request("http://127.0.0.1/", { headers: { cookie: `${TOKEN_COOKIE}=${value}` } });
 
   expect(device.personId).toBe(store.ownerId());
@@ -177,13 +177,24 @@ test("a device let in with an invite is the owner's, and signs in as the owner, 
   expect(signedIn(withCookie("not-a-token"))).toBeNull();
 });
 
+test("the host's own token signs in nobody from another computer, nor beside a device's token there, while a device's token alone still signs in", () => {
+  const store = new Store(":memory:");
+  const devices = new DeviceService(store);
+  const { device, token } = devices.join(devices.invite().code, "Phone")!;
+  const signedInFromAfar = (cookie: string) => signedInWith("browser-token", devices, store.ownerId())(new Request("https://box.example.ts.net/", { headers: { cookie } }), false);
+
+  expect(signedInFromAfar(`${TOKEN_COOKIE}=browser-token`)).toBeNull();
+  expect(signedInFromAfar(`${TOKEN_COOKIE}=${token}; ${TOKEN_COOKIE}=browser-token`)).toBeNull();
+  expect(signedInFromAfar(`${TOKEN_COOKIE}=${token}`)).toEqual({ deviceId: device.id, personId: store.ownerId(), isOwner: true });
+});
+
 test("a request with two token cookies signs in the owner when one is the host's own, which no other page knows, and otherwise nobody, as a page of another port of this computer can add the second", () => {
   const store = new Store(":memory:");
   const devices = new DeviceService(store);
   store.insertPerson({ id: "mia", name: "Mia", color: null });
   const { token } = devices.admit("Mia's laptop", "mia");
   const { token: phone } = devices.join(devices.invite().code, "Phone")!;
-  const signedIn = signedInWith("browser-token", devices, store.ownerId());
+  const signedIn = (request: Request) => signedInWith("browser-token", devices, store.ownerId())(request, true);
   const withCookies = (cookie: string) => new Request("http://127.0.0.1/", { headers: { cookie } });
   const owner = { deviceId: null, personId: store.ownerId(), isOwner: true };
 
@@ -200,7 +211,7 @@ test("a device of another person signs in as that person, who is not the owner",
   const devices = new DeviceService(store);
   store.insertPerson({ id: "mia", name: "Mia", color: null });
   const { device, token } = devices.admit("Mia's laptop", "mia");
-  const signedIn = signedInWith("browser-token", devices, store.ownerId());
+  const signedIn = (request: Request) => signedInWith("browser-token", devices, store.ownerId())(request, false);
 
   expect(store.listPeople().map(({ id }) => id)).toEqual([store.ownerId(), "mia"]);
   expect(signedIn(new Request("http://127.0.0.1/", { headers: { cookie: `${TOKEN_COOKIE}=${token}` } }))).toEqual({ deviceId: device.id, personId: "mia", isOwner: false });

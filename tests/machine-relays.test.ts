@@ -89,10 +89,10 @@ describe("a machine's canvas assets", () => {
     return web.url.origin;
   }
 
-  function relaysFor(origin: string) {
+  function relaysFor(origin: string, signedInAsOwner: (request: Request, fromThisComputer: boolean) => boolean = () => true) {
     const store = new Store(":memory:");
     store.insertMachine({ id: "home", name: "Home server", origin, createdAt: 1 });
-    relays = new MachineRelays(store, freePorts(3), "http://127.0.0.1:4601", THIS_HOSTS_PAGES, () => true, () => {}, () => {}, unusedOwnerKey);
+    relays = new MachineRelays(store, freePorts(3), "http://127.0.0.1:4601", THIS_HOSTS_PAGES, signedInAsOwner, () => {}, () => {}, unusedOwnerKey);
     relays.startAll();
     return `http://127.0.0.1:${store.findMachine("home")!.relayPort}`;
   }
@@ -106,6 +106,14 @@ describe("a machine's canvas assets", () => {
     expect([pageRelay, "http://127.0.0.1:4601"]).not.toContain(canvasRelay);
     const answer = await fetch(`${canvasRelay}/apps/media/6af5ae1363fad878/view.js`, { headers: { cookie: "mirador_token=this-hosts-own" } });
     expect(await answer.json()).toEqual({ path: "/apps/media/6af5ae1363fad878/view.js", cookie: null, relay: canvasRelay });
+  });
+
+  test("of a machine of this computer's owner, take this host's own sign-in only from this computer itself, not passed on by a proxy", async () => {
+    const pageRelay = relaysFor(machineThatSays("its canvas origin"), (_, fromThisComputer) => fromThisComputer);
+    const statusWith = (headers: Record<string, string>) => fetch(`${pageRelay}/`, { headers }).then(({ status }) => status);
+    expect(await statusWith({})).toBe(200);
+    expect(await statusWith({ "x-forwarded-for": "100.101.5.7", "x-forwarded-proto": "https" })).toBe(401);
+    expect(await statusWith({ "tailscale-user-login": "someone@github" })).toBe(401);
   });
 
   test("register no service worker of the machine", async () => {

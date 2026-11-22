@@ -131,7 +131,7 @@ bun install
 bun start
 ```
 
-Open the `http://127.0.0.1:4600/auth?code=…` link the host prints; it signs one browser in with a cookie, works once, and expires after 10 minutes. `bin/mirador sign-in` makes a new link for the next browser. Ctrl+C stops the host, and the agents with it.
+Open the `http://127.0.0.1:4600/auth?code=…` link the host prints in a browser on this computer; it signs that browser in with a cookie, works once, and expires after 10 minutes. `bin/mirador sign-in` makes a new link for the next browser here. Sign-in links work only on the computer Mirador runs on: other devices join with an invite from *Settings → Devices*. Ctrl+C stops the host, and the agents with it.
 
 ### On Windows
 
@@ -441,6 +441,7 @@ A native window around Mirador, for macOS, Linux and Windows ([full details](des
 ### Security
 
 - **Signed-in browsers only**: a token cookie, set by a one-time sign-in link so the token itself never sits in browser history or a log, and origin checks that turn away other sites and clients.
+- **The host's own token works only on its computer**: in a sign-in link, a cookie or a command, it signs in only a browser or program on the computer Mirador runs on, never one that reaches it through `tailscale serve`, a proxy that says it passed the request on, the network port, the peer-to-peer tunnel or another Mirador. A bare TCP forward to Mirador's port, such as `ssh -L` or `tailscale serve --tcp`, can't be told apart from this computer, so don't put one in front of it. Every other device signs in with a token of its own, from an invite or by asking to join.
 - **Canvas pages are sandboxed** on a separate origin: they can't reach the host, the page around them or the network.
 - **Per-device tokens**, revocable at once. Other sites can't make your machine join them.
 - **The network port** exposes no sign-in link, no MCP endpoint and no script-message route.

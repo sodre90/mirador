@@ -15,6 +15,7 @@ import { newKeyPair } from "./p2p/identity.ts";
 import { errorResponse, problemResponse } from "./problem-response.ts";
 import { sameSecret } from "./sign-in.ts";
 import type { Store } from "./store.ts";
+import { fromThisComputer } from "./from-this-computer.ts";
 import { HostProblemError, PROBLEM_HEADER, problemInHeader, type HostProblem } from "../shared/host-problems.ts";
 import { checkedDeviceTunnel, placesIn, type InviteTunnel } from "../shared/tunnel.ts";
 
@@ -237,7 +238,7 @@ export class MachineRelays {
     private readonly canvasAssetsOrigin: string,
     /** Where this host's own page is served on this computer, which alone may frame a machine of its owner's. */
     private readonly thisHostsPages: string[],
-    private readonly signedInAsOwner: (request: Request) => boolean,
+    private readonly signedInAsOwner: (request: Request, fromThisComputer: boolean) => boolean,
     private readonly joined: (machineId: string) => void,
     private readonly signedOut: (machineId: string) => void,
     private readonly ownerKey: OwnerKey,
@@ -534,7 +535,7 @@ export class MachineRelays {
     if (asksForServiceWorker(request)) return noServiceWorker();
     if (machine.asPerson) return this.relayForPerson(machine, relayOrigin, request, server);
     if (askedFromAnotherPage(request)) return new Response("forbidden site", { status: 403 });
-    if (!this.signedInAsOwner(request)) return new Response("unauthorized", { status: 401 });
+    if (!this.signedInAsOwner(request, fromThisComputer(request, server.requestIP(request)?.address, port))) return new Response("unauthorized", { status: 401 });
     const origin = request.headers.get("origin");
     if (origin !== null && !relayOrigins.includes(origin)) return new Response("forbidden origin", { status: 403 });
 

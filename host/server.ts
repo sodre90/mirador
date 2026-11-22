@@ -91,6 +91,7 @@ import type { MachineWatch } from "./machine-watch.ts";
 import type { MachineTunnels } from "./machine-tunnels.ts";
 import { wayToMachine } from "./machine-trust.ts";
 import { sameSecret, signedInWith } from "./sign-in.ts";
+import { BROWSER_TOKEN_ONLY_HERE, fromThisComputer } from "./from-this-computer.ts";
 import { MAX_DROPPED_FILE_BYTES, type DroppedFiles } from "./dropped-files.ts";
 import { MAX_IMAGE_BYTES, type ImageStore } from "./images.ts";
 import { imagesOf, lowDataEvent, pageEvent, wholeToolOutput } from "./low-data.ts";
@@ -317,7 +318,24 @@ export function startServer(services: HostServices) {
       ? new Response(certificate.authority, { headers: { "Content-Type": "application/x-pem-file", "Content-Disposition": 'attachment; filename="mirador-ca.pem"' } })
       : new Response("This Mirador has no certificate authority of its own.", { status: 404 });
 
-  const signedInWithCookie = signedInWith(config.browserToken, devices, store.ownerId());
+  /** Requests the 127.0.0.1 listener took from a browser or process on this computer itself, which alone the host's own token signs in. */
+  const madeOnThisComputer = new WeakSet<Request>();
+  function noteWhetherMadeOnThisComputer(request: Request, server: Bun.Server<SocketData>) {
+    if (fromThisComputer(request, server.requestIP(request)?.address, config.port)) madeOnThisComputer.add(request);
+  }
+
+  /** Marks each request the 127.0.0.1 listener takes from this computer itself, before the route's own checks run. */
+  function onLoopbackListener<R extends Record<string, unknown>>(routes: R): R {
+    return withEachHandler(routes, (_, handler) => (request, server) => {
+      noteWhetherMadeOnThisComputer(request, server as Bun.Server<SocketData>);
+      return handler(request, server);
+    });
+  }
+
+  const refusedFromAfar = (request: Request) => (madeOnThisComputer.has(request) ? null : new Response(BROWSER_TOKEN_ONLY_HERE, { status: 403 }));
+
+  const cookieSignIn = signedInWith(config.browserToken, devices, store.ownerId());
+  const signedInWithCookie = (request: Request) => cookieSignIn(request, madeOnThisComputer.has(request));
   /** Through the tunnel, only the device whose socket a request arrived on signs in, and never with this machine's own token. */
   const signedInAs = (request: Request) => {
     const end = tunnelEnds.get(request);
@@ -344,6 +362,8 @@ export function startServer(services: HostServices) {
 
   function authenticate(request: Request) {
     if (!hasAllowedHost(request)) return new Response("forbidden host", { status: 403 });
+    const refused = refusedFromAfar(request);
+    if (refused) return refused;
     const url = new URL(request.url);
     if (url.hostname !== "127.0.0.1") return Response.redirect(`${config.appOrigin}${url.pathname}${url.search}`, 302);
     const code = url.searchParams.get("code");
@@ -2254,7 +2274,7 @@ export function startServer(services: HostServices) {
   /** For `mirador devices`, which signs in with the host's own token, as this machine's browser does. */
   function listDevicesForCommandLine(request: Request) {
     const listed: DevicesAndPeople = { devices: listedDevices(), people: store.listPeople(), ownerId: store.ownerId() };
-    return refusedAgentRequest(request, config.browserToken) ?? Response.json(listed);
+    return refusedFromAfar(request) ?? refusedAgentRequest(request, config.browserToken) ?? Response.json(listed);
   }
 
   function upgradeSockets(request: Request, server: Bun.Server<SocketData>) {
@@ -2306,8 +2326,11 @@ export function startServer(services: HostServices) {
     // listener keeps that default, so a device on the network cannot hold its sockets open by going quiet.
     idleTimeout: 0,
     development: config.developmentMode,
-    routes: { ...routesForDevices, ...routesForThisMachine },
-    fetch: upgradeSockets,
+    routes: onLoopbackListener({ ...routesForDevices, ...routesForThisMachine }),
+    fetch: (request, server) => {
+      noteWhetherMadeOnThisComputer(request, server);
+      return upgradeSockets(request, server);
+    },
     websocket,
   });
   const networkOptions =

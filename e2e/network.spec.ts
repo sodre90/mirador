@@ -205,10 +205,10 @@ test("the network closes a connection that goes quiet after a request, so a devi
   expect(quietFor.closedAfterMs).toBeLessThan(20_000);
 });
 
-/** Posts to the network a chunk every 2 s, 16 s in all, as a signed-in page on a slow connection does, and answers what came back. */
-function trickleToTheNetwork(path: string, headers: string[], chunks: string[]) {
+/** Posts to the network a chunk every 2 s, as a page signed in with `token` on a slow connection does, and answers what came back. */
+function trickleToTheNetwork(path: string, token: string, headers: string[], chunks: string[]) {
   const { hostname, port } = new URL(networkOrigin());
-  const signedInCookie = `${TOKEN_COOKIE}=${new URL(host.authUrl).searchParams.get("token")}`;
+  const signedInCookie = `${TOKEN_COOKIE}=${token}`;
   return new Promise<{ status: string; body: string }>((resolve) => {
     let received = "";
     const socket = connectTls({ host: hostname, port: Number(port), ca: authorityOf(host) }, async () => {
@@ -246,11 +246,17 @@ test("an image or file a device on a slow network sends still arrives, though it
   const conversationId = await startConversation(page);
   const fileChunks = Array.from({ length: 8 }, (_, index) => `line ${index} of a file that trickles in\n`);
   const imageChunks = Array.from({ length: 8 }, (_, index) => `bytes ${index} of an image`);
+  const code = /Invite code: (\S+)/.exec(host.mirador("invite"))![1]!;
+  const joined = await fetch(`${host.origin}/join`, { method: "POST", body: JSON.stringify({ code, name: "Phone" }) });
+  const { token } = (await joined.json()) as { token: string };
 
-  const [file, image] = await Promise.all([
-    trickleToTheNetwork(`/conversations/${conversationId}/files`, ["Content-Type: application/octet-stream", "X-File-Name: notes.txt"], fileChunks),
-    trickleToTheNetwork(`/conversations/${conversationId}/images`, ["Content-Type: image/png"], imageChunks),
+  const [file, image, withHostsOwnToken] = await Promise.all([
+    trickleToTheNetwork(`/conversations/${conversationId}/files`, token, ["Content-Type: application/octet-stream", "X-File-Name: notes.txt"], fileChunks),
+    trickleToTheNetwork(`/conversations/${conversationId}/images`, token, ["Content-Type: image/png"], imageChunks),
+    trickleToTheNetwork(`/conversations/${conversationId}/images`, new URL(host.authUrl).searchParams.get("token")!, ["Content-Type: image/png"], imageChunks.slice(0, 1)),
   ]);
+
+  expect(withHostsOwnToken.status, "the host's own token signs in only on this computer, never over the network").toMatch(/^HTTP\/1\.1 401 /);
 
   expect(file.status, "the file took longer to arrive than Bun lets a request take by default").toBe("HTTP/1.1 200 OK");
   expect(readFileSync((JSON.parse(file.body) as { path: string }).path, "utf8")).toBe(fileChunks.join(""));
