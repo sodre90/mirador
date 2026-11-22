@@ -25,6 +25,7 @@ import { MachineRelays } from "./machine-relays.ts";
 import { forgetSignInAt } from "./machine-sign-in.ts";
 import { MachineTunnels } from "./machine-tunnels.ts";
 import { MachineWatch } from "./machine-watch.ts";
+import { BroughtAgents } from "./brought-agents.ts";
 import { ownPageOrigins } from "./addresses.ts";
 import { ConversationSearch } from "./search.ts";
 import { signedInWith } from "./sign-in.ts";
@@ -171,7 +172,6 @@ const stopWatchingViews = watchViews(loadedPlugins, () =>
   hub.broadcast({ type: "plugins.views", installedApps: apps.installed(), canvasViews: canvasPlugins.viewPaths() }),
 );
 const rooms = new RoomService(store, hub, conversations, notifications, config.dataDir);
-conversations.hearTurnsWith(rooms);
 conversations.followsRoomRulesOf(rooms);
 const roomQuestions = new RoomQuestions(store, hub, canvas);
 const roomReading = new RoomReadingService(store, hub, notifications);
@@ -244,6 +244,19 @@ const watch = new MachineWatch(
   machineSignedOut,
   tunnels,
 );
+const broughtAgents = new BroughtAgents(store, hub, watch, conversations, notifications);
+watch.hearRoomMachinesWith({ opened: (machineId) => broughtAgents.connected(machineId), heard: (machineId, message) => broughtAgents.heard(machineId, message) });
+conversations.followsBroughtTasksOf(broughtAgents);
+conversations.hearTurnsWith({
+  turnStarted: (conversationId, turnSeq) => {
+    rooms.turnStarted(conversationId, turnSeq);
+    broughtAgents.turnStarted(conversationId, turnSeq);
+  },
+  turnEnded: (conversationId, turnSeq) => {
+    rooms.turnEnded(conversationId, turnSeq);
+    broughtAgents.turnEnded(conversationId, turnSeq);
+  },
+});
 const relays = new MachineRelays(
   store,
   config.relayPorts,
@@ -285,7 +298,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, roomQuestions, roomReading });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, roomQuestions, roomReading, broughtAgents });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

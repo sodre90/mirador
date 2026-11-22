@@ -67,6 +67,8 @@ import { RoomCanvas, RoomView } from "./Room.tsx";
 import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
 import { newRoomWorkspace, NewRoomDialog } from "./NewRoom.tsx";
 import { JoinRoomDialog, RoomInviteDialog } from "./RoomInvite.tsx";
+import { BringAgentDialog } from "./BringAgent.tsx";
+import { joinedRoomsOf } from "./RoomsSidebar.tsx";
 import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
@@ -693,6 +695,7 @@ export function App() {
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const settingsRoom = overlay?.kind === "room" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
   const invitedRoom = overlay?.kind === "room-invite" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
+  const bringingInto = overlay?.kind === "bring-agent" ? joinedRoomsOf(state.machines, state.machineStatuses).find(({ machine, room }) => machine.id === overlay.machineId && room.id === overlay.roomId) : undefined;
   const worktreesWorkspace = overlay?.kind === "worktrees" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const layoutToggles = {
     sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
@@ -764,6 +767,7 @@ export function App() {
                         <ChatPanel
                           conversation={keptConversation}
                           delegatedTasks={state.conversations.filter(({ startedBy }) => startedBy?.conversationId === keptConversation.id && !startedBy.dismissed)}
+                          broughtTasks={state.broughtTasks.filter(({ conversationId }) => conversationId === keptConversation.id)}
                           profiles={state.profiles}
                           promptTemplates={state.promptTemplates}
                           voiceSettings={state.voiceSettings}
@@ -1023,6 +1027,7 @@ export function App() {
         />
       )}
       {invitedRoom && <RoomInviteDialog key={invitedRoom.id} room={invitedRoom} devices={state.devices} onClose={closeOverlay} />}
+      {bringingInto && <BringAgentDialog machine={bringingInto.machine} room={bringingInto.room} profiles={state.profiles} workspaces={state.workspaces} onClose={closeOverlay} />}
       {overlay?.kind === "join-room" && (
         <JoinRoomDialog
           machines={state.machines}

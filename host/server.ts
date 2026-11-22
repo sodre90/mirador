@@ -29,6 +29,7 @@ import {
   type WorkspaceGroup,
   type MachineSeen,
   type Pastel,
+  type HarnessId,
   workingCopyIdOf,
 } from "../shared/model.ts";
 import { readJobWaitRequest } from "../shared/job-waits.ts";
@@ -71,6 +72,7 @@ import type { ConversationSearch } from "./search.ts";
 import type { RoomService } from "./rooms.ts";
 import type { RoomQuestions } from "./room-questions.ts";
 import type { RoomReadingService } from "./room-reading.ts";
+import type { BroughtAgents } from "./brought-agents.ts";
 import type { RoomRole } from "../shared/rooms.ts";
 import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
@@ -166,6 +168,7 @@ export interface HostServices {
   rooms: RoomService;
   roomQuestions: RoomQuestions;
   roomReading: RoomReadingService;
+  broughtAgents: BroughtAgents;
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
@@ -263,6 +266,7 @@ export function startServer(services: HostServices) {
     rooms,
     roomQuestions,
     roomReading,
+    broughtAgents,
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
@@ -658,13 +662,21 @@ export function startServer(services: HostServices) {
 
   /** Their places in the tunnel go before the devices themselves, then the sockets they had open; a person signs in only with a device of theirs. */
   function revokeDevices(deviceIds: string[], closing: { reason: string; code?: number } = { reason: "device revoked" }) {
+    const revoked = new Set(deviceIds);
+    const theirPeople = new Set(devices.list().flatMap(({ id, personId }) => (revoked.has(id) && personId !== store.ownerId() ? [personId] : [])));
     deviceIds.forEach((deviceId) => {
       p2p?.forget(deviceId);
       devices.revoke(deviceId);
     });
-    const revoked = new Set(deviceIds);
     hub.disconnectWhere((socket) => socket.data.deviceId !== null && revoked.has(socket.data.deviceId), closing.reason, closing.code);
+    takeOutAgentsOfPeopleWithoutDevices(theirPeople);
     sendDevicesToEveryPage();
+  }
+
+  /** The agents a person brought run on their own Mirador, which a person without a device here no longer reaches it through. */
+  function takeOutAgentsOfPeopleWithoutDevices(personIds: Set<string>) {
+    const withDevices = new Set(devices.list().map(({ personId }) => personId));
+    personIds.forEach((personId) => withDevices.has(personId) || rooms.takeOutAgentsOfEverywhere(personId));
   }
 
   const broadcastMachines = () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() });
@@ -1306,7 +1318,7 @@ export function startServer(services: HostServices) {
     const refused = nameRefused(name);
     if (refused) throw new HostProblemError({ code: refused });
     const named = personName(shownAsWritten(name));
-    if (readsAsMiradorsWords(named) || nameTaken(named, namesOthersGoBy(store, personId))) throw new HostProblemError({ code: "person-name-taken" });
+    if (readsAsMiradorsWords(named) || nameTaken(named, namesOthersGoBy(store, personId)) || !rooms.broughtAgentsFreeUnder(personId, named)) throw new HostProblemError({ code: "person-name-taken" });
     keepOwnProfile(personId, named, color);
     if (store.forgetNameClashesOf(personId)) store.roomsOf(personId).forEach((room) => hub.broadcast({ type: "room.upserted", room }));
   }
@@ -2143,8 +2155,42 @@ export function startServer(services: HostServices) {
         return roomQuestions.confirm(message.roomId, message.itemId, message.answers, socket.data.personId);
       case "room.mute":
         return roomReading.mute(message.roomId, socket.data.personId, message.muted);
+      case "room.set-members-bring-agents":
+        return rooms.setMembersBringAgents(message.roomId, message.allowed);
+      case "room.bring-agent": {
+        const brought = letAgentIn(message.roomId, socket.data.personId, message.name, message.harness);
+        return reply({ type: "room.agent-brought", requestId: message.requestId, personId: socket.data.personId, roomId: message.roomId, ...brought });
+      }
+      case "room.take-agent-out":
+        return rooms.takeAgentOut(message.roomId, message.agentId, socket.data.personId);
+      case "room.brought-agents-here":
+        return rooms.broughtAgentsHere(socket.data);
+      case "room.brought-task-started":
+        return rooms.broughtTaskStarted(socket.data.personId, message.roomId, message.agentId, message.taskId);
+      case "room.brought-task-answered":
+        return rooms.broughtTaskAnswered(socket.data.personId, message.roomId, message.agentId, message.taskId, message.text, message.ended);
+      case "machine.bring-agent":
+        return void Promise.resolve()
+          .then(() => broughtAgents.bring(message.machineId, message.roomId, message.profileId, message.workspaceId, message.othersTasks))
+          .then(
+            () => reply({ type: "machine.agent-brought", requestId: message.requestId, problem: null }),
+            (error) => reply({ type: "machine.agent-brought", requestId: message.requestId, ...problemFieldsOf(error, errorMessage(error)) }),
+          );
+      case "machine.take-agent-out":
+        return broughtAgents.takeOut(message.broughtId);
+      case "brought-task.answer":
+        return broughtAgents.answer(message.taskId, message.answer);
       default:
         return message satisfies never;
+    }
+  }
+
+  /** The id the room gives the agent a person brings, or why it keeps it out, which goes back to their Mirador. */
+  function letAgentIn(roomId: string, personId: string, name: string, harness: HarnessId): { agentId: string | null; problem: HostProblem | null } {
+    try {
+      return { agentId: rooms.bringAgent(roomId, personId, name, harness), problem: null };
+    } catch (error) {
+      return { agentId: null, problem: error instanceof HostProblemError ? error.problem : { code: "room-agent-not-let-in" } };
     }
   }
 
@@ -2201,6 +2247,8 @@ export function startServer(services: HostServices) {
       roomApprovals: rooms.allApprovals(),
       roomTasksWaiting: rooms.allTasksWaiting(),
       roomInvites: roomInvites.waiting(),
+      broughtAgents: broughtAgents.list().agents,
+      broughtTasks: broughtAgents.list().tasks,
       profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
       promptTemplates: store.listPromptTemplates(),
       canvasUse: store.canvasUse(),
@@ -2303,6 +2351,7 @@ export function startServer(services: HostServices) {
     },
     close(socket, code, reason) {
       hub.remove(socket);
+      if (socket.data.carriesAgents) rooms.bringerLeft(socket.data.personId);
       roomPresence.closed(socket.data);
       desktopApp.disconnected(socket);
       if (socket.data.deviceId) deviceCameOrLeft(socket.data.deviceId);

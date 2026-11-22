@@ -3,7 +3,8 @@ import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/mode
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import type { RoomPresence } from "../shared/rooms.ts";
-import { agentStandIn, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
+import { agentStandIn, broughtAgentName, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
+import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
 import type { Store } from "./store.ts";
 
@@ -16,25 +17,28 @@ type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { 
 /**
  * A room as a person in it sees it: its people by id and role alone, whom they tag and see vote, nothing of the
  * workspace its agents work in, the models the owner chose for them or what they are given, and in place of each
- * agent's conversation there, which they never open, a stand-in that names none.
+ * agent's conversation there, which they never open, a stand-in that names none; of an agent someone brought, who did,
+ * its name and kind, and whether it is here.
  */
-const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, createdAt }: Room): Room => ({
+const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, membersBringAgents, createdAt }: Room): Room => ({
   id,
   name,
   workspaceId: "",
-  agents: agents.map(({ profileId, conversationId, answering }) => ({
+  agents: agents.map(({ profileId, conversationId, answering, brought }) => ({
     profileId,
     conversationId: conversationId === null ? null : agentStandIn(id, profileId),
     answering,
     ...PROFILES_MODEL,
     variables: {},
     wholeHostEnvironment: false,
+    ...(brought && { brought: { personId: brought.personId, name: brought.name, harness: brought.harness, here: brought.here } }),
   })),
   permissions,
   people: people.map(({ personId, role }) => ({ personId, role })),
   peoplesTasksWait,
   claudeSetup: ALL_OF_CLAUDE_SETUP,
   agentsReadGuests: true,
+  membersBringAgents,
   createdAt,
 });
 
@@ -76,10 +80,19 @@ export function peopleSeenBy(store: PeopleSeen, personId: string) {
   return store.listPeople().filter(({ id }) => seen.has(id));
 }
 
+/** What the rooms call the agents people brought into them. */
+export function broughtAgentNamesIn(store: Pick<Store, "listPeople">, rooms: Room[]) {
+  const people = store.listPeople();
+  return rooms.flatMap(({ agents }) =>
+    agents.flatMap(({ brought }) => (brought ? [broughtAgentName(personGoesBy(people.find(({ id }) => id === brought.personId), PERSON_WITHOUT_A_NAME), brought.name)] : [])),
+  );
+}
+
 /** The names of the people and agents a person other than the owner sees, their own left out: whether one is taken tells them of nobody they don't see. */
 export const namesOthersGoBy = (store: PeopleSeen & Pick<Store, "listProfiles">, personId: string) => [
   ...peopleSeenBy(store, personId).flatMap(({ id, name }) => (id === personId ? [] : [name])),
   ...agentsOfRooms(store, store.roomsOf(personId)).map(({ name }) => name),
+  ...broughtAgentNamesIn(store, store.roomsOf(personId)),
 ];
 
 /**
@@ -141,6 +154,8 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       roomApprovals: [],
       roomTasksWaiting: [],
       roomInvites: [],
+      broughtAgents: [],
+      broughtTasks: [],
       profiles: agentsOf(rooms).map(agentSeen),
       promptTemplates: [],
       canvasUse: "as-needed",
@@ -228,6 +243,10 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room.approvals": HIDDEN,
     "room.presence": ({ roomId, here, writing }, socket) => shownIf(isIn(socket, roomId), { type: "room.presence", roomId, ...presenceSeen(roomId, { here, writing }, socket) }),
     "room.usage.got": HIDDEN,
+    "room.agent-brought": (message, socket) => shownIf(message.personId === socket.personId, message),
+    "room.brought-task": (message, socket) => shownIf(message.personId === socket.personId && socket.carriesAgents, message),
+    "brought-agents.listed": HIDDEN,
+    "machine.agent-brought": HIDDEN,
     "rooms.people-here": HIDDEN,
     "conversation.history": HIDDEN,
     "conversation.earlier": HIDDEN,

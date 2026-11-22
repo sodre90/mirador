@@ -3,7 +3,8 @@ import type { Reminder } from "./reminders.ts";
 import type { ClaudeSetup } from "./room-agent-setup.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
-import type { Room, RoomAgentModel, RoomApproval, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { BroughtAnswerEnd, Room, RoomAgentModel, RoomApproval, RoomAuthorRole, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { BroughtAgentHere, BroughtTaskWaiting, OthersTasks } from "./brought-agents.ts";
 import type { RoomAlert, RoomReading } from "./room-reading.ts";
 import type { RoomConfirmedAnswer, RoomQuestionVotes } from "./room-votes.ts";
 import type { RoomInviteConnect } from "./machines.ts";
@@ -409,6 +410,11 @@ export type ClientMessage =
   | { type: "machine.room-opened"; machineId: string; roomId: string }
   /** Keeps a room of a machine joined as a person quiet on this computer, whatever that machine does, or lets it call again. */
   | { type: "machine.mute-room"; machineId: string; roomId: string; muted: boolean }
+  /** Brings an agent of one of your profiles into a room of a machine joined as a person, to work in one of your workspaces; the host answers `machine.agent-brought`. */
+  | { type: "machine.bring-agent"; requestId: string; machineId: string; roomId: string; profileId: string; workspaceId: string; othersTasks: OthersTasks }
+  | { type: "machine.take-agent-out"; broughtId: string }
+  /** Your OK, or not, for a task someone else gave an agent you brought into a room. */
+  | { type: "brought-task.answer"; taskId: string; answer: "allow" | "deny" }
   | { type: "search"; requestId: string; query: string }
   /** `models` holds the model and effort chosen for each agent, by its profile id; an agent not in it takes its profile's. */
   | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[]; permissions: PermissionPreset; models: Record<string, RoomAgentModel> }
@@ -455,7 +461,19 @@ export type ClientMessage =
   /** The answer its agent gets, one for each of its questions, from the person whose task it works on or the owner. */
   | { type: "room.confirm"; roomId: string; itemId: string; answers: RoomConfirmedAnswer[] }
   /** Whether the room notifies you; muted, it still counts what you have not read. */
-  | { type: "room.mute"; roomId: string; muted: boolean };
+  | { type: "room.mute"; roomId: string; muted: boolean }
+  /** Whether the room's members may bring agents of their own Miradors into it; turned off, those already there go. */
+  | { type: "room.set-members-bring-agents"; roomId: string; allowed: boolean }
+  /** From a member's own Mirador: an agent of theirs joins the room under this name, of this kind; the host answers `room.agent-brought`. */
+  | { type: "room.bring-agent"; requestId: string; roomId: string; name: string; harness: HarnessId }
+  /** Its bringer, or the room's owner, takes an agent someone brought out of the room. */
+  | { type: "room.take-agent-out"; roomId: string; agentId: string }
+  /** From a person's own Mirador: it takes the tasks of the agents they brought on this socket, from now on. */
+  | { type: "room.brought-agents-here" }
+  /** From a person's own Mirador: the agent they brought began a turn on the task. */
+  | { type: "room.brought-task-started"; roomId: string; agentId: string; taskId: string }
+  /** From a person's own Mirador: the final answer of the agent they brought to the task, or how it ended without one. */
+  | { type: "room.brought-task-answered"; roomId: string; agentId: string; taskId: string; text: string; ended: BroughtAnswerEnd | null };
 
 export type ServerMessage =
   | {
@@ -471,6 +489,9 @@ export type ServerMessage =
       roomTasksWaiting: RoomTaskApproval[];
       /** The room invites nobody has used yet, soonest to expire first. */
       roomInvites: RoomInvite[];
+      /** The agents this computer's owner brought into rooms of other machines, and the tasks others gave them that wait for their OK. */
+      broughtAgents: BroughtAgentHere[];
+      broughtTasks: BroughtTaskWaiting[];
       profiles: Profile[];
       promptTemplates: PromptTemplate[];
       canvasUse: CanvasUse;
@@ -626,6 +647,13 @@ export type ServerMessage =
   /** Who is in a subscribed room now and who of them writes there, after `room.timeline` and each time it changes. */
   | ({ type: "room.presence"; roomId: string } & RoomPresence)
   | { type: "room.usage.got"; requestId: string; usage: RoomUsage }
+  /** To the person's own Mirador: whether the room let the agent in, and under which id. */
+  | { type: "room.agent-brought"; requestId: string; personId: string; roomId: string; agentId: string | null; problem: HostProblem | null }
+  /** To the person's own Mirador alone: a task for the agent they brought, as one of the room's own agents would be sent it, and who wrote it in what role. */
+  | { type: "room.brought-task"; personId: string; roomId: string; agentId: string; taskId: string; text: string; byName: string; byRole: RoomAuthorRole; fromYou: boolean }
+  /** The agents this computer's owner brought into rooms of other machines, and the tasks of others that wait for their OK, each time either changes. */
+  | { type: "brought-agents.listed"; agents: BroughtAgentHere[]; tasks: BroughtTaskWaiting[] }
+  | { type: "machine.agent-brought"; requestId: string; problem: string | null; problemAbout?: HostProblem }
   | {
       type: "conversation.history";
       conversationId: string;

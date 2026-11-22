@@ -46,6 +46,7 @@ const room = (id: string, name: string, people: Room["people"]): Room => ({
   peoplesTasksWait: true,
   claudeSetup: ALL_OF_CLAUDE_SETUP,
   agentsReadGuests: true,
+  membersBringAgents: true,
   createdAt: 1,
 });
 

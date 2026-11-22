@@ -12,6 +12,8 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   roomApprovals: [],
   roomTasksWaiting: [],
   roomInvites: [],
+  broughtAgents: [],
+  broughtTasks: [],
   profiles: [],
   promptTemplates: [],
   canvasUse: "often",

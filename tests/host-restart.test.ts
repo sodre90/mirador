@@ -195,6 +195,31 @@ describe("a host continuing turns the previous one stopped for a restart", () =>
   });
 });
 
+describe("tasks of a room elsewhere queued in a brought agent's conversation", () => {
+  const roomTask = (id: string, broughtTaskId: string) => ({ id, text: `room task ${broughtTaskId}`, imageIds: [], fromScript: true as const, fromMirador: true as const, afterTurn: true as const, broughtTaskId });
+  const stillToRun = (kept: string[]) => ({ conversationsHoldingTasks: () => new Set<string>(), stillToRun: (taskId: string) => kept.includes(taskId) });
+
+  test("one no longer to run is left out once its turn comes, also after a restart, and the next goes", async () => {
+    const store = new Store(":memory:");
+    const conversations = hostWithEvents([], store, () => store.saveQueuedMessages("c1", [roomTask("q1", "gone"), roomTask("q2", "kept")]));
+    conversations.followsBroughtTasksOf(stillToRun(["kept"]));
+    const userMessages = () => store.listEvents("c1").flatMap(({ event }) => (event.type === "user-message" ? [event.text] : []));
+    conversations.resumeAfterRestart([]);
+    while (!userMessages().includes("room task kept")) await Bun.sleep(20);
+    expect(userMessages()).toEqual(["room task kept"]);
+    void conversations.shutdown();
+  });
+
+  test("the ones the room no longer waits for are taken out of the queue", () => {
+    const store = new Store(":memory:");
+    const conversations = hostWithEvents([], store, () => store.saveQueuedMessages("c1", [roomTask("q1", "t1"), { id: "q2", text: "mine", imageIds: [] }, roomTask("q3", "t3")]));
+    conversations.dropQueuedBroughtTasks("c1", ["t1", "t3"]);
+    expect(conversations.get("c1").queuedMessages.map(({ id }) => id)).toEqual(["q2"]);
+    expect(store.findConversation("c1")!.queuedMessages.map(({ id }) => id)).toEqual(["q2"]);
+    void conversations.shutdown();
+  });
+});
+
 describe("questions still waiting when a new host starts", () => {
   function hostWithWaitingAsks() {
     const scratch = mkdtempSync(join(tmpdir(), "mirador-restart-asks-"));

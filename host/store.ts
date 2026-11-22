@@ -38,7 +38,8 @@ import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
-import { writtenByAgent, type Room, type RoomAgentModel, type RoomAnswerEnd, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import type { RoomBallot } from "../shared/room-votes.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
@@ -166,6 +167,16 @@ const schema = `
   CREATE TABLE IF NOT EXISTS person_keys (
     public_key TEXT PRIMARY KEY, person_id TEXT NOT NULL UNIQUE REFERENCES people(id) ON DELETE CASCADE);
   CREATE TABLE IF NOT EXISTS tunnel_keys_over (key TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL, until INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_brought_tasks (
+    id TEXT PRIMARY KEY, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, message_id TEXT NOT NULL,
+    prompt TEXT NOT NULL, by_name TEXT NOT NULL, by_role TEXT NOT NULL, from_bringer INTEGER NOT NULL, sent_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS brought_agents (
+    id TEXT PRIMARY KEY, machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE, room_id TEXT NOT NULL, agent_id TEXT,
+    profile_id TEXT NOT NULL, workspace_id TEXT NOT NULL, others_tasks TEXT NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS brought_tasks (
+    id TEXT PRIMARY KEY, machine_id TEXT NOT NULL, task_id TEXT NOT NULL, brought_id TEXT NOT NULL REFERENCES brought_agents(id) ON DELETE CASCADE,
+    state TEXT NOT NULL, by_name TEXT NOT NULL, by_role TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL, answer TEXT, ended TEXT,
+    answered_at INTEGER, UNIQUE (machine_id, task_id));
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -296,6 +307,13 @@ const addedColumns = [
   { table: "room_agents", column: "variables", definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: "room_agents", column: "whole_host_environment", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "room_setup", definition: "TEXT" },
+  { table: "conversations", column: "brought_into_room", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "rooms", column: "members_bring_agents", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "room_agents", column: "brought_by", definition: "TEXT" },
+  { table: "room_agents", column: "brought_name", definition: "TEXT" },
+  { table: "room_agents", column: "brought_harness", definition: "TEXT" },
+  { table: "room_agents", column: "brought_here", definition: "INTEGER NOT NULL DEFAULT 0" },
+  { table: "room_messages", column: "brought_by", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -368,6 +386,7 @@ type ConversationRow = {
   delegation_dismissed: number;
   side_chat_of: string | null;
   room_id: string | null;
+  brought_into_room: number;
   plugin_settings: string | null;
   reminder: string | null;
   favourite: number;
@@ -492,6 +511,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...startedByOf(row),
   ...(row.side_chat_of && { sideChatOf: row.side_chat_of }),
   ...(row.room_id && { roomId: row.room_id }),
+  ...(row.brought_into_room === 1 && { broughtIntoRoom: true as const }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
   ...(row.reminder && { reminder: JSON.parse(row.reminder) as Reminder }),
   ...(row.favourite === 1 && { favourite: true }),
@@ -509,8 +529,67 @@ interface RoomRow {
   peoples_tasks_wait: number;
   claude_setup: string;
   agents_read_guests: number;
+  members_bring_agents: number;
   created_at: number;
 }
+
+interface RoomAgentRow {
+  profile_id: string;
+  conversation_id: string | null;
+  answering: string | null;
+  model: string | null;
+  effort: string | null;
+  variables: string;
+  whole_host_environment: number;
+  brought_by: string | null;
+  brought_name: string | null;
+  brought_harness: HarnessId | null;
+  brought_here: number;
+}
+
+const broughtOf = ({ brought_by, brought_name, brought_harness, brought_here }: RoomAgentRow): Pick<RoomAgent, "brought"> =>
+  brought_by !== null && brought_name !== null && brought_harness !== null ? { brought: { personId: brought_by, name: brought_name, harness: brought_harness, here: brought_here === 1 } } : {};
+
+/** A task this machine sent an agent a person brought, which its bringer's Mirador has not answered yet. */
+export interface RoomBroughtTask {
+  id: string;
+  roomId: string;
+  agentId: string;
+  messageId: string;
+  prompt: string;
+  byName: string;
+  byRole: RoomAuthorRole;
+  fromBringer: boolean;
+  sentAt: number;
+}
+
+const roomBroughtTaskColumns = "id, room_id AS roomId, agent_id AS agentId, message_id AS messageId, prompt, by_name AS byName, by_role AS byRole, from_bringer = 1 AS fromBringer, sent_at AS sentAt";
+
+const toRoomBroughtTask = (row: Omit<RoomBroughtTask, "fromBringer"> & { fromBringer: number }): RoomBroughtTask => ({ ...row, fromBringer: row.fromBringer === 1 });
+
+/** Where a task stands on the Mirador of the person who brought the agent it is for. */
+export type BroughtTaskState = "waiting" | "sent" | "answered";
+
+/** A task a room's machine sent an agent this computer's owner brought there, kept so that one sent again runs once. */
+export interface BroughtTask {
+  id: string;
+  machineId: string;
+  taskId: string;
+  broughtId: string;
+  state: BroughtTaskState;
+  byName: string;
+  byRole: RoomAuthorRole;
+  text: string;
+  at: number;
+  /** Once answered: what went back to the room's machine. */
+  answer: string | null;
+  ended: BroughtAnswerEnd | null;
+}
+
+const broughtTaskColumns = "id, machine_id AS machineId, task_id AS taskId, brought_id AS broughtId, state, by_name AS byName, by_role AS byRole, text, at, answer, ended";
+
+const broughtAgentColumns =
+  "id, machine_id AS machineId, room_id AS roomId, agent_id AS agentId, profile_id AS profileId, workspace_id AS workspaceId, others_tasks AS othersTasks, conversation_id AS conversationId";
 
 interface RoomMessageRow {
   id: string;
@@ -528,6 +607,7 @@ interface RoomMessageRow {
   author_role: RoomRole | null;
   task_held: TaskHeld | null;
   mentions: string | null;
+  brought_by: string | null;
 }
 
 interface RoomThreadRow {
@@ -552,6 +632,7 @@ const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
   ...(row.tags_dropped !== null && { tagsDropped: JSON.parse(row.tags_dropped) as string[] }),
   ...(row.task_held !== null && { taskHeld: row.task_held }),
   ...(row.mentions !== null && { mentions: JSON.parse(row.mentions) as RoomMention[] }),
+  ...(row.brought_by !== null && { broughtBy: row.brought_by }),
 });
 
 const mentionsColumn = ({ mentions }: Pick<RoomMessage, "mentions">) => (mentions && mentions.length > 0 ? JSON.stringify(mentions) : null);
@@ -980,8 +1061,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, room_id, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, room_id, brought_into_room, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -998,6 +1079,7 @@ export class Store {
         conversation.worktree ? JSON.stringify(conversation.worktree) : null,
         conversation.sideChatOf ?? null,
         conversation.roomId ?? null,
+        conversation.broughtIntoRoom ? 1 : 0,
         conversation.createdAt,
         conversation.updatedAt,
       );
@@ -1148,8 +1230,8 @@ export class Store {
 
   insertRoom(room: Room) {
     this.db
-      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.createdAt);
+      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.membersBringAgents ? 1 : 0, room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
     room.agents.forEach(({ profileId, model, effort }) => this.setRoomAgentModel(room.id, profileId, { model, effort }));
     room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
@@ -1165,35 +1247,31 @@ export class Store {
     return row ? this.toRoom(row) : undefined;
   }
 
-  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, created_at }: RoomRow): Room {
-    const agents = this.db.query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment FROM room_agents WHERE room_id = ? ORDER BY rowid").all(id) as {
-      profile_id: string;
-      conversation_id: string | null;
-      answering: string | null;
-      model: string | null;
-      effort: string | null;
-      variables: string;
-      whole_host_environment: number;
-    }[];
+  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, created_at }: RoomRow): Room {
+    const agents = this.db
+      .query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here FROM room_agents WHERE room_id = ? ORDER BY rowid")
+      .all(id) as RoomAgentRow[];
     const people = this.db.query("SELECT person_id, role, name_clash FROM room_people WHERE room_id = ? ORDER BY rowid").all(id) as RoomPersonRow[];
     return {
       id,
       name,
       workspaceId: workspace_id,
-      agents: agents.map(({ profile_id, conversation_id, answering, model, effort, variables, whole_host_environment }) => ({
-        profileId: profile_id,
-        conversationId: conversation_id,
-        answering,
-        model,
-        effort,
-        variables: variablesChosenIn(variables),
-        wholeHostEnvironment: whole_host_environment === 1,
+      agents: agents.map((row) => ({
+        profileId: row.profile_id,
+        conversationId: row.conversation_id,
+        answering: row.answering,
+        model: row.model,
+        effort: row.effort,
+        variables: variablesChosenIn(row.variables),
+        wholeHostEnvironment: row.whole_host_environment === 1,
+        ...broughtOf(row),
       })),
       permissions,
       people: people.map(toRoomPerson),
       peoplesTasksWait: peoples_tasks_wait === 1,
       claudeSetup: claudeSetupIn(JSON.parse(claude_setup)),
       agentsReadGuests: agents_read_guests === 1,
+      membersBringAgents: members_bring_agents === 1,
       createdAt: created_at,
     };
   }
@@ -1309,10 +1387,10 @@ export class Store {
     this.db.query("UPDATE rooms SET permissions = ? WHERE id = ?").run(permissions, id);
   }
 
-  /** The agents stay in the order they joined; those that stay keep their conversations and what they have read. */
+  /** The agents of profiles stay in the order they joined; those that stay keep their conversations and what they have read. Agents people brought stay. */
   setRoomAgents(roomId: string, profileIds: string[]) {
     const kept = JSON.stringify(profileIds);
-    this.db.query("DELETE FROM room_agents WHERE room_id = ? AND profile_id NOT IN (SELECT value FROM json_each(?))").run(roomId, kept);
+    this.db.query("DELETE FROM room_agents WHERE room_id = ? AND brought_by IS NULL AND profile_id NOT IN (SELECT value FROM json_each(?))").run(roomId, kept);
     profileIds.forEach((profileId) => this.db.query("INSERT INTO room_agents (room_id, profile_id) VALUES (?, ?) ON CONFLICT DO NOTHING").run(roomId, profileId));
   }
 
@@ -1339,9 +1417,148 @@ export class Store {
     this.db.query("UPDATE room_agents SET answering = ? WHERE conversation_id = ?").run(answering, conversationId);
   }
 
-  /** No agent's turn runs on before the host starts. */
+  /** The room message the agent, one a person brought too, answers in the turn under way, or null once that turn ended. */
+  setRoomAgentAnsweringIn(roomId: string, agentId: string, answering: string | null) {
+    this.db.query("UPDATE room_agents SET answering = ? WHERE room_id = ? AND profile_id = ?").run(answering, roomId, agentId);
+  }
+
+  /** No agent's turn runs on before the host starts, and no bringer's Mirador is connected yet. */
   forgetRoomAgentsAnswering() {
-    this.db.query("UPDATE room_agents SET answering = NULL").run();
+    this.db.query("UPDATE room_agents SET answering = NULL, brought_here = 0").run();
+  }
+
+  setRoomMembersBringAgents(id: string, allowed: boolean) {
+    this.db.query("UPDATE rooms SET members_bring_agents = ? WHERE id = ?").run(allowed ? 1 : 0, id);
+  }
+
+  addBroughtAgent(roomId: string, agentId: string, { personId, name, harness }: Omit<BroughtAgent, "here">, here: boolean) {
+    this.db
+      .query("INSERT INTO room_agents (room_id, profile_id, brought_by, brought_name, brought_harness, brought_here) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(roomId, agentId, personId, name, harness, here ? 1 : 0);
+  }
+
+  /** Takes the brought agent out of the room with the tasks it was sent and has not answered. */
+  removeBroughtAgent(roomId: string, agentId: string) {
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM room_brought_tasks WHERE room_id = ? AND agent_id = ?").run(roomId, agentId);
+      this.db.query("DELETE FROM room_agents WHERE room_id = ? AND profile_id = ? AND brought_by IS NOT NULL").run(roomId, agentId);
+    })();
+  }
+
+  /** The brought agent with the id, in whichever room it is. */
+  findBroughtAgent(agentId: string): (BroughtAgent & { roomId: string }) | undefined {
+    const row = this.db.query("SELECT room_id, profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here FROM room_agents WHERE profile_id = ? AND brought_by IS NOT NULL").get(agentId) as
+      | (RoomAgentRow & { room_id: string })
+      | null;
+    const brought = row ? broughtOf(row).brought : undefined;
+    return brought && { ...brought, roomId: row!.room_id };
+  }
+
+  /** Whether the person's Mirador is connected to take the tasks of the agents they brought; the rooms that changed with it. */
+  setBroughtAgentsHere(personId: string, here: boolean): string[] {
+    const rows = this.db.query("UPDATE room_agents SET brought_here = ?, answering = CASE WHEN ? = 1 THEN answering ELSE NULL END WHERE brought_by = ? AND brought_here != ? RETURNING room_id").all(here ? 1 : 0, here ? 1 : 0, personId, here ? 1 : 0) as {
+      room_id: string;
+    }[];
+    return [...new Set(rows.map(({ room_id }) => room_id))];
+  }
+
+  insertRoomBroughtTask(task: RoomBroughtTask) {
+    this.db
+      .query("INSERT INTO room_brought_tasks (id, room_id, agent_id, message_id, prompt, by_name, by_role, from_bringer, sent_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(task.id, task.roomId, task.agentId, task.messageId, task.prompt, task.byName, task.byRole, task.fromBringer ? 1 : 0, task.sentAt);
+  }
+
+  /** The task sent to the agent in the room, now answered, which can be answered only once; undefined for any other. */
+  takeRoomBroughtTask(id: string, roomId: string, agentId: string): RoomBroughtTask | undefined {
+    const row = this.db.query(`DELETE FROM room_brought_tasks WHERE id = ? AND room_id = ? AND agent_id = ? RETURNING ${roomBroughtTaskColumns}`).get(id, roomId, agentId) as Parameters<typeof toRoomBroughtTask>[0] | null;
+    return row ? toRoomBroughtTask(row) : undefined;
+  }
+
+  findRoomBroughtTask(id: string): RoomBroughtTask | undefined {
+    const row = this.db.query(`SELECT ${roomBroughtTaskColumns} FROM room_brought_tasks WHERE id = ?`).get(id) as Parameters<typeof toRoomBroughtTask>[0] | null;
+    return row ? toRoomBroughtTask(row) : undefined;
+  }
+
+  /** The tasks sent to the agents the person brought that are not answered yet, oldest first. */
+  roomBroughtTasksOf(personId: string): RoomBroughtTask[] {
+    const rows = this.db
+      .query(`SELECT ${roomBroughtTaskColumns} FROM room_brought_tasks WHERE (room_id, agent_id) IN (SELECT room_id, profile_id FROM room_agents WHERE brought_by = ?) ORDER BY sent_at, rowid`)
+      .all(personId) as Parameters<typeof toRoomBroughtTask>[0][];
+    return rows.map(toRoomBroughtTask);
+  }
+
+  roomBroughtTasksOfAgent(roomId: string, agentId: string): RoomBroughtTask[] {
+    const rows = this.db.query(`SELECT ${roomBroughtTaskColumns} FROM room_brought_tasks WHERE room_id = ? AND agent_id = ? ORDER BY sent_at, rowid`).all(roomId, agentId) as Parameters<typeof toRoomBroughtTask>[0][];
+    return rows.map(toRoomBroughtTask);
+  }
+
+  listBroughtAgents(): BroughtAgentHere[] {
+    return this.db.query(`SELECT ${broughtAgentColumns} FROM brought_agents ORDER BY created_at, rowid`).all() as BroughtAgentHere[];
+  }
+
+  findBroughtAgentHere(id: string): BroughtAgentHere | undefined {
+    return (this.db.query(`SELECT ${broughtAgentColumns} FROM brought_agents WHERE id = ?`).get(id) as BroughtAgentHere | null) ?? undefined;
+  }
+
+  insertBroughtAgentHere(agent: BroughtAgentHere) {
+    this.db
+      .query("INSERT INTO brought_agents (id, machine_id, room_id, agent_id, profile_id, workspace_id, others_tasks, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(agent.id, agent.machineId, agent.roomId, agent.agentId, agent.profileId, agent.workspaceId, agent.othersTasks, agent.conversationId, Date.now());
+  }
+
+  /** The room's machine let the agent in under this id. */
+  setBroughtAgentId(id: string, agentId: string) {
+    this.db.query("UPDATE brought_agents SET agent_id = ? WHERE id = ?").run(agentId, id);
+  }
+
+  setBroughtAgentConversation(id: string, conversationId: string) {
+    this.db.query("UPDATE brought_agents SET conversation_id = ? WHERE id = ?").run(conversationId, id);
+  }
+
+  /** Forgets the agent brought into a room, with its tasks; its conversation stays. */
+  deleteBroughtAgentHere(id: string) {
+    this.db.query("DELETE FROM brought_agents WHERE id = ?").run(id);
+  }
+
+  findBroughtTask(machineId: string, taskId: string): BroughtTask | undefined {
+    return (this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE machine_id = ? AND task_id = ?`).get(machineId, taskId) as BroughtTask | null) ?? undefined;
+  }
+
+  findBroughtTaskById(id: string): BroughtTask | undefined {
+    return (this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE id = ?`).get(id) as BroughtTask | null) ?? undefined;
+  }
+
+  insertBroughtTask(task: BroughtTask) {
+    this.db
+      .query("INSERT INTO brought_tasks (id, machine_id, task_id, brought_id, state, by_name, by_role, text, at, answer, ended) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(task.id, task.machineId, task.taskId, task.broughtId, task.state, task.byName, task.byRole, task.text, task.at, task.answer, task.ended);
+  }
+
+  setBroughtTaskState(id: string, state: BroughtTaskState) {
+    this.db.query("UPDATE brought_tasks SET state = ? WHERE id = ?").run(state, id);
+  }
+
+  answerBroughtTask(id: string, answer: string, ended: BroughtAnswerEnd | null, at: number) {
+    this.db.query("UPDATE brought_tasks SET state = 'answered', answer = ?, ended = ?, answered_at = ? WHERE id = ?").run(answer, ended, at, id);
+  }
+
+  /** The tasks of the agent not answered yet: waiting for an OK, or sent to its conversation. */
+  broughtTasksQueued(broughtId: string): BroughtTask[] {
+    return this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE brought_id = ? AND state != 'answered' ORDER BY at, rowid`).all(broughtId) as BroughtTask[];
+  }
+
+  broughtTasksWaiting(): BroughtTask[] {
+    return this.db.query(`SELECT ${broughtTaskColumns} FROM brought_tasks WHERE state = 'waiting' ORDER BY at, rowid`).all() as BroughtTask[];
+  }
+
+  /** Answered tasks are kept a while after their answer so that one a room's machine sends again is answered again, not run again. */
+  forgetBroughtTasksAnsweredBefore(at: number) {
+    this.db.query("DELETE FROM brought_tasks WHERE state = 'answered' AND answered_at < ?").run(at);
+  }
+
+  /** An agent a room's machine had not let in when the host stopped is not waited for any more. */
+  forgetBroughtAgentsNotLetIn() {
+    this.db.query("DELETE FROM brought_agents WHERE agent_id IS NULL").run();
   }
 
   setRoomSeenThrough(roomId: string, profileId: string, seq: number) {
@@ -1370,7 +1587,7 @@ export class Store {
     const author = writtenByAgent(message.author) ? { personId: null, profileId: message.author.profileId } : { personId: message.author.personId, profileId: null };
     this.db
       .query(
-        "INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, author_role, text, tags, thread_id, answers, ended, tags_dropped, task_held, mentions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, author_role, text, tags, thread_id, answers, ended, tags_dropped, task_held, mentions, brought_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         message.id,
@@ -1388,6 +1605,7 @@ export class Store {
         message.tagsDropped ? JSON.stringify(message.tagsDropped) : null,
         message.taskHeld ?? null,
         mentionsColumn(message),
+        message.broughtBy ?? null,
       );
     return { ...message, seq };
   }

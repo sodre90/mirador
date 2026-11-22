@@ -1,8 +1,10 @@
-import { useRef, useState, type CSSProperties, type Dispatch } from "react";
+import { useRef, useState, type CSSProperties, type Dispatch, type MouseEvent } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
-import type { JoinedRoom, Machine, MachineStatus, Profile } from "../shared/model.ts";
+import type { BroughtAgentHere } from "../shared/brought-agents.ts";
+import type { JoinedRoom, Machine, MachineStatus, Person, Profile } from "../shared/model.ts";
+import { personGoesBy } from "../shared/people.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
-import type { Room } from "../shared/rooms.ts";
+import { broughtAgentName, type Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
 import { connection } from "./connection.ts";
 import { waitingHints } from "./hints.ts";
@@ -32,8 +34,12 @@ export function joinedRoomsOf(machines: Machine[], statuses: MachineStatus[]): J
 }
 
 /** Under a room's name: the people in it besides its owner, and its agents, or that it has none yet. */
-function roomSubline(room: Room, profiles: Profile[], manages: boolean) {
-  const agents = room.agents.map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone);
+function roomSubline(room: Room, profiles: Profile[], people: Person[], manages: boolean) {
+  const agents = room.agents.map(({ profileId, brought }) =>
+    brought
+      ? broughtAgentName(personGoesBy(people.find(({ id }) => id === brought.personId), words.nameless), brought.name)
+      : (profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone),
+  );
   return [manages && room.people.length > 0 && words.peopleCount(room.people.length), agents.length > 0 ? agents.join(", ") : words.noAgentsYet].filter(Boolean).join(" · ");
 }
 
@@ -95,6 +101,50 @@ function MuteHereToggle({ machineId, roomId, mutedHere }: { machineId: string; r
   );
 }
 
+/** A joined room's "⋯": bringing an agent of your own into it, and taking out those you brought. */
+function JoinedRoomMenu({ machineId, room, brought, profiles, dispatch }: { machineId: string; room: JoinedRoom; brought: BroughtAgentHere[]; profiles: Profile[]; dispatch: Dispatch<AppAction> }) {
+  const opener = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const [placement, setPlacement] = useState<CSSProperties | null>(null);
+  const open = placement !== null;
+  useClosing(open, [opener, menu], () => setPlacement(null));
+  const choose = (event: MouseEvent, act: () => void) => {
+    event.stopPropagation();
+    setPlacement(null);
+    act();
+  };
+  return (
+    <>
+      <button
+        ref={opener}
+        type="button"
+        className="icon"
+        aria-label={words.moreFor(room.name)}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={(event) => {
+          event.stopPropagation();
+          setPlacement(open ? null : placedBelow(event.currentTarget));
+        }}
+      >
+        ⋯
+      </button>
+      {open && (
+        <div ref={menu} className="add-room-menu joined-room-menu" role="menu" aria-label={words.moreFor(room.name)} style={placement}>
+          <button type="button" role="menuitem" onClick={(event) => choose(event, () => dispatch({ type: "open-overlay", overlay: { kind: "bring-agent", machineId, roomId: room.id } }))}>
+            {words.bringAgent}
+          </button>
+          {brought.map(({ id, profileId }) => (
+            <button key={id} type="button" role="menuitem" onClick={(event) => choose(event, () => connection.send({ type: "machine.take-agent-out", broughtId: id }))}>
+              {words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone)}
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 /** The section's "+": a new room of this machine, or joining someone else's with their invite. */
 function AddRoomMenu({ canJoin, dispatch }: { canJoin: boolean; dispatch: Dispatch<AppAction> }) {
   const opener = useRef<HTMLButtonElement>(null);
@@ -139,6 +189,8 @@ export function RoomsSection({
   readings,
   roomsWithPeopleHere = [],
   joinedRooms = [],
+  people,
+  broughtAgents = [],
   manages,
   dispatch,
   onOpenJoinedRoom,
@@ -153,6 +205,9 @@ export function RoomsSection({
   roomsWithPeopleHere?: string[];
   /** Rooms of someone else's machines, which open in that machine's frame; listed only where this page shows machines. */
   joinedRooms?: JoinedRoomShown[];
+  people: Person[];
+  /** The agents this computer's owner brought into rooms of other machines. */
+  broughtAgents?: BroughtAgentHere[];
   /** The machine's owner makes rooms and changes them; anyone else only opens the ones they are in. */
   manages: boolean;
   dispatch: Dispatch<AppAction>;
@@ -180,7 +235,7 @@ export function RoomsSection({
               <RoomMark style={{ background: workspaceMarkColor(room.name) }} />
               <span className="room-card-text">
                 <span className="room-card-name">{room.name}</span>
-                <span className="room-card-subline">{roomSubline(room, profiles, manages)}</span>
+                <span className="room-card-subline">{roomSubline(room, profiles, people, manages)}</span>
               </span>
               {roomsWithPeopleHere.includes(room.id) && <span className="room-people-here" role="img" aria-label={words.someoneHere} data-hint={words.someoneHere} />}
               <ReadingMarks reading={reading} waiting={waiting} />
@@ -204,6 +259,7 @@ export function RoomsSection({
           joinedRooms.map(({ machine, status, room }) => {
             const away = status?.reachable === false;
             const mutedHere = status?.mutedHere.includes(room.id) === true;
+            const broughtHere = broughtAgents.filter((agent) => agent.machineId === machine.id && agent.roomId === room.id);
             return (
               <li
                 key={`${machine.id}:${room.id}`}
@@ -215,10 +271,15 @@ export function RoomsSection({
                 <RoomMark style={machine.color ? { ...pastelVariables(machine.color), background: "var(--pastel-stripe)" } : { background: workspaceMarkColor(machine.name) }} />
                 <span className="room-card-text">
                   <span className="room-card-name">{room.name}</span>
-                  <span className="room-card-subline">{[words.onMachine(machine.name), away && t.shell.machines.notAnswering].filter(Boolean).join(" · ")}</span>
+                  <span className="room-card-subline">
+                    {[words.onMachine(machine.name), away && t.shell.machines.notAnswering, ...broughtHere.map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone)]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </span>
                 <ReadingMarks reading={room} waiting={false} />
                 <MuteHereToggle machineId={machine.id} roomId={room.id} mutedHere={mutedHere} />
+                <JoinedRoomMenu machineId={machine.id} room={room} brought={broughtHere} profiles={profiles} dispatch={dispatch} />
               </li>
             );
           })}

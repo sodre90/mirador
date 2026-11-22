@@ -145,6 +145,9 @@ export const isHidden = (machine: MachineSeen, hidden: MachineSeen[]) => hidden.
 
 /** How many rooms of one machine its list shows at most, and how long a name of one may be there. */
 export const MOST_JOINED_ROOMS = 50;
+
+/** The most entries of a list of rooms someone else's machine sends that this host reads, its rooms past them left out. */
+export const MOST_ROOMS_READ = MOST_JOINED_ROOMS * 2;
 export const LONGEST_JOINED_ROOM_NAME = 80;
 
 /** The form a room's id has, which nothing else in a list or a link to a room may take. */
@@ -165,7 +168,7 @@ export function joinedRoomIn(listed: unknown): JoinedRoom | null {
 /** The rooms someone else's machine lists for this computer's owner, each once, at most MOST_JOINED_ROOMS of them, as display data only. */
 export function joinedRoomsIn(listed: unknown): JoinedRoom[] {
   if (!Array.isArray(listed)) return [];
-  const rooms = listed.slice(0, MOST_JOINED_ROOMS * 2).flatMap((each) => joinedRoomIn(each) ?? []);
+  const rooms = listed.slice(0, MOST_ROOMS_READ).flatMap((each) => joinedRoomIn(each) ?? []);
   return rooms.filter((room, index) => rooms.findIndex(({ id }) => id === room.id) === index).slice(0, MOST_JOINED_ROOMS);
 }
 

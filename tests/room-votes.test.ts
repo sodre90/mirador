@@ -113,7 +113,7 @@ function roomWithPeople() {
     startAfreshInRoom: () => {},
     takeQueuedRoomPrompts: () => [],
   };
-  const rooms = new RoomService(store, hub, sessions, { notify: () => {} }, mkdtempSync(join(tmpdir(), "room-votes-")));
+  const rooms = new RoomService(store, hub, sessions, { notify: () => {}, roomTaskHeld: () => {} }, mkdtempSync(join(tmpdir(), "room-votes-")));
   const conversations = {
     get: (conversationId: string) => store.findConversation(conversationId)!,
     send: async (conversationId: string, text: string, _: string[], options: Sent["options"]) => void sent.push({ conversationId, text, options }),

@@ -3,7 +3,7 @@ import type { Conversation, Person, Profile, Workspace } from "../shared/model.t
 import { personGoesBy } from "../shared/people.ts";
 import { PERMISSION_PRESETS } from "../shared/room-permissions.ts";
 import { ROOM_USAGE_PERIODS, sinceOf, type RoomUsage, type RoomUsagePeriod, type Spend } from "../shared/room-usage.ts";
-import { ROOM_ROLES, type Room, type RoomAgent, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
+import { broughtAgentName, ROOM_ROLES, type Room, type RoomAgent, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
 import { agentMarks } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
@@ -22,7 +22,7 @@ const words = t.rooms;
 export const ROOM_SETTINGS_TABS: RoomSettingsTab[] = ["people", "agents", "permissions", "usage"];
 
 /** The long story behind a setting, folded away under "What does this mean?". */
-function WhatItMeans({ children }: { children: ReactNode }) {
+export function WhatItMeans({ children }: { children: ReactNode }) {
   return (
     <details className="what-it-means">
       <summary>{words.whatDoesThisMean}</summary>
@@ -194,8 +194,9 @@ function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; p
  * The room's agents, each on its model and effort, which apply at once, with the values of its profile it gets; taking
  * one out deletes its conversation in the room. Then what its Claude agents load of the owner's Claude Code setup.
  */
-function AgentsTab({ room, profiles, roomConversations }: { room: Room; profiles: Profile[]; roomConversations: Conversation[] }) {
-  const profileIds = room.agents.map(({ profileId }) => profileId);
+function AgentsTab({ room, profiles, people, roomConversations }: { room: Room; profiles: Profile[]; people: Person[]; roomConversations: Conversation[] }) {
+  const ownAgents = room.agents.filter(({ brought }) => !brought);
+  const profileIds = ownAgents.map(({ profileId }) => profileId);
   const setAgents = (ids: string[]) => connection.send({ type: "room.set-agents", roomId: room.id, profileIds: ids });
   const row = (agent: RoomAgent) => {
     const { profileId, conversationId, model, effort } = agent;
@@ -230,9 +231,9 @@ function AgentsTab({ room, profiles, roomConversations }: { room: Room; profiles
   };
   return (
     <>
-      {room.agents.length === 0 && <p className="hint">{words.noAgentsYet}</p>}
+      {ownAgents.length === 0 && <p className="hint">{words.noAgentsYet}</p>}
       <ul className="room-settings-rows" aria-label={words.agents}>
-        {room.agents.map(row)}
+        {ownAgents.map(row)}
       </ul>
       {profiles.length === 0 ? <p className="hint">{words.noProfiles}</p> : <AgentSearch profiles={profiles} chosenIds={profileIds} label={words.addAgent} onAdd={(profileId) => setAgents([...profileIds, profileId])} />}
       <p className="hint">{words.agentsHint}</p>
@@ -240,6 +241,48 @@ function AgentsTab({ room, profiles, roomConversations }: { room: Room; profiles
       <WhatItMeans>
         <AgentSetupMeaning room={room} profiles={profiles} />
       </WhatItMeans>
+      <BroughtAgents room={room} people={people} />
+    </>
+  );
+}
+
+/** The agents members brought from their own Miradors, which the owner takes out, and whether members may bring them. */
+function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
+  const [membersBring, setMembersBring] = useSentChoice(room.membersBringAgents, (allowed) => connection.send({ type: "room.set-members-bring-agents", roomId: room.id, allowed }));
+  const brought = room.agents.flatMap(({ profileId, brought }) => (brought ? [{ agentId: profileId, ...brought, bringer: personGoesBy(people.find(({ id }) => id === brought.personId), words.nameless) }] : []));
+  return (
+    <>
+      <h3 className="room-brought-heading">{words.broughtAgents}</h3>
+      {brought.length > 0 && (
+        <ul className="room-settings-rows" aria-label={words.broughtAgents}>
+          {brought.map(({ agentId, name, harness, here, bringer }) => {
+            const shownName = broughtAgentName(bringer, name);
+            return (
+              <li key={agentId}>
+                <span className={`avatar agent-${harness}`} aria-hidden="true">
+                  {agentMarks[harness]}
+                </span>
+                <span className="room-settings-row-name">{shownName}</span>
+                <span className={`room-agent-brought${here ? "" : " away"}`}>{here ? words.onComputerOf(bringer) : words.awayFrom(bringer)}</span>
+                <ConfirmButton
+                  className="link danger"
+                  label={words.takeOutAgent(shownName)}
+                  armedText={words.takeOutArmed}
+                  armedHint={words.takeOutArmedHint}
+                  onConfirm={() => connection.send({ type: "room.take-agent-out", roomId: room.id, agentId })}
+                >
+                  {words.takeOut}
+                </ConfirmButton>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <label className="room-agent-choice room-members-bring-agents">
+        <input type="checkbox" role="switch" checked={membersBring} onChange={(event) => setMembersBring(event.target.checked)} />
+        {words.membersBringAgents}
+      </label>
+      <p className="hint">{words.membersBringAgentsHint}</p>
     </>
   );
 }
@@ -404,7 +447,7 @@ export function RoomSettingsDialog({
       </div>
       <div className="room-tab-panel" id="room-tab-panel" role="tabpanel" aria-labelledby={`room-tab-${shownTab}`}>
         {shownTab === "people" && <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} onInvite={onInvite} />}
-        {shownTab === "agents" && <AgentsTab room={room} profiles={profiles} roomConversations={roomConversations} />}
+        {shownTab === "agents" && <AgentsTab room={room} profiles={profiles} people={people} roomConversations={roomConversations} />}
         {shownTab === "permissions" && <PermissionsTab room={room} />}
         {shownTab === "usage" && <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />}
       </div>

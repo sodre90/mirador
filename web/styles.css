@@ -3698,6 +3698,29 @@ button.subagent-close {
   background: var(--warn-soft);
 }
 
+.brought-task {
+  margin: 0 16px 8px;
+}
+
+.brought-task-text {
+  max-height: 16em;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0 4px;
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-agent-brought {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-agent-brought.away,
+.agent-chip.away {
+  color: var(--warn);
+}
+
 .permission.resolved {
   border-color: var(--border);
   background: var(--panel);

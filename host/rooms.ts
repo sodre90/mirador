@@ -3,11 +3,11 @@ import { homedir, userInfo } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
-import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
+import { harnessIds, type CanvasItem, type Conversation, type HarnessId, type Launch } from "../shared/model.ts";
 import type { RoomUsage } from "../shared/room-usage.ts";
-import { mentionsIn, type RoomMention } from "../shared/room-mentions.ts";
+import { agentsTaggedIn, mentionsIn, type RoomMention, type TaggableAgent } from "../shared/room-mentions.ts";
 import { ALL_OF_CLAUDE_SETUP, CLAUDE_SETUP_PARTS, claudeSetupIn, isVariableName, narrows, narrowsClaudeSetup, profileVariablesInRoom, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
-import { AGENT_GONE, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
+import { AGENT_GONE, nameRefused, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import {
   allowedByPreset,
   changesClaudeSetup,
@@ -24,6 +24,9 @@ import {
   agentTaggedTurnsAfter,
   asksAgentsAs,
   authorRoleOf,
+  broughtAgentName,
+  isBroughtAnswerEnd,
+  MOST_AGENTS_BROUGHT,
   catchUpPrompt,
   catchUpShown,
   isRoomRole,
@@ -39,7 +42,10 @@ import {
   taskWaits,
   writtenByAgent,
   type AuthorOf,
+  type BroughtAgent,
+  type BroughtAnswerEnd,
   type Room,
+  type RoomAnswerEnd,
   type RoomAgent,
   type RoomApproval,
   type RoomAgentModel,
@@ -53,11 +59,12 @@ import {
   type RoomTimeline,
 } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
+import { firstGraphemes } from "../shared/text-cut.ts";
 import type { RoomRules, TurnListener, WaitingPermission } from "./conversations.ts";
-import type { Hub } from "./hub.ts";
+import type { Hub, SocketData } from "./hub.ts";
 import { SenderLimit } from "./join-requests.ts";
 import { EVENTS_OF_TURNS, roomUsage } from "./room-usage.ts";
-import type { Store } from "./store.ts";
+import type { RoomBroughtTask, Store } from "./store.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 
 /** What a room needs of the conversations its agents work in. */
@@ -96,6 +103,21 @@ export interface TagsNamed {
 /** How many messages a person other than the owner may write in rooms a minute. */
 export const MOST_ROOM_MESSAGES_A_MINUTE = 30;
 
+/** How often a person may bring an agent into a room a minute, all rooms together. */
+export const MOST_AGENTS_BROUGHT_A_MINUTE = 6;
+
+/** How often a person's Mirador may say a minute that an agent they brought began on a task, all rooms together. */
+export const MOST_BROUGHT_TASK_STARTS_A_MINUTE = 30;
+
+/** The numbers a brought agent's name may take after it when the room already has one of that name. */
+const NUMBERS_AFTER_A_TAKEN_NAME = [2, 3, 4, 5, 6, 7, 8, 9];
+
+/** What a person's Mirador says, cut to what a room message may hold, its end marked. */
+function cutToRoomMessage(text: string) {
+  if (roomMessageLength(text) <= ROOM_MESSAGE_MOST_CHARACTERS) return text.trim();
+  return `${firstGraphemes(text.trim().slice(0, ROOM_MESSAGE_MOST_CHARACTERS - 1), ROOM_MESSAGE_MOST_CHARACTERS).replace(/[\uD800-\uDBFF]$/, "")}…`;
+}
+
 /** Told of each message that goes up in a room: the people it tags that it didn't tag before, and its author's name. */
 export type PostListener = (message: RoomMessage, newlyTagged: RoomMention[], by: string) => void;
 
@@ -103,6 +125,7 @@ export type TaskAnswer = "allow" | "deny";
 
 const distinct = (ids: string[]) => [...new Set(ids)];
 const hasAgent = (room: Room, profileId: string) => room.agents.some((agent) => agent.profileId === profileId);
+const broughtBy = (personId: string) => (agent: RoomAgent): agent is RoomAgent & { brought: BroughtAgent } => agent.brought?.personId === personId;
 const sameName = (named: string, name: string) => named.trim().replace(/^@/, "").toLowerCase() === name.toLowerCase();
 
 const leadsOut = (relativePath: string) => relativePath === ".." || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath);
@@ -191,11 +214,13 @@ export class RoomService implements RoomRules, TurnListener {
     private readonly store: Store,
     private readonly hub: Hub,
     private readonly sessions: RoomSessions,
-    private readonly notifications: Pick<SystemNotifications, "notify">,
+    private readonly notifications: Pick<SystemNotifications, "notify" | "roomTaskHeld">,
     /** Mirador's data directory, with its tokens and database, which the agents never reach without asking. */
     private readonly dataDir: string,
     private readonly writing = new SenderLimit(Date.now, MOST_ROOM_MESSAGES_A_MINUTE),
     private readonly home: HostsHome = { directory: homedir(), user: userRunningTheHost() },
+    private readonly bringing = new SenderLimit(Date.now, MOST_AGENTS_BROUGHT_A_MINUTE),
+    private readonly broughtTaskStarts = new SenderLimit(Date.now, MOST_BROUGHT_TASK_STARTS_A_MINUTE),
   ) {
     store.forgetRoomAgentsAnswering();
   }
@@ -231,6 +256,7 @@ export class RoomService implements RoomRules, TurnListener {
       peoplesTasksWait: true,
       claudeSetup: ALL_OF_CLAUDE_SETUP,
       agentsReadGuests: true,
+      membersBringAgents: true,
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -257,7 +283,7 @@ export class RoomService implements RoomRules, TurnListener {
   /** From the agent's next session in the room on, and in its open one at once; an agent not in the room has none to change. */
   setAgentModel(roomId: string, profileId: string, model: RoomAgentModel) {
     const agent = this.existingRoom(roomId).agents.find((each) => each.profileId === profileId);
-    if (!agent) return;
+    if (!agent || agent.brought) return;
     this.store.setRoomAgentModel(roomId, profileId, checkedModel(model));
     this.publish(roomId);
     if (agent.conversationId) void this.sessions.followRoomAgentModel(agent.conversationId).catch(() => {});
@@ -334,7 +360,7 @@ export class RoomService implements RoomRules, TurnListener {
   setAgentWholeHostEnvironment(roomId: string, profileId: string, given: boolean) {
     if (typeof given !== "boolean") throw new Error("The host's whole environment is given or not.");
     const agent = this.existingRoom(roomId).agents.find((each) => each.profileId === profileId);
-    if (!agent || agent.wholeHostEnvironment === given) return;
+    if (!agent || agent.brought || agent.wholeHostEnvironment === given) return;
     this.store.setRoomAgentWholeHostEnvironment(roomId, profileId, given);
     this.publish(roomId);
     this.startAfresh(agent, narrows(agent.wholeHostEnvironment, given));
@@ -376,6 +402,7 @@ export class RoomService implements RoomRules, TurnListener {
     const comingIn = !room.people.some((person) => person.personId === personId);
     if (comingIn && this.nameTakenIn(room, personId)) throw new HostProblemError({ code: "room-person-name-taken" });
     this.store.setRoomPersonRole(roomId, personId, role);
+    if (!asksAgentsAs(role)) this.takeOutAgentsOf(roomId, personId);
     this.peopleChanged(roomId);
     this.declineTasksNoLongerAsked(roomId);
   }
@@ -384,6 +411,7 @@ export class RoomService implements RoomRules, TurnListener {
   removePerson(roomId: string, personId: string) {
     this.existingRoom(roomId);
     if (personId === this.store.ownerId()) throw new HostProblemError({ code: "room-person-unknown" });
+    this.takeOutAgentsOf(roomId, personId);
     this.store.removeRoomPerson(roomId, personId);
     this.peopleChanged(roomId);
     this.declineTasksNoLongerAsked(roomId);
@@ -398,6 +426,119 @@ export class RoomService implements RoomRules, TurnListener {
     if (room.people.length === 0) return;
     this.peopleListed();
     this.tellOfPeopleInNoRoom(room.people.map(({ personId }) => personId));
+  }
+
+  /** Whether the room's members may bring agents of their own Miradors; turned off, the agents they brought go at once. */
+  setMembersBringAgents(roomId: string, allowed: boolean) {
+    if (typeof allowed !== "boolean") throw new Error("Members bring agents or not.");
+    this.existingRoom(roomId);
+    this.store.setRoomMembersBringAgents(roomId, allowed);
+    if (!allowed) this.existingRoom(roomId).agents.filter(({ brought }) => brought).forEach((agent) => this.takeOut(this.existingRoom(roomId), agent));
+    this.publish(roomId);
+  }
+
+  /**
+   * An agent a member brings from their own Mirador, where it runs, under the name of its profile there, cleaned as a
+   * person's is and numbered when the room already has one that reads the same; the id this machine knows it by.
+   */
+  bringAgent(roomId: string, personId: string, name: string, harness: HarnessId): string {
+    const room = this.existingRoom(roomId);
+    const role = room.people.find((person) => person.personId === personId)?.role;
+    if (!role || !asksAgentsAs(role) || !room.membersBringAgents) throw new HostProblemError({ code: "room-bringing-not-yours" });
+    if (typeof name !== "string" || !harnessIds.includes(harness)) throw new Error("An agent is brought by its name and kind.");
+    if (room.agents.filter(broughtBy(personId)).length >= MOST_AGENTS_BROUGHT) throw new HostProblemError({ code: "room-agents-brought-too-many" });
+    if (!this.bringing.allows(personId)) throw new HostProblemError({ code: "room-bringing-too-fast" });
+    const agentId = crypto.randomUUID();
+    this.store.addBroughtAgent(roomId, agentId, { personId, name: this.freeAgentName(room, personId, name), harness }, this.hub.carriesAgentsOf(personId));
+    this.publish(roomId);
+    return agentId;
+  }
+
+  /** Its bringer, or the owner, takes the agent out: the tasks it has not answered say so in their threads. */
+  takeAgentOut(roomId: string, agentId: string, personId: string) {
+    const room = this.existingRoom(roomId);
+    const agent = room.agents.find((each) => each.profileId === agentId && each.brought);
+    if (!agent?.brought) throw new HostProblemError({ code: "brought-agent-gone" });
+    if (personId !== this.store.ownerId() && agent.brought.personId !== personId) throw new HostProblemError({ code: "room-agent-not-yours" });
+    this.takeOut(room, agent);
+    this.publish(roomId);
+  }
+
+  /**
+   * The person's own Mirador says it takes the tasks of the agents they brought on this socket: the first time it says
+   * so there, they show as here, and are sent again what they have not answered.
+   */
+  broughtAgentsHere(socket: Pick<SocketData, "personId" | "isOwner" | "carriesAgents">) {
+    if (socket.isOwner || socket.carriesAgents) return;
+    socket.carriesAgents = true;
+    this.store.setBroughtAgentsHere(socket.personId, true).forEach((roomId) => this.publish(roomId));
+    this.store.roomBroughtTasksOf(socket.personId).forEach((task) => this.sendBroughtTask(socket.personId, task));
+  }
+
+  /** The person's own Mirador went: their agents show as away, working on nothing the room sees, until it is back. */
+  bringerLeft(personId: string) {
+    if (this.hub.carriesAgentsOf(personId)) return;
+    this.store.setBroughtAgentsHere(personId, false).forEach((roomId) => this.publish(roomId));
+  }
+
+  /** The agent the person brought began a turn on a task this machine sent it: the room shows it answering, once, and only so often. */
+  broughtTaskStarted(personId: string, roomId: string, agentId: string, taskId: string) {
+    const room = this.existingRoom(roomId);
+    const agent = this.broughtAgentOf(room, agentId, personId);
+    const task = this.store.findRoomBroughtTask(taskId);
+    if (task?.roomId !== roomId || task.agentId !== agentId) throw new HostProblemError({ code: "room-brought-task-unknown" });
+    if (agent.answering === task.messageId || !this.broughtTaskStarts.allows(personId)) return;
+    this.store.setRoomAgentAnsweringIn(roomId, agentId, task.messageId);
+    this.publish(roomId);
+  }
+
+  /**
+   * The final answer of the agent the person brought, to a task this machine sent it and that is not answered yet, goes
+   * up in the task's thread as its own agents' answers do: cleaned and cut as a person's text, tagging the people and
+   * agents it names after an @, a few turns at most after a person last wrote; or how it ended without one. It is its
+   * bringer's word: it tags agents only as they may, and while people's tasks wait, a tag of any agent but theirs waits
+   * as their task for an approver.
+   */
+  broughtTaskAnswered(personId: string, roomId: string, agentId: string, taskId: string, text: string, ended: BroughtAnswerEnd | null) {
+    const room = this.existingRoom(roomId);
+    this.broughtAgentOf(room, agentId, personId);
+    if (typeof text !== "string" || !(ended === null || isBroughtAnswerEnd(ended))) throw new Error("An answer is its text, and how it ended unless it finished.");
+    const task = this.store.takeRoomBroughtTask(taskId, roomId, agentId);
+    if (!task) throw new HostProblemError({ code: "room-brought-task-unknown" });
+    this.store.setRoomAgentAnsweringIn(roomId, agentId, null);
+    this.publish(roomId);
+    const asked = this.store.findRoomMessage(task.messageId);
+    const thread = asked && this.threadOf(asked, agentId);
+    if (!asked || !thread) return;
+    const written = cutToRoomMessage(shownAsWritten(text));
+    const author = { profileId: agentId };
+    const named = ended === null && this.mayTag(room, personId) && this.personBehindMayTag(room, asked) ? this.agentsTaggedBy(room, agentId, written) : [];
+    const passedOn = this.agentsMayGoOn(room.id, asked, named.length) ? named : [];
+    const waits = this.waitsAsBringersTask(room, personId, passedOn);
+    const answer = this.store.appendRoomMessage({
+      id: crypto.randomUUID(),
+      roomId,
+      at: Date.now(),
+      author,
+      text: written,
+      tags: passedOn,
+      ...this.mentionsOf(room, written, author),
+      threadId: thread.id,
+      answers: asked.id,
+      ...(ended !== null && { ended }),
+      ...(passedOn.length < named.length && { tagsDropped: named }),
+      ...(waits && { taskHeld: "waiting" as const }),
+      broughtBy: personId,
+    });
+    this.post(answer, passedOn);
+    if (waits) this.holdTask(room, answer, passedOn);
+    else passedOn.forEach((profileId) => this.ask(room, profileId, answer, undefined));
+  }
+
+  /** While people's tasks wait, a brought agent's answer that tags any agent but those its bringer brought waits as their task. */
+  private waitsAsBringersTask(room: Room, bringerId: string, tagged: string[]) {
+    const theirs = new Set(room.agents.filter(broughtBy(bringerId)).map(({ profileId }) => profileId));
+    return room.peoplesTasksWait && tagged.some((profileId) => !theirs.has(profileId));
   }
 
   /**
@@ -416,17 +557,15 @@ export class RoomService implements RoomRules, TurnListener {
     this.hub.broadcast({ type: "room.approvals", roomId, approvals: this.approvals(roomId), tasks: this.tasksWaiting(roomId) });
   }
 
-  /** The tasks of people other than the owner that wait for an approver, oldest first. */
+  /** The tasks of people other than the owner, or of the agents they brought, that wait for an approver, oldest first. */
   tasksWaiting(roomId: string): RoomTaskApproval[] {
     const room = this.store.findRoom(roomId);
     if (!room) return [];
-    const ownerId = this.store.ownerId();
     return this.store.listRoomTasksWaiting(roomId).map((message) => ({
       roomId,
       messageId: message.id,
       profileIds: this.agentsAsked(message),
-      personId: (message.author as { personId: string }).personId,
-      role: authorRoleOf(message, ownerId),
+      ...this.taskGiverOf(message),
       text: message.text,
       sentAlong: this.sentAlongWith(room, message),
       at: message.at,
@@ -448,7 +587,7 @@ export class RoomService implements RoomRules, TurnListener {
     this.assertMayApprove(room, personId);
     if (answer !== "allow" && answer !== "deny") throw new Error(`There is no answer "${answer}" to a task.`);
     const waiting = this.store.findRoomMessage(messageId);
-    if (waiting?.roomId !== roomId || !taskWaits(waiting) || writtenByAgent(waiting.author)) throw new HostProblemError({ code: "room-task-not-waiting" });
+    if (waiting?.roomId !== roomId || !taskWaits(waiting)) throw new HostProblemError({ code: "room-task-not-waiting" });
     if (answer === "allow" && this.writerMayStillAsk(room, waiting)) this.allowTask(room, waiting);
     else this.declineTask(room, waiting);
     this.waitingChanged(roomId);
@@ -497,7 +636,7 @@ export class RoomService implements RoomRules, TurnListener {
    * out of it, or a workspace the room left, takes its conversation there with it, and what it took.
    */
   usage(roomId: string, since: number | null): RoomUsage {
-    const agents = this.existingRoom(roomId).agents.map(({ profileId, conversationId }) => ({
+    const agents = this.existingRoom(roomId).agents.filter(({ brought }) => !brought).map(({ profileId, conversationId }) => ({
       profileId,
       events: conversationId ? this.store.listEventsOfTypes(conversationId, EVENTS_OF_TURNS) : [],
     }));
@@ -625,12 +764,12 @@ export class RoomService implements RoomRules, TurnListener {
     const room = conversation?.roomId ? this.store.findRoom(conversation.roomId) : undefined;
     const answering = this.askedIn(conversationId, Number.MAX_SAFE_INTEGER);
     if (!conversation || !room || !answering) return null;
-    const others = room.agents.filter(({ profileId }) => profileId !== conversation.profileId && this.answers(room, profileId)).map(({ profileId }) => this.store.findProfile(profileId)!);
+    const others = this.agentsNamed(room).filter(({ agentId }) => agentId !== conversation.profileId && this.answers(room, agentId));
     const ownName = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId)?.name;
     const itself = ownName !== undefined && names.some((named) => sameName(named, ownName));
     const tagged = others.filter(({ name }) => names.some((named) => sameName(named, name)));
     const unknown = names.filter((named) => !(ownName !== undefined && sameName(named, ownName)) && !others.some(({ name }) => sameName(named, name)));
-    this.store.setRoomAnswerTags(conversationId, answering.id, tagged.map(({ id }) => id));
+    this.store.setRoomAnswerTags(conversationId, answering.id, tagged.map(({ agentId }) => agentId));
     return { tagged: tagged.map(({ name }) => name), itself, unknown, others: others.map(({ name }) => name) };
   }
 
@@ -737,10 +876,16 @@ export class RoomService implements RoomRules, TurnListener {
     return thread ? [thread.profileId] : [];
   }
 
+  /** Whose task a waiting message is: its writer's, or, for a brought agent's answer, its bringer's, a member. */
+  private taskGiverOf(task: RoomMessage): Pick<RoomTaskApproval, "personId" | "role" | "byAgent"> {
+    if (writtenByAgent(task.author)) return { personId: task.broughtBy!, role: "member", byAgent: task.author.profileId };
+    return { personId: task.author.personId, role: authorRoleOf(task, this.store.ownerId()) };
+  }
+
   private allowTask(room: Room, waiting: RoomMessage) {
     const task = this.store.answerRoomTask(waiting.id, null)!;
     this.hub.publishToRoom(room.id, { type: "room.message", message: task, threads: [] });
-    const writerId = (task.author as { personId: string }).personId;
+    const writerId = writtenByAgent(task.author) ? undefined : task.author.personId;
     this.agentsAsked(task)
       .filter((profileId) => this.answers(room, profileId))
       .forEach((profileId) => this.ask(room, profileId, task, writerId));
@@ -762,12 +907,13 @@ export class RoomService implements RoomRules, TurnListener {
     const people = this.store.listPeople();
     const others = new Set([this.store.ownerId(), ...room.people.map((person) => person.personId), ...this.store.writersIn(room.id)].filter((id) => id !== personId));
     const named = people.find(({ id }) => id === personId)?.name ?? "";
-    const agents = room.agents.flatMap(({ profileId }) => this.store.findProfile(profileId)?.name ?? []);
+    const agents = this.agentsNamed(room).map(({ name }) => name);
     return nameTaken(named, [...people.filter(({ id }) => others.has(id)).map(({ name }) => name), ...agents]);
   }
 
-  /** The writer is still in the room, in a role that lets them ask what the task asks. */
+  /** The writer, or the bringer of the agent that wrote it, is still in the room, in a role that lets them ask what the task asks. */
   private writerMayStillAsk(room: Room, task: RoomMessage) {
+    if (task.broughtBy !== undefined) return this.mayTag(room, task.broughtBy);
     if (writtenByAgent(task.author)) return false;
     const { personId } = task.author;
     const role = room.people.find((person) => person.personId === personId)?.role;
@@ -782,20 +928,26 @@ export class RoomService implements RoomRules, TurnListener {
     if (noLongerAsked.length > 0) this.waitingChanged(roomId);
   }
 
-  /** The task waits, and approvers hear of it as of a request: through the conversation of the first agent it asks. */
+  /** The task waits, and approvers hear of it as of a request: through the conversation of the first of the room's own agents it asks, or from the room. */
   private holdTask(room: Room, task: RoomMessage, asked: string[]) {
-    const agent = room.agents.find(({ profileId }) => profileId === asked[0])!;
-    const conversationId = agent.conversationId ?? this.startSession(room, agent.profileId);
+    const agent = room.agents.find(({ profileId, brought }) => !brought && asked.includes(profileId));
     const { role, name } = this.authorOf(task);
-    this.notifications.notify(conversationId, { kind: "permission", tool: `a task of ${name}, ${role}` });
+    const waiting = { kind: "permission" as const, tool: `a task of ${name}, ${role}` };
+    if (agent) this.notifications.notify(agent.conversationId ?? this.startSession(room, agent.profileId), waiting);
+    else this.notifications.roomTaskHeld(room, waiting);
     this.waitingChanged(room.id);
   }
 
   /** The declined task's answer, which no agent wrote: it tells the room the agent was never asked. */
   private decline(task: RoomMessage, profileId: string) {
+    this.postEnding(task, profileId, "declined");
+  }
+
+  /** An answer without words, which says in the task's thread how the task ended without reaching the agent. */
+  private postEnding(task: RoomMessage, profileId: string, ended: RoomAnswerEnd) {
     const thread = this.threadOf(task, profileId);
     if (!thread) return;
-    const declined = this.store.appendRoomMessage({
+    const ending = this.store.appendRoomMessage({
       id: crypto.randomUUID(),
       roomId: task.roomId,
       at: Date.now(),
@@ -804,9 +956,125 @@ export class RoomService implements RoomRules, TurnListener {
       tags: [],
       threadId: thread.id,
       answers: task.id,
-      ended: "declined",
+      ended,
     });
-    this.post(declined, []);
+    this.post(ending, []);
+  }
+
+  /** The agent of the room the person brought; anyone else's, or one gone, is not theirs to act for. */
+  private broughtAgentOf(room: Room, agentId: string, personId: string) {
+    const agent = room.agents.find((each) => each.profileId === agentId && each.brought);
+    if (!agent?.brought) throw new HostProblemError({ code: "brought-agent-gone" });
+    if (agent.brought.personId !== personId) throw new HostProblemError({ code: "room-agent-not-yours" });
+    return agent;
+  }
+
+  /** The agents the person brought into the room go, as when taken out. */
+  private takeOutAgentsOf(roomId: string, personId: string) {
+    const room = this.existingRoom(roomId);
+    const theirs = room.agents.filter(broughtBy(personId));
+    theirs.forEach((agent) => this.takeOut(room, agent));
+    if (theirs.length > 0) this.publish(roomId);
+  }
+
+  /** The agents the person brought into any room go, as when taken out. */
+  takeOutAgentsOfEverywhere(personId: string) {
+    this.store.roomsOf(personId).forEach(({ id }) => this.takeOutAgentsOf(id, personId));
+  }
+
+  private takeOut(room: Room, agent: RoomAgent) {
+    this.store.roomBroughtTasksOfAgent(room.id, agent.profileId).forEach(({ messageId }) => {
+      const asked = this.store.findRoomMessage(messageId);
+      if (asked) this.postEnding(asked, agent.profileId, "taken-out");
+    });
+    this.store.removeBroughtAgent(room.id, agent.profileId);
+  }
+
+  /**
+   * The person's name as it would be on a brought agent: their own name and the agent's, which may not be blank, has to
+   * read as no name Mirador puts in an author's place and pass the rules a person's name does, and is numbered when it
+   * reads as another of the room's.
+   */
+  private freeAgentName(room: Room, personId: string, asked: string) {
+    const name = personName(shownAsWritten(asked));
+    if (!name) throw new Error("An agent is brought under a name.");
+    const refused = nameRefused(name);
+    if (refused) throw new HostProblemError({ code: refused });
+    const bringer = this.nameOf({ personId });
+    const taken = this.namesIn(room);
+    const free = [name, ...NUMBERS_AFTER_A_TAKEN_NAME.map((number) => `${name} ${number}`)].find((each) => !readsAsMiradorsWords(each) && !nameTaken(broughtAgentName(bringer, each), taken));
+    if (free === undefined) throw new HostProblemError({ code: "room-agent-name-taken" });
+    return free;
+  }
+
+  /** Whom the room shows and frames by name: its owner, its people and who wrote there, and its agents; besides a person, without them and the agents they brought. */
+  private namesIn(room: Room, besides: string | null = null) {
+    const people = this.store.listPeople();
+    const inRoom = new Set([this.store.ownerId(), ...room.people.map(({ personId }) => personId), ...this.store.writersIn(room.id)].filter((id) => id !== besides));
+    const theirAgents = new Set(besides === null ? [] : room.agents.filter(broughtBy(besides)).map(({ profileId }) => profileId));
+    const agents = this.agentsNamed(room).filter(({ agentId }) => !theirAgents.has(agentId));
+    return [...people.filter(({ id }) => inRoom.has(id)).map(({ name }) => name), ...agents.map(({ name }) => name)];
+  }
+
+  /** Whether the agents the person brought would read, under this new name of theirs, as no one else in their rooms. */
+  broughtAgentsFreeUnder(personId: string, name: string) {
+    return this.store.roomsOf(personId).every((room) => {
+      const taken = this.namesIn(room, personId);
+      return room.agents.filter(broughtBy(personId)).every(({ brought }) => !nameTaken(broughtAgentName(name, brought.name), taken));
+    });
+  }
+
+  /** Every agent of the room by the name the room calls it: its profile's, or for one a person brought, theirs and its own. */
+  private agentsNamed(room: Room): TaggableAgent[] {
+    return room.agents.flatMap((agent) => {
+      const name = agent.brought ? broughtAgentName(this.nameOf({ personId: agent.brought.personId }), agent.brought.name) : this.store.findProfile(agent.profileId)?.name;
+      return name === undefined ? [] : [{ agentId: agent.profileId, name }];
+    });
+  }
+
+  /** The other agents of the room a brought agent's answer tags by an @ and their name. */
+  private agentsTaggedBy(room: Room, agentId: string, text: string) {
+    return agentsTaggedIn(text, this.peopleTaggable(room, { profileId: agentId }), this.agentsNamed(room)).filter((each) => each !== agentId && this.answers(room, each));
+  }
+
+  private sendBroughtTask(personId: string, task: RoomBroughtTask) {
+    this.hub.sendToAgentsOf(personId, {
+      type: "room.brought-task",
+      personId,
+      roomId: task.roomId,
+      agentId: task.agentId,
+      taskId: task.id,
+      text: task.prompt,
+      byName: task.byName,
+      byRole: task.byRole,
+      fromYou: task.fromBringer,
+    });
+  }
+
+  /**
+   * A task for an agent a person brought goes to their own Mirador as one of the room's own agents would be sent it, with
+   * who wrote it in what role, once; while that Mirador is away, the task's thread says so and the agent reads it later.
+   */
+  private askBrought(room: Room, agent: RoomAgent, brought: BroughtAgent, message: RoomMessage) {
+    if (!this.hub.carriesAgentsOf(brought.personId)) return this.postEnding(message, agent.profileId, "away");
+    const introduced = this.store.roomSeenThrough(room.id, agent.profileId) === 0;
+    const prompt = this.catchUp(room, agent.profileId, introduced ? this.roomThrough(room, message) : this.unseenBy(room, agent.profileId, message), message, introduced);
+    this.store.markRoomSeen(room.id, agent.profileId, message.seq);
+    const { name, role } = this.authorOf(message);
+    const task: RoomBroughtTask = {
+      id: crypto.randomUUID(),
+      roomId: room.id,
+      agentId: agent.profileId,
+      messageId: message.id,
+      prompt,
+      byName: name,
+      byRole: role,
+      fromBringer: !writtenByAgent(message.author) && message.author.personId === brought.personId,
+      sentAt: Date.now(),
+    };
+    this.store.insertRoomBroughtTask(task);
+    this.sendBroughtTask(brought.personId, task);
+    this.tasksMayCarryOthers(room.id);
   }
 
   /** The room's messages up to and with the one the agent is asked that it has not seen and may read; never its own. */
@@ -829,6 +1097,7 @@ export class RoomService implements RoomRules, TurnListener {
       authorOf: this.authorOf,
       ...(introduced && { introducedAs: this.nameOf({ profileId }) }),
       otherAgents: this.otherAgentNames(room, profileId),
+      attendance: room.agents.some((agent) => agent.profileId === profileId && agent.brought) ? "brought" : "own",
     });
   }
 
@@ -851,6 +1120,7 @@ export class RoomService implements RoomRules, TurnListener {
   /** An agent new to the room, or on a new conversation there, is introduced to it with the room's messages so far. */
   private ask(room: Room, profileId: string, message: RoomMessage, personId: string | undefined) {
     const agent = room.agents.find((each) => each.profileId === profileId)!;
+    if (agent.brought) return this.askBrought(room, agent, agent.brought, message);
     const conversationId = agent.conversationId ?? this.startSession(room, profileId);
     const introduced = agent.conversationId === null || this.store.roomSeenThrough(room.id, profileId) === 0;
     const prompt = this.catchUp(room, profileId, introduced ? this.roomThrough(room, message) : this.unseenBy(room, profileId, message), message, introduced);
@@ -874,14 +1144,18 @@ export class RoomService implements RoomRules, TurnListener {
    * the owner and the room's people, never the writer, nor anyone without a name or whose name reads as another's here.
    */
   private mentionsOf(room: Room, text: string, author: RoomAuthor): Pick<RoomMessage, "mentions"> {
+    const mentions = mentionsIn(text, this.peopleTaggable(room, author), this.agentsNamed(room));
+    return mentions.length > 0 ? { mentions } : {};
+  }
+
+  /** The people of the room a message of the author can tag: the owner and the room's people, never the writer, nor anyone whose name reads as another's here. */
+  private peopleTaggable(room: Room, author: RoomAuthor) {
     const people = this.store.listPeople();
     const inRoom = [{ personId: this.store.ownerId() }, ...room.people.filter(({ nameClash }) => nameClash === undefined)];
-    const taggable = inRoom.flatMap(({ personId }) => {
+    return inRoom.flatMap(({ personId }) => {
       const name = people.find(({ id }) => id === personId)?.name ?? "";
       return writtenByAgent(author) || author.personId !== personId ? [{ personId, name }] : [];
     });
-    const mentions = mentionsIn(text, taggable);
-    return mentions.length > 0 ? { mentions } : {};
   }
 
   /**
@@ -892,11 +1166,15 @@ export class RoomService implements RoomRules, TurnListener {
     return named?.answering === answering.id && this.personBehindMayTag(room, answering) ? named.profileIds : [];
   }
 
-  /** The owner may tag agents in every room, and a member in theirs; an agent's answer works for the person whose message began its chain. */
+  /** An agent's answer works for the person whose message began its chain. */
   private personBehindMayTag(room: Room, answering: RoomMessage) {
     const { author } = personMessageBehind(answering, new Map(this.store.listRoomMessages(room.id).map((message) => [message.id, message])));
-    if (writtenByAgent(author)) return false;
-    return author.personId === this.store.ownerId() || room.people.some(({ personId, role }) => personId === author.personId && asksAgentsAs(role));
+    return !writtenByAgent(author) && this.mayTag(room, author.personId);
+  }
+
+  /** The owner may tag agents in every room, and a member in theirs. */
+  private mayTag(room: Room, personId: string) {
+    return personId === this.store.ownerId() || room.people.some((person) => person.personId === personId && asksAgentsAs(person.role));
   }
 
   private agentsMayGoOn(roomId: string, asked: RoomMessage, tagging: number) {
@@ -913,12 +1191,12 @@ export class RoomService implements RoomRules, TurnListener {
   }
 
   private otherAgentNames(room: Room, profileId: string) {
-    return room.agents.flatMap((agent) => (agent.profileId === profileId ? [] : (this.store.findProfile(agent.profileId)?.name ?? [])));
+    return this.agentsNamed(room).flatMap(({ agentId, name }) => (agentId === profileId ? [] : [name]));
   }
 
-  /** An agent of the room whose profile is still there to take a turn. */
+  /** An agent of the room whose profile is still there to take a turn, or one a person brought, whose Mirador answers for it. */
   private answers(room: Room, profileId: string) {
-    return hasAgent(room, profileId) && this.store.findProfile(profileId) !== undefined;
+    return hasAgent(room, profileId) && (room.agents.some((agent) => agent.profileId === profileId && agent.brought) || this.store.findProfile(profileId) !== undefined);
   }
 
   /** The thread a follow-up goes to: one of the room's, whose agent is still in it, written to without tags. */
@@ -956,10 +1234,15 @@ export class RoomService implements RoomRules, TurnListener {
   /** The role the host knows a message's author by, and their name, as agents are told them. */
   private readonly authorOf: AuthorOf = (message) => ({ role: authorRoleOf(message, this.store.ownerId()), name: this.nameOf(message.author) });
 
-  private nameOf(author: RoomAuthor) {
-    if (writtenByAgent(author)) return this.store.findProfile(author.profileId)?.name ?? AGENT_GONE;
+  private nameOf(author: RoomAuthor): string {
+    if (writtenByAgent(author)) return this.store.findProfile(author.profileId)?.name ?? this.broughtAgentNamed(author.profileId) ?? AGENT_GONE;
     const person = this.store.listPeople().find(({ id }) => id === author.personId);
     return author.personId === this.store.ownerId() ? person?.name || OWNER_WITHOUT_A_NAME : personGoesBy(person, PERSON_WITHOUT_A_NAME);
+  }
+
+  private broughtAgentNamed(agentId: string): string | undefined {
+    const brought = this.store.findBroughtAgent(agentId);
+    return brought && broughtAgentName(this.nameOf({ personId: brought.personId }), brought.name);
   }
 
   private existingRoom(roomId: string) {

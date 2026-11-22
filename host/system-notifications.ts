@@ -1,6 +1,6 @@
 import type { RoomAlert } from "../shared/room-reading.ts";
 import type { Room } from "../shared/rooms.ts";
-import { roomNotification, systemNotification, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
+import { roomNotification, roomWaitingNotification, systemNotification, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
 import type { Hub } from "./hub.ts";
 import type { PushNotifications } from "./push-notifications.ts";
 import type { Store } from "./store.ts";
@@ -25,6 +25,12 @@ export class SystemNotifications {
     if (conversation.roomId && (!TOLD_OF_IN_ROOMS.has(reason.kind) || this.hub.isRoomWatched(conversation.roomId) || this.store.roomMuted(conversation.roomId, this.store.ownerId()))) return;
     const workspace = this.store.findWorkspace(conversation.workspaceId)?.name ?? "";
     this.tell({ ...systemNotification(conversation, workspace, reason), id: crypto.randomUUID() });
+  }
+
+  /** A task waits in a room for its owner's OK and asks none of the room's own agents, whose conversation would tell of it: the room does, as quietly. */
+  roomTaskHeld(room: Room, reason: NotificationReason) {
+    if (this.hub.isRoomWatched(room.id) || this.store.roomMuted(room.id, this.store.ownerId())) return;
+    this.tell({ ...roomWaitingNotification(room.id, room.name, this.store.findWorkspace(room.workspaceId)?.name ?? "", reason), id: crypto.randomUUID() });
   }
 
   /** A room calls its owner, who looks elsewhere and didn't mute it. */

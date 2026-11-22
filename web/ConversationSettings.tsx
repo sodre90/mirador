@@ -3,7 +3,7 @@ import { useRef, useState, type CSSProperties, type RefObject } from "react";
 import { conversationSettingValue, isChoiceSetting, profileSettingWhoseModelsItLists, settingValueFollowingProfile, type PluginChoiceProfileSetting, type PluginProfileSetting } from "../shared/apps.ts";
 import { chosenModel, flatSelectOptions } from "../shared/config-options.ts";
 import { nameWithPrice } from "./model-names.ts";
-import { harnessLabels, type AskMode, type Conversation, type Profile } from "../shared/model.ts";
+import { harnessLabels, worksForARoom, type AskMode, type Conversation, type Profile } from "../shared/model.ts";
 import { agentBesideProfile } from "../shared/profile-label.ts";
 import { placedBelowOnItsSide, useClosing } from "./BarMenu.tsx";
 import { choiceGroups } from "./choices.ts";
@@ -287,7 +287,7 @@ export function ConversationSettingsPopover({
         {conversation.configOptions.map((option) => (
           <ConfigControl key={option.id} conversationId={conversation.id} option={option} />
         ))}
-        <YoloSwitch conversation={conversation} />
+        {!worksForARoom(conversation) && <YoloSwitch conversation={conversation} />}
         <PluginSettingMenus conversation={conversation} profiles={profiles} />
         <QuestionsMenu conversation={conversation} />
       </div>

@@ -36,6 +36,7 @@ import type { ClientMessage } from "../shared/protocol.ts";
 import { parseAnsi, plainTextOf } from "./ansi.ts";
 import { harnessSteers, useEnterWhileBusy, type EnterWhileBusy } from "./busy-sending.ts";
 import { connection } from "./connection.ts";
+import type { BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import { MessageImages, PastedImages, useComposerImages } from "./ComposerImages.tsx";
 import { useDroppedFiles } from "./dropped-files.ts";
 import { DictateButton, DictationLines, useDictation } from "./Dictation.tsx";
@@ -749,6 +750,29 @@ function PermissionCard({ block, conversationId }: { block: PermissionBlock; con
       ) : (
         <PermissionOptions options={block.options} onChoose={(optionId) => answerPermission(conversationId, block.permissionId, optionId)} />
       )}
+    </div>
+  );
+}
+
+/**
+ * A task someone gave an agent you brought into a room of someone else's machine, waiting for your OK: who gave it, in
+ * what role, in which room, and all the agent would be sent.
+ */
+function BroughtTaskCard({ task }: { task: BroughtTaskWaiting }) {
+  const roomWords = t.rooms;
+  return (
+    <div className="permission pending brought-task" data-brought-task={task.id} role="group" aria-label={roomWords.broughtTask(task.byName, roomWords.authorRoles[task.byRole], task.roomName, task.machineName)}>
+      <div className="permission-title">{roomWords.broughtTask(task.byName, roomWords.authorRoles[task.byRole], task.roomName, task.machineName)}</div>
+      <pre className="brought-task-text">{task.text}</pre>
+      <div className="hint">{roomWords.broughtTaskHint}</div>
+      <div className="permission-options">
+        <button type="button" className="option-allow_once" onClick={() => connection.send({ type: "brought-task.answer", taskId: task.id, answer: "allow" })}>
+          {roomWords.allow}
+        </button>
+        <button type="button" onClick={() => connection.send({ type: "brought-task.answer", taskId: task.id, answer: "deny" })}>
+          {roomWords.deny}
+        </button>
+      </div>
     </div>
   );
 }
@@ -2268,6 +2292,7 @@ function useWordsFromTabs(conversationId: string, setText: Dispatch<SetStateActi
 export function ChatPanel({
   conversation,
   delegatedTasks,
+  broughtTasks = [],
   profiles,
   promptTemplates,
   voiceSettings,
@@ -2286,6 +2311,8 @@ export function ChatPanel({
   conversation: Conversation;
   /** The conversations this one's plugin tools started that the user hasn't dismissed. */
   delegatedTasks: Conversation[];
+  /** Tasks for the agent you brought into a room, which work in this conversation, waiting for your OK. */
+  broughtTasks?: BroughtTaskWaiting[];
   profiles: Profile[];
   promptTemplates: PromptTemplate[];
   voiceSettings: VoiceSettings;
@@ -2435,6 +2462,9 @@ export function ChatPanel({
                         {words.timeline.openInTerminal(words.terminalActivity[conversation.openInTerminal])}
                       </div>
                     )}
+                    {broughtTasks.map((task) => (
+                      <BroughtTaskCard key={task.id} task={task} />
+                    ))}
                     {!side && <ReminderBanner conversation={conversation} dispatch={dispatch} />}
                     <Composer
                       conversation={conversation}

@@ -991,6 +991,8 @@ export function Sidebar({
         readings={state.roomReadings}
         roomsWithPeopleHere={state.roomsWithPeopleHere}
         joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
+        people={state.people}
+        broughtAgents={state.broughtAgents}
         manages
         dispatch={dispatch}
         onOpenJoinedRoom={onOpenJoinedRoom}

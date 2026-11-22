@@ -1,6 +1,7 @@
 import { flushSync } from "react-dom";
 import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
-import type { AskItem, CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
+import type { AskItem, CanvasItem, Conversation, HarnessId, Person, Profile } from "../shared/model.ts";
+import { personGoesBy } from "../shared/people.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
@@ -9,6 +10,7 @@ import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   askedInThread,
+  broughtAgentName,
   canvasItemsOfAnswers,
   eventsAnswering,
   firstReachingTheAgent,
@@ -19,6 +21,7 @@ import {
   taskWaits,
   workPending,
   writtenByAgent,
+  type BroughtAgent,
   type Room,
   type RoomAgentModel,
   type RoomApproval,
@@ -59,6 +62,9 @@ const TAG_MENU_ID = "room-tags";
 interface RoomAgentShown {
   profileId: string;
   name: string;
+  harness: HarnessId | undefined;
+  /** Of an agent a person brought from their own Mirador: by whom, by the name they go by, and whether it is here. */
+  brought: (BroughtAgent & { bringer: string }) | undefined;
   profile: Profile | undefined;
   conversation: Conversation | undefined;
   /** The room message the agent's turn under way answers. */
@@ -73,7 +79,7 @@ const agentNames = (profileIds: string[], agentsById: Map<string, RoomAgentShown
 
 function AuthorMark({ author, agentsById }: { author: RoomAuthor; agentsById: Map<string, RoomAgentShown> }) {
   if (!writtenByAgent(author)) return <PersonAvatar personId={author.personId} />;
-  const harness = agentsById.get(author.profileId)?.profile?.harness;
+  const harness = agentsById.get(author.profileId)?.harness;
   return (
     <span className={`avatar agent-${harness ?? "gone"}`} aria-hidden="true">
       {harness ? agentMarks[harness] : "?"}
@@ -89,6 +95,9 @@ function answerEnding(message: RoomMessage) {
   if (message.ended === "stopped") return words.stopped;
   if (message.ended === "failed") return words.failed;
   if (message.ended === "declined") return words.declined;
+  if (message.ended === "away") return words.away;
+  if (message.ended === "refused") return words.refused;
+  if (message.ended === "taken-out") return words.takenOut;
   return message.text ? null : words.noAnswer;
 }
 
@@ -321,16 +330,20 @@ function ApprovalStrip({ approvals, tasks = [], agentsById, you }: { approvals: 
 }
 
 /**
- * A person's task that reaches no agent until you allow it: who gives it, in what role, to which agents, all it says,
- * and the room's other messages its agents would be sent with it.
+ * A person's task that reaches no agent until you allow it: who gives it, in what role, through which agent they brought
+ * if one, to which agents, all it says, and the room's other messages its agents would be sent with it.
  */
 function TaskApproval({ task, agentsById, count }: { task: RoomTaskApproval; agentsById: Map<string, RoomAgentShown>; count: ReactNode }) {
   const personName = usePersonName(task.personId);
   const [wholeShown, setWholeShown] = useState(false);
+  const role = words.authorRoles[task.role];
+  const asked = agentNames(task.profileIds, agentsById);
   return (
     <section className="room-approvals room-task-approval" aria-label={words.approvalsWaiting} data-task-message-id={task.messageId}>
       <div className="room-approval-head">
-        <span className="room-approval-asker">{words.taskFrom(personName, words.authorRoles[task.role], agentNames(task.profileIds, agentsById))}</span>
+        <span className="room-approval-asker">
+          {task.byAgent === undefined ? words.taskFrom(personName, role, asked) : words.taskOnBehalfOf(agentNames([task.byAgent], agentsById), personName, role, asked)}
+        </span>
         {count}
       </div>
       <div className={`room-approval-task-text${wholeShown ? " whole" : ""}`}>{task.text}</div>
@@ -454,9 +467,13 @@ function ThreadColumn({
     ? words.taskWaits(agent.name)
     : waitsInThread(approvals, thread.id)
       ? words.waitingForApproval(agent.name)
-      : isBusy(agent.conversation)
-        ? words.working(agent.name)
-        : words.waiting(agent.name);
+      : agent.brought
+        ? agent.answering === null
+          ? words.notStartedYet(agent.name)
+          : words.working(agent.name)
+        : isBusy(agent.conversation)
+          ? words.working(agent.name)
+          : words.waiting(agent.name);
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -517,7 +534,15 @@ function workUnderWay(pending: WorkPending[], agentsById: Map<string, RoomAgentS
     const agent = agentsById.get(thread.profileId);
     const name = agent?.name ?? words.agentGone;
     const first = sent.find((each) => each.thread.profileId === thread.profileId)?.message === message;
-    const text = taskWaits(message) ? words.taskWaits(name) : waitsInThread(approvals, thread.id) ? words.waitingForApproval(name) : first ? words.working(name) : words.waiting(name);
+    const text = taskWaits(message)
+      ? words.taskWaits(name)
+      : waitsInThread(approvals, thread.id)
+        ? words.waitingForApproval(name)
+        : !first
+          ? words.waiting(name)
+          : agent?.brought && agent.answering === null
+            ? words.notStartedYet(name)
+            : words.working(name);
     return { key: `${message.id}-${thread.id}`, thread, text };
   });
 }
@@ -574,6 +599,11 @@ function questionsOfNoAnswer(canvas: CanvasItem[], canvasOfAnswers: Map<string, 
   return canvas.filter(isAsk).filter((item) => item.status === "waiting" && !held.has(item.id));
 }
 
+/** Where an agent a person brought runs, or that it is away while their Mirador is. */
+function BroughtMark({ brought }: { brought: BroughtAgent & { bringer: string } }) {
+  return <span className={`room-agent-brought${brought.here ? "" : " away"}`}>{brought.here ? words.onComputerOf(brought.bringer) : words.awayFrom(brought.bringer)}</span>;
+}
+
 /** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which model for the owner, who changes it there. */
 function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents: RoomAgentShown[]; here: string[]; ownerId: string | null; owns: boolean }) {
   const opener = useRef<HTMLButtonElement>(null);
@@ -612,16 +642,17 @@ function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents:
             <>
               <h3>{words.agents}</h3>
               <ul aria-label={words.agents}>
-                {agents.map(({ profileId, name, profile, conversation, answering, model }) => (
+                {agents.map(({ profileId, name, harness, brought, profile, conversation, answering, model }) => (
                   <li key={profileId} className="room-people-agent">
                     <div className="room-people-agent-line">
-                      <span className={`avatar agent-${profile?.harness ?? "gone"}`} aria-hidden="true">
-                        {profile ? agentMarks[profile.harness] : "?"}
+                      <span className={`avatar agent-${harness ?? "gone"}`} aria-hidden="true">
+                        {harness ? agentMarks[harness] : "?"}
                       </span>
                       <span className="room-people-agent-name">{name}</span>
+                      {brought && <BroughtMark brought={brought} />}
                       {answering !== null && <span className="room-agent-working">{words.agentWorking}</span>}
                     </div>
-                    {owns && (
+                    {owns && !brought && (
                       <div className="room-people-agent-choices">
                         <ModelChoice
                           agentName={name}
@@ -681,9 +712,14 @@ export function RoomView({
   onOpenOnCanvas: (itemId: string) => void;
 }) {
   const [threadId, setThreadId] = useState<string | null>(null);
-  const agents = room.agents.map(({ profileId, conversationId, answering, model, effort }): RoomAgentShown => {
+  const agents = room.agents.map(({ profileId, conversationId, answering, model, effort, brought }): RoomAgentShown => {
+    const conversation = roomConversations.find(({ id }) => id === conversationId);
+    if (brought) {
+      const bringer = personGoesBy(people.find(({ id }) => id === brought.personId), words.nameless);
+      return { profileId, name: broughtAgentName(bringer, brought.name), harness: brought.harness, brought: { ...brought, bringer }, profile: undefined, conversation, answering, model: { model, effort } };
+    }
     const profile = profiles.find(({ id }) => id === profileId);
-    return { profileId, name: profile?.name ?? words.agentGone, profile, conversation: roomConversations.find(({ id }) => id === conversationId), answering, model: { model, effort } };
+    return { profileId, name: profile?.name ?? words.agentGone, harness: profile?.harness, brought: undefined, profile, conversation, answering, model: { model, effort } };
   });
   const owns = you !== null && you === ownerId;
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
@@ -717,10 +753,10 @@ export function RoomView({
         <h2 className="room-title"># {room.name}</h2>
         <ul className="room-agents" aria-label={words.agents}>
           {agents.map((agent) => (
-            <li key={agent.profileId} className="agent-chip">
-              {agent.profile ? `${agentMarks[agent.profile.harness]} ` : ""}
+            <li key={agent.profileId} className={`agent-chip${agent.brought && !agent.brought.here ? " away" : ""}`} data-hint={agent.brought && (agent.brought.here ? words.onComputerOf(agent.brought.bringer) : words.awayFrom(agent.brought.bringer))}>
+              {agent.harness ? `${agentMarks[agent.harness]} ` : ""}
               {agent.name}
-              {owns && <ModelShown agent={agent} />}
+              {owns && !agent.brought && <ModelShown agent={agent} />}
             </li>
           ))}
         </ul>
@@ -753,7 +789,7 @@ export function RoomView({
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
-        agents={tagsAgents ? agents.filter(({ profile }) => profile) : []}
+        agents={tagsAgents ? agents.filter(({ harness }) => harness) : []}
         people={peopleToTag}
         onSend={(text, tags) => writeIn(room.id, text, tags, null)}
         tellWriting={tellWritingIn(room.id, null)}

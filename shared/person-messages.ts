@@ -4,7 +4,7 @@ import type { ClientMessage } from "./protocol.ts";
  * All a signed-in person other than the machine's owner may send, and only within their rooms: the host refuses anything
  * else from them, and their page holds anything else back.
  */
-export const PERSON_MESSAGE_TYPES = ["ping", "presence", "person.set-own-profile", "room.subscribe", "room.unsubscribe", "room.write", "room.writing", "room.vote", "room.confirm", "room.mute"] as const satisfies readonly ClientMessage["type"][];
+export const PERSON_MESSAGE_TYPES = ["ping", "presence", "person.set-own-profile", "room.subscribe", "room.unsubscribe", "room.write", "room.writing", "room.vote", "room.confirm", "room.mute", "room.bring-agent", "room.take-agent-out", "room.brought-agents-here", "room.brought-task-started", "room.brought-task-answered"] as const satisfies readonly ClientMessage["type"][];
 
 export type PersonMessageType = (typeof PERSON_MESSAGE_TYPES)[number];
 

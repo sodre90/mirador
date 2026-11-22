@@ -76,6 +76,16 @@ export const systemNotification = (
   about: { kind: "conversation", reason, ...(isUntitled(conversation) && { untitled: true as const }) },
 });
 
+/** Something in a room waits for you with no agent's conversation of yours to tell of it: the room's name as the title, and what for. */
+export const roomWaitingNotification = (roomId: string, roomName: string, place: string, reason: NotificationReason): SystemNotification => ({
+  kind: reason.kind,
+  roomId,
+  title: roomName,
+  workspace: place,
+  body: notificationBody(reasonText(reason)),
+  about: { kind: "conversation", reason },
+});
+
 export type TurnOutcome = { stopReason: string } | { error: string; problem?: HostProblem };
 
 /**

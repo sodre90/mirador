@@ -2,8 +2,11 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel } from "../shared/model.ts";
 import type { PersonMessageType } from "../shared/person-messages.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
+import { isRoomId } from "../shared/machines.ts";
+import { harnessIds } from "../shared/model.ts";
+import { LONGEST_PERSON_NAME } from "../shared/people.ts";
 import { MOST_OWN_ANSWER_CHARACTERS } from "../shared/room-votes.ts";
-import { asksAgentsAs, mayWriteAs, type RoomRole } from "../shared/rooms.ts";
+import { asksAgentsAs, isBroughtAnswerEnd, mayWriteAs, ROOM_MESSAGE_MOST_CHARACTERS, type RoomRole } from "../shared/rooms.ts";
 
 /** A signed-in person other than the machine's owner, as far as what they send goes: the role they have in each room they are in. */
 export interface PersonInRooms {
@@ -27,6 +30,18 @@ function isConfirmedAnswer(value: unknown) {
   if (typeof value !== "object" || value === null || Object.keys(value).length !== 1) return false;
   const { option, own } = value as { option?: unknown; own?: unknown };
   return isPlace(option) || (typeof own === "string" && own.length <= MOST_OWN_ANSWER_CHARACTERS * 4);
+}
+
+/** Far more than a name or an answer holds once cleaned, so that what is cleaned is never much. */
+const MOST_AGENT_NAME_SENT = LONGEST_PERSON_NAME * 4;
+const MOST_ANSWER_SENT = ROOM_MESSAGE_MOST_CHARACTERS * 4;
+const MOST_REQUEST_ID = 100;
+
+const isRequestId = (value: unknown) => typeof value === "string" && value.length > 0 && value.length <= MOST_REQUEST_ID;
+
+/** What names one task of one agent someone brought: ids of the form this machine gives them. */
+function assertTaskNamed({ agentId, taskId }: { agentId: unknown; taskId: unknown }) {
+  if (!isRoomId(agentId) || !isRoomId(taskId)) throw unreadable();
 }
 
 /** A room the person is not in is as good as gone for them. */
@@ -220,6 +235,9 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "machine.ask-to-join": OWNER_ONLY,
   "machine.room-opened": OWNER_ONLY,
   "machine.mute-room": OWNER_ONLY,
+  "machine.bring-agent": OWNER_ONLY,
+  "machine.take-agent-out": OWNER_ONLY,
+  "brought-task.answer": OWNER_ONLY,
   "search": OWNER_ONLY,
   "room.create": OWNER_ONLY,
   "room.rename": OWNER_ONLY,
@@ -263,6 +281,30 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "room.mute": ({ roomId, muted }, person) => {
     if (typeof muted !== "boolean") throw unreadable();
     void roleOf(person, roomId);
+  },
+  "room.set-members-bring-agents": OWNER_ONLY,
+  /** Into a room the person is in; that only a member brings one, never a guest, while the room lets them, and how many, the room's host checks and answers. */
+  "room.bring-agent": ({ requestId, roomId, name, harness }, person) => {
+    if (!isRequestId(requestId) || typeof name !== "string" || name.length > MOST_AGENT_NAME_SENT || !harnessIds.includes(harness)) throw unreadable();
+    void roleOf(person, roomId);
+  },
+  /** Whose agent it is, the room's host checks: a person takes out only the agents they brought. */
+  "room.take-agent-out": ({ roomId, agentId }, person) => {
+    if (!isRoomId(agentId)) throw unreadable();
+    void roleOf(person, roomId);
+  },
+  "room.brought-agents-here": (message) => {
+    if (Object.keys(message).length !== 1) throw unreadable();
+  },
+  /** Only for a task the room's host sent an agent the person brought, and has not had answered, which it checks. */
+  "room.brought-task-started": (message, person) => {
+    assertTaskNamed(message);
+    void roleOf(person, message.roomId);
+  },
+  "room.brought-task-answered": (message, person) => {
+    assertTaskNamed(message);
+    if (typeof message.text !== "string" || message.text.length > MOST_ANSWER_SENT || !(message.ended === null || isBroughtAnswerEnd(message.ended))) throw unreadable();
+    void roleOf(person, message.roomId);
   },
 };
 

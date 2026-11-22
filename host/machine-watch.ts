@@ -99,6 +99,13 @@ class MachineSocket {
     }, this.heartbeatEveryMs);
   }
 
+  /** Whether the message went out: only while the socket is open. */
+  send(message: ClientMessage) {
+    if (this.socket?.readyState !== WebSocket.OPEN) return false;
+    this.socket.send(JSON.stringify(message));
+    return true;
+  }
+
   private openLater() {
     this.retry = setTimeout(() => this.start(), RECONNECT_DELAYS_MS[Math.min(this.failures++, RECONNECT_DELAYS_MS.length - 1)]);
   }
@@ -124,6 +131,12 @@ class MachineSocket {
 export interface ThisHost {
   id: string;
   origins: readonly string[];
+}
+
+/** What follows the rooms of the machines this computer joined as a person, beyond the watch itself: their sockets opening, and all they say. */
+export interface RoomMachineListener {
+  opened(machineId: string): void;
+  heard(machineId: string, message: ServerMessage): void;
 }
 
 interface WatchedMachine {
@@ -196,6 +209,7 @@ export class MachineWatch {
   private readonly watched = new Map<string, WatchedMachine>();
   private readonly roomCalls = new SenderLimit(Date.now, MOST_ROOM_CALLS_A_MINUTE);
   private readonly calledRooms = new Set<string>();
+  private roomMachineListener: RoomMachineListener = { opened: () => {}, heard: () => {} };
 
   constructor(
     private readonly store: Store,
@@ -211,6 +225,16 @@ export class MachineWatch {
     private readonly tunnels: Pick<MachineReach, "reached" | "stillReaches" | "wayTo"> = DIRECT_REACH,
     private readonly heartbeatEveryMs = HEARTBEAT_EVERY_MS,
   ) {}
+
+  hearRoomMachinesWith(listener: RoomMachineListener) {
+    this.roomMachineListener = listener;
+  }
+
+  /** To a machine this computer joined as a person, on its page's socket: whether it went out. */
+  send(machineId: string, message: ClientMessage) {
+    if (!this.store.findMachine(machineId)?.asPerson) return false;
+    return this.watched.get(machineId)?.sockets[0]?.send(message) ?? false;
+  }
 
   startAll() {
     this.store.listMachines().forEach((machine) => this.start(machine.id));
@@ -229,8 +253,15 @@ export class MachineWatch {
       return token ? { headers: { Origin: origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
     };
     const events = {
-      opened: () => this.update(watched, { reachable: true }),
-      message: (message: ServerMessage) => (machine.asPerson ? this.followRooms(machine, watched, message) : this.follow(watched, message)),
+      opened: () => {
+        this.update(watched, { reachable: true });
+        if (machine.asPerson) this.roomMachineListener.opened(machineId);
+      },
+      message: (message: ServerMessage) => {
+        if (!machine.asPerson) return this.follow(watched, message);
+        this.followRooms(machine, watched, message);
+        this.roomMachineListener.heard(machineId, message);
+      },
       closed: (code: number, reached: Machine) => {
         this.update(watched, { reachable: false });
         if (code === OUT_OF_ROOMS_CLOSE_CODE && this.tunnels.stillReaches(reached)) this.signedOut(machineId);

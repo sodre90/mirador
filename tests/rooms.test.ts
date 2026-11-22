@@ -150,7 +150,7 @@ function machineWithRooms(dataDir = mkdtempSync(join(tmpdir(), "room-data-")), h
     startAfreshInRoom: (conversationId, { stopsTurn }) => void startedAfresh.push({ conversationId, stopsTurn }),
   };
   const clock = { now: Date.UTC(2026, 10, 20, 9) };
-  const notifications = { notify: (conversationId: string, reason: NotificationReason) => void notified.push({ conversationId, reason }) };
+  const notifications = { notify: (conversationId: string, reason: NotificationReason) => void notified.push({ conversationId, reason }), roomTaskHeld: () => {} };
   const roomsOn = (on: Store) => new RoomService(on, hub, sessions, notifications, dataDir, new SenderLimit(() => clock.now, MOST_ROOM_MESSAGES_A_MINUTE), home);
   const rooms = roomsOn(store);
   const room = rooms.create(" Launch ", "w1", ["p1", "p2"], DEFAULT_PERMISSION_PRESET);
@@ -992,7 +992,7 @@ describe("a page that shows a room", () => {
   const builderInRoom = { ...conversationIn("r1", "w1", { harness: "opencode", profileId: "p1" }, "Launch: Builder"), position: 0 };
   const page = (id: string, conversationId: string, kind: CanvasItem["kind"] = "show") => ({ id, conversationId, kind, title: id, html: "", status: "shown", createdAt: 1 }) as CanvasItem;
   const serverSent = (state: AppState, message: ServerMessage) => reducer(state, { type: "server", message });
-  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, createdAt: 1 };
+  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, createdAt: 1 };
   const showingRoom = (messages: RoomMessage[], rooms = [launch]) =>
     serverSent(reducer({ ...initialState, rooms, roomConversations: [builderInRoom] }, { type: "select-room", roomId: "r1" }), {
       type: "room.timeline",
@@ -1548,6 +1548,30 @@ describe("a room conversation's canvas tools", () => {
     expect((await callTool(own.id, "usage_stats", {})).text).not.toContain("the canvas ran nothing");
     expect(store.findConversation(own.id)!.title).toBe("Mine");
   }, 15_000);
+});
+
+describe("the conversation of an agent you brought into a room elsewhere", () => {
+  test("gets only the canvas's show and ask, with a room's instructions, and serves no call of another conversation, nor its calls elsewhere", async () => {
+    const { store, rooms, room, ownerId, callTool, toolNames, instructionsOf, conversationOf, opencodeSessions } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder go", ["p1"], null);
+    const brought = store.insertConversation({ ...conversationIn(undefined, "w1", { harness: "opencode", profileId: "p1" }, "Garden · Ann's machine"), broughtIntoRoom: true });
+    const own = store.insertConversation(conversationIn(undefined, "w1", { harness: "opencode", profileId: "p1" }, "Mine"));
+    expect(await toolNames(brought.id)).toEqual(["show", "ask"]);
+    expect(await instructionsOf(brought.id)).toBe(await instructionsOf(conversationOf("p1")));
+    opencodeSessions.set("brought-session", brought.id);
+    opencodeSessions.set("own-session", own.id);
+    const from = (sessionId: string) => ({ "ai.opencode/sessionID": sessionId });
+    const callerElsewhere = { text: "This canvas server serves only its own conversation, and this call came from another, so the canvas ran nothing.", isError: true };
+    const validCalls = { when_done: { pid: 1 }, title_conversation: { title: "Renamed by a room" }, usage_stats: {}, plan_usage: {} };
+    for (const [tool, args] of Object.entries(validCalls)) expect(await callTool(own.id, tool, args, from("brought-session"))).toEqual(callerElsewhere);
+    expect(await callTool(brought.id, "ask", { question: "Which?", options: [{ label: "A" }, { label: "B" }] }, from("own-session"))).toEqual(callerElsewhere);
+    expect(store.findConversation(own.id)!.title).toBe("Mine");
+  }, 15_000);
+
+  test("runs on an agent process of its own", () => {
+    const harnesses = ["claude", "opencode", "pi", "codex", "copilot", "antigravity"] as const;
+    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1", broughtIntoRoom: true }))).toEqual(harnesses.map(() => "p1/c1"));
+  });
 });
 
 describe("a room conversation's agent process", () => {

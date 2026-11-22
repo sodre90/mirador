@@ -19,6 +19,7 @@ import { describedText, hostErrorText } from "./host-error.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
+import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 
 export interface OpenConversation {
@@ -56,6 +57,8 @@ export type Overlay =
   | { kind: "room-invite"; roomId: string }
   /** Joining someone else's room with the invite they sent. */
   | { kind: "join-room" }
+  /** An agent of one of your profiles into a room of a machine you joined as a person. */
+  | { kind: "bring-agent"; machineId: string; roomId: string }
   /** `rewind` takes the conversation and the files back; without it only the files are put back. */
   | { kind: "revert"; conversationId: string; turn: Turn; rewind?: boolean }
   | { kind: "settings"; page?: SettingsPage };
@@ -89,6 +92,9 @@ export interface AppState {
   roomTasksWaiting: RoomTaskApproval[];
   /** The room invites nobody has used yet, soonest to expire first; those of a deleted room went with it. */
   roomInvites: RoomInvite[];
+  /** The agents you brought into rooms of other machines, and the tasks of others that wait for your OK. */
+  broughtAgents: BroughtAgentHere[];
+  broughtTasks: BroughtTaskWaiting[];
   /** The rooms someone other than the owner is in now. */
   roomsWithPeopleHere: string[];
   /** How far you have read each of your rooms, and what waits for you there. */
@@ -220,6 +226,8 @@ export const initialState: AppState = {
   roomApprovals: [],
   roomTasksWaiting: [],
   roomInvites: [],
+  broughtAgents: [],
+  broughtTasks: [],
   roomsWithPeopleHere: [],
   roomReadings: [],
   selectedRoomId: null,
@@ -414,6 +422,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomApprovals: message.roomApprovals,
         roomTasksWaiting: message.roomTasksWaiting,
         roomInvites: message.roomInvites,
+        broughtAgents: message.broughtAgents,
+        broughtTasks: message.broughtTasks,
         profiles: message.profiles,
         promptTemplates: message.promptTemplates,
         canvasUse: message.canvasUse,
@@ -727,7 +737,12 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return state.selectedRoomId === roomId ? { ...state, roomPresence: { roomId, here, writing } } : state;
     }
     case "room.usage.got":
+    case "room.agent-brought":
+    case "room.brought-task":
+    case "machine.agent-brought":
       return state;
+    case "brought-agents.listed":
+      return { ...state, broughtAgents: message.agents, broughtTasks: message.tasks };
   }
 }
 

@@ -31,6 +31,8 @@ export interface SocketData {
   isOwner: boolean;
   /** For a person other than the owner: the rooms their page was told of, so it hears when one is gone for them. */
   roomsShown: Set<string>;
+  /** For a person other than the owner: their own Mirador said it takes the tasks of the agents they brought on this socket. */
+  carriesAgents: boolean;
   subscriptions: Set<string>;
   /** The documents the socket's page shows, by their ids: only these pages get their documents, which can be large. */
   appSubscriptions: Set<string>;
@@ -84,6 +86,7 @@ export const socketData = (
   personId,
   isOwner,
   roomsShown: new Set<string>(),
+  carriesAgents: false,
   canvasAssetsOrigin,
   from,
   readsDeflatedMessages,
@@ -292,6 +295,23 @@ export class Hub {
 
   publishToPluginTabs(workspaceId: string, message: ServerMessage) {
     this.publishWhere((socket) => socket.data.pluginTabSubscriptions.has(workspaceId), message);
+  }
+
+  /** The socket the person's own Mirador last said takes the tasks of the agents they brought, while it is open. */
+  private agentsSocketOf(personId: string) {
+    return [...this.sockets].findLast(({ data }) => data.personId === personId && data.carriesAgents && !data.isOwner);
+  }
+
+  /** Whether the person's own Mirador is connected to take the tasks of the agents they brought. */
+  carriesAgentsOf(personId: string) {
+    return this.agentsSocketOf(personId) !== undefined;
+  }
+
+  /** To the person's own Mirador alone, on the one socket it takes their agents' tasks on; whether it was connected. */
+  sendToAgentsOf(personId: string, message: ServerMessage) {
+    const socket = this.agentsSocketOf(personId);
+    if (socket) this.deliver(socket, message);
+    return socket !== undefined;
   }
 
   publishToRoom(roomId: string, message: ServerMessage) {

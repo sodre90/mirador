@@ -3,6 +3,7 @@ import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
+import type { OthersTasks } from "../../../shared/brought-agents.ts";
 
 /** The parts of a room's settings, each on a tab of its own. */
 export type RoomSettingsTab = "people" | "agents" | "permissions" | "usage";
@@ -108,6 +109,7 @@ export const rooms = {
   asks: (agent: string) => `${agent} asks`,
   approvalTask: (person: string, role: string, text: string) => `Task of ${person} (${role}): “${text}”`,
   taskFrom: (person: string, role: string, agents: string) => `${person} (${role}) gives ${agents} a task`,
+  taskOnBehalfOf: (agent: string, person: string, role: string, agents: string) => `${agent} gives ${agents} a task on behalf of ${person} (${role})`,
   yourTask: (text: string) => `Your task: “${text}”`,
   approvalPosition: (count: number) => `1 of ${count}`,
   taskLines: (count: number) => counted(count, "line", "lines"),
@@ -169,7 +171,7 @@ export const rooms = {
   applyChange: "Change",
   peoplesTasksHint: "Otherwise a member's tag or follow-up reaches no agent until you allow it.",
   roles: { member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
-  authorRoles: { owner: "Owner", member: "Member", guest: "Guest", agent: "Agent" } satisfies Record<RoomAuthorRole, string>,
+  authorRoles: { owner: "Owner", member: "Member", guest: "Guest", agent: "Agent", "member's agent": "Member's agent" } satisfies Record<RoomAuthorRole, string>,
   roleOf: (person: string) => `Role of ${person}`,
   nameless: "Someone without a name",
   inNoRoom: "You are in no room yet. When the owner of this machine adds you to one, it shows here.",
@@ -222,4 +224,35 @@ export const rooms = {
   usageNone: "No turns in this period.",
   usageHint:
     "Tokens as the agents report them at the end of each turn; Input leaves out what came from the cache. A turn counts toward the person whose message started it, also when an agent tagged another on the way. Only you see this.",
+  onComputerOf: (person: string) => `On ${person}'s computer`,
+  awayFrom: (person: string) => `Away: ${person}'s Mirador is not connected`,
+  away: "Its bringer's Mirador was not connected, so it did not get the task.",
+  refused: "Its bringer's Mirador did not take the task.",
+  takenOut: "It was taken out of the room before it answered.",
+  notStartedYet: (agent: string) => `${agent} has not started on it yet.`,
+  broughtAgents: "Agents people brought",
+  takeOut: "Take out",
+  takeOutAgent: (agent: string) => `Take out ${agent}`,
+  takeOutArmed: "Take out for good?",
+  takeOutArmedHint: "Click again. The tasks it has not answered end, and its conversation stays on its bringer's computer.",
+  membersBringAgents: "Members may bring agents of their own",
+  membersBringAgentsHint:
+    "A member can bring an agent from their own Mirador: it runs on their computer, in their workspace, with their permissions, and its answers come into the room. It never reads your files. Turned off, those already here go.",
+  moreFor: (room: string) => `More for ${room}`,
+  bringAgent: "Bring an agent…",
+  bringAgentInto: (room: string) => `Bring an agent into ${room}`,
+  agent: "Agent",
+  broughtNameSeen: "The room sees it by this profile's name, after yours.",
+  othersTasks: "When others give it a task",
+  othersTasksChoices: { "after-ok": "Only after my OK", "any-time": "Any time" } satisfies Record<OthersTasks, string>,
+  bringMeaning: [
+    "The agent works here, on this computer, in the workspace you choose, with its profile's permissions: its tools ask you as they always do, though reading files in that workspace usually goes ahead without asking. It gets its profile's values and your agent settings as your other conversations do, but never YOLO or a mode that skips asking.",
+    "Its conversation shows with your others. Its final answer to each task goes into the room; what it puts on the canvas stays here.",
+    "With “Only after my OK”, a task from anyone else waits in its conversation until you allow it. Your own tasks start at once.",
+    "The room's machine says who wrote each task. Its owner could pass a task off as yours, and it would start without your OK; your permission settings still ask before its tools.",
+  ],
+  bring: "Bring",
+  bringing: "Bringing…",
+  broughtTask: (person: string, role: string, room: string, machine: string) => `${person} (${role}) gives this agent a task in ${room} on ${machine}`,
+  broughtTaskHint: "This is all the agent is sent, after a line saying where it comes from.",
 };

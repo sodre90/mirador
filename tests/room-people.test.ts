@@ -235,10 +235,19 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.vote": true,
   "room.confirm": true,
   "room.mute": true,
+  "room.set-members-bring-agents": true,
+  "room.bring-agent": true,
+  "room.take-agent-out": true,
+  "room.brought-agents-here": true,
+  "room.brought-task-started": true,
+  "room.brought-task-answered": true,
+  "machine.bring-agent": true,
+  "machine.take-agent-out": true,
+  "brought-task.answer": true,
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;

@@ -31,6 +31,15 @@ const presetModes: Record<HarnessId, Record<PermissionPreset, string> | null> = 
 /** The mode a room's conversation on this agent runs in; null where the agent has none for the preset, and keeps its profile's. */
 export const presetModeOf = (harness: HarnessId, preset: PermissionPreset) => presetModes[harness]?.[preset] ?? null;
 
+/**
+ * The profile's mode for an agent brought into someone else's room, which asks as usual: kept where it is one of the modes
+ * a room's preset runs that agent in, so one that never asks gives way to the agent's own default.
+ */
+export const askingModeOf = (harness: HarnessId, mode: string | undefined | null) => {
+  const asking = presetModes[harness];
+  return !mode || !asking || Object.values(asking).includes(mode) ? (mode ?? undefined) : undefined;
+};
+
 /** A permission request as the host judges it: the tool's kind, its title, the whole command it would run, and the paths it names. */
 export interface AskedPermission {
   toolKind: ToolKind | null;

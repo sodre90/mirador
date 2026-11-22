@@ -19,7 +19,7 @@ import { readJobWaitRequest, waitSetUpReply } from "../../shared/job-waits.ts";
 import { answerAsToolResult, severalQuestionsRequest, type AnswerWaitGivenUp, type CanvasService, type RenderOutcome } from "./service.ts";
 import { ANTIGRAVITY_ASK_WAIT_MS } from "../config.ts";
 import { MIRADOR_VERSION } from "../../shared/version.ts";
-import type { CanvasUse, HarnessId } from "../../shared/model.ts";
+import { worksForARoom, type CanvasUse, type HarnessId } from "../../shared/model.ts";
 import type { AppDocuments } from "../apps/documents.ts";
 import { appToolsGuidance, registerAppTools } from "../apps/tools.ts";
 import type { PluginCatalog } from "../plugin-catalog.ts";
@@ -161,30 +161,37 @@ export interface CanvasServerParts {
   antigravityAskWaitMs?: number;
 }
 
+/** A room's agent's conversation here, or that of an agent of yours brought into a room elsewhere, which gets only the canvas's show and ask, and the room's own tools for a room here. */
+const worksForARoomHere = (store: Store | null, conversationId: string) => {
+  const conversation = store?.findConversation(conversationId);
+  return conversation !== undefined && worksForARoom(conversation);
+};
+
 function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning) {
   const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
   const inRoom = Boolean(store?.findConversation(conversationId)?.roomId);
+  const forARoom = worksForARoomHere(store, conversationId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
-  const instructions = inRoom ? canvasInstructions(assetsOrigin) : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
+  const instructions = forARoom ? canvasInstructions(assetsOrigin) : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
   cutInstructionsWarning.check(harness, instructions);
   const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
   /**
    * The conversations on one opencode agent process each add their canvas server under the same name, and opencode keeps
    * only the last one added: every call reaches that conversation's address, whichever conversation made it. opencode 2
-   * names the session that calls, which finds its conversation; a session that finds none is refused. A room's
-   * conversation runs on an agent process of its own, so its address serves it alone, and no other conversation's
-   * address serves a room's.
+   * names the session that calls, which finds its conversation; a session that finds none is refused. A conversation
+   * that works for a room runs on an agent process of its own, so its address serves it alone, and no other
+   * conversation's address serves one that works for a room.
    */
   const callingConversation = async ({ mcpReq }: ServerContext) => {
     const sessionId = mcpReq._meta?.[OPENCODE_SESSION_META];
     const caller = sessionId === undefined ? conversationId : typeof sessionId === "string" ? await conversations.conversationOfSession(sessionId) : undefined;
     if (caller === undefined) throw new Error(CALLER_UNKNOWN);
-    if (caller !== conversationId && (inRoom || Boolean(store?.findConversation(caller)?.roomId))) throw new Error(CALLER_ELSEWHERE);
+    if (caller !== conversationId && (forARoom || worksForARoomHere(store, caller))) throw new Error(CALLER_ELSEWHERE);
     return caller;
   };
   everyToolFindingItsCallerFirst(server, callingConversation);
@@ -267,8 +274,8 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     },
   );
 
-  if (inRoom) {
-    if (rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
+  if (forARoom) {
+    if (inRoom && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
     return server;
   }
 

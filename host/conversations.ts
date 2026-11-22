@@ -13,6 +13,7 @@ import {
   isConversationPlace,
   isUntitled,
   UNTITLED,
+  worksForARoom,
   type Activity,
   type AdoptMode,
   type AskItem,
@@ -65,7 +66,7 @@ import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
-import { presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
+import { askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
 import { PROFILES_MODEL, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
@@ -253,6 +254,16 @@ export interface RoomRules {
 
 const NO_ROOM_RULES: RoomRules = { allowsByItself: () => false, waitingChanged: () => {}, reintroduced: (_, __, text) => text };
 
+/** What the tasks rooms of other machines give the agents you brought there say of their conversations. */
+export interface BroughtTaskRules {
+  /** The conversations with a task that waits for your OK, which wait for you as for a permission. */
+  conversationsHoldingTasks(): ReadonlySet<string>;
+  /** Whether a task queued in a conversation, by its id here, still goes to the agent once its turn comes. */
+  stillToRun(taskId: string): boolean;
+}
+
+const NO_BROUGHT_TASKS: BroughtTaskRules = { conversationsHoldingTasks: () => new Set(), stillToRun: () => false };
+
 interface PromptStart {
   imageIds?: string[];
   /** The person who wrote it. */
@@ -261,6 +272,7 @@ interface PromptStart {
   fromMirador?: boolean;
   fromPlugin?: string;
   roomMessageId?: string;
+  broughtTaskId?: string;
   /** A message of the user's starts a turn of its own, so the files are snapshotted and that turn can be undone. */
   startsTurn?: boolean;
 }
@@ -415,18 +427,18 @@ const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity"
  */
 const readsSettingsPerSession = (harness: HarnessId) => harness === "claude" || harness === "pi" || harness === "codex" || harness === "copilot";
 
-/** What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id and room. */
-export type ProcessLaunch = Launch & { id?: string; roomId?: string };
+/** What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id and the room it works for. */
+export type ProcessLaunch = Launch & { id?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom">;
 
 /**
  * The agent process serving a conversation. Antigravity keeps one canvas MCP server per process, the one its first
  * session registered, so every conversation on one profile would reach that first conversation's canvas; it takes a
- * process of its own. So does a room's conversation, on every agent: opencode keeps one canvas server per folder, and a
- * room's agent shares no process, canvas server or environment with the owner's conversations or another room's. The
- * others share one per profile.
+ * process of its own. So does a conversation that works for a room, on every agent: opencode keeps one canvas server per
+ * folder, and a room's agent shares no process, canvas server or environment with the owner's conversations or another
+ * room's. The others share one per profile.
  */
-export const agentProcessKey = (profile: Pick<Profile, "id" | "harness">, { id, roomId }: ProcessLaunch) =>
-  id && (profile.harness === "antigravity" || roomId) ? `${profile.id}/${id}` : profile.id;
+export const agentProcessKey = (profile: Pick<Profile, "id" | "harness">, launch: ProcessLaunch) =>
+  launch.id && (profile.harness === "antigravity" || worksForARoom(launch)) ? `${profile.id}/${launch.id}` : profile.id;
 
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
@@ -475,6 +487,7 @@ export class ConversationService {
   private pluginTellsItsCaller: (plugin: string) => boolean = () => false;
   private hearActivity: (conversationId: string, activity: PluginActivity) => void = () => {};
   private turnsHeard: TurnListener = { turnStarted: () => {}, turnEnded: () => {} };
+  private broughtTasks = NO_BROUGHT_TASKS;
   private roomRules = NO_ROOM_RULES;
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
   private deletesWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
@@ -803,6 +816,26 @@ export class ConversationService {
     this.turnsHeard = listener;
   }
 
+  /** A conversation holding a task from a room of another machine until you let it through waits for you as for a permission, and a queued task no longer to run is left out. */
+  followsBroughtTasksOf(rules: BroughtTaskRules) {
+    this.broughtTasks = rules;
+  }
+
+  /** Takes the tasks, by their ids here, out of the conversation's queue: the room that sent them no longer waits for them. */
+  dropQueuedBroughtTasks(conversationId: string, taskIds: string[]) {
+    if (!this.store.hasConversation(conversationId)) return;
+    const runtime = this.runtime(conversationId);
+    const dropped = new Set(taskIds);
+    const kept = runtime.queuedMessages.filter(({ broughtTaskId }) => broughtTaskId === undefined || !dropped.has(broughtTaskId));
+    if (kept.length === runtime.queuedMessages.length) return;
+    this.setQueue(conversationId, runtime, kept);
+    this.publish(this.get(conversationId));
+  }
+
+  heldTasksChanged(conversationId: string) {
+    this.republish(conversationId);
+  }
+
   /**
    * A room's agent asks its room's rules first, the room hears whenever one of its agents' requests starts or stops
    * waiting, and an agent on a new session after an earlier one is told of the room again.
@@ -1044,6 +1077,11 @@ export class ConversationService {
     return { sessionId: copyId, configOptions };
   }
 
+  /** An agent brought into someone else's room asks as usual, so its profile's mode holds only where that mode still asks. */
+  private profileModeFor(conversation: Conversation, profile: Profile | undefined) {
+    return conversation.broughtIntoRoom ? askingModeOf(conversation.harness, profile?.mode) : profile?.mode;
+  }
+
   /** The mode its room's preset runs a room's conversation in, where its agent has one for it; null for any other conversation. */
   private roomPresetMode(conversation: Conversation) {
     const room = conversation.roomId ? this.store.findRoom(conversation.roomId) : undefined;
@@ -1158,7 +1196,17 @@ export class ConversationService {
    * questions don't wait for an answer, and it never runs in YOLO, whatever its profile says: the room's preset rules it.
    */
   startInRoom(roomId: string, workspaceId: string, launch: Launch, title: string): Conversation {
-    return this.insertConversation(workspaceId, launch, title, true, undefined, undefined, roomId);
+    return this.insertConversation(workspaceId, launch, title, true, undefined, undefined, { roomId });
+  }
+
+  /**
+   * The conversation of an agent you brought into a room of someone else's machine, which shows with your others and asks
+   * you as they do; as the room's text drives it, it gets of Mirador no more than a room's agent does.
+   */
+  createBroughtIntoRoom(workspaceId: string, launch: Launch, title: string): Conversation {
+    const conversation = this.insertConversation(workspaceId, launch, title, true, undefined, undefined, { broughtIntoRoom: true });
+    this.ensureSession(conversation.id).catch(() => {});
+    return conversation;
   }
 
   private insertConversation(
@@ -1168,7 +1216,7 @@ export class ConversationService {
     titleSetByUser = false,
     worktree?: ConversationWorktree,
     sideChatOf?: string,
-    roomId?: string,
+    { roomId, broughtIntoRoom }: Pick<Conversation, "roomId" | "broughtIntoRoom"> = {},
   ): Conversation {
     this.existingWorkspace(workspaceId);
     const profile = profileToLaunch(this.store, launch);
@@ -1182,7 +1230,7 @@ export class ConversationService {
       titleSetByUser,
       acpSessionId: null,
       askMode: roomId ? "next-message" : profile.askMode,
-      bypassPermissions: sideChatOf === undefined && roomId === undefined && profile.bypassPermissions,
+      bypassPermissions: sideChatOf === undefined && roomId === undefined && !broughtIntoRoom && profile.bypassPermissions,
       status: "idle",
       statusDetail: null,
       openInTerminal: null,
@@ -1199,6 +1247,7 @@ export class ConversationService {
       ...(worktree && { worktree }),
       ...(sideChatOf && { sideChatOf }),
       ...(roomId && { roomId }),
+      ...(broughtIntoRoom && { broughtIntoRoom }),
       createdAt: now,
       updatedAt: now,
     });
@@ -1534,6 +1583,7 @@ export class ConversationService {
 
   /** Switching YOLO on also approves the requests already waiting for the user. */
   setBypassPermissions(conversationId: string, bypassPermissions: boolean) {
+    if (bypassPermissions && worksForARoom(this.get(conversationId))) throw new Error("A conversation that works for a room always asks.");
     this.save({ ...this.get(conversationId), bypassPermissions });
     if (!bypassPermissions) return;
     this.runtime(conversationId).pendingPermissions.forEach(({ settle, allowOptionId }) => allowOptionId && settle(allowOptionId));
@@ -1652,7 +1702,7 @@ export class ConversationService {
     }
   }
 
-  async prompt(conversationId: string, text: string, { imageIds = [], authorId, fromScript = false, fromMirador = false, fromPlugin, roomMessageId, startsTurn = false }: PromptStart = {}) {
+  async prompt(conversationId: string, text: string, { imageIds = [], authorId, fromScript = false, fromMirador = false, fromPlugin, roomMessageId, broughtTaskId, startsTurn = false }: PromptStart = {}) {
     const runtime = this.runtime(conversationId);
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
@@ -1683,6 +1733,7 @@ export class ConversationService {
         ...(fromMirador && { fromMirador }),
         ...(fromPlugin && { fromPlugin }),
         ...(roomMessageId && { roomMessageId }),
+        ...(broughtTaskId && { broughtTaskId }),
       },
       notes,
     );
@@ -1812,7 +1863,7 @@ export class ConversationService {
       !isCanvasFollowUp(promptSent.text) &&
       this.store.canvasUse() === "often" &&
       !this.get(conversationId).startedBy &&
-      !this.get(conversationId).roomId;
+      !worksForARoom(this.get(conversationId));
     const carriedOnOtherwise = this.stopping || runtime.running || runtime.queuedMessages.length > 0 || (runtime.steerInFlight ?? false);
     if (!checked || carriedOnOtherwise) return;
     const followUp = canvasFollowUp({
@@ -1848,14 +1899,15 @@ export class ConversationService {
       fromPlugin,
       afterTurn = false,
       roomMessageId,
-    }: { authorId?: string; fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean; roomMessageId?: string } = {},
+      broughtTaskId,
+    }: { authorId?: string; fromScript?: boolean; fromMirador?: boolean; fromPlugin?: string; afterTurn?: boolean; roomMessageId?: string; broughtTaskId?: string } = {},
   ) {
     const fromUser = !fromScript && !fromMirador && !fromPlugin;
     if (fromUser && this.tookReminderCommand(conversationId, text)) return;
     if (fromUser && this.get(conversationId).reminder) this.setReminder(conversationId, null);
     const runtime = this.runtime(conversationId);
     const sendsAtOnce = !runtime.running && !this.holdsQueue(runtime) && runtime.queuedMessages.length === 0;
-    if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, authorId, fromScript, fromMirador, fromPlugin, roomMessageId, startsTurn: true });
+    if (sendsAtOnce) return this.prompt(conversationId, text, { imageIds, authorId, fromScript, fromMirador, fromPlugin, roomMessageId, broughtTaskId, startsTurn: true });
     const message: QueuedMessage = {
       id: crypto.randomUUID(),
       text,
@@ -1866,6 +1918,7 @@ export class ConversationService {
       ...(fromPlugin && { fromPlugin }),
       ...(afterTurn && { afterTurn }),
       ...(roomMessageId && { roomMessageId }),
+      ...(broughtTaskId && { broughtTaskId }),
     };
     this.setQueue(conversationId, runtime, [...runtime.queuedMessages, message]);
     this.publish(this.get(conversationId));
@@ -2823,9 +2876,9 @@ profileId: string | null, conversationId: string) {
     return sessionId;
   }
 
-  /** The canvas tools that only show things in Mirador run without asking; in a room, only the room's. */
+  /** The canvas tools that only show things in Mirador run without asking; for a room, only the room's. */
   private preAllowsCanvasTool(conversationId: string, tool: string | null) {
-    if (this.get(conversationId).roomId) return tool !== null && ROOM_CANVAS_TOOLS.includes(tool);
+    if (worksForARoom(this.get(conversationId))) return tool !== null && ROOM_CANVAS_TOOLS.includes(tool);
     return isPreAllowedCanvasTool(tool, this.canvasPlugins(conversationId).toolNames);
   }
 
@@ -2847,7 +2900,7 @@ profileId: string | null, conversationId: string) {
         withoutUserSettings,
         canvasPlugins,
         idleCompaction,
-        inRoom: Boolean(conversation.roomId),
+        inRoom: worksForARoom(conversation),
         claudeSetup,
         keptProtections: await this.claudeProtectionsKept(conversation, settingSourcesLeftOut(claudeSetup, withoutUserSettings), cwd),
       }),
@@ -2921,7 +2974,7 @@ profileId: string | null, conversationId: string) {
   private async applyProfileChoices(conversationId: string, sessionId: string) {
     const { profileId } = this.get(conversationId);
     const profile = profileId === null ? undefined : this.store.findProfile(profileId);
-    const mode = this.roomPresetMode(this.get(conversationId)) ?? profile?.mode;
+    const mode = this.roomPresetMode(this.get(conversationId)) ?? this.profileModeFor(this.get(conversationId), profile);
     const modeOption = this.get(conversationId).configOptions.find(({ category }) => category === "mode");
     if (mode && modeOption) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
     const effortOption = this.get(conversationId).configOptions.find(({ category }) => category === "thought_level");
@@ -3085,8 +3138,8 @@ profileId: string | null, conversationId: string) {
   }
 
   /** A room's agent works on tasks of people other than the owner too, so it gets no token to reach the host with as the owner's scripts do. */
-  private scriptEnvironmentFor({ roomId }: ProcessLaunch, path: string | undefined) {
-    return roomId ? {} : this.scriptEnvironment(path);
+  private scriptEnvironmentFor(launch: ProcessLaunch, path: string | undefined) {
+    return worksForARoom(launch) ? {} : this.scriptEnvironment(path);
   }
 
   /** The mirador command, and where it reaches the host from the agent or a script it starts (mirador message, mirador when-done). */
@@ -3651,12 +3704,16 @@ profileId: string | null, conversationId: string) {
     this.publish(this.get(conversationId));
   }
 
-  /** A turn that started meanwhile, e.g. while a /clear opened the fresh session, sends the queue on once it ends. */
-  private sendNextQueuedMessage(conversationId: string) {
+  /** A turn that started meanwhile, e.g. while a /clear opened the fresh session, sends the queue on once it ends; a task no longer to run is left out. */
+  private sendNextQueuedMessage(conversationId: string): void {
     const runtime = this.store.hasConversation(conversationId) ? this.runtime(conversationId) : undefined;
     const [next, ...rest] = runtime?.queuedMessages ?? [];
     if (!runtime || !next || runtime.running || this.holdsQueue(runtime)) return;
     this.setQueue(conversationId, runtime, rest);
+    if (next.broughtTaskId !== undefined && !this.broughtTasks.stillToRun(next.broughtTaskId)) {
+      this.publish(this.get(conversationId));
+      return this.sendNextQueuedMessage(conversationId);
+    }
     this.prompt(conversationId, next.text, {
       imageIds: next.imageIds,
       authorId: next.authorId,
@@ -3664,13 +3721,14 @@ profileId: string | null, conversationId: string) {
       fromMirador: next.fromMirador,
       fromPlugin: next.fromPlugin,
       roomMessageId: next.roomMessageId,
+      broughtTaskId: next.broughtTaskId,
       startsTurn: true,
     }).catch(() => {});
   }
 
   private appendUserMessage(
     conversationId: string,
-    { text, imageIds, authorId, fromScript, fromMirador, fromPlugin, roomMessageId }: Omit<QueuedMessage, "id">,
+    { text, imageIds, authorId, fromScript, fromMirador, fromPlugin, roomMessageId, broughtTaskId }: Omit<QueuedMessage, "id">,
     { commands, reverts, canvas }: NotesForAgent,
   ) {
     canvas.forEach((note) => note.heard());
@@ -3687,6 +3745,7 @@ profileId: string | null, conversationId: string) {
       ...(fromMirador && { fromMirador }),
       ...(fromPlugin && { fromPlugin }),
       ...(roomMessageId && { roomMessageId }),
+      ...(broughtTaskId && { broughtTaskId }),
     });
   }
 
@@ -3770,13 +3829,13 @@ profileId: string | null, conversationId: string) {
     return currentActivity(runtime.openToolCalls, [...runtime.pendingPermissions.values()].map(({ request }) => request.title));
   }
 
-  /** Every conversation `waitingFor` could find waiting, from the three things it reads, so only those that wait are read from the database. */
+  /** Every conversation `waitingFor` could find waiting, from the four things it reads, so only those that wait are read from the database. */
   private conversationsThatMayWait() {
-    return new Set([...this.runtimes.keys(), ...this.asksWaitedOn.keys(), ...this.unseenTurnEnds.keys()]);
+    return new Set([...this.runtimes.keys(), ...this.asksWaitedOn.keys(), ...this.unseenTurnEnds.keys(), ...this.broughtTasks.conversationsHoldingTasks()]);
   }
 
   private waitingFor(conversationId: string): WaitingFor | null {
-    if ((this.runtimes.get(conversationId)?.pendingPermissions.size ?? 0) > 0) return "permission";
+    if ((this.runtimes.get(conversationId)?.pendingPermissions.size ?? 0) > 0 || this.broughtTasks.conversationsHoldingTasks().has(conversationId)) return "permission";
     if (this.asksWaitedOn.has(conversationId)) return "question";
     return this.unseenTurnEnds.get(conversationId) ?? null;
   }
@@ -4035,8 +4094,8 @@ function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionRespo
   return rejecting ? { outcome: { outcome: "selected", optionId: rejecting } } : { outcome: { outcome: "cancelled" } };
 }
 
-/** YOLO, which a room's conversation never runs in, whatever its profile says: its room's preset decides. */
-const approvesEverything = ({ bypassPermissions, roomId }: Conversation) => bypassPermissions && !roomId;
+/** YOLO, which a conversation working for a room never runs in, whatever its profile says: its room's preset decides, or it asks as usual. */
+const approvesEverything = (conversation: Conversation) => conversation.bypassPermissions && !worksForARoom(conversation);
 
 /** No once, so the agent can still ask for something else. */
 function optionThatRejects(options: acp.PermissionOption[]): string | null {

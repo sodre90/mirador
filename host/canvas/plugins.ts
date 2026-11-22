@@ -29,7 +29,7 @@ import {
 } from "../../shared/canvas-plugins.ts";
 import type { PluginCommand } from "../../shared/slash-commands.ts";
 import { argumentsHint, commandInput } from "../../shared/command-arguments.ts";
-import type { Conversation, PluginCanvasItem, PluginContextHint, PluginStatuslineChips, Profile, StartedBy } from "../../shared/model.ts";
+import { worksForARoom, type Conversation, type PluginCanvasItem, type PluginContextHint, type PluginStatuslineChips, type Profile, type StartedBy } from "../../shared/model.ts";
 import type { ProfileDraft, ServerMessage } from "../../shared/protocol.ts";
 import { conversationSettingValue, type ConversationPlugin, isChoiceSetting, pluginsOffFor, isTextSetting, modelSettingsOf, profileSettingValue, readTextSetting, type PluginProfileSetting } from "../../shared/apps.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
@@ -263,10 +263,10 @@ export class CanvasPlugins {
     );
   }
 
-  /** The plugins a conversation gets: all but those its profile goes without, and none in a room. */
+  /** The plugins a conversation gets: all but those its profile goes without, and none for a room. */
   private pluginsOf(conversationId: string): CanvasPlugin[] {
     const conversation = this.store.findConversation(conversationId);
-    if (conversation?.roomId) return [];
+    if (conversation && worksForARoom(conversation)) return [];
     const turnedOff = this.pluginsOffFor(conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined);
     return this.plugins.filter(({ manifest }) => !turnedOff.includes(manifest.name));
   }
@@ -281,7 +281,7 @@ export class CanvasPlugins {
   /** The guidance of the plugins the conversation's profile has on, with what each adds for that profile, which a conversation a plugin's tool started doesn't get. */
   guidanceFor(conversationId: string): CanvasPluginGuidance {
     const conversation = this.store.findConversation(conversationId);
-    if (conversation?.roomId) return NO_CANVAS_PLUGINS;
+    if (conversation && worksForARoom(conversation)) return NO_CANVAS_PLUGINS;
     const plugins = this.pluginsOf(conversationId);
     const guidance = this.guidanceOf(plugins, (plugin) => this.waitsToBeLoaded(plugin, conversation));
     if (conversation?.startedBy) return this.withOfferedPlugins(guidance);
