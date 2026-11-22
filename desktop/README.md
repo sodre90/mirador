@@ -129,6 +129,10 @@ On Windows:
 - **Open at login** is a value, `Mirador-<port>`, in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`, naming the launcher. The launcher drops its arguments, so this is only available on the default port and data folder.
 - **Restart host**: Windows cannot re-execute a process, so the host restarts by exiting. The app starts its own host again, and a background host runs its task again before it exits.
 
+### Settings in the macOS menu
+
+*Settings…* in the Mirador menu, `⌘,`, opens Mirador's Settings in the main window, opening or raising that window first, also from a window of an item's own. The keys go to Settings at once, so Esc closes them and a running turn goes on. While another dialog is open it does nothing, so unsaved edits there stay.
+
 ### Closing and quitting
 
 - **Closing the window** stops nothing. ⌘W closes what has focus inside Mirador first (the open dialog, else the focused terminal's shell), and asks before it closes the window; the window's close button doesn't ask.
@@ -273,7 +277,7 @@ bun run test            # includes tests/desktop-*.test.ts
 
 - **macOS file access prompts**: macOS attributes file access to the app, not to Terminal. As the host starts through your interactive login shell, anything your `~/.zshrc` touches under `~/Downloads`, `~/Documents` or `~/Desktop` brings a one-time permission prompt for Mirador, and the host waits on it until you answer. Approve it once.
 - **Clicking a notification** doesn't open its conversation: Electrobun 2.0.2 does not report clicks.
-- **The macOS theme** is set through the Objective-C runtime (`src/bun/app-appearance.ts`), as Electrobun 2.0.2 has no call for it. Whether WebKitGTK renders canvas pages in the app's appearance on Linux is untested, so the Linux app is left as it is.
+- **The macOS theme** is set through the Objective-C runtime (`src/bun/app-appearance.ts`, over `src/bun/objective-c.ts`), as Electrobun 2.0.2 has no call for it. The page of a new window is given the keys the same way (`src/bun/web-view-keys.ts`). Whether WebKitGTK renders canvas pages in the app's appearance on Linux is untested, so the Linux app is left as it is.
 - **Linux** is checked only under X11 (Xvfb with openbox); the tray icon and Wayland sessions are untested.
 - **The microphone question** comes again each time the app starts, as Electrobun 2.0.2 keeps the answer in memory only. On Windows, `build.win.autoGrantPermissions: ["microphone"]` in `electrobun.config.ts` would skip it, but for any page the window opens, so it is left off. No real microphone has been tried in the app yet: on Linux, recording is checked only in a bare WebKitGTK page with its mock microphone, and Windows is untested.
 - **Sign-in**: `host.log` holds no sign-in link, as the host prints one only to a terminal. The window signs in with `<data dir>/browser-token`, which the app never logs. The window is sandboxed, and links to other sites open in your default browser.

@@ -5,6 +5,7 @@ import { frameToOpenWith, readWindowFrame, WindowFrameKeeper } from "../core/win
 import { giveWindowIcon } from "../core/window-icon.ts";
 import { setDockIconVisible } from "./dock.ts";
 import type { DesktopWords } from "../core/desktop-words.ts";
+import { giveKeysToPage } from "./web-view-keys.ts";
 
 interface HostMessageEvent {
   data?: { detail?: unknown };
@@ -44,6 +45,10 @@ export class MainWindow {
     this.window?.activate();
   }
 
+  giveKeysToPage() {
+    giveKeysToPage(this.window?.ptr ?? null);
+  }
+
   open(url: string) {
     setDockIconVisible(true);
     if (this.window) return this.bringToFront();
@@ -62,7 +67,13 @@ export class MainWindow {
     });
     // Blocked navigations and new windows are not opened in the browser: any frame can cause or forge those events, the
     // agents' canvas pages included. The app's own page asks for its links with the nonce instead (web/outside-links.ts).
-    Electrobun.events.on(`host-message-${window.webview.id}`, (event: unknown) => this.onPageMessage((event as HostMessageEvent).data?.detail));
+    // The page's first message says it is there to take the keys, which a new window keeps for itself.
+    let pageHasKeys = false;
+    Electrobun.events.on(`host-message-${window.webview.id}`, (event: unknown) => {
+      if (!pageHasKeys) giveKeysToPage(window.ptr);
+      pageHasKeys = true;
+      this.onPageMessage((event as HostMessageEvent).data?.detail);
+    });
     this.window = window;
   }
 

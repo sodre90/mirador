@@ -554,6 +554,9 @@ export async function actAsDesktopApp(page: Page, menu: DesktopMenu) {
 /** ⌘W as the macOS desktop app passes it to the page. */
 export const pressCommandWInTheApp = (page: Page) => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-close")));
 
+/** What the macOS app's Settings… menu item, ⌘, runs in its window's page. */
+export const pressCommandCommaInTheApp = (page: Page) => page.evaluate(() => window.dispatchEvent(new CustomEvent("mirador:desktop-settings")));
+
 /** A room's card in the sidebar, by its name alone. */
 export const roomCard = (scope: Page | FrameLocator, name: string) =>
   scope.locator(".sidebar .rooms li.room-card").filter({ has: scope.locator(".room-card-name", { hasText: new RegExp(`^${literally(name)}$`) }) });

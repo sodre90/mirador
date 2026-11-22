@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
+import { SETTINGS_ROUTE } from "../shared/desktop-menu.ts";
+import { LANGUAGES } from "../shared/i18n/languages.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
+import { desktopWords } from "../desktop/src/core/desktop-words.ts";
 import {
   closeWhatHasFocusScript,
   conversationRoute,
@@ -9,6 +12,7 @@ import {
   pageRequest,
   showMenuScript,
   showRouteScript,
+  showSettingsScript,
   showUpdateScript,
   windowMenu,
 } from "../desktop/src/core/window-menu.ts";
@@ -163,5 +167,16 @@ describe("opening a conversation from the tray", () => {
 
   test("moves an open window's page there", () => {
     expect(showRouteScript("#/c/c-1")).toBe('window.location.hash = "#/c/c-1"');
+  });
+});
+
+describe("Settings… in the macOS app's menu", () => {
+  test("asks an open window's page to show Settings, and a window it opens for them starts at their address", () => {
+    expect(showSettingsScript).toBe('window.dispatchEvent(new CustomEvent("mirador:desktop-settings"))');
+    expect(SETTINGS_ROUTE).toBe("#/settings");
+  });
+
+  test("is named in every language", () => {
+    expect(LANGUAGES.map((language) => desktopWords(language).menu.settings)).toEqual(["Settings…", "Beállítások…", "Configuración…", "设置…", "Einstellungen…"]);
   });
 });

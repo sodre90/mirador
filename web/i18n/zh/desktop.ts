@@ -52,6 +52,7 @@ export const desktop: Messages["desktop"] = {
   couldNotStart: (app, problem) => `${app} 无法启动：${problem}`,
   detailsIn: (path) => `详情见 ${path}。`,
   menu: {
+    settings: "设置…",
     hide: (app) => `隐藏 ${app}`,
     hideOthers: "隐藏其他",
     showAll: "全部显示",
