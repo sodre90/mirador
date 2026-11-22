@@ -33,6 +33,12 @@ export const DESKTOP_UPDATE_EVENT = "mirador:desktop-update";
 /** The macOS app's ⌘W asks its page with this event to close what has focus; with nothing to close, the page asks back to close the window. */
 export const DESKTOP_CLOSE_EVENT = "mirador:desktop-close";
 
+/** The macOS app's Settings… menu item, ⌘,, asks its window's page with this event to show Settings. */
+export const DESKTOP_SETTINGS_EVENT = "mirador:desktop-settings";
+
+/** The address a window opens at to show Settings at once, as the macOS app's ⌘, has it while its window is closed. */
+export const SETTINGS_ROUTE = "#/settings";
+
 /** Mirador's chosen theme, which the macOS app gives its window: WebKit hands canvas frames the app's appearance, not the page's. */
 export type DesktopAppearance = "light" | "dark" | "system";
 

@@ -52,6 +52,7 @@ export const desktop: Messages["desktop"] = {
   couldNotStart: (app, problem) => `Nem sikerült elindítani: ${app}. ${problem}`,
   detailsIn: (path) => `A részletek itt vannak: ${path}`,
   menu: {
+    settings: "Beállítások…",
     hide: (app) => `${app} elrejtése`,
     hideOthers: "Többi elrejtése",
     showAll: "Összes mutatása",

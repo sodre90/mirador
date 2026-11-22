@@ -2,6 +2,7 @@ import {
   DESKTOP_CLOSE_EVENT,
   DESKTOP_MENU_EVENT,
   DESKTOP_NONCE_EVENT,
+  DESKTOP_SETTINGS_EVENT,
   DESKTOP_UPDATE_EVENT,
   isDesktopAppearance,
   type DesktopAppearance,
@@ -41,6 +42,8 @@ export const conversationRoute = (conversationId: string) => `#/c/${encodeURICom
 export const showRouteScript = (route: string) => `window.location.hash = ${JSON.stringify(route)}`;
 
 export const closeWhatHasFocusScript = `window.dispatchEvent(new CustomEvent(${JSON.stringify(DESKTOP_CLOSE_EVENT)}))`;
+
+export const showSettingsScript = `window.dispatchEvent(new CustomEvent(${JSON.stringify(DESKTOP_SETTINGS_EVENT)}))`;
 
 /** Where the window shows the tray's menu (Linux) the page runs any of its actions; elsewhere only those of its update banner. */
 export const pageMayRun = (action: TrayAction, menuInWindow: boolean) => menuInWindow || action === "install-update" || action === "check-for-update";

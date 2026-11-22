@@ -2,6 +2,7 @@ import { OpensIn } from "./opens-in.ts";
 import { useMouseSteps } from "./mouse-steps.ts";
 import { EMPTY_TRAIL, stepped, visited } from "./visit-trail.ts";
 import { Activity, memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
+import { DESKTOP_SETTINGS_EVENT, SETTINGS_ROUTE } from "../shared/desktop-menu.ts";
 import { isHidden, machinesSeen } from "../shared/machines.ts";
 import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type Workspace, type WorkspaceGroup } from "../shared/model.ts";
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
@@ -625,6 +626,24 @@ export function App() {
     };
     window.addEventListener("hashchange", selectFromHash);
     return () => window.removeEventListener("hashchange", selectFromHash);
+  }, []);
+
+  const dialogIsOpen = useRef(false);
+  dialogIsOpen.current = isModal(state);
+  useEffect(() => {
+    const showSettings = () => dispatch({ type: "open-overlay", overlay: { kind: "settings" } });
+    /**
+     * ⌘, comes through the app's menu from wherever the keys are, a canvas frame or the message box: Esc then has to
+     * reach the dialog, not what had focus. An open dialog stays, as it does for the page's own shortcuts.
+     */
+    const showSettingsAndTakeTheKeys = () => {
+      if (dialogIsOpen.current) return;
+      if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+      showSettings();
+    };
+    if (location.hash === SETTINGS_ROUTE) showSettings();
+    window.addEventListener(DESKTOP_SETTINGS_EVENT, showSettingsAndTakeTheKeys);
+    return () => window.removeEventListener(DESKTOP_SETTINGS_EVENT, showSettingsAndTakeTheKeys);
   }, []);
 
   const trail = useRef(EMPTY_TRAIL);

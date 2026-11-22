@@ -9,7 +9,7 @@ import { desktopWords } from "../core/desktop-words.ts";
 import { loadSettings, SettingsStore } from "../core/settings.ts";
 import { claimSingleInstance } from "../core/single-instance.ts";
 import { recordStartupFailure } from "../core/startup-failure.ts";
-import { closeWhatHasFocusOnMenuClose } from "./app-menu.ts";
+import { runMenuCommands } from "./app-menu.ts";
 import { DesktopApp } from "./desktop-app.ts";
 
 const APP_NAME = "Mirador";
@@ -42,7 +42,7 @@ async function launch() {
     builtFromCode: BUILD_DESKTOP_APP_CODE,
   });
 
-  if (process.platform === "darwin") closeWhatHasFocusOnMenuClose(() => app?.closeWhatHasFocus());
+  if (process.platform === "darwin") runMenuCommands({ closeWhatHasFocus: () => app?.closeWhatHasFocus(), showSettings: () => app?.showSettings() });
   Electrobun.events.on("reopen", () => void app?.openWindow());
   Electrobun.events.on("before-quit", () => app?.stopOwnedHost());
   await app.start();
