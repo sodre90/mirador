@@ -38,6 +38,8 @@ import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { writtenByAgent, type Room, type RoomAgentModel, type RoomAnswerEnd, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import type { RoomMention } from "../shared/room-mentions.ts";
+import type { RoomBallot } from "../shared/room-votes.ts";
 import type { TerminalLayout } from "../shared/terminal-layout.ts";
 import { defaultVoiceSettings, withThisMacModels, type VoiceSettings } from "../shared/voice.ts";
 
@@ -151,6 +153,15 @@ const schema = `
   CREATE TABLE IF NOT EXISTS room_invites (
     id TEXT PRIMARY KEY, code_hash TEXT NOT NULL UNIQUE, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     role TEXT NOT NULL, expires_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_votes (
+    item_id TEXT NOT NULL REFERENCES canvas_items(id) ON DELETE CASCADE, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+    person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, question INTEGER NOT NULL, option INTEGER NOT NULL,
+    PRIMARY KEY (item_id, person_id, question));
+  CREATE TABLE IF NOT EXISTS room_readers (
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    read_through INTEGER NOT NULL DEFAULT 0, muted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (room_id, person_id));
+  CREATE TABLE IF NOT EXISTS joined_room_mutes (
+    machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE, room_id TEXT NOT NULL, PRIMARY KEY (machine_id, room_id));
   CREATE TABLE IF NOT EXISTS person_keys (
     public_key TEXT PRIMARY KEY, person_id TEXT NOT NULL UNIQUE REFERENCES people(id) ON DELETE CASCADE);
   CREATE TABLE IF NOT EXISTS tunnel_keys_over (key TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL, until INTEGER NOT NULL);
@@ -278,6 +289,7 @@ const addedColumns = [
   { table: "room_agents", column: "model", definition: "TEXT" },
   { table: "room_agents", column: "effort", definition: "TEXT" },
   { table: "machines", column: "rooms", definition: "TEXT" },
+  { table: "room_messages", column: "mentions", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -507,6 +519,7 @@ interface RoomMessageRow {
   tags_dropped: string | null;
   author_role: RoomRole | null;
   task_held: TaskHeld | null;
+  mentions: string | null;
 }
 
 interface RoomThreadRow {
@@ -530,7 +543,10 @@ const toRoomMessage = (row: RoomMessageRow): RoomMessage => ({
   ...(row.ended !== null && { ended: row.ended }),
   ...(row.tags_dropped !== null && { tagsDropped: JSON.parse(row.tags_dropped) as string[] }),
   ...(row.task_held !== null && { taskHeld: row.task_held }),
+  ...(row.mentions !== null && { mentions: JSON.parse(row.mentions) as RoomMention[] }),
 });
+
+const mentionsColumn = ({ mentions }: Pick<RoomMessage, "mentions">) => (mentions && mentions.length > 0 ? JSON.stringify(mentions) : null);
 
 type RoomPersonRow = { person_id: string; role: RoomRole; name_clash: string | null };
 
@@ -1174,8 +1190,11 @@ export class Store {
     this.db.query("INSERT INTO room_people (room_id, person_id, role) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET role = excluded.role").run(roomId, personId, role);
   }
 
+  /** Takes the person out of the room with their picks on its questions, their read mark and their mute there. */
   removeRoomPerson(roomId: string, personId: string) {
-    this.db.query("DELETE FROM room_people WHERE room_id = ? AND person_id = ?").run(roomId, personId);
+    this.db.transaction(() => {
+      ["room_people", "room_votes", "room_readers"].forEach((table) => this.db.query(`DELETE FROM ${table} WHERE room_id = ? AND person_id = ?`).run(roomId, personId));
+    })();
   }
 
   setRoomPersonNameClash(roomId: string, personId: string, nameClash: string | null) {
@@ -1295,7 +1314,7 @@ export class Store {
     const author = writtenByAgent(message.author) ? { personId: null, profileId: message.author.profileId } : { personId: message.author.personId, profileId: null };
     this.db
       .query(
-        "INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, author_role, text, tags, thread_id, answers, ended, tags_dropped, task_held) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO room_messages (id, room_id, seq, at, person_id, profile_id, author_role, text, tags, thread_id, answers, ended, tags_dropped, task_held, mentions) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .run(
         message.id,
@@ -1312,6 +1331,7 @@ export class Store {
         message.ended ?? null,
         message.tagsDropped ? JSON.stringify(message.tagsDropped) : null,
         message.taskHeld ?? null,
+        mentionsColumn(message),
       );
     return { ...message, seq };
   }
@@ -1330,9 +1350,55 @@ export class Store {
   /** The message under the same id, as written anew: what it says, when, and how it ended change; its number, which agents may have read, stays. */
   rewriteRoomMessage(message: Omit<RoomMessage, "seq">): RoomMessage {
     this.db
-      .query("UPDATE room_messages SET at = ?, text = ?, tags = ?, ended = ?, tags_dropped = ? WHERE id = ?")
-      .run(message.at, message.text, JSON.stringify(message.tags), message.ended ?? null, message.tagsDropped ? JSON.stringify(message.tagsDropped) : null, message.id);
+      .query("UPDATE room_messages SET at = ?, text = ?, tags = ?, ended = ?, tags_dropped = ?, mentions = ? WHERE id = ?")
+      .run(message.at, message.text, JSON.stringify(message.tags), message.ended ?? null, message.tagsDropped ? JSON.stringify(message.tagsDropped) : null, mentionsColumn(message), message.id);
     return this.findRoomMessage(message.id)!;
+  }
+
+  /** The person's pick for the question at `question` of the item, in place of the one they made before. */
+  setRoomVote(itemId: string, roomId: string, { personId, question, option }: RoomBallot) {
+    this.db
+      .query("INSERT INTO room_votes (item_id, room_id, person_id, question, option) VALUES (?, ?, ?, ?, ?) ON CONFLICT DO UPDATE SET option = excluded.option")
+      .run(itemId, roomId, personId, question, option);
+  }
+
+  /** Everyone's picks on the item's questions, in the order they first picked. */
+  listRoomVotes(itemId: string): RoomBallot[] {
+    return this.db.query("SELECT person_id AS personId, question, option FROM room_votes WHERE item_id = ? ORDER BY rowid").all(itemId) as RoomBallot[];
+  }
+
+  /** The number of the room's last message the person read; 0 before they read any. */
+  roomReadThrough(roomId: string, personId: string): number {
+    return (this.db.query("SELECT read_through FROM room_readers WHERE room_id = ? AND person_id = ?").get(roomId, personId) as { read_through: number } | null)?.read_through ?? 0;
+  }
+
+  /** Whether the person's mark moved on to the message at `seq`; it never moves back. */
+  markRoomRead(roomId: string, personId: string, seq: number): boolean {
+    return (
+      this.db
+        .query("INSERT INTO room_readers (room_id, person_id, read_through) VALUES (?1, ?2, ?3) ON CONFLICT DO UPDATE SET read_through = ?3 WHERE read_through < ?3")
+        .run(roomId, personId, seq).changes > 0
+    );
+  }
+
+  roomMuted(roomId: string, personId: string): boolean {
+    return (this.db.query("SELECT muted FROM room_readers WHERE room_id = ? AND person_id = ?").get(roomId, personId) as { muted: number } | null)?.muted === 1;
+  }
+
+  setRoomMuted(roomId: string, personId: string, muted: boolean) {
+    this.db.query("INSERT INTO room_readers (room_id, person_id, muted) VALUES (?1, ?2, ?3) ON CONFLICT DO UPDATE SET muted = ?3").run(roomId, personId, muted ? 1 : 0);
+  }
+
+  /** The room's messages after the one at `afterSeq` that it shows itself and someone else wrote, and those of any of them that tag the person. */
+  countRoomUnread(roomId: string, personId: string, afterSeq: number): { unread: number; mentions: number } {
+    return this.db
+      .query(
+        `SELECT
+           COUNT(*) FILTER (WHERE (thread_id IS NULL OR answers IS NOT NULL) AND (person_id IS NULL OR person_id != ?2)) AS unread,
+           COUNT(*) FILTER (WHERE mentions IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(mentions) WHERE json_extract(value, '$.personId') = ?2)) AS mentions
+         FROM room_messages WHERE room_id = ?1 AND seq > ?3`,
+      )
+      .get(roomId, personId, afterSeq) as { unread: number; mentions: number };
   }
 
   /** The number of the room's latest message, 0 while it has none. */
@@ -1769,6 +1835,16 @@ export class Store {
 
   setMachineRooms(id: string, rooms: JoinedRoom[]) {
     this.db.query("UPDATE machines SET rooms = ? WHERE id = ?").run(rooms.length > 0 ? JSON.stringify(rooms) : null, id);
+  }
+
+  /** The rooms of the machine joined as a person that this computer keeps quiet, whatever the machine says. */
+  joinedRoomsMutedHere(machineId: string): string[] {
+    return (this.db.query("SELECT room_id FROM joined_room_mutes WHERE machine_id = ? ORDER BY room_id").all(machineId) as { room_id: string }[]).map(({ room_id }) => room_id);
+  }
+
+  setJoinedRoomMutedHere(machineId: string, roomId: string, muted: boolean) {
+    if (muted) this.db.query("INSERT INTO joined_room_mutes (machine_id, room_id) VALUES (?, ?) ON CONFLICT DO NOTHING").run(machineId, roomId);
+    else this.db.query("DELETE FROM joined_room_mutes WHERE machine_id = ? AND room_id = ?").run(machineId, roomId);
   }
 
   setMachineOutOfRooms(id: string, outOfRooms: boolean) {

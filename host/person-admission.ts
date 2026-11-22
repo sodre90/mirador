@@ -2,7 +2,8 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel } from "../shared/model.ts";
 import type { PersonMessageType } from "../shared/person-messages.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
-import { mayWriteAs, type RoomRole } from "../shared/rooms.ts";
+import { MOST_OWN_ANSWER_CHARACTERS } from "../shared/room-votes.ts";
+import { asksAgentsAs, mayWriteAs, type RoomRole } from "../shared/rooms.ts";
 
 /** A signed-in person other than the machine's owner, as far as what they send goes: the role they have in each room they are in. */
 export interface PersonInRooms {
@@ -16,6 +17,17 @@ type Admission<K extends ClientMessage["type"]> = (message: Extract<ClientMessag
 const unreadable = () => new Error("The host could not read that message.");
 const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((each) => typeof each === "string");
 const isIdOrNone = (value: unknown) => value === null || typeof value === "string";
+
+/** Far more questions, and options of each, than an agent's question holds; which there are is the host's to check. */
+const MOST_PLACES = 100;
+const isPlace = (value: unknown): value is number => Number.isInteger(value) && (value as number) >= 0 && (value as number) < MOST_PLACES;
+
+/** One option by its place, or words of the confirmer's own, nothing besides. */
+function isConfirmedAnswer(value: unknown) {
+  if (typeof value !== "object" || value === null || Object.keys(value).length !== 1) return false;
+  const { option, own } = value as { option?: unknown; own?: unknown };
+  return isPlace(option) || (typeof own === "string" && own.length <= MOST_OWN_ANSWER_CHARACTERS * 4);
+}
 
 /** A room the person is not in is as good as gone for them. */
 function roleOf(person: PersonInRooms, roomId: unknown): RoomRole {
@@ -206,6 +218,8 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "machine.show-again": OWNER_ONLY,
   "machine.join": OWNER_ONLY,
   "machine.ask-to-join": OWNER_ONLY,
+  "machine.room-opened": OWNER_ONLY,
+  "machine.mute-room": OWNER_ONLY,
   "search": OWNER_ONLY,
   "room.create": OWNER_ONLY,
   "room.rename": OWNER_ONLY,
@@ -233,6 +247,19 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     if (typeof roomId !== "string" || !isIdOrNone(threadId) || typeof writing !== "boolean") throw unreadable();
   },
   "room.usage.get": OWNER_ONLY,
+  "room.vote": ({ roomId, itemId, question, option }, person) => {
+    if (typeof itemId !== "string" || !isPlace(question) || !isPlace(option)) throw unreadable();
+    void roleOf(person, roomId);
+  },
+  /** Only the person whose task the agent works on confirms, besides the owner, and only while they may ask agents themselves; the room's host checks which. */
+  "room.confirm": ({ roomId, itemId, answers }, person) => {
+    if (typeof itemId !== "string" || !Array.isArray(answers) || answers.length > MOST_PLACES || !answers.every(isConfirmedAnswer)) throw unreadable();
+    if (!asksAgentsAs(roleOf(person, roomId))) throw new HostProblemError({ code: "room-confirm-not-yours" });
+  },
+  "room.mute": ({ roomId, muted }, person) => {
+    if (typeof muted !== "boolean") throw unreadable();
+    void roleOf(person, roomId);
+  },
 };
 
 /** The message, from what a person other than the owner sent, when they may send it; anything else throws what refuses it. */

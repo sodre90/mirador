@@ -186,6 +186,11 @@ export class Hub {
     return this.ownersPresence().some((presence) => presence.attentive && presence.roomId === roomId);
   }
 
+  /** Whether a focused page of the person's shows the room, as the owner's or anyone else's. */
+  isRoomWatchedBy(roomId: string, personId: string) {
+    return [...this.sockets].some(({ data: { personId: each, presence } }) => each === personId && presence.attentive && presence.roomId === roomId);
+  }
+
   /** The people with a page in sight that shows the room, whoever they are; who of them may be there is the room's to say. */
   peopleShowing(roomId: string): Set<string> {
     return new Set([...this.sockets].flatMap(({ data: { personId, presence } }) => (presence.visible && presence.roomId === roomId ? [personId] : [])));

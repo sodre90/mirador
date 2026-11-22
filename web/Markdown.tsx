@@ -1,4 +1,4 @@
-import { createContext, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { createContext, Fragment, memo, useContext, useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import Markdown, { defaultUrlTransform, type Components, type ExtraProps, type UrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isFromAnotherSite, siteOf, useExternalImagesBlocked } from "./external-images.ts";
@@ -9,6 +9,7 @@ import { looksLikeFilePath } from "../shared/file-paths.ts";
 import { connection } from "./connection.ts";
 import { highlightCode } from "./highlight.ts";
 import { blocksOfMessage, linesOfInlines, type Block, type Inline, type LineInline, type Mark } from "../shared/slack-markdown.ts";
+import { textAroundMentions, type RoomMention } from "../shared/room-mentions.ts";
 
 /** How long a Copy button says it copied, or couldn't. */
 export const COPY_OUTCOME_SHOWN_MS = 1_500;
@@ -20,6 +21,49 @@ const InsideCodeBlock = createContext(false);
 
 /** The conversation whose files the agent's paths in a text name, or null where there is none to open them in. */
 const FilesOfConversation = createContext<string | null>(null);
+
+/** The people a room message tags, as the host found them, and who reads it: each tag stands out, the reader's own the most. */
+export interface MentionsRead {
+  mentions: RoomMention[];
+  you: string | null;
+}
+
+export const MentionsOfMessage = createContext<MentionsRead | null>(null);
+
+const mentionClasses = (mention: RoomMention, you: string | null) => ["room-mention", ...(mention.personId === you ? ["you"] : [])];
+
+function TextWithMentions({ text }: { text: string }) {
+  const read = useContext(MentionsOfMessage);
+  const pieces = useMemo(() => textAroundMentions(text, read?.mentions ?? []), [text, read?.mentions]);
+  return pieces.map(({ text: piece, mention }, index) => (
+    <Fragment key={index}>{mention ? <span className={mentionClasses(mention, read?.you ?? null).join(" ")}>{piece}</span> : piece}</Fragment>
+  ));
+}
+
+interface MarkdownNode {
+  type: string;
+  value?: string;
+  children?: MarkdownNode[];
+  data?: { hName?: string; hProperties?: Record<string, unknown> };
+}
+
+const KEPT_WHOLE = new Set(["link", "linkReference", "inlineCode", "code", "html"]);
+
+/** Wraps each tag of a person in the text of an agent's answer in a span of its own, leaving links and code as they are. */
+const remarkMentions =
+  ({ mentions, you }: MentionsRead) =>
+  () =>
+  (tree: MarkdownNode) => {
+    const split = (node: MarkdownNode): MarkdownNode[] => {
+      if (node.type === "text" && node.value)
+        return textAroundMentions(node.value, mentions).map(({ text, mention }) =>
+          mention ? { type: "roomMention", data: { hName: "span", hProperties: { className: mentionClasses(mention, you) } }, children: [{ type: "text", value: text }] } : { type: "text", value: text },
+        );
+      if (node.children && !KEPT_WHOLE.has(node.type)) node.children = node.children.flatMap(split);
+      return [node];
+    };
+    split(tree);
+  };
 
 function CodeBlock({ node: _node, ...props }: ComponentProps<"pre"> & ExtraProps) {
   const block = useRef<HTMLPreElement>(null);
@@ -148,8 +192,10 @@ function useThrottledText(text: string) {
 
 /** Parsing is the costly part, so a re-render with the same text reuses the last result. */
 const RenderedMarkdown = memo(function RenderedMarkdown({ text }: { text: string }) {
+  const read = useContext(MentionsOfMessage);
+  const remarkPlugins = useMemo(() => (read && read.mentions.length > 0 ? [remarkGfm, remarkMentions(read)] : [remarkGfm]), [read]);
   return (
-    <Markdown remarkPlugins={[remarkGfm]} components={markdownComponents} urlTransform={keepingLocalImagePaths}>
+    <Markdown remarkPlugins={remarkPlugins} components={markdownComponents} urlTransform={keepingLocalImagePaths}>
       {text}
     </Markdown>
   );
@@ -181,7 +227,7 @@ function SlackInline({ inline }: { inline: LineInline }) {
       </a>
     );
   if (inline.marks.includes("code")) return <MarkdownCode>{inline.text}</MarkdownCode>;
-  return MARK_TAGS.reduce<ReactNode>((content, [mark, Tag]) => (inline.marks.includes(mark) ? <Tag>{content}</Tag> : content), inline.text);
+  return MARK_TAGS.reduce<ReactNode>((content, [mark, Tag]) => (inline.marks.includes(mark) ? <Tag>{content}</Tag> : content), <TextWithMentions text={inline.text} />);
 }
 
 /** One element per line, so a blank line keeps its height wherever it falls, even last in a block. */

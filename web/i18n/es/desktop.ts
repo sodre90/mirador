@@ -20,6 +20,8 @@ export const desktop: Messages["desktop"] = {
   waiting: { decision: "Esperándote", failed: "Falló", done: "Listo", unread: "No leída" },
   untitled: "Nueva conversación",
   notifications: {
+    tagged: (name: string, text: string) => `${name} te etiquetó: ${text}`,
+    waitsToConfirm: (question: string) => `Espera que confirmes la respuesta: ${question}`,
     asks: (question) => `Pregunta: ${question}`,
     wantsPermission: (tool) => `Pide permiso: ${tool}`,
     aTool: "una herramienta",

@@ -69,7 +69,7 @@ async function write(page: Page, text: string) {
 
 async function tagBuilder(page: Page, rest: string) {
   await roomComposer(page).fill("@Bu");
-  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: "@Builder" }).click();
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
   await roomComposer(page).pressSequentially(rest);
   await roomComposer(page).press("Enter");
 }

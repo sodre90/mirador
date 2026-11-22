@@ -20,7 +20,7 @@ import { saveIntoWorkspace } from "./save-to-project.ts";
 import { noteOfPageErrors, type CanvasNote } from "./notes.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 import { workingCopyOf } from "../worktrees.ts";
-import { roomMessageAnswered, shownOnRoomCanvas } from "../../shared/rooms.ts";
+import { authorLine, quotedLines, roomMessageAnswered, shownOnRoomCanvas, type FramedAuthor } from "../../shared/rooms.ts";
 
 const RENDER_REPORT_TIMEOUT_MS = 6000;
 
@@ -48,11 +48,23 @@ export interface RenderReport {
 
 export type RenderOutcome = RenderReport | "no-viewer";
 
+/** Told of each change to a question an agent asks in a room, and whether it just began to wait for its answer. */
+export type RoomQuestionListener = (roomId: string, item: AskItem, startsWaiting: boolean) => void;
+
 /** Why a tool call stopped waiting for its question's answer, whose answer then goes as the user's next message. */
 export type AnswerWaitGivenUp = "turn-ended" | "time-up";
 
+/** Someone other than the owner who confirmed the answer for a room: their role and name there, and which of the answers are in their own words. */
+export interface RoomAnswerer {
+  author: FramedAuthor;
+  ownWords: boolean[];
+}
+
+/** An answer as it goes to the agent: what was chosen, and who chose it where that was not the owner. */
+export type GivenAnswer = Pick<CanvasAnswer, "label" | "note" | "answers"> & { answerer?: RoomAnswerer };
+
 interface AnswerWaiter {
-  answered(answer: Pick<CanvasAnswer, "label" | "note">): void;
+  answered(answer: GivenAnswer): void;
   withdrawn(): void;
 }
 
@@ -60,6 +72,7 @@ export class CanvasService {
   private readonly answerWaiters = new Map<string, AnswerWaiter>();
   private readonly askingTurns = new Map<string, { conversationId: string; turnEnded: AbortController }>();
   private readonly renderWaiters = new Map<string, (report: RenderReport) => void>();
+  private roomQuestionChanged: RoomQuestionListener = () => {};
 
   constructor(
     private readonly store: Store,
@@ -69,6 +82,10 @@ export class CanvasService {
     /** Every address the canvas libraries are served at, as a page may name any of them; the first is the one agents were given. */
     private readonly assetsOrigins: string[],
   ) {}
+
+  hearRoomQuestionsWith(listener: RoomQuestionListener) {
+    this.roomQuestionChanged = listener;
+  }
 
   list(conversationId: string): CanvasItem[] {
     return this.store.listCanvasItems(conversationId);
@@ -90,7 +107,7 @@ export class CanvasService {
     return { item, render };
   }
 
-  openAsk(conversationId: string, request: AskRequest, { installsPluginOffer }: { installsPluginOffer?: string } = {}): AskItem {
+  openAsk(conversationId: string, request: AskRequest, { installsPluginOffer, answerFillsForm = false }: { installsPluginOffer?: string; answerFillsForm?: boolean } = {}): AskItem {
     const shownBefore = this.pagesShownSinceUserSpoke(conversationId).map(({ id }) => id);
     const asked = "questions" in request ? severalQuestionsAsked(request.questions) : singleQuestionAsked(request);
     const item = this.save({
@@ -102,7 +119,7 @@ export class CanvasService {
       ...(installsPluginOffer && { installsPluginOffer }),
       status: "waiting",
       createdAt: Date.now(),
-      ...this.madeInRoom(conversationId),
+      ...this.madeInRoom(conversationId, answerFillsForm),
     });
     this.notifications.notify(conversationId, { kind: "question", question: item.title });
     return item;
@@ -148,7 +165,7 @@ export class CanvasService {
   }
 
   /** Resolves with the user's answer, or rejects when `signal` aborts first; a later answer then arrives as the next message. */
-  waitForAnswer(item: CanvasItem, signal: AbortSignal): Promise<Pick<CanvasAnswer, "label" | "note" | "answers">> {
+  waitForAnswer(item: CanvasItem, signal: AbortSignal): Promise<GivenAnswer> {
     return new Promise((resolve, reject) => {
       const stopWaiting = () => {
         this.answerWaiters.delete(item.id);
@@ -177,7 +194,7 @@ export class CanvasService {
     item: CanvasItem,
     signal: AbortSignal,
     limitMs: number | null = null,
-  ): Promise<Pick<CanvasAnswer, "label" | "note" | "answers"> | AnswerWaitGivenUp> {
+  ): Promise<GivenAnswer | AnswerWaitGivenUp> {
     const turnEnded = new AbortController();
     this.askingTurns.set(item.id, { conversationId: item.conversationId, turnEnded });
     const timeUp = limitMs === null ? [] : [AbortSignal.timeout(limitMs)];
@@ -206,16 +223,17 @@ export class CanvasService {
   /**
    * An answer the agent no longer waits on goes to it as the next message, written by the person who answered. A room's
    * agent hears it after the turn it may be in, as going on with the room message whose turn asked, so that its answer
-   * goes into that message's thread.
+   * goes into that message's thread. One a person other than the owner confirmed for a room tells the agent who they are.
    */
-  answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[], authorId?: string) {
+  answer(itemId: string, label: string, note?: string, answers?: AskAnswerEntry[], authorId?: string, answerer?: RoomAnswerer) {
     const item = this.store.findCanvasItem(itemId);
     if (!item || item.kind !== "ask") throw new HostProblemError({ code: "unknown-question" });
     if (item.status !== "waiting") throw new HostProblemError({ code: "question-already-answered" });
-    const given = answersFor(item, label, note, answers);
+    const chosen = answersFor(item, label, note, answers);
+    const given: GivenAnswer = answerer ? { ...chosen, answerer } : chosen;
     const waiter = this.answerWaiters.get(itemId);
     this.answerWaiters.delete(itemId);
-    this.save({ ...item, status: "answered", answer: { ...given, deliveredAs: waiter ? "tool-result" : "next-message" } });
+    this.save({ ...item, status: "answered", answer: { ...chosen, deliveredAs: waiter ? "tool-result" : "next-message", ...(authorId && { answeredBy: authorId }) } });
     if (waiter) waiter.answered(given);
     else if (item.installsPluginOffer) void this.installThenTell(item, item.installsPluginOffer, given, authorId);
     else this.conversations.send(item.conversationId, answerAsMessage(item, given), [], { authorId, ...this.roomMessageAsking(item) }).catch(() => {});
@@ -226,10 +244,11 @@ export class CanvasService {
   }
 
   /** In a room, the message the agent's turn answers as it makes the item, and how far the room had got by then. */
-  private madeInRoom(conversationId: string): { madeInRoom?: MadeInRoom } {
+  private madeInRoom(conversationId: string, answerFillsForm = false): { madeInRoom?: MadeInRoom } {
     const roomId = this.store.findConversation(conversationId)?.roomId;
-    const answering = roomId && roomMessageAnswered(this.store.listEventsOfTypes(conversationId, ["user-message"]));
-    return answering ? { madeInRoom: { answering, afterSeq: this.store.lastRoomSeq(roomId) } } : {};
+    const turn = roomId ? roomMessageAnswered(this.store.listEventsOfTypes(conversationId, ["user-message"])) : undefined;
+    if (!roomId || !turn) return {};
+    return { madeInRoom: { answering: turn.answering, afterSeq: this.store.lastRoomSeq(roomId), ...((turn.promptedOutsideRoom || answerFillsForm) && { ownerAloneAnswers: true }) } };
   }
 
   private pluginInstaller: PluginInstaller = {
@@ -352,12 +371,14 @@ export class CanvasService {
   }
 
   private save<T extends CanvasItem>(change: T): T {
+    const startsWaiting = change.kind === "ask" && change.status === "waiting" && this.store.findCanvasItem(change.id)?.status !== "waiting";
     const item = { ...change, updatedAt: Date.now() };
     this.store.saveCanvasItem(item);
     this.hub.publishToConversation(item.conversationId, { type: "canvas.upserted", item });
     const roomId = this.store.findConversation(item.conversationId)?.roomId;
     if (roomId && shownOnRoomCanvas(item)) this.hub.publishToRoom(roomId, { type: "canvas.upserted", item });
     if (item.kind === "ask") this.conversations.questionsChanged(item.conversationId);
+    if (roomId && item.kind === "ask") this.roomQuestionChanged(roomId, item, startsWaiting);
     return item;
   }
 }
@@ -379,8 +400,6 @@ const severalQuestionsAsked = (questions: AskQuestion[]): AskedFields => ({
   questions,
 });
 
-type GivenAnswer = Pick<CanvasAnswer, "label" | "note" | "answers">;
-
 /** What the user sent, checked against what was asked: one answer for a question, one for each of several. */
 function answersFor(item: AskItem, label: string, note: string | undefined, answers: AskAnswerEntry[] | undefined): GivenAnswer {
   const questions = questionsOf(item);
@@ -397,7 +416,21 @@ function answersFor(item: AskItem, label: string, note: string | undefined, answ
 
 const noteLine = (note: string | undefined, prefix: string) => (note ? [`${prefix}${note}`] : []);
 
-export function answerAsToolResult({ label, note, answers }: GivenAnswer) {
+const indented = (lines: string[]) => lines.map((line) => `   ${line}`);
+
+/** One answer of a person other than the owner, named as a room's messages name them: the option they chose, or their own words quoted as those messages are. */
+const roomPersonsAnswer = (who: string, label: string, inOwnWords: boolean) => (inOwnWords ? [`${who} answered in their own words:`, ...quotedLines(label)] : [`${who} chose: ${label}`]);
+
+function roomPersonsAnswerAsToolResult({ label, answers }: GivenAnswer, { author, ownWords }: RoomAnswerer) {
+  const who = authorLine(author);
+  if (!answers) return roomPersonsAnswer(who, label, ownWords[0] === true).join("\n");
+  const each = answers.flatMap((entry, index) => [`${index + 1}. ${entry.question}`, ...indented(roomPersonsAnswer(who, entry.label, ownWords[index] === true))]);
+  return [`${who} answered ${answers.length} questions:`, ...each].join("\n");
+}
+
+export function answerAsToolResult(given: GivenAnswer) {
+  if (given.answerer) return roomPersonsAnswerAsToolResult(given, given.answerer);
+  const { label, note, answers } = given;
   if (answers) {
     const each = answers.flatMap((entry, index) => [`${index + 1}. ${entry.question}`, `   The user chose: ${entry.label}`, ...noteLine(entry.note, "   Their note: ")]);
     return [`The user answered ${answers.length} questions:`, ...each, ...noteLine(note, "Their note on all the answers: ")].join("\n");
@@ -502,7 +535,19 @@ function readAnswer(text: string, { chosenLine, noteLine, overallNoteLine, quest
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-function answerAsMessage(item: AskItem, { label, note, answers }: GivenAnswer) {
+/** The answer to a question, after `asked`, as a person other than the owner gave it: an option, or their own words quoted. */
+const roomPersonsAnswerTo = (asked: string, label: string, inOwnWords: boolean) => (inOwnWords ? [`${asked}, in their own words:`, ...quotedLines(label)] : [`${asked}: ${label}`]);
+
+function roomPersonsAnswerAsMessage(item: AskItem, { label, answers }: GivenAnswer, { author, ownWords }: RoomAnswerer) {
+  const who = authorLine(author);
+  if (!answers) return roomPersonsAnswerTo(`${who} answered your question "${item.question}"`, label, ownWords[0] === true).join("\n");
+  const each = answers.flatMap((entry, index) => roomPersonsAnswerTo(`${index + 1}. "${entry.question}"`, entry.label, ownWords[index] === true));
+  return [`${who} answered your questions:`, ...each].join("\n");
+}
+
+function answerAsMessage(item: AskItem, given: GivenAnswer) {
+  if (given.answerer) return roomPersonsAnswerAsMessage(item, given, given.answerer);
+  const { label, note, answers } = given;
   if (answers) {
     const each = answers.flatMap((entry, index) => [`${index + 1}. "${entry.question}": ${entry.label}`, ...noteLine(entry.note, "   Note: ")]);
     return ["My answers to your questions:", ...each, ...noteLine(note, "Note on all the answers: ")].join("\n");

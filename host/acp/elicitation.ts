@@ -87,7 +87,7 @@ export async function askFormOnCanvas(
 ): Promise<acp.CreateElicitationResponse> {
   const asked = askOfElicitation(request);
   if (!asked) return { action: "decline" };
-  const item = canvas.openAsk(conversationId, asked.ask);
+  const item = canvas.openAsk(conversationId, asked.ask, { answerFillsForm: true });
   try {
     return { action: "accept", content: elicitationContent(asked, await canvas.waitForAnswer(item, signal)) };
   } catch {

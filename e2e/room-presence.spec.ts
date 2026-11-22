@@ -133,11 +133,11 @@ test("the owner and a person in the room see who of them is here and who writes,
   });
 
   await test.step("the person's task, allowed by the owner, and the owner's own reach the agent, which shows as working while it answers", async () => {
-    await tagBuilder(visitorsComposer, frame.getByRole("listbox", { name: "Agents of the room" }), "TOKENS 1200 300 0.05 SAY Seeds are in");
+    await tagBuilder(visitorsComposer, frame.getByRole("listbox", { name: "Agents and people of the room" }), "TOKENS 1200 300 0.05 SAY Seeds are in");
     await page.locator(".room-timeline ~ .room-approvals").getByRole("button", { name: "Allow", exact: true }).click();
     await expect(roomMessages(page).last()).toHaveText("Seeds are in");
 
-    await tagBuilder(ownersComposer, page.getByRole("listbox", { name: "Agents of the room" }), `WAIT ${answerHeldUntil()} TOKENS 800 100 SAY Rows are dug`);
+    await tagBuilder(ownersComposer, page.getByRole("listbox", { name: "Agents and people of the room" }), `WAIT ${answerHeldUntil()} TOKENS 800 100 SAY Rows are dug`);
     await expect.poll(async () => (await peopleListed(frame)).agents).toEqual(["Builder, Working"]);
     writeFileSync(answerHeldUntil(), "");
     await expect(roomMessages(frame).last()).toHaveText("Rows are dug");

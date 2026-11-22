@@ -28,7 +28,7 @@ const roomsListed = (page: Page) => page.locator(".sidebar .rooms .room-card-nam
 
 async function tagBuilder(page: Page, rest: string) {
   await roomComposer(page).fill("@Bu");
-  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: "@Builder" }).click();
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
   await roomComposer(page).pressSequentially(rest);
   await roomComposer(page).press("Enter");
 }
@@ -157,7 +157,7 @@ test("a person the owner lets into a room sees only that room on their own brows
     await roomCard(miaPage, "Launch").click();
     await setRoleOfMia(page, "Launch", "Guest");
     await guestComposer(miaPage).fill("@Bu");
-    await expect(miaPage.getByRole("listbox", { name: "Agents of the room" })).toHaveCount(0);
+    await expect(miaPage.getByRole("listbox", { name: "Agents and people of the room" })).toHaveCount(0);
     await guestComposer(miaPage).fill("Just watching");
     await guestComposer(miaPage).press("Enter");
     await expect(roomMessages(page).last()).toHaveText("Just watching");

@@ -7,6 +7,7 @@ import { harnessRewinds, workingCopyIdOf, type Conversation, type Machine, type 
 import { turnTitle, turnsFrom, undoableTurns, type Turn } from "../shared/reverts.ts";
 import { groupHolds, groupsWithPaths, shownGroupOf, sidebarItems } from "../shared/sidebar-order.ts";
 import { countWaiting, roomsWaitingFor } from "../shared/waiting.ts";
+import { isMuted } from "../shared/room-reading.ts";
 import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, focusPane, forkConversation, startConversationIn, startRenamingOpenConversation } from "./actions.ts";
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
@@ -588,6 +589,7 @@ export function App() {
   const openJoinedRoom = (machineId: string, roomId: string | null) => {
     if (!showsMachinesHere()) return;
     if (!roomId) return machines.show(machineId);
+    connection.send({ type: "machine.room-opened", machineId, roomId });
     machines.rememberPlace(machineId, `#/r/${roomId}`);
     machines.openIn(machineId, `#/r/${roomId}`);
   };
@@ -600,6 +602,7 @@ export function App() {
     },
     [state.machines],
   );
+  const openRoom = useCallback((roomId: string, machineId?: string) => (machineId ? openJoinedRoom(machineId, roomId) : dispatch({ type: "select-room", roomId })), [machines]);
   const sideChatShownBesideSelected = state.selectedConversationId ? sideChatsShown[state.selectedConversationId] : undefined;
   useSystemNotifications(
     shownMachine ? null : state.selectedConversationId,
@@ -607,6 +610,7 @@ export function App() {
     shownMachine ? null : state.selectedRoomId,
     status === "open",
     openConversation,
+    openRoom,
   );
   useTabTitle(countWaiting(state.conversations) + roomsWaitingFor(state).size);
 
@@ -796,6 +800,7 @@ export function App() {
             approvals={state.roomApprovals.filter(({ roomId }) => roomId === shownRoom.id)}
             tasks={state.roomTasksWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
             presence={state.roomPresence?.roomId === shownRoom.id ? state.roomPresence : null}
+            muted={isMuted(state.roomReadings, shownRoom.id)}
             you={state.you}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnRoomCanvas(shownRoom.id, itemId)}

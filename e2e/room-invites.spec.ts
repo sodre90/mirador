@@ -270,7 +270,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
 
   await test.step("the person tags the agent, the owner allows the task, and both read the answer", async () => {
     await composer.fill("@Bu");
-    await frame.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: "@Builder" }).click();
+    await frame.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
     await composer.pressSequentially("SAY Seeds are in");
     await composer.press("Enter");
     const strip = page.locator(".room-timeline ~ .room-approvals");
@@ -284,7 +284,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await setRoleOfDora(page, "Guest");
     const guestComposer = frame.getByRole("textbox", { name: "Write in Garden…" });
     await guestComposer.fill("@Bu");
-    await expect(frame.getByRole("listbox", { name: "Agents of the room" })).toHaveCount(0);
+    await expect(frame.getByRole("listbox", { name: "Agents and people of the room" })).toHaveCount(0);
   });
 
   await test.step("taken out of the room, the person's Mirador says they are in no room there any more, and offers no way in but a new invite", async () => {

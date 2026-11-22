@@ -21,7 +21,10 @@ These terms stay the same everywhere:
 | side chat (a question about a conversation, beside it) | mellékszál | chat lateral | 旁聊 | Nebenchat |
 | room (where people and agents write together) | szoba | sala | 房间 | Raum |
 | thread (one agent's task in a room) | téma | hilo | 话题 | Thread (der) |
-| tag (an agent, in a room's message) | megjelöl | etiquetar | 标记 | markieren |
+| tag (an agent or a person, in a room's message) | megjelöl | etiquetar | 标记 | markieren |
+| vote (on a question of a room's agent) | szavaz / szavazás | votar / voto | 投票 | abstimmen / Stimme |
+| confirm (the answer a room's agent gets) | megerősít / megerősítés | confirmar / confirmación | 确认 | bestätigen / Bestätigung |
+| mute (a room's notifications) | némít | silenciar | 静音 | stummschalten |
 | session | munkamenet | sesión | 会话 | Sitzung |
 | profile | profil | perfil | 配置 | Profil |
 | your profile (your name and colour in Settings, not an agent profile) | profilod | tu perfil | 个人资料 | dein Profil |

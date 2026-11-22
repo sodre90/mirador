@@ -1,4 +1,6 @@
-import { systemNotification, type NotificationReason } from "../shared/system-notifications.ts";
+import type { RoomAlert } from "../shared/room-reading.ts";
+import type { Room } from "../shared/rooms.ts";
+import { roomNotification, systemNotification, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
 import type { Hub } from "./hub.ts";
 import type { PushNotifications } from "./push-notifications.ts";
 import type { Store } from "./store.ts";
@@ -15,14 +17,29 @@ export class SystemNotifications {
   /**
    * Stays quiet while a focused page shows the conversation, as you are already looking at it. An agent's conversation in
    * a room, which no page opens, tells only of a request or question waiting and an answer finished, and stays quiet
-   * while a focused page shows its room.
+   * while a focused page shows its room, or while the owner muted the room.
    */
   notify(conversationId: string, reason: NotificationReason) {
     const conversation = this.store.findConversation(conversationId);
     if (!conversation || this.hub.isWatched(conversationId)) return;
-    if (conversation.roomId && (!TOLD_OF_IN_ROOMS.has(reason.kind) || this.hub.isRoomWatched(conversation.roomId))) return;
+    if (conversation.roomId && (!TOLD_OF_IN_ROOMS.has(reason.kind) || this.hub.isRoomWatched(conversation.roomId) || this.store.roomMuted(conversation.roomId, this.store.ownerId()))) return;
     const workspace = this.store.findWorkspace(conversation.workspaceId)?.name ?? "";
-    const notification = { ...systemNotification(conversation, workspace, reason), id: crypto.randomUUID() };
+    this.tell({ ...systemNotification(conversation, workspace, reason), id: crypto.randomUUID() });
+  }
+
+  /** A room calls its owner, who looks elsewhere and didn't mute it. */
+  roomAlert(room: Room, alert: RoomAlert) {
+    this.tell({ ...roomNotification(room.id, room.name, this.store.findWorkspace(room.workspaceId)?.name ?? "", alert), id: crypto.randomUUID() });
+  }
+
+  /** A room this computer's owner joined on someone else's machine calls them: phones get it too, as they never join that machine. */
+  passOnFromJoinedRoom(notification: SystemNotification) {
+    this.hub.notifyThisComputer(notification);
+    const { machineId: _joinedOn, ...pushed } = notification;
+    void this.pushes?.notify(pushed);
+  }
+
+  private tell(notification: SystemNotification) {
     this.hub.notify(notification);
     void this.pushes?.notify(notification);
   }

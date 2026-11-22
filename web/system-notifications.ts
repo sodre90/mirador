@@ -50,20 +50,24 @@ export async function setNotificationsWanted(wanted: boolean) {
   refresh();
 }
 
-function show(received: SystemNotification, open: OpenConversation) {
+function show(received: SystemNotification, open: OpenConversation, openRoom: OpenRoom) {
   refresh();
   if (!notifies(setting)) return;
   const notification = inLanguage(received, t);
-  const shown = new Notification(notification.title, { body: bodyWithWorkspace(notification), tag: notification.conversationId ?? "about-this-machine" });
+  const shown = new Notification(notification.title, { body: bodyWithWorkspace(notification), tag: notification.conversationId ?? notification.roomId ?? "about-this-machine" });
   shown.onclick = () => {
     window.focus();
     if (notification.conversationId) open(notification.conversationId, notification.machineId);
+    else if (notification.roomId) openRoom(notification.roomId, notification.machineId);
     shown.close();
   };
 }
 
 /** A conversation of this machine, or of another one when the notification came from there. */
 type OpenConversation = (conversationId: string, machineId?: string) => void;
+
+/** A room of this machine, or of another one this computer joined when the notification came from there. */
+type OpenRoom = (roomId: string, machineId?: string) => void;
 
 const isInSight = () => document.visibilityState === "visible" && isShownByTheRail();
 const isLookedAt = () => isInSight() && document.hasFocus();
@@ -74,7 +78,7 @@ const isLookedAt = () => isInSight() && document.hasFocus();
  * window for a moment, so the report waits for focus to settle; one still waiting when the page shows something else
  * would say the page shows what it no longer does.
  */
-export function useSystemNotifications(selectedConversationId: string | null, sideChatId: string | null, roomId: string | null, connected: boolean, open: OpenConversation) {
+export function useSystemNotifications(selectedConversationId: string | null, sideChatId: string | null, roomId: string | null, connected: boolean, open: OpenConversation, openRoom: OpenRoom) {
   useEffect(() => {
     if (!connected) return;
     const report = () =>
@@ -108,8 +112,8 @@ export function useSystemNotifications(selectedConversationId: string | null, si
   useEffect(
     () =>
       connection.onMessage((message) => {
-        if (message.type === "system-notification") show(message.notification, open);
+        if (message.type === "system-notification") show(message.notification, open, openRoom);
       }),
-    [open],
+    [open, openRoom],
   );
 }

@@ -81,12 +81,19 @@ export interface MachineStatus {
   joinedThere: MachineSeen[];
   /** Of a machine joined as a person: the rooms this computer's owner is in there, as it lists them, kept from when it last answered. */
   rooms: JoinedRoom[];
+  /** The ids of those rooms this computer keeps quiet itself, whatever the machine says of them. */
+  mutedHere: string[];
 }
 
 /** A room this computer's owner is in on someone else's machine, as that machine lists it: shown with the machine, trusted for nothing. */
 export interface JoinedRoom {
   id: string;
   name: string;
+  /** What you have not read there and what waits for you there, as the machine counts them, each made a count of `countFrom`'s. */
+  unread: number;
+  mentions: number;
+  toConfirm: number;
+  muted: boolean;
 }
 
 /** A machine another machine has joined, known here by the name, address and id it has there. */
@@ -865,6 +872,8 @@ export interface CanvasAnswer {
   /** For an ask of several questions: each answer beside its question. */
   answers?: (AskAnswerEntry & { question: string })[];
   deliveredAs: "tool-result" | "next-message";
+  /** The person who gave it: in a room, who confirmed it. */
+  answeredBy?: string;
 }
 
 export type CanvasItemKind = "show" | "ask" | "plugin";
@@ -874,6 +883,11 @@ export type CanvasItemKind = "show" | "ask" | "plugin";
 export interface MadeInRoom {
   answering: string;
   afterSeq: number;
+  /**
+   * The owner prompted the agent's conversation itself while it answered that message, or the answer fills an agent's
+   * form, which has no place to say who answered: either way it is the owner's alone to answer.
+   */
+  ownerAloneAnswers?: true;
 }
 
 export interface CanvasItemBase {

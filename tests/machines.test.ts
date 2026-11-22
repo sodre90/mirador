@@ -17,7 +17,9 @@ import {
   tunnelIn,
   withJoinedRoom,
   withoutJoinedRoom,
+  withReadings,
 } from "../shared/machines.ts";
+import { MOST_COUNTED } from "../shared/room-reading.ts";
 import type { Machine, MachineSeen } from "../shared/model.ts";
 import { checkedDeviceTunnel, tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
 
@@ -215,8 +217,8 @@ test("the machines this computer's machines have joined are offered once each, t
   const laptop = machine("laptop", "https://laptop.example.ts.net:4700");
   const server = machine("server", "https://server.example.ts.net");
   const statuses = [
-    { machineId: "server", reachable: true, waiting: [], joinedThere: [seen("Pi", "https://pi.example.ts.net"), seen("Laptop", laptop.origin)], rooms: [] },
-    { machineId: "laptop", reachable: false, waiting: [], joinedThere: [seen("Home server", server.origin), seen("Raspberry", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net")], rooms: [] },
+    { machineId: "server", reachable: true, waiting: [], joinedThere: [seen("Pi", "https://pi.example.ts.net"), seen("Laptop", laptop.origin)], rooms: [], mutedHere: [] },
+    { machineId: "laptop", reachable: false, waiting: [], joinedThere: [seen("Home server", server.origin), seen("Raspberry", "https://pi.example.ts.net"), seen("NAS", "https://nas.example.ts.net")], rooms: [], mutedHere: [] },
   ];
   expect(machinesSeen([laptop, server], statuses)).toEqual([
     { name: "Raspberry", origin: "https://pi.example.ts.net", hostId: null, throughMachineId: "laptop" },
@@ -238,6 +240,7 @@ test("a machine known at two addresses is one machine once its id is known, both
       waiting: [],
       joinedThere: [seen("Home server", "https://192.168.1.20:4700", "server-id"), seen("NAS", "https://nas.example.ts.net", "nas-id"), seen("NAS on the LAN", "https://192.168.1.30:4700", "nas-id")],
       rooms: [],
+      mutedHere: [],
     },
   ];
   expect(machinesSeen([laptop, server], statuses)).toEqual([{ name: "NAS", origin: "https://nas.example.ts.net", hostId: "nas-id", throughMachineId: "laptop" }]);
@@ -274,6 +277,9 @@ test("a room invite's machine name is taken only short and well formed, and a br
   expect(machineAddress(`https://box.example/#/room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=bm90LWEtdHVubmVs`)).toBeNull();
 });
 
+const unreadNone = { unread: 0, mentions: 0, toConfirm: 0, muted: false };
+const joined = (id: string, name: string) => ({ id, name, ...unreadNone });
+
 test("the rooms someone else's machine lists are display data: ids of a room's form, names on one line as everyone reads them, cut to length, each once, a bounded few", () => {
   expect(
     joinedRoomsIn([
@@ -285,20 +291,34 @@ test("the rooms someone else's machine lists are display data: ids of a room's f
       "not a room",
       { id: "r4", name: "x".repeat(500) },
     ]),
-  ).toEqual([
-    { id: "r1", name: "Launch plan" },
-    { id: "r4", name: "x".repeat(80) },
-  ]);
+  ).toEqual([joined("r1", "Launch plan"), joined("r4", "x".repeat(80))]);
   expect(joinedRoomsIn({ rooms: [] })).toEqual([]);
   expect(joinedRoomsIn(Array.from({ length: 200 }, (_, index) => ({ id: `r${index}`, name: `Room ${index}` })))).toHaveLength(MOST_JOINED_ROOMS);
 
-  const listed = [{ id: "r1", name: "Launch" }];
-  expect(withJoinedRoom(listed, { id: "r1", name: "Launch day", people: [] })).toEqual([{ id: "r1", name: "Launch day" }]);
-  expect(withJoinedRoom(listed, { id: "r2", name: "Ops" })).toEqual([...listed, { id: "r2", name: "Ops" }]);
+  const listed = [{ ...joined("r1", "Launch"), unread: 3 }];
+  expect(withJoinedRoom(listed, { id: "r1", name: "Launch day", people: [] })).toEqual([{ ...joined("r1", "Launch day"), unread: 3 }]);
+  expect(withJoinedRoom(listed, { id: "r2", name: "Ops" })).toEqual([...listed, joined("r2", "Ops")]);
   expect(withJoinedRoom(listed, { id: "bad id", name: "Ops" })).toBe(listed);
-  const full = Array.from({ length: MOST_JOINED_ROOMS }, (_, index) => ({ id: `r${index}`, name: `Room ${index}` }));
-  expect(withJoinedRoom(full, { id: "one-more", name: "More" })).toBe(full);
+  const full = Array.from({ length: MOST_JOINED_ROOMS }, (_, index) => joined(`r${index}`, `Room ${index}`));
+  expect(withJoinedRoom(full, joined("one-more", "More"))).toBe(full);
   expect(withoutJoinedRoom(listed, "r1")).toEqual([]);
+});
+
+test("what another machine counts in its rooms is taken as whole numbers in a bounded range, for the rooms it lists alone, and a room it says nothing of counts nothing", () => {
+  const listed = [joined("r1", "Launch"), { ...joined("r2", "Ops"), unread: 4, muted: true }];
+  expect(
+    withReadings(listed, [
+      { roomId: "r1", unread: 2, mentions: 1, toConfirm: 1, muted: "yes" },
+      { roomId: "r9", unread: 5 },
+      "not a reading",
+    ]),
+  ).toEqual([{ ...joined("r1", "Launch"), unread: 2, mentions: 1, toConfirm: 1 }, joined("r2", "Ops")]);
+  expect(withReadings(listed, [{ roomId: "r1", unread: 1e9, mentions: -3, toConfirm: 1.5, muted: true }])).toEqual([
+    { ...joined("r1", "Launch"), unread: MOST_COUNTED, muted: true },
+    joined("r2", "Ops"),
+  ]);
+  expect(withReadings(listed, "not a list")).toEqual([joined("r1", "Launch"), joined("r2", "Ops")]);
+  expect(joinedRoomsIn([{ id: "r1", name: "Launch", unread: "7", mentions: NaN, toConfirm: Infinity, muted: 1 }])).toEqual([joined("r1", "Launch")]);
 });
 
 test("a room invite connects the way Settings name while it works, else the other way, and not at all when neither works", () => {

@@ -13,17 +13,17 @@ type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { type: K }>, socket: SocketData) => ServerMessage[];
 
 /**
- * A room as a person in it sees it: of its people only themselves, nothing of the workspace its agents work in or the
- * models the owner chose for them, and in place of each agent's conversation there, which they never open, a stand-in
- * that names none.
+ * A room as a person in it sees it: its people by id and role alone, whom they tag and see vote, nothing of the
+ * workspace its agents work in or the models the owner chose for them, and in place of each agent's conversation there,
+ * which they never open, a stand-in that names none.
  */
-const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, createdAt }: Room, personId: string): Room => ({
+const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, createdAt }: Room): Room => ({
   id,
   name,
   workspaceId: "",
   agents: agents.map(({ profileId, conversationId, answering }) => ({ profileId, conversationId: conversationId === null ? null : agentStandIn(id, profileId), answering, ...PROFILES_MODEL })),
   permissions,
-  people: people.flatMap(({ personId: each, role }) => (each === personId ? [{ personId, role }] : [])),
+  people: people.map(({ personId, role }) => ({ personId, role })),
   peoplesTasksWait,
   createdAt,
 });
@@ -91,7 +91,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     if (room.people.some(({ personId }) => personId === socket.personId)) {
       socket.roomsShown.add(room.id);
       const agents = agentsOf([room]).map((profile): ServerMessage => ({ type: "profile.upserted", profile: agentSeen(profile) }));
-      return [...agents, { type: "room.upserted", room: roomSeenBy(room, socket.personId) }];
+      return [...agents, { type: "room.upserted", room: roomSeenBy(room) }];
     }
     socket.roomSubscriptions.delete(room.id);
     return shownIf(socket.roomsShown.delete(room.id), { type: "room.deleted", roomId: room.id });
@@ -127,7 +127,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       workspaces: [],
       workspaceGroups: [],
       conversations: [],
-      rooms: rooms.map((room) => roomSeenBy(room, socket.personId)),
+      rooms: rooms.map(roomSeenBy),
       roomApprovals: [],
       roomTasksWaiting: [],
       roomInvites: [],
@@ -211,6 +211,10 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room-invites.listed": HIDDEN,
     "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas) }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
+    "room.votes": (message, socket) => shownIf(isIn(socket, message.roomId), message),
+    "rooms.reading": ({ personId, readings }, socket) =>
+      shownIf(personId === socket.personId, { type: "rooms.reading", personId, readings: readings.filter(({ roomId }) => isIn(socket, roomId)) }),
+    "room.alert": (message, socket) => shownIf(message.personId === socket.personId && isIn(socket, message.roomId), message),
     "room.approvals": HIDDEN,
     "room.presence": ({ roomId, here, writing }, socket) => shownIf(isIn(socket, roomId), { type: "room.presence", roomId, ...presenceSeen(roomId, { here, writing }, socket) }),
     "room.usage.got": HIDDEN,

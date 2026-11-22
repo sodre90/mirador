@@ -437,12 +437,15 @@ function AskView({
   assetsOrigin,
   formRef,
   answerable,
+  inRoom,
 }: {
   item: AskItem;
   pagesBefore: ShowItem[];
   assetsOrigin: string;
   formRef: RefObject<HTMLFormElement | null>;
   answerable: boolean;
+  /** Its room votes on it and confirms the answer there, so here it is only read. */
+  inRoom: boolean;
 }) {
   const questions = questionsOf(item);
   const several = item.questions !== undefined;
@@ -478,16 +481,17 @@ function AskView({
       {several && waiting && !onReviewPage && <p className="ask-progress">{words.ask.questionOf(page + 1, questions.length)}</p>}
       {several && waiting && onReviewPage && <p className="ask-progress">{words.ask.review}</p>}
       <h3>{several ? (waiting ? (onReviewPage ? words.ask.isThisRight : shownQuestion.question) : item.title) : item.question}</h3>
-      {item.status === "answered" && item.answer && !several && (
+      {item.status === "answered" && item.answer && !several && !inRoom && (
         <div className="ask-answer">
           {words.ask.youChose} <strong>{item.answer.label}</strong>
           {item.answer.note && <> — “{item.answer.note}”</>}
           <span className="delivered">{deliveredNote(item.answer)}</span>
         </div>
       )}
-      {item.status === "answered" && item.answer && several && <AnsweredSeveral answer={item.answer} count={questions.length} />}
+      {item.status === "answered" && item.answer && several && !inRoom && <AnsweredSeveral answer={item.answer} count={questions.length} />}
+      {item.status === "answered" && item.answer && inRoom && <div className="ask-answer">{t.rooms.vote.answered(item.answer.label)}</div>}
       {item.status === "cancelled" && <div className="ask-answer">{words.ask.withdrawn}</div>}
-      {item.status === "waiting" && !answerable && <div className="ask-answer">{t.rooms.ownerAnswers}</div>}
+      {item.status === "waiting" && inRoom && <div className="ask-answer">{t.rooms.vote.voteInRoom}</div>}
       {pagesBeforeShown.map((before) => (
         <section key={before.id} className="ask-page-before" aria-label={words.ask.shownBeforeLabel(before.title)}>
           <div className="ask-page-before-title" data-hint={hints.askPageBefore}>
@@ -839,9 +843,9 @@ export function CanvasPanel({
   /** Where the canvas assets serve each canvas plugin's view, by plugin name. */
   canvasViews: Record<string, string>;
   onHide: () => void;
-  /** A room's canvas, which holds its agents' pages and questions: no changes of a workspace, no pointing at a page to ask about it. */
+  /** A room's canvas, which holds its agents' pages and questions: no changes of a workspace, no pointing at a page to ask about it, and its questions are voted on in the room. */
   inRoom?: boolean;
-  /** Seen by a person other than the machine's owner, who reads its pages and questions but neither answers, saves nor reports on them. */
+  /** Seen by a person other than the machine's owner, who reads its pages and questions but neither saves nor reports on them. */
   readOnly?: boolean;
   /** The item the user asked to see, brought in front once for each time they ask. */
   itemToShow?: { itemId: string } | null;
@@ -1208,7 +1212,8 @@ export function CanvasPanel({
             pagesBefore={pages.filter((page): page is ShowItem => page.kind === "show" && shownQuestion.shownBefore?.includes(page.id) === true)}
             assetsOrigin={assetsOrigin}
             formRef={shownQuestionForm}
-            answerable={!readOnly}
+            answerable={!inRoom}
+            inRoom={inRoom}
           />
         )}
       </div>

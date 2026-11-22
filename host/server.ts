@@ -69,6 +69,8 @@ import { JobWaitRefused } from "./job-waits.ts";
 import { JoinRequestRefused, SenderAndOverallLimit, SenderLimit, senderForLimits, type JoinRequestService } from "./join-requests.ts";
 import type { ConversationSearch } from "./search.ts";
 import type { RoomService } from "./rooms.ts";
+import type { RoomQuestions } from "./room-questions.ts";
+import type { RoomReadingService } from "./room-reading.ts";
 import type { RoomRole } from "../shared/rooms.ts";
 import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
@@ -77,7 +79,7 @@ import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
 import { RoomPresenceService } from "./room-presence.ts";
 import { namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
-import { inviteIn, isRoomInviteConnect, LONGEST_MACHINE_NAME, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
+import { inviteIn, isRoomId, isRoomInviteConnect, LONGEST_MACHINE_NAME, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
 import { oneLine, shownAsWritten } from "../shared/written-text.ts";
@@ -161,6 +163,8 @@ export interface HostServices {
   pushes: PushNotifications;
   notifications: SystemNotifications;
   rooms: RoomService;
+  roomQuestions: RoomQuestions;
+  roomReading: RoomReadingService;
 }
 
 const MAX_SCRIPT_MESSAGE_BYTES = 64 * 1024;
@@ -256,6 +260,8 @@ export function startServer(services: HostServices) {
     pushes,
     notifications,
     rooms,
+    roomQuestions,
+    roomReading,
   } = services;
   const appStorage = new AppStorage(store, (name) => apps.installed().some((app) => app.name === name));
   conversations.deletesWithAllItHoldsBy(deleteConversation);
@@ -435,6 +441,7 @@ export function startServer(services: HostServices) {
       p2p?.inviteUsed(code);
       const tunnel = tunnelForDevice?.register(joined.device.id, tunnelKey);
       rooms.personCameIn(joined.roomId);
+      roomPeopleChanged(joined.roomId);
       sendRoomInvitesToEveryPage();
       sendDevicesToEveryPage();
       return Response.json({ deviceId: joined.device.id, token: joined.token, roomId: joined.roomId, tunnel });
@@ -1906,6 +1913,7 @@ export function startServer(services: HostServices) {
         return console.log(`page error: ${message.message.slice(0, PAGE_ERROR_LOG_LIMIT)}\n${message.stack.slice(0, PAGE_ERROR_LOG_LIMIT)}`);
       case "presence": {
         roomPresence.reported(socket.data, message);
+        roomReading.looked(socket.data);
         const { conversationId, attentive, sideChatId, roomId } = socket.data.presence;
         if (!socket.data.isOwner || !attentive) return;
         [conversationId, sideChatId].forEach((seen) => seen && conversations.markSeen(seen));
@@ -2009,6 +2017,12 @@ export function startServer(services: HostServices) {
         return hideMachine(message.machine);
       case "machine.show-again":
         return showMachineAgain(message.machine);
+      case "machine.room-opened":
+        if (isRoomId(message.roomId)) watch.roomOpened(message.machineId, message.roomId);
+        return;
+      case "machine.mute-room":
+        if (isRoomId(message.roomId) && typeof message.muted === "boolean") watch.muteRoomHere(message.machineId, message.roomId, message.muted);
+        return;
       case "join-request.approve": {
         const problem = await joinRequests.approve(message.joinRequestId, message.number).then(
           (approved) => (approved ? null : described({ code: "join-number-wrong" })),
@@ -2043,7 +2057,8 @@ export function startServer(services: HostServices) {
       case "room.rename":
         return rooms.rename(message.roomId, message.name);
       case "room.set-agents":
-        return rooms.setAgents(message.roomId, message.profileIds);
+        rooms.setAgents(message.roomId, message.profileIds);
+        return roomReading.peopleChanged(message.roomId);
       case "room.set-agent-model":
         return rooms.setAgentModel(message.roomId, message.profileId, { model: message.model, effort: message.effort });
       case "room.set-workspace":
@@ -2052,10 +2067,10 @@ export function startServer(services: HostServices) {
         return rooms.setPermissions(message.roomId, message.permissions);
       case "room.set-person-role":
         rooms.setPersonRole(message.roomId, message.personId, message.role);
-        return roomPresence.peopleChanged(message.roomId);
+        return roomPeopleChanged(message.roomId);
       case "room.remove-person":
         rooms.removePerson(message.roomId, message.personId);
-        return roomPresence.peopleChanged(message.roomId);
+        return roomPeopleChanged(message.roomId);
       case "room.invite":
         return void inviteIntoRoom(message.roomId, message.role, message.connect).then(
           ({ invite, text }) => reply({ type: "room.invited", requestId: message.requestId, invite, text, problem: null }),
@@ -2081,7 +2096,7 @@ export function startServer(services: HostServices) {
       case "room.subscribe": {
         const timeline = rooms.timeline(message.roomId);
         socket.data.roomSubscriptions.add(message.roomId);
-        reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId) });
+        reply({ type: "room.timeline", roomId: message.roomId, ...timeline, canvas: rooms.canvas(message.roomId), votes: roomQuestions.votesIn(message.roomId) });
         return reply({ type: "room.presence", roomId: message.roomId, ...roomPresence.presenceIn(message.roomId) });
       }
       case "room.unsubscribe":
@@ -2094,6 +2109,12 @@ export function startServer(services: HostServices) {
         return roomPresence.signalled(socket.data, message.roomId, message.threadId, message.writing);
       case "room.usage.get":
         return reply({ type: "room.usage.got", requestId: message.requestId, usage: rooms.usage(message.roomId, message.since) });
+      case "room.vote":
+        return roomQuestions.vote(message.roomId, message.itemId, message.question, message.option, socket.data.personId);
+      case "room.confirm":
+        return roomQuestions.confirm(message.roomId, message.itemId, message.answers, socket.data.personId);
+      case "room.mute":
+        return roomReading.mute(message.roomId, socket.data.personId, message.muted);
       default:
         return message satisfies never;
     }
@@ -2204,8 +2225,16 @@ export function startServer(services: HostServices) {
     });
     hub.send(socket, { type: "join-requests.listed", joinRequests: joinRequests.waiting() });
     hub.send(socket, { type: "rooms.people-here", roomIds: roomPresence.roomsWithPeopleHere() });
+    hub.send(socket, { type: "rooms.reading", personId: socket.data.personId, readings: roomReading.readingsOf(socket.data.personId) });
     hub.send(socket, voiceSettingsFor(socket));
     hub.send(socket, { type: "voice.engine", engine: voiceEngine.status() });
+  }
+
+  /** Who is in the room, in which role, changed: who is there, who confirms its questions and what waits for whom follow. */
+  function roomPeopleChanged(roomId: string) {
+    roomPresence.peopleChanged(roomId);
+    roomQuestions.peopleChanged(roomId);
+    roomReading.peopleChanged(roomId);
   }
 
   /** Every page's list of devices shows who is connected now, and when the others were last seen. */

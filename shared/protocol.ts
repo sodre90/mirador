@@ -3,6 +3,8 @@ import type { Reminder } from "./reminders.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type { Room, RoomAgentModel, RoomApproval, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type { RoomAlert, RoomReading } from "./room-reading.ts";
+import type { RoomConfirmedAnswer, RoomQuestionVotes } from "./room-votes.ts";
 import type { RoomInviteConnect } from "./machines.ts";
 import type { NotificationKind } from "./system-notifications.ts";
 import type { SessionConfigOption, ToolCallContent } from "@agentclientprotocol/sdk/unstable";
@@ -402,6 +404,10 @@ export type ClientMessage =
   /** invite is what the user pasted: an invite's code, or its whole link, which a machine reached peer to peer needs. */
   | { type: "machine.join"; requestId: string; machineId: string; invite: string }
   | { type: "machine.ask-to-join"; requestId: string; machineId: string }
+  /** A room of a machine joined as a person was opened here, which may call you again from then on. */
+  | { type: "machine.room-opened"; machineId: string; roomId: string }
+  /** Keeps a room of a machine joined as a person quiet on this computer, whatever that machine does, or lets it call again. */
+  | { type: "machine.mute-room"; machineId: string; roomId: string; muted: boolean }
   | { type: "search"; requestId: string; query: string }
   /** `models` holds the model and effort chosen for each agent, by its profile id; an agent not in it takes its profile's. */
   | { type: "room.create"; requestId: string; name: string; workspaceId: string; profileIds: string[]; permissions: PermissionPreset; models: Record<string, RoomAgentModel> }
@@ -434,7 +440,13 @@ export type ClientMessage =
   /** You type in the room's message box (`threadId` null) or a thread's, or stopped with it emptied; never what you type. */
   | { type: "room.writing"; roomId: string; threadId: string | null; writing: boolean }
   /** What the room's agents took since then; the host answers `room.usage.got`. */
-  | { type: "room.usage.get"; requestId: string; roomId: string; since: number | null };
+  | { type: "room.usage.get"; requestId: string; roomId: string; since: number | null }
+  /** Your pick for one question an agent of the room asks, by the places of the question and the option; a new pick replaces the last. */
+  | { type: "room.vote"; roomId: string; itemId: string; question: number; option: number }
+  /** The answer its agent gets, one for each of its questions, from the person whose task it works on or the owner. */
+  | { type: "room.confirm"; roomId: string; itemId: string; answers: RoomConfirmedAnswer[] }
+  /** Whether the room notifies you; muted, it still counts what you have not read. */
+  | { type: "room.mute"; roomId: string; muted: boolean };
 
 export type ServerMessage =
   | {
@@ -590,8 +602,14 @@ export type ServerMessage =
   | { type: "rooms.people-here"; roomIds: string[] }
   /** The room invites nobody has used yet, each time one is made, used or withdrawn; those of a deleted room go with it. */
   | { type: "room-invites.listed"; invites: RoomInvite[] }
-  /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on. */
-  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[] } & RoomTimeline)
+  /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on, and the votes on its questions, which come as `room.votes`. */
+  | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[]; votes: RoomQuestionVotes[] } & RoomTimeline)
+  /** The picks on a question of a subscribed room's agent, and who may confirm its answer, each time either changes. */
+  | { type: "room.votes"; roomId: string; votes: RoomQuestionVotes }
+  /** To the person alone: how far they have read each of their rooms and what waits for them there, each time it changes. */
+  | { type: "rooms.reading"; personId: string; readings: RoomReading[] }
+  /** To a person other than the owner alone, while they look elsewhere: their own Mirador tells them of it. */
+  | { type: "room.alert"; roomId: string; personId: string; alert: RoomAlert }
   /** A new message of a subscribed room, with the threads it starts, one for each agent it tags; one the room holds already is written anew, in its place by its seq. */
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
   /** All the room's agents wait on, and the people's tasks that wait for an approver, oldest first, each time one starts or stops waiting. */

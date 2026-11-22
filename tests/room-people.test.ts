@@ -205,6 +205,8 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "machine.show-again": true,
   "machine.join": true,
   "machine.ask-to-join": true,
+  "machine.room-opened": true,
+  "machine.mute-room": true,
   "search": true,
   "room.create": true,
   "room.rename": true,
@@ -225,10 +227,13 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.write": true,
   "room.writing": true,
   "room.usage.get": true,
+  "room.vote": true,
+  "room.confirm": true,
+  "room.mute": true,
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;
@@ -516,14 +521,20 @@ describe("a person other than the owner", () => {
     });
   });
 
-  test("is shown a room on their open page as soon as the owner lets them in, with only themselves among its people", async () => {
+  test("is shown a room on their open page as soon as the owner lets them in, with its people by id and role alone", async () => {
     const [miaMark, gusMark] = [miaPage.mark, gusPage.mark];
     owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "member" });
     owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "guest" });
-    const shownToMia = (await miaPage.waitFor(isType("room.upserted", ({ room }) => room.people.some(({ personId }) => personId === mia.id)), miaMark)).room;
-    expect(shownToMia).toMatchObject({ id: roomA.id, name: "Launch", workspaceId: "", people: [{ personId: mia.id, role: "member" }] });
-    const shownToGus = await gusPage.waitFor(isType("room.upserted", ({ room }) => room.people.some(({ personId, role }) => personId === gus.id && role === "guest")), gusMark);
-    expect(shownToGus.room.people).toEqual([{ personId: gus.id, role: "guest" }]);
+    const bothIn = ({ room }: { room: Room }) => room.people.length === 2;
+    const shownToMia = (await miaPage.waitFor(isType("room.upserted", bothIn), miaMark)).room;
+    const roomPeople = [
+      { personId: mia.id, role: "member" as const },
+      { personId: gus.id, role: "guest" as const },
+    ];
+    expect(shownToMia).toMatchObject({ id: roomA.id, name: "Launch", workspaceId: "" });
+    expect(shownToMia.people.toSorted((a, b) => a.personId.localeCompare(b.personId))).toEqual(roomPeople.toSorted((a, b) => a.personId.localeCompare(b.personId)));
+    const shownToGus = await gusPage.waitFor(isType("room.upserted", bothIn), gusMark);
+    expect(shownToGus.room.people).toEqual(shownToMia.people);
     for (const [page, mark] of [[miaPage, miaMark], [gusPage, gusMark]] as const) {
       const { profile: agent } = await page.waitFor(isType("profile.upserted", ({ profile: shown }) => shown.id === profile.id), mark);
       expect(agent).toEqual({ ...profile, environment: "", prelaunch: "", pluginsOff: [], createdAt: 0 });
@@ -926,7 +937,8 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     const { page, snapshot, token } = await joined(await post("/join", { code: roomCode, name: "Sneaky", person: crafted, personId: ownerId, role: "owner", isOwner: true }));
     page.close();
     expect(snapshot.you).not.toBe(ownerId);
-    expect(snapshot.rooms.map(({ id, people }) => ({ id, people }))).toEqual([{ id: roomC.id, people: [{ personId: snapshot.you, role: "guest" }] }]);
+    expect(snapshot.rooms.map(({ id }) => id)).toEqual([roomC.id]);
+    expect(snapshot.rooms[0]!.people).toContainEqual({ personId: snapshot.you, role: "guest" });
     expect((await fetch(`http://127.0.0.1:${port}/devices`, { headers: { Cookie: `${TOKEN_COOKIE}=${token}` } })).status).toBe(403);
 
     mark = owner.mark;
@@ -974,7 +986,8 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     expect(second.snapshot.you).toBe(dora.personId);
     const roleIn = (roomId: string) => second.snapshot.rooms.find(({ id }) => id === roomId)?.people;
     expect(second.snapshot.rooms).toHaveLength(2);
-    expect([roleIn(roomC.id), roleIn(roomD.id)]).toEqual([[{ personId: dora.personId, role: "member" }], [{ personId: dora.personId, role: "guest" }]]);
+    expect(roleIn(roomC.id)).toContainEqual({ personId: dora.personId, role: "member" });
+    expect(roleIn(roomD.id)).toContainEqual({ personId: dora.personId, role: "guest" });
     const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => devices.some(({ id }) => id === second.deviceId)), mark);
     expect(devices.filter(({ personId }) => personId === dora.personId).map(({ id }) => id).toSorted()).toEqual([dora.deviceId, second.deviceId].toSorted());
     const { people } = await owner.waitFor(isType("people.listed"), mark);
@@ -1052,7 +1065,8 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     const mark = owner.mark;
     const clashing = await joined(await joining(code, newKey(), { name: "DORA" }));
     expect(clashing.snapshot.people.find(({ id }) => id === clashing.snapshot.you)?.name).toBe("");
-    expect(clashing.snapshot.rooms[0]?.people).toEqual([{ personId: clashing.snapshot.you, role: "guest" }]);
+    expect(clashing.snapshot.rooms[0]?.people).toContainEqual({ personId: clashing.snapshot.you, role: "guest" });
+    expect(clashing.snapshot.rooms[0]?.people.every((person) => !("nameClash" in person))).toBe(true);
     const told = await owner.waitFor(isType("room.upserted", ({ room }) => room.people.some(({ personId }) => personId === clashing.snapshot.you)), mark);
     expect(told.room.people.find(({ personId }) => personId === clashing.snapshot.you)).toEqual({ personId: clashing.snapshot.you, role: "guest", nameClash: "DORA" });
     const named = owner.mark;

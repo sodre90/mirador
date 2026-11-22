@@ -1,7 +1,11 @@
-import { joinedRoomsIn, withJoinedRoom, withoutJoinedRoom } from "../shared/machines.ts";
+import { joinedRoomsIn, withJoinedRoom, withoutJoinedRoom, withReadings } from "../shared/machines.ts";
+import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
+import { alertText, ROOM_ALERT_TEXT_MOST, type RoomAlert } from "../shared/room-reading.ts";
+import { shownAsWritten } from "../shared/written-text.ts";
 import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
-import type { SystemNotification } from "../shared/system-notifications.ts";
+import { roomNotification, type SystemNotification } from "../shared/system-notifications.ts";
+import { SenderLimit } from "./join-requests.ts";
 import { signInRevoked } from "./machine-sign-in.ts";
 import { DIRECT_REACH, type MachineReach } from "./machine-tunnels.ts";
 import { trusting } from "./machine-trust.ts";
@@ -14,6 +18,10 @@ const RECONNECT_DELAYS_MS = [2_000, 5_000, 15_000, 60_000];
 const OPEN_TIMEOUT_MS = 10_000;
 /** A socket through a tunnel's forward stays open while the machine beyond it is gone, so the machine is asked to answer this often. */
 const HEARTBEAT_EVERY_MS = 15_000;
+/** How many times a minute one machine's rooms may call this computer's owner, whatever it sends. */
+export const MOST_ROOM_CALLS_A_MINUTE = 10;
+/** A machine's rooms are saved and told of at most this often, the last of a quick run of changes once it has passed. */
+export const ROOMS_SAVED_EVERY_MS = 1_000;
 
 /** With the DOM library loaded, TypeScript hides the overload of Bun's WebSocket that takes headers, and terminate, which drops a socket without the closing handshake a gone machine never answers. */
 type BunWebSocket = new (url: string, options: Bun.WebSocketOptions) => WebSocket & { terminate(): void };
@@ -122,6 +130,10 @@ interface WatchedMachine {
   sockets: MachineSocket[];
   status: MachineStatus;
   waitingIn: Map<string, WaitingFor>;
+  /** The rooms as the machine last listed them, which its status takes at most every ROOMS_SAVED_EVERY_MS. */
+  rooms: JoinedRoom[];
+  roomsSavedAt: number;
+  roomsToSave?: ReturnType<typeof setTimeout>;
 }
 
 const waitingOf = (conversations: Conversation[]) =>
@@ -133,7 +145,25 @@ const sameStatus = (one: MachineStatus, other: MachineStatus) =>
   one.reachable === other.reachable &&
   one.waiting.join() === other.waiting.join() &&
   JSON.stringify(one.joinedThere) === JSON.stringify(other.joinedThere) &&
-  JSON.stringify(one.rooms) === JSON.stringify(other.rooms);
+  JSON.stringify(one.rooms) === JSON.stringify(other.rooms) &&
+  one.mutedHere.join() === other.mutedHere.join();
+
+const roomsUnchanged = ({ rooms, status }: WatchedMachine) => JSON.stringify(rooms) === JSON.stringify(status.rooms);
+
+const calledRoomKey = (machineId: string, roomId: string) => JSON.stringify([machineId, roomId]);
+
+/** Far more of what another machine says than an alert shows, so that cleaning it takes little. */
+const READ_OF_WHAT_IS_SAID = ROOM_ALERT_TEXT_MOST * 4;
+
+/** Why another machine's room calls you, made safe to show: a kind of call this computer knows, its words cleaned and cut as `alertText` does; null for anything else. */
+export function roomAlertIn(said: unknown): RoomAlert | null {
+  if (typeof said !== "object" || said === null) return null;
+  const { about, by, text, question } = said as Record<string, unknown>;
+  if (about === "confirm" && typeof question === "string") return { about, question: alertText(question.slice(0, READ_OF_WHAT_IS_SAID)) };
+  if (about !== "mention" || typeof by !== "string" || typeof text !== "string") return null;
+  const name = personName(shownAsWritten(by.slice(0, LONGEST_PERSON_NAME * 4)));
+  return name ? { about, by: name, text: alertText(text.slice(0, READ_OF_WHAT_IS_SAID)) } : null;
+}
 
 /** The rooms someone else's machine lists for this computer's owner after its message, each as `joinedRoomIn` cleans it. */
 function roomsAfter(rooms: JoinedRoom[], message: ServerMessage): JoinedRoom[] {
@@ -144,6 +174,8 @@ function roomsAfter(rooms: JoinedRoom[], message: ServerMessage): JoinedRoom[] {
       return withJoinedRoom(rooms, message.room);
     case "room.deleted":
       return withoutJoinedRoom(rooms, message.roomId);
+    case "rooms.reading":
+      return withReadings(rooms, message.readings);
     default:
       return rooms;
   }
@@ -154,12 +186,16 @@ function roomsAfter(rooms: JoinedRoom[], message: ServerMessage): JoinedRoom[] {
  * you, and its notifications, which it passes on as this host's own. It listens as a page for the conversations and
  * as a desktop app for the notifications, so the machine tells this host instead of the frames this host shows it in.
  * A machine this computer joined as a person in its rooms, by this host's own record, is someone else's: this host
- * takes nothing it says, not its notifications, id, machines or waiting conversations, only whether it answers and the
- * names of the rooms it lists for the person, cleaned, to show with the machine; when its owner takes the person out of
- * the last of its rooms, this host is signed out at once.
+ * takes nothing it says, not its notifications, id, machines or waiting conversations, only whether it answers, the
+ * names and counts of the rooms it lists for the person, cleaned, to show with the machine, at most once a second, and
+ * that one of them calls the person, which this host words itself, from its own record of the room, and passes on as its
+ * own while the room is muted neither there nor here, once until the room is next opened here and a few times a minute
+ * at most; when its owner takes the person out of the last of its rooms, this host is signed out at once.
  */
 export class MachineWatch {
   private readonly watched = new Map<string, WatchedMachine>();
+  private readonly roomCalls = new SenderLimit(Date.now, MOST_ROOM_CALLS_A_MINUTE);
+  private readonly calledRooms = new Set<string>();
 
   constructor(
     private readonly store: Store,
@@ -169,6 +205,8 @@ export class MachineWatch {
     /** A machine said which id it goes by, which this host keeps with it. */
     private readonly machinesChanged: () => void,
     private readonly notify: (notification: SystemNotification) => void,
+    /** A room of a machine joined as a person calls this computer's owner. */
+    private readonly roomCalled: (notification: SystemNotification) => void,
     private readonly signedOut: (machineId: string) => void,
     private readonly tunnels: Pick<MachineReach, "reached" | "stillReaches" | "wayTo"> = DIRECT_REACH,
     private readonly heartbeatEveryMs = HEARTBEAT_EVERY_MS,
@@ -183,14 +221,16 @@ export class MachineWatch {
     this.stop(machineId);
     const machine = this.store.findMachine(machineId);
     if (!machine?.joined) return;
-    const watched: WatchedMachine = { sockets: [], status: { machineId, reachable: false, waiting: [], joinedThere: [], rooms: this.store.machineRooms(machineId) }, waitingIn: new Map() };
+    const rooms = this.store.machineRooms(machineId);
+    const status: MachineStatus = { machineId, reachable: false, waiting: [], joinedThere: [], rooms, mutedHere: this.store.joinedRoomsMutedHere(machineId) };
+    const watched: WatchedMachine = { sockets: [], status, waitingIn: new Map(), rooms, roomsSavedAt: 0 };
     const signIn = (origin: string) => {
       const token = this.store.machineDeviceToken(machineId);
       return token ? { headers: { Origin: origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
     };
     const events = {
       opened: () => this.update(watched, { reachable: true }),
-      message: (message: ServerMessage) => (machine.asPerson ? this.followRooms(watched, message) : this.follow(watched, message)),
+      message: (message: ServerMessage) => (machine.asPerson ? this.followRooms(machine, watched, message) : this.follow(watched, message)),
       closed: (code: number, reached: Machine) => {
         this.update(watched, { reachable: false });
         if (code === OUT_OF_ROOMS_CLOSE_CODE && this.tunnels.stillReaches(reached)) this.signedOut(machineId);
@@ -207,7 +247,9 @@ export class MachineWatch {
   }
 
   stop(machineId: string) {
-    this.watched.get(machineId)?.sockets.forEach((socket) => socket.stop());
+    const watched = this.watched.get(machineId);
+    watched?.sockets.forEach((socket) => socket.stop());
+    clearTimeout(watched?.roomsToSave);
     this.watched.delete(machineId);
   }
 
@@ -217,6 +259,19 @@ export class MachineWatch {
 
   statuses(): MachineStatus[] {
     return [...this.watched.values()].map(({ status }) => status);
+  }
+
+  /** The room of a machine joined as a person was opened here: it may call this computer's owner again. */
+  roomOpened(machineId: string, roomId: string) {
+    this.calledRooms.delete(calledRoomKey(machineId, roomId));
+  }
+
+  /** Keeps the room of a machine joined as a person quiet on this computer, or lets it call again, whatever the machine does. */
+  muteRoomHere(machineId: string, roomId: string, muted: boolean) {
+    const watched = this.watched.get(machineId);
+    if (!watched || !this.store.findMachine(machineId)?.asPerson) return;
+    this.store.setJoinedRoomMutedHere(machineId, roomId, muted);
+    this.update(watched, { mutedHere: this.store.joinedRoomsMutedHere(machineId) });
   }
 
   private follow(watched: WatchedMachine, message: ServerMessage) {
@@ -237,11 +292,37 @@ export class MachineWatch {
     }
   }
 
-  private followRooms(watched: WatchedMachine, message: ServerMessage) {
-    const rooms = roomsAfter(watched.status.rooms, message);
-    if (JSON.stringify(rooms) === JSON.stringify(watched.status.rooms)) return;
-    this.store.setMachineRooms(watched.status.machineId, rooms);
-    this.update(watched, { rooms });
+  private followRooms(machine: Machine, watched: WatchedMachine, message: ServerMessage) {
+    if (message.type === "room.alert") return this.passOnRoomCall(machine, watched, message.roomId, message.alert);
+    watched.rooms = roomsAfter(watched.rooms, message);
+    this.saveRoomsSoon(watched);
+  }
+
+  private saveRoomsSoon(watched: WatchedMachine) {
+    if (watched.roomsToSave || roomsUnchanged(watched)) return;
+    const wait = watched.roomsSavedAt + ROOMS_SAVED_EVERY_MS - Date.now();
+    if (wait <= 0) return this.saveRooms(watched);
+    watched.roomsToSave = setTimeout(() => {
+      watched.roomsToSave = undefined;
+      this.saveRooms(watched);
+    }, wait);
+  }
+
+  private saveRooms(watched: WatchedMachine) {
+    if (roomsUnchanged(watched)) return;
+    watched.roomsSavedAt = Date.now();
+    this.store.setMachineRooms(watched.status.machineId, watched.rooms);
+    this.update(watched, { rooms: watched.rooms });
+  }
+
+  private passOnRoomCall(machine: Machine, watched: WatchedMachine, roomId: unknown, said: unknown) {
+    const room = watched.rooms.find(({ id }) => id === roomId);
+    const alert = roomAlertIn(said);
+    if (!room || !alert || room.muted || watched.status.mutedHere.includes(room.id)) return;
+    const called = calledRoomKey(machine.id, room.id);
+    if (this.calledRooms.has(called) || !this.roomCalls.allows(machine.id)) return;
+    this.calledRooms.add(called);
+    this.roomCalled({ ...roomNotification(room.id, room.name, machine.name, alert), id: crypto.randomUUID(), machineId: machine.id });
   }
 
   private learnHostId(machineId: string, hostId: string) {

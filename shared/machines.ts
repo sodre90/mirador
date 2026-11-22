@@ -1,5 +1,6 @@
 import type { JoinedRoom, Machine, MachineSeen, MachineStatus } from "./model.ts";
 import { base64UrlOf, decodedInviteTunnel, encodedInviteTunnel, textOfBase64Url, tunnelOrigin, type InviteTunnel } from "./tunnel.ts";
+import { countFrom } from "./room-reading.ts";
 import { oneLine, shownAsWritten } from "./written-text.ts";
 
 /** How long a name Settings give a machine can be, so it fits a device's lists. */
@@ -149,13 +150,16 @@ export const LONGEST_JOINED_ROOM_NAME = 80;
 /** The form a room's id has, which nothing else in a list or a link to a room may take. */
 export const isRoomId = (id: unknown): id is string => typeof id === "string" && /^[\w-]{1,64}$/.test(id);
 
-/** A room as someone else's machine lists it, made safe to show: an id of a room's form, and its name on one line, as everyone reads it, cut to length; null when either is not there. */
+/**
+ * A room as someone else's machine lists it, made safe to show: an id of a room's form, its name on one line, as
+ * everyone reads it, cut to length, and its counts made counts; null when the id or the name is not there.
+ */
 export function joinedRoomIn(listed: unknown): JoinedRoom | null {
   if (typeof listed !== "object" || listed === null) return null;
-  const { id, name } = listed as Record<string, unknown>;
+  const { id, name, unread, mentions, toConfirm, muted } = listed as Record<string, unknown>;
   if (!isRoomId(id) || typeof name !== "string") return null;
   const shownName = oneLine(shownAsWritten(name.slice(0, LONGEST_JOINED_ROOM_NAME * 4))).slice(0, LONGEST_JOINED_ROOM_NAME).trim();
-  return shownName ? { id, name: shownName } : null;
+  return shownName ? { id, name: shownName, unread: countFrom(unread), mentions: countFrom(mentions), toConfirm: countFrom(toConfirm), muted: muted === true } : null;
 }
 
 /** The rooms someone else's machine lists for this computer's owner, each once, at most MOST_JOINED_ROOMS of them, as display data only. */
@@ -165,12 +169,21 @@ export function joinedRoomsIn(listed: unknown): JoinedRoom[] {
   return rooms.filter((room, index) => rooms.findIndex(({ id }) => id === room.id) === index).slice(0, MOST_JOINED_ROOMS);
 }
 
-/** The list with the room the machine says changed, in its place or last; a room past MOST_JOINED_ROOMS stays out. */
+/** The list with the room the machine says changed, in its place, keeping its counts, or last; a room past MOST_JOINED_ROOMS stays out. */
 export function withJoinedRoom(rooms: JoinedRoom[], listed: unknown): JoinedRoom[] {
   const room = joinedRoomIn(listed);
   if (!room) return rooms;
-  if (rooms.some(({ id }) => id === room.id)) return rooms.map((each) => (each.id === room.id ? room : each));
+  if (rooms.some(({ id }) => id === room.id)) return rooms.map((each) => (each.id === room.id ? { ...each, name: room.name } : each));
   return rooms.length < MOST_JOINED_ROOMS ? [...rooms, room] : rooms;
+}
+
+/** The listed rooms with the counts the machine says each has now; a room it says nothing of has none. */
+export function withReadings(rooms: JoinedRoom[], readings: unknown): JoinedRoom[] {
+  const said = Array.isArray(readings) ? readings.slice(0, MOST_JOINED_ROOMS * 2).filter((reading): reading is Record<string, unknown> => typeof reading === "object" && reading !== null) : [];
+  return rooms.map((room) => {
+    const reading = said.find(({ roomId }) => roomId === room.id) ?? {};
+    return { ...room, unread: countFrom(reading.unread), mentions: countFrom(reading.mentions), toConfirm: countFrom(reading.toConfirm), muted: reading.muted === true };
+  });
 }
 
 export const withoutJoinedRoom = (rooms: JoinedRoom[], roomId: unknown) => rooms.filter(({ id }) => id !== roomId);

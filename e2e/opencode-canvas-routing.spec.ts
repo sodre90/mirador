@@ -82,7 +82,7 @@ const openNewRoom = (page: Page, room: string) => createRoom(page, room, [PROFIL
 /** Tags the agent from the @ menu and puts `line` on a line of its own, the last of the prompt the scripted model reads. */
 async function tagInRoom(page: Page, room: string, line: string, answered = line) {
   await roomComposer(page, room).fill(`@${PROFILE.slice(0, 2)}`);
-  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: `@${PROFILE}` }).click();
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: `@${PROFILE}` }).click();
   await roomComposer(page, room).fill(`@${PROFILE}\n${line}`);
   await roomComposer(page, room).press("Enter");
   await expect(roomAnswerSaying(page, answered).first()).toBeVisible({ timeout: 60_000 });

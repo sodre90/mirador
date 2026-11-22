@@ -59,7 +59,8 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * when none asked. Ending in `FOLDER`, the message is answered with the folder the session works in; in `CHOICES`, with what the session is on. `WAIT ` and a path there holds the turn until that file exists before it does the rest.
  * `TOKENS ` there with input and output tokens and, if given, a cost in US dollars ends the turn with those tokens as
  * its own, after reporting that cost as the session's so far, as a turn's spend reaches the host. `My answer
- * to your question` is answered with "Going with " and the answer, once no file is at `FAKE_ACP_ANSWERS_HELD_BY`.
+ * to your question`, or a room person's `[member] Name answered your question`, is answered with "Going with " and the
+ * answer, once no file is at `FAKE_ACP_ANSWERS_HELD_BY`.
  * Prompts are appended to the file in `FAKE_ACP_PROMPTS`, so a test can see a turn was sent again after the kill.
  *
  * Its profile can give it more: `FAKE_ACP_MODES=1` offers Mode and Effort options and lets sessions be closed, with
@@ -96,6 +97,8 @@ const history: { sessionId: string; title: string; updates: acp.SessionUpdate[] 
   ? JSON.parse(readFileSync(process.env.FAKE_ACP_HISTORY, "utf8"))
   : null;
 const startsWith = (prompt: acp.ContentBlock[], word: string) => prompt.every((block) => block.type === "text" && block.text.startsWith(word));
+
+const isRoomPersonsAnswer = (text: string) => /^\[member\] [^\n]* answered your question "/.test(text);
 
 const log = (entry: string) => process.env.FAKE_ACP_LOG && appendFileSync(process.env.FAKE_ACP_LOG, `${process.env.FAKE_ACP_NAME ?? "agent"} ${entry}\n`);
 const trace = (step: string) => process.stderr.write(`fake agent ${process.pid}: ${step}\n`);
@@ -696,7 +699,7 @@ acp
     if (startsWith(prompt, "ENDS UNREAD ")) return endsWithSteerUnread(ctx.client, ctx.params.sessionId, text.slice("ENDS UNREAD ".length));
     if (startsWith(prompt, "REPLY STEERED ")) return replyThenSteered(ctx.client, ctx.params.sessionId, text.slice("REPLY STEERED ".length));
     if (text.includes(ROOM_MESSAGES_HEADING)) return answerInRoom(ctx.client, ctx.params.sessionId, text);
-    if (startsWith(prompt, "My answer to your question")) return goWithAnswer(ctx.client, ctx.params.sessionId, text.slice(text.lastIndexOf(": ") + ": ".length));
+    if (startsWith(prompt, "My answer to your question") || isRoomPersonsAnswer(text)) return goWithAnswer(ctx.client, ctx.params.sessionId, text.slice(text.lastIndexOf(": ") + ": ".length));
     if (startsWith(prompt, "CRASH LEAVING A CHILD")) spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], { stdio: ["ignore", "inherit", "ignore"] });
     if (startsWith(prompt, "CRASH")) setTimeout(() => process.exit(1), 100);
     return startsWith(prompt, "WEDGE") || startsWith(prompt, "CRASH") ? new Promise(() => {}) : { stopReason: "end_turn" as const };

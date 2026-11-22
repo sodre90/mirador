@@ -18,6 +18,8 @@ export const desktop: Messages["desktop"] = {
   waiting: { decision: "需要你", failed: "失败", done: "完成", unread: "未读" },
   untitled: "新对话",
   notifications: {
+    tagged: (name: string, text: string) => `${name} 标记了你：${text}`,
+    waitsToConfirm: (question: string) => `等你确认答案：${question}`,
     asks: (question) => `提问：${question}`,
     wantsPermission: (tool) => `请求权限：${tool}`,
     aTool: "某个工具",

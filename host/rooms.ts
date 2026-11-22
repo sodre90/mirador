@@ -5,6 +5,7 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import { replyOf } from "../shared/last-words.ts";
 import type { CanvasItem, Conversation, Launch } from "../shared/model.ts";
 import type { RoomUsage } from "../shared/room-usage.ts";
+import { mentionsIn, type RoomMention } from "../shared/room-mentions.ts";
 import { AGENT_GONE, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import {
   allowedByPreset,
@@ -79,6 +80,9 @@ export interface TagsNamed {
 
 /** How many messages a person other than the owner may write in rooms a minute. */
 export const MOST_ROOM_MESSAGES_A_MINUTE = 30;
+
+/** Told of each message that goes up in a room: the people it tags that it didn't tag before, and its author's name. */
+export type PostListener = (message: RoomMessage, newlyTagged: RoomMention[], by: string) => void;
 
 export type TaskAnswer = "allow" | "deny";
 
@@ -166,6 +170,7 @@ export class RoomService implements RoomRules, TurnListener {
   /** What an approver let through for the rest of each conversation's turn, by `taskAllowanceOf`. */
   private readonly allowedForTurn = new Map<string, Set<string>>();
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
+  private postListener: PostListener = () => {};
 
   constructor(
     private readonly store: Store,
@@ -187,6 +192,10 @@ export class RoomService implements RoomRules, TurnListener {
   /** Told of the people a change took out of the last room they were in. */
   hearPeopleOutOfEveryRoomWith(listener: (personIds: string[]) => void) {
     this.outOfEveryRoom = listener;
+  }
+
+  hearPostsWith(listener: PostListener) {
+    this.postListener = listener;
   }
 
   /** A person an invite just let into the room: pages hear of them as of one the owner let in. */
@@ -443,6 +452,7 @@ export class RoomService implements RoomRules, TurnListener {
       ...(role !== null && { authorRole: role }),
       text: written.trim(),
       tags: tagged,
+      ...this.mentionsOf(room, written, { personId }),
       threadId,
       ...(waits && { taskHeld: "waiting" as const }),
     });
@@ -478,6 +488,7 @@ export class RoomService implements RoomRules, TurnListener {
       author: { profileId: conversation.profileId },
       text: reply.text ?? "",
       tags: passedOn,
+      ...this.mentionsOf(room, reply.text ?? "", { profileId: conversation.profileId }),
       threadId: thread.id,
       answers: asked.id,
       ...(reply.ended !== "finished" && { ended: reply.ended }),
@@ -485,7 +496,7 @@ export class RoomService implements RoomRules, TurnListener {
     };
     const unfinished = this.unfinishedAnswer(asked, conversation.profileId);
     const posted = unfinished ? this.store.rewriteRoomMessage({ ...answer, id: unfinished.id }) : this.store.appendRoomMessage({ ...answer, id: crypto.randomUUID() });
-    this.post(posted, passedOn);
+    this.post(posted, passedOn, unfinished?.mentions ?? []);
     passedOn.forEach((profileId) => this.ask(room, profileId, posted, undefined));
     if (finished && this.writtenByAnApprover(room, asked)) this.notifications.notify(conversationId, { kind: "finished" });
   }
@@ -758,12 +769,29 @@ export class RoomService implements RoomRules, TurnListener {
     this.tasksMayCarryOthers(room.id);
   }
 
-  /** The message goes to every page that shows the room, with a thread for each agent it tags. */
-  private post(message: RoomMessage, tagged: string[]) {
+  /** The message goes to every page that shows the room, with a thread for each agent it tags; the people it tags now and didn't before are told of it. */
+  private post(message: RoomMessage, tagged: string[], taggedBefore: RoomMention[] = []) {
     const threads = tagged.map((profileId) => ({ id: crypto.randomUUID(), roomId: message.roomId, messageId: message.id, profileId }));
     threads.forEach((started) => this.store.insertRoomThread(started));
     this.hub.publishToRoom(message.roomId, { type: "room.message", message, threads });
     this.tasksMayCarryOthers(message.roomId);
+    const newlyTagged = (message.mentions ?? []).filter(({ personId }) => !taggedBefore.some((before) => before.personId === personId));
+    this.postListener(message, newlyTagged, this.nameOf(message.author));
+  }
+
+  /**
+   * The people of the room the text tags by an @ and their name as they go by now, which a rename can't change later:
+   * the owner and the room's people, never the writer, nor anyone without a name or whose name reads as another's here.
+   */
+  private mentionsOf(room: Room, text: string, author: RoomAuthor): Pick<RoomMessage, "mentions"> {
+    const people = this.store.listPeople();
+    const inRoom = [{ personId: this.store.ownerId() }, ...room.people.filter(({ nameClash }) => nameClash === undefined)];
+    const taggable = inRoom.flatMap(({ personId }) => {
+      const name = people.find(({ id }) => id === personId)?.name ?? "";
+      return writtenByAgent(author) || author.personId !== personId ? [{ personId, name }] : [];
+    });
+    const mentions = mentionsIn(text, taggable);
+    return mentions.length > 0 ? { mentions } : {};
   }
 
   /**

@@ -16,7 +16,7 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import type { CanvasItem, Conversation, ConversationEvent, Launch, MadeInRoom, Profile, StoredEvent } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { DEFAULT_PERMISSION_PRESET, type AskedPermission, type PermissionPreset } from "../shared/room-permissions.ts";
-import type { NotificationReason } from "../shared/system-notifications.ts";
+import type { NotificationReason, SystemNotification } from "../shared/system-notifications.ts";
 import { initialState, reducer, type AppState } from "../web/state.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
@@ -780,9 +780,21 @@ describe("a room's canvas", () => {
     });
   });
 
-  test("finds the room message a turn under way answers: the last that reached the agent", () => {
+  test("finds the room message a turn under way answers, the last that reached the agent, and whether a prompt from outside the room reached it since that message first did", () => {
     const userMessage = (seq: number, roomMessageId?: string): StoredEvent => ({ seq, at: 1_000 - seq, event: { type: "user-message", text: "x", ...(roomMessageId && { roomMessageId }) } });
-    expect([roomMessageAnswered([userMessage(1, "a"), userMessage(5)]), roomMessageAnswered([userMessage(1, "a"), userMessage(5), userMessage(10, "b")]), roomMessageAnswered([userMessage(5)])]).toEqual(["a", "b", undefined]);
+    expect([
+      roomMessageAnswered([userMessage(1, "a"), userMessage(5)]),
+      roomMessageAnswered([userMessage(1, "a"), userMessage(5), userMessage(10, "b")]),
+      roomMessageAnswered([userMessage(1, "a"), userMessage(5), userMessage(7, "a")]),
+      roomMessageAnswered([userMessage(1), userMessage(5, "a"), userMessage(7, "a")]),
+      roomMessageAnswered([userMessage(5)]),
+    ]).toEqual([
+      { answering: "a", promptedOutsideRoom: true },
+      { answering: "b", promptedOutsideRoom: false },
+      { answering: "a", promptedOutsideRoom: true },
+      { answering: "a", promptedOutsideRoom: false },
+      undefined,
+    ]);
   });
 });
 
@@ -974,6 +986,7 @@ describe("a page that shows a room", () => {
       messages,
       threads: [{ id: "t1", roomId: "r1", messageId: "m1", profileId: "p1" }],
       canvas: [],
+      votes: [],
     });
 
   test("puts the pages and questions of the room's agents on its canvas, and leaves out plugins' items and other conversations' pages", () => {
@@ -1274,6 +1287,34 @@ describe("telling the owner of a room's answers", () => {
     notifications.notify(builder, { kind: "permission", tool: "ls" });
     notifications.notify(builder, { kind: "question", question: "Which?" });
     expect(told()).toHaveLength(4);
+  });
+
+  test("a room the owner muted tells them nothing of its agents; one they did not calls them by its name, on their devices and phones", () => {
+    const { store, hub, rooms, room, ownerId, received, conversationOf } = machineWithRooms();
+    rooms.write(room.id, ownerId, "@Builder build it", ["p1"], null);
+    const pushed: SystemNotification[] = [];
+    const notifications = new SystemNotifications(store, hub, { notify: async (notification: SystemNotification) => void pushed.push(notification) } as never);
+    const told = () => received.flatMap((message) => (message.type === "system-notification" ? [message.notification] : []));
+    store.setRoomMuted(room.id, ownerId, true);
+    notifications.notify(conversationOf("p1"), { kind: "question", question: "Which?" });
+    expect([told(), pushed]).toEqual([[], []]);
+
+    store.setRoomMuted(room.id, ownerId, false);
+    notifications.roomAlert(store.findRoom(room.id)!, { about: "mention", by: "Mia", text: "@Ann look" });
+    expect(told()).toEqual([expect.objectContaining({ kind: "question", roomId: room.id, title: "Launch", workspace: "project", body: "Mia tagged you: @Ann look" })]);
+    expect(told()[0]!.conversationId).toBeUndefined();
+    expect(pushed.map(({ kind }) => kind)).toEqual(["question"]);
+  });
+
+  test("a room joined on someone else's machine calls this computer's owner on this computer, and on their phones, which never join that machine", () => {
+    const { store, hub, received } = machineWithRooms();
+    const pushed: SystemNotification[] = [];
+    const notifications = new SystemNotifications(store, hub, { notify: async (notification: SystemNotification) => void pushed.push(notification) } as never);
+    const call: SystemNotification = { id: "n1", kind: "question", machineId: "m1", roomId: "r9", title: "Garden", workspace: "Bob's Mac", body: "Waits for you to confirm the answer: Which?" };
+    notifications.passOnFromJoinedRoom(call);
+    expect(received.filter(({ type }) => type === "system-notification")).toEqual([{ type: "system-notification", notification: call }]);
+    const { machineId: _machine, ...withoutMachine } = call;
+    expect(pushed).toEqual([withoutMachine]);
   });
 
   test("a person other than the owner looking at the room keeps none of its agents' news from the owner", () => {

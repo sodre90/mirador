@@ -988,6 +988,7 @@ export function Sidebar({
         profiles={state.profiles}
         selectedRoomId={state.selectedRoomId}
         waitingRoomIds={roomsWaitingFor(state)}
+        readings={state.roomReadings}
         roomsWithPeopleHere={state.roomsWithPeopleHere}
         joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
         manages

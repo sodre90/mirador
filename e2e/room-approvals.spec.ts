@@ -52,7 +52,7 @@ const openNewRoom = (page: Page, room: string, agents: string[], preset?: string
 /** Tags the agent from the @ menu, then writes the rest of the message after the tag. */
 async function tag(page: Page, room: string, agent: string, rest: string) {
   await roomComposer(page, room).fill(`@${agent.slice(0, 2)}`);
-  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: `@${agent}` }).click();
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: `@${agent}` }).click();
   await roomComposer(page, room).fill(`@${agent} ${rest}`);
   await roomComposer(page, room).press("Enter");
 }

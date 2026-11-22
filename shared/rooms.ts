@@ -1,5 +1,6 @@
 import type { CanvasItem, PendingPermissionRequest, StoredEvent } from "./model.ts";
 import type { PermissionPreset } from "./room-permissions.ts";
+import type { RoomMention } from "./room-mentions.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 import { LINE_BREAKS, oneLine, squareBracketsMadeRound } from "./written-text.ts";
 
@@ -60,7 +61,7 @@ export interface Room {
   agents: RoomAgent[];
   /** What its agents may do without asking. */
   permissions: PermissionPreset;
-  /** The people in it besides the owner; a person who is not the owner sees only themselves here. */
+  /** The people in it besides the owner; a person who is not the owner sees each of them by id and role alone. */
   people: RoomPerson[];
   /** Whether a task a person other than the owner gives its agents waits for an approver to allow it before any agent is sent it. */
   peoplesTasksWait: boolean;
@@ -98,6 +99,8 @@ export interface RoomMessage {
   text: string;
   /** The room's agents it tags, by profile id. */
   tags: string[];
+  /** Only on a message that tags people of the room: whom, as the host found them in its text when it was posted. */
+  mentions?: RoomMention[];
   /** The thread it was written in: a follow-up, or an agent's answer. */
   threadId: string | null;
   /** Only on an agent's answer: the message it answers. */
@@ -290,8 +293,15 @@ export function eventsAnswering(events: StoredEvent[], messageId: string): Store
 /** Whether the room message reached the agent in these events of its conversation. */
 export const reachedAmong = (events: StoredEvent[], messageId: string) => events.some((stored) => roomMessageReaching(stored) === messageId);
 
-/** The room message the agent's turn under way answers: the last that reached it. */
-export const roomMessageAnswered = (userMessages: StoredEvent[]) => userMessages.map(roomMessageReaching).findLast((messageId) => messageId !== undefined);
+/**
+ * The room message the agent's turn under way answers, the last that reached it, and whether a prompt that came from no
+ * room message, as the owner's own in the agent's conversation, reached the agent since that message first did.
+ */
+export function roomMessageAnswered(userMessages: StoredEvent[]): { answering: string; promptedOutsideRoom: boolean } | undefined {
+  const reaching = userMessages.map(roomMessageReaching);
+  const answering = reaching.findLast((messageId) => messageId !== undefined);
+  return answering === undefined ? undefined : { answering, promptedOutsideRoom: reaching.slice(reaching.indexOf(answering)).includes(undefined) };
+}
 
 /** At most this many turns of agents that other agents tagged may follow a message of a person. */
 export const AGENT_TAGGED_TURNS_AFTER_A_PERSON = 8;
@@ -366,16 +376,15 @@ export type AuthorOf = (message: RoomMessage) => FramedAuthor;
 const shownToAgents = (name: string) => oneLine(squareBracketsMadeRound(name));
 
 /** The role comes first, where the host alone writes it, so that no name can pass for another role. */
-const authorLine = ({ role, name }: FramedAuthor) => `[${role}] ${shownToAgents(name)}`;
+export const authorLine = ({ role, name }: FramedAuthor) => `[${role}] ${shownToAgents(name)}`;
 
-/**
- * A message as an agent reads it: a line with its number, its author's role and name, and its time, then every line of
- * its text after `> `, so that no text written in the room can pass for the start of another message or another author.
- */
+/** Every line of a person's text after `> `, so that none of it can pass for the start of another message or another author. */
+export const quotedLines = (text: string) => text.split(LINE_BREAKS).map((line) => (line ? `> ${line}` : ">"));
+
+/** A message as an agent reads it: a line with its number, its author's role and name, and its time, then its text quoted. */
 export function framedMessage(message: RoomMessage, authorOf: AuthorOf) {
   const { seq, at, text } = message;
-  const lines = text.split(LINE_BREAKS).map((line) => (line ? `> ${line}` : ">"));
-  return [`#${seq} ${authorLine(authorOf(message))}, ${timeOf(at)}:`, ...lines].join("\n");
+  return [`#${seq} ${authorLine(authorOf(message))}, ${timeOf(at)}:`, ...quotedLines(text)].join("\n");
 }
 
 /**
@@ -399,6 +408,7 @@ function introduction(roomName: string, ownName: string, taggedBy: FramedAuthor,
     "Your final answer of each turn is posted to the room for everyone in it to read, so write it to them.",
     otherAgents.length > 0 ? `The room's other agents are ${otherAgents.map(shownToAgents).join(", ")}.` : "No other agent is in the room yet.",
     `To pass work on to another agent, name it with the ${ROOM_TAG_TOOL} tool before you end your turn: your final answer then tags it, and it answers in a thread of its own.`,
+    "To call a person of the room, write @ and their name in your answer.",
     `Each time, you are sent only the messages you have not seen yet; the ${ROOM_HISTORY_TOOL} tool reads older ones.`,
     'Each message comes as a line with its number, its author\'s role in brackets, their name and the time, then its text, every line of it after "> ". Mirador writes the role: [owner] is the person whose machine you work on and who owns the room, [member] and [guest] are people the owner let into the room, and [agent] is one of the room\'s AI agents.',
     "",

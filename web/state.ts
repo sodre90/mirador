@@ -18,6 +18,8 @@ import { lastsUntilOpened } from "../shared/waiting.ts";
 import { describedText, hostErrorText } from "./host-error.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type RoomPresence, type RoomTaskApproval, type RoomTimeline } from "../shared/rooms.ts";
+import type { RoomReading } from "../shared/room-reading.ts";
+import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -64,7 +66,7 @@ export type SettingsPage = "appearance" | "conversations" | "agents" | "voice" |
 export type DevicesListed = Extract<ServerMessage, { type: "devices.listed" }>;
 
 /** A room's messages and threads, with the pages and questions of its canvas. */
-export type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[] };
+export type RoomTimelineWithCanvas = RoomTimeline & { canvas: CanvasItem[]; votes: RoomQuestionVotes[] };
 
 /** A plugin's tab in a workspace, as its host code last said. */
 export interface PluginTabState {
@@ -89,6 +91,8 @@ export interface AppState {
   roomInvites: RoomInvite[];
   /** The rooms someone other than the owner is in now. */
   roomsWithPeopleHere: string[];
+  /** How far you have read each of your rooms, and what waits for you there. */
+  roomReadings: RoomReading[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
@@ -217,6 +221,7 @@ export const initialState: AppState = {
   roomTasksWaiting: [],
   roomInvites: [],
   roomsWithPeopleHere: [],
+  roomReadings: [],
   selectedRoomId: null,
   roomTimeline: null,
   roomPresence: null,
@@ -693,9 +698,15 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
     case "room.timeline": {
-      const { roomId, messages, threads, canvas } = message;
-      return state.selectedRoomId === roomId ? { ...state, roomTimeline: { roomId, messages, threads, canvas: canvas.map((item) => withThisPagesAssetsOrigin(state, item)) } } : state;
+      const { roomId, messages, threads, canvas, votes } = message;
+      return state.selectedRoomId === roomId ? { ...state, roomTimeline: { roomId, messages, threads, votes, canvas: canvas.map((item) => withThisPagesAssetsOrigin(state, item)) } } : state;
     }
+    case "room.votes":
+      return withRoomTimeline(state, message.roomId, (timeline) => ({ ...timeline, votes: [...timeline.votes.filter(({ itemId }) => itemId !== message.votes.itemId), message.votes] }));
+    case "rooms.reading":
+      return { ...state, roomReadings: message.readings };
+    case "room.alert":
+      return state;
     case "room.message":
       return withRoomTimeline(state, message.message.roomId, (timeline) => {
         const knownThreads = new Set(timeline.threads.map(({ id }) => id));

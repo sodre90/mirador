@@ -1,5 +1,6 @@
 import type { HostProblem } from "./host-problems.ts";
 import { isUntitled, type Conversation, type JoinRequest } from "./model.ts";
+import type { RoomAlert } from "./room-reading.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 import { oneLine } from "./written-text.ts";
 
@@ -17,7 +18,8 @@ export type NotificationReason =
 /** What a notification says, for a page or the desktop app to put in its own language; title and body say it in English. */
 export type NotificationAbout =
   | { kind: "conversation"; reason: NotificationReason; untitled?: true }
-  | { kind: "join-request"; request: Pick<JoinRequest, "name" | "fromAddress" | "tailscaleUser"> };
+  | { kind: "join-request"; request: Pick<JoinRequest, "name" | "fromAddress" | "tailscaleUser"> }
+  | { kind: "room"; alert: RoomAlert };
 
 /** What a notification is about, so a device can let through only the kinds its owner wants. */
 export type NotificationKind = NotificationReason["kind"] | "join-request";
@@ -30,6 +32,8 @@ export interface SystemNotification {
   machineId?: string;
   /** None when it is about this machine itself, e.g. a device asking to join it. */
   conversationId?: string;
+  /** The room it calls you to, of this machine or, with `machineId`, of that one. */
+  roomId?: string;
   title: string;
   workspace: string;
   body: string;
@@ -94,6 +98,20 @@ export const joinRequestNotification = ({ name, fromAddress, tailscaleUser }: Jo
   workspace: "",
   body: `From ${fromAddress}${tailscaleUser ? `, signed in to Tailscale as ${tailscaleUser}` : ""}. Open Mirador to approve it by typing the number it shows. Approving makes it one of your own devices, with full control of Mirador; let anyone else in with a room invite.`,
   about: { kind: "join-request", request: { name, fromAddress, tailscaleUser } },
+});
+
+function roomAlertText(alert: RoomAlert) {
+  return alert.about === "mention" ? `${alert.by} tagged you: ${alert.text}` : `Waits for you to confirm the answer: ${alert.question}`;
+}
+
+/** A room calls you: its name as the title, and what for; phones take it as they take an agent's question, which also waits for you. */
+export const roomNotification = (roomId: string, roomName: string, place: string, alert: RoomAlert): SystemNotification => ({
+  kind: "question",
+  roomId,
+  title: roomName,
+  workspace: place,
+  body: notificationBody(roomAlertText(alert)),
+  about: { kind: "room", alert },
 });
 
 /** Where a notification has no subtitle line (browsers, Linux), the workspace leads the body. */

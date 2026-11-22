@@ -1,9 +1,11 @@
 import { flushSync } from "react-dom";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
-import type { CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
+import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
+import type { AskItem, CanvasItem, Conversation, Person, Profile } from "../shared/model.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
+import type { TaggablePerson } from "../shared/room-mentions.ts";
+import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
   askedInThread,
@@ -40,12 +42,14 @@ import type { EditRequest } from "./edit-approval.ts";
 import { hints } from "./hints.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
-import { MarkdownText, SlackMessageText } from "./Markdown.tsx";
+import { LineIcon } from "./LineIcon.tsx";
+import { MarkdownText, MentionsOfMessage, SlackMessageText } from "./Markdown.tsx";
 import { writersIn, writingLine, WritingSignals } from "./room-writing.ts";
 import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
+import { RoomVote } from "./RoomVote.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
 
@@ -88,11 +92,15 @@ function answerEnding(message: RoomMessage) {
   return message.text ? null : words.noAnswer;
 }
 
+const tagsYou = (message: RoomMessage, you: string | null) => message.mentions?.some(({ personId }) => personId === you) === true;
+
 function RoomEntry({ message, quoted, agentsById, children }: { message: RoomMessage; quoted?: RoomMessage; agentsById: Map<string, RoomAgentShown>; children?: ReactNode }) {
   const ending = answerEnding(message);
   const byAgent = writtenByAgent(message.author);
+  const { you } = useContext(MessageWriters);
+  const mentionsRead = useMemo(() => (message.mentions ? { mentions: message.mentions, you } : null), [message.mentions, you]);
   return (
-    <div className="timeline-entry group-start room-entry" data-room-message={message.id}>
+    <div className={`timeline-entry group-start room-entry${tagsYou(message, you) ? " tags-you" : ""}`} data-room-message={message.id}>
       <div className="gutter">
         <AuthorMark author={message.author} agentsById={agentsById} />
       </div>
@@ -111,7 +119,11 @@ function RoomEntry({ message, quoted, agentsById, children }: { message: RoomMes
             <span className="room-quote-text">{quoted.text}</span>
           </blockquote>
         )}
-        {message.text && <div className={`message ${byAgent ? "agent" : "user"}`}>{byAgent ? <MarkdownText text={message.text} /> : <SlackMessageText text={message.text} />}</div>}
+        {message.text && (
+          <MentionsOfMessage.Provider value={mentionsRead}>
+            <div className={`message ${byAgent ? "agent" : "user"}`}>{byAgent ? <MarkdownText text={message.text} /> : <SlackMessageText text={message.text} />}</div>
+          </MentionsOfMessage.Provider>
+        )}
         {ending && <div className="notice-line">{ending}</div>}
         {byAgent && message.tags.length > 0 && <div className="room-tags-line">{words.tagged(agentNames(message.tags, agentsById))}</div>}
         {message.tagsDropped && <div className="notice-line room-tags-dropped">{words.tagsDropped(agentNames(message.tagsDropped, agentsById), AGENT_TAGGED_TURNS_AFTER_A_PERSON)}</div>}
@@ -147,10 +159,17 @@ function CanvasLine({ items, onOpen }: { items: CanvasItem[]; onOpen: (itemId: s
   );
 }
 
-/** The agents to tag for the @ being written where the caret is: those whose name starts with what follows the @. */
-function useTagMenu({ agents, text, caret, take }: { agents: RoomAgentShown[]; text: string; caret: number; take: (agent: RoomAgentShown) => void }) {
-  const query = agents.length > 0 ? (mentionAt(text, caret)?.query ?? null) : null;
-  const offered = query === null ? [] : agents.filter(({ name }) => name.toLowerCase().startsWith(query.toLowerCase()));
+/** One the room's message box tags: an agent, which the message then reaches, or a person, who is only called by it. */
+type Taggable = { agent: RoomAgentShown } | { person: TaggablePerson };
+
+const nameToTag = (taggable: Taggable) => ("agent" in taggable ? taggable.agent.name : taggable.person.name);
+
+const keyOfTaggable = (taggable: Taggable) => ("agent" in taggable ? `agent:${taggable.agent.profileId}` : `person:${taggable.person.personId}`);
+
+/** The agents and people to tag for the @ being written where the caret is: those whose name starts with what follows the @. */
+function useTagMenu({ taggable, text, caret, take }: { taggable: Taggable[]; text: string; caret: number; take: (taggable: Taggable) => void }) {
+  const query = taggable.length > 0 ? (mentionAt(text, caret)?.query ?? null) : null;
+  const offered = query === null ? [] : taggable.filter((each) => nameToTag(each).toLowerCase().startsWith(query.toLowerCase()));
   const [dismissedAt, setDismissedAt] = useState<string | null>(null);
   const { pickedIndex, move } = usePickedSuggestion(offered.length, query);
   const open = offered.length > 0 && dismissedAt !== text;
@@ -165,25 +184,27 @@ function useTagMenu({ agents, text, caret, take }: { agents: RoomAgentShown[]; t
     return true;
   };
   const menu = open ? (
-    <SuggestionList id={TAG_MENU_ID} label={words.tagMenu} className="mention-paths room-tags" items={offered} keyOf={({ profileId }) => profileId} pickedIndex={pickedIndex} onPick={take}>
-      {(agent) => <span className="room-tag-option">@{agent.name}</span>}
+    <SuggestionList id={TAG_MENU_ID} label={words.tagMenu} className="mention-paths room-tags" items={offered} keyOf={keyOfTaggable} pickedIndex={pickedIndex} onPick={take}>
+      {(each) => <span className={`room-tag-option${"person" in each ? " person" : ""}`}>@{nameToTag(each)}</span>}
     </SuggestionList>
   ) : null;
   return { onKeyDown, textareaAttributes: suggestionAttributes(TAG_MENU_ID, open, pickedIndex), menu };
 }
 
 /**
- * A message box for the room, whose @ tags its agents, or, without agents to tag, for a thread's follow-ups; the room's
- * people see that you write in it while you do.
+ * A message box for the room, whose @ tags its agents and people, or, without agents to tag, for a thread's follow-ups;
+ * the room's people see that you write in it while you do.
  */
 function RoomComposer({
   placeholder,
   agents,
+  people,
   onSend,
   tellWriting,
 }: {
   placeholder: string;
   agents: RoomAgentShown[];
+  people: TaggablePerson[];
   onSend: (text: string, tags: string[]) => void;
   tellWriting: (writing: boolean) => void;
 }) {
@@ -194,18 +215,18 @@ function RoomComposer({
   const typingAidAttributes = useTypingAidAttributes();
   const [writingSignals] = useState(() => new WritingSignals(tellWriting));
   useEffect(() => () => writingSignals.stopped(), []);
-  const take = (agent: RoomAgentShown) => {
-    const next = withMention(text, caret, { path: agent.name, directory: false });
+  const take = (taken: Taggable) => {
+    const next = withMention(text, caret, { path: nameToTag(taken), directory: false });
     writingSignals.typed(next.text);
     flushSync(() => {
       setText(next.text);
       setCaret(next.caret);
     });
-    setTagged((already) => [...already.filter(({ profileId }) => profileId !== agent.profileId), agent]);
+    if ("agent" in taken) setTagged((already) => [...already.filter(({ profileId }) => profileId !== taken.agent.profileId), taken.agent]);
     textarea.current?.focus();
     textarea.current?.setSelectionRange(next.caret, next.caret);
   };
-  const tagMenu = useTagMenu({ agents, text, caret, take });
+  const tagMenu = useTagMenu({ taggable: [...agents.map((agent) => ({ agent })), ...people.map((person) => ({ person }))], text, caret, take });
   const length = roomMessageLength(text);
   const tooLong = length > ROOM_MESSAGE_MOST_CHARACTERS;
   const send = () => {
@@ -407,6 +428,7 @@ function ThreadColumn({
   waitingForYou,
   you,
   followsUp,
+  peopleToTag,
   writing,
   onClose,
 }: {
@@ -420,6 +442,7 @@ function ThreadColumn({
   waitingForYou: RoomApproval[];
   you: string | null;
   followsUp: boolean;
+  peopleToTag: TaggablePerson[];
   writing: RoomWriter[];
   onClose: () => void;
 }) {
@@ -465,6 +488,7 @@ function ThreadColumn({
         <RoomComposer
           placeholder={words.followUpPlaceholder(agent.name)}
           agents={[]}
+          people={peopleToTag}
           onSend={(text) => writeIn(thread.roomId, text, [], thread.id)}
           tellWriting={tellWritingIn(thread.roomId, thread.id)}
         />
@@ -512,14 +536,42 @@ function ModelShown({ agent }: { agent: RoomAgentShown }) {
   return name ? <span className="room-agent-model">{name}</span> : null;
 }
 
-/**
- * The room's people as this page knows them, each with their role where it is known: the owner, everyone the room
- * lets in, of whom a person other than the owner is told only of themselves, and whoever else is here now.
- */
+/** The room's people as this page knows them, each with their role where it is known: the owner, everyone the room lets in, and whoever else is here now. */
 function peopleOfRoom(room: Room, ownerId: string | null, here: string[]): { personId: string; role: RoleShown }[] {
   const known: { personId: string; role: RoleShown }[] = [...(ownerId ? [{ personId: ownerId, role: "owner" as const }] : []), ...room.people];
   const knownIds = new Set(known.map(({ personId }) => personId));
   return [...known, ...here.filter((personId) => !knownIds.has(personId)).map((personId) => ({ personId, role: null }))];
+}
+
+/** The people of the room you can tag: everyone there with a name but you, by the name they go by, whom the host finds in the message too. */
+const taggablePeople = (room: Room, ownerId: string | null, people: Person[], you: string | null): TaggablePerson[] =>
+  [...(ownerId ? [{ personId: ownerId }] : []), ...room.people.filter(({ nameClash }) => nameClash === undefined)].flatMap(({ personId }) => {
+    const name = people.find(({ id }) => id === personId)?.name.trim();
+    return name && personId !== you ? [{ personId, name }] : [];
+  });
+
+/** Whether the room notifies you; muted, what you have not read still counts. */
+function MuteToggle({ roomId, muted }: { roomId: string; muted: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`icon room-mute${muted ? " muted" : ""}`}
+      aria-label={words.muteRoom}
+      aria-pressed={muted}
+      data-hint={muted ? words.mutedHint : words.muteRoom}
+      onClick={() => connection.send({ type: "room.mute", roomId, muted: !muted })}
+    >
+      <LineIcon shape={muted ? "bellOff" : "bell"} />
+    </button>
+  );
+}
+
+const isAsk = (item: CanvasItem): item is AskItem => item.kind === "ask";
+
+/** Questions its agents wait on that no answer of theirs holds yet, as while the turn that asks is still under way. */
+function questionsOfNoAnswer(canvas: CanvasItem[], canvasOfAnswers: Map<string, CanvasItem[]>) {
+  const held = new Set([...canvasOfAnswers.values()].flat().map(({ id }) => id));
+  return canvas.filter(isAsk).filter((item) => item.status === "waiting" && !held.has(item.id));
 }
 
 /** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which model for the owner, who changes it there. */
@@ -598,6 +650,7 @@ export function RoomView({
   approvals,
   tasks,
   presence,
+  muted,
   you,
   dispatch,
   onOpenOnCanvas,
@@ -616,6 +669,8 @@ export function RoomView({
   tasks: RoomTaskApproval[];
   /** Who is in the room now and who of them writes, once the host said. */
   presence: RoomPresence | null;
+  /** Whether the room notifies you. */
+  muted: boolean;
   you: string | null;
   dispatch: Dispatch<AppAction>;
   onOpenOnCanvas: (itemId: string) => void;
@@ -628,6 +683,7 @@ export function RoomView({
   const owns = you !== null && you === ownerId;
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
   const tagsAgents = !isGuestIn(room, you);
+  const peopleToTag = taggablePeople(room, ownerId, people, you);
   const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
   const tasksWaitingForYou = tasks.filter(({ approvers }) => you !== null && approvers.includes(you));
   const thread = timeline?.threads.find(({ id }) => id === threadId) ?? null;
@@ -641,6 +697,8 @@ export function RoomView({
     () => (timeline ? canvasItemsOfAnswers(timeline.messages, timeline.canvas, (profileId) => room.agents.find((agent) => agent.profileId === profileId)?.conversationId) : new Map<string, CanvasItem[]>()),
     [timeline, room.agents],
   );
+  const votesOf = new Map(timeline?.votes.map((votes): [string, RoomQuestionVotes] => [votes.itemId, votes]));
+  const voteOn = (item: AskItem) => <RoomVote key={item.id} roomId={room.id} item={item} votes={votesOf.get(item.id)} you={you} takesOwnWords={owns || !room.peoplesTasksWait} />;
   const pending = timeline ? workPending(timeline, room.agents) : [];
   const writing = presence?.writing ?? [];
   const timelineEnd = useRef<HTMLDivElement>(null);
@@ -662,6 +720,7 @@ export function RoomView({
           ))}
         </ul>
         {presence && <RoomPeople room={room} agents={agents} here={presence.here} ownerId={ownerId} owns={owns} />}
+        <MuteToggle roomId={room.id} muted={muted} />
         {owns && (
           <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>
             {words.inviteSomeone}
@@ -676,10 +735,12 @@ export function RoomView({
           return (
             <RoomEntry key={message.id} message={message} quoted={message.answers === undefined ? undefined : messagesById.get(message.answers)} agentsById={agentsById}>
               {madeOnCanvas.length > 0 && <CanvasLine items={madeOnCanvas} onOpen={onOpenOnCanvas} />}
+              {madeOnCanvas.filter(isAsk).map(voteOn)}
               {message.answers !== undefined && message.threadId && <ThreadLink onOpen={() => setThreadId(message.threadId)} />}
             </RoomEntry>
           );
         })}
+        {timeline && questionsOfNoAnswer(timeline.canvas, canvasOfAnswers).map(voteOn)}
         {workUnderWay(pending, agentsById, approvals).map(({ key, thread: working, text }) => <ThreadLink key={key} text={text} onOpen={() => setThreadId(working.id)} />)}
         <WritingLine writing={writing} threadId={null} you={you} />
         <div ref={timelineEnd} />
@@ -688,6 +749,7 @@ export function RoomView({
       <RoomComposer
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
         agents={tagsAgents ? agents.filter(({ profile }) => profile) : []}
+        people={peopleToTag}
         onSend={(text, tags) => writeIn(room.id, text, tags, null)}
         tellWriting={tellWritingIn(room.id, null)}
       />
@@ -707,6 +769,7 @@ export function RoomView({
         waitingForYou={waitingForYou}
         you={you}
         followsUp={tagsAgents}
+        peopleToTag={peopleToTag}
         writing={writing}
         onClose={() => setThreadId(null)}
       />
@@ -718,7 +781,7 @@ export function RoomView({
   );
 }
 
-/** The room's canvas: its agents' pages and questions, newest in front, where the owner reads them and answers. */
+/** The room's canvas: its agents' pages and questions, newest in front, which everyone in the room reads there and votes on in the room. */
 export function RoomCanvas({
   room,
   items,

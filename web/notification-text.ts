@@ -1,3 +1,4 @@
+import type { RoomAlert } from "../shared/room-reading.ts";
 import { notificationBody, type NotificationAbout, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
 import type { desktop } from "./i18n/en/desktop.ts";
 import { errorText, type ProblemWords } from "./problem-text.ts";
@@ -25,11 +26,16 @@ function reasonText(reason: NotificationReason, { desktop: { notifications: word
   }
 }
 
+function roomAlertText(alert: RoomAlert, { desktop: { notifications: words } }: NotificationWords) {
+  return alert.about === "mention" ? words.tagged(alert.by, alert.text) : words.waitsToConfirm(alert.question);
+}
+
 function translated(notification: SystemNotification, about: NotificationAbout, words: NotificationWords): Pick<SystemNotification, "title" | "body"> {
   if (about.kind === "join-request") {
     const { name, fromAddress, tailscaleUser } = about.request;
     return { title: words.desktop.notifications.joinRequest(name), body: words.desktop.notifications.joinRequestBody(fromAddress, tailscaleUser) };
   }
+  if (about.kind === "room") return { title: notification.title, body: notificationBody(roomAlertText(about.alert, words)) };
   return { title: about.untitled ? words.desktop.untitled : notification.title, body: notificationBody(reasonText(about.reason, words)) };
 }
 

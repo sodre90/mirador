@@ -41,6 +41,8 @@ import { MUTED_LIST_FILE, NotifierMute } from "./notifier.ts";
 import { installedHarnesses } from "./acp/harnesses.ts";
 import { giveEveryWorkspaceAProfile, moveProfilelessOntoProfiles, ProfileService } from "./profiles.ts";
 import { RoomService } from "./rooms.ts";
+import { RoomQuestions } from "./room-questions.ts";
+import { RoomReadingService } from "./room-reading.ts";
 import { HostRestart, relaunch, stoppedWithinTimeout, takeRelaunchEnvironment, takeTurnsStoppedForRestart } from "./restart.ts";
 import { DesktopAppCheck } from "./desktop-app-check.ts";
 import { switchOf, type PluginUpdate } from "../shared/apps.ts";
@@ -171,6 +173,15 @@ const stopWatchingViews = watchViews(loadedPlugins, () =>
 const rooms = new RoomService(store, hub, conversations, notifications, config.dataDir);
 conversations.hearTurnsWith(rooms);
 conversations.followsRoomRulesOf(rooms);
+const roomQuestions = new RoomQuestions(store, hub, canvas);
+const roomReading = new RoomReadingService(store, hub, notifications);
+rooms.hearPostsWith((message, newlyTagged, by) => roomReading.posted(message, newlyTagged, by));
+canvas.hearRoomQuestionsWith((roomId, item, startsWaiting) => {
+  const room = store.findRoom(roomId);
+  if (!room) return;
+  roomQuestions.changed(room, item);
+  roomReading.questionChanged(room, item, startsWaiting);
+});
 const mcp = new CanvasMcpEndpoints({
   canvas,
   conversations,
@@ -229,6 +240,7 @@ const watch = new MachineWatch(
   (status) => hub.broadcast({ type: "machine.status", status }),
   () => hub.broadcast({ type: "machines.changed", machines: store.listMachines() }),
   (notification) => hub.notifyThisComputer(notification),
+  (notification) => notifications.passOnFromJoinedRoom(notification),
   machineSignedOut,
   tunnels,
 );
@@ -273,7 +285,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms });
+const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, roomQuestions, roomReading });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

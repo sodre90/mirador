@@ -31,7 +31,7 @@ async function write(page: Page, text: string) {
 
 async function tag(page: Page, agent: string, typed: string, rest: string) {
   await roomComposer(page).fill(typed);
-  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: `@${agent}` }).click();
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: `@${agent}` }).click();
   await roomComposer(page).pressSequentially(rest);
   await roomComposer(page).press("Enter");
 }
@@ -153,7 +153,7 @@ test("a workspace a room works in stays until the room moves to another, where i
   const composer = page.getByRole("textbox", { name: "Write in Moving, @ tags an agent…" });
   const tagMover = async (rest: string) => {
     await composer.fill("@Mo");
-    await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: "@Mover" }).click();
+    await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Mover" }).click();
     await composer.pressSequentially(rest);
     await composer.press("Enter");
   };

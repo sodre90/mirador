@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { forgetSignInAt, signInRevoked } from "../host/machine-sign-in.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
-import { MachineWatch } from "../host/machine-watch.ts";
+import { MachineWatch, MOST_ROOM_CALLS_A_MINUTE } from "../host/machine-watch.ts";
 import type { Way } from "../host/p2p/dial.ts";
 import { Store } from "../host/store.ts";
 import type { Machine, MachineStatus } from "../shared/model.ts";
@@ -55,6 +55,8 @@ function fakeMachine(port = 0) {
 
 const conversation = (id: string, waitingFor: string | null) => ({ id, waitingFor });
 
+const joined = (id: string, name: string) => ({ id, name, unread: 0, mentions: 0, toConfirm: 0, muted: false });
+
 let cleanUp: (() => void)[] = [];
 afterEach(() => {
   cleanUp.forEach((step) => step());
@@ -70,6 +72,7 @@ function watching(origin: string, { joined = true, asPerson = false } = {}) {
   if (asPerson) store.setMachineJoinedAs("m1", { asPerson: true, relayKey: "relay-key" });
   const statuses: MachineStatus[] = [];
   const notifications: SystemNotification[] = [];
+  const roomCalls: SystemNotification[] = [];
   const signedOut: string[] = [];
   const machineChanges: string[] = [];
   const watch = new MachineWatch(
@@ -78,6 +81,7 @@ function watching(origin: string, { joined = true, asPerson = false } = {}) {
     (status) => statuses.push(status),
     () => machineChanges.push(store.listMachines().map(({ hostId }) => hostId).join()),
     (notification) => notifications.push(notification),
+    (notification) => roomCalls.push(notification),
     (machineId) => {
       signedOut.push(machineId);
       watch.stop(machineId);
@@ -85,7 +89,7 @@ function watching(origin: string, { joined = true, asPerson = false } = {}) {
   );
   cleanUp.push(() => watch.stopAll());
   watch.startAll();
-  return { watch, store, statuses, notifications, signedOut, machineChanges };
+  return { watch, store, statuses, notifications, roomCalls, signedOut, machineChanges };
 }
 
 describe("MachineWatch", () => {
@@ -95,7 +99,7 @@ describe("MachineWatch", () => {
     const { watch } = watching(machine.origin);
     await eventually(() => expect(machine.sockets).toHaveLength(2));
     expect(machine.signIns.toSorted()).toEqual([`/notifications ${machine.origin} mirador_token=device-token`, `/ws ${machine.origin} mirador_token=device-token`]);
-    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [], rooms: [] }]);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [], rooms: [], mutedHere: [] }]);
 
     machine.send("/ws", { type: "snapshot", conversations: [conversation("a", "question"), conversation("b", null)], machines: [], hostId: "home-server-id" });
     await eventually(() => expect(watch.statuses()[0]!.waiting).toEqual(["question"]));
@@ -214,7 +218,7 @@ describe("MachineWatch", () => {
     const notification: SystemNotification = { kind: "question", conversationId: "a", title: "Deploy", workspace: "infra", body: "Asks: Ship it?" };
     machine.send("/ws", { type: "system-notification", notification });
     await Bun.sleep(300);
-    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [], rooms: [] }]);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: true, waiting: [], joinedThere: [], rooms: [], mutedHere: [] }]);
     expect(statuses.every(({ waiting, joinedThere }) => waiting.length === 0 && joinedThere.length === 0)).toBe(true);
     expect(store.findMachine("m1")?.hostId).toBeNull();
     expect(machineChanges).toEqual([]);
@@ -229,16 +233,124 @@ describe("MachineWatch", () => {
 
     const room = (id: string, name: string) => ({ id, name, workspaceId: "w1", people: [], agents: [] });
     machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [room("r1", "Launch\nplan"), room("../x", "Escape")] } as never);
-    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ id: "r1", name: "Launch plan" }]));
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([joined("r1", "Launch plan")]));
     machine.send("/ws", { type: "room.upserted", room: room("r2", "Ops") } as never);
     machine.send("/ws", { type: "room.deleted", roomId: "r1" } as never);
-    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ id: "r2", name: "Ops" }]));
-    expect(store.machineRooms("m1")).toEqual([{ id: "r2", name: "Ops" }]);
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([joined("r2", "Ops")]));
+    expect(store.machineRooms("m1")).toEqual([joined("r2", "Ops")]);
 
     watch.stopAll();
     machine.server.stop(true);
     watch.start("m1");
-    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: false, waiting: [], joinedThere: [], rooms: [{ id: "r2", name: "Ops" }] }]);
+    expect(watch.statuses()).toEqual([{ machineId: "m1", reachable: false, waiting: [], joinedThere: [], rooms: [joined("r2", "Ops")], mutedHere: [] }]);
+  });
+
+  test("joined as a person, keeps what the machine counts in each of its rooms for the person, cleaned, and only for rooms it lists", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [{ id: "r1", name: "Launch" }] } as never);
+    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: 3, mentions: 1, toConfirm: 1e6, muted: false }, { roomId: "r2", unread: 9 }] } as never);
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ ...joined("r1", "Launch"), unread: 3, mentions: 1, toConfirm: 999 }]));
+    machine.send("/ws", { type: "room.upserted", room: { id: "r1", name: "Launch day" } } as never);
+    await eventually(() => expect(store.machineRooms("m1")).toEqual([{ ...joined("r1", "Launch day"), unread: 3, mentions: 1, toConfirm: 999 }]));
+  });
+
+  test("joined as a person, words a room's call itself, from its own record of the room, and passes on only calls of a room it lists, not muted, cleaned, once until the room is opened here", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, roomCalls, notifications } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [{ id: "r1", name: "Launch" }, { id: "r2", name: "Quiet" }] } as never);
+    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r2", muted: true }] } as never);
+    await Bun.sleep(100);
+
+    const call = (roomId: string, alert: unknown) => machine.send("/ws", { type: "room.alert", roomId, personId: "ann", alert } as never);
+    call("r2", { about: "confirm", question: "Muted room" });
+    call("r9", { about: "confirm", question: "A room it doesn't list" });
+    call("r1", { about: "run", command: "rm -rf /" });
+    call("r1", { about: "mention", by: "", text: "Nobody" });
+    call("r1", "not an alert");
+    call("r1", { about: "mention", by: "Bob\n\u202E", text: `Look at this\n${"x".repeat(500)}`, conversationId: "c1", html: "<script>" });
+    call("r1", { about: "confirm", question: "Which plan?" });
+    await eventually(() => expect(roomCalls).toHaveLength(1));
+    expect(roomCalls[0]).toMatchObject({ kind: "question", roomId: "r1", machineId: "m1", title: "Launch", workspace: "Home server", about: { kind: "room", alert: { about: "mention", by: "Bob" } } });
+    expect(roomCalls[0]!.conversationId).toBeUndefined();
+    expect((roomCalls[0]!.about as { alert: { text: string } }).alert.text).toBe(`Look at this ${"x".repeat(107)}…`);
+
+    watch.roomOpened("m1", "r1");
+    call("r1", { about: "confirm", question: "Which plan?" });
+    call("r1", { about: "confirm", question: "Again" });
+    await eventually(() => expect(roomCalls).toHaveLength(2));
+    await Bun.sleep(100);
+    expect(roomCalls).toHaveLength(2);
+    expect(roomCalls[1]).toMatchObject({ kind: "question", roomId: "r1", body: "Waits for you to confirm the answer: Which plan?" });
+    expect(notifications).toEqual([]);
+  });
+
+  test("joined as a person, passes on calls of a few of the machine's rooms a minute at most, however many rooms it lists", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { roomCalls } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    const rooms = Array.from({ length: MOST_ROOM_CALLS_A_MINUTE + 5 }, (_, index) => ({ id: `r${index}`, name: `Room ${index}` }));
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms } as never);
+    await Bun.sleep(100);
+    rooms.forEach(({ id }) => machine.send("/ws", { type: "room.alert", roomId: id, personId: "ann", alert: { about: "confirm", question: "Which?" } } as never));
+    await Bun.sleep(300);
+    expect(roomCalls).toHaveLength(MOST_ROOM_CALLS_A_MINUTE);
+  });
+
+  test("joined as a person, keeps a room quiet that this computer muted, whatever the machine says of it, until it is unmuted here", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store, roomCalls } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [{ id: "r1", name: "Launch" }] } as never);
+    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", muted: false }] } as never);
+    watch.muteRoomHere("m1", "r1", true);
+    expect(watch.statuses()[0]!.mutedHere).toEqual(["r1"]);
+    expect(store.joinedRoomsMutedHere("m1")).toEqual(["r1"]);
+
+    const call = () => machine.send("/ws", { type: "room.alert", roomId: "r1", personId: "ann", alert: { about: "confirm", question: "Which?" } } as never);
+    call();
+    await Bun.sleep(200);
+    expect(roomCalls).toEqual([]);
+
+    watch.stopAll();
+    watch.start("m1");
+    expect(watch.statuses()[0]!.mutedHere).toEqual(["r1"]);
+    await eventually(() => expect(machine.sockets).toHaveLength(2));
+    watch.muteRoomHere("m1", "r1", false);
+    call();
+    await eventually(() => expect(roomCalls).toHaveLength(1));
+  });
+
+  test("joined as a person, saves and tells of the machine's rooms at most once a second however often it sends them, and the last it sent lands", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store, statuses } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    const saved = spyOn(store, "setMachineRooms");
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [{ id: "r1", name: "Launch" }] } as never);
+    await eventually(() => expect(saved).toHaveBeenCalledTimes(1));
+    const told = statuses.length;
+    Array.from({ length: 50 }, (_, index) =>
+      machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: index % 2 === 0 ? 1 : 2 }] } as never),
+    );
+    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: 7 }] } as never);
+    await Bun.sleep(200);
+    expect(saved).toHaveBeenCalledTimes(1);
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toEqual([{ ...joined("r1", "Launch"), unread: 7 }]));
+    expect(saved).toHaveBeenCalledTimes(2);
+    expect(statuses.length - told).toBe(1);
+    expect(store.machineRooms("m1")).toEqual([{ ...joined("r1", "Launch"), unread: 7 }]);
+
+    machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: 7 }] } as never);
+    await Bun.sleep(1_200);
+    expect(saved).toHaveBeenCalledTimes(2);
   });
 
   test("takes no rooms from a machine joined as a device: its own rooms are not the person's", async () => {
@@ -270,7 +382,7 @@ describe("MachineWatch", () => {
     store.insertMachine({ id: "device", name: "Home server", origin: "https://home.example:4600", createdAt: 1 });
     store.setMachineJoinedAs("person", { asPerson: true, relayKey: "relay-key" });
     ["person", "device"].forEach((machineId) => store.setMachineDeviceToken(machineId, "device-token"));
-    store.setMachineRooms("person", [{ id: "r1", name: "Launch" }]);
+    store.setMachineRooms("person", [joined("r1", "Launch")]);
     const forgotten: string[] = [];
     const tunnels = { forget: (machineId: string) => forgotten.push(machineId) };
 
@@ -375,7 +487,7 @@ describe("a machine reached through a dial's forward", () => {
     const { dial, reach } = dialTo(way);
     const statuses: MachineStatus[] = [];
     const signedOut: string[] = [];
-    const watch = new MachineWatch(store, THIS_HOST, (status) => statuses.push(status), () => {}, () => {}, (machineId) => signedOut.push(machineId), reach, HEARTBEAT_MS);
+    const watch = new MachineWatch(store, THIS_HOST, (status) => statuses.push(status), () => {}, () => {}, () => {}, (machineId) => signedOut.push(machineId), reach, HEARTBEAT_MS);
     cleanUp.push(() => watch.stopAll());
     watch.startAll();
     return { watch, store, statuses, signedOut, dial };

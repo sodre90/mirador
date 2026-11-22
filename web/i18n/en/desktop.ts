@@ -21,6 +21,8 @@ export const desktop = {
   waiting: { decision: "Needs you", failed: "Failed", done: "Done", unread: "Unread" } satisfies Record<WaitingTone, string>,
   untitled: "New conversation",
   notifications: {
+    tagged: (name: string, text: string) => `${name} tagged you: ${text}`,
+    waitsToConfirm: (question: string) => `Waits for you to confirm the answer: ${question}`,
     asks: (question: string) => `Asks: ${question}`,
     wantsPermission: (tool: string) => `Wants permission: ${tool}`,
     aTool: "a tool",

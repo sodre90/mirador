@@ -18,6 +18,8 @@ export const desktop: Messages["desktop"] = {
   waiting: { decision: "Rád vár", failed: "Sikertelen", done: "Kész", unread: "Olvasatlan" },
   untitled: "Új beszélgetés",
   notifications: {
+    tagged: (name: string, text: string) => `${name} megjelölt téged: ${text}`,
+    waitsToConfirm: (question: string) => `Arra vár, hogy megerősítsd a választ: ${question}`,
     asks: (question) => `Kérdezi: ${question}`,
     wantsPermission: (tool) => `Engedélyt kér: ${tool}`,
     aTool: "egy eszköz",

@@ -1,10 +1,13 @@
 import { useRef, useState, type CSSProperties, type Dispatch } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
 import type { JoinedRoom, Machine, MachineStatus, Profile } from "../shared/model.ts";
+import type { RoomReading } from "../shared/room-reading.ts";
 import type { Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
+import { connection } from "./connection.ts";
 import { waitingHints } from "./hints.ts";
-import { t } from "./i18n/index.ts";
+import { formatNumber, t } from "./i18n/index.ts";
+import { LineIcon } from "./LineIcon.tsx";
 import { pastelVariables } from "./pastels.ts";
 import type { AppAction } from "./state.ts";
 import { waitingLabels } from "./waiting.ts";
@@ -39,6 +42,56 @@ function RoomMark({ style }: { style: CSSProperties }) {
     <span className="room-mark" style={style} aria-hidden="true">
       #
     </span>
+  );
+}
+
+type ReadingCounts = Pick<RoomReading, "unread" | "mentions" | "toConfirm" | "muted">;
+
+const NOTHING_UNREAD: ReadingCounts = { unread: 0, mentions: 0, toConfirm: 0, muted: false };
+
+const needsYou = (waiting: boolean, { toConfirm }: ReadingCounts) => waiting || toConfirm > 0;
+
+const readingClasses = ({ unread, muted }: ReadingCounts) => [unread > 0 && "unread", muted && "muted"];
+
+/** What a room holds for you: a mark where you were tagged, how many messages you have not read, and "Needs you" where something waits for you. */
+function ReadingMarks({ reading, waiting }: { reading: ReadingCounts; waiting: boolean }) {
+  return (
+    <>
+      {reading.mentions > 0 && (
+        <span className="waiting-count tone-decision room-tagged" role="img" aria-label={words.taggedHere} data-hint={words.taggedHere}>
+          @
+        </span>
+      )}
+      {reading.unread > 0 && (
+        <span className="waiting-count tone-unread room-unread" role="img" aria-label={words.unreadCount(reading.unread)} data-hint={words.unreadCount(reading.unread)}>
+          {formatNumber(reading.unread)}
+        </span>
+      )}
+      {needsYou(waiting, reading) && (
+        <span className="waiting-pill tone-decision" data-hint={waiting ? waitingHints.permission : words.waitsForYourConfirm}>
+          {waitingLabels.decision}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** Keeps a room of someone else's machine quiet on this computer, whatever that machine does; muted there, it is quiet too. */
+function MuteHereToggle({ machineId, roomId, mutedHere }: { machineId: string; roomId: string; mutedHere: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`icon room-mute${mutedHere ? " muted" : ""}`}
+      aria-label={words.muteRoom}
+      aria-pressed={mutedHere}
+      data-hint={mutedHere ? words.mutedHint : words.muteRoom}
+      onClick={(event) => {
+        event.stopPropagation();
+        connection.send({ type: "machine.mute-room", machineId, roomId, muted: !mutedHere });
+      }}
+    >
+      <LineIcon shape={mutedHere ? "bellOff" : "bell"} />
+    </button>
   );
 }
 
@@ -83,6 +136,7 @@ export function RoomsSection({
   profiles,
   selectedRoomId,
   waitingRoomIds,
+  readings,
   roomsWithPeopleHere = [],
   joinedRooms = [],
   manages,
@@ -93,6 +147,8 @@ export function RoomsSection({
   profiles: Profile[];
   selectedRoomId: string | null;
   waitingRoomIds: Set<string>;
+  /** How far you have read each room, and what waits for you there. */
+  readings: RoomReading[];
   /** The rooms someone other than the owner is in now. */
   roomsWithPeopleHere?: string[];
   /** Rooms of someone else's machines, which open in that machine's frame; listed only where this page shows machines. */
@@ -113,11 +169,12 @@ export function RoomsSection({
       <ul>
         {rooms.map((room) => {
           const waiting = waitingRoomIds.has(room.id);
+          const reading = readings.find(({ roomId }) => roomId === room.id) ?? NOTHING_UNREAD;
           return (
             <li
               key={room.id}
-              className={["room-card", room.id === selectedRoomId && "selected", waiting && "waiting"].filter(Boolean).join(" ")}
-              data-waiting-tone={waiting ? "decision" : undefined}
+              className={["room-card", room.id === selectedRoomId && "selected", needsYou(waiting, reading) && "waiting", ...readingClasses(reading)].filter(Boolean).join(" ")}
+              data-waiting-tone={needsYou(waiting, reading) ? "decision" : undefined}
               onClick={() => dispatch({ type: "select-room", roomId: room.id })}
             >
               <RoomMark style={{ background: workspaceMarkColor(room.name) }} />
@@ -126,11 +183,7 @@ export function RoomsSection({
                 <span className="room-card-subline">{roomSubline(room, profiles, manages)}</span>
               </span>
               {roomsWithPeopleHere.includes(room.id) && <span className="room-people-here" role="img" aria-label={words.someoneHere} data-hint={words.someoneHere} />}
-              {waiting && (
-                <span className="waiting-pill tone-decision" data-hint={waitingHints.permission}>
-                  {waitingLabels.decision}
-                </span>
-              )}
+              <ReadingMarks reading={reading} waiting={waiting} />
               {manages && (
                 <button
                   type="button"
@@ -150,10 +203,12 @@ export function RoomsSection({
         {onOpenJoinedRoom &&
           joinedRooms.map(({ machine, status, room }) => {
             const away = status?.reachable === false;
+            const mutedHere = status?.mutedHere.includes(room.id) === true;
             return (
               <li
                 key={`${machine.id}:${room.id}`}
-                className={["room-card", "joined-room", away && "away"].filter(Boolean).join(" ")}
+                className={["room-card", "joined-room", away && "away", needsYou(false, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || mutedHere })].filter(Boolean).join(" ")}
+                data-waiting-tone={needsYou(false, room) ? "decision" : undefined}
                 data-machine={machine.id}
                 onClick={() => onOpenJoinedRoom(machine.id, room.id)}
               >
@@ -162,6 +217,8 @@ export function RoomsSection({
                   <span className="room-card-name">{room.name}</span>
                   <span className="room-card-subline">{[words.onMachine(machine.name), away && t.shell.machines.notAnswering].filter(Boolean).join(" · ")}</span>
                 </span>
+                <ReadingMarks reading={room} waiting={false} />
+                <MuteHereToggle machineId={machine.id} roomId={room.id} mutedHere={mutedHere} />
               </li>
             );
           })}

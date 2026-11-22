@@ -1,8 +1,8 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { AGENT_TAGGED_TURNS_AFTER_A_PERSON } from "../shared/rooms.ts";
-import { addWorkspace, allowNotifications, answerCanvasQuestion, clickNotification, createProfile, createRoom, literally, notificationsShown, openNewRoom as openNewRoomDialog, openRoomSettings, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, literally, notificationsShown, openNewRoom as openNewRoomDialog, openRoomSettings, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -51,11 +51,17 @@ async function write(page: Page, room: string, text: string) {
 /** Tags the agent from the @ menu, then writes the rest of the message after the tag. */
 async function tag(page: Page, room: string, agent: string, rest: string) {
   await roomComposer(page, room).fill(`@${agent.slice(0, 2)}`);
-  await page.getByRole("listbox", { name: "Agents of the room" }).getByRole("option", { name: `@${agent}` }).click();
+  await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: `@${agent}` }).click();
   await write(page, room, `@${agent} ${rest}`);
 }
 
 const canvasCall = (tool: string, input: unknown) => `CANVAS ${tool} ${JSON.stringify(input)}`;
+
+/** Picks the option in the vote under the agent's answer, then confirms it as the answer the agent gets. */
+async function confirmInRoom(answer: Locator, label: string) {
+  await answer.locator(".room-vote").getByRole("button", { name: label, exact: true }).click();
+  await answer.locator(".room-vote").getByRole("button", { name: `Confirm: ${label}` }).click();
+}
 
 test("an agent's page shows on the room's canvas, its answer opens it there, the canvas hidden too, and it stays after a reload", async ({ page }) => {
   await openNewRoom(page, "Pages");
@@ -86,7 +92,7 @@ test("an agent's page shows on the room's canvas, its answer opens it there, the
   await expect(shownPage(page).locator("h1")).toHaveText("None known");
 });
 
-test("a question asked in a room is answered on its canvas, and the agent's reply lands in the thread that asked it", async ({ page }) => {
+test("a question asked in a room is voted on and confirmed there, its canvas only shows it, and the agent's reply lands in the thread that asked it", async ({ page }) => {
   await openNewRoom(page, "Colours");
   await tag(page, "Colours", "Builder", canvasCall("ask", { question: "Which colour?", options: [{ label: "Blue" }, { label: "Green" }] }));
   const asking = answersOf(page, "Builder").filter({ has: page.locator(".room-quote", { hasText: "Which colour?" }) });
@@ -95,8 +101,10 @@ test("a question asked in a room is answered on its canvas, and the agent's repl
   await expect(answerSaying(page, "Unrelated done")).toHaveCount(1);
 
   await asking.getByRole("button", { name: "Open on canvas" }).click();
+  await expect(roomCanvas(page).locator(".ask-answer")).toHaveText("Vote on it in the room.");
+  await expect(roomCanvas(page).getByRole("button", { name: "Submit" })).toHaveCount(0);
   writeFileSync(answersHeld(), "");
-  await answerCanvasQuestion(page, "Blue");
+  await confirmInRoom(asking, "Blue");
   const working = page.locator(".room-timeline > .room-thread-line", { hasText: "Builder is working…" });
   await expect(working).toBeVisible();
   await working.getByRole("button", { name: "Open thread" }).click();
@@ -125,8 +133,7 @@ test("a question asked in a room while you look elsewhere notifies, marks the ro
   await expect(page).toHaveTitle("(1) Mirador");
   await clickNotification(page, "project · Asks: Which size?");
   await expect(page).toHaveURL(new RegExp(`${asksRoom}$`));
-  await answersOf(page, "Builder").getByRole("button", { name: "Open on canvas" }).click();
-  await answerCanvasQuestion(page, "Large");
+  await confirmInRoom(answersOf(page, "Builder"), "Large");
   await expect(answerSaying(page, "Going with Large")).toHaveCount(1);
   await expect(roomCard(page, "Sizes")).not.toHaveAttribute("data-waiting-tone");
   await expect(page).toHaveTitle("Mirador");

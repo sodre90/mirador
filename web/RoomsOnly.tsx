@@ -1,5 +1,6 @@
 import { useState, type CSSProperties, type Dispatch, type ReactNode } from "react";
 import { namelessPerson } from "../shared/people.ts";
+import { isMuted } from "../shared/room-reading.ts";
 import { t } from "./i18n/index.ts";
 import { inView, toggledInView, type PaneLayout } from "./layout.ts";
 import { LayoutToggles, LayoutToggleState } from "./LayoutToggles.tsx";
@@ -84,6 +85,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             approvals={[]}
             tasks={[]}
             presence={state.roomPresence?.roomId === room.id ? state.roomPresence : null}
+            muted={isMuted(state.roomReadings, room.id)}
             you={state.you}
             dispatch={dispatch}
             onOpenOnCanvas={(itemId) => openOnCanvas(room.id, itemId)}
@@ -107,7 +109,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
       <div className={`layout ${sidebarHidden ? "sidebar-hidden" : ""}`} style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}>
         {!sidebarHidden && (
           <nav className="sidebar">
-            <RoomsSection rooms={state.rooms} profiles={state.profiles} selectedRoomId={state.selectedRoomId} waitingRoomIds={NO_ROOMS_WAITING} manages={false} dispatch={dispatch} />
+            <RoomsSection rooms={state.rooms} profiles={state.profiles} selectedRoomId={state.selectedRoomId} waitingRoomIds={NO_ROOMS_WAITING} readings={state.roomReadings} manages={false} dispatch={dispatch} />
             <div className="sidebar-scroll" />
             <footer>
               <button type="button" className="link" onClick={() => setOwnProfileOpen(true)}>

@@ -10177,6 +10177,156 @@ button.link.more-rows {
   font-size: calc(12px * var(--font-scale));
 }
 
+.room-mute {
+  display: inline-flex;
+  align-items: center;
+  margin-left: auto;
+}
+
+.room-here-count ~ .room-mute {
+  margin-left: 0;
+}
+
+.room-mute .line-icon {
+  width: calc(15px * var(--font-scale));
+  height: calc(15px * var(--font-scale));
+}
+
+.rooms li button.icon.room-mute.muted {
+  visibility: visible;
+}
+
+.room-card.unread .room-card-name {
+  font-weight: 700;
+}
+
+.room-card.muted .waiting-count.room-unread {
+  --tone: var(--muted);
+}
+
+.room-tag-option.person {
+  color: var(--muted);
+}
+
+.room-mention {
+  padding: 0 2px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.room-mention.you {
+  background: color-mix(in srgb, var(--warn) 28%, transparent);
+  color: color-mix(in srgb, var(--warn) 55%, var(--text));
+}
+
+.room-entry.tags-you {
+  background: color-mix(in srgb, var(--warn) 8%, transparent);
+  box-shadow: inset 3px 0 0 var(--warn);
+}
+
+.room-vote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 520px;
+  margin-top: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: calc(13px * var(--font-scale));
+}
+
+.room-vote.open {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.room-timeline > .room-vote {
+  margin-left: 38px;
+}
+
+.room-vote-ask {
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.room-vote-options {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-vote-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.room-vote-option button {
+  flex: 1 1 auto;
+  padding: 4px 10px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.room-vote-option button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.room-vote-option button:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.room-vote-option.answer button {
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  font-weight: 600;
+}
+
+.room-vote-voters {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.room-vote-voters .avatar {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: calc(9.5px * var(--font-scale));
+}
+
+.room-vote-count {
+  margin-left: 4px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-vote-own {
+  width: 100%;
+  margin-top: 6px;
+}
+
+.room-vote-status,
+.room-vote-hint {
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-vote-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .room-agent-chips,
 .room-settings-rows {
   display: grid;
