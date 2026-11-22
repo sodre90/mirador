@@ -13,6 +13,7 @@ import { shortcutKeys } from "./shortcuts.ts";
 import { shownTitle } from "./shown-title.ts";
 import { addToComposer, askInSideChat, closeSideChat, dropQuote, firstMessage, startSideChat } from "./side-chats.ts";
 import { Splitter } from "./Splitter.tsx";
+import { useTypingAidAttributes } from "./typing-aids.ts";
 
 const words = t.sideChat;
 
@@ -150,6 +151,7 @@ export function NewSideChat({ parent, quotes }: { parent: Conversation; quotes: 
   const [question, setQuestion] = useDraft(`side-chat-${parent.id}`);
   const [starting, setStarting] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
+  const typingAidAttributes = useTypingAidAttributes();
   useEffect(() => box.current?.focus(), [quotes.length]);
   const canAsk = !starting && (question.trim() !== "" || quotes.length > 0);
   const ask = () => {
@@ -187,6 +189,7 @@ export function NewSideChat({ parent, quotes }: { parent: Conversation; quotes: 
       </div>
       <div className="composer side-chat-new-composer">
         <textarea
+          {...typingAidAttributes}
           ref={box}
           rows={3}
           value={question}

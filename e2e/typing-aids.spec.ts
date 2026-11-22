@@ -24,11 +24,14 @@ test.describe("on macOS", () => {
     await signIn(page, host);
     await addWorkspace(page, host.projectDir);
     await startConversation(page);
-    const composer = page.locator(".composer textarea");
+    const composer = page.locator(".main-chat .composer textarea");
+    const sideChatQuestion = page.locator(".side-chat").getByLabel("Ask about this conversation…");
     const terminalInput = page.locator(".terminal-pane .xterm-helper-textarea");
     await page.getByRole("button", { name: "Show terminal" }).click();
+    await composer.press("Alt+KeyB");
 
     await expectTypingAids(composer, "off", "false");
+    await expectTypingAids(sideChatQuestion, "off", "false");
     await expectTypingAids(terminalInput, "off", "false");
 
     const settings = await openSettings(page, "Conversations");
@@ -36,6 +39,7 @@ test.describe("on macOS", () => {
     await settings.getByRole("checkbox", { name: "Inline predictions" }).check();
     await page.keyboard.press("Escape");
     await expectTypingAids(composer, "on", "true");
+    await expectTypingAids(sideChatQuestion, "on", "true");
 
     await page.reload();
     await expectTypingAids(composer, "on", "true");
