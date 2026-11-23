@@ -1093,7 +1093,7 @@ export function App() {
       {invitedRoom && <RoomInviteDialog key={invitedRoom.id} room={invitedRoom} devices={state.devices} onClose={closeOverlay} />}
       {bringingInto && <BringAgentDialog machine={bringingInto.machine} room={bringingInto.room} profiles={state.profiles} workspaces={state.workspaces} onClose={closeOverlay} />}
       {overlay?.kind === "join-room" && (
-        <JoinRoomDialog machines={state.machines} onJoined={joinedRoom} onClose={closeOverlay} />
+        <JoinRoomDialog machines={state.machines} person={state.people.find(({ id }) => id === state.ownerId)} onJoined={joinedRoom} onClose={closeOverlay} />
       )}
     </div>
   );

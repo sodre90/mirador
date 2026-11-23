@@ -56,6 +56,8 @@ export const rooms: Messages["rooms"] = {
   showInvite: "Mostrar invitación",
   invite: "Invitación",
   pasteInvite: "Pega la invitación",
+  yourName: "Tu nombre",
+  yourNameHint: "En la sala, todos te ven por este nombre.",
   join: "Unirse",
   joining: "Uniéndose…",
   notAnInvite: "Eso no es una invitación a una sala. Pide una nueva a quien te la envió.",

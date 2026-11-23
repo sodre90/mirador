@@ -55,6 +55,8 @@ export const rooms: Messages["rooms"] = {
   showInvite: "Meghívó megjelenítése",
   invite: "Meghívó",
   pasteInvite: "Illeszd be a meghívót",
+  yourName: "A neved",
+  yourNameHint: "A szobában ezen a néven látnak.",
   join: "Csatlakozás",
   joining: "Csatlakozás…",
   notAnInvite: "Ez nem szobameghívó. Kérj újat attól, aki küldte.",

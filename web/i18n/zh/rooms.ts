@@ -55,6 +55,8 @@ export const rooms: Messages["rooms"] = {
   showInvite: "显示邀请",
   invite: "邀请",
   pasteInvite: "粘贴邀请",
+  yourName: "你的名字",
+  yourNameHint: "房间里的人会用这个名字看到你。",
   join: "加入",
   joining: "正在加入…",
   notAnInvite: "这不是房间邀请。请向发送者要一个新的。",

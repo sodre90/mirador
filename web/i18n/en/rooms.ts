@@ -65,6 +65,8 @@ export const rooms = {
   showInvite: "Show invite",
   invite: "Invite",
   pasteInvite: "Paste the invite",
+  yourName: "Your name",
+  yourNameHint: "People in the room see you by this name.",
   join: "Join",
   joining: "Joining…",
   notAnInvite: "That isn't a room invite. Ask whoever sent it for a new one.",

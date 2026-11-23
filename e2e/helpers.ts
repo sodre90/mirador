@@ -642,12 +642,13 @@ export async function copiedInvite(dialog: Locator) {
   return dialog.getByRole("textbox", { name: "Invite" }).inputValue();
 }
 
-/** Joins someone else's room from the Rooms section's "+", with the invite they sent. */
-export async function joinRoom(page: Page, invite: string) {
+/** Joins someone else's room from the Rooms section's "+", with the invite they sent, by `name` where the joiner has none yet. */
+export async function joinRoom(page: Page, invite: string, name?: string) {
   await page.locator(".sidebar .rooms > header button.workspace-new").click();
   await page.getByRole("menuitem", { name: "Join a room" }).click();
   const dialog = page.getByRole("dialog", { name: "Join a room" });
   await dialog.getByLabel("Paste the invite").fill(invite);
+  if (name) await dialog.getByLabel("Your name").fill(name);
   await dialog.getByRole("button", { name: "Join", exact: true }).click();
   return dialog;
 }

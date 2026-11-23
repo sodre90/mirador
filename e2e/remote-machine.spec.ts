@@ -436,7 +436,7 @@ test("an invite whose mirador-p2p ends as it starts says peer to peer didn't sta
   try {
     await outdated.start();
     await signIn(page, outdated);
-    const dialog = await joinRoom(page, studioRoomInvite);
+    const dialog = await joinRoom(page, studioRoomInvite, "Ann");
     await expect(dialog.locator(".join-room-problem")).toHaveText(
       `Peer to peer didn't start on this computer, so the invite wasn't used. Check that this computer is online, and that ${binary}, which MIRADOR_P2P_BINARY names, is new enough for this Mirador. The host log says what went wrong.`,
     );
