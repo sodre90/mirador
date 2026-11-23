@@ -1204,7 +1204,7 @@ function scrollBackTo(timeline: HTMLElement, { element, fraction }: ScrollAnchor
  * kept on every change to the page, before the browser paints it or reports the scroll. Scroll events caused by the
  * resize itself (the browser clamping or reflowing) are ignored, so they don't overwrite the place remembered before it.
  */
-function useScrollAnchor() {
+export function useScrollAnchor() {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   const anchor = useRef<ScrollAnchor | null>(null);

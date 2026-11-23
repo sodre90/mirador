@@ -425,3 +425,46 @@ test("the divider beside a thread drags it wider, and under it higher, and the r
     expect(Math.abs((await threadBox()).height - dragged)).toBeLessThan(1);
   });
 });
+
+test("a thread opens at its latest, follows the agent's work from there, and leaves a reader who scrolled up in place", async ({ page }) => {
+  const longText = (ending: string) => `${"Every plank is measured twice. ".repeat(300)}${ending}`;
+  const timeline = thread(page, "Builder").locator(".timeline");
+  const scrolledTo = () => timeline.evaluate((element) => element.scrollTop);
+  const leftBelow = () => timeline.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop);
+  const workSaying = (text: string) => workInThread(page, "Builder").locator(".message.agent", { hasText: text });
+  const expectAtLatest = async (answer: string) => {
+    await expect(workSaying(answer)).toBeVisible();
+    await expect.poll(leftBelow).toBeLessThan(2);
+    expect(await scrolledTo()).toBeGreaterThan(0);
+  };
+  const followUp = async (text: string) => {
+    const box = thread(page, "Builder").getByRole("textbox", { name: "Follow up with Builder…" });
+    await box.fill(text);
+    await box.press("Enter");
+  };
+
+  await openNewRoom(page, "Planks");
+  await tag(page, "Planks", "Builder", `SAY ${longText("First coat")}`);
+  const answer = answerSaying(page, "First coat");
+  await answer.getByRole("button", { name: "Open thread" }).click();
+  await expectAtLatest("First coat");
+
+  await followUp(`SAY ${longText("Second coat")}`);
+  await expectAtLatest("Second coat");
+
+  const released = join(host.root, "third-coat-released");
+  rmSync(released, { force: true });
+  await followUp(`WAIT ${released} SAY ${longText("Third coat")}`);
+  await expect(thread(page, "Builder").locator(".working")).toHaveText("Builder is working…");
+  await timeline.evaluate((element) => {
+    element.scrollTop = 200;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  writeFileSync(released, "");
+  await expect(workSaying("Third coat")).toBeVisible();
+  expect(await scrolledTo()).toBe(200);
+
+  await thread(page, "Builder").getByRole("button", { name: "Close thread" }).click();
+  await answer.getByRole("button", { name: "Open thread" }).click();
+  await expectAtLatest("Third coat");
+});

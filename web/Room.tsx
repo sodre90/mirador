@@ -43,7 +43,7 @@ import {
 import type { HeldChange } from "../shared/sandbox.ts";
 import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
-import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames } from "./Chat.tsx";
+import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames, useScrollAnchor } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { HintedWhenCutShort } from "./cut-short.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
@@ -488,6 +488,7 @@ function ThreadColumn({
   const shownHere = threadMessagesShown(timeline, thread, agent);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
   const workingLine = workUnderWay(pending, agentsById, approvals).find((work) => work.thread.id === thread.id)?.text;
+  const { ref: threadTimeline, onScroll } = useScrollAnchor();
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -503,7 +504,7 @@ function ThreadColumn({
           ×
         </button>
       </header>
-      <div className="timeline">
+      <div className="timeline" ref={threadTimeline} onScroll={onScroll}>
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
         {shownHere.map((message) => (
           <div key={message.id} className="room-thread-turn">
