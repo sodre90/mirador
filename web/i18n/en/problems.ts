@@ -132,6 +132,8 @@ export const problems = {
     "peer-to-peer-unavailable-here": "Peer to peer isn't available on this computer, and this invite needs it: mirador-p2p could not be downloaded, or there is none for this system.",
     "room-invite-loopback-from-afar": "A room invite joins at 127.0.0.1 or localhost only from this computer itself.",
     "join-too-often": "There were too many tries to join this machine. Try again in a minute.",
+    "room-invite-used-already": "You used this invite already. Ask whoever sent it for a new one.",
+    "room-joiner-gone": "They no longer wait to join this room.",
     "room-join-unproven": "Joining a room needs a signature, with the key it presents, over this machine's latest challenge for the invite, the address it was asked at and the certificate authority it was trusted by. Try joining again.",
     "voice-not-set-up": "Voice isn't set up on this Mac yet.",
     "voice-not-set-up-here": "Voice isn't set up on this Mac yet. Settings → Voice can set it up.",

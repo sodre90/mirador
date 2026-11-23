@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { askToJoin as askToJoinThere } from "../shared/join-requests.ts";
-import { SOMEONE_ELSES_MACHINE_SANDBOX } from "../shared/machines.ts";
+import { isRoomId, SOMEONE_ELSES_MACHINE_SANDBOX } from "../shared/machines.ts";
 import type { Machine } from "../shared/model.ts";
 import { CANVAS_ASSETS_ORIGIN_HEADER, TOKEN_COOKIE } from "../shared/protocol.ts";
 import { HERE_PATH } from "./addresses.ts";
@@ -130,7 +130,20 @@ const refusedJoin = async (response: Response) => {
 };
 
 /** The room a room invite let this computer's owner into, as the machine names it; taken only in the form a room's id has. */
-const roomIdIn = (answer: { roomId?: unknown }) => (typeof answer.roomId === "string" && /^[\w-]{1,64}$/.test(answer.roomId) ? answer.roomId : null);
+const roomIdIn = (answer: { roomId?: unknown }) => (isRoomId(answer.roomId) ? answer.roomId : null);
+
+/** Where a room invite took this computer's owner: into a room, or to its door, to wait for its owner to let them in. */
+export interface RoomJoined {
+  roomId: string | null;
+  waiting: boolean;
+}
+
+const NO_ROOM: RoomJoined = { roomId: null, waiting: false };
+
+const roomJoinedIn = (answer: { roomId?: unknown; waiting?: unknown }): RoomJoined => {
+  const roomId = roomIdIn(answer);
+  return { roomId, waiting: roomId !== null && answer.waiting === true };
+};
 
 /** Null when nothing answers; through a dial's forward, also when the machine has not started answering within `answerTimeoutMs`, while its answer's body takes as long as it takes. */
 export async function fetchAnswered(way: Way, path: string, init: RequestInit, answerTimeoutMs: number | null) {
@@ -300,7 +313,7 @@ export class MachineRelays {
     linkFingerprint: string | null = null,
     tunnel: InviteTunnel | null = null,
     { trustsOnFirstUse = true } = {},
-  ): Promise<{ roomId: string | null }> {
+  ): Promise<RoomJoined> {
     const machine = this.store.findMachine(machineId);
     if (!machine) throw new HostProblemError({ code: "machine-gone" });
     if (machine.peerToPeer) return this.joinThroughTunnel(machine, code, tunnel);
@@ -323,10 +336,20 @@ export class MachineRelays {
     const response = await post("/join", { code, name: thisHostAsDevice(this.store), person });
     if (!response) throw new HostProblemError({ code: "machine-did-not-answer", machine: machine.name });
     if (!response.ok) throw await refusedJoin(response);
-    const answer = (await response.json()) as { token?: unknown; roomId?: unknown };
+    const answer = (await response.json()) as { token?: unknown; roomId?: unknown; waiting?: unknown };
     if (typeof answer.token !== "string") throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
+    const joined = person ? this.roomJoined(machine.id, answer) : NO_ROOM;
     this.signInFromNowOn(machine, authority, answer.token, person ? { asPerson: true, relayKey: newRelayKey() } : { asPerson: false });
-    return { roomId: person ? roomIdIn(answer) : null };
+    return joined;
+  }
+
+  /** Before this host signs in with the new token, so the machine's watch starts out knowing of the room it waits at. */
+  private roomJoined(machineId: string, answer: { roomId?: unknown; waiting?: unknown }) {
+    const joined = roomJoinedIn(answer);
+    if (joined.roomId === null) return joined;
+    const otherKnocks = (this.store.findMachine(machineId)?.knocks ?? []).filter(({ roomId }) => roomId !== joined.roomId);
+    this.store.setMachineKnocks(machineId, joined.waiting ? [...otherKnocks, { roomId: joined.roomId, turnedAway: false }] : otherKnocks);
+    return joined;
   }
 
   /**
@@ -360,13 +383,14 @@ export class MachineRelays {
       const response = await post("/join", { code, name: thisHostAsDevice(this.store), person, tunnelKey: own.publicKey });
       if (!response) throw unreachable;
       if (!response.ok) throw await refusedJoin(response);
-      const answer = (await response.json().catch(() => ({}))) as { token?: unknown; roomId?: unknown; tunnel?: unknown };
+      const answer = (await response.json().catch(() => ({}))) as { token?: unknown; roomId?: unknown; waiting?: unknown; tunnel?: unknown };
       const given = checkedDeviceTunnel(answer.tunnel);
       if (typeof answer.token !== "string" || !given || !isFromMachine(given)) throw new HostProblemError({ code: "machine-gave-no-token", machine: machine.name });
       this.store.setMachineTunnelDevice(machine.id, placesIn(given), { address: given.deviceAddress, privateKey: own.privateKey });
       this.tunnels.start(machine.id);
+      const joined = this.roomJoined(machine.id, answer);
       this.signInFromNowOn(machine, null, answer.token, { asPerson: true, relayKey: newRelayKey() });
-      return { roomId: roomIdIn(answer) };
+      return joined;
     } finally {
       joining.stop();
     }

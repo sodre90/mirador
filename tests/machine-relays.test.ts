@@ -724,7 +724,7 @@ describe("joining a machine that made its own certificate", () => {
   });
 
   /** A machine whose invite is a room invite: it challenges whoever has the code, and records what joining sends, and what else it is asked. */
-  function roomInviteMachine(challenge: unknown) {
+  function roomInviteMachine(challenge: unknown, answers: Record<string, unknown>[] = []) {
     const joins: Record<string, unknown>[] = [];
     const otherRequests: string[] = [];
     const server = Bun.serve({
@@ -735,7 +735,7 @@ describe("joining a machine that made its own certificate", () => {
         "/join": {
           POST: async (request) => {
             joins.push((await request.json()) as Record<string, unknown>);
-            return Response.json({ token: "person-device-token" });
+            return Response.json({ token: "person-device-token", ...answers.shift() });
           },
         },
       },
@@ -780,6 +780,26 @@ describe("joining a machine that made its own certificate", () => {
     expect(signedRoomJoin({ ...signed, authorityFingerprint: "someone-in-between" }, person.signature)).toBe(false);
     expect(store.machineDeviceToken("box")).toBe("person-device-token");
     expect(store.findMachine("box")).toMatchObject({ outOfRooms: false, asPerson: true, relayKey: expect.stringMatching(/^[\w-]{43}$/), hostId: null });
+  });
+
+  test("waits at the door of a room whose invite asks its owner's OK, in place of where it stood there before, and stands at none of a room it went straight into", async () => {
+    const { relays, store } = roomInviteMachine(newChallenge(), [
+      { roomId: "r1", waiting: true },
+      { roomId: "r2", waiting: true },
+      { roomId: "r2", waiting: false },
+      { roomId: "../x", waiting: true },
+    ]);
+    store.setMachineKnocks("box", [{ roomId: "r1", turnedAway: true }]);
+
+    expect(await relays.join("box", "ABCD-EFGH-JKLM")).toEqual({ roomId: "r1", waiting: true });
+    expect(await relays.join("box", "ABCD-EFGH-JKLN")).toEqual({ roomId: "r2", waiting: true });
+    expect(store.findMachine("box")?.knocks).toEqual([
+      { roomId: "r1", turnedAway: false },
+      { roomId: "r2", turnedAway: false },
+    ]);
+    expect(await relays.join("box", "ABCD-EFGH-JKLP")).toEqual({ roomId: "r2", waiting: false });
+    expect(await relays.join("box", "ABCD-EFGH-JKLQ")).toEqual({ roomId: null, waiting: false });
+    expect(store.findMachine("box")?.knocks).toEqual([{ roomId: "r1", turnedAway: false }]);
   });
 
   test("signs nothing for a machine whose challenge is not one a Mirador makes, such as text that runs over more lines, and joins it as a device", async () => {

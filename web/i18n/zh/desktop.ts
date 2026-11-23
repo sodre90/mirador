@@ -20,6 +20,8 @@ export const desktop: Messages["desktop"] = {
   notifications: {
     tagged: (name: string, text: string) => `${name} 标记了你：${text}`,
     waitsToConfirm: (question: string) => `等你确认答案：${question}`,
+    waitsToBeLetIn: (name: string) => `有人在等你允许其进入，所给的名字是“${name}”`,
+    someoneWaitsToBeLetIn: "有人在等你允许其进入",
     asks: (question) => `提问：${question}`,
     wantsPermission: (tool) => `请求权限：${tool}`,
     aTool: "某个工具",

@@ -69,7 +69,7 @@ import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
 import { newRoomWorkspace, NewRoomDialog } from "./NewRoom.tsx";
 import { JoinRoomDialog, RoomInviteDialog } from "./RoomInvite.tsx";
 import { BringAgentDialog } from "./BringAgent.tsx";
-import { joinedRoomsOf } from "./RoomsSidebar.tsx";
+import { joinedRoomsOf, useOpenedWhenLetIn } from "./RoomsSidebar.tsx";
 import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
@@ -596,6 +596,7 @@ export function App() {
     machines.rememberPlace(machineId, `#/r/${roomId}`);
     machines.openIn(machineId, `#/r/${roomId}`);
   };
+  useOpenedWhenLetIn(state.machines, state.machineStatuses, openJoinedRoom);
   const openConversation = useCallback(
     (conversationId: string, machineId?: string) => {
       const machine = state.machines.find(({ id }) => id === machineId);
@@ -825,6 +826,7 @@ export function App() {
             heldChanges={state.heldChanges.filter(({ roomId }) => roomId === shownRoom.id)}
             holdsTooMany={state.roomsHoldingTooMany.includes(shownRoom.id)}
             presence={state.roomPresence?.roomId === shownRoom.id ? state.roomPresence : null}
+            joiners={state.roomJoiners.filter(({ roomId }) => roomId === shownRoom.id)}
             muted={isMuted(state.roomReadings, shownRoom.id)}
             you={state.you}
             dispatch={dispatch}
@@ -974,9 +976,9 @@ export function App() {
             closeOverlay();
             showMachine(machine);
           }}
-          onJoined={(machineId, roomId) => {
+          onJoined={(machineId, roomId, waiting) => {
             closeOverlay();
-            openJoinedRoom(machineId, roomId);
+            if (!waiting) openJoinedRoom(machineId, roomId);
           }}
           onClose={closeOverlay}
         />
@@ -1042,6 +1044,7 @@ export function App() {
           people={state.people}
           ownerId={state.ownerId}
           invites={state.roomInvites}
+          joiners={state.roomJoiners.filter(({ roomId }) => roomId === settingsRoom.id)}
           roomConversations={state.roomConversations}
           sandboxSetup={state.sandboxSetup}
           onInvite={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: settingsRoom.id } })}
@@ -1053,9 +1056,9 @@ export function App() {
       {overlay?.kind === "join-room" && (
         <JoinRoomDialog
           machines={state.machines}
-          onJoined={(machineId, roomId) => {
+          onJoined={(machineId, roomId, waiting) => {
             closeOverlay();
-            openJoinedRoom(machineId, roomId);
+            if (!waiting) openJoinedRoom(machineId, roomId);
           }}
           onClose={closeOverlay}
         />

@@ -210,7 +210,7 @@ test("takes the invite code and certificate authority's fingerprint out of a pas
   expect(inviteIn("  ABCD-EFGH-JKLM \n")).toEqual({ code: "ABCD-EFGH-JKLM", authorityFingerprint: null, tunnel: null });
 });
 
-const machine = (id: string, origin: string, hostId: string | null = null): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId, outOfRooms: false, asPerson: false, relayKey: null, peerToPeer: false });
+const machine = (id: string, origin: string, hostId: string | null = null): Machine => ({ id, name: id, origin, createdAt: 1, relayPort: 4620, joined: true, color: null, hostId, outOfRooms: false, asPerson: false, relayKey: null, peerToPeer: false, knocks: [], ownerName: null });
 const seen = (name: string, origin: string, hostId: string | null = null): MachineSeen => ({ name, origin, hostId });
 
 test("the machines this computer's machines have joined are offered once each, through the first that lists them, unless added here", () => {

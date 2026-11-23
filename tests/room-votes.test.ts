@@ -540,7 +540,7 @@ describe("what a person has not read in their rooms", () => {
 
   test("calls a person once for tags in a room until they read it, however many people tag them there, and from one sender a few times a minute, which leaves other senders' calls through", () => {
     const { rooms, room, ownerId, clock, pages, ownerCalled } = roomWithPeople();
-    const gusCalls = () => pages.gus.allOf("room.alert").map(({ alert }) => (alert.about === "mention" ? `${alert.by}: ${alert.text}` : alert.question));
+    const gusCalls = () => pages.gus.allOf("room.alert").map(({ alert }) => (alert.about === "mention" ? `${alert.by}: ${alert.text}` : alert.about === "confirm" ? alert.question : alert.by));
     rooms.write(room.id, ownerId, "@Gus one", [], null);
     rooms.write(room.id, ownerId, "@Gus two", [], null);
     rooms.write(room.id, "mia", "@Gus three", [], null);

@@ -134,6 +134,8 @@ export const problems: Messages["problems"] = {
     "peer-to-peer-unavailable-here": "Peer-to-Peer ist auf diesem Computer nicht verfügbar, und diese Einladung braucht es: mirador-p2p ließ sich nicht herunterladen, oder es gibt keins für dieses System.",
     "room-invite-loopback-from-afar": "Mit einer Raumeinladung tritt man unter 127.0.0.1 oder localhost nur von diesem Computer selbst bei.",
     "join-too-often": "Es gab zu viele Versuche, diesem Rechner beizutreten. Versuche es in einer Minute erneut.",
+    "room-invite-used-already": "Du hast diese Einladung schon benutzt. Bitte die Person, die sie geschickt hat, um eine neue.",
+    "room-joiner-gone": "Diese Person wartet nicht mehr darauf, dem Raum beizutreten.",
     "room-join-unproven": "Um einem Raum beizutreten, braucht es eine Signatur mit dem vorgelegten Schlüssel über die letzte Challenge dieses Rechners für die Einladung, die Adresse, an der sie angefragt wurde, und die Zertifizierungsstelle, der dabei vertraut wurde. Versuche erneut beizutreten.",
     "voice-not-set-up": "Die Sprachfunktionen sind auf diesem Mac noch nicht eingerichtet.",
     "voice-not-set-up-here": "Die Sprachfunktionen sind auf diesem Mac noch nicht eingerichtet. Unter Einstellungen → Stimme lassen sie sich einrichten.",

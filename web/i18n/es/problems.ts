@@ -134,6 +134,8 @@ export const problems: Messages["problems"] = {
     "peer-to-peer-unavailable-here": "La conexión peer to peer no está disponible en este equipo, y esta invitación la necesita: no se pudo descargar mirador-p2p, o no lo hay para este sistema.",
     "room-invite-loopback-from-afar": "Con una invitación a una sala solo se une en 127.0.0.1 o localhost desde este mismo equipo.",
     "join-too-often": "Hubo demasiados intentos de unirse a esta máquina. Inténtalo de nuevo en un minuto.",
+    "room-invite-used-already": "Ya usaste esta invitación. Pide una nueva a quien te la envió.",
+    "room-joiner-gone": "Ya no espera para unirse a esta sala.",
     "room-join-unproven": "Para unirse a una sala hace falta una firma, con la clave que presenta, sobre el último desafío de esta máquina para la invitación, la dirección en que se pidió y la autoridad de certificación con la que se confió en ella. Intenta unirte de nuevo.",
     "voice-not-set-up": "La voz aún no está configurada en este Mac.",
     "voice-not-set-up-here": "La voz aún no está configurada en este Mac. Puedes configurarla en Configuración → Voz.",

@@ -1,7 +1,7 @@
-import { useRef, useState, type CSSProperties, type Dispatch, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type MouseEvent } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
-import type { JoinedRoom, Machine, MachineStatus, Person, Profile } from "../shared/model.ts";
+import type { JoinedRoom, Machine, MachineStatus, Person, Profile, RoomKnock } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
 import { broughtAgentName, type Room } from "../shared/rooms.ts";
@@ -32,6 +32,39 @@ export function joinedRoomsOf(machines: Machine[], statuses: MachineStatus[]): J
       return (status?.rooms ?? []).map((room) => ({ machine, status, room }));
     });
 }
+
+/** A room of someone else's machine this computer's owner waits to be let into, or was turned away from, with its machine. */
+export interface KnockShown {
+  machine: Machine;
+  knock: RoomKnock;
+}
+
+/** Every room door this computer's owner stands at on someone else's machines. */
+export const knocksOf = (machines: Machine[]): KnockShown[] => machines.filter(({ asPerson }) => asPerson).flatMap((machine) => machine.knocks.map((knock) => ({ machine, knock })));
+
+const knockKey = (machineId: string, roomId: string) => JSON.stringify([machineId, roomId]);
+
+/** A room this computer's owner waited at the door of opens once its owner lets them in, as a room joined at once does. */
+export function useOpenedWhenLetIn(machines: Machine[], statuses: MachineStatus[], open: (machineId: string, roomId: string) => void) {
+  const waitedAt = useRef<Set<string> | null>(null);
+  useEffect(() => {
+    const waitingAt = new Set(knocksOf(machines).flatMap(({ machine, knock }) => (knock.turnedAway ? [] : [knockKey(machine.id, knock.roomId)])));
+    const waitedBefore = waitedAt.current;
+    waitedAt.current = waitingAt;
+    if (!waitedBefore) return;
+    joinedRoomsOf(machines, statuses)
+      .filter(({ machine, room }) => waitedBefore.has(knockKey(machine.id, room.id)) && !waitingAt.has(knockKey(machine.id, room.id)))
+      .forEach(({ machine, room }) => open(machine.id, room.id));
+  }, [machines, statuses]);
+}
+
+/** What a room door says of this computer's owner, by the name its machine's owner goes by when it said one. */
+function knockText({ ownerName }: Machine, { turnedAway }: RoomKnock) {
+  if (turnedAway) return ownerName ? words.turnedAwayBy(ownerName) : words.turnedAwayNoName;
+  return ownerName ? words.waitingToBeLetIn(ownerName) : words.waitingToBeLetInNoName;
+}
+
+const machineMarkStyle = (machine: Machine): CSSProperties => (machine.color ? { ...pastelVariables(machine.color), background: "var(--pastel-stripe)" } : { background: workspaceMarkColor(machine.name) });
 
 /** Under a room's name: the people in it besides its owner, and its agents, or that it has none yet. */
 function roomSubline(room: Room, profiles: Profile[], people: Person[], manages: boolean) {
@@ -189,6 +222,7 @@ export function RoomsSection({
   readings,
   roomsWithPeopleHere = [],
   joinedRooms = [],
+  knocks = [],
   people,
   broughtAgents = [],
   manages,
@@ -205,6 +239,8 @@ export function RoomsSection({
   roomsWithPeopleHere?: string[];
   /** Rooms of someone else's machines, which open in that machine's frame; listed only where this page shows machines. */
   joinedRooms?: JoinedRoomShown[];
+  /** The doors of rooms of someone else's machines this computer's owner waits at, or was turned away from; listed only where joined rooms are. */
+  knocks?: KnockShown[];
   people: Person[];
   /** The agents this computer's owner brought into rooms of other machines. */
   broughtAgents?: BroughtAgentHere[];
@@ -268,7 +304,7 @@ export function RoomsSection({
                 data-machine={machine.id}
                 onClick={() => onOpenJoinedRoom(machine.id, room.id)}
               >
-                <RoomMark style={machine.color ? { ...pastelVariables(machine.color), background: "var(--pastel-stripe)" } : { background: workspaceMarkColor(machine.name) }} />
+                <RoomMark style={machineMarkStyle(machine)} />
                 <span className="room-card-text">
                   <span className="room-card-name">{room.name}</span>
                   <span className="room-card-subline">
@@ -283,6 +319,21 @@ export function RoomsSection({
               </li>
             );
           })}
+        {onOpenJoinedRoom &&
+          knocks.map(({ machine, knock }) => (
+            <li key={`knock:${machine.id}:${knock.roomId}`} className={["room-card", "room-knock", knock.turnedAway && "turned-away"].filter(Boolean).join(" ")} data-machine={machine.id}>
+              <RoomMark style={machineMarkStyle(machine)} />
+              <span className="room-card-text">
+                <span className="room-card-name">{knockText(machine, knock)}</span>
+                <span className="room-card-subline">{words.onMachine(machine.name)}</span>
+              </span>
+              {knock.turnedAway && (
+                <button type="button" className="link" onClick={() => connection.send({ type: "machine.dismiss-knock", machineId: machine.id, roomId: knock.roomId })}>
+                  {words.dismissKnock}
+                </button>
+              )}
+            </li>
+          ))}
       </ul>
     </section>
   );

@@ -376,6 +376,62 @@ describe("MachineWatch", () => {
     expect(machine.signIns).toHaveLength(1);
   });
 
+  test("joined as a person, learns from the rooms it still waits at whether the machine's owner let this computer in, the room there first, or turned it away, and keeps what the owner goes by, cleaned", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store, machineChanges } = watching(machine.origin, { asPerson: true });
+    store.setMachineKnocks("m1", [
+      { roomId: "r1", turnedAway: false },
+      { roomId: "r2", turnedAway: false },
+      { roomId: "r3", turnedAway: true },
+    ]);
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    const knocks = () => store.findMachine("m1")?.knocks;
+    const room = (id: string, name: string) => ({ id, name, workspaceId: "w1", people: [], agents: [] });
+    const people = (ownerName: string) => [
+      { id: "ann", name: ownerName, color: null, number: 1 },
+      { id: "me", name: "Gus", color: null, number: 2 },
+    ];
+
+    machine.send("/ws", { type: "snapshot", conversations: [], machines: [], rooms: [room("r0", "Lobby")], people: people("Ann\nLee"), ownerId: "ann" } as never);
+    await eventually(() => expect(store.findMachine("m1")?.ownerName).toBe("Ann Lee"));
+    const changesSoFar = machineChanges.length;
+    machine.send("/ws", { type: "rooms.waiting-to-join", personId: "me", roomIds: ["r1", "r2", "../x"] } as never);
+    await Bun.sleep(100);
+    expect(knocks()).toEqual([
+      { roomId: "r1", turnedAway: false },
+      { roomId: "r2", turnedAway: false },
+      { roomId: "r3", turnedAway: true },
+    ]);
+    expect(machineChanges).toHaveLength(changesSoFar);
+
+    machine.send("/ws", { type: "room.upserted", room: room("r1", "Launch") } as never);
+    machine.send("/ws", { type: "rooms.waiting-to-join", personId: "me", roomIds: ["r2"] } as never);
+    await eventually(() => expect(knocks()).toEqual([{ roomId: "r2", turnedAway: false }, { roomId: "r3", turnedAway: true }]));
+    expect(watch.statuses()[0]!.rooms.map(({ id }) => id)).toEqual(["r0", "r1"]);
+
+    machine.send("/ws", { type: "rooms.waiting-to-join", personId: "me", roomIds: [] } as never);
+    await eventually(() => expect(knocks()).toEqual([{ roomId: "r2", turnedAway: true }, { roomId: "r3", turnedAway: true }]));
+    watch.dismissKnock("m1", "r2");
+    expect(knocks()).toEqual([{ roomId: "r3", turnedAway: true }]);
+
+    machine.send("/ws", { type: "people.listed", people: people("Ann Smith") } as never);
+    await eventually(() => expect(store.findMachine("m1")?.ownerName).toBe("Ann Smith"));
+    machine.send("/ws", { type: "people.listed", people: people("") } as never);
+    await eventually(() => expect(store.findMachine("m1")?.ownerName).toBeNull());
+  });
+
+  test("forgets only a room that turned this computer's owner away, never one they still wait at", () => {
+    const { watch, store, machineChanges } = watching("https://127.0.0.1:1", { asPerson: true });
+    store.setMachineKnocks("m1", [{ roomId: "r1", turnedAway: false }]);
+
+    watch.dismissKnock("m1", "r1");
+    watch.dismissKnock("m1", "r9");
+
+    expect(store.findMachine("m1")?.knocks).toEqual([{ roomId: "r1", turnedAway: false }]);
+    expect(machineChanges).toEqual([]);
+  });
+
   test("a machine that signed this computer out takes its token and its place in the tunnel, and says it is out of their rooms when it was joined as a person", () => {
     const store = new Store(":memory:");
     store.insertMachine({ id: "person", name: "Ann's Mac", origin: "https://ann.example:4600", createdAt: 1 });
@@ -383,6 +439,10 @@ describe("MachineWatch", () => {
     store.setMachineJoinedAs("person", { asPerson: true, relayKey: "relay-key" });
     ["person", "device"].forEach((machineId) => store.setMachineDeviceToken(machineId, "device-token"));
     store.setMachineRooms("person", [joined("r1", "Launch")]);
+    store.setMachineKnocks("person", [
+      { roomId: "r2", turnedAway: false },
+      { roomId: "r3", turnedAway: true },
+    ]);
     const forgotten: string[] = [];
     const tunnels = { forget: (machineId: string) => forgotten.push(machineId) };
 
@@ -394,6 +454,10 @@ describe("MachineWatch", () => {
     expect(store.findMachine("person")?.outOfRooms).toBe(true);
     expect(store.findMachine("device")?.outOfRooms).toBe(false);
     expect(store.machineRooms("person")).toEqual([]);
+    expect(store.findMachine("person")?.knocks).toEqual([
+      { roomId: "r2", turnedAway: true },
+      { roomId: "r3", turnedAway: true },
+    ]);
   });
 
   test("does not ask a machine it stopped watching whether it still lets this host in, so a host stopping never reads the store it closed", async () => {

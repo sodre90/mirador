@@ -9,10 +9,13 @@ import type { Store } from "./store.ts";
  * The machine turned this host's token away, or said its owner took this computer's person out: the token goes, and
  * this host's place in the machine's tunnel with its dial and key. One joined as a person says from then on that its
  * owner signed this computer out of their rooms, by taking the person out or revoking this computer alike, even when
- * this host was off as it happened and only learns it now.
+ * this host was off as it happened and only learns it now. A room this computer's owner still waited at the door of
+ * there never lets them in: it says they were turned away.
  */
 export function forgetSignInAt(store: Store, tunnels: Pick<MachineTunnels, "forget">, machineId: string) {
-  if (store.findMachine(machineId)?.asPerson) store.setMachineOutOfRooms(machineId, true);
+  const machine = store.findMachine(machineId);
+  if (machine?.asPerson) store.setMachineOutOfRooms(machineId, true);
+  store.setMachineKnocks(machineId, (machine?.knocks ?? []).map((knock) => ({ ...knock, turnedAway: true })));
   store.setMachineRooms(machineId, []);
   tunnels.forget(machineId);
   store.forgetMachineDeviceToken(machineId);

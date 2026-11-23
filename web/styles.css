@@ -10256,7 +10256,8 @@ button.link.more-rows {
   opacity: 0.45;
 }
 
-.room-invites-heading {
+.room-invites-heading,
+.room-joiners-heading {
   margin: 8px 0 0;
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
@@ -10764,6 +10765,65 @@ select.room-agent-choice-select:focus-visible {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+.room-invite-seats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin-top: 8px;
+}
+
+.room-invite-seats label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.room-joiners {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.room-joiners li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.room-joiner-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
+.room-joiner-role {
+  flex: none;
+}
+
+.room-joiner-device {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.room-joiners .room-person-name-clash {
+  flex-basis: 100%;
+}
+
+.rooms li.room-knock {
+  cursor: default;
+}
+
+.rooms li.room-knock .room-card-name {
+  font-style: italic;
 }
 
 .room-invite-made p {

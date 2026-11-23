@@ -73,7 +73,6 @@ import type { RoomService } from "./rooms.ts";
 import type { RoomQuestions } from "./room-questions.ts";
 import type { RoomReadingService } from "./room-reading.ts";
 import type { BroughtAgents } from "./brought-agents.ts";
-import type { RoomRole } from "../shared/rooms.ts";
 import { reachedAt, RoomInvites, type ReachedAt } from "./room-invites.ts";
 import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
@@ -433,8 +432,10 @@ export function startServer(services: HostServices) {
   /** Invite codes can't be guessed, and are not tried quickly either: so many a minute from each sender, and from all of them together. */
   const joining = new SenderAndOverallLimit(Date.now, MOST_JOINS_PER_SENDER_A_MINUTE, MOST_JOINS_A_MINUTE);
   const challengingJoins = new SenderAndOverallLimit(Date.now, MOST_JOINS_PER_SENDER_A_MINUTE, MOST_JOINS_A_MINUTE);
-  const refusedTooOften = (limit: SenderAndOverallLimit, request: Request, server: Bun.Server<SocketData>) =>
-    limit.allows(senderOfRequest(request, server)) ? null : problemResponse({ code: "join-too-often" }, 429);
+  function refusedTooOften(limit: SenderAndOverallLimit, request: Request, server: Bun.Server<SocketData>) {
+    const allowed = limit.allowsRequest(tunnelEnds.get(request), clientAddressOf(request, server), (codeKey) => roomInvites.seatsLeftFor(codeKey));
+    return allowed ? null : problemResponse({ code: "join-too-often" }, 429);
+  }
 
   const senderOfRequest = (request: Request, server: Bun.Server<SocketData>) => senderForLimits(tunnelEnds.get(request), clientAddressOf(request, server));
 
@@ -453,7 +454,8 @@ export function startServer(services: HostServices) {
 
   /**
    * Through the tunnel, the joining Mirador sends a tunnel key of its own, which the person's new device comes back in
-   * with from then on; at an address it sends none, as it gets no place in the tunnel there.
+   * with from then on; at an address it sends none, as it gets no place in the tunnel there. One whose invite asks the
+   * owner's OK first is told it waits, and the owner is told who knocks.
    */
   function joinRoom(request: Request, server: Bun.Server<SocketData>, code: string, name: unknown, person: unknown, tunnelKey: unknown) {
     const reached = roomJoinReach(request, server, code);
@@ -464,19 +466,53 @@ export function startServer(services: HostServices) {
     const refusedKey = tunnelForDevice?.refusedKey(tunnelKey);
     if (refusedKey) return new Response(refusedKey.message, { status: refusedKey.status });
     try {
-      const joined = roomInvites.redeem(code, deviceName(name), person, reached);
-      p2p?.inviteUsed(code);
+      const joined = roomInvites.redeem(code, deviceName(name), person, reached, p2p);
       const tunnel = tunnelForDevice?.register(joined.device.id, tunnelKey);
-      rooms.personCameIn(joined.roomId);
-      roomPeopleChanged(joined.roomId);
+      if (joined.waiting) tellOwnerOfKnock(joined.roomId, joined.personId);
+      else personCameIn(joined.roomId);
+      roomJoinersChanged(joined.personId);
       sendRoomInvitesToEveryPage();
       sendDevicesToEveryPage();
-      return Response.json({ deviceId: joined.device.id, token: joined.token, roomId: joined.roomId, tunnel });
+      return Response.json({ deviceId: joined.device.id, token: joined.token, roomId: joined.roomId, waiting: joined.waiting, tunnel });
     } catch (error) {
       if (error instanceof HostProblemError) return problemResponse(error.problem, 403);
       throw error;
     }
   }
+
+  function personCameIn(roomId: string) {
+    rooms.personCameIn(roomId);
+    roomPeopleChanged(roomId);
+  }
+
+  /** By the name they presented as the room would let them take it, which leaves out one that reads as Mirador's own words or as one already in the room. */
+  function tellOwnerOfKnock(roomId: string, personId: string) {
+    const room = store.findRoom(roomId);
+    const joiner = roomInvites.joiner(roomId, personId);
+    if (room && joiner) notifications.roomKnock(room, joiner.name);
+  }
+
+  /** In the room only once `room.upserted` went out, so their Mirador never takes a wait that ended for a refusal. */
+  function letIntoRoom(roomId: string, personId: string) {
+    roomInvites.letIn(roomId, personId);
+    personCameIn(roomId);
+    roomJoinersChanged(personId);
+  }
+
+  /** Told they wait no more before their devices go, if they are then in no room here. */
+  function turnAwayFromRoom(roomId: string, personId: string) {
+    roomInvites.turnAway(roomId, personId);
+    roomJoinersChanged(personId);
+    signOutPeopleInNoRoom(store.peopleInNoRoom([personId]));
+  }
+
+  /** The owner's pages list who waits to join which room, and the person's own pages learn which rooms they still wait at. */
+  function roomJoinersChanged(...personIds: string[]) {
+    hub.broadcast({ type: "room-joiners.listed", joiners: roomInvites.joiners() });
+    new Set(personIds).forEach((personId) => hub.publishWhere(({ data }) => data.personId === personId && !data.isOwner, waitingToJoin(personId)));
+  }
+
+  const waitingToJoin = (personId: string): ServerMessage => ({ type: "rooms.waiting-to-join", personId, roomIds: roomInvites.roomsWaitedForBy(personId) });
 
   /** What the Mirador joining with a room invite's code signs, to show the key it presents is its own. */
   async function challengeRoomJoin(request: Request, server: Bun.Server<SocketData>) {
@@ -487,7 +523,7 @@ export function startServer(services: HostServices) {
     if (!joinsWithItsOwnInvite(request, code)) return problemResponse({ code: "invite-code-wrong" }, 404);
     const reached = roomJoinReach(request, server, code);
     if (reached instanceof Response) return reached;
-    const challenge = roomInvites.challenge(code, reached);
+    const challenge = roomInvites.challenge(code, reached, senderOfRequest(request, server));
     return challenge === null ? problemResponse({ code: "invite-code-wrong" }, 404) : Response.json({ challenge });
   }
 
@@ -693,7 +729,7 @@ export function startServer(services: HostServices) {
    * when its address will do instead. A join through such a link that fails leaves nothing added, so the link can be
    * pasted again.
    */
-  async function addMachine(name: string, address: string): Promise<{ machineId: string | null; roomId: string | null } & (DescribedProblem | { problem: null })> {
+  async function addMachine(name: string, address: string): Promise<{ machineId: string | null; roomId: string | null; waiting: boolean } & (DescribedProblem | { problem: null })> {
     const parsed = machineAddress(address);
     if (!parsed) throw new HostProblemError({ code: "not-a-machine-address", address });
     const { joinCode, authorityFingerprint, forRoom } = parsed;
@@ -710,13 +746,13 @@ export function startServer(services: HostServices) {
     relays.start(store.findMachine(machineId)!);
     broadcastMachines();
     broadcastHiddenMachines();
-    if (!joinCode) return { machineId, roomId: null, problem: null };
+    if (!joinCode) return { machineId, roomId: null, waiting: false, problem: null };
     const leavesNothingAdded = parsed.tunnel !== null;
     return relays.join(machineId, joinCode, authorityFingerprint, tunnel, { trustsOnFirstUse }).then(
-      ({ roomId }) => ({ machineId, roomId, problem: null }),
+      ({ roomId, waiting }) => ({ machineId, roomId, waiting, problem: null }),
       (error) => {
         if (leavesNothingAdded) forgetMachineNotJoined(machineId);
-        return { machineId: leavesNothingAdded ? null : machineId, roomId: null, ...problemFieldsOf(error, errorMessage(error)) };
+        return { machineId: leavesNothingAdded ? null : machineId, roomId: null, waiting: false, ...problemFieldsOf(error, errorMessage(error)) };
       },
     );
   }
@@ -1358,12 +1394,12 @@ export function startServer(services: HostServices) {
    * An invite into the room that carries one way to this machine, the one asked for: its peer-to-peer tunnel and no
    * address, or its address and no tunnel. One that can't be made that way is withdrawn at once, and says why.
    */
-  async function inviteIntoRoom(roomId: string, role: RoomRole, connect: RoomInviteConnect) {
+  async function inviteIntoRoom({ roomId, role, connect, seats, letsIn }: Extract<ClientMessage, { type: "room.invite" }>) {
     if (!isRoomInviteConnect(connect)) throw new Error(`There is no way for room invites to connect called "${connect}".`);
     const publicOrigin = config.reachability.publicAddress?.origin ?? null;
     if (connect === "address" && !publicOrigin) throw new HostProblemError({ code: "room-invite-needs-address" });
     if (connect === "peer-to-peer" && !p2p) throw new HostProblemError({ code: "room-invite-needs-peer-to-peer" });
-    const { invite, code } = roomInvites.invite(roomId, role);
+    const { invite, code } = roomInvites.invite(roomId, role, seats, letsIn);
     sendRoomInvitesToEveryPage();
     if (connect === "address") return { invite, text: roomInviteText(code, { origin: publicOrigin!, authorityFingerprint, machineName: store.machineName() }) };
     const tunnel = await roomInvites.tunnelFor(code, invite.expiresAt, p2p);
@@ -2041,7 +2077,7 @@ export function startServer(services: HostServices) {
         if (thisMacModelsInUse(store.voiceSettings()).includes(message.model)) return reply(MODEL_IN_USE);
         return await voiceEngine.removeModel(message.model);
       case "machine.add": {
-        const added = await addMachine(message.name, message.address).catch((error) => ({ machineId: null, roomId: null, ...problemFieldsOf(error, errorMessage(error)) }));
+        const added = await addMachine(message.name, message.address).catch((error) => ({ machineId: null, roomId: null, waiting: false, ...problemFieldsOf(error, errorMessage(error)) }));
         return reply({ type: "machine.added", requestId: message.requestId, ...added });
       }
       case "machine.remove":
@@ -2058,6 +2094,8 @@ export function startServer(services: HostServices) {
       case "machine.mute-room":
         if (isRoomId(message.roomId) && typeof message.muted === "boolean") watch.muteRoomHere(message.machineId, message.roomId, message.muted);
         return;
+      case "machine.dismiss-knock":
+        return watch.dismissKnock(message.machineId, message.roomId);
       case "join-request.approve": {
         const problem = await joinRequests.approve(message.joinRequestId, message.number).then(
           (approved) => (approved ? null : described({ code: "join-number-wrong" })),
@@ -2076,12 +2114,12 @@ export function startServer(services: HostServices) {
             () => null,
             (error) => problemFieldsOf(error, errorMessage(error)),
           )
-          .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, roomId: null, ...(problem ?? { problem: null }) }));
+          .then((problem) => reply({ type: "machine.join-answered", requestId: message.requestId, roomId: null, waiting: false, ...(problem ?? { problem: null }) }));
       case "machine.join": {
         const { code, authorityFingerprint, tunnel } = inviteIn(message.invite);
         const joined = await relays.join(message.machineId, code, authorityFingerprint, tunnel, { trustsOnFirstUse: tunnel === null }).then(
-          ({ roomId }) => ({ roomId, problem: null }),
-          (error) => ({ roomId: null, ...problemFieldsOf(error, errorMessage(error)) }),
+          ({ roomId, waiting }) => ({ roomId, waiting, problem: null }),
+          (error) => ({ roomId: null, waiting: false, ...problemFieldsOf(error, errorMessage(error)) }),
         );
         return reply({ type: "machine.join-answered", requestId: message.requestId, ...joined });
       }
@@ -2102,12 +2140,13 @@ export function startServer(services: HostServices) {
         return rooms.setPermissions(message.roomId, message.permissions);
       case "room.set-person-role":
         rooms.setPersonRole(message.roomId, message.personId, message.role);
-        return roomPeopleChanged(message.roomId);
+        roomPeopleChanged(message.roomId);
+        return roomJoinersChanged(message.personId);
       case "room.remove-person":
         rooms.removePerson(message.roomId, message.personId);
         return roomPeopleChanged(message.roomId);
       case "room.invite":
-        return void inviteIntoRoom(message.roomId, message.role, message.connect).then(
+        return void inviteIntoRoom(message).then(
           ({ invite, text }) => reply({ type: "room.invited", requestId: message.requestId, invite, text, problem: null }),
           (error) => reply({ type: "room.invited", requestId: message.requestId, invite: null, text: null, ...problemFieldsOf(error, errorMessage(error)) }),
         );
@@ -2116,6 +2155,10 @@ export function startServer(services: HostServices) {
         if (withdrawn) p2p?.inviteWithdrawn(withdrawn);
         return sendRoomInvitesToEveryPage();
       }
+      case "room.let-in":
+        return letIntoRoom(message.roomId, message.personId);
+      case "room.turn-away":
+        return turnAwayFromRoom(message.roomId, message.personId);
       case "room.approve":
         return rooms.approve(message.conversationId, message.permissionId, message.answer, socket.data.personId);
       case "room.answer-task":
@@ -2139,11 +2182,15 @@ export function startServer(services: HostServices) {
         return rooms.setAgentWholeHostEnvironment(message.roomId, message.profileId, message.given);
       case "room.set-agents-read-guests":
         return rooms.setAgentsReadGuests(message.roomId, message.read);
-      case "room.delete":
+      case "room.delete": {
+        const waitedAtItsDoor = roomInvites.joiners().flatMap(({ roomId, personId }) => (roomId === message.roomId ? [personId] : []));
         roomInvites.withdrawAllInto(message.roomId).forEach((withdrawn) => p2p?.inviteWithdrawn(withdrawn));
         rooms.delete(message.roomId);
         roomPresence.roomGone(message.roomId);
-        return sendRoomInvitesToEveryPage();
+        sendRoomInvitesToEveryPage();
+        roomJoinersChanged(...waitedAtItsDoor);
+        return signOutPeopleInNoRoom(store.peopleInNoRoom(waitedAtItsDoor));
+      }
       case "room.subscribe": {
         const timeline = rooms.timeline(message.roomId);
         socket.data.roomSubscriptions.add(message.roomId);
@@ -2261,6 +2308,7 @@ export function startServer(services: HostServices) {
       heldChanges: sandboxes.heldChanges(),
       roomsHoldingTooMany: sandboxes.roomsHoldingTooMany(),
       roomInvites: roomInvites.waiting(),
+      roomJoiners: roomInvites.joiners(),
       broughtAgents: broughtAgents.list().agents,
       broughtTasks: broughtAgents.list().tasks,
       profiles: store.listProfiles().map((profile) => profileFor(socket, profile, pluginSettings.secretSettings())),
@@ -2316,6 +2364,7 @@ export function startServer(services: HostServices) {
     hub.send(socket, { type: "join-requests.listed", joinRequests: joinRequests.waiting() });
     hub.send(socket, { type: "rooms.people-here", roomIds: roomPresence.roomsWithPeopleHere() });
     hub.send(socket, { type: "rooms.reading", personId: socket.data.personId, readings: roomReading.readingsOf(socket.data.personId) });
+    if (!socket.data.isOwner) hub.send(socket, waitingToJoin(socket.data.personId));
     hub.send(socket, voiceSettingsFor(socket));
     hub.send(socket, { type: "voice.engine", engine: voiceEngine.status() });
   }

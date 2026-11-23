@@ -22,7 +22,7 @@ const words = t.shell.machines;
  * once, while the machines of one's own stay listed here, to open or colour.
  * A link that reaches the machine peer to peer names the machine, so its name may stay empty.
  */
-function AddMachine({ machines, onJoined }: { machines: Machine[]; onJoined: (machineId: string, roomId: string | null) => void }) {
+function AddMachine({ machines, onJoined }: { machines: Machine[]; onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [adding, setAdding] = useState(false);
@@ -43,7 +43,7 @@ function AddMachine({ machines, onJoined }: { machines: Machine[]; onJoined: (ma
         setName("");
         setAddress("");
       }
-      if (added.machineId && !added.problem && parsed.forRoom) onJoined(added.machineId, added.roomId);
+      if (added.machineId && !added.problem && parsed.forRoom) onJoined(added.machineId, added.roomId, added.waiting);
     } catch {
       // Disconnected; the page says so
     } finally {
@@ -152,7 +152,7 @@ export function MachinesDialog({
   machines: Machine[];
   hidden: MachineToJoin[];
   onOpen: (machine: Machine) => void;
-  onJoined: (machineId: string, roomId: string | null) => void;
+  onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void;
   onClose: () => void;
 }) {
   useEffect(() => {

@@ -1,7 +1,7 @@
 import type { PermissionPreset } from "../../../shared/room-permissions.ts";
 import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
-import type { RoomAuthorRole, RoomRole } from "../../../shared/rooms.ts";
+import type { RoomAuthorRole, RoomInviteLetsIn, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
 import type { SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
@@ -218,11 +218,32 @@ export const rooms = {
   nameless: "Someone without a name",
   inNoRoom: "You are in no room yet. When the owner of this machine adds you to one, it shows here.",
   noRoomOpen: "Pick a room on the left.",
-  inviteWorksUntil: (time: string) => `Works once, until ${time}.`,
+  inviteWorksUntil: (seats: number, time: string) => (seats === 1 ? `Works once, until ${time}.` : `Works for up to ${seats} people, until ${time}.`),
   waitingInvites: "Waiting invites",
-  waitingInvite: (role: string, time: string) => `${role}, until ${time}`,
   withdrawInvite: "Withdraw",
-  withdrawInviteOf: (role: string, time: string) => `Withdraw the invite (${role}, until ${time})`,
+  withdrawInviteOf: (role: string, expires: string) => `Withdraw the invite (${role}, ${expires})`,
+  howMany: "How many people",
+  seatChoices: (seats: number) => (seats === 1 ? "1 person" : `Up to ${seats}`),
+  letThemIn: "Let them in",
+  letsInChoices: { "after-ok": "After my OK", "at-once": "At once" } satisfies Record<RoomInviteLetsIn, string>,
+  seatsTaken: (taken: number, seats: number) => `${taken} of ${seats} joined`,
+  expiresIn: (relative: string) => `expires ${relative}`,
+  waitingToJoin: "Waiting to join",
+  letIn: "Let in",
+  letInWho: (name: string) => `Let ${name} in`,
+  turnAway: "Turn away",
+  turnAwayWho: (name: string) => `Turn ${name} away`,
+  turnAwayArmed: "Turn away for good?",
+  turnAwayArmedHint: "Click again. This invite won't let them in again.",
+  cameFromDevice: (device: string) => `from “${device}”`,
+  gaveNameInRoom: (name: string) => `Gave the name “${name}”, which reads as a name already in the room.`,
+  waitingCount: (count: number) => `${count} waiting`,
+  waitingToBeLetIn: (owner: string) => `Waiting for ${owner} to let you in`,
+  waitingToBeLetInNoName: "Waiting to be let in",
+  turnedAwayBy: (owner: string) => `${owner} turned you away`,
+  turnedAwayNoName: "You were turned away",
+  dismissKnock: "Dismiss",
+  waitingHere: "You are waiting for the owner of this machine to let you in.",
   nameClash: (name: string) => `Joined as “${name}”, which reads as a name already in the room, so they go without one until they choose another.`,
   machineOf: (owner: string) => `This is the Mirador of ${owner}.`,
   machineOfNamelessOwner: "This is another person's Mirador.",

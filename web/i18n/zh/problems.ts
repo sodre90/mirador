@@ -133,6 +133,8 @@ export const problems: Messages["problems"] = {
     "peer-to-peer-unavailable-here": "这台电脑无法使用点对点连接，而这个邀请需要它：mirador-p2p 无法下载，或者没有适用于此系统的版本。",
     "room-invite-loopback-from-afar": "只有这台电脑本身才能在 127.0.0.1 或 localhost 上用房间邀请加入。",
     "join-too-often": "加入这台机器的尝试太多了。请一分钟后再试。",
+    "room-invite-used-already": "你已经用过这个邀请。请向发送者索取一个新的。",
+    "room-joiner-gone": "此人已不再等待加入这个房间。",
     "room-join-unproven": "加入房间需要用所出示的密钥，对这台机器为该邀请发出的最新挑战、所请求的地址以及信任它所用的证书颁发机构进行签名。请重新加入。",
     "voice-not-set-up": "这台 Mac 上还没有设置语音。",
     "voice-not-set-up-here": "这台 Mac 上还没有设置语音。可以在设置 → 语音中设置。",

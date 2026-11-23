@@ -15,7 +15,7 @@ import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { inviteIn, machineAddress } from "../shared/machines.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
-import { agentStandIn, type Room, type RoomRole, type RoomThread } from "../shared/rooms.ts";
+import { agentStandIn, type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole, type RoomThread } from "../shared/rooms.ts";
 
 /**
  * A real host, with the owner and three other people of the machine, each signed in on a device of their own: Mia and
@@ -212,6 +212,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "machine.ask-to-join": true,
   "machine.room-opened": true,
   "machine.mute-room": true,
+  "machine.dismiss-knock": true,
   "search": true,
   "room.create": true,
   "room.rename": true,
@@ -220,6 +221,8 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.set-permissions": true,
   "room.set-workspace": true,
   "room.set-person-role": true,
+  "room.let-in": true,
+  "room.turn-away": true,
   "room.remove-person": true,
   "room.invite": true,
   "room.withdraw-invite": true,
@@ -251,7 +254,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;
@@ -869,10 +872,10 @@ describe("a person a room invite lets in, from their own Mirador", () => {
 
   const refusal = async (response: Response) => ({ status: response.status, problem: (JSON.parse(decodeURIComponent(response.headers.get(PROBLEM_HEADER) ?? "null")) as { code: string } | null)?.code ?? null });
 
-  async function ownerInvites(room: Room, role: RoomRole) {
+  async function ownerInvites(room: Room, role: RoomRole, seats: RoomInviteSeats = 1, letsIn: RoomInviteLetsIn = "at-once") {
     const mark = owner.mark;
     const requestId = crypto.randomUUID();
-    owner.send({ type: "room.invite", requestId, roomId: room.id, role, connect: "address" });
+    owner.send({ type: "room.invite", requestId, roomId: room.id, role, connect: "address", seats, letsIn });
     const { invite, text } = await owner.waitFor(isType("room.invited", (invited) => invited.requestId === requestId), mark);
     return { invite: invite!, text: text!, code: inviteIn(text!).code };
   }
@@ -937,7 +940,7 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     owner.send({ type: "room.withdraw-invite", inviteId: invite.id });
 
     const mark = owner.mark;
-    owner.send({ type: "room.invite", requestId: "p2p", roomId: roomD.id, role: "guest", connect: "peer-to-peer" });
+    owner.send({ type: "room.invite", requestId: "p2p", roomId: roomD.id, role: "guest", connect: "peer-to-peer", seats: 1, letsIn: "at-once" });
     const refused = await owner.waitFor(isType("room.invited", ({ requestId }) => requestId === "p2p"), mark);
     expect(refused).toMatchObject({ invite: null, text: null, problemAbout: { code: "room-invite-needs-peer-to-peer" } });
 
@@ -1176,6 +1179,172 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     back.page.close();
     expect(back.snapshot.you).toBe(dora.personId);
     expect(back.snapshot.rooms.map(({ id }) => id)).toEqual([roomD.id]);
+  });
+
+  describe("with one invite for several people, which waits for the owner's OK", () => {
+    let studio: Room;
+    let studioInvite: { id: string };
+    let studioCode = "";
+    const ivyKey = newKey();
+    const joKey = newKey();
+    let ivy: { personId: string; token: string; page: Page };
+    let jo: { personId: string; token: string; page: Page };
+    const ownersToken = () => readFileSync(join(dataDir, "browser-token"), "utf8").trim();
+    const waitingAt = (roomIds: string[]) => isType("rooms.waiting-to-join", (waiting) => JSON.stringify(waiting.roomIds) === JSON.stringify(roomIds));
+
+    async function knocks(code: string, room: Room, key: Key, name: string) {
+      const response = await joining(code, key, { name });
+      expect(response.status).toBe(200);
+      const answer = (await response.json()) as { token: string; roomId: string; waiting: boolean };
+      expect(answer).toMatchObject({ roomId: room.id, waiting: true });
+      const page = await Page.open(port, answer.token);
+      const snapshot = await page.waitFor(isType("snapshot"));
+      await page.waitFor(waitingAt([room.id]));
+      return { personId: snapshot.you, token: answer.token, page };
+    }
+
+    beforeAll(async () => {
+      studio = await ownerCreatesRoom("Studio");
+      const invited = await ownerInvites(studio, "member", 5, "after-ok");
+      expect(invited.invite).toMatchObject({ roomId: studio.id, role: "member", seats: 5, letsIn: "after-ok", taken: 0 });
+      [studioInvite, studioCode] = [invited.invite, invited.code];
+    });
+
+    afterAll(() => [ivy?.page, jo?.page].forEach((page) => page?.close()));
+
+    test("takes each person to the room's door, and shows the owner who waits there: by the name they presented, in the invite's role, on which device", async () => {
+      const mark = owner.mark;
+      ivy = await knocks(studioCode, studio, ivyKey, "Ivy");
+      jo = await knocks(studioCode, studio, joKey, "Jo");
+      expect([ivy.page.snapshot.rooms, jo.page.snapshot.rooms]).toEqual([[], []]);
+      expect(ivy.page.snapshot.people.map(({ id }) => id).toSorted()).toEqual([ivy.page.snapshot.ownerId, ivy.personId].toSorted());
+      const { joiners } = await owner.waitFor(isType("room-joiners.listed", ({ joiners }) => joiners.length === 2), mark);
+      expect(joiners).toEqual([
+        { roomId: studio.id, personId: ivy.personId, role: "member", name: "Ivy", deviceName: "Dora's Mirador", since: expect.any(Number) },
+        { roomId: studio.id, personId: jo.personId, role: "member", name: "Jo", deviceName: "Dora's Mirador", since: expect.any(Number) },
+      ]);
+      await owner.waitFor(isType("room-invites.listed", ({ invites }) => invites.some(({ id, taken }) => id === studioInvite.id && taken === 2)), mark);
+      expect(owner.received.slice(mark).some(isType("room.upserted", ({ room }) => room.id === studio.id && room.people.length > 0))).toBe(false);
+    });
+
+    test("gives someone at the door nothing of the room while the owner works in it, and takes nothing of theirs into it, but that they wait", async () => {
+      const [ivyMark, ownerMark] = [ivy.page.mark, owner.mark];
+      owner.send({ type: "room.subscribe", roomId: studio.id });
+      await ownerWritesIn(studio, "Studio secret");
+      owner.send({ type: "room.rename", roomId: studio.id, name: "Studio plans" });
+      owner.send({ type: "room.set-person-role", roomId: studio.id, personId: mia.id, role: "member" });
+      await owner.waitFor(isType("room.upserted", ({ room }) => room.id === studio.id && room.name === "Studio plans" && room.people.length === 1), ownerMark);
+      const naming = { requestId: "probe", roomId: studio.id, text: "Ivy slips in", tags: [], threadId: null, writing: true, itemId: "item", question: 0, option: 0, answers: [], muted: true, name: "Probe", harness: "opencode", agentId: "agent", taskId: "task", ended: null, conversationId: null, attentive: true, visible: true };
+      PERSON_MESSAGE_TYPES.filter((type) => type !== "person.set-own-profile").forEach((type) => ivy.page.send({ type, ...naming }));
+      await ivy.page.waitForError("room-gone", ivyMark);
+
+      const came = await ivy.page.settledSince(ivyMark);
+      expect([...new Set(came.map(({ type }) => type))].filter((type) => !["error", "pong", "people.listed"].includes(type))).toEqual([]);
+      [studio.id, "Studio", mia.id].forEach((secret) => expect(JSON.stringify(came)).not.toContain(secret));
+      const fresh = await Page.open(port, ownersToken());
+      await fresh.waitFor(isType("snapshot"));
+      const subscribed = fresh.mark;
+      fresh.send({ type: "room.subscribe", roomId: studio.id });
+      const timeline = await fresh.waitFor(isType("room.timeline", ({ roomId }) => roomId === studio.id), subscribed);
+      fresh.close();
+      expect(timeline.messages.map(({ text }) => text)).toEqual(["Studio secret"]);
+      const aboutTheDoor = new Set<ServerMessage["type"]>(["room-joiners.listed", "people.listed", "devices.listed", "room-invites.listed"]);
+      expect(JSON.stringify(owner.received.slice(ownerMark).filter(({ type }) => !aboutTheDoor.has(type)))).not.toContain(ivy.personId);
+    });
+
+    test("takes no second seat for a key that came already, which it refuses, and counts everyone who came", async () => {
+      expect(await refusal(await joining(studioCode, ivyKey, { name: "Ivy again" }))).toEqual({ status: 403, problem: "room-invite-used-already" });
+      const fresh = await Page.open(port, ownersToken());
+      const { roomInvites, roomJoiners } = await fresh.waitFor(isType("snapshot"));
+      fresh.close();
+      expect(roomInvites.find(({ id }) => id === studioInvite.id)?.taken).toBe(2);
+      expect(roomJoiners.map(({ name }) => name)).toEqual(["Ivy", "Jo"]);
+    });
+
+    test("lets one in on the owner's word: their page is shown the room, in the invite's role, before it hears they wait no more", async () => {
+      const [ivyMark, ownerMark] = [ivy.page.mark, owner.mark];
+      owner.send({ type: "room.let-in", roomId: studio.id, personId: ivy.personId });
+      await ivy.page.waitFor(waitingAt([]), ivyMark);
+      const came = ivy.page.received.slice(ivyMark);
+      const shown = came.findIndex(isType("room.upserted", ({ room }) => room.id === studio.id));
+      expect(shown).toBeGreaterThanOrEqual(0);
+      expect(shown).toBeLessThan(came.findIndex(waitingAt([])));
+      const { room } = came[shown] as Extract<ServerMessage, { type: "room.upserted" }>;
+      expect(room.people).toContainEqual({ personId: ivy.personId, role: "member" });
+      await owner.waitFor(isType("room-joiners.listed", ({ joiners }) => joiners.map(({ personId }) => personId).join() === jo.personId), ownerMark);
+
+      ivy.page.send({ type: "room.write", roomId: studio.id, text: "Ivy is in", tags: [], threadId: null });
+      await owner.waitFor(roomMessageSaying("Ivy is in"), ownerMark);
+      owner.send({ type: "room.let-in", roomId: studio.id, personId: ivy.personId });
+      await owner.waitForError("room-joiner-gone", ownerMark);
+    });
+
+    test("turns one away on the owner's word: they hear they wait no more, then lose every device and socket here at once, and the link takes them nowhere again", async () => {
+      const [joMark, ownerMark] = [jo.page.mark, owner.mark];
+      owner.send({ type: "room.turn-away", roomId: studio.id, personId: jo.personId });
+      await jo.page.waitFor(waitingAt([]), joMark);
+      expect(await jo.page.closed).toBe(OUT_OF_ROOMS_CLOSE_CODE);
+      expect(jo.page.received.slice(joMark).some(isType("room.upserted"))).toBe(false);
+      await owner.waitFor(isType("room-joiners.listed", ({ joiners }) => joiners.length === 0), ownerMark);
+      await owner.waitFor(isType("devices.listed", ({ devices }) => !devices.some(({ personId }) => personId === jo.personId)), ownerMark);
+      await expect(Page.open(port, jo.token)).rejects.toThrow();
+
+      expect(await refusal(await joining(studioCode, joKey, { name: "Jo" }))).toEqual({ status: 403, problem: "room-invite-used-already" });
+      owner.send({ type: "room.turn-away", roomId: studio.id, personId: jo.personId });
+      await owner.waitForError("room-joiner-gone", ownerMark);
+    });
+
+    test("lets nobody new in once its seats are taken, and its link ends with the last of them", async () => {
+      const mark = owner.mark;
+      for (const name of ["Kai", "Lu", "Max"]) (await knocks(studioCode, studio, newKey(), name)).page.close();
+      await owner.waitFor(isType("room-invites.listed", ({ invites }) => !invites.some(({ id }) => id === studioInvite.id)), mark);
+      expect(await challengeFor(studioCode)).toBeNull();
+      expect(await refusal(await post("/join", { code: studioCode, name: "Late", person: presented(newKey(), studioCode, "A".repeat(43)) }))).toEqual({ status: 403, problem: "invite-code-wrong" });
+    });
+
+    test("signs out someone who waited at the door of a room the owner deletes, when they are in no other room here", async () => {
+      const attic = await ownerCreatesRoom("Attic");
+      const { code } = await ownerInvites(attic, "guest", 5, "after-ok");
+      const kim = await knocks(code, attic, newKey(), "Kim");
+      const mark = kim.page.mark;
+      owner.send({ type: "room.delete", roomId: attic.id });
+      await kim.page.waitFor(waitingAt([]), mark);
+      expect(await kim.page.closed).toBe(OUT_OF_ROOMS_CLOSE_CODE);
+    });
+
+    test("takes each person straight in when it lets several in at once", async () => {
+      const { code } = await ownerInvites(studio, "guest", 5, "at-once");
+      for (const name of ["Ned", "Oda"]) {
+        const response = await joining(code, newKey(), { name });
+        expect(await response.clone().json()).toMatchObject({ roomId: studio.id, waiting: false });
+        const { page, snapshot } = await joined(response);
+        page.close();
+        expect(snapshot.rooms.map(({ id }) => id)).toEqual([studio.id]);
+        expect(snapshot.rooms[0]!.people).toContainEqual({ personId: snapshot.you, role: "guest" });
+      }
+    });
+
+    test("shows the owner someone at the door whose name reads as one in the room without it, marked, in the door list and the alert alike, and the person learns nothing of it", async () => {
+      const { code } = await ownerInvites(studio, "guest", 5, "after-ok");
+      const mark = owner.mark;
+      const answers: Record<string, unknown>[] = [];
+      for (const name of ["IVY", "Pia"]) answers.push((await (await joining(code, newKey(), { name })).json()) as Record<string, unknown>);
+      expect(Object.keys(answers[0]!).toSorted()).toEqual(Object.keys(answers[1]!).toSorted());
+      const pages = await Promise.all(answers.map(({ token }) => Page.open(port, token as string)));
+      const snapshots = await Promise.all(pages.map((page) => page.waitFor(isType("snapshot"))));
+      pages.forEach((page) => page.close());
+      expect(snapshots.map(({ people, you }) => people.find(({ id }) => id === you)?.name)).toEqual(["", ""]);
+
+      const atTheDoor = snapshots.map(({ you }) => you);
+      const listed = await owner.waitFor(isType("room-joiners.listed", ({ joiners }) => atTheDoor.every((personId) => joiners.some((joiner) => joiner.personId === personId))), mark);
+      const shown = atTheDoor.map((personId) => listed.joiners.find((joiner) => joiner.personId === personId)!);
+      expect(shown.map(({ name, nameClash }) => [name, nameClash ?? null])).toEqual([
+        ["", "IVY"],
+        ["Pia", null],
+      ]);
+      const alerts = owner.received.slice(mark).filter(isType("system-notification")).map(({ notification }) => notification.body);
+      expect(alerts).toEqual(["Someone waits for you to let them in", "Someone waits for you to let them in, giving the name “Pia”"]);
+    });
   });
 });
 

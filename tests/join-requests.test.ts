@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DeviceService } from "../host/devices.ts";
 import { JoinRequestService, SenderAndOverallLimit, SenderLimit, senderForLimits } from "../host/join-requests.ts";
+import type { TunnelEnd } from "../host/p2p/service.ts";
 import { Store } from "../host/store.ts";
+import type { ClientAddress } from "../shared/model.ts";
 import { commitmentTo, matchingNumber, newNonce, spacedNumber } from "../shared/join-requests.ts";
 
 const machineAuthority = "m".repeat(43);
@@ -197,6 +199,19 @@ test("joins are limited for each sender and for all senders together, and one se
   expect(["b", "c", "d"].map((sender) => limit.allows(sender))).toEqual([true, false, false]);
   clock.now += 60_001;
   expect(["d", "e", "f", "g"].map((sender) => limit.allows(sender))).toEqual([true, true, true, false]);
+});
+
+test("joins through an invite's end of the tunnel, where everyone with its link is one sender, get so many tries for each seat it has left, and none of what all senders share", () => {
+  const clock = { now: 0 };
+  const limit = new SenderAndOverallLimit(() => clock.now, 2, 3);
+  const throughTunnel = { fromAddress: "the peer-to-peer tunnel", tailscaleUser: null };
+  const seatsLeft = (inviteKey: string) => (inviteKey === "five-seats" ? 5 : 1);
+  const tries = (end: TunnelEnd | undefined, address: ClientAddress, count: number) => Array.from({ length: count }, () => limit.allowsRequest(end, address, seatsLeft));
+  expect(tries({ inviteKey: "five-seats" }, throughTunnel, 11)).toEqual([...Array(10).fill(true), false]);
+  expect(tries({ inviteKey: "one-seat" }, throughTunnel, 3)).toEqual([true, true, false]);
+  const fromAddresses = ["192.0.2.1", "192.0.2.2", "192.0.2.3", "192.0.2.4"].map((fromAddress) => limit.allowsRequest(undefined, { fromAddress, tailscaleUser: null }, seatsLeft));
+  expect(fromAddresses).toEqual([true, true, true, false]);
+  expect(tries({ deviceId: "laptop" }, throughTunnel, 1)).toEqual([false]);
 });
 
 test("each end of the tunnel asks to join as a sender of its own, though every request through the tunnel comes from the same place", () => {

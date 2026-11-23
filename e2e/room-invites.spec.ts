@@ -76,7 +76,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     expect(machineAddress(text)).toMatchObject({ origin: owners.origin, forRoom: true, tunnel: null, name: "Ann's machine" });
     await dialog.getByRole("button", { name: "Done" }).click();
     const settings = await openRoomSettings(page, "Garden");
-    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member, until /]);
+    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · expires in 1[45] minutes/]);
     await settings.getByRole("button", { name: "Done" }).click();
     return text;
   });
@@ -409,9 +409,9 @@ test("an invite leaves the owner's list of waiting invites as it expires", async
   await inviteIntoRoom(page, "Garden");
   const dialog = await openRoomSettings(page, "Garden");
   const waiting = dialog.getByRole("list", { name: "Waiting invites" }).getByRole("listitem");
-  await expect(waiting).toHaveText([/^Member, until /]);
+  await expect(waiting).toHaveText([/^Member · expires in 1[45] minutes/]);
   await page.clock.fastForward("14:00");
-  await expect(waiting).toHaveText([/^Member, until /]);
+  await expect(waiting).toHaveText([/^Member · expires in 1 minute(?!s)/]);
   await page.clock.fastForward("02:00");
   await expect(waiting).toHaveCount(0);
 });

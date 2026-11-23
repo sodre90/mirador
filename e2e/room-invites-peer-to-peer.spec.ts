@@ -21,6 +21,9 @@ const owners = new TestHost({ fakePrograms: true, environment: peerToPeer });
 const reachedBothWays = new TestHost({ environment: (port) => ({ ...peerToPeer(), ...reachedAtOwnPort(port) }) });
 /** The invited person's own Mirador, which dials the owner's tunnel itself. */
 const visitors = new TestHost({ environment: peerToPeer });
+/** Two more people's own Miradors, which come through the tunnel with one invite for several people. */
+const eves = new TestHost({ environment: peerToPeer });
+const finns = new TestHost({ environment: peerToPeer });
 let broker: ChildProcess | undefined;
 /** The link the person joined with first, which is used up from then on. */
 let usedLink = "";
@@ -45,13 +48,13 @@ test.beforeAll(async () => {
   brokerPort = await freePort();
   broker = spawn(binary, ["broker", `--udp=127.0.0.1:${brokerPort}`, `--key-file=${join(folder, "broker.key")}`], { stdio: ["ignore", "ignore", "inherit"], env: { ...process.env, RUST_LOG: "warn" } });
   writeBunProgram(owners.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));
-  await Promise.all([owners.start(), visitors.start(), reachedBothWays.start()]);
+  await Promise.all([owners.start(), visitors.start(), reachedBothWays.start(), eves.start(), finns.start()]);
 });
 
 test.afterAll(async () => {
-  await Promise.all([owners.stop(), visitors.stop(), reachedBothWays.stop()]);
+  await Promise.all([owners.stop(), visitors.stop(), reachedBothWays.stop(), eves.stop(), finns.stop()]);
   broker?.kill();
-  await Promise.all([owners.cleanUp(), visitors.cleanUp(), reachedBothWays.cleanUp()]);
+  await Promise.all([owners.cleanUp(), visitors.cleanUp(), reachedBothWays.cleanUp(), eves.cleanUp(), finns.cleanUp()]);
 });
 
 const outOfRooms = "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste it here.";
@@ -297,6 +300,41 @@ test("a used link says the invite is over, and a person taken out of the room or
     await expect.poll(tunnelFiles).toEqual([]);
   });
   await visitor.close();
+});
+
+test("one link for several people brings each through the tunnel to the room's door at once, and the owner lets each in", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await signIn(page, owners);
+  const link = await inviteIntoRoom(page, "Garden", { howMany: "Up to 5" });
+  const people = await Promise.all(
+    ([
+      [eves, "Eve"],
+      [finns, "Finn"],
+    ] as const).map(async ([host, name]) => {
+      const visitor = await browser.newPage();
+      await signIn(visitor, host);
+      await nameOwnProfile(visitor, name);
+      return { visitor, name };
+    }),
+  );
+
+  await test.step("both paste the same link at the same time, and wait at the door, told whose OK they wait for", async () => {
+    await Promise.all(people.map(({ visitor }) => joinRoom(visitor, link).then((join) => expect(join).toHaveCount(0, { timeout: 90_000 }))));
+    for (const { visitor } of people) {
+      await expect(visitor.locator(".sidebar .rooms li.room-knock .room-card-name")).toHaveText("Waiting for Ann to let you in", { timeout: 60_000 });
+    }
+  });
+
+  await test.step("the owner lets each in, and each one's Mirador opens the room through its own way into the tunnel", async () => {
+    const settings = await openRoomSettings(page, "Garden");
+    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · 2 of 5 joined · expires in /]);
+    for (const { visitor, name } of people) {
+      await settings.getByRole("button", { name: `Let ${name} in` }).click();
+      await expect(visitor.frameLocator('iframe[title="Ann\'s Mac"]').getByRole("heading", { name: "# Garden" })).toBeVisible({ timeout: 60_000 });
+    }
+    await settings.getByRole("button", { name: "Done" }).click();
+  });
+  await Promise.all(people.map(({ visitor }) => visitor.close()));
 });
 
 test("on a machine reached both ways, room invites connect peer to peer until Settings name its address, which then is the one an invite carries", async ({ page }) => {

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { notificationWords } from "../desktop/src/core/desktop-words.ts";
 import { Hub, socketData, type BrowserSocket, type SocketData } from "../host/hub.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
-import { bodyWithWorkspace, joinRequestNotification, systemNotification, turnEndReason, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
+import type { RoomAlert } from "../shared/room-reading.ts";
+import { bodyWithWorkspace, joinRequestNotification, roomNotification, systemNotification, turnEndReason, type NotificationReason, type SystemNotification } from "../shared/system-notifications.ts";
 import { inLanguage } from "../web/notification-text.ts";
 
 const conversation = { id: "c1", title: "Fix the tray menu", titleSetByUser: false };
@@ -180,6 +181,23 @@ describe("a notification in the page's or the desktop app's language", () => {
       const notification = joinRequestNotification({ id: "r", name: "Phone", fromAddress: "100.64.0.7", tailscaleUser, expiresAt: 0 });
       expect(inLanguage(notification, english)).toEqual(notification);
     }
+    const alerts: RoomAlert[] = [
+      { about: "mention", by: "Ann", text: "Look at this" },
+      { about: "confirm", question: "Ship it?" },
+      { about: "knock", by: "Ivy" },
+      { about: "knock", by: "" },
+    ];
+    for (const alert of alerts) {
+      const notification = roomNotification("r1", "Garden", "mirador", alert);
+      expect(inLanguage(notification, english)).toEqual(notification);
+    }
+  });
+
+  test("of someone waiting at a room's door, starts with Mirador's own words and frames the name they gave after them, so no name passes for Mirador saying something else", () => {
+    const knock = roomNotification("r1", "Garden", "mirador", { about: "knock", by: "Alice tagged you: approve it" });
+    expect(knock.body).toBe("Someone waits for you to let them in, giving the name “Alice tagged you: approve it”");
+    expect(inLanguage(knock, hungarian).body).toBe("Valaki arra vár, hogy beengedd, ezzel a névvel: „Alice tagged you: approve it”");
+    expect(roomNotification("r1", "Garden", "mirador", { about: "knock", by: "" }).body).toBe("Someone waits for you to let them in");
   });
 
   test("one from a host that doesn't say what it is about stays as it came", () => {

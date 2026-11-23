@@ -1,8 +1,8 @@
-import { joinedRoomsIn, withJoinedRoom, withoutJoinedRoom, withReadings } from "../shared/machines.ts";
+import { isRoomId, joinedRoomsIn, withJoinedRoom, withoutJoinedRoom, withReadings } from "../shared/machines.ts";
 import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import { alertText, ROOM_ALERT_TEXT_MOST, type RoomAlert } from "../shared/room-reading.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
-import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, WaitingFor } from "../shared/model.ts";
+import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, RoomKnock, WaitingFor } from "../shared/model.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { roomNotification, type SystemNotification } from "../shared/system-notifications.ts";
 import { SenderLimit } from "./join-requests.ts";
@@ -147,6 +147,8 @@ interface WatchedMachine {
   rooms: JoinedRoom[];
   roomsSavedAt: number;
   roomsToSave?: ReturnType<typeof setTimeout>;
+  /** Who owns the machine, as its snapshot said, so a later list of people names them again. */
+  ownerId: string | null;
 }
 
 const waitingOf = (conversations: Conversation[]) =>
@@ -174,8 +176,30 @@ export function roomAlertIn(said: unknown): RoomAlert | null {
   const { about, by, text, question } = said as Record<string, unknown>;
   if (about === "confirm" && typeof question === "string") return { about, question: alertText(question.slice(0, READ_OF_WHAT_IS_SAID)) };
   if (about !== "mention" || typeof by !== "string" || typeof text !== "string") return null;
-  const name = personName(shownAsWritten(by.slice(0, LONGEST_PERSON_NAME * 4)));
+  const name = cleanedPersonName(by);
   return name ? { about, by: name, text: alertText(text.slice(0, READ_OF_WHAT_IS_SAID)) } : null;
+}
+
+/** A name another machine gives, made safe to show as `personName` shows one; null for anything else, or none. */
+const cleanedPersonName = (name: unknown) => (typeof name === "string" ? personName(shownAsWritten(name.slice(0, LONGEST_PERSON_NAME * 4))) || null : null);
+
+/** The name of the machine's owner among the people it lists, cleaned. */
+function ownerNameIn(people: unknown, ownerId: string | null): string | null {
+  if (!Array.isArray(people) || ownerId === null) return null;
+  const owner: unknown = people.find((person: unknown) => typeof person === "object" && person !== null && (person as { id?: unknown }).id === ownerId);
+  return cleanedPersonName((owner as { name?: unknown } | undefined)?.name);
+}
+
+/**
+ * Where this computer's owner stands at the doors of the machine's rooms once it says which they still wait at: a room
+ * they no longer wait at is one they were let into, when the machine lists it for them, or turned away from otherwise.
+ */
+function knocksAfter(knocks: RoomKnock[], waitingAt: unknown, rooms: JoinedRoom[]): RoomKnock[] {
+  const stillWaitingAt = new Set(Array.isArray(waitingAt) ? waitingAt.filter(isRoomId) : []);
+  const isIn = (roomId: string) => rooms.some(({ id }) => id === roomId);
+  return knocks
+    .filter(({ roomId }) => !isIn(roomId))
+    .map((knock) => (knock.turnedAway || stillWaitingAt.has(knock.roomId) ? knock : { ...knock, turnedAway: true }));
 }
 
 /** The rooms someone else's machine lists for this computer's owner after its message, each as `joinedRoomIn` cleans it. */
@@ -203,7 +227,9 @@ function roomsAfter(rooms: JoinedRoom[], message: ServerMessage): JoinedRoom[] {
  * names and counts of the rooms it lists for the person, cleaned, to show with the machine, at most once a second, and
  * that one of them calls the person, which this host words itself, from its own record of the room, and passes on as its
  * own while the room is muted neither there nor here, once until the room is next opened here and a few times a minute
- * at most; when its owner takes the person out of the last of its rooms, this host is signed out at once.
+ * at most; when its owner takes the person out of the last of its rooms, this host is signed out at once. Of the rooms
+ * whose door the person waits at, by this host's own record, it takes only which they still wait at, and the cleaned
+ * name its owner goes by, to say whose OK they wait for.
  */
 export class MachineWatch {
   private readonly watched = new Map<string, WatchedMachine>();
@@ -247,7 +273,7 @@ export class MachineWatch {
     if (!machine?.joined) return;
     const rooms = this.store.machineRooms(machineId);
     const status: MachineStatus = { machineId, reachable: false, waiting: [], joinedThere: [], rooms, mutedHere: this.store.joinedRoomsMutedHere(machineId) };
-    const watched: WatchedMachine = { sockets: [], status, waitingIn: new Map(), rooms, roomsSavedAt: 0 };
+    const watched: WatchedMachine = { sockets: [], status, waitingIn: new Map(), rooms, roomsSavedAt: 0, ownerId: null };
     const signIn = (origin: string) => {
       const token = this.store.machineDeviceToken(machineId);
       return token ? { headers: { Origin: origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
@@ -323,10 +349,49 @@ export class MachineWatch {
     }
   }
 
+  /** Forgets a room of the machine joined as a person that turned this computer's owner away, once they saw it did. */
+  dismissKnock(machineId: string, roomId: string) {
+    const knocks = this.store.findMachine(machineId)?.knocks;
+    if (!knocks?.some((knock) => knock.roomId === roomId && knock.turnedAway)) return;
+    this.store.setMachineKnocks(machineId, knocks.filter((knock) => knock.roomId !== roomId));
+    this.machinesChanged();
+  }
+
   private followRooms(machine: Machine, watched: WatchedMachine, message: ServerMessage) {
-    if (message.type === "room.alert") return this.passOnRoomCall(machine, watched, message.roomId, message.alert);
+    switch (message.type) {
+      case "room.alert":
+        return this.passOnRoomCall(machine, watched, message.roomId, message.alert);
+      case "rooms.waiting-to-join":
+        return this.followKnocks(watched, message.roomIds);
+      case "snapshot":
+        watched.ownerId = typeof message.ownerId === "string" ? message.ownerId : null;
+        this.learnOwnerName(watched, message.people);
+        break;
+      case "people.listed":
+        this.learnOwnerName(watched, message.people);
+        break;
+    }
     watched.rooms = roomsAfter(watched.rooms, message);
     this.saveRoomsSoon(watched);
+  }
+
+  private learnOwnerName(watched: WatchedMachine, people: unknown) {
+    const { machineId } = watched.status;
+    const ownerName = ownerNameIn(people, watched.ownerId);
+    if (this.store.findMachine(machineId)?.ownerName === ownerName) return;
+    this.store.setMachineOwnerName(machineId, ownerName);
+    this.machinesChanged();
+  }
+
+  /** The rooms go out first, so a room this computer's owner was let into is there by the time their wait for it ends. */
+  private followKnocks(watched: WatchedMachine, waitingAt: unknown) {
+    const { machineId } = watched.status;
+    const knocks = this.store.findMachine(machineId)?.knocks ?? [];
+    const after = knocksAfter(knocks, waitingAt, watched.rooms);
+    if (JSON.stringify(after) === JSON.stringify(knocks)) return;
+    this.saveRooms(watched);
+    this.store.setMachineKnocks(machineId, after);
+    this.machinesChanged();
   }
 
   private saveRoomsSoon(watched: WatchedMachine) {
@@ -340,6 +405,8 @@ export class MachineWatch {
   }
 
   private saveRooms(watched: WatchedMachine) {
+    clearTimeout(watched.roomsToSave);
+    watched.roomsToSave = undefined;
     if (roomsUnchanged(watched)) return;
     watched.roomsSavedAt = Date.now();
     this.store.setMachineRooms(watched.status.machineId, watched.rooms);

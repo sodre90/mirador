@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { SessionUpdate } from "@agentclientprotocol/sdk/unstable";
+import { notificationWords } from "../desktop/src/core/desktop-words.ts";
 import { CanvasMcpEndpoints } from "../host/canvas/mcp.ts";
 import { CanvasService } from "../host/canvas/service.ts";
 import { agentProcessKey, type ConversationService, type WaitingPermission } from "../host/conversations.ts";
@@ -17,6 +18,7 @@ import type { CanvasItem, Conversation, ConversationEvent, Launch, MadeInRoom, P
 import type { ServerMessage } from "../shared/protocol.ts";
 import { DEFAULT_PERMISSION_PRESET, type AskedPermission, type PermissionPreset } from "../shared/room-permissions.ts";
 import type { NotificationReason, SystemNotification } from "../shared/system-notifications.ts";
+import { inLanguage } from "../web/notification-text.ts";
 import { initialState, reducer, type AppState } from "../web/state.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
@@ -1058,8 +1060,8 @@ describe("a page that shows a room", () => {
 
   test("keeps the waiting room invites as the host last listed them, and drops those of a room deleted", () => {
     const invites = [
-      { id: "i1", roomId: "r1", role: "member", expiresAt: 2 },
-      { id: "i2", roomId: "r2", role: "guest", expiresAt: 3 },
+      { id: "i1", roomId: "r1", role: "member", expiresAt: 2, seats: 1, letsIn: "at-once", taken: 0 },
+      { id: "i2", roomId: "r2", role: "guest", expiresAt: 3, seats: 5, letsIn: "after-ok", taken: 2 },
     ] satisfies RoomInvite[];
     const state = serverSent(initialState, { type: "room-invites.listed", invites });
     expect(state.roomInvites).toEqual(invites);
@@ -1360,6 +1362,23 @@ describe("telling the owner of a room's answers", () => {
     expect(told()).toEqual([expect.objectContaining({ kind: "question", roomId: room.id, title: "Launch", workspace: "project", body: "Mia tagged you: @Ann look" })]);
     expect(told()[0]!.conversationId).toBeUndefined();
     expect(pushed.map(({ kind }) => kind)).toEqual(["question"]);
+  });
+
+  test("someone waiting at a room's door calls its owner, framing the name they presented, on their devices and phones, even while a page shows the room, unless the owner muted it", () => {
+    const { store, hub, page, room, ownerId, received } = machineWithRooms();
+    const pushed: SystemNotification[] = [];
+    const notifications = new SystemNotifications(store, hub, { notify: async (notification: SystemNotification) => void pushed.push(notification) } as never);
+    const told = () => received.flatMap((message) => (message.type === "system-notification" ? [message.notification] : []));
+    page.data.presence = { conversationId: null, attentive: true, sideChatId: null, roomId: room.id, visible: true };
+
+    notifications.roomKnock(store.findRoom(room.id)!, "Ivy");
+    expect(told()).toEqual([expect.objectContaining({ kind: "question", roomId: room.id, title: "Launch", body: "Someone waits for you to let them in, giving the name “Ivy”", about: { kind: "room", alert: { about: "knock", by: "Ivy" } } })]);
+    expect(pushed).toHaveLength(1);
+    expect(inLanguage(told()[0]!, notificationWords("hu")).body).toBe("Valaki arra vár, hogy beengedd, ezzel a névvel: „Ivy”");
+
+    store.setRoomMuted(room.id, ownerId, true);
+    notifications.roomKnock(store.findRoom(room.id)!, "Jo");
+    expect([told(), pushed].map((sent) => sent.length)).toEqual([1, 1]);
   });
 
   test("a room joined on someone else's machine calls this computer's owner on this computer, and on their phones, which never join that machine", () => {

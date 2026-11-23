@@ -13,7 +13,7 @@ import { BarMenu, type BarMenuEntry } from "./BarMenu.tsx";
 import { ColorSwatches } from "./ColorSwatches.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu, type ContextMenuEntry } from "./ContextMenu.tsx";
-import { joinedRoomsOf, RoomsSection } from "./RoomsSidebar.tsx";
+import { joinedRoomsOf, knocksOf, RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
@@ -998,6 +998,7 @@ export function Sidebar({
           readings={state.roomReadings}
           roomsWithPeopleHere={state.roomsWithPeopleHere}
           joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
+          knocks={knocksOf(state.machines)}
           people={state.people}
           broughtAgents={state.broughtAgents}
           manages

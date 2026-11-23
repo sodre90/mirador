@@ -68,6 +68,10 @@ export interface Machine {
    * the machine's address inside the tunnel, which says nothing to a person.
    */
   peerToPeer: boolean;
+  /** Of a machine joined as a person: the rooms there this computer's owner waits to be let into, or was turned away from. */
+  knocks: RoomKnock[];
+  /** Of a machine joined as a person: what its owner goes by, as the machine last said it, cleaned; null while it said none. */
+  ownerName: string | null;
 }
 
 /**
@@ -83,6 +87,13 @@ export interface MachineStatus {
   rooms: JoinedRoom[];
   /** The ids of those rooms this computer keeps quiet itself, whatever the machine says of them. */
   mutedHere: string[];
+}
+
+/** A room of someone else's machine this computer's owner joined with an invite that waits for the owner's OK: by its id alone, as nothing more of it is theirs yet. */
+export interface RoomKnock {
+  roomId: string;
+  /** Its owner turned them away, or never let them in before ending this computer's sign-in there. */
+  turnedAway: boolean;
 }
 
 /** A room this computer's owner is in on someone else's machine, as that machine lists it: shown with the machine, trusted for nothing. */

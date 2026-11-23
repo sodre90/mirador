@@ -22,6 +22,7 @@ import type {
   Profile,
   PromptTemplate,
   PublicAddress,
+  RoomKnock,
   QueuedMessage,
   StoredEvent,
   Workspace,
@@ -39,7 +40,7 @@ import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
 import { roomSandboxIn, type RoomSandbox } from "../shared/sandbox.ts";
-import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
+import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
 import type { RoomBallot } from "../shared/room-votes.ts";
@@ -156,6 +157,12 @@ const schema = `
   CREATE TABLE IF NOT EXISTS room_invites (
     id TEXT PRIMARY KEY, code_hash TEXT NOT NULL UNIQUE, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     role TEXT NOT NULL, expires_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS room_invite_uses (
+    invite_id TEXT NOT NULL REFERENCES room_invites(id) ON DELETE CASCADE, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    PRIMARY KEY (invite_id, person_id));
+  CREATE TABLE IF NOT EXISTS room_joiners (
+    room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE, person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE,
+    role TEXT NOT NULL, name TEXT NOT NULL, color TEXT, device_name TEXT NOT NULL, since INTEGER NOT NULL, PRIMARY KEY (room_id, person_id));
   CREATE TABLE IF NOT EXISTS room_votes (
     item_id TEXT NOT NULL REFERENCES canvas_items(id) ON DELETE CASCADE, room_id TEXT NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
     person_id TEXT NOT NULL REFERENCES people(id) ON DELETE CASCADE, question INTEGER NOT NULL, option INTEGER NOT NULL,
@@ -226,6 +233,13 @@ export type KeyOverKind = "device" | "invite";
 export interface KeyOver extends PublicTunnelKey {
   kind: KeyOverKind;
   until: number;
+}
+
+/** Someone waiting to join a room, with the name and colour they presented, which become theirs only once let in. */
+export interface StoredRoomJoiner extends Omit<RoomJoiner, "name" | "nameClash"> {
+  /** Cleaned as a person's name is, or none where the name rules refuse it; never checked against the room's names until then. */
+  presentedName: string;
+  color: Pastel | null;
 }
 
 /** Four digits, short enough to tell people without a name apart at a glance. */
@@ -317,6 +331,10 @@ const addedColumns = [
   { table: "room_agents", column: "brought_here", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "room_messages", column: "brought_by", definition: "TEXT" },
   { table: "workspaces", column: "sandbox_last_on_at", definition: "INTEGER" },
+  { table: "room_invites", column: "seats", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "room_invites", column: "lets_in", definition: "TEXT NOT NULL DEFAULT 'at-once'" },
+  { table: "machines", column: "owner_name", definition: "TEXT" },
+  { table: "machines", column: "knocks", definition: "TEXT" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -449,15 +467,17 @@ type MachineRow = {
   as_person: number;
   relay_key: string | null;
   peer_to_peer: number;
+  knocks: string | null;
+  owner_name: string | null;
 };
 
 const MACHINE_COLUMNS =
-  "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id, out_of_rooms, as_person, relay_key, tunnel IS NOT NULL AS peer_to_peer FROM machines";
+  "SELECT id, name, origin, created_at, relay_port, device_token IS NOT NULL AS joined, color, host_id, out_of_rooms, as_person, relay_key, tunnel IS NOT NULL AS peer_to_peer, knocks, owner_name FROM machines";
 
 type JobWaitRow = { id: string; conversation_id: string; job: string; ssh_host: string | null; message: string; resume: number; since: number };
 
 const toMachine = (row: unknown): Machine => {
-  const { id, name, origin, created_at, relay_port, joined, color, host_id, out_of_rooms, as_person, relay_key, peer_to_peer } = row as MachineRow;
+  const { id, name, origin, created_at, relay_port, joined, color, host_id, out_of_rooms, as_person, relay_key, peer_to_peer, knocks, owner_name } = row as MachineRow;
   return {
     id,
     name,
@@ -471,6 +491,8 @@ const toMachine = (row: unknown): Machine => {
     asPerson: as_person === 1,
     relayKey: relay_key,
     peerToPeer: peer_to_peer === 1,
+    knocks: knocks ? (JSON.parse(knocks) as RoomKnock[]) : [],
+    ownerName: owner_name,
   };
 };
 
@@ -651,7 +673,10 @@ function variablesChosenIn(text: string): VariablesChosen {
 
 const toRoomPerson = ({ person_id, role, name_clash }: RoomPersonRow): RoomPerson => ({ personId: person_id, role, ...(name_clash !== null && { nameClash: name_clash }) });
 
-const roomInviteColumns = "id, room_id AS roomId, role, expires_at AS expiresAt";
+const roomInviteColumns =
+  "id, room_id AS roomId, role, expires_at AS expiresAt, seats, lets_in AS letsIn, (SELECT COUNT(*) FROM room_invite_uses WHERE invite_id = room_invites.id) AS taken";
+
+const roomJoinerColumns = "room_id AS roomId, person_id AS personId, role, name AS presentedName, color, device_name AS deviceName, since";
 
 const toRoomThread = ({ id, room_id, message_id, profile_id }: RoomThreadRow): RoomThread => ({ id, roomId: room_id, messageId: message_id, profileId: profile_id });
 
@@ -1312,9 +1337,12 @@ export class Store {
     return rows.map(({ person_id }) => person_id);
   }
 
-  /** Lets the person into the room with the role, or gives them that role there. */
+  /** Lets the person into the room with the role, or gives them that role there; in the room, they wait to join it no more. */
   setRoomPersonRole(roomId: string, personId: string, role: RoomRole) {
-    this.db.query("INSERT INTO room_people (room_id, person_id, role) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET role = excluded.role").run(roomId, personId, role);
+    this.inOneTransaction(() => {
+      this.db.query("INSERT INTO room_people (room_id, person_id, role) VALUES (?, ?, ?) ON CONFLICT DO UPDATE SET role = excluded.role").run(roomId, personId, role);
+      this.deleteRoomJoiner(roomId, personId);
+    });
   }
 
   /** Takes the person out of the room with their picks on its questions, their read mark and their mute there. */
@@ -1333,30 +1361,65 @@ export class Store {
     return this.db.query("UPDATE room_people SET name_clash = NULL WHERE person_id = ? AND name_clash IS NOT NULL").run(personId).changes > 0;
   }
 
-  /** Of the people, those in no room. */
+  /** Of the people, those in no room and waiting to join none. */
   peopleInNoRoom(personIds: string[]): string[] {
-    const inSomeRoom = new Set((this.db.query("SELECT DISTINCT person_id FROM room_people").all() as { person_id: string }[]).map(({ person_id }) => person_id));
+    const rows = this.db.query("SELECT person_id FROM room_people UNION SELECT person_id FROM room_joiners").all() as { person_id: string }[];
+    const inSomeRoom = new Set(rows.map(({ person_id }) => person_id));
     return personIds.filter((personId) => !inSomeRoom.has(personId));
   }
 
-  addRoomInvite({ id, roomId, role, expiresAt }: RoomInvite, codeHash: string) {
-    this.db.query("INSERT INTO room_invites (id, code_hash, room_id, role, expires_at) VALUES (?, ?, ?, ?, ?)").run(id, codeHash, roomId, role, expiresAt);
+  addRoomInvite({ id, roomId, role, expiresAt, seats, letsIn }: Omit<RoomInvite, "taken">, codeHash: string) {
+    this.db
+      .query("INSERT INTO room_invites (id, code_hash, room_id, role, expires_at, seats, lets_in) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(id, codeHash, roomId, role, expiresAt, seats, letsIn);
   }
 
-  /** Those not yet used, withdrawn or expired, soonest to expire first; every expired one goes. */
+  /** Those with seats left, not withdrawn or expired, soonest to expire first; every expired one goes. */
   waitingRoomInvites(now: number): RoomInvite[] {
     this.db.query("DELETE FROM room_invites WHERE expires_at <= ?").run(now);
     return this.db.query(`SELECT ${roomInviteColumns} FROM room_invites ORDER BY expires_at, rowid`).all() as RoomInvite[];
   }
 
-  /** The room invite with the code, unless it is used, withdrawn or expired. */
+  /** The room invite with the code, unless its seats are taken, or it is withdrawn or expired. */
   findRoomInvite(codeHash: string, now: number): RoomInvite | undefined {
     return (this.db.query(`SELECT ${roomInviteColumns} FROM room_invites WHERE code_hash = ? AND expires_at > ?`).get(codeHash, now) as RoomInvite | null) ?? undefined;
   }
 
-  /** Removes the room invite with the code, which can then let nobody else in; what it was, if it was there and still valid. */
-  takeRoomInvite(codeHash: string, now: number): RoomInvite | undefined {
-    return (this.db.query(`DELETE FROM room_invites WHERE code_hash = ? AND expires_at > ? RETURNING ${roomInviteColumns}`).get(codeHash, now) as RoomInvite | null) ?? undefined;
+  tookRoomInviteSeat(inviteId: string, personId: string) {
+    return this.db.query("SELECT 1 FROM room_invite_uses WHERE invite_id = ? AND person_id = ?").get(inviteId, personId) !== null;
+  }
+
+  /** A seat of the invite for the person; with its last seat taken, the invite goes and can let nobody else in. Whether it went. */
+  takeRoomInviteSeat(inviteId: string, personId: string) {
+    this.db.query("INSERT INTO room_invite_uses (invite_id, person_id) VALUES (?, ?)").run(inviteId, personId);
+    return this.db.query(`DELETE FROM room_invites WHERE id = ?1 AND seats <= (SELECT COUNT(*) FROM room_invite_uses WHERE invite_id = ?1)`).run(inviteId).changes > 0;
+  }
+
+  /** Keeps the person waiting to join the room, in place of any knock of theirs there before. */
+  addRoomJoiner({ roomId, personId, role, presentedName, color, deviceName, since }: StoredRoomJoiner) {
+    this.db
+      .query("INSERT OR REPLACE INTO room_joiners (room_id, person_id, role, name, color, device_name, since) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(roomId, personId, role, presentedName, color, deviceName, since);
+  }
+
+  /** Everyone waiting to join a room, longest waiting first. */
+  roomJoiners(): StoredRoomJoiner[] {
+    return this.db.query(`SELECT ${roomJoinerColumns} FROM room_joiners ORDER BY since, rowid`).all() as StoredRoomJoiner[];
+  }
+
+  findRoomJoiner(roomId: string, personId: string): StoredRoomJoiner | undefined {
+    const found = this.db.query(`SELECT ${roomJoinerColumns} FROM room_joiners WHERE room_id = ? AND person_id = ?`).get(roomId, personId) as StoredRoomJoiner | null;
+    return found ?? undefined;
+  }
+
+  /** Whether the person waited to join the room. */
+  deleteRoomJoiner(roomId: string, personId: string) {
+    return this.db.query("DELETE FROM room_joiners WHERE room_id = ? AND person_id = ?").run(roomId, personId).changes > 0;
+  }
+
+  /** The rooms the person waits to join, by id. */
+  roomsWaitedForBy(personId: string): string[] {
+    return (this.db.query("SELECT room_id FROM room_joiners WHERE person_id = ? ORDER BY since, rowid").all(personId) as { room_id: string }[]).map(({ room_id }) => room_id);
   }
 
   /** The deleted invite's code hash; null when there was no such invite. */
@@ -2127,6 +2190,14 @@ export class Store {
 
   setMachineRooms(id: string, rooms: JoinedRoom[]) {
     this.db.query("UPDATE machines SET rooms = ? WHERE id = ?").run(rooms.length > 0 ? JSON.stringify(rooms) : null, id);
+  }
+
+  setMachineKnocks(machineId: string, knocks: RoomKnock[]) {
+    this.db.query("UPDATE machines SET knocks = ? WHERE id = ?").run(knocks.length > 0 ? JSON.stringify(knocks) : null, machineId);
+  }
+
+  setMachineOwnerName(machineId: string, name: string | null) {
+    this.db.query("UPDATE machines SET owner_name = ? WHERE id = ?").run(name, machineId);
   }
 
   /** The rooms of the machine joined as a person that this computer keeps quiet, whatever the machine says. */

@@ -83,12 +83,51 @@ export interface RoomPerson {
   nameClash?: string;
 }
 
-/** A waiting invite into a room, for one person with one role; its code is shown once, when it is made. */
+/** How many people one room invite lets in at most, the owner's choice as they make it. */
+export const ROOM_INVITE_SEATS = [1, 5, 10, 25] as const;
+
+export type RoomInviteSeats = (typeof ROOM_INVITE_SEATS)[number];
+
+export const isRoomInviteSeats = (value: unknown): value is RoomInviteSeats => ROOM_INVITE_SEATS.includes(value as RoomInviteSeats);
+
+/** Whether those an invite admits come into the room at once, or wait there for the owner to let them in. */
+export type RoomInviteLetsIn = "at-once" | "after-ok";
+
+export const ROOM_INVITE_LETS_IN: RoomInviteLetsIn[] = ["after-ok", "at-once"];
+
+export const isRoomInviteLetsIn = (value: unknown): value is RoomInviteLetsIn => ROOM_INVITE_LETS_IN.includes(value as RoomInviteLetsIn);
+
+/** One person comes in at once, as they always did; more wait for the owner's OK, unless the owner chooses otherwise. */
+export const defaultLetsIn = (seats: RoomInviteSeats): RoomInviteLetsIn => (seats === 1 ? "at-once" : "after-ok");
+
+/** A waiting invite into a room, for as many people as its seats with one role; its code is shown once, when it is made. */
 export interface RoomInvite {
   id: string;
   roomId: string;
   role: RoomRole;
   expiresAt: number;
+  seats: RoomInviteSeats;
+  letsIn: RoomInviteLetsIn;
+  /** The seats taken: by those it let in, those who wait to be, and those the owner turned away. */
+  taken: number;
+}
+
+/** Someone an invite let knock at a room, who waits for its owner to let them in or turn them away; for the owner's eyes. */
+export interface RoomJoiner {
+  roomId: string;
+  personId: string;
+  /** The role they get once let in, the invite's. */
+  role: RoomRole;
+  /**
+   * The name they presented, cleaned as a person's is, as the room would let them take it: none where the name rules
+   * refuse it, it reads as Mirador's own words, or as one already in the room.
+   */
+  name: string;
+  /** The name they presented when it reads as one already in the room, which the owner sees marked as the room marks it. */
+  nameClash?: string;
+  /** The name of the device they knocked from. */
+  deviceName: string;
+  since: number;
 }
 
 /** Where people of this machine and its agents write together; nothing reaches an agent until a message tags it. */

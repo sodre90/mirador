@@ -3,14 +3,14 @@ import type { Conversation, Person, Profile, Workspace } from "../shared/model.t
 import { personGoesBy } from "../shared/people.ts";
 import { PERMISSION_PRESETS } from "../shared/room-permissions.ts";
 import { ROOM_USAGE_PERIODS, sinceOf, type RoomUsage, type RoomUsagePeriod, type Spend } from "../shared/room-usage.ts";
-import { broughtAgentName, ROOM_ROLES, type Room, type RoomAgent, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
+import { relativeTimeOf } from "../shared/relative-time.ts";
+import { broughtAgentName, ROOM_ROLES, type Room, type RoomAgent, type RoomInvite, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
 import type { SandboxSetup } from "../shared/sandbox.ts";
 import { agentMarks } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { HintedWhenCutShort } from "./cut-short.tsx";
-import { timeOf } from "./Devices.tsx";
-import { formatNumber, t } from "./i18n/index.ts";
+import { formatNumber, locale, t } from "./i18n/index.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
@@ -34,7 +34,13 @@ export function WhatItMeans({ children }: { children: ReactNode }) {
   );
 }
 
-/** The invites not yet expired, which drop out each as it expires: the host lists them again only when they change otherwise. */
+/** How often the time an invite has left is told afresh. */
+const EXPIRY_TOLD_EVERY_MS = 30_000;
+
+/**
+ * The invites not yet expired, which drop out each as it expires, with the time they have left told afresh now and then:
+ * the host lists them again only when they change otherwise.
+ */
 function useUnexpired(invites: RoomInvite[]) {
   const [now, setNow] = useState(Date.now);
   const unexpired = invites.filter(({ expiresAt }) => expiresAt > now);
@@ -42,9 +48,57 @@ function useUnexpired(invites: RoomInvite[]) {
   useEffect(() => {
     if (!Number.isFinite(soonestExpiry)) return;
     const timer = setTimeout(() => setNow(Date.now()), soonestExpiry - Date.now());
-    return () => clearTimeout(timer);
+    const clock = setInterval(() => setNow(Date.now()), EXPIRY_TOLD_EVERY_MS);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(clock);
+    };
   }, [soonestExpiry]);
   return unexpired;
+}
+
+/** An invite as the owner sees it waiting: the role it gives, how many of its people came when it is for several, and when it expires. */
+function waitingInviteText({ role, seats, taken, expiresAt }: RoomInvite) {
+  return [words.roles[role], seats > 1 && words.seatsTaken(taken, seats), words.expiresIn(relativeTimeOf(expiresAt, locale))].filter(Boolean).join(" · ");
+}
+
+/**
+ * The people an invite took to the room's door, whom the owner lets in or turns away: each with the role they would get,
+ * apart from the name of the device they came on, which they chose themselves, and a name of theirs that reads as one
+ * already in the room marked as the room marks it.
+ */
+export function WaitingToJoin({ joiners }: { joiners: RoomJoiner[] }) {
+  if (joiners.length === 0) return null;
+  return (
+    <>
+      <h3 className="room-joiners-heading">{words.waitingToJoin}</h3>
+      <ul className="room-joiners" aria-label={words.waitingToJoin}>
+        {joiners.map(({ roomId, personId, role, name, nameClash, deviceName }) => {
+          const shownName = name || words.nameless;
+          return (
+            <li key={personId}>
+              <span className="room-joiner-name">{shownName}</span>
+              <span className="room-role-label room-joiner-role">{words.roles[role]}</span>
+              <span className="room-joiner-device">{words.cameFromDevice(deviceName)}</span>
+              <button type="button" className="primary" aria-label={words.letInWho(shownName)} onClick={() => connection.send({ type: "room.let-in", roomId, personId })}>
+                {words.letIn}
+              </button>
+              <ConfirmButton
+                className="link danger"
+                label={words.turnAwayWho(shownName)}
+                armedText={words.turnAwayArmed}
+                armedHint={words.turnAwayArmedHint}
+                onConfirm={() => connection.send({ type: "room.turn-away", roomId, personId })}
+              >
+                {words.turnAway}
+              </ConfirmButton>
+              {nameClash && <span className="hint room-person-name-clash">{words.gaveNameInRoom(nameClash)}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
 }
 
 /** The room's name, taken on Enter or as the field loses focus; its workspace; and deleting it. */
@@ -110,11 +164,11 @@ function RoleSelect({ label, role, onChange }: { label: string; role: RoomRole; 
   );
 }
 
-/** Who is in the room and as what, whether their tasks start unasked, the invites still waiting, and inviting someone. */
-function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; people: Person[]; ownerId: string | null; invites: RoomInvite[]; onInvite: () => void }) {
+/** Who is in the room and as what, who waits at its door, whether their tasks start unasked, the invites still waiting, and inviting someone. */
+function PeopleTab({ room, people, ownerId, invites, joiners, onInvite }: { room: Room; people: Person[]; ownerId: string | null; invites: RoomInvite[]; joiners: RoomJoiner[]; onInvite: () => void }) {
   const waiting = useUnexpired(invites.filter(({ roomId }) => roomId === room.id));
   const nameOf = (personId: string) => personGoesBy(people.find(({ id }) => id === personId), words.nameless);
-  const inRoom = new Set(room.people.map(({ personId }) => personId));
+  const inRoom = new Set([...room.people, ...joiners].map(({ personId }) => personId));
   const [peoplesTasksWait, setPeoplesTasksWait] = useSentChoice(room.peoplesTasksWait, (wait) => connection.send({ type: "room.set-peoples-tasks-wait", roomId: room.id, wait }));
   const [agentsReadGuests, setAgentsReadGuests] = useSentChoice(room.agentsReadGuests, (read) => connection.send({ type: "room.set-agents-read-guests", roomId: room.id, read }));
   const letInBefore = people.filter(({ id }) => id !== ownerId && !inRoom.has(id));
@@ -143,6 +197,7 @@ function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; p
           );
         })}
       </ul>
+      <WaitingToJoin joiners={joiners} />
       {letInBefore.length > 0 && (
         <select className="room-add-person" aria-label={words.addPerson} value="" onChange={(event) => event.target.value && setRole(event.target.value, "member")}>
           <option value="">{words.addPerson}</option>
@@ -173,12 +228,11 @@ function PeopleTab({ room, people, ownerId, invites, onInvite }: { room: Room; p
       {waiting.length > 0 && (
         <ul className="room-invites" aria-label={words.waitingInvites}>
           {waiting.map((invite) => {
-            const shownRole = words.roles[invite.role];
-            const until = timeOf(invite.expiresAt);
+            const shown = waitingInviteText(invite);
             return (
               <li key={invite.id}>
-                <span>{words.waitingInvite(shownRole, until)}</span>
-                <button type="button" className="link" aria-label={words.withdrawInviteOf(shownRole, until)} onClick={() => connection.send({ type: "room.withdraw-invite", inviteId: invite.id })}>
+                <span>{shown}</span>
+                <button type="button" className="link" aria-label={words.withdrawInviteOf(words.roles[invite.role], words.expiresIn(relativeTimeOf(invite.expiresAt, locale)))} onClick={() => connection.send({ type: "room.withdraw-invite", inviteId: invite.id })}>
                   {words.withdrawInvite}
                 </button>
               </li>
@@ -430,6 +484,7 @@ export function RoomSettingsDialog({
   people,
   ownerId,
   invites,
+  joiners,
   roomConversations,
   sandboxSetup,
   onInvite,
@@ -442,6 +497,8 @@ export function RoomSettingsDialog({
   people: Person[];
   ownerId: string | null;
   invites: RoomInvite[];
+  /** Who waits at the room's door. */
+  joiners: RoomJoiner[];
   roomConversations: Conversation[];
   sandboxSetup: SandboxSetup;
   onInvite: () => void;
@@ -460,7 +517,7 @@ export function RoomSettingsDialog({
         ))}
       </div>
       <div className="room-tab-panel" id="room-tab-panel" role="tabpanel" aria-labelledby={`room-tab-${shownTab}`}>
-        {shownTab === "people" && <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} onInvite={onInvite} />}
+        {shownTab === "people" && <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} joiners={joiners} onInvite={onInvite} />}
         {shownTab === "agents" && <AgentsTab room={room} profiles={profiles} people={people} roomConversations={roomConversations} />}
         {shownTab === "permissions" && <PermissionsTab room={room} profiles={profiles} roomConversations={roomConversations} sandboxSetup={sandboxSetup} />}
         {shownTab === "usage" && <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />}

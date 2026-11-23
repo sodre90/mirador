@@ -27,7 +27,14 @@ function reasonText(reason: NotificationReason, { desktop: { notifications: word
 }
 
 function roomAlertText(alert: RoomAlert, { desktop: { notifications: words } }: NotificationWords) {
-  return alert.about === "mention" ? words.tagged(alert.by, alert.text) : words.waitsToConfirm(alert.question);
+  switch (alert.about) {
+    case "mention":
+      return words.tagged(alert.by, alert.text);
+    case "confirm":
+      return words.waitsToConfirm(alert.question);
+    case "knock":
+      return alert.by ? words.waitsToBeLetIn(alert.by) : words.someoneWaitsToBeLetIn;
+  }
 }
 
 function translated(notification: SystemNotification, about: NotificationAbout, words: NotificationWords): Pick<SystemNotification, "title" | "body"> {

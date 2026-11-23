@@ -97,6 +97,17 @@ export const namesOthersGoBy = (store: PeopleSeen & Pick<Store, "listProfiles">,
   ...broughtAgentNamesIn(store, store.roomsOf(personId)),
 ];
 
+/** The names a room shows and frames, a person's own left out: its owner's, its people's and those of who wrote there, and its agents'. */
+export function namesShownIn(store: PeopleSeen & Pick<Store, "listProfiles" | "writersIn">, room: Room, besides: string) {
+  const shown = new Set([store.ownerId(), ...room.people.map(({ personId }) => personId), ...store.writersIn(room.id)]);
+  shown.delete(besides);
+  return [
+    ...store.listPeople().flatMap(({ id, name }) => (shown.has(id) ? [name] : [])),
+    ...agentsOfRooms(store, [room]).map(({ name }) => name),
+    ...broughtAgentNamesIn(store, [room]),
+  ];
+}
+
 /**
  * What a signed-in person other than the machine's owner sees of each message the host sends: their rooms, the people
  * and agents in them, and those rooms' messages and canvases, as made for them; nothing else. A message type missing here
@@ -159,6 +170,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       heldChanges: [],
       roomsHoldingTooMany: [],
       roomInvites: [],
+      roomJoiners: [],
       broughtAgents: [],
       broughtTasks: [],
       profiles: agentsOf(rooms).map(agentSeen),
@@ -239,6 +251,8 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "room.deleted": (message, socket) => shownIf(socket.roomsShown.delete(message.roomId), message),
     "room.invited": HIDDEN,
     "room-invites.listed": HIDDEN,
+    "room-joiners.listed": HIDDEN,
+    "rooms.waiting-to-join": (message, socket) => shownIf(message.personId === socket.personId, message),
     "room.timeline": (message, socket) => shownIf(isIn(socket, message.roomId), { ...message, canvas: timelineCanvasSeen(message.roomId, message.canvas) }),
     "room.message": (message, socket) => shownIf(isIn(socket, message.message.roomId), message),
     "room.votes": (message, socket) => shownIf(isIn(socket, message.roomId), message),

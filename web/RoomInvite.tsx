@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { inviteConnectFor, machineAddress, type RoomInviteConnect } from "../shared/machines.ts";
 import type { Machine } from "../shared/model.ts";
 import type { PeerToPeerStatus } from "../shared/protocol.ts";
-import { ROOM_ROLES, type Room, type RoomRole } from "../shared/rooms.ts";
+import { defaultLetsIn, ROOM_INVITE_LETS_IN, ROOM_INVITE_SEATS, ROOM_ROLES, type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole } from "../shared/rooms.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
 import { connection } from "./connection.ts";
 import { timeOf } from "./Devices.tsx";
@@ -28,18 +28,23 @@ function whyNoPeerToPeer(status: PeerToPeerStatus | null) {
 interface MadeInvite {
   text: string;
   expiresAt: number;
+  seats: RoomInviteSeats;
   copied: boolean;
 }
 
 /**
- * Makes an invite into the room for one person, with the role they join as and the one way it connects: a single text,
- * a secret until it is used, which "Copy invite" puts on the clipboard and "Show invite" alone shows.
+ * Makes an invite into the room for one person or several, with the role they join as, whether they come in at once or
+ * after the owner's OK, and the one way it connects: a single text, a secret until its last use, which "Copy invite"
+ * puts on the clipboard and "Show invite" alone shows.
  */
 export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devices: DevicesListed | null; onClose: () => void }) {
   const publicOrigin = devices?.reachability.publicAddress?.origin ?? null;
   const peerToPeer = devices?.peerToPeer ?? null;
   const works: Record<RoomInviteConnect, boolean> = { "peer-to-peer": peerToPeerWorks(peerToPeer), address: publicOrigin !== null };
   const [role, setRole] = useState<RoomRole>("member");
+  const [seats, setSeats] = useState<RoomInviteSeats>(1);
+  const [pickedLetsIn, setLetsIn] = useState<RoomInviteLetsIn | null>(null);
+  const letsIn = pickedLetsIn ?? defaultLetsIn(seats);
   const [picked, setConnect] = useState<RoomInviteConnect | null>(null);
   const connect = picked && works[picked] ? picked : inviteConnectFor(devices?.roomInvitesConnect ?? "peer-to-peer", works);
   const [made, setMade] = useState<MadeInvite | null>(null);
@@ -59,7 +64,7 @@ export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devic
     setProblem(null);
     try {
       const invited = await connection.sendAndAwait(
-        (requestId) => ({ type: "room.invite", requestId, roomId: room.id, role, connect }),
+        (requestId) => ({ type: "room.invite", requestId, roomId: room.id, role, connect, seats, letsIn }),
         (message, requestId) => (message.type === "room.invited" && message.requestId === requestId ? message : undefined),
       );
       if (!invited.text || !invited.invite) return setProblem(replyProblemText(invited));
@@ -67,7 +72,7 @@ export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devic
         () => true,
         () => false,
       );
-      setMade({ text: invited.text, expiresAt: invited.invite.expiresAt, copied });
+      setMade({ text: invited.text, expiresAt: invited.invite.expiresAt, seats: invited.invite.seats, copied });
       setShown(!copied);
     } catch {
       // Disconnected; the page says so, and the host made no invite
@@ -86,6 +91,28 @@ export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devic
             {words.roleChoices[each]}
           </label>
         ))}
+        <div className="room-invite-seats">
+          <label>
+            {words.howMany}
+            <select value={seats} onChange={(event) => choose(() => setSeats(Number(event.target.value) as RoomInviteSeats))}>
+              {ROOM_INVITE_SEATS.map((each) => (
+                <option key={each} value={each}>
+                  {words.seatChoices(each)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {words.letThemIn}
+            <select value={letsIn} onChange={(event) => choose(() => setLetsIn(event.target.value as RoomInviteLetsIn))}>
+              {ROOM_INVITE_LETS_IN.map((each) => (
+                <option key={each} value={each}>
+                  {words.letsInChoices[each]}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </fieldset>
       <fieldset className="room-field">
         <legend>{words.connect}</legend>
@@ -115,7 +142,7 @@ export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devic
       {made && (
         <div className="room-invite-made" role="status">
           <p>{words.sendInvite}</p>
-          <p className="hint">{words.inviteWorksUntil(timeOf(made.expiresAt))}</p>
+          <p className="hint">{words.inviteWorksUntil(made.seats, timeOf(made.expiresAt))}</p>
           {shown && <textarea className="room-invite-text" readOnly aria-label={words.invite} value={made.text} onFocus={(event) => event.target.select()} />}
         </div>
       )}
@@ -141,7 +168,7 @@ function machineOfInvite(machines: Machine[], text: string) {
  * Joins someone else's room with the invite they sent: a machine this computer has not added yet is added with it, as
  * under Machines; one it has, of another room there, is joined again with the new invite.
  */
-export function JoinRoomDialog({ machines, onJoined, onClose }: { machines: Machine[]; onJoined: (machineId: string, roomId: string | null) => void; onClose: () => void }) {
+export function JoinRoomDialog({ machines, onJoined, onClose }: { machines: Machine[]; onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void; onClose: () => void }) {
   const [text, setText] = useState("");
   const [joining, setJoining] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -163,7 +190,7 @@ export function JoinRoomDialog({ machines, onJoined, onClose }: { machines: Mach
             (message, requestId) => (message.type === "machine.added" && message.requestId === requestId ? message : undefined),
           );
       if (answer.problem || !answer.machineId) return setProblem(replyProblemText(answer));
-      onJoined(answer.machineId, answer.roomId);
+      onJoined(answer.machineId, answer.roomId, answer.waiting);
     } catch {
       // Disconnected; the page says so
     } finally {

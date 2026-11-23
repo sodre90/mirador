@@ -134,6 +134,8 @@ export const problems: Messages["problems"] = {
     "peer-to-peer-unavailable-here": "Ezen a számítógépen nem érhető el az egyenrangú (peer to peer) kapcsolat, pedig ez a meghívó azt kívánja: a mirador-p2p nem tölthető le, vagy nincs ehhez a rendszerhez.",
     "room-invite-loopback-from-afar": "Szobameghívóval 127.0.0.1 vagy localhost címen csak erről a számítógépről lehet csatlakozni.",
     "join-too-often": "Túl sokszor próbáltak csatlakozni ehhez a géphez. Próbáld újra egy perc múlva.",
+    "room-invite-used-already": "Ezt a meghívót már felhasználtad. Kérj újat attól, aki küldte.",
+    "room-joiner-gone": "Már nem vár arra, hogy belépjen ebbe a szobába.",
     "room-join-unproven": "A szobába lépéshez aláírás kell a bemutatott kulccsal, a gép legutóbbi kihívására ehhez a meghívóhoz, ahhoz a címhez, ahol kérték, és ahhoz a tanúsítványkiadóhoz, amellyel megbíztak benne. Próbálj újra csatlakozni.",
     "voice-not-set-up": "A hang még nincs beállítva ezen a Macen.",
     "voice-not-set-up-here": "A hang még nincs beállítva ezen a Macen. A Beállítások → Hang részben állíthatod be.",

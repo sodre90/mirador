@@ -22,6 +22,8 @@ export const desktop: Messages["desktop"] = {
   notifications: {
     tagged: (name: string, text: string) => `${name} te etiquetó: ${text}`,
     waitsToConfirm: (question: string) => `Espera que confirmes la respuesta: ${question}`,
+    waitsToBeLetIn: (name: string) => `Alguien espera que lo dejes entrar, con el nombre «${name}»`,
+    someoneWaitsToBeLetIn: "Alguien espera que lo dejes entrar",
     asks: (question) => `Pregunta: ${question}`,
     wantsPermission: (tool) => `Pide permiso: ${tool}`,
     aTool: "una herramienta",

@@ -4,7 +4,23 @@ import type { ClaudeSetup } from "./room-agent-setup.ts";
 import type { HeldChange, HeldChangeAnswer, HeldChangeText, RoomSandbox, SandboxCheck, SandboxSetup } from "./sandbox.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
-import type { BroughtAnswerEnd, Room, RoomAgentModel, RoomApproval, RoomAuthorRole, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
+import type {
+  BroughtAnswerEnd,
+  Room,
+  RoomAgentModel,
+  RoomApproval,
+  RoomAuthorRole,
+  RoomInvite,
+  RoomInviteLetsIn,
+  RoomInviteSeats,
+  RoomJoiner,
+  RoomMessage,
+  RoomPresence,
+  RoomRole,
+  RoomTaskApproval,
+  RoomThread,
+  RoomTimeline,
+} from "./rooms.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting, OthersTasks } from "./brought-agents.ts";
 import type { RoomAlert, RoomReading } from "./room-reading.ts";
 import type { RoomConfirmedAnswer, RoomQuestionVotes } from "./room-votes.ts";
@@ -411,6 +427,8 @@ export type ClientMessage =
   | { type: "machine.room-opened"; machineId: string; roomId: string }
   /** Keeps a room of a machine joined as a person quiet on this computer, whatever that machine does, or lets it call again. */
   | { type: "machine.mute-room"; machineId: string; roomId: string; muted: boolean }
+  /** Forgets that the owner of a machine joined as a person turned this computer's owner away from one of its rooms. */
+  | { type: "machine.dismiss-knock"; machineId: string; roomId: string }
   /** Brings an agent of one of your profiles into a room of a machine joined as a person, to work in one of your workspaces; the host answers `machine.agent-brought`. */
   | { type: "machine.bring-agent"; requestId: string; machineId: string; roomId: string; profileId: string; workspaceId: string; othersTasks: OthersTasks }
   | { type: "machine.take-agent-out"; broughtId: string }
@@ -429,9 +447,17 @@ export type ClientMessage =
   /** Lets a person of this machine into the room with the role, or changes their role there. */
   | { type: "room.set-person-role"; roomId: string; personId: string; role: RoomRole }
   | { type: "room.remove-person"; roomId: string; personId: string }
-  /** An invite for one person into the room with the role, which they join this machine with from their own Mirador, the one way `connect` names; the host answers `room.invited`. */
-  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole; connect: RoomInviteConnect }
+  /**
+   * An invite into the room with the role for as many people as `seats`, which they join this machine with from their
+   * own Mirador, the one way `connect` names, coming in at once or waiting for the owner's OK as `letsIn` says; the host
+   * answers `room.invited`.
+   */
+  | { type: "room.invite"; requestId: string; roomId: string; role: RoomRole; connect: RoomInviteConnect; seats: RoomInviteSeats; letsIn: RoomInviteLetsIn }
   | { type: "room.withdraw-invite"; inviteId: string }
+  /** Lets someone who waits to join the room in, with the role their invite gave. */
+  | { type: "room.let-in"; roomId: string; personId: string }
+  /** Turns someone who waits to join the room away: in no room then, they lose their devices here too. */
+  | { type: "room.turn-away"; roomId: string; personId: string }
   /** Answers a request a room's agent waits on; allowing it for the task lets the same again through until the turn ends. */
   | { type: "room.approve"; conversationId: string; permissionId: string; answer: RoomApprovalAnswer }
   /** Answers a task of a person other than the owner that waits: allowing sends it to its agents, denying tells the room it was declined. */
@@ -502,8 +528,10 @@ export type ServerMessage =
       heldChanges: HeldChange[];
       /** The rooms whose sandbox stopped as they hold as many changes as a room may. */
       roomsHoldingTooMany: string[];
-      /** The room invites nobody has used yet, soonest to expire first. */
+      /** The room invites with seats left, soonest to expire first. */
       roomInvites: RoomInvite[];
+      /** Those who wait to join rooms, longest waiting first. */
+      roomJoiners: RoomJoiner[];
       /** The agents this computer's owner brought into rooms of other machines, and the tasks others gave them that wait for their OK. */
       broughtAgents: BroughtAgentHere[];
       broughtTasks: BroughtTaskWaiting[];
@@ -645,8 +673,12 @@ export type ServerMessage =
   | { type: "room.invited"; requestId: string; invite: RoomInvite | null; text: string | null; problem: string | null; problemAbout?: HostProblem }
   /** The rooms someone other than the owner is in now, each time that changes. */
   | { type: "rooms.people-here"; roomIds: string[] }
-  /** The room invites nobody has used yet, each time one is made, used or withdrawn; those of a deleted room go with it. */
+  /** The room invites with seats left, each time one is made, used or withdrawn; those of a deleted room go with it. */
   | { type: "room-invites.listed"; invites: RoomInvite[] }
+  /** Those who wait to join rooms, each time someone knocks, is let in or turned away; those of a deleted room go with it. */
+  | { type: "room-joiners.listed"; joiners: RoomJoiner[] }
+  /** To a person other than the owner alone: the rooms they wait to be let into, by id alone, each time that changes. */
+  | { type: "rooms.waiting-to-join"; personId: string; roomIds: string[] }
   /** With the pages and questions of the room's canvas, which come as `canvas.upserted` from then on, and the votes on its questions, which come as `room.votes`. */
   | ({ type: "room.timeline"; roomId: string; canvas: CanvasItem[]; votes: RoomQuestionVotes[] } & RoomTimeline)
   /** The picks on a question of a subscribed room's agent, and who may confirm its answer, each time either changes. */
@@ -818,13 +850,14 @@ export type ServerMessage =
   | { type: "machine.status"; status: MachineStatus }
   /** The machine has the request; it waits there until someone types the number this host shows. */
   | { type: "machine.join-asked"; requestId: string; number: string }
-  /** roomId: the room a room invite let this computer's owner into. */
-  | { type: "machine.join-answered"; requestId: string; roomId: string | null; problem: string | null; problemAbout?: HostProblem }
+  /** roomId: the room a room invite let this computer's owner into, or, `waiting`, where they wait for its owner to let them in. */
+  | { type: "machine.join-answered"; requestId: string; roomId: string | null; waiting: boolean; problem: string | null; problemAbout?: HostProblem }
   /**
-   * machineId is null when nothing was added; roomId, the room a room invite's link let this computer's owner into. A
-   * problem joining leaves the machine added, unless the link carried the machine's tunnel: then nothing stays added.
+   * machineId is null when nothing was added; roomId, the room a room invite's link let this computer's owner into, or,
+   * `waiting`, where they wait for its owner to let them in. A problem joining leaves the machine added, unless the link
+   * carried the machine's tunnel: then nothing stays added.
    */
-  | { type: "machine.added"; requestId: string; machineId: string | null; roomId: string | null; problem: string | null; problemAbout?: HostProblem }
+  | { type: "machine.added"; requestId: string; machineId: string | null; roomId: string | null; waiting: boolean; problem: string | null; problemAbout?: HostProblem }
   | { type: "join-requests.listed"; joinRequests: JoinRequest[] }
   /** problem says why it was not approved, e.g. a wrong number, which denies it. */
   | { type: "join-request.answered"; requestId: string; problem: string | null; problemAbout?: HostProblem }

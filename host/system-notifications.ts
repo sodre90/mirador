@@ -38,6 +38,16 @@ export class SystemNotifications {
     this.tell({ ...roomNotification(room.id, room.name, this.store.findWorkspace(room.workspaceId)?.name ?? "", alert), id: crypto.randomUUID() });
   }
 
+  /**
+   * Someone an invite let knock at the room, by the name they presented as the room would let them take it, waits for its
+   * owner to let them in, unless the owner muted it. Even a page that shows the room is told, as nothing in the room
+   * itself shows who waits.
+   */
+  roomKnock(room: Room, by: string) {
+    if (this.store.roomMuted(room.id, this.store.ownerId())) return;
+    this.roomAlert(room, { about: "knock", by });
+  }
+
   /** A room this computer's owner joined on someone else's machine calls them: phones get it too, as they never join that machine. */
   passOnFromJoinedRoom(notification: SystemNotification) {
     this.hub.notifyThisComputer(notification);

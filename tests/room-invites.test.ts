@@ -15,6 +15,9 @@ const HOST = "127.0.0.1:4600";
 const CODE = "ROOM-ABCD-EFGH-JKLM";
 const TUNNEL_KEY = "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=";
 const REACHED: ReachedAt = { host: HOST, authorityFingerprint: NO_AUTHORITY };
+/** Who asks for a challenge, as the limits on joining tell senders apart: an address, or an invite's end of the tunnel, where everyone with its link is one. */
+const REQUESTER = "192.0.2.1";
+const TUNNEL_REQUESTER = "tunnel invite one-time";
 const MINUTE = 60_000;
 
 function keyPair() {
@@ -23,15 +26,20 @@ function keyPair() {
   return { publicKey, sign: (statement: string) => sign(null, Buffer.from(statement), privateKey).toString("base64url") };
 }
 
+const addRoom = (store: Store, id: string) =>
+  store.insertRoom({ id, name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
+
 function machine(owners = keyPair()) {
   const clock = { now: 1_000_000 };
   const now = () => clock.now;
   const store = new Store(":memory:");
   store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "opencode", profileId: "p1" }, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
+  addRoom(store, "r1");
   const invites = new RoomInvites(store, new DeviceService(store, now), owners.publicKey, now);
   return { now, store, clock, invites };
 }
+
+const profileOf = (store: Store, personId: string) => store.listPeople().find(({ id }) => id === personId);
 
 const problemCode = (attempt: () => unknown) => {
   try {
@@ -50,10 +58,10 @@ function presented(key: ReturnType<typeof keyPair>, code: string, challenge: str
 describe("room invites", () => {
   test("stop admitting anyone once they expire, and are no longer listed", () => {
     const { clock, invites } = machine();
-    const { code } = invites.invite("r1", "member");
-    const challenge = invites.challenge(code, REACHED)!;
+    const { code } = invites.invite("r1", "member", 1, "at-once");
+    const challenge = invites.challenge(code, REACHED, REQUESTER)!;
     clock.now += 15 * MINUTE;
-    expect(invites.challenge(code, REACHED)).toBeNull();
+    expect(invites.challenge(code, REACHED, REQUESTER)).toBeNull();
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(keyPair(), code, challenge), REACHED))).toBe("invite-code-wrong");
     expect(invites.waiting()).toEqual([]);
   });
@@ -61,20 +69,20 @@ describe("room invites", () => {
   test("take a challenge only a little while, and only the newest for the invite", () => {
     const { clock, invites } = machine();
     const key = keyPair();
-    const { code } = invites.invite("r1", "guest");
-    const first = invites.challenge(code, REACHED)!;
-    const second = invites.challenge(code, REACHED)!;
+    const { code } = invites.invite("r1", "guest", 1, "at-once");
+    const first = invites.challenge(code, REACHED, REQUESTER)!;
+    const second = invites.challenge(code, REACHED, REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, first), REACHED))).toBe("room-join-unproven");
     clock.now += 2 * MINUTE;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, second), REACHED))).toBe("room-join-unproven");
-    const third = invites.challenge(code, REACHED)!;
+    const third = invites.challenge(code, REACHED, REQUESTER)!;
     expect(invites.redeem(code, "Dora's Mirador", presented(key, code, third), REACHED).roomId).toBe("r1");
   });
 
   test("forget their challenges when withdrawn, and admit nobody after", () => {
     const { invites } = machine();
-    const { code, invite } = invites.invite("r1", "member");
-    const challenge = invites.challenge(code, REACHED)!;
+    const { code, invite } = invites.invite("r1", "member", 1, "at-once");
+    const challenge = invites.challenge(code, REACHED, REQUESTER)!;
     invites.withdraw(invite.id);
     expect(invites.waitsFor(code)).toBe(false);
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(keyPair(), code, challenge), REACHED))).toBe("invite-code-wrong");
@@ -82,22 +90,22 @@ describe("room invites", () => {
 
   test("go with their room", () => {
     const { store, invites } = machine();
-    const { code } = invites.invite("r1", "member");
+    const { code } = invites.invite("r1", "member", 1, "at-once");
     store.deleteRoom("r1");
     expect(invites.waitsFor(code)).toBe(false);
-    expect(problemCode(() => invites.invite("r1", "member"))).toBe("room-gone");
+    expect(problemCode(() => invites.invite("r1", "member", 1, "at-once"))).toBe("room-gone");
   });
 
   test("admit only a proof naming the certificate authority this machine answered with, or none where it served no certificate of its own", () => {
     const { invites } = machine();
     const key = keyPair();
-    const { code } = invites.invite("r1", "member");
+    const { code } = invites.invite("r1", "member", 1, "at-once");
     const servedOwn: ReachedAt = { host: "home.example.ts.net:4602", authorityFingerprint: "own-authority" };
-    const passedOn = invites.challenge(code, servedOwn)!;
+    const passedOn = invites.challenge(code, servedOwn, REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, passedOn, { ...servedOwn, authorityFingerprint: NO_AUTHORITY }), servedOwn))).toBe("room-join-unproven");
-    const pinnedAnother = invites.challenge(code, servedOwn)!;
+    const pinnedAnother = invites.challenge(code, servedOwn, REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, pinnedAnother, { ...servedOwn, authorityFingerprint: "someone-in-between" }), servedOwn))).toBe("room-join-unproven");
-    const proven = invites.challenge(code, servedOwn)!;
+    const proven = invites.challenge(code, servedOwn, REQUESTER)!;
     expect(invites.redeem(code, "Dora's Mirador", presented(key, code, proven, servedOwn), servedOwn).roomId).toBe("r1");
   });
 
@@ -124,19 +132,19 @@ describe("room invites", () => {
   test("admit a proof made through the tunnel only for this machine's own key there, and only as it was asked: never one asked or made at an address", () => {
     const { invites } = machine();
     const key = keyPair();
-    const { code } = invites.invite("r1", "member");
+    const { code } = invites.invite("r1", "member", 1, "at-once");
     const throughTunnel: ReachedAt = { tunnelKey: TUNNEL_KEY };
     const someoneElsesTunnel: ReachedAt = { tunnelKey: "3Q85Sl/Vr65bJz+OyEhIQtyAeBRDJQqqkVWJgryS2WE=" };
-    const forAnotherMachine = invites.challenge(code, throughTunnel)!;
+    const forAnotherMachine = invites.challenge(code, throughTunnel, TUNNEL_REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, forAnotherMachine, someoneElsesTunnel), throughTunnel))).toBe("room-join-unproven");
-    const madeAtAnAddress = invites.challenge(code, throughTunnel)!;
+    const madeAtAnAddress = invites.challenge(code, throughTunnel, TUNNEL_REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, madeAtAnAddress, REACHED), throughTunnel))).toBe("room-join-unproven");
-    const askedThroughTunnel = invites.challenge(code, throughTunnel)!;
+    const askedThroughTunnel = invites.challenge(code, throughTunnel, TUNNEL_REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, askedThroughTunnel, REACHED), REACHED))).toBe("room-join-unproven");
-    const askedAtAnAddress = invites.challenge(code, REACHED)!;
+    const askedAtAnAddress = invites.challenge(code, REACHED, REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(key, code, askedAtAnAddress, throughTunnel), throughTunnel))).toBe("room-join-unproven");
     expect(invites.waitsFor(code)).toBe(true);
-    const proven = invites.challenge(code, throughTunnel)!;
+    const proven = invites.challenge(code, throughTunnel, TUNNEL_REQUESTER)!;
     expect(invites.redeem(code, "Dora's Mirador", presented(key, code, proven, throughTunnel), throughTunnel).roomId).toBe("r1");
     expect(invites.waitsFor(code)).toBe(false);
   });
@@ -149,8 +157,8 @@ describe("room invites", () => {
 
   test("give back the code of a withdrawn invite, or of every one into a room that goes, for its one-time key in the tunnel to go too", () => {
     const { invites } = machine();
-    const first = invites.invite("r1", "member");
-    const second = invites.invite("r1", "guest");
+    const first = invites.invite("r1", "member", 1, "at-once");
+    const second = invites.invite("r1", "guest", 1, "at-once");
     expect(invites.withdraw(first.invite.id)).toBe(inviteKey(first.code));
     expect(invites.withdraw(first.invite.id)).toBeNull();
     expect(invites.withdrawAllInto("r1")).toEqual([inviteKey(second.code)]);
@@ -159,7 +167,7 @@ describe("room invites", () => {
 
   test("go out without a way through the tunnel when making its one-time key fails, saying why in the log alone and letting go of what it made, and keep none for an invite withdrawn meanwhile", async () => {
     const { invites } = machine();
-    const { code, invite } = invites.invite("r1", "member");
+    const { code, invite } = invites.invite("r1", "member", 1, "at-once");
     const withdrawn: string[] = [];
     const failing = { invite: () => Promise.reject(new Error("the sidecar stopped")), inviteWithdrawn: (key: string) => void withdrawn.push(key) };
     const logged = spyOn(console, "error").mockImplementation(() => {});
@@ -182,11 +190,11 @@ describe("room invites", () => {
   test("answer the owner's own key as they answer a proof that fails, and only once the proof holds", () => {
     const owners = keyPair();
     const { invites } = machine(owners);
-    const { code } = invites.invite("r1", "member");
-    const unproven = invites.challenge(code, REACHED)!;
+    const { code } = invites.invite("r1", "member", 1, "at-once");
+    const unproven = invites.challenge(code, REACHED, REQUESTER)!;
     const forged = { ...presented(keyPair(), code, unproven), publicKey: owners.publicKey };
     expect(problemCode(() => invites.redeem(code, "Me?", forged, REACHED))).toBe("room-join-unproven");
-    const proven = invites.challenge(code, REACHED)!;
+    const proven = invites.challenge(code, REACHED, REQUESTER)!;
     expect(problemCode(() => invites.redeem(code, "Me", presented(owners, code, proven), REACHED))).toBe("room-join-unproven");
     expect(invites.waitsFor(code)).toBe(true);
   });
@@ -194,14 +202,203 @@ describe("room invites", () => {
   test("leave nothing behind when the device can't be made: no person, key or place in the room", () => {
     const { now, store, invites } = machine();
     const key = keyPair();
-    const { code } = invites.invite("r1", "member");
+    const { code } = invites.invite("r1", "member", 1, "at-once");
     const failing = new RoomInvites(store, { admit: () => { throw new Error("disk full"); } } as unknown as DeviceService, keyPair().publicKey, now);
-    const challenge = failing.challenge(code, REACHED)!;
+    const challenge = failing.challenge(code, REACHED, REQUESTER)!;
     expect(() => failing.redeem(code, "Dora's Mirador", presented(key, code, challenge), REACHED)).toThrow("disk full");
     expect(store.listPeople()).toHaveLength(1);
     expect(store.personWithKey(key.publicKey)).toBeUndefined();
     expect(store.findRoom("r1")?.people).toEqual([]);
     expect(invites.waitsFor(code)).toBe(true);
+    expect(invites.waiting().map(({ taken }) => taken)).toEqual([0]);
+  });
+});
+
+describe("a room invite for several people", () => {
+  /** Joins with a fresh challenge of its own, signed by the key. */
+  const joining = (invites: RoomInvites, code: string, key = keyPair(), name = "Dora", p2p: { inviteUsed: (code: string) => void } | null = null) =>
+    invites.redeem(code, `${name}'s Mirador`, { ...presented(key, code, invites.challenge(code, REACHED, REQUESTER)!), name }, REACHED, p2p);
+
+  const takenOf = (invites: RoomInvites) => invites.waiting().map(({ taken, seats }) => `${taken} of ${seats}`);
+
+  test("takes a seat for each person it lets in, and once they are taken admits nobody new, its one-time key in the tunnel kept until then and let go then", () => {
+    const { invites, store } = machine();
+    const { code } = invites.invite("r1", "member", 5, "at-once");
+    const keysOver: string[] = [];
+    const p2p = { inviteUsed: (used: string) => void keysOver.push(used) };
+    Array.from({ length: 4 }, (_, index) => joining(invites, code, keyPair(), `Person ${index}`, p2p));
+    expect(takenOf(invites)).toEqual(["4 of 5"]);
+    expect(keysOver).toEqual([]);
+    expect(joining(invites, code, keyPair(), "Fifth", p2p)).toMatchObject({ roomId: "r1", waiting: false });
+    expect(keysOver).toEqual([code]);
+    expect(invites.waitsFor(code)).toBe(false);
+    expect(invites.waiting()).toEqual([]);
+    expect(invites.challenge(code, REACHED, REQUESTER)).toBeNull();
+    expect(store.findRoom("r1")?.people.map(({ role }) => role)).toEqual(Array(5).fill("member"));
+  });
+
+  test("keeps a challenge for each seat left, so several join at once, each with its own, the newest replacing the oldest", () => {
+    const { invites } = machine();
+    const { code } = invites.invite("r1", "guest", 5, "at-once");
+    const [dora, ola] = [keyPair(), keyPair()];
+    const challenges = Array.from({ length: 6 }, () => invites.challenge(code, REACHED, REQUESTER)!);
+    expect(problemCode(() => invites.redeem(code, "Dora's Mirador", presented(dora, code, challenges[0]!), REACHED))).toBe("room-join-unproven");
+    expect(invites.redeem(code, "Dora's Mirador", presented(dora, code, challenges[1]!), REACHED).roomId).toBe("r1");
+    expect(invites.redeem(code, "Ola's Mirador", presented(ola, code, challenges[5]!), REACHED).roomId).toBe("r1");
+    expect(problemCode(() => invites.redeem(code, "Ola's Mirador", presented(keyPair(), code, challenges[5]!), REACHED))).toBe("room-join-unproven");
+    expect(takenOf(invites)).toEqual(["2 of 5"]);
+  });
+
+  test("tells by its code, as inviteKey keeps it, how many seats it has left, for the tries its link gets through the tunnel; any other code has one", () => {
+    const { invites } = machine();
+    const { code } = invites.invite("r1", "guest", 5, "at-once");
+    joining(invites, code);
+    expect(invites.seatsLeftFor(inviteKey(code))).toBe(4);
+    expect(invites.seatsLeftFor(inviteKey("ROOM-ZZZZ-ZZZZ-ZZZZ"))).toBe(1);
+  });
+
+  test("keeps each requester's challenges apart, so one asking again and again replaces only its own, never another joiner's", () => {
+    const { invites } = machine();
+    const { code } = invites.invite("r1", "guest", 5, "at-once");
+    const dorasChallenge = invites.challenge(code, REACHED, "192.0.2.7")!;
+    const asksOften = Array.from({ length: 10 }, () => invites.challenge(code, REACHED, "203.0.113.9")!);
+    expect(invites.redeem(code, "Dora's Mirador", presented(keyPair(), code, dorasChallenge), REACHED).roomId).toBe("r1");
+    expect(problemCode(() => invites.redeem(code, "Ola's Mirador", presented(keyPair(), code, asksOften[4]!), REACHED))).toBe("room-join-unproven");
+    expect(invites.redeem(code, "Ola's Mirador", presented(keyPair(), code, asksOften[5]!), REACHED).roomId).toBe("r1");
+  });
+
+  test("shows its owner who waits at the door by a name the room would let them take: none for Mirador's own words, and one the owner, a person, a writer or an agent of the room goes by marked as the room marks it, while the joiner learns nothing of it", () => {
+    const { invites, store } = machine();
+    store.setPersonProfile(store.ownerId(), { name: "Peter", color: null });
+    store.insertPerson({ id: "alice", name: "Alice", color: null });
+    store.setRoomPersonRole("r1", "alice", "member");
+    store.insertPerson({ id: "wren", name: "Wren", color: null });
+    store.appendRoomMessage({ id: "m1", roomId: "r1", at: 1, author: { personId: "wren" }, text: "Before I left", tags: [], threadId: null });
+    store.saveProfile({ id: "p1", name: "Builder", harness: "opencode", environment: "", prelaunch: "", model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
+    store.setRoomAgents("r1", ["p1"]);
+    const { code } = invites.invite("r1", "member", 10, "after-ok");
+    const presentedNames = ["ALICE", "Peter", "wren", "Builder", "Owner", "Someone without a name 1234", "Ivy"];
+    const knocked = presentedNames.map((name) => joining(invites, code, keyPair(), name));
+    expect(invites.joiners().map(({ name, nameClash }) => [name, nameClash ?? null])).toEqual([
+      ["", "ALICE"],
+      ["", "Peter"],
+      ["", "wren"],
+      ["", "Builder"],
+      ["", null],
+      ["", null],
+      ["Ivy", null],
+    ]);
+    expect(invites.joiner("r1", knocked[0]!.personId)).toMatchObject({ name: "", nameClash: "ALICE" });
+    expect(new Set(knocked.map((each) => Object.keys(each).toSorted().join()))).toEqual(new Set([Object.keys(knocked[6]!).toSorted().join()]));
+    expect(knocked.map(({ personId }) => profileOf(store, personId)?.name)).toEqual(presentedNames.map(() => ""));
+  });
+
+  test("changes nothing of a person who comes to the door until the owner lets them in, though they are someone already in another room", () => {
+    const { invites, store } = machine();
+    addRoom(store, "r2");
+    const key = keyPair();
+    const alice = joining(invites, invites.invite("r1", "member", 1, "at-once").code, key, "Alice");
+    const { code } = invites.invite("r2", "member", 5, "after-ok");
+    const asMallory = { ...presented(key, code, invites.challenge(code, REACHED, REQUESTER)!), name: "Mallory", color: "rose" };
+    expect(invites.redeem(code, "Alice's Mirador", asMallory, REACHED)).toMatchObject({ personId: alice.personId, waiting: true });
+    expect(profileOf(store, alice.personId)).toMatchObject({ name: "Alice", color: "mint" });
+    invites.letIn("r2", alice.personId);
+    expect(profileOf(store, alice.personId)).toMatchObject({ name: "Mallory", color: "rose" });
+  });
+
+  test("takes no second seat for the same key, whether it came in, waits or was turned away: a repeat is refused", () => {
+    const { invites, store } = machine();
+    const atOnce = invites.invite("r1", "member", 5, "at-once");
+    const key = keyPair();
+    const first = joining(invites, atOnce.code, key);
+    expect(problemCode(() => joining(invites, atOnce.code, key))).toBe("room-invite-used-already");
+    expect(takenOf(invites)).toEqual(["1 of 5"]);
+    expect(store.listDevices().filter(({ personId }) => personId === first.personId)).toHaveLength(1);
+
+    invites.withdraw(atOnce.invite.id);
+    const afterOk = invites.invite("r1", "member", 5, "after-ok");
+    const waiting = keyPair();
+    const knocked = joining(invites, afterOk.code, waiting, "Ola");
+    expect(problemCode(() => joining(invites, afterOk.code, waiting, "Ola"))).toBe("room-invite-used-already");
+    invites.turnAway("r1", knocked.personId);
+    expect(problemCode(() => joining(invites, afterOk.code, waiting, "Ola"))).toBe("room-invite-used-already");
+    expect(invites.joiners()).toEqual([]);
+    expect(takenOf(invites)).toEqual(["1 of 5"]);
+  });
+
+  test("with the owner's OK first, takes the person to the room's door alone, until the owner lets them in with the invite's role and the name they presented", () => {
+    const { invites, store, clock } = machine();
+    const { code } = invites.invite("r1", "guest", 10, "after-ok");
+    const knocked = joining(invites, code, keyPair(), "Dora");
+    expect(knocked).toMatchObject({ roomId: "r1", waiting: true });
+    expect(store.findRoom("r1")?.people).toEqual([]);
+    expect(store.roomsOf(knocked.personId)).toEqual([]);
+    expect(invites.roomsWaitedForBy(knocked.personId)).toEqual(["r1"]);
+    expect(invites.joiners()).toEqual([{ roomId: "r1", personId: knocked.personId, role: "guest", name: "Dora", deviceName: "Dora's Mirador", since: clock.now }]);
+    expect(takenOf(invites)).toEqual(["1 of 10"]);
+
+    invites.letIn("r1", knocked.personId);
+    expect(store.findRoom("r1")?.people).toEqual([{ personId: knocked.personId, role: "guest" }]);
+    expect(store.listPeople().find(({ id }) => id === knocked.personId)).toMatchObject({ name: "Dora", color: "mint" });
+    expect(invites.joiners()).toEqual([]);
+    expect(invites.roomsWaitedForBy(knocked.personId)).toEqual([]);
+    expect(problemCode(() => invites.letIn("r1", knocked.personId))).toBe("room-joiner-gone");
+    expect(problemCode(() => invites.turnAway("r1", knocked.personId))).toBe("room-joiner-gone");
+  });
+
+  test("leaves whoever waits waiting after the invite expires or is withdrawn, for the owner to let in or turn away", () => {
+    const { invites, store, clock } = machine();
+    const expiring = invites.invite("r1", "member", 5, "after-ok");
+    const dora = joining(invites, expiring.code, keyPair(), "Dora");
+    const withdrawn = invites.invite("r1", "member", 5, "after-ok");
+    const ola = joining(invites, withdrawn.code, keyPair(), "Ola");
+    invites.withdraw(withdrawn.invite.id);
+    clock.now += 15 * 60_000;
+    expect(invites.waiting()).toEqual([]);
+    expect(invites.joiners().map(({ name }) => name)).toEqual(["Dora", "Ola"]);
+    invites.letIn("r1", dora.personId);
+    invites.turnAway("r1", ola.personId);
+    expect(store.findRoom("r1")?.people).toEqual([{ personId: dora.personId, role: "member" }]);
+  });
+
+  test("keeps the devices of those who wait while they are in no room, and of those turned away no more", () => {
+    const { invites, store } = machine();
+    const { code } = invites.invite("r1", "member", 5, "after-ok");
+    const dora = joining(invites, code, keyPair(), "Dora");
+    expect(store.peopleInNoRoom([dora.personId])).toEqual([]);
+    invites.turnAway("r1", dora.personId);
+    expect(store.peopleInNoRoom([dora.personId])).toEqual([dora.personId]);
+  });
+
+  test("leaves someone already in the room as they are, name and all, with the owner's OK first, and lets the owner's adding them in end their wait", () => {
+    const { invites, store } = machine();
+    const key = keyPair();
+    const atOnce = invites.invite("r1", "guest", 1, "at-once");
+    const dora = joining(invites, atOnce.code, key);
+    const afterOk = invites.invite("r1", "member", 5, "after-ok");
+    expect(joining(invites, afterOk.code, key, "Dorothea")).toMatchObject({ personId: dora.personId, waiting: false });
+    expect(store.findRoom("r1")?.people).toEqual([{ personId: dora.personId, role: "guest" }]);
+    expect(profileOf(store, dora.personId)?.name).toBe("Dora");
+
+    const ola = joining(invites, afterOk.code, keyPair(), "Ola");
+    store.setRoomPersonRole("r1", ola.personId, "guest");
+    expect(invites.joiners()).toEqual([]);
+  });
+
+  test("never takes the owner's own key to the door either", () => {
+    const owners = keyPair();
+    const { invites } = machine(owners);
+    const { code } = invites.invite("r1", "member", 5, "after-ok");
+    expect(problemCode(() => joining(invites, code, owners, "Me"))).toBe("room-join-unproven");
+    expect(invites.joiners()).toEqual([]);
+    expect(takenOf(invites)).toEqual(["0 of 5"]);
+  });
+
+  test("is made only for as many people, and to let them in only in a way, as the dialog offers", () => {
+    const { invites } = machine();
+    expect(() => invites.invite("r1", "member", 3 as 5, "at-once")).toThrow("A room invite can't be for 3 people.");
+    expect(() => invites.invite("r1", "member", 5, "whenever" as "at-once")).toThrow(`A room invite can't let people in "whenever".`);
+    expect(invites.waiting()).toEqual([]);
   });
 });
 

@@ -81,6 +81,9 @@ These terms stay the same everywhere:
 | sandbox (a light VM a room's agents run in) | sandbox | sandbox | 沙箱 | Sandbox (die) |
 | work freely (in a sandbox, without asking) | szabadon dolgozik | trabajar libremente | 自由工作 | frei arbeiten |
 | held (an agent config change, put back until the owner allows it) | visszatartott | retenido | 暂扣 | zurückgehalten |
+| let in (someone a room invite took to the room's door) | beenged / beengedés | dejar entrar | 允许进入 | hereinlassen |
+| turn away (someone waiting at a room's door) | elutasít / elutasítás | rechazar | 拒绝 | abweisen |
+| waiting to join (at a room's door, for its owner's OK) | belépésre vár | esperando para entrar | 等待加入 | Warten auf Einlass |
 
 ## Hungarian
 

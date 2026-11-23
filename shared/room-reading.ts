@@ -14,8 +14,11 @@ export interface RoomReading {
   muted: boolean;
 }
 
-/** Why a room calls you while you look elsewhere: someone tagged you, or a question waits for you to confirm its answer. */
-export type RoomAlert = { about: "mention"; by: string; text: string } | { about: "confirm"; question: string };
+/**
+ * Why a room calls you while you look elsewhere: someone tagged you, or a question waits for you to confirm its answer;
+ * for its owner alone, someone an invite let knock waits for them to let them in.
+ */
+export type RoomAlert = { about: "mention"; by: string; text: string } | { about: "confirm"; question: string } | { about: "knock"; by: string };
 
 export const ROOM_ALERT_KINDS = ["mention", "confirm"] as const satisfies readonly RoomAlert["about"][];
 

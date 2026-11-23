@@ -87,6 +87,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             heldChanges={[]}
             holdsTooMany={false}
             presence={state.roomPresence?.roomId === room.id ? state.roomPresence : null}
+            joiners={[]}
             muted={isMuted(state.roomReadings, room.id)}
             you={state.you}
             dispatch={dispatch}
@@ -98,7 +99,7 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
               <LayoutToggles />
             </div>
             <div className="empty-state">
-              <h2>{outOfRooms ? words.outOfRooms : state.rooms.length === 0 ? words.inNoRoom : words.noRoomOpen}</h2>
+              <h2>{outOfRooms ? words.outOfRooms : state.rooms.length > 0 ? words.noRoomOpen : state.waitingToJoin.length > 0 ? words.waitingHere : words.inNoRoom}</h2>
               {!outOfRooms && <Welcome state={state} />}
             </div>
           </>

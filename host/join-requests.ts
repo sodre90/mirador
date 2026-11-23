@@ -194,7 +194,7 @@ export class SenderLimit {
     private readonly most = MOST_ASKED_PER_SENDER_A_MINUTE,
   ) {}
 
-  allows(sender: string) {
+  allows(sender: string, most = this.most) {
     const aMinuteAgo = this.now() - 60_000;
     this.askedAt.forEach((times, someSender) => {
       const recent = times.filter((at) => at > aMinuteAgo);
@@ -202,7 +202,7 @@ export class SenderLimit {
       else this.askedAt.delete(someSender);
     });
     const recent = this.askedAt.get(sender) ?? [];
-    if (recent.length >= this.most) return false;
+    if (recent.length >= most) return false;
     this.askedAt.set(sender, [...recent, this.now()]);
     return true;
   }
@@ -213,12 +213,28 @@ export class SenderAndOverallLimit {
   private readonly perSender: SenderLimit;
   private readonly overall: SenderLimit;
 
-  constructor(now: () => number, mostPerSender: number, mostOverall: number) {
+  constructor(
+    now: () => number,
+    private readonly mostPerSender: number,
+    mostOverall: number,
+  ) {
     this.perSender = new SenderLimit(now, mostPerSender);
     this.overall = new SenderLimit(now, mostOverall);
   }
 
   allows(sender: string) {
     return this.perSender.allows(sender) && this.overall.allows("");
+  }
+
+  /**
+   * A request from `address`, or through the tunnel end `end`. Everyone holding an invite's link reaches its end as one
+   * sender, as nothing there tells them apart, so that end gets so many tries for each seat its invite has left, and
+   * none of the shared ones: the shared limit keeps codes from being guessed, and that end takes its own invite's code
+   * alone.
+   */
+  allowsRequest(end: TunnelEnd | undefined, address: ClientAddress, seatsLeftOf: (inviteKey: string) => number) {
+    const sender = senderForLimits(end, address);
+    if (end && "inviteKey" in end) return this.perSender.allows(sender, this.mostPerSender * seatsLeftOf(end.inviteKey));
+    return this.allows(sender);
   }
 }

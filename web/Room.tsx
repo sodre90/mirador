@@ -26,6 +26,7 @@ import {
   type RoomAgentModel,
   type RoomApproval,
   type RoomAuthor,
+  type RoomJoiner,
   type RoomMessage,
   type RoomMessageSentAlong,
   type RoomPresence,
@@ -55,6 +56,7 @@ import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./stat
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
 import { HeldChangeCard } from "./RoomSandbox.tsx";
+import { WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -622,7 +624,7 @@ function BroughtMark({ brought }: { brought: BroughtAgent & { bringer: string } 
 }
 
 /** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which model for the owner, who changes it there. */
-function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents: RoomAgentShown[]; here: string[]; ownerId: string | null; owns: boolean }) {
+function RoomPeople({ room, agents, here, joiners, ownerId, owns }: { room: Room; agents: RoomAgentShown[]; here: string[]; joiners: RoomJoiner[]; ownerId: string | null; owns: boolean }) {
   const opener = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
@@ -640,7 +642,7 @@ function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents:
         aria-expanded={placement !== null}
         onClick={() => setPlacement(placement || !opener.current ? null : placedBelowOnItsSide(opener.current))}
       >
-        {words.hereCount(here.length)}
+        {[words.hereCount(here.length), owns && joiners.length > 0 && words.waitingCount(joiners.length)].filter(Boolean).join(" · ")}
       </button>
       {placement && (
         <div ref={popover} className="room-people" role="dialog" aria-label={words.peopleOfRoom} style={placement}>
@@ -655,6 +657,7 @@ function RoomPeople({ room, agents, here, ownerId, owns }: { room: Room; agents:
               </li>
             ))}
           </ul>
+          {owns && <WaitingToJoin joiners={joiners} />}
           {agents.length > 0 && (
             <>
               <h3>{words.agents}</h3>
@@ -705,6 +708,7 @@ export function RoomView({
   heldChanges,
   holdsTooMany,
   presence,
+  joiners,
   muted,
   you,
   dispatch,
@@ -728,6 +732,8 @@ export function RoomView({
   holdsTooMany: boolean;
   /** Who is in the room now and who of them writes, once the host said. */
   presence: RoomPresence | null;
+  /** Who waits at the room's door for its owner to let them in; only the owner is told. */
+  joiners: RoomJoiner[];
   /** Whether the room notifies you. */
   muted: boolean;
   you: string | null;
@@ -781,7 +787,7 @@ export function RoomView({
             ))}
           </ul>
         )}
-        {presence && <RoomPeople room={room} agents={agents} here={presence.here} ownerId={ownerId} owns={owns} />}
+        {presence && <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} />}
         <MuteToggle roomId={room.id} muted={muted} />
         {owns && (
           <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>

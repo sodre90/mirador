@@ -1,14 +1,14 @@
 import { HostProblemError } from "../shared/host-problems.ts";
 import { isPastel, type Device, type Pastel } from "../shared/model.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
-import { isRoomRole, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
+import { isRoomInviteLetsIn, isRoomInviteSeats, isRoomRole, type RoomInvite, type RoomInviteLetsIn, type RoomInviteSeats, type RoomJoiner, type RoomRole } from "../shared/rooms.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import type { InviteTunnel } from "../shared/tunnel.ts";
 import { inviteKey, newRoomInvite, type DeviceService } from "./devices.ts";
 import { isChallenge, newChallenge, NO_AUTHORITY, signedRoomJoin, type ReachedAt } from "./person-keys.ts";
-import { namesOthersGoBy } from "./person-view.ts";
+import { namesOthersGoBy, namesShownIn } from "./person-view.ts";
 import type { PeerToPeer, TunnelEnd } from "./p2p/service.ts";
-import type { Store } from "./store.ts";
+import type { Store, StoredRoomJoiner } from "./store.ts";
 
 const CHALLENGE_LIFETIME_MILLISECONDS = 2 * 60_000;
 /** Far longer than a name the rules keep, so a longer one is turned away before they read it all. */
@@ -20,6 +20,8 @@ interface Challenge {
   inviteId: string;
   /** How the joiner asked for it, which its signature must name and its join must come the same way. */
   reachedAt: ReachedAt;
+  /** Who asked for it, as the limits on joining tell senders apart. */
+  requester: string;
   expiresAt: number;
 }
 
@@ -42,21 +44,44 @@ export function reachedAt(request: Request, code: string, own: { authorityFinger
 const sameReach = (one: ReachedAt, other: ReachedAt) =>
   "tunnelKey" in one ? "tunnelKey" in other && one.tunnelKey === other.tunnelKey : "host" in other && one.host === other.host && one.authorityFingerprint === other.authorityFingerprint;
 
-/** What came of a room invite: a device of a person other than the owner, and the room it let them into. */
+/**
+ * What came of a room invite: a device of a person other than the owner, and the room it let them into, or, `waiting`,
+ * whose door they wait at for the owner to let them in, with nothing of the room theirs until then.
+ */
 export interface Admitted {
   device: Device;
   token: string;
   personId: string;
   roomId: string;
+  waiting: boolean;
+}
+
+/** Of a name a person presented, what the name rules let them go by: cleaned, or none. */
+function presentedName(presented: unknown) {
+  return typeof presented === "string" && presented.length <= LONGEST_PRESENTED_NAME && !nameRefused(presented) ? personName(shownAsWritten(presented)) : "";
 }
 
 /**
- * Invites into a room, each for one person with one role, kept apart from device invites: only a waiting room invite's
- * code gets a challenge or admits anyone here, and what it admits is always a person other than the owner. The person
- * proves the key they present by signing the challenge, the invite, and how they reached this machine: its address and
- * the certificate authority they trusted it by, or its key in the peer-to-peer tunnel. So a signature made for another
- * invite or machine, passed on by someone in between, asked for one way and used another, or used once already, admits
- * nobody. A proof that fails and one with the owner's key are turned away alike.
+ * Of a name a person presented, the one they may go by beside names `taken` already: none where the name rules refuse it
+ * or it reads as Mirador's own words, and none, with the name it clashes as, where it reads as one taken.
+ */
+function checkedName(presented: unknown, taken: string[]): { name: string; nameClash?: string } {
+  const named = presentedName(presented);
+  if (readsAsMiradorsWords(named)) return { name: "" };
+  return nameTaken(named, taken) ? { name: "", nameClash: named } : { name: named };
+}
+
+/**
+ * Invites into a room, each for as many people as its seats with one role, kept apart from device invites: only the code
+ * of a room invite with seats left gets a challenge or admits anyone here, and what it admits is always a person other
+ * than the owner. The person proves the key they present by signing the challenge, the invite, and how they reached this
+ * machine: its address and the certificate authority they trusted it by, or its key in the peer-to-peer tunnel. So a
+ * signature made for another invite or machine, passed on by someone in between, asked for one way and used another, or
+ * used once already, admits nobody. A proof that fails and one with the owner's key are turned away alike.
+ *
+ * Each person an invite admits takes one of its seats for good, whether they come in at once, wait for the owner's OK,
+ * or are turned away; the same key never takes a second. Once its seats are taken the invite goes, as when it expires or
+ * the owner withdraws it. Those who wait outlive their invite, until the owner lets them in or turns them away.
  */
 export class RoomInvites {
   private readonly challenges = new Map<string, Challenge>();
@@ -69,17 +94,54 @@ export class RoomInvites {
     private readonly now: () => number = Date.now,
   ) {}
 
-  invite(roomId: string, role: RoomRole): { invite: RoomInvite; code: string } {
+  invite(roomId: string, role: RoomRole, seats: RoomInviteSeats, letsIn: RoomInviteLetsIn): { invite: RoomInvite; code: string } {
     if (!this.store.findRoom(roomId)) throw new HostProblemError({ code: "room-gone" });
     if (!isRoomRole(role)) throw new Error(`There is no room role "${role}".`);
+    if (!isRoomInviteSeats(seats)) throw new Error(`A room invite can't be for ${seats} people.`);
+    if (!isRoomInviteLetsIn(letsIn)) throw new Error(`A room invite can't let people in "${letsIn}".`);
     const { code, expiresAt } = newRoomInvite(this.now());
-    const invite = { id: crypto.randomUUID(), roomId, role, expiresAt };
+    const invite = { id: crypto.randomUUID(), roomId, role, expiresAt, seats, letsIn, taken: 0 };
     this.store.addRoomInvite(invite, inviteKey(code));
     return { invite, code };
   }
 
   waiting(): RoomInvite[] {
     return this.store.waitingRoomInvites(this.now());
+  }
+
+  joiners(): RoomJoiner[] {
+    return this.store.roomJoiners().map((joiner) => this.atTheDoor(joiner));
+  }
+
+  joiner(roomId: string, personId: string): RoomJoiner | undefined {
+    const joiner = this.store.findRoomJoiner(roomId, personId);
+    return joiner && this.atTheDoor(joiner);
+  }
+
+  /** Of an invite into a room, by its code as `inviteKey` keeps it, the seats it has left; one for any other code. */
+  seatsLeftFor(codeKey: string) {
+    const invite = this.store.findRoomInvite(codeKey, this.now());
+    return invite ? invite.seats - invite.taken : 1;
+  }
+
+  /** The rooms the person waits to be let into, which is all they learn of them until then. */
+  roomsWaitedForBy(personId: string): string[] {
+    return this.store.roomsWaitedForBy(personId);
+  }
+
+  /** In with the role their invite gave and the name they presented, as an invite that lets people in at once would have. */
+  letIn(roomId: string, personId: string) {
+    const joiner = this.store.findRoomJoiner(roomId, personId);
+    if (!joiner) throw new HostProblemError({ code: "room-joiner-gone" });
+    this.store.inOneTransaction(() => {
+      this.store.setRoomPersonRole(roomId, personId, joiner.role);
+      this.namePerson(roomId, personId, joiner.presentedName, joiner.color);
+    });
+  }
+
+  /** They keep the seat they took, so the same invite lets them knock no more. */
+  turnAway(roomId: string, personId: string) {
+    if (!this.store.deleteRoomJoiner(roomId, personId)) throw new HostProblemError({ code: "room-joiner-gone" });
   }
 
   /** The withdrawn invite's code as `inviteKey` keeps it, for its one-time key in the tunnel to go too; null when it was gone already. */
@@ -115,22 +177,29 @@ export class RoomInvites {
     return null;
   }
 
-  /** A challenge for whoever holds a waiting room invite's code to sign; the newest for an invite replaces the one before. Null for any other code. */
-  challenge(code: string, reached: ReachedAt): string | null {
+  /**
+   * A challenge for whoever holds the code of a room invite with seats left to sign; null for any other code. Each
+   * requester keeps one challenge for each seat left, so as many people as it has seats can join at once, even from one
+   * address, and its newest replaces its oldest, never another requester's. Through the tunnel everyone with the link is
+   * one requester, as nothing there tells them apart.
+   */
+  challenge(code: string, reached: ReachedAt, requester: string): string | null {
     const invite = this.store.findRoomInvite(inviteKey(code), this.now());
     if (!invite) return null;
-    this.forgetChallengesFor(invite.id);
+    this.forgetChallengesBeyondSeats(invite, requester);
     const challenge = newChallenge();
-    this.challenges.set(challenge, { inviteId: invite.id, reachedAt: reached, expiresAt: this.now() + CHALLENGE_LIFETIME_MILLISECONDS });
+    this.challenges.set(challenge, { inviteId: invite.id, reachedAt: reached, requester, expiresAt: this.now() + CHALLENGE_LIFETIME_MILLISECONDS });
     return challenge;
   }
 
   /**
-   * Uses the invite up for the person whose key signed the challenge made for it, reached as `reached`: the same key is the same
-   * person, who gains the room, and a new key a new person. Their device, their place in the room with the invite's role
-   * and the name they presented are made in one go. The challenge is used up whatever comes of it.
+   * Takes a seat of the invite for the person whose key signed the challenge made for it, reached as `reached`: the same key
+   * is the same person, and a new key a new person. Their device, their seat, and their place in the room with the invite's
+   * role and the name they presented, or at its door, are made in one go. A key that took a seat of the invite before takes
+   * none again. The challenge is used up whatever comes of it; with the invite's last seat taken, its one-time key in the
+   * tunnel is over.
    */
-  redeem(code: string, deviceName: string, presented: unknown, reached: ReachedAt): Admitted {
+  redeem(code: string, deviceName: string, presented: unknown, reached: ReachedAt, p2p: Pick<PeerToPeer, "inviteUsed"> | null = null): Admitted {
     const { publicKey, name, color, challenge, signature } = (typeof presented === "object" && presented !== null ? presented : {}) as Record<string, unknown>;
     const asked = isChallenge(challenge) ? this.takeChallenge(challenge) : undefined;
     const codeKey = inviteKey(code);
@@ -143,14 +212,45 @@ export class RoomInvites {
       typeof publicKey === "string" &&
       signedRoomJoin({ challenge, inviteKey: codeKey, ...reached, publicKey }, signature);
     if (!proven || publicKey === this.ownersPublicKey) throw new HostProblemError({ code: "room-join-unproven" });
-    return this.store.inOneTransaction(() => {
-      const taken = this.store.takeRoomInvite(codeKey, this.now());
-      if (!taken) throw new HostProblemError({ code: "invite-code-wrong" });
+    const { admitted, wasLastSeat } = this.store.inOneTransaction(() => {
       const personId = this.personWithKey(publicKey);
-      this.store.setRoomPersonRole(taken.roomId, personId, taken.role);
-      this.namePerson(taken.roomId, personId, name, isPastel(color) ? color : null);
-      return { ...this.devices.admit(deviceName, personId), personId, roomId: taken.roomId };
+      if (this.store.tookRoomInviteSeat(invite.id, personId)) throw new HostProblemError({ code: "room-invite-used-already" });
+      const wasLastSeat = this.store.takeRoomInviteSeat(invite.id, personId);
+      const waiting = this.comeIn(invite, personId, { name, color: isPastel(color) ? color : null, deviceName });
+      return { admitted: { ...this.devices.admit(deviceName, personId), personId, roomId: invite.roomId, waiting }, wasLastSeat };
     });
+    if (wasLastSeat) this.lastSeatTaken(invite.id, code, p2p);
+    return admitted;
+  }
+
+  /**
+   * Into the room with the invite's role and the name they presented, or, where it asks the owner's OK first, at the
+   * room's door, with nothing of theirs changed until the owner lets them in; someone already in the room stays in it as
+   * they are then. Whether they wait.
+   */
+  private comeIn(invite: RoomInvite, personId: string, { name, color, deviceName }: { name: unknown; color: Pastel | null; deviceName: string }) {
+    if (invite.letsIn === "at-once") {
+      this.store.setRoomPersonRole(invite.roomId, personId, invite.role);
+      this.namePerson(invite.roomId, personId, name, color);
+      return false;
+    }
+    const inTheRoom = this.store.findRoom(invite.roomId)?.people.some((person) => person.personId === personId) === true;
+    if (!inTheRoom) this.store.addRoomJoiner({ roomId: invite.roomId, personId, role: invite.role, presentedName: presentedName(name), color, deviceName, since: this.now() });
+    return !inTheRoom;
+  }
+
+  /**
+   * Someone at the room's door as its owner sees them: by the name they presented, as the room would let them take it
+   * now, beside its owner, its people, who wrote there and its agents. They learn nothing of it.
+   */
+  private atTheDoor({ presentedName: presented, color: _takenOnceLetIn, ...joiner }: StoredRoomJoiner): RoomJoiner {
+    const room = this.store.findRoom(joiner.roomId);
+    return { ...joiner, ...checkedName(presented, room ? namesShownIn(this.store, room, joiner.personId) : []) };
+  }
+
+  private lastSeatTaken(inviteId: string, code: string, p2p: Pick<PeerToPeer, "inviteUsed"> | null) {
+    this.forgetChallengesFor(inviteId);
+    p2p?.inviteUsed(code);
   }
 
   private personWithKey(publicKey: string) {
@@ -167,12 +267,10 @@ export class RoomInvites {
    * that reads as one already in their rooms leaves them without one too, and the owner sees it beside them in the room.
    */
   private namePerson(roomId: string, personId: string, presented: unknown, color: Pastel | null) {
-    const named = typeof presented === "string" && presented.length <= LONGEST_PRESENTED_NAME && !nameRefused(presented) ? personName(shownAsWritten(presented)) : "";
-    const keptByMirador = readsAsMiradorsWords(named);
-    const clashes = !keptByMirador && nameTaken(named, namesOthersGoBy(this.store, personId));
-    this.store.setPersonProfile(personId, { name: keptByMirador || clashes ? "" : named, color });
+    const { name, nameClash } = checkedName(presented, namesOthersGoBy(this.store, personId));
+    this.store.setPersonProfile(personId, { name, color });
     this.store.forgetNameClashesOf(personId);
-    if (clashes) this.store.setRoomPersonNameClash(roomId, personId, named);
+    if (nameClash) this.store.setRoomPersonNameClash(roomId, personId, nameClash);
   }
 
   private takeChallenge(challenge: string) {
@@ -187,5 +285,14 @@ export class RoomInvites {
     this.challenges.forEach((each, challenge) => {
       if (each.inviteId === inviteId || each.expiresAt <= now) this.challenges.delete(challenge);
     });
+  }
+
+  /** Every expired one, and of the requester's for the invite the oldest, until one more leaves them no more than a challenge for each seat left. */
+  private forgetChallengesBeyondSeats({ id, seats, taken }: RoomInvite, requester: string) {
+    const now = this.now();
+    this.challenges.forEach((each, challenge) => each.expiresAt <= now && this.challenges.delete(challenge));
+    const theirs = [...this.challenges].filter(([, each]) => each.inviteId === id && each.requester === requester).map(([challenge]) => challenge);
+    const keptBesideNew = Math.max(0, seats - taken - 1);
+    theirs.slice(0, Math.max(0, theirs.length - keptBesideNew)).forEach((challenge) => this.challenges.delete(challenge));
   }
 }

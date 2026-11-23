@@ -1145,7 +1145,7 @@ describe("Store", () => {
     store.insertWorkspace({ id: "w1", name: "project", path: "/tmp/project", defaultLaunch: { harness: "claude", profileId: null }, createdAt: 1 });
     store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
     store.addInvite("device code", 100);
-    store.addRoomInvite({ id: "i1", roomId: "r1", role: "member", expiresAt: 200 }, "room code");
+    store.addRoomInvite({ id: "i1", roomId: "r1", role: "member", expiresAt: 200, seats: 1, letsIn: "at-once" }, "room code");
     store.addInvite("keyless code", 100);
     store.setInviteJoinKey("device code", { key: "device key", address: "fd00::1" });
     store.setInviteJoinKey("room code", { key: "room key", address: "fd00::2" });

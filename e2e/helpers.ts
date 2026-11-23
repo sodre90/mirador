@@ -610,12 +610,18 @@ export async function nameMachine(page: Page, name: string) {
 /** A host's address for the machines that join it: its own port and the one after for its canvas, as a proxy in front of it would give. */
 export const reachedAtOwnPort = (port: number) => ({ MIRADOR_PUBLIC_ORIGIN: `http://127.0.0.1:${port}`, MIRADOR_PUBLIC_CANVAS_ORIGIN: `http://127.0.0.1:${port + 1}` });
 
-/** Makes an invite into the room from its bar, with the role and the way to connect when given, and reads its one text under "Show invite". */
-export async function inviteIntoRoom(page: Page, room: string, { role, connect }: { role?: "Member" | "Guest"; connect?: string | RegExp } = {}) {
+/** Makes an invite into the room from its bar, with the role, how many it lets in, when and the way to connect when given, and reads its one text under "Show invite". */
+export async function inviteIntoRoom(
+  page: Page,
+  room: string,
+  { role, connect, howMany, letThemIn }: { role?: "Member" | "Guest"; connect?: string | RegExp; howMany?: string; letThemIn?: "After my OK" | "At once" } = {},
+) {
   await roomCard(page, room).click();
   await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
   const dialog = page.getByRole("dialog", { name: `Invite someone to ${room}` });
   if (role) await dialog.getByLabel(role === "Member" ? "Member: can ask the agents" : "Guest: can chat").check();
+  if (howMany) await dialog.getByLabel("How many people").selectOption({ label: howMany });
+  if (letThemIn) await dialog.getByLabel("Let them in").selectOption({ label: letThemIn });
   if (connect) await dialog.getByLabel(connect).check();
   const text = await copiedInvite(dialog);
   await dialog.getByRole("button", { name: "Done" }).click();

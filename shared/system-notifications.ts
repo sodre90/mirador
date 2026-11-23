@@ -111,7 +111,14 @@ export const joinRequestNotification = ({ name, fromAddress, tailscaleUser }: Jo
 });
 
 function roomAlertText(alert: RoomAlert) {
-  return alert.about === "mention" ? `${alert.by} tagged you: ${alert.text}` : `Waits for you to confirm the answer: ${alert.question}`;
+  switch (alert.about) {
+    case "mention":
+      return `${alert.by} tagged you: ${alert.text}`;
+    case "confirm":
+      return `Waits for you to confirm the answer: ${alert.question}`;
+    case "knock":
+      return alert.by ? `Someone waits for you to let them in, giving the name “${alert.by}”` : "Someone waits for you to let them in";
+  }
 }
 
 /** A room calls you: its name as the title, and what for; phones take it as they take an agent's question, which also waits for you. */
