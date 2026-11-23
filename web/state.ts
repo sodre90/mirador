@@ -112,6 +112,8 @@ export interface AppState {
   roomReadings: RoomReading[];
   /** The room shown in the main pane instead of a conversation. */
   selectedRoomId: string | null;
+  /** The door of a room on someone else's machine this computer's owner waits at, or was turned away from, shown in the main pane instead. */
+  selectedKnock: { machineId: string; roomId: string } | null;
   /** The shown room's messages and threads, and the pages and questions of its canvas, once the host sent them. */
   roomTimeline: (RoomTimelineWithCanvas & { roomId: string }) | null;
   /** Who is in the shown room now, and who of them writes there, once the host said. */
@@ -216,6 +218,7 @@ export type AppAction =
   | { type: "leave-conversation"; conversationId: string }
   | { type: "keep-side-chats"; conversationIds: string[] }
   | { type: "select-room"; roomId: string }
+  | { type: "select-knock"; machineId: string; roomId: string }
   | { type: "keep-thread-conversations"; conversationIds: string[] }
   | { type: "awaiting-conversation"; workspaceId: string }
   | { type: "open-overlay"; overlay: Overlay }
@@ -247,6 +250,7 @@ export const initialState: AppState = {
   roomsWithPeopleHere: [],
   roomReadings: [],
   selectedRoomId: null,
+  selectedKnock: null,
   roomTimeline: null,
   roomPresence: null,
   threadConversations: [],
@@ -343,11 +347,13 @@ function conversationToReturnTo(state: AppState, leaving: string) {
 }
 
 function select(state: AppState, conversationId: string | null): AppState {
-  if (conversationId === null) return { ...state, selectedConversationId: null };
+  if (conversationId === null) return { ...state, selectedConversationId: null, selectedKnock: null };
   const opened = state.kept.find((open) => open.conversationId === conversationId) ?? state.sideChats.find((open) => open.conversationId === conversationId) ?? notLoaded(conversationId);
   const others = state.kept.filter((open) => open !== opened);
-  return { ...leavingRoom(state), selectedConversationId: conversationId, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
+  return { ...leavingRoom(state), selectedConversationId: conversationId, selectedKnock: null, kept: [opened, ...others].slice(0, KEPT_CONVERSATIONS) };
 }
+
+const selectKnock = (state: AppState, machineId: string, roomId: string): AppState => ({ ...leavingRoom(state), selectedConversationId: null, selectedKnock: { machineId, roomId } });
 
 /** An agent's conversation in a room opens as its room, which is where it shows, as a notification about it does; a page loaded on one does so once the snapshot says which room it is in. */
 function selectShowing(state: AppState, conversationId: string | null): AppState {
@@ -356,8 +362,8 @@ function selectShowing(state: AppState, conversationId: string | null): AppState
 }
 
 function selectRoom(state: AppState, roomId: string): AppState {
-  if (state.selectedRoomId === roomId) return { ...state, selectedConversationId: null };
-  return { ...state, selectedConversationId: null, selectedRoomId: roomId, roomTimeline: null, roomPresence: null, threadConversations: [] };
+  if (state.selectedRoomId === roomId) return { ...state, selectedConversationId: null, selectedKnock: null };
+  return { ...state, selectedConversationId: null, selectedKnock: null, selectedRoomId: roomId, roomTimeline: null, roomPresence: null, threadConversations: [] };
 }
 
 const leavingRoom = (state: AppState): AppState =>
@@ -791,13 +797,18 @@ export function reducer(state: AppState, action: AppAction): AppState {
     case "hold-turn-times":
       return { ...state, heldTurnTimes: action.held ? turnTimesOf(state.conversations) : null };
     case "select":
-      return { ...(action.conversationId === state.selectedConversationId ? state : selectShowing(state, action.conversationId)), conversationsPicked: state.conversationsPicked + 1 };
+      return {
+        ...(action.conversationId === state.selectedConversationId && state.selectedKnock === null ? state : selectShowing(state, action.conversationId)),
+        conversationsPicked: state.conversationsPicked + 1,
+      };
     case "leave-conversation":
       return action.conversationId === state.selectedConversationId ? select(state, conversationToReturnTo(state, action.conversationId)) : state;
     case "keep-side-chats":
       return keepingSideChats(state, action.conversationIds);
     case "select-room":
       return selectRoom(state, action.roomId);
+    case "select-knock":
+      return selectKnock(state, action.machineId, action.roomId);
     case "keep-thread-conversations":
       return keepingThreadConversations(state, action.conversationIds);
     case "awaiting-conversation":

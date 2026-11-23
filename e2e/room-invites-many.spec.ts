@@ -93,7 +93,20 @@ test("one invite brings several people to a room's door, where the owner lets ea
       expect(await readsWhole(knockCard(visitor).locator(".room-card-name"))).toBe(true);
       await expect(knockCard(visitor).locator(".room-card-subline")).toHaveText("on Ann's machine");
       await expect(visitor.locator(".sidebar .rooms li.joined-room")).toHaveCount(0);
+      const door = visitor.getByRole("region", { name: "Waiting for Ann to let you in" });
+      await expect(door).toContainText("You asked to join a room on Ann's machine. Once you're let in, the room opens here by itself.");
+      await expect(door).toContainText("You can close this page meanwhile. The room will be under Rooms when you come back.");
+      await expect(knockCard(visitor)).toHaveClass(/selected/);
     }
+  });
+
+  await test.step("someone at the door sees where they wait again by clicking its card", async () => {
+    await dora.reload();
+    const door = dora.getByRole("region", { name: "Waiting for Ann to let you in" });
+    await expect(knockCard(dora)).toBeVisible();
+    await expect(door).toHaveCount(0);
+    await knockCard(dora).click();
+    await expect(door).toBeVisible();
   });
 
   await test.step("the owner's room says it needs them while people wait at its door", async () => {
@@ -177,6 +190,14 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await expect(count).not.toContainText("waiting");
     await expect(roomCard(page, "Garden").locator(".waiting-pill")).toHaveCount(0);
     await expect(knockCard(hal).locator(".room-card-name")).toHaveText("Ann turned you away");
+  });
+
+  await test.step("someone turned away while looking at the door is told so there, and puts it away", async () => {
+    const door = hal.getByRole("region", { name: "Ann turned you away" });
+    await expect(door).toContainText("That invite won't take you into the room on Ann's machine any more. If it was a mistake, ask for a new one.");
+    await door.getByRole("button", { name: "Dismiss" }).click();
+    await expect(knockCard(hal)).toHaveCount(0);
+    await expect(door).toHaveCount(0);
   });
 
   await test.step("the one turned away is told so, and puts it away", async () => {

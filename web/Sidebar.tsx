@@ -999,6 +999,7 @@ export function Sidebar({
           roomsWithPeopleHere={state.roomsWithPeopleHere}
           joinedRooms={joinedRoomsOf(state.machines, state.machineStatuses)}
           knocks={knocksOf(state.machines)}
+          selectedKnock={state.selectedKnock}
           people={state.people}
           broughtAgents={state.broughtAgents}
           manages

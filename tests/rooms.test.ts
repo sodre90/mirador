@@ -1030,6 +1030,18 @@ describe("a page that shows a room", () => {
     expect(after.roomTimeline!.threads).toHaveLength(1);
   });
 
+  test("shows the door of a room on someone else's machine in place of the room, until a room, a conversation or nothing is picked", () => {
+    const atTheDoor = reducer(showingRoom([]), { type: "select-knock", machineId: "m1", roomId: "elsewhere" });
+    expect([atTheDoor.selectedKnock, atTheDoor.selectedRoomId, atTheDoor.roomTimeline, atTheDoor.selectedConversationId]).toEqual([{ machineId: "m1", roomId: "elsewhere" }, null, null, null]);
+    for (const picked of [
+      { type: "select-room", roomId: "r1" },
+      { type: "select", conversationId: builderInRoom.id },
+      { type: "select", conversationId: "c1" },
+      { type: "select", conversationId: null },
+    ] as const)
+      expect(reducer(atTheDoor, picked).selectedKnock).toBeNull();
+  });
+
   test("opens the room of an agent's conversation there when that conversation is picked, as a notification about it does", () => {
     const state = reducer({ ...initialState, roomConversations: [builderInRoom] }, { type: "select", conversationId: builderInRoom.id });
     expect([state.selectedRoomId, state.selectedConversationId]).toEqual(["r1", null]);

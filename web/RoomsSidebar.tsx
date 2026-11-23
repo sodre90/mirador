@@ -8,9 +8,10 @@ import { broughtAgentName, type Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
 import { connection } from "./connection.ts";
 import { formatNumber, t } from "./i18n/index.ts";
+import { LayoutToggles } from "./LayoutToggles.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { pastelVariables } from "./pastels.ts";
-import type { AppAction } from "./state.ts";
+import type { AppAction, AppState } from "./state.ts";
 import { waitingLabels, type RoomWait } from "./waiting.ts";
 
 const words = t.rooms;
@@ -64,6 +65,40 @@ function knockText({ ownerName }: Machine, { turnedAway }: RoomKnock) {
 }
 
 const machineMarkStyle = (machine: Machine): CSSProperties => (machine.color ? { ...pastelVariables(machine.color), background: "var(--pastel-stripe)" } : { background: workspaceMarkColor(machine.name) });
+
+const dismissKnock = (machineId: string, roomId: string) => connection.send({ type: "machine.dismiss-knock", machineId, roomId });
+
+/**
+ * The main pane while this computer's owner stands at a room's door on someone else's machine: whose OK they wait for,
+ * on which machine, that the room opens by itself once they are let in and that they need not keep the page open; or
+ * that they were turned away, which they put away.
+ */
+export function KnockView({ machine, knock }: KnockShown) {
+  return (
+    <>
+      <div className="empty-state-bar" data-pane-bar>
+        <LayoutToggles />
+      </div>
+      <section className={`empty-state room-knock-view${knock.turnedAway ? " turned-away" : ""}`} aria-label={knockText(machine, knock)}>
+        <RoomMark style={machineMarkStyle(machine)} />
+        <h2>{knockText(machine, knock)}</h2>
+        {knock.turnedAway ? (
+          <>
+            <p>{words.turnedAwayFrom(machine.name)}</p>
+            <button type="button" onClick={() => dismissKnock(machine.id, knock.roomId)}>
+              {words.dismissKnock}
+            </button>
+          </>
+        ) : (
+          <>
+            <p>{words.knockedOn(machine.name)}</p>
+            <p>{words.mayCloseWhileWaiting}</p>
+          </>
+        )}
+      </section>
+    </>
+  );
+}
 
 /** Under a room's name: the people in it besides its owner, and its agents, or that it has none yet. */
 function roomSubline(room: Room, profiles: Profile[], people: Person[], manages: boolean) {
@@ -228,6 +263,7 @@ export function RoomsSection({
   roomsWithPeopleHere = [],
   joinedRooms = [],
   knocks = [],
+  selectedKnock = null,
   people,
   broughtAgents = [],
   manages,
@@ -246,6 +282,8 @@ export function RoomsSection({
   joinedRooms?: JoinedRoomShown[];
   /** The doors of rooms of someone else's machines this computer's owner waits at, or was turned away from; listed only where joined rooms are. */
   knocks?: KnockShown[];
+  /** The door shown in the main pane. */
+  selectedKnock?: AppState["selectedKnock"];
   people: Person[];
   /** The agents this computer's owner brought into rooms of other machines. */
   broughtAgents?: BroughtAgentHere[];
@@ -326,14 +364,26 @@ export function RoomsSection({
           })}
         {onOpenJoinedRoom &&
           knocks.map(({ machine, knock }) => (
-            <li key={`knock:${machine.id}:${knock.roomId}`} className={["room-card", "room-knock", knock.turnedAway && "turned-away"].filter(Boolean).join(" ")} data-machine={machine.id}>
+            <li
+              key={`knock:${machine.id}:${knock.roomId}`}
+              className={["room-card", "room-knock", knock.turnedAway && "turned-away", selectedKnock?.machineId === machine.id && selectedKnock.roomId === knock.roomId && "selected"].filter(Boolean).join(" ")}
+              data-machine={machine.id}
+              onClick={() => dispatch({ type: "select-knock", machineId: machine.id, roomId: knock.roomId })}
+            >
               <RoomMark style={machineMarkStyle(machine)} />
               <span className="room-card-text">
                 <span className="room-card-name">{knockText(machine, knock)}</span>
                 <span className="room-card-subline">{words.onMachine(machine.name)}</span>
               </span>
               {knock.turnedAway && (
-                <button type="button" className="link" onClick={() => connection.send({ type: "machine.dismiss-knock", machineId: machine.id, roomId: knock.roomId })}>
+                <button
+                  type="button"
+                  className="link"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    dismissKnock(machine.id, knock.roomId);
+                  }}
+                >
                   {words.dismissKnock}
                 </button>
               )}

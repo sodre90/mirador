@@ -69,7 +69,7 @@ import { RoomsOnlyApp, seesOnlyTheirRooms } from "./RoomsOnly.tsx";
 import { newRoomWorkspace, NewRoomDialog } from "./NewRoom.tsx";
 import { JoinRoomDialog, RoomInviteDialog } from "./RoomInvite.tsx";
 import { BringAgentDialog } from "./BringAgent.tsx";
-import { joinedRoomsOf, useOpenedWhenLetIn } from "./RoomsSidebar.tsx";
+import { joinedRoomsOf, KnockView, knocksOf, useOpenedWhenLetIn } from "./RoomsSidebar.tsx";
 import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
@@ -597,6 +597,12 @@ export function App() {
     machines.openIn(machineId, `#/r/${roomId}`);
   };
   useOpenedWhenLetIn(state.machines, state.machineStatuses, openJoinedRoom);
+  /** A room joined with an invite opens at once, or, where its owner lets people in, shows its door until they do. */
+  const joinedRoom = (machineId: string, roomId: string | null, waiting: boolean) => {
+    closeOverlay();
+    if (!waiting) return openJoinedRoom(machineId, roomId);
+    if (roomId) dispatch({ type: "select-knock", machineId, roomId });
+  };
   const openConversation = useCallback(
     (conversationId: string, machineId?: string) => {
       const machine = state.machines.find(({ id }) => id === machineId);
@@ -673,6 +679,7 @@ export function App() {
 
   const conversation = state.conversations.find(({ id }) => id === state.selectedConversationId) ?? null;
   const shownRoom = shownMachine || conversation ? null : (state.rooms.find(({ id }) => id === state.selectedRoomId) ?? null);
+  const shownKnock = knocksOf(state.machines).find(({ machine, knock }) => machine.id === state.selectedKnock?.machineId && knock.roomId === state.selectedKnock.roomId);
   const showCanvas = canvasVisible && conversation !== null && open !== null;
   const showRoomCanvas = canvasVisible && shownRoom !== null;
   const showTerminals = terminalVisible && conversation !== null && workspace !== undefined;
@@ -835,7 +842,9 @@ export function App() {
         )}
         {!(conversation && open) &&
           !shownRoom &&
-          (state.profiles.length === 0 ? (
+          (shownKnock ? (
+            <KnockView {...shownKnock} />
+          ) : state.profiles.length === 0 ? (
             <FirstProfile installedAgents={state.installedAgents} conversations={state.conversations} />
           ) : (
             <>
@@ -976,10 +985,7 @@ export function App() {
             closeOverlay();
             showMachine(machine);
           }}
-          onJoined={(machineId, roomId, waiting) => {
-            closeOverlay();
-            if (!waiting) openJoinedRoom(machineId, roomId);
-          }}
+          onJoined={joinedRoom}
           onClose={closeOverlay}
         />
       )}
@@ -1054,14 +1060,7 @@ export function App() {
       {invitedRoom && <RoomInviteDialog key={invitedRoom.id} room={invitedRoom} devices={state.devices} onClose={closeOverlay} />}
       {bringingInto && <BringAgentDialog machine={bringingInto.machine} room={bringingInto.room} profiles={state.profiles} workspaces={state.workspaces} onClose={closeOverlay} />}
       {overlay?.kind === "join-room" && (
-        <JoinRoomDialog
-          machines={state.machines}
-          onJoined={(machineId, roomId, waiting) => {
-            closeOverlay();
-            if (!waiting) openJoinedRoom(machineId, roomId);
-          }}
-          onClose={closeOverlay}
-        />
+        <JoinRoomDialog machines={state.machines} onJoined={joinedRoom} onClose={closeOverlay} />
       )}
     </div>
   );
