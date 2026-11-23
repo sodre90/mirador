@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
-import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, nameOwnProfile, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** mirador-p2p is built from its own repository, which only the owner's machines have; elsewhere this spec is skipped. */
@@ -65,13 +65,6 @@ async function removeDoraFromGarden(page: Page) {
   await dialog.getByRole("button", { name: "Confirm: Remove Dora" }).click();
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toBeHidden();
-}
-
-async function nameOwnProfile(page: Page, name: string) {
-  const settings = await openSettings(page);
-  await settings.getByLabel("Name", { exact: true }).fill(name);
-  await settings.getByLabel("Name", { exact: true }).press("Enter");
-  await settings.getByRole("button", { name: "Close" }).click();
 }
 
 /** The pids of the visitor's dials into machines' tunnels, by the files its host writes beside their keys. */

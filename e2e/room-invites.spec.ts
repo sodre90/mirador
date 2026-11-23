@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, openSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -26,13 +26,6 @@ test.afterAll(async () => {
 const OUT_OF_ROOMS = "Its owner signed this computer out of their rooms there. Ask them for a new invite, and paste it here.";
 
 const roomMessages = (page: Page | FrameLocator) => page.locator(".room-timeline .room-entry .message");
-
-async function nameOwnProfile(page: Page, name: string) {
-  const settings = await openSettings(page);
-  await settings.getByLabel("Name", { exact: true }).fill(name);
-  await settings.getByLabel("Name", { exact: true }).press("Enter");
-  await settings.getByRole("button", { name: "Close" }).click();
-}
 
 const roomsListed = (scope: Page | FrameLocator) => scope.locator(".sidebar .rooms .room-card-name");
 

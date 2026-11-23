@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, allowNotifications, clickNotification, createRoom, inviteIntoRoom, joinRoom, nameMachine, notificationsShown, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, allowNotifications, clickNotification, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, notificationsShown, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 /** The owner's machine, with the room. */
@@ -14,13 +14,6 @@ test.afterAll(async () => {
   await Promise.all([owners.stop(), visitors.stop()]);
   await Promise.all([owners.cleanUp(), visitors.cleanUp()]);
 });
-
-async function nameOwnProfile(page: Page, name: string) {
-  const settings = await openSettings(page);
-  await settings.getByLabel("Name", { exact: true }).fill(name);
-  await settings.getByLabel("Name", { exact: true }).press("Enter");
-  await settings.getByRole("button", { name: "Close" }).click();
-}
 
 const joinedCard = (page: Page) => roomCard(page, "Garden").and(page.locator(".joined-room"));
 

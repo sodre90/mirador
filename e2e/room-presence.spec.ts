@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type FrameLocator, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room and its agent. */
@@ -24,13 +24,6 @@ test.afterAll(async () => {
 const roomMessages = (page: Page | FrameLocator) => page.locator(".room-timeline .room-entry .message");
 const hereCount = (page: Page | FrameLocator) => page.locator(".room-header .room-here-count");
 const writingLine = (page: Page | FrameLocator) => page.locator(".room-timeline .room-writing");
-
-async function nameOwnProfile(page: Page, name: string) {
-  const settings = await openSettings(page);
-  await settings.getByLabel("Name", { exact: true }).fill(name);
-  await settings.getByLabel("Name", { exact: true }).press("Enter");
-  await settings.getByRole("button", { name: "Close" }).click();
-}
 
 /** The room's people as the page lists them, each "name, role, here" as far as the page knows them, then its agents. */
 async function peopleListed(page: Page | FrameLocator) {

@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, chooseInSettings, createProfile, createRoom, expectPopoverFits, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, chooseInSettings, createProfile, createRoom, expectPopoverFits, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openRoomSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room, which other machines reach at its address. */
@@ -25,13 +25,6 @@ test.afterAll(async () => {
   await Promise.all([owners.stop(), doras.stop(), elis.stop(), guses.stop(), hals.stop(), fays.stop()]);
   await Promise.all([owners.cleanUp(), doras.cleanUp(), elis.cleanUp(), guses.cleanUp(), hals.cleanUp(), fays.cleanUp()]);
 });
-
-async function nameOwnProfile(page: Page, name: string) {
-  const settings = await openSettings(page);
-  await settings.getByLabel("Name", { exact: true }).fill(name);
-  await settings.getByLabel("Name", { exact: true }).press("Enter");
-  await settings.getByRole("button", { name: "Close" }).click();
-}
 
 const knockCard = (page: Page) => page.locator(".sidebar .rooms li.room-knock");
 const readsWhole = (label: Locator) => label.evaluate((element) => element.scrollWidth <= element.clientWidth);
