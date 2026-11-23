@@ -86,6 +86,8 @@ These terms stay the same everywhere:
 | held (an agent config change, put back until the owner allows it) | visszatartott | retenido | 暂扣 | zurückgehalten |
 | folders from this computer (that the owner adds to a sandbox, which sees each at the same path) | mappák erről a gépről | carpetas de este equipo | 这台电脑上的文件夹 | Ordner von diesem Rechner |
 | read only (a folder the agents in a sandbox can't change) | csak olvasható | solo lectura | 只读 | schreibgeschützt |
+| read and write (a folder the agents in a sandbox can change, a git repository's own top folder) | olvasható és írható | lectura y escritura | 读写 | les- und schreibbar |
+| access (a folder's in a sandbox: read only, or read and write) | hozzáférés | acceso | 访问权限 | Zugriff |
 | let in (someone a room invite took to the room's door) | beenged / beengedés | dejar entrar | 允许进入 | hereinlassen |
 | turn away (someone waiting at a room's door) | elutasít / elutasítás | rechazar | 拒绝 | abweisen |
 | waiting to join (at a room's door, for its owner's OK) | belépésre vár | esperando para entrar | 等待加入 | Warten auf Einlass |

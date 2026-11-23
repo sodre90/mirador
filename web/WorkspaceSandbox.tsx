@@ -108,7 +108,7 @@ export function WorkspaceSandboxDialog({
           <p key={paragraph}>{paragraph}</p>
         ))}
       </WhatItMeans>
-      <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={profileName(profiles)} countOf={t.rooms.approvalPosition} unknownAgent={words.anAgentHere} />
+      <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={profileName(profiles)} countOf={t.rooms.approvalPosition} homeDir={homeDir} unknownAgent={words.anAgentHere} />
       <div className="form-actions">
         <button type="button" className="primary" onClick={onClose}>
           {words.done}

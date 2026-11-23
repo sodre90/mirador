@@ -789,6 +789,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
     case "workspace.sandbox-checked":
     case "sandbox.held-change-text":
     case "sandbox.folder-added":
+    case "sandbox.folder-access-set":
       return state;
     case "room.presence": {
       const { roomId, here, writing } = message;

@@ -3,7 +3,17 @@ import { isAbsolute, relative, sep } from "node:path";
 import type { SandboxBlocker, SandboxFolder, SandboxFolderRefusal, SandboxFolderState } from "../../shared/sandbox.ts";
 import { expandHome } from "../paths.ts";
 import { SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
-import { isInside, miradorsOwn, realOrAsIs, type MiradorPlaces } from "./workspace-mounts.ts";
+import { isInside, miradorsOwn, realOrAsIs, sandboxRefusalOf, type MiradorPlaces } from "./workspace-mounts.ts";
+
+/** What the other rooms' and workspaces' sandboxes work in, without links, which a folder read and write keeps clear of. */
+export interface OtherSandboxes {
+  /** The workspaces of those whose sandbox is on. */
+  workspaces: string[];
+  /** The folders added to any of them read and write, its sandbox on or not. */
+  writableFolders: string[];
+  /** The folders added read and write to those whose sandbox is on. */
+  writableFoldersOn: string[];
+}
 
 /** What a folder added to one sandbox must keep clear of. */
 export interface FolderSurroundings {
@@ -14,12 +24,18 @@ export interface FolderSurroundings {
   sandboxOwn: string[];
   /** Where each VM's sockets get a folder of their own. */
   socketsParent: string;
+  otherSandboxes: OtherSandboxes;
 }
+
+/** An added folder as a VM mounts it: at its own path, read-only or read and write. */
+export type MountedFolder = Pick<SandboxFolder, "path" | "writable">;
+
+export type LeftOutFolder = Exclude<SandboxFolderState, { kind: "in-sandbox" | "waiting" }>;
 
 /** Each of the sandbox's added folders its VM starts with: those it mounts, and why each other one is left out. */
 export interface FoldersMounted {
-  mounted: string[];
-  leftOut: Map<string, Exclude<SandboxFolderState, { kind: "in-sandbox" | "waiting" }>>;
+  mounted: MountedFolder[];
+  leftOut: Map<string, LeftOutFolder>;
 }
 
 const overlap = (a: string, b: string) => isInside(a, b) || isInside(b, a);
@@ -51,12 +67,35 @@ function homesPrivateEntry(folder: string, home: string): SandboxFolderRefusal |
   return entry === "Library" ? { kind: "in-library" } : null;
 }
 
+/** A repository a workspace's sandbox would refuse, as a folder read and write is: one with no `.git` folder of its own, or whose git parts can't be kept read-only. */
+export const repositoryRefusal = (blocker: SandboxBlocker): SandboxFolderRefusal =>
+  blocker.kind === "workspace-not-a-repository" || blocker.kind === "workspace-is-worktree" ? { kind: "needs-repository" } : { kind: "repository-refused", blocker };
+
 /**
- * Why the folder, given without links, can't go into the sandbox beside `others`, its other added folders; null where
- * it can. Only a folder inside the owner's home goes in, never home itself, a hidden folder right under it or a Mac's
- * Library, nor any of Mirador's own places or the sandbox's, its workspace, or another added folder or one inside it.
+ * Why the folder can't go in read and write, past what keeps any added folder out. Its agents could write anything in
+ * it, so it must lie in no folder this computer runs programs from, and no other sandbox may work in it, nor in a
+ * folder in or around it. And it must be a git repository's own top folder, its config as safe as a workspace's must
+ * be, so the owner sees and undoes what the agents change.
  */
-export async function addedFolderRefusal(folder: string, surroundings: FolderSurroundings, others: string[]): Promise<SandboxFolderRefusal | null> {
+async function writableFolderRefusal(folder: string, { places, otherSandboxes }: FolderSurroundings): Promise<SandboxFolderRefusal | null> {
+  const computersOwn = await Promise.all(places.computersOwn.map(realOrAsIs));
+  const runsProgramsFrom = computersOwn.find((own) => isInside(folder, own));
+  if (runsProgramsFrom) return { kind: "inside-computers-own", folder: runsProgramsFrom };
+  const workspace = otherSandboxes.workspaces.find((other) => overlap(folder, other));
+  if (workspace) return { kind: "overlaps-sandbox-workspace", folder: workspace };
+  const writable = otherSandboxes.writableFolders.find((other) => overlap(folder, other));
+  if (writable) return { kind: "overlaps-sandbox-folder", folder: writable };
+  const refused = await sandboxRefusalOf(folder, places);
+  return refused && repositoryRefusal(refused);
+}
+
+/**
+ * Why the folder, given without links, can't go into the sandbox beside `others`, its other added folders, with the
+ * access asked for; null where it can. Only a folder inside the owner's home goes in, never home itself, a hidden folder
+ * right under it or a Mac's Library, nor any of Mirador's own places or the sandbox's, its workspace, or another added
+ * folder or one inside it.
+ */
+export async function addedFolderRefusal({ path: folder, writable }: MountedFolder, surroundings: FolderSurroundings, others: string[]): Promise<SandboxFolderRefusal | null> {
   if (folder.includes(":")) return { kind: "path-has-colon" };
   const home = await realOrAsIs(surroundings.places.home);
   if (folder === home) return { kind: "is-home" };
@@ -69,7 +108,18 @@ export async function addedFolderRefusal(folder: string, surroundings: FolderSur
   if (surroundings.workspace && overlap(folder, surroundings.workspace)) return { kind: "overlaps-workspace" };
   if (others.includes(folder)) return { kind: "already-added" };
   const overlapping = others.find((other) => overlap(folder, other));
-  return overlapping ? { kind: "overlaps-folder", folder: overlapping } : null;
+  if (overlapping) return { kind: "overlaps-folder", folder: overlapping };
+  return writable ? writableFolderRefusal(folder, surroundings) : readOnlyFolderRefusal(folder, surroundings.otherSandboxes);
+}
+
+/**
+ * A folder read-only may not lie inside one another sandbox's agents write in, its workspace or a folder read and write:
+ * they could swap it for a link to anywhere of this computer's just as its VM mounts it. Holding one is safe, as its VM
+ * follows the links in it inside itself.
+ */
+function readOnlyFolderRefusal(folder: string, { workspaces, writableFoldersOn }: OtherSandboxes): SandboxFolderRefusal | null {
+  const written = [...workspaces, ...writableFoldersOn].find((root) => folder !== root && isInside(folder, root));
+  return written ? { kind: "inside-where-a-sandbox-writes", folder: written } : null;
 }
 
 const isFolder = async (path: string) => (await stat(path).catch(() => null))?.isDirectory() === true;
@@ -82,21 +132,21 @@ export async function folderToAdd(typed: string): Promise<{ folder: string } | {
 }
 
 /** Why an added folder is left out as its VM starts: gone, a link now, or refused as it would be added now. */
-async function leftOutAtStart(folder: string, surroundings: FolderSurroundings, mounted: string[]) {
-  if (!(await isFolder(folder))) return { kind: "missing" } as const;
-  if ((await realpath(folder)) !== folder) return { kind: "refused", refusal: { kind: "now-a-link" } } as const;
+async function leftOutAtStart(folder: MountedFolder, surroundings: FolderSurroundings, mounted: string[]): Promise<LeftOutFolder | null> {
+  if (!(await isFolder(folder.path))) return { kind: "missing" };
+  if ((await realpath(folder.path)) !== folder.path) return { kind: "refused", refusal: { kind: "now-a-link" } };
   const refusal = await addedFolderRefusal(folder, surroundings, mounted);
-  return refusal && ({ kind: "refused", refusal } as const);
+  return refusal && { kind: "refused", refusal };
 }
 
 /** The added folders a VM mounts as it starts, each looked at again, oldest first; the others left out with why. */
 export async function foldersMounted(folders: SandboxFolder[], surroundings: FolderSurroundings): Promise<FoldersMounted> {
-  const mounted: string[] = [];
+  const mounted: MountedFolder[] = [];
   const leftOut: FoldersMounted["leftOut"] = new Map();
-  for (const { path } of folders) {
-    const why = await leftOutAtStart(path, surroundings, mounted);
+  for (const { path, writable } of folders) {
+    const why = await leftOutAtStart({ path, writable }, surroundings, mounted.map((folder) => folder.path));
     if (why) leftOut.set(path, why);
-    else mounted.push(path);
+    else mounted.push({ path, writable });
   }
   return { mounted, leftOut };
 }

@@ -41,6 +41,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "sandbox.answer-held-change": true,
   "sandbox.held-change-text": true,
   "sandbox.add-folder": true,
+  "sandbox.set-folder-access": true,
   "sandbox.remove-folder": true,
   "sandbox.apply-folders-now": true,
   "workspace.create": true,

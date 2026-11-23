@@ -61,7 +61,7 @@ async function heldWorkspace(files: Record<string, string> = {}, before: (at: (p
   });
   before(at);
   const room = new FakeRoom();
-  const held = new HeldFiles(workspace, roomSandbox("room-1"), [".git"], room);
+  const held = new HeldFiles(workspace, roomSandbox("room-1"), [".git"], room, false);
   const readOnly = await held.start();
   await Bun.sleep(WATCH_STARTS_MS);
   const textAt = (path: string) => (existsSync(at(path)) ? readFileSync(at(path), "utf8") : null);

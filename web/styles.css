@@ -10865,6 +10865,32 @@ select.room-agent-choice-select:focus-visible {
   color: var(--muted);
 }
 
+select.sandbox-folder-access {
+  padding: 1px 20px 1px 4px;
+  background-position: right 6px center;
+  border-color: transparent;
+  background-color: transparent;
+  font-size: calc(12px * var(--font-scale));
+}
+
+select.sandbox-folder-access:hover,
+select.sandbox-folder-access:focus-visible {
+  border-color: var(--border);
+  color: var(--text);
+}
+
+.sandbox-folder > .sandbox-folder-refusal {
+  flex-basis: 100%;
+}
+
+.sandbox-folder-access-choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 6px 0 2px;
+  font-size: calc(12px * var(--font-scale));
+}
+
 .sandbox-folder.state-in-sandbox .sandbox-folder-state {
   color: var(--ok);
 }

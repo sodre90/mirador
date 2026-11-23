@@ -267,6 +267,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "sandbox.held-changes": HIDDEN,
     "sandbox.held-change-text": HIDDEN,
     "sandbox.folder-added": HIDDEN,
+    "sandbox.folder-access-set": HIDDEN,
     "sandbox.folders": HIDDEN,
     "room.presence": ({ roomId, here, writing }, socket) => shownIf(isIn(socket, roomId), { type: "room.presence", roomId, ...presenceSeen(roomId, { here, writing }, socket) }),
     "room.usage.got": HIDDEN,

@@ -146,10 +146,12 @@ export type ClientMessage =
   /** A held change's text before and as proposed; the host answers `sandbox.held-change-text`. */
   | { type: "sandbox.held-change-text"; requestId: string; owner: SandboxOwner; changeId: string }
   /**
-   * Gives a room's or workspace's sandbox a folder of this computer, read-only, at the same path; its VM takes it up once
-   * no turn runs in it. The host answers `sandbox.folder-added`.
+   * Gives a room's or workspace's sandbox a folder of this computer at the same path, read-only or read and write; its VM
+   * takes it up once no turn runs in it. The host answers `sandbox.folder-added`.
    */
-  | { type: "sandbox.add-folder"; requestId: string; owner: SandboxOwner; path: string }
+  | { type: "sandbox.add-folder"; requestId: string; owner: SandboxOwner; path: string; writable: boolean }
+  /** Makes a folder of the sandbox read-only or read and write, once no turn runs in it. The host answers `sandbox.folder-access-set`. */
+  | { type: "sandbox.set-folder-access"; requestId: string; owner: SandboxOwner; path: string; writable: boolean }
   /** Takes a folder out of the sandbox, once no turn runs in it. */
   | { type: "sandbox.remove-folder"; owner: SandboxOwner; path: string }
   /** Stops the turns at work in the sandbox, for its VM to take up its folders now. */
@@ -721,7 +723,9 @@ export type ServerMessage =
   | { type: "sandbox.held-change-text"; requestId: string; text: HeldChangeText | null }
   /** To the page that asked, the folder added, or why it can't be. */
   | { type: "sandbox.folder-added"; requestId: string; refused: SandboxFolderRefusal | null }
-  /** The folders of this computer a sandbox has, each time one is added, taken out or taken up by its VM. */
+  /** To the page that asked, the folder's access changed, or why it can't be. */
+  | { type: "sandbox.folder-access-set"; requestId: string; refused: SandboxFolderRefusal | null }
+  /** The folders of this computer a sandbox has, each time one is added, changed, taken out or taken up by its VM. */
   | { type: "sandbox.folders"; folders: SandboxFolders }
   /** Who is in a subscribed room now and who of them writes there, after `room.timeline` and each time it changes. */
   | ({ type: "room.presence"; roomId: string } & RoomPresence)

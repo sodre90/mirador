@@ -6,6 +6,7 @@ import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile
 import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
+import type { MountedFolder } from "../sandbox/added-folders.ts";
 import { sandboxFoldersGuidance } from "../sandbox/folders-guidance.ts";
 import { applyEnvironment, parseEnvironment, type ProfileEnvironment } from "../../shared/profile-environment.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
@@ -258,8 +259,8 @@ export function sessionMeta(
     inRoom?: boolean;
     claudeSetup?: ClaudeSetup;
     keptProtections?: ClaudeProtections;
-    /** The folders of this computer the agent's sandbox mounted beside its workspace, read-only. */
-    sandboxFolders?: string[];
+    /** The folders of this computer the agent's sandbox mounted beside its workspace, read-only or read and write. */
+    sandboxFolders?: MountedFolder[];
   },
 ) {
   if (harness === "claude")
@@ -316,7 +317,7 @@ const canvasPromptParts = (canvasUse: CanvasUse, canvasAssetsOrigin: string, can
  */
 export function claudeSessionMeta(
   canvasUse: CanvasUse,
-  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, sandboxFolders = [] as string[] } = {},
+  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, sandboxFolders = [] as MountedFolder[] } = {},
 ) {
   return {
     systemPrompt: {
@@ -352,7 +353,7 @@ export function claudeRoomSessionMeta(
     claudeSetup = ALL_OF_CLAUDE_SETUP,
     keptProtections = NO_PROTECTIONS,
     sandboxFolders = [],
-  }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandboxFolders?: string[] } = {},
+  }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandboxFolders?: MountedFolder[] } = {},
 ) {
   const { env, disallowedTools } = claudeSessionMeta(canvasUse).claudeCode.options;
   const { deny, ask, sandbox } = keptProtections;

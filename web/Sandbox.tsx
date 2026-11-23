@@ -19,6 +19,7 @@ import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { sandboxBlockerText, sandboxUnavailableText } from "./problem-text.ts";
 import { SandboxFolderList } from "./SandboxFolders.tsx";
+import { withHomeAsTilde } from "./workspace-folder.ts";
 import { nameOf, roomStartsAfreshText, StartsAfreshWarning, useChangeStartingAfresh, workingThere } from "./RoomAgentSetup.tsx";
 
 const words = t.rooms.sandbox;
@@ -271,38 +272,45 @@ function useHeldText({ owner, id, at, unshown }: HeldChange) {
   return text;
 }
 
-function HeldText({ change }: { change: HeldChange }) {
+function HeldText({ change, shownPath }: { change: HeldChange; shownPath: string }) {
   const text = useHeldText(change);
   if (text === null) return <p className="hint">{heldWords.loading}</p>;
   if ("unshown" in text) return <p className="room-held-unshown">{heldWords.unshown}</p>;
-  return <DiffView path={change.path} oldText={text.before} newText={text.after ?? ""} />;
+  return <DiffView path={shownPath} oldText={text.before} newText={text.after ?? ""} />;
 }
+
+/** A held file as the owner reads where it is: its path in the workspace, or in which folder added read and write. */
+const heldPlace = ({ folder, path }: HeldChange, homeDir: string) => (folder === null ? { title: path, diff: path } : { title: heldWords.inFolder(path, withHomeAsTilde(folder, homeDir)), diff: withHomeAsTilde(`${folder}/${path}`, homeDir) });
 
 /**
  * The oldest agent config file change of a sandbox, put back as it was and held for the owner: which agents may have
- * made it, what it would write, and Allow or Discard; and, where the sandbox holds as many as it may, that its VM
- * stopped until some are answered. Where none of its agents was at work, `unknownAgent` says who may have made it.
+ * made it, in the workspace or which added folder, what it would write, and Allow or Discard; and, where the sandbox
+ * holds as many as it may, that its VM stopped until some are answered. Where none of its agents was at work,
+ * `unknownAgent` says who may have made it.
  */
 export function HeldChangeCard({
   changes,
   holdsTooMany,
   agentName,
   countOf,
+  homeDir,
   unknownAgent,
 }: {
   changes: HeldChange[];
   holdsTooMany: boolean;
   agentName: (profileId: string) => string;
   countOf: (count: number) => string;
+  homeDir: string;
   unknownAgent?: string;
 }) {
   const first = changes[0];
   if (!first) return null;
   const agents = first.agents.length === 0 && unknownAgent ? [unknownAgent] : first.agents.map(agentName);
+  const place = heldPlace(first, homeDir);
   return (
-    <section className="room-held" aria-label={heldWords.label} data-held-path={first.path}>
+    <section className="room-held" aria-label={heldWords.label} data-held-path={first.path} data-held-folder={first.folder ?? undefined}>
       <div className="room-held-head">
-        <span className="room-held-title">{heldTitles[first.kind](agents, first.path)}</span>
+        <span className="room-held-title">{heldTitles[first.kind](agents, place.title)}</span>
         {changes.length > 1 && <span className="room-approval-count">{countOf(changes.length)}</span>}
       </div>
       {holdsTooMany && (
@@ -310,7 +318,7 @@ export function HeldChangeCard({
           {heldWords.tooMany(HELD_CHANGES_MOST)}
         </p>
       )}
-      <HeldText key={first.id} change={first} />
+      <HeldText key={first.id} change={first} shownPath={place.diff} />
       <p className="room-held-kept">{heldWords.keptAsItWas}</p>
       <div className="permission-options">
         <button type="button" className="option-allow_once" onClick={() => answerHeld(first, "allow")}>

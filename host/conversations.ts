@@ -3247,7 +3247,7 @@ export class ConversationService {
     const cwd = await recordedDirectory(this.workspaceOf(conversationId));
     if (!this.runsInSandbox(conversation)) await this.sandboxes.settleHeldFilesFor(cwd);
     const sandboxFolders = this.sandboxFoldersOf(conversation);
-    const additionalDirectories = sandboxFolders.length > 0 && (await this.currentProcessOf(conversation)?.takesAdditionalDirectories()) ? sandboxFolders : [];
+    const additionalDirectories = sandboxFolders.length > 0 && (await this.currentProcessOf(conversation)?.takesAdditionalDirectories()) ? sandboxFolders.map(({ path }) => path) : [];
     return {
       cwd,
       mcpServers: [this.runsInSandbox(conversation) ? this.canvasServerFor(conversationId, sandboxCanvasAddress(conversationId)) : this.canvasServerFor(conversationId)],

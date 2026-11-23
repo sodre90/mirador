@@ -434,6 +434,7 @@ export const problems: Messages["problems"] = {
   sandboxConfigIncludesWorkspaceFile: (file: string) => `仓库的 git 配置包含了 ${file}，这是沙箱可以改动的工作区文件：要使用沙箱，请去掉这个包含。`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `工作区就是或包含 ${folder}，这台电脑会自行从中运行程序：沙箱可能会改动它们。`,
+  sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `另一个已开启的沙箱以读写方式添加了 ${folder}，它就是这个工作区、包含它或位于其中：只能有一个沙箱在那里写入。`,
   sandboxTooManyHeldChanges: (most: number) => `它的 Agent 改动了超过 ${most} 个暂扣的文件，正等待你的答复：请先允许或丢弃其中一些。`,
   sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,
   sandboxCouldNotStart: (cause: string) => `它无法启动：${cause}`,

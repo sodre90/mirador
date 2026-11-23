@@ -51,7 +51,7 @@ import {
   type RoomTaskApproval,
 } from "../shared/rooms.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
-import { NO_SANDBOX } from "../shared/sandbox.ts";
+import { NO_SANDBOX, roomSandbox } from "../shared/sandbox.ts";
 
 const OWNER = "owner";
 const profile = (id: string, name: string): Profile => ({
@@ -1987,21 +1987,28 @@ describe("what a room's agents are given of the owner's setup", () => {
 describe("a room's sandbox leaving its workspace", () => {
   const SANDBOX_ON = { on: true, workFreely: true, allowsSharedKernel: false };
 
-  test("turned off, or gone with its room, it leaves the repositories' hooks off in the workspace's folder for 7 days", async () => {
+  test("turned off, or gone with its room, it leaves the repositories' hooks off in the workspace's folder and its folders read and write for 7 days", async () => {
     const { store, rooms, room } = machineWithRooms();
     const other = rooms.create("Other", "w1", ["p1"], DEFAULT_PERMISSION_PRESET);
     store.setRoomSandbox(room.id, SANDBOX_ON);
+    store.addSandboxFolder(roomSandbox(room.id), { path: "/tmp/library", writable: true, addedAt: 1 });
+    store.addSandboxFolder(roomSandbox(room.id), { path: "/tmp/notes", writable: false, addedAt: 2 });
     const before = Date.now();
 
     await rooms.setSandbox(room.id, NO_SANDBOX);
     expect(repositoryHooksOff(store, ["/tmp/project"], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
     expect(repositoryHooksOff(store, ["/tmp/project"], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
+    expect(repositoryHooksOff(store, ["/tmp/library/nested"], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
+    expect(repositoryHooksOff(store, ["/tmp/library"], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
+    expect(repositoryHooksOff(store, ["/tmp/notes"], before)).toBe(false);
 
     store.setRoomSandbox(other.id, SANDBOX_ON);
+    store.addSandboxFolder(roomSandbox(other.id), { path: "/tmp/tools", writable: true, addedAt: 1 });
     const beforeDeleting = Date.now();
     rooms.delete(other.id);
     expect(store.listRooms().some(({ sandbox }) => sandbox.on)).toBe(false);
-    const [{ leftAt }] = store.foldersSandboxesLeft();
-    expect(leftAt).toBeGreaterThanOrEqual(beforeDeleting);
+    const leftLately = store.foldersSandboxesLeft().filter(({ leftAt }) => leftAt >= beforeDeleting);
+    expect(leftLately).toHaveLength(2);
+    expect(leftLately.map(({ path }) => path)).toContain("/tmp/tools");
   });
 });

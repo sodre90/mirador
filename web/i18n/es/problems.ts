@@ -465,6 +465,7 @@ export const problems: Messages["problems"] = {
   sandboxConfigIncludesWorkspaceFile: (file: string) => `La configuración de git del repositorio incluye ${file}, un archivo del espacio de trabajo que el sandbox podría cambiar: quita esa inclusión para usar un sandbox.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `El espacio de trabajo es o contiene ${folder}, desde donde este equipo ejecuta programas por sí solo: un sandbox podría cambiarlos.`,
+  sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Otro sandbox encendido tiene ${folder} en lectura y escritura, que es el espacio de trabajo, lo contiene o está dentro de él: solo un sandbox puede escribir ahí.`,
   sandboxTooManyHeldChanges: (most: number) => `Sus agentes cambiaron más de ${most} archivos retenidos, que esperan tu respuesta: permite o descarta algunos primero.`,
   sandboxSetupFailed: (cause: string) => `No se pudieron preparar los sandboxes: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `No pudo iniciarse: ${cause}`,

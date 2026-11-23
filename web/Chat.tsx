@@ -2343,6 +2343,7 @@ export function ChatPanel({
   dispatch,
   side,
   sandbox,
+  homeDir,
 }: {
   conversation: Conversation;
   /** The conversations this one's plugin tools started that the user hasn't dismissed. */
@@ -2368,6 +2369,7 @@ export function ChatPanel({
   /** For a side chat in the column beside its conversation. */
   side?: { parent: Conversation; onOpenAsConversation: () => void };
   sandbox: ConversationSandbox;
+  homeDir: string;
 }) {
   const timeline = useTimeline(open.events);
   const sideChatShown = conversation.id in useSideChatsShown();
@@ -2511,6 +2513,7 @@ export function ChatPanel({
                       holdsTooMany={sandbox.holdsTooMany}
                       agentName={(profileId) => profiles.find(({ id }) => id === profileId)?.name ?? t.rooms.agentGone}
                       countOf={t.rooms.approvalPosition}
+                      homeDir={homeDir}
                       unknownAgent={t.shell.workspaceSandbox.anAgentHere}
                     />
                     {!side && <ReminderBanner conversation={conversation} dispatch={dispatch} />}

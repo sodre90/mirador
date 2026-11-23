@@ -464,6 +464,7 @@ export const problems = {
   sandboxConfigIncludesWorkspaceFile: (file: string) => `The repository's git config includes ${file}, a file of the workspace the sandbox could change: take that include out to use a sandbox.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `The workspace is or holds ${folder}, which this computer runs programs from by itself: a sandbox could change them.`,
+  sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Another sandbox that is on has ${folder} read and write, which is the workspace, holds it or lies inside it: only one sandbox may write there.`,
   sandboxTooManyHeldChanges: (most: number) => `Its agents changed more than ${most} held files, which wait for your answer: allow or discard some first.`,
   sandboxSetupFailed: (cause: string) => `Setting up sandboxes failed: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `It could not start: ${cause}`,

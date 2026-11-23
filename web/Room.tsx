@@ -808,6 +808,7 @@ export function RoomView({
   tasks,
   heldChanges,
   holdsTooMany,
+  homeDir,
   presence,
   joiners,
   muted,
@@ -831,6 +832,7 @@ export function RoomView({
   heldChanges: HeldChange[];
   /** Whether its sandbox stopped as it holds as many changes as a room may. */
   holdsTooMany: boolean;
+  homeDir: string;
   /** Who is in the room now and who of them writes, once the host said. */
   presence: RoomPresence | null;
   /** Who waits at the room's door for its owner to let them in; only the owner is told. */
@@ -935,7 +937,7 @@ export function RoomView({
         <WritingLine writing={writing} threadId={null} you={you} />
         <div ref={timelineEnd} />
       </div>
-      {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} />}
+      {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} homeDir={homeDir} />}
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
         ref={composer}

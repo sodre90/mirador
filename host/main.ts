@@ -75,7 +75,7 @@ import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
 import { belongsToSandbox, Sandboxes } from "./sandbox/sandboxes.ts";
 import type { SandboxControl } from "./sandbox/sandbox-control.ts";
 import { WorkspaceSandboxes } from "./workspace-sandbox.ts";
-import { SandboxFolderService } from "./sandbox-folders.ts";
+import { otherSandboxesOf, SandboxFolderService } from "./sandbox-folders.ts";
 
 if (process.platform === "win32") stopIgnoringCtrlC();
 const config = loadConfig();
@@ -230,6 +230,7 @@ const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxCont
   setupChanged: (setup) => hub.broadcast({ type: "sandbox.setup", setup }),
   heldChanged: (owner, changes, full) => hub.broadcast({ type: "sandbox.held-changes", owner, changes, full }),
   foldersOf: (owner) => store.sandboxFoldersOf(owner),
+  otherSandboxes: (owner) => otherSandboxesOf(store, owner),
   foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
 });
 const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandboxes);
@@ -242,7 +243,7 @@ const sandboxControl: SandboxControl = {
   availability: () => sandboxes.availability(),
   prepare: () => void claudeCodeVersionHere().then((version) => version && sandboxes.prepareInBackground(version)),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
-  workspaceRefusal: (workspace) => sandboxes.workspaceRefusal(workspace),
+  workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
   ownerGone: (owner) => {
     sandboxFolders.ownerGone(owner);
     return sandboxes.ownerGone(owner);

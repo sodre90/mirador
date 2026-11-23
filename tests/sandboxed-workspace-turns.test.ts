@@ -96,6 +96,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     setupChanged: () => {},
     heldChanged: () => {},
     foldersOf: () => [],
+    otherSandboxes: () => ({ workspaces: [], writableFolders: [], writableFoldersOn: [] }),
     foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] },
   };
@@ -106,7 +107,7 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     availability: () => sandboxes.availability(),
     prepare: () => {},
     answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
-    workspaceRefusal: (workspace) => sandboxes.workspaceRefusal(workspace),
+    workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
     ownerGone: (owner) => sandboxes.ownerGone(owner),
   };
   const agentTabsClosed: string[] = [];
@@ -331,9 +332,13 @@ test("turning a workspace's sandbox off stops its agents in the VM, starts its c
   const { store, conversations, workspaceSandboxes, claude } = sandboxedWorkspace();
   const conversation = conversations.create("w1", BUILDER);
   const { stops } = await onFakeAgentForItsVm(conversations, store, conversation.id);
+  const library = repository();
+  store.addSandboxFolder(workspaceSandbox("w1"), { path: library, writable: true, addedAt: 1 });
   const before = Date.now();
 
   await workspaceSandboxes.setSandbox("w1", NO_SANDBOX);
+  expect(repositoryHooksOff(store, [library], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
+  expect(repositoryHooksOff(store, [library], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
 
   expect(stops()).toBe(1);
   expect([...inside(conversations).agentProcesses.keys()].some((key) => key.endsWith("/sandboxed"))).toBe(false);
@@ -348,8 +353,10 @@ test("turning a workspace's sandbox off stops its agents in the VM, starts its c
   await conversations.shutdown();
 });
 
-test("a sandboxed workspace removed leaves the repositories' hooks off in its folder for 7 days, though it is added again", async () => {
+test("a sandboxed workspace removed leaves the repositories' hooks off in its folder and its folders read and write for 7 days, though it is added again", async () => {
   const { store, workspaceSandboxes, project, other } = sandboxedWorkspace();
+  const library = repository();
+  store.addSandboxFolder(workspaceSandbox("w1"), { path: library, writable: true, addedAt: 1 });
   const before = Date.now();
 
   workspaceSandboxes.workspaceGone("w1");
@@ -358,6 +365,8 @@ test("a sandboxed workspace removed leaves the repositories' hooks off in its fo
 
   expect(repositoryHooksOff(store, [join(project, "nested")], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
   expect(repositoryHooksOff(store, [join(project, "nested")], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
+  expect(repositoryHooksOff(store, [join(library, "nested")], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
+  expect(repositoryHooksOff(store, [library], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
   expect(repositoryHooksOff(store, [other], before)).toBe(false);
 });
 

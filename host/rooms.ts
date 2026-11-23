@@ -81,7 +81,7 @@ import {
   type SandboxSetting,
 } from "../shared/sandbox.ts";
 import { assertSandboxCanRun, NO_SANDBOX_CONTROL, profileSandboxBlocker, type SandboxControl } from "./sandbox/sandbox-control.ts";
-import { sandboxLeft } from "./sandbox/hooks-off.ts";
+import { sandboxLeft, sandboxLeftWritableFolders } from "./sandbox/hooks-off.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import { firstGraphemes } from "../shared/text-cut.ts";
 import type { RoomRules, TurnListener, WaitingPermission } from "./conversations.ts";
@@ -438,16 +438,18 @@ export class RoomService implements RoomRules, TurnListener {
     if (sandbox.on) this.sandboxes.prepare();
   }
 
-  /** A sandbox leaving its workspace leaves the repositories' hooks off in its folder a while yet. */
+  /** A sandbox leaving its workspace and its folders read and write leaves the repositories' hooks off in them a while yet. */
   private sandboxLeaves(room: Room) {
+    if (!room.sandbox.on) return;
     const workspace = this.store.findWorkspace(room.workspaceId);
-    if (room.sandbox.on && workspace) sandboxLeft(this.store, workspace.path);
+    if (workspace) sandboxLeft(this.store, workspace.path);
+    sandboxLeftWritableFolders(this.store, roomSandbox(room.id));
   }
 
   async sandboxCheck(roomId: string): Promise<SandboxCheck> {
     const room = this.existingRoom(roomId);
     const workspace = this.store.findWorkspace(room.workspaceId);
-    const workspaceRefused = workspace ? await this.sandboxes.workspaceRefusal(workspace.path) : null;
+    const workspaceRefused = workspace ? await this.sandboxes.workspaceRefusal(workspace.path, room.sandbox.on ? undefined : roomSandbox(roomId)) : null;
     const agentsRefused = room.agents.flatMap((agent) => this.sandboxBlockerOf(agent) ?? []);
     return { availability: this.sandboxes.availability(), blockers: [...agentsRefused, ...(workspaceRefused ? [workspaceRefused] : [])] };
   }

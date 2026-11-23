@@ -2193,8 +2193,11 @@ export function startServer(services: HostServices) {
         if (!isSandboxOwner(message.owner)) throw new Error("A held change belongs to a room's or a workspace's sandbox.");
         return reply({ type: "sandbox.held-change-text", requestId: message.requestId, text: sandboxes.heldChangeText(message.owner, message.changeId) });
       case "sandbox.add-folder":
-        if (!isSandboxOwner(message.owner) || typeof message.path !== "string") throw new Error("A folder is added to a room's or a workspace's sandbox, by its path.");
-        return reply({ type: "sandbox.folder-added", requestId: message.requestId, refused: await sandboxFolders.add(message.owner, message.path) });
+        if (!isSandboxOwner(message.owner) || typeof message.path !== "string" || typeof message.writable !== "boolean") throw new Error("A folder is added to a room's or a workspace's sandbox, by its path, read-only or read and write.");
+        return reply({ type: "sandbox.folder-added", requestId: message.requestId, refused: await sandboxFolders.add(message.owner, message.path, message.writable) });
+      case "sandbox.set-folder-access":
+        if (!isSandboxOwner(message.owner) || typeof message.path !== "string" || typeof message.writable !== "boolean") throw new Error("A folder of a room's or a workspace's sandbox is made read-only or read and write, by its path.");
+        return reply({ type: "sandbox.folder-access-set", requestId: message.requestId, refused: await sandboxFolders.setAccess(message.owner, message.path, message.writable) });
       case "sandbox.remove-folder":
         if (!isSandboxOwner(message.owner) || typeof message.path !== "string") throw new Error("A folder is taken out of a room's or a workspace's sandbox, by its path.");
         return sandboxFolders.remove(message.owner, message.path);

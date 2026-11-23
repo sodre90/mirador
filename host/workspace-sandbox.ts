@@ -11,7 +11,7 @@ import {
 } from "../shared/sandbox.ts";
 import type { Hub } from "./hub.ts";
 import { assertSandboxCanRun, NO_SANDBOX_CONTROL, profileSandboxBlocker, type SandboxControl } from "./sandbox/sandbox-control.ts";
-import { sandboxLeft } from "./sandbox/hooks-off.ts";
+import { sandboxLeft, sandboxLeftWritableFolders } from "./sandbox/hooks-off.ts";
 import { belongsToSandbox } from "./sandbox/sandboxes.ts";
 import type { Store } from "./store.ts";
 
@@ -56,7 +56,7 @@ export class WorkspaceSandboxes {
     if (sameSandbox(sandbox, workspace.sandbox)) return;
     const turnsOn = sandbox.on && !workspace.sandbox.on;
     if (turnsOn) assertSandboxCanRun(await this.sandboxCheck(workspaceId), sandbox);
-    if (workspace.sandbox.on && !sandbox.on) sandboxLeft(this.store, workspace.path);
+    if (workspace.sandbox.on && !sandbox.on) this.sandboxLeaves(workspace.id, workspace.path);
     this.store.setWorkspaceSandbox(workspaceId, sandbox);
     this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
     this.conversations.startAfreshInWorkspace(workspaceId, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
@@ -74,7 +74,7 @@ export class WorkspaceSandboxes {
    */
   async sandboxCheck(workspaceId: string): Promise<WorkspaceSandboxCheck> {
     const workspace = this.existingWorkspace(workspaceId);
-    const refused = await this.sandboxes.workspaceRefusal(workspace.path);
+    const refused = await this.sandboxes.workspaceRefusal(workspace.path, workspace.sandbox.on ? undefined : workspaceSandbox(workspaceId));
     const { profileId } = workspace.defaultLaunch;
     const startsOnProfile = profileId === null ? undefined : this.store.findProfile(profileId);
     return {
@@ -90,11 +90,16 @@ export class WorkspaceSandboxes {
     await this.sandboxes.answerHeldChange(workspaceSandbox(workspaceId), changeId, answer);
   }
 
-  /** The deleted workspace's VM stops, and what it held goes unanswered; its folder keeps its repositories' hooks off a while yet. */
+  /** The deleted workspace's VM stops, and what it held goes unanswered; its folder and its folders read and write keep their repositories' hooks off a while yet. */
   workspaceGone(workspaceId: string) {
     const workspace = this.store.findWorkspace(workspaceId);
-    if (workspace?.sandbox.on) sandboxLeft(this.store, workspace.path);
+    if (workspace?.sandbox.on) this.sandboxLeaves(workspaceId, workspace.path);
     void this.sandboxes.ownerGone(workspaceSandbox(workspaceId));
+  }
+
+  private sandboxLeaves(workspaceId: string, path: string) {
+    sandboxLeft(this.store, path);
+    sandboxLeftWritableFolders(this.store, workspaceSandbox(workspaceId));
   }
 
   private existingWorkspace(workspaceId: string) {

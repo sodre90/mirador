@@ -22,8 +22,8 @@ export interface SandboxControl {
   answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer): Promise<void>;
   /** The room or workspace is deleted: its VM stops, and what it held goes unanswered. */
   ownerGone(owner: SandboxOwner): Promise<void>;
-  /** Why the workspace can't be shown to a sandbox, null where it can. */
-  workspaceRefusal(workspace: string): Promise<SandboxBlocker | null>;
+  /** Why a sandbox can't work in the workspace, or the room's or workspace's sandbox `turningOn` can't turn on there; null where it can. */
+  workspaceRefusal(workspace: string, turningOn?: SandboxOwner): Promise<SandboxBlocker | null>;
 }
 
 export const NO_SANDBOX_CONTROL: SandboxControl = {

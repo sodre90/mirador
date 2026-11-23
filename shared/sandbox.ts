@@ -91,7 +91,9 @@ export type SandboxBlocker =
   | { kind: "workspace-is-mirador" }
   | { kind: "workspace-holds-computers-own"; folder: string }
   /** A workspace's conversation that works in a worktree of its own, which lies outside the folder its sandbox sees. */
-  | { kind: "conversation-in-worktree" };
+  | { kind: "conversation-in-worktree" }
+  /** Another sandbox that is on has a folder read and write that is the workspace, holds it or lies inside it. */
+  | { kind: "workspace-overlaps-sandbox-folder"; folder: string };
 
 /**
  * A folder of this computer the owner added to a room's or workspace's sandbox, which its VM shows at the same path,
@@ -103,7 +105,11 @@ export interface SandboxFolder {
   addedAt: number;
 }
 
-/** Why a folder can't go into a sandbox: said as it is added, and again where its VM starts without it. */
+/**
+ * Why a folder can't go into a sandbox: said as it is added or its access changes, and again where its VM starts
+ * without it. From `needs-repository` on they hold for a folder read and write alone, which must be a git repository's
+ * own top folder that no other sandbox works in, nor one this computer runs programs from.
+ */
 export type SandboxFolderRefusal =
   | { kind: "not-a-folder" }
   | { kind: "already-added" }
@@ -118,7 +124,15 @@ export type SandboxFolderRefusal =
   | { kind: "holds-sandbox-files" }
   | { kind: "overlaps-workspace" }
   | { kind: "overlaps-folder"; folder: string }
-  | { kind: "now-a-link" };
+  | { kind: "now-a-link" }
+  | { kind: "needs-repository" }
+  | { kind: "repository-refused"; blocker: SandboxBlocker }
+  | { kind: "inside-computers-own"; folder: string }
+  | { kind: "overlaps-sandbox-workspace"; folder: string }
+  | { kind: "overlaps-sandbox-folder"; folder: string }
+  | { kind: "inside-where-a-sandbox-writes"; folder: string }
+  | { kind: "held-files-refused" }
+  | { kind: "could-not-mount"; cause: string };
 
 /**
  * Where an added folder stands: in the sandbox, or to be once it starts; added while its VM runs without it, until its
@@ -198,12 +212,15 @@ export interface SandboxSetup {
 export const SETUP_NOT_STARTED: SandboxSetup = { stage: "not-started" };
 
 /**
- * An agent's config file in the workspace that the sandbox changed, put back as it was and held for the owner's OK:
- * its path from the workspace with /, and whether it was added, changed or deleted. Its text comes on request.
+ * An agent's config file in the workspace, or in a folder added read and write, that the sandbox changed, put back as
+ * it was and held for the owner's OK: its path from there with /, and whether it was added, changed or deleted. Its
+ * text comes on request.
  */
 export interface HeldChange {
   id: string;
   owner: SandboxOwner;
+  /** The folder added read and write that the file is in; null where it is the workspace's. */
+  folder: string | null;
   path: string;
   /** The agents at work in the sandbox when it came, by profile id; the change may be any of theirs. */
   agents: string[];

@@ -13,6 +13,7 @@ import {
   type HeldChange,
   type HeldChangeAnswer,
   type HeldChangeText,
+  type SandboxBlocker,
   type SandboxFolder,
   type SandboxFolderRefusal,
   type SandboxFolderState,
@@ -23,15 +24,15 @@ import {
 import type { Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Store } from "../store.ts";
-import { addedFolderRefusal, foldersMounted, type FolderSurroundings, type FoldersMounted } from "./added-folders.ts";
+import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurroundings, type FoldersMounted, type LeftOutFolder, type MountedFolder, type OtherSandboxes } from "./added-folders.ts";
 import { AGENT_USER, BUN_IN_VM, environmentInVm } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
-import { HeldFiles, type HeldSandbox } from "./held-files.ts";
+import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import { startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
 import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type VmLauncher } from "./vm-launcher.ts";
-import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces, type Mount } from "./workspace-mounts.ts";
+import { gitFoldersOf, realOrAsIs, sandboxRefusalOf, workspaceMounts, type MiradorPlaces, type Mount } from "./workspace-mounts.ts";
 
 /** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
@@ -55,6 +56,11 @@ export const sandboxConfigFolder = (dataDir: string, owner: SandboxOwner) => joi
 
 /** Where the copies of a sandboxed workspace's repository config, which its VM reads, are taken as the VM starts. */
 const gitConfigCopies = (dataDir: string, owner: SandboxOwner) => join(sandboxFolder(dataDir, owner), "git-config");
+
+/** Where the copies of the repository config of the sandbox's folders read and write are taken, each folder's apart, never among the workspace's. */
+const folderGitConfigCopies = (dataDir: string, owner: SandboxOwner) => join(sandboxFolder(dataDir, owner), "folder-git-config");
+
+const gitConfigCopiesOf = (dataDir: string, owner: SandboxOwner, folder: string) => join(folderGitConfigCopies(dataDir, owner), shortHash(folder, 16));
 
 /** The canvas of a conversation, as its agent reaches it in its sandbox's VM. */
 export const sandboxCanvasAddress = (conversationId: string) => `http://127.0.0.1:${CANVAS_RELAY_PORT}/mcp/${conversationId}`;
@@ -97,6 +103,8 @@ export interface SandboxHost {
   heldChanged(owner: SandboxOwner, changes: HeldChange[], full: boolean): void;
   /** The folders of this computer the owner added to the sandbox, oldest first. */
   foldersOf(owner: SandboxOwner): SandboxFolder[];
+  /** What the other rooms' and workspaces' sandboxes work in. */
+  otherSandboxes(owner: SandboxOwner): OtherSandboxes;
   /** The sandbox's VM started, with what of its added folders it mounted and what it left out. */
   foldersStarted(owner: SandboxOwner): void;
 }
@@ -123,8 +131,10 @@ interface SandboxVm {
   image: string;
   /** The workspace as its room or workspace named it when the VM started. */
   workspace: string | null;
-  /** The workspace's own path, without links, once the VM started on it. */
-  realWorkspace?: string;
+  /** What the VM's agents can write, without links, as the VM starts on it: the workspace, then each folder added read and write it mounts. */
+  writableRoots: string[];
+  /** The held files of each of `writableRoots`. */
+  helds: HeldFiles[];
   /** The folders the owner had added as the VM started. */
   folders: SandboxFolder[];
   started: Promise<void>;
@@ -138,9 +148,19 @@ interface SandboxVm {
   socketsFolder?: string;
   /** The model API of each agent's profile, by profile id, as the agents last started. */
   routes: Map<string, ModelRoute>;
-  held?: HeldFiles;
   stopping?: Promise<void>;
 }
+
+/** What a sandbox's VM mounted of its added folders and left out as it last started, and the folders it started with. */
+interface FolderStart extends FoldersMounted {
+  startedWith: MountedFolder[];
+}
+
+const sameFolder = (a: MountedFolder) => (b: MountedFolder) => a.path === b.path && a.writable === b.writable;
+
+const leftOutAs = (refusal: SandboxFolderRefusal) => ({ leftOut: { kind: "refused", refusal } as LeftOutFolder });
+
+const leftOutFor = (error: unknown) => leftOutAs(error instanceof HeldFilesRefused ? { kind: "held-files-refused" } : { kind: "could-not-mount", cause: messageOf(error) });
 
 const shortHash = (text: string, length = 10) => createHash("sha256").update(text).digest("hex").slice(0, length);
 
@@ -208,37 +228,52 @@ export class Sandboxes {
   }
 
   heldChanges(): HeldChange[] {
-    return [...this.vms.values()].flatMap(({ held }) => held?.changes() ?? []).concat(this.heldOfStoppedVms());
+    return this.allHelds().flatMap((held) => held.changes());
   }
 
-  /** The rooms and workspaces whose VM stopped as they hold as many changes as one may. */
+  /** The rooms and workspaces whose VM stopped as they hold as many changes as one may, in the workspace or in a folder. */
   holdingTooMany(): SandboxOwner[] {
     const owners = new Map([...this.vms.values(), ...this.stoppedHeld.values()].map(({ owner }) => [ownerKey(owner), owner]));
-    return [...owners.values()].filter((owner) => this.heldOf(owner)?.full());
+    return [...owners.values()].filter((owner) => this.holdsTooMany(owner));
   }
 
   heldChangeText(owner: SandboxOwner, changeId: string): HeldChangeText | null {
-    return this.heldOf(owner)?.textOf(changeId) ?? null;
+    return (
+      this.heldsOf(owner)
+        .map((held) => held.textOf(changeId))
+        .find((text) => text !== null) ?? null
+    );
   }
 
-  /** The workspace's own path, as this host's sandboxes know it: whether it can be shown to one. */
-  workspaceRefusal(workspace: string) {
-    return sandboxRefusalOf(workspace, this.host.places);
+  /**
+   * Why a sandbox can't work in the workspace: what keeps it from any sandbox; and, for the room's or workspace's sandbox
+   * `turningOn`, another sandbox that is on writing in it or around it through a folder read and write, whose agents
+   * could swap it for a link. Null where it can.
+   */
+  async workspaceRefusal(workspace: string, turningOn?: SandboxOwner): Promise<SandboxBlocker | null> {
+    const refused = await sandboxRefusalOf(workspace, this.host.places);
+    if (refused || !turningOn) return refused;
+    const real = await realOrAsIs(workspace);
+    const writableFoldersOn = await Promise.all(this.host.otherSandboxes(turningOn).writableFoldersOn.map(realOrAsIs));
+    const written = writableFoldersOn.find((folder) => overlap(real, folder));
+    return written ? { kind: "workspace-overlaps-sandbox-folder", folder: written } : null;
   }
 
-  /** Why the folder, given without links, can't be added to the sandbox beside its other added folders; null where it can. */
-  async folderRefusal(owner: SandboxOwner, folder: string): Promise<SandboxFolderRefusal | null> {
-    const others = this.host.foldersOf(owner).map(({ path }) => path);
+  /** Why the folder, given without links, can't be in the sandbox with this access beside `others`, its other added folders; null where it can. */
+  async folderRefusal(owner: SandboxOwner, folder: MountedFolder, others: string[]): Promise<SandboxFolderRefusal | null> {
     return addedFolderRefusal(folder, await this.folderSurroundings(owner), others);
   }
 
   private async folderSurroundings(owner: SandboxOwner): Promise<FolderSurroundings> {
     const workspace = this.host.workspaceOf(owner);
+    const { workspaces, writableFolders, writableFoldersOn } = this.host.otherSandboxes(owner);
+    const real = (paths: string[]) => Promise.all(paths.map(realOrAsIs));
     return {
       places: this.host.places,
       workspace: workspace && (await realpath(workspace).catch(() => null)),
       sandboxOwn: [sandboxConfigFolder(this.host.dataDir, owner), agentPackages(), IN_VM_SCRIPTS, SCRIPTS_IN_VM, SOCKETS_IN_VM],
       socketsParent: this.socketsParent,
+      otherSandboxes: { workspaces: await real(workspaces), writableFolders: await real(writableFolders), writableFoldersOn: await real(writableFoldersOn) },
     };
   }
 
@@ -249,38 +284,41 @@ export class Sandboxes {
   }
 
   /** What each VM of a sandbox mounted of its added folders and left out as it last started, by `ownerKey`, kept once it stops. */
-  private readonly folderStarts = new Map<string, FoldersMounted>();
+  private readonly folderStarts = new Map<string, FolderStart>();
 
   /** The added folders the sandbox's running VM mounted; none where it doesn't run. */
-  mountedFolders(owner: SandboxOwner): string[] {
+  mountedFolders(owner: SandboxOwner): MountedFolder[] {
     const key = ownerKey(owner);
     return this.vms.get(key)?.running ? (this.folderStarts.get(key)?.mounted ?? []) : [];
   }
 
-  /** Where an added folder stands: left out as the VM last started, waiting where it runs without it, or in the sandbox. */
-  folderStateOf(owner: SandboxOwner, path: string): SandboxFolderState {
+  /**
+   * Where an added folder stands with its access: left out as the VM last started with it so, waiting where the VM runs
+   * without it so, or in the sandbox.
+   */
+  folderStateOf(owner: SandboxOwner, folder: MountedFolder): SandboxFolderState {
     const key = ownerKey(owner);
     const started = this.folderStarts.get(key);
-    const leftOut = started?.leftOut.get(path);
+    const leftOut = started?.startedWith.some(sameFolder(folder)) ? started.leftOut.get(folder.path) : undefined;
     if (leftOut) return leftOut;
-    return this.vms.get(key)?.running && !started?.mounted.includes(path) ? { kind: "waiting" } : { kind: "in-sandbox" };
+    return this.vms.get(key)?.running && !started?.mounted.some(sameFolder(folder)) ? { kind: "waiting" } : { kind: "in-sandbox" };
   }
 
   /**
-   * Before an agent session starts on this computer in a folder a sandbox works in, its held files are looked at once
-   * more, so none the agents planted is loaded meanwhile; where one stays, the session does not start.
+   * Before an agent session starts on this computer in a folder a sandbox works in, its workspace or one added read and
+   * write, its held files are looked at once more, so none the agents planted is loaded meanwhile; where one stays, the
+   * session does not start.
    */
   async settleHeldFilesFor(directory: string) {
     const real = await realpath(directory).catch(() => directory);
-    const helds = [...[...this.vms.values()].flatMap(({ held }) => (held ? [held] : [])), ...[...this.stoppedHeld.values()].map(({ held }) => held)];
-    const settled = await Promise.all(helds.filter((held) => overlap(real, held.workspace)).map((held) => held.check()));
+    const settled = await Promise.all(this.allHelds().filter((held) => overlap(real, held.workspace)).map((held) => held.check()));
     if (settled.includes(false)) throw new HostProblemError({ code: "sandbox-held-files-unsettled" });
   }
 
-  /** The VMs working in or around this folder stop, before Mirador writes there itself, so none races it. */
+  /** The VMs working in or around this folder, as their workspace or a folder added read and write, stop before Mirador writes there itself, so none races it. */
   async stopSandboxesWorkingIn(directory: string) {
     const real = await realpath(directory).catch(() => directory);
-    const working = [...this.vms.values()].filter((vm) => vm.realWorkspace && overlap(real, vm.realWorkspace));
+    const working = [...this.vms.values()].filter((vm) => vm.writableRoots.some((root) => overlap(real, root)));
     await Promise.all(working.map(({ owner }) => this.stop(owner)));
   }
 
@@ -303,7 +341,7 @@ export class Sandboxes {
     const available = this.availability();
     if (!available.available) throw new SandboxNotReady({ kind: "unavailable", why: available.why });
     if (sharesKernel(available.kind) && !agent.allowsSharedKernel) throw new SandboxNotReady({ kind: "shared-kernel-not-allowed" });
-    if (this.heldOf(agent.owner)?.full()) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
+    if (this.holdsTooMany(agent.owner)) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
     const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedVm(agent.owner, agent.claudeCodeVersion));
     const configDir = sandboxConfigFolder(this.host.dataDir, agent.owner);
     const environment = environmentInVm(agent.given, { configDir, modelBaseUrl: modelAddress(agent.profileId), keyVariable: agent.route.keyVariable });
@@ -345,21 +383,34 @@ export class Sandboxes {
 
   /** At each turn's end the held files are looked at again, in case a watch event was missed. */
   async turnEnded(owner: SandboxOwner) {
-    await this.vms.get(ownerKey(owner))?.held?.check();
+    await Promise.all((this.vms.get(ownerKey(owner))?.helds ?? []).map((held) => held.check()));
   }
 
   async answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer) {
-    await this.heldOf(owner)?.answer(changeId, answer);
+    await Promise.all(this.heldsOf(owner).map((held) => held.answer(changeId, answer)));
   }
 
-  private heldOf(owner: SandboxOwner) {
+  /** The held files of the sandbox, its running VM's and those a stopped one left waiting for the owner, each once. */
+  private heldsOf(owner: SandboxOwner): HeldFiles[] {
     const key = ownerKey(owner);
-    return this.vms.get(key)?.held ?? this.stoppedHeld.get(key)?.held;
+    return [...new Set([...(this.vms.get(key)?.helds ?? []), ...(this.stoppedHeld.get(key)?.helds ?? [])])];
+  }
+
+  private allHelds(): HeldFiles[] {
+    return [...new Set([...this.vms.values(), ...this.stoppedHeld.values()].flatMap(({ helds }) => helds))];
+  }
+
+  /** Whether the held files of the workspace or of a folder hold as many changes as each may: past that, the VM does not start until the owner answers some. */
+  private holdsTooMany(owner: SandboxOwner) {
+    return this.heldsOf(owner).some((held) => held.full());
   }
 
   private heldChanged(owner: SandboxOwner) {
-    const held = this.heldOf(owner);
-    this.host.heldChanged(owner, held?.changes() ?? [], held?.full() ?? false);
+    this.host.heldChanged(
+      owner,
+      this.heldsOf(owner).flatMap((held) => held.changes()),
+      this.holdsTooMany(owner),
+    );
   }
 
   /** Stops the VM, its sockets and its watch, after a last look at the held files. */
@@ -382,11 +433,28 @@ export class Sandboxes {
     await Promise.all([...this.vms.values()].map(({ owner }) => this.stop(owner)));
   }
 
-  /** Held files of sandboxes whose VM stopped wait for the owner's answer still, by `ownerKey`. */
-  private readonly stoppedHeld = new Map<string, { owner: SandboxOwner; held: HeldFiles }>();
+  /**
+   * Held files whose VM stopped wait for the owner's answer still, by `ownerKey`: each folder's until a VM holds that
+   * folder's files again, or for good where none does.
+   */
+  private readonly stoppedHeld = new Map<string, { owner: SandboxOwner; helds: HeldFiles[] }>();
 
-  private heldOfStoppedVms() {
-    return [...this.stoppedHeld.entries()].filter(([key]) => !this.vms.has(key)).flatMap(([, { held }]) => held.changes());
+  private keepWaiting(owner: SandboxOwner, helds: HeldFiles[]) {
+    const kept = [...(this.stoppedHeld.get(ownerKey(owner))?.helds ?? []), ...helds].filter((held) => held.changes().length > 0);
+    if (kept.length > 0) this.stoppedHeld.set(ownerKey(owner), { owner, helds: [...new Set(kept)] });
+    else this.stoppedHeld.delete(ownerKey(owner));
+  }
+
+  /** The changes a stopped VM held in the folder these held files are of go on waiting in them. */
+  private takeOverStoppedHeld(owner: SandboxOwner, held: HeldFiles) {
+    const stopped = this.stoppedHeld.get(ownerKey(owner))?.helds ?? [];
+    const ofSameFolder = stopped.filter((previous) => previous.workspace === held.workspace);
+    ofSameFolder.forEach((previous) => held.takeOver(previous));
+    this.stoppedHeld.delete(ownerKey(owner));
+    this.keepWaiting(
+      owner,
+      stopped.filter((previous) => !ofSameFolder.includes(previous)),
+    );
   }
 
   private async tearDown(vm: SandboxVm) {
@@ -395,10 +463,8 @@ export class Sandboxes {
     await this.halt(vm).catch((error: unknown) => console.error(`stopping the VM of ${key} failed:`, error));
     await Promise.all(vm.sockets.map((socket) => socket.stop().catch(() => {})));
     if (vm.socketsFolder) await rm(vm.socketsFolder, { recursive: true, force: true }).catch(() => {});
-    if (vm.held) {
-      await vm.held.stop().catch(() => {});
-      if (vm.held.changes().length > 0) this.stoppedHeld.set(key, { owner: vm.owner, held: vm.held });
-    }
+    await Promise.all(vm.helds.map((held) => held.stop().catch(() => {})));
+    this.keepWaiting(vm.owner, vm.helds);
     if (this.vms.get(key) === vm) this.vms.delete(key);
   }
 
@@ -454,6 +520,8 @@ export class Sandboxes {
       name: `mirador-${this.hostLabel}-${shortHash(key, 8)}`,
       image,
       workspace: this.host.workspaceOf(owner),
+      writableRoots: [],
+      helds: [],
       folders: this.host.foldersOf(owner),
       started: Promise.resolve(),
       running: false,
@@ -477,15 +545,14 @@ export class Sandboxes {
     if (!workspace) throw new HostProblemError({ code: "workspace-gone" });
     const refused = await this.workspaceRefusal(workspace);
     if (refused) throw new SandboxNotReady({ kind: "blocked", blocker: refused });
-    vm.realWorkspace = workspace;
-    vm.held = new HeldFiles(workspace, owner, await gitFoldersOf(workspace), this.heldSandbox(vm));
-    const stoppedHeld = this.stoppedHeld.get(key);
-    if (stoppedHeld) vm.held.takeOver(stoppedHeld.held);
-    this.stoppedHeld.delete(key);
-    const heldReadOnly = await vm.held.start();
+    vm.writableRoots.push(workspace);
+    const held = new HeldFiles(workspace, owner, await gitFoldersOf(workspace), this.heldSandbox(vm), false);
+    vm.helds.push(held);
+    this.takeOverStoppedHeld(owner, held);
+    const heldReadOnly = await held.start();
     const planned = await workspaceMounts(workspace, gitConfigCopies(this.host.dataDir, owner), this.host.places, heldReadOnly);
     if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
-    const folders = await foldersMounted(vm.folders, await this.folderSurroundings(owner));
+    const folders = await this.addedFoldersMounted(vm);
     const configFolder = sandboxConfigFolder(this.host.dataDir, owner);
     await mkdir(configFolder, { recursive: true, mode: 0o700 });
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
@@ -501,7 +568,7 @@ export class Sandboxes {
       memory: VM_MEMORY,
       mounts: [
         ...planned.mounts,
-        ...folders.mounted.map((folder) => atItsOwnPath(folder, true)),
+        ...folders.mounts,
         atItsOwnPath(configFolder, false),
         atItsOwnPath(agentPackages(), true),
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
@@ -511,8 +578,45 @@ export class Sandboxes {
       entry: ["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, this.launcher.firstProcessUser, `${CANVAS_RELAY_PORT}=${SOCKETS_IN_VM}/canvas.sock`, `${MODEL_RELAY_PORT}=${SOCKETS_IN_VM}/model.sock`],
     });
     vm.running = true;
-    this.folderStarts.set(key, folders);
+    this.folderStarts.set(key, { ...folders.started, startedWith: vm.folders.map(({ path, writable }) => ({ path, writable })) });
     this.host.foldersStarted(owner);
+  }
+
+  /**
+   * The mounts of the sandbox's added folders, each looked at as it stands now: a read-only one at its own path, and one
+   * read and write as the workspace is, with held files and copies of its git config of its own. A folder that fails
+   * anywhere is left out whole, never mounted in part.
+   */
+  private async addedFoldersMounted(vm: SandboxVm): Promise<{ mounts: Mount[]; started: FoldersMounted }> {
+    const checked = await foldersMounted(vm.folders, await this.folderSurroundings(vm.owner));
+    await rm(folderGitConfigCopies(this.host.dataDir, vm.owner), { recursive: true, force: true });
+    const mounted: MountedFolder[] = [];
+    const mounts: Mount[] = [];
+    for (const folder of checked.mounted) {
+      const planned = folder.writable ? await this.writableFolderMounts(vm, folder.path) : { mounts: [atItsOwnPath(folder.path, true)] };
+      if ("leftOut" in planned) checked.leftOut.set(folder.path, planned.leftOut);
+      else {
+        mounted.push(folder);
+        mounts.push(...planned.mounts);
+      }
+    }
+    return { mounts, started: { mounted, leftOut: checked.leftOut } };
+  }
+
+  /** A folder read and write, mounted as the workspace is, its held files watched from now on; or why it is left out. */
+  private async writableFolderMounts(vm: SandboxVm, folder: string): Promise<{ mounts: Mount[] } | { leftOut: LeftOutFolder }> {
+    const held = new HeldFiles(folder, vm.owner, await gitFoldersOf(folder), this.heldSandbox(vm), true);
+    const heldReadOnly = await held.start().catch(leftOutFor);
+    if (!Array.isArray(heldReadOnly)) return heldReadOnly;
+    const planned = await workspaceMounts(folder, gitConfigCopiesOf(this.host.dataDir, vm.owner, folder), this.host.places, heldReadOnly).catch(leftOutFor);
+    if (!("mounts" in planned)) {
+      await held.stop().catch(() => {});
+      return "refused" in planned ? leftOutAs(repositoryRefusal(planned.refused)) : planned;
+    }
+    vm.helds.push(held);
+    vm.writableRoots.push(folder);
+    this.takeOverStoppedHeld(vm.owner, held);
+    return planned;
   }
 
   /** The runtime runs and the image of this Claude Code version is there: set up once for every sandbox, its progress told as it goes. */

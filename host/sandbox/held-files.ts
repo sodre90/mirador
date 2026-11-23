@@ -86,11 +86,13 @@ export class HeldFiles {
   private readOnly: string[] = [];
   private gitRedirects: string[] = [];
 
+  /** `workspace` is the folder whose files it holds: the sandbox's workspace, or a folder added to it read and write. */
   constructor(
     readonly workspace: string,
     private readonly owner: SandboxOwner,
     private readonly gitFolders: string[],
     private readonly sandbox: HeldSandbox,
+    private readonly isAddedFolder: boolean,
   ) {}
 
   /**
@@ -243,7 +245,16 @@ export class HeldFiles {
     const before = this.expected.get(path) ?? NONE;
     const [beforeText, afterText] = [textOf(before), textOf(proposed)];
     const unshown = beforeText === undefined || afterText === undefined;
-    const change: HeldChange = { id: kept?.change.id ?? crypto.randomUUID(), owner: this.owner, path, ...this.sandbox.atWork(), kind: kindOfChange(before, proposed), ...(unshown && { unshown: true as const }), at: Date.now() };
+    const change: HeldChange = {
+      id: kept?.change.id ?? crypto.randomUUID(),
+      owner: this.owner,
+      folder: this.isAddedFolder ? this.workspace : null,
+      path,
+      ...this.sandbox.atWork(),
+      kind: kindOfChange(before, proposed),
+      ...(unshown && { unshown: true as const }),
+      at: Date.now(),
+    };
     this.held.set(path, { change, before, proposed });
     return true;
   }

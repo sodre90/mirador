@@ -423,6 +423,8 @@ type ConversationRow = {
   updated_at: number;
 };
 
+const ownerOfRow = (kind: string, id: string): SandboxOwner[] => (kind === "room" ? [roomSandbox(id)] : kind === "workspace" ? [workspaceSandbox(id)] : []);
+
 const toWorkspace = (row: WorkspaceRow): Workspace => ({
   id: row.id,
   name: row.name,
@@ -823,11 +825,21 @@ export class Store {
   /** The rooms and workspaces with folders added to their sandbox. */
   ownersWithSandboxFolders(): SandboxOwner[] {
     const rows = this.db.query("SELECT DISTINCT owner_kind, owner_id FROM sandbox_folders").all() as { owner_kind: string; owner_id: string }[];
-    return rows.flatMap(({ owner_kind, owner_id }) => (owner_kind === "room" ? [roomSandbox(owner_id)] : owner_kind === "workspace" ? [workspaceSandbox(owner_id)] : []));
+    return rows.flatMap(({ owner_kind, owner_id }) => ownerOfRow(owner_kind, owner_id));
+  }
+
+  /** Every folder added to a room's or workspace's sandbox read and write, its sandbox on or not. */
+  writableSandboxFolders(): { owner: SandboxOwner; path: string }[] {
+    const rows = this.db.query("SELECT owner_kind, owner_id, path FROM sandbox_folders WHERE writable = 1 ORDER BY added_at, path").all() as { owner_kind: string; owner_id: string; path: string }[];
+    return rows.flatMap(({ owner_kind, owner_id, path }) => ownerOfRow(owner_kind, owner_id).map((owner) => ({ owner, path })));
   }
 
   addSandboxFolder({ kind, id }: SandboxOwner, { path, writable, addedAt }: SandboxFolder) {
     this.db.query("INSERT INTO sandbox_folders (owner_kind, owner_id, path, writable, added_at) VALUES (?, ?, ?, ?, ?)").run(kind, id, path, writable ? 1 : 0, addedAt);
+  }
+
+  setSandboxFolderAccess({ kind, id }: SandboxOwner, path: string, writable: boolean) {
+    this.db.query("UPDATE sandbox_folders SET writable = ? WHERE owner_kind = ? AND owner_id = ? AND path = ?").run(writable ? 1 : 0, kind, id, path);
   }
 
   removeSandboxFolder({ kind, id }: SandboxOwner, path: string) {
