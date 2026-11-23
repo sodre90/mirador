@@ -28,6 +28,7 @@ const workspaceAt = (path: string): Workspace => ({
   newConversationsIn: "worktree",
   worktreeSetup: "",
   sandbox: NO_SANDBOX,
+  sideChatAccess: null,
   createdAt: 0,
 });
 

@@ -2,7 +2,7 @@ import { knownEditorIds, knownEditorNames, type EditorSetting, type EditorState 
 import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { PUSH_RELAY_CHOICES, pushRelayChoiceOf, pushRelayHost, type PushRelayChoice, type PushRelayRequest, type PushRelaySetting } from "../shared/push.ts";
 import { saveSetting } from "./saved-setting.ts";
-import { CONVERSATIONS_SHOWN_CHOICES, OLDER_AFTER_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ConversationsShown, type ClaudeProgram, type Person, type Profile, type PromptTemplate } from "../shared/model.ts";
+import { CONVERSATIONS_SHOWN_CHOICES, OLDER_AFTER_CHOICES, SIDE_CHAT_ACCESS_CHOICES, type CanvasUse, type KeepAwake, type KeepDeletedCanvas, type OlderAfter, type ConversationsShown, type ClaudeProgram, type Person, type Profile, type PromptTemplate, type SideChatAccess } from "../shared/model.ts";
 import { LONGEST_PERSON_NAME, personName } from "../shared/people.ts";
 import type { VoiceSettings as VoiceSettingsValue } from "../shared/voice.ts";
 import type { VoiceEngineStatus } from "../shared/voice-engine.ts";
@@ -43,6 +43,7 @@ import {
   type ShellFontSize,
 } from "./shell-look.ts";
 import { setShellOutputStyle, useShellOutputStyle } from "./shell-output.ts";
+import { sideChatAccessLabels } from "./SideChat.tsx";
 import { isMac } from "./shortcuts.ts";
 import type { DevicesListed, SettingsPage } from "./state.ts";
 import { notifies, setNotificationsWanted, useNotificationSetting, type NotificationSetting } from "./system-notifications.ts";
@@ -108,6 +109,7 @@ export function SettingsDialog({
   keepDeletedCanvas,
   olderAfter,
   conversationsShown,
+  sideChatAccess,
   claudeProgram,
   scriptProgram,
   editor,
@@ -136,6 +138,7 @@ export function SettingsDialog({
   keepDeletedCanvas: KeepDeletedCanvas;
   olderAfter: OlderAfter;
   conversationsShown: ConversationsShown;
+  sideChatAccess: SideChatAccess;
   claudeProgram: ClaudeProgram;
   scriptProgram: string;
   editor: EditorState;
@@ -183,6 +186,7 @@ export function SettingsDialog({
         <ReminderSettings morning={reminderMorning} />
         <ConversationsShownSettings shown={conversationsShown} />
         <OlderConversationSettings olderAfter={olderAfter} />
+        <SideChatSettings access={sideChatAccess} />
       </>
     ),
     agents: () => (
@@ -845,6 +849,31 @@ function ConversationsShownSettings({ shown }: { shown: ConversationsShown }) {
             {CONVERSATIONS_SHOWN_CHOICES.map((choice) => (
               <option key={choice} value={choice}>
                 {t.labels.conversationsShown[choice]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+    </>
+  );
+}
+
+function SideChatSettings({ access }: { access: SideChatAccess }) {
+  return (
+    <>
+      <h3>{text.sideChats.title}</h3>
+      <p className="hint">{text.sideChats.hint}</p>
+      <div className="sending-settings">
+        <label data-hint={hints.sideChatAccess}>
+          {text.sideChats.access}
+          <select
+            className="side-chat-access-setting"
+            value={access}
+            onChange={(event) => connection.send({ type: "settings.set-side-chat-access", sideChatAccess: event.target.value as SideChatAccess })}
+          >
+            {SIDE_CHAT_ACCESS_CHOICES.map((choice) => (
+              <option key={choice} value={choice}>
+                {sideChatAccessLabels[choice]}
               </option>
             ))}
           </select>

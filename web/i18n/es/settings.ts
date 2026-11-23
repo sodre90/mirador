@@ -91,6 +91,11 @@ export const settings: Messages["settings"] = {
     hint: "Cada espacio de trabajo muestra sus conversaciones con actividad más reciente y pliega el resto bajo Más. Las favoritas, las que te esperan, las que tienen un recordatorio y las que siguen trabajando se quedan en la lista y cuentan para este número.",
     atMost: "Conversaciones por espacio de trabajo",
   },
+  sideChats: {
+    title: "Chats laterales",
+    hint: "Lo que puede hacer un chat lateral nuevo, salvo que su espacio de trabajo elija otra cosa en Dónde trabajan las conversaciones. Claude Code, Codex y Antigravity pueden limitar un chat lateral a leer; otros agentes no, así que sus chats laterales siempre pueden cambiar archivos. Los chats laterales de las conversaciones de una sala siguen siendo de solo lectura.",
+    access: "Chats laterales nuevos",
+  },
   sleep: {
     title: "Suspensión",
     hint: "Lo guarda el host. Su equipo aún puede suspenderse al cerrar la tapa de un portátil, y su pantalla se apaga igualmente.",

@@ -3,6 +3,7 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RequestPermissionRequest } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { loadConfig } from "../host/config.ts";
 import { agentProcessKey, ConversationService } from "../host/conversations.ts";
 import { Hub } from "../host/hub.ts";
@@ -490,6 +491,39 @@ test("the mode a sandbox's work-freely set never follows its conversation to thi
 
   expect(log).not.toContain("computer:mode=bypassPermissions");
   expect(modeOf(store, conversation.id)).toBe("default");
+  await conversations.shutdown();
+});
+
+test("a sandboxed workspace's side chat that may change files starts in its VM too, never in the mode its conversation works freely in, and asks before it does anything", async () => {
+  const { store, conversations, launcher, claude } = sandboxedWorkspace();
+  store.setSideChatAccess("can-change-files");
+  const log: string[] = [];
+  const conversation = conversations.create("w1", BUILDER);
+  await until(() => conversations.get(conversation.id).status === "error");
+  const worksFreely: SessionConfigOption = { id: "mode", name: "Mode", category: "mode", type: "select", currentValue: "bypassPermissions", options: [{ value: "bypassPermissions", name: "Bypass permissions" }] };
+  store.updateConversation({ ...store.findConversation(conversation.id)!, configOptions: [worksFreely] });
+  const launchedBefore = launcher.agents.length;
+
+  const sideChat = conversations.startSideChat(conversation.id, "fix it", store.ownerId());
+  await until(() => store.listEvents(sideChat.id).some(({ event }) => event.type === "error"));
+  expect(launcher.agents.length).toBeGreaterThan(launchedBefore);
+  expect(claude.ranHere()).toBe(false);
+
+  conversations.startsSandboxedAgentsIn({ ...NO_SANDBOXES, confirmedRunning: () => true });
+  inItsVm(conversations, store, sideChat.id, agentWithModes("side", log, "bypassPermissions"));
+  await conversations.send(sideChat.id, "and now?");
+  expect(store.findConversation(sideChat.id)?.sideChatMayChangeFiles).toBe(true);
+  expect(log).toEqual(["side:mode=default"]);
+
+  const sessionId = store.findConversation(sideChat.id)!.acpSessionId!;
+  const answered = await Promise.race([
+    inside(conversations).handlePermissionRequest(
+      { sessionId, toolCall: { toolCallId: "edit", title: "Edit README.md", kind: "edit" }, options: [{ optionId: "allow", name: "Allow", kind: "allow_once" }, { optionId: "reject", name: "Reject", kind: "reject_once" }] },
+      new AbortController().signal,
+    ),
+    Bun.sleep(300).then(() => "asks the owner"),
+  ]);
+  expect(answered).toBe("asks the owner");
   await conversations.shutdown();
 });
 

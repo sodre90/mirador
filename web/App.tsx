@@ -13,7 +13,7 @@ import { canFork, canvasPageHasFocus, findInCanvasPage, findInOpenConversation, 
 import { bringsHiddenCanvasBack, latestCanvasNews, type CanvasNews } from "./canvas-news.ts";
 import { ChatPanel } from "./Chat.tsx";
 import { ConversationWithSide, NewSideChat, SelectionActions, SideChatColumn, timelineSelection } from "./SideChat.tsx";
-import { askInSideChat, closeSideChat, forgetSideChatsOfDeleted, selectingBeside, toggleSideChat, useSideChatsShown, type SideChatShown } from "./side-chats.ts";
+import { askInSideChat, closeSideChat, forgetSideChatsOfDeleted, newSideChatMayChangeFiles, selectingBeside, toggleSideChat, useSideChatsShown, type SideChatShown } from "./side-chats.ts";
 import { connection, type ConnectionStatus } from "./connection.ts";
 import { useClosesAsDialog } from "./desktop-close.ts";
 import { JoinMachine } from "./Devices.tsx";
@@ -751,7 +751,7 @@ export function App() {
     if ("draft" in side) {
       return (
         <SideChatColumn parent={parent}>
-          <NewSideChat parent={parent} quotes={side.quotes} />
+          <NewSideChat parent={parent} quotes={side.quotes} mayChangeFiles={newSideChatMayChangeFiles(state, parent)} />
         </SideChatColumn>
       );
     }
@@ -1025,6 +1025,7 @@ export function App() {
           keepDeletedCanvas={state.keepDeletedCanvas}
           olderAfter={state.olderAfter}
           conversationsShown={state.conversationsShown}
+          sideChatAccess={state.sideChatAccess}
           claudeProgram={state.claudeProgram}
           scriptProgram={state.scriptProgram}
           editor={state.editor}
@@ -1046,7 +1047,7 @@ export function App() {
         />
       )}
       {sessionsWorkspace && <SessionsDialog workspace={sessionsWorkspace} profiles={state.profiles} dispatch={dispatch} onClose={closeOverlay} />}
-      {worktreesWorkspace && <WorktreesDialog key={worktreesWorkspace.id} workspace={worktreesWorkspace} dispatch={dispatch} onClose={closeOverlay} />}
+      {worktreesWorkspace && <WorktreesDialog key={worktreesWorkspace.id} workspace={worktreesWorkspace} sideChatSetting={state.sideChatAccess} dispatch={dispatch} onClose={closeOverlay} />}
       {sandboxWorkspace && (
         <WorkspaceSandboxDialog
           key={sandboxWorkspace.id}

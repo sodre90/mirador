@@ -360,8 +360,16 @@ export interface Workspace {
   worktreeSetup: string;
   /** Whether its own conversations' agents, outside any room, run in a sandbox of the workspace's, and how. */
   sandbox: SandboxSetting;
+  /** What its new side chats may do; null for what Settings says. */
+  sideChatAccess: SideChatAccess | null;
   createdAt: number;
 }
+
+/** What a side chat may do: only read and search, or change files as its conversation does. */
+export const SIDE_CHAT_ACCESS_CHOICES = ["read-only", "can-change-files"] as const;
+export type SideChatAccess = (typeof SIDE_CHAT_ACCESS_CHOICES)[number];
+export const DEFAULT_SIDE_CHAT_ACCESS: SideChatAccess = "read-only";
+export const isSideChatAccess = (value: unknown): value is SideChatAccess => SIDE_CHAT_ACCESS_CHOICES.includes(value as SideChatAccess);
 
 /** Where a conversation works: in its workspace's folder, with every other conversation there, or in a git worktree of its own. */
 export const conversationPlaces = ["folder", "worktree"] as const;
@@ -721,6 +729,8 @@ export interface Conversation {
   startedBy?: StartedBy;
   /** Only on a side chat: the conversation it asks about, beside which it shows and under which the sidebar lists it. */
   sideChatOf?: string;
+  /** Only on a side chat that Settings or its workspace let change files as its conversation does, as they said when it started. */
+  sideChatMayChangeFiles?: true;
   /** Only on an agent's conversation in a room, which no list of conversations shows: the room. */
   roomId?: string;
   /** Only on the conversation of an agent you brought into a room of someone else's machine, which the room's tasks come into. */

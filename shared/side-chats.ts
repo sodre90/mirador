@@ -1,4 +1,4 @@
-import type { Conversation, HarnessId, StoredEvent } from "./model.ts";
+import { worksForARoom, type Conversation, type HarnessId, type SideChatAccess, type StoredEvent } from "./model.ts";
 import { buildTimeline } from "./timeline.ts";
 
 export const SIDE_CHAT_COMMAND = "btw";
@@ -17,14 +17,37 @@ export function sideChatQuestionIn(message: string): string | null {
  */
 const readOnlyModes: Record<HarnessId, string | null> = { claude: "plan", codex: "read-only", antigravity: "plan", opencode: "plan", pi: null, copilot: null };
 
-const keepsSideChatsReadOnly: Record<HarnessId, boolean> = { claude: true, codex: true, antigravity: true, opencode: false, pi: false, copilot: false };
+const holdsSideChatsToReading: Record<HarnessId, boolean> = { claude: true, codex: true, antigravity: true, opencode: false, pi: false, copilot: false };
 
 export const sideChatModeOf = (harness: HarnessId) => readOnlyModes[harness];
 
-/** Whether the agent itself stops a side chat from changing files and running commands, rather than only being asked not to. */
-export const sideChatIsReadOnly = (harness: HarnessId) => keepsSideChatsReadOnly[harness];
+/** Whether the agent itself can stop a side chat from changing files and running commands, rather than only ask it not to. */
+export const canHoldSideChatsToReading = (harness: HarnessId) => holdsSideChatsToReading[harness];
+
+/** Whether the side chat's agent is stopped from changing files and running commands, rather than only asked not to, or let. */
+export const sideChatIsReadOnly = ({ harness, sideChatMayChangeFiles }: Pick<Conversation, "harness" | "sideChatMayChangeFiles">) =>
+  canHoldSideChatsToReading(harness) && !sideChatMayChangeFiles;
 
 export const isSideChat = (conversation: Pick<Conversation, "sideChatOf">) => conversation.sideChatOf !== undefined;
+
+/** Who opens a new side chat, beside which conversation, and what its workspace and Settings say side chats may do. */
+export interface SideChatOpening {
+  parent: Pick<Conversation, "harness" | "roomId" | "broughtIntoRoom">;
+  openedByOwner: boolean;
+  /** Null for what Settings say. */
+  workspaceChoice: SideChatAccess | null;
+  setting: SideChatAccess;
+}
+
+/**
+ * Whether a new side chat may change files, in the mode of the conversation it is beside: only one the owner opens, of a
+ * conversation that works for no room, where its workspace, else Settings, lets side chats change files. The choice is
+ * only for an agent that can hold a side chat to reading: another can't be stopped, and is only asked to read.
+ */
+export function sideChatMayChangeFiles({ parent, openedByOwner, workspaceChoice, setting }: SideChatOpening): boolean {
+  if (!canHoldSideChatsToReading(parent.harness) || worksForARoom(parent) || !openedByOwner) return false;
+  return (workspaceChoice ?? setting) === "can-change-files";
+}
 
 /** The text as a Markdown quote, each of its lines quoted. */
 export const quoted = (text: string) =>
@@ -64,11 +87,17 @@ export function conversationAsText(events: StoredEvent[], maxCharacters = HANDOV
 
 const SIDE_CHAT_BRIEF_TAG = "mirador-side-chat";
 
+const READING_ONLY =
+  "Answer the user's questions directly. Read and search as you need, but do not change files, run commands that change anything, or start on the main conversation's task.";
+
+const CHANGING_FILES =
+  "Answer the user's questions directly, and change files or run commands where the user asks you to, but do not start on the main conversation's task. The main conversation's agent may be editing the same files right now: read a file again just before you change it, and say what you changed.";
+
 /**
  * What the agent hears before the side chat's first question. A forked session already holds the conversation; a new
  * one gets it in `handover`.
  */
-export function sideChatBrief(handover: string | null): string {
+export function sideChatBrief(handover: string | null, mayChangeFiles: boolean): string {
   const context =
     handover === null
       ? "This session is a copy of the main conversation."
@@ -78,7 +107,7 @@ export function sideChatBrief(handover: string | null): string {
     "The user opened a side chat to ask about their conversation with an agent, without interrupting it.",
     context,
     "The main conversation goes on without you, and nothing said here reaches it unless the user sends it there.",
-    "Answer the user's questions directly. Read and search as you need, but do not change files, run commands that change anything, or start on the main conversation's task.",
+    mayChangeFiles ? CHANGING_FILES : READING_ONLY,
     "Answer here in text: a side chat shows no canvas, so pages you show and questions you ask there go unseen.",
     `</${SIDE_CHAT_BRIEF_TAG}>`,
   ].join("\n");

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, sendMessage, signIn, startConversation, waitForTurnToEnd } from "./helpers.ts";
+import { addWorkspace, clickWorkspaceButton, createProfile, openSettings, sendMessage, signIn, startConversation, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -18,17 +18,19 @@ test.beforeAll(async ({ browser }) => {
     FAKE_ACP_MODES: "1",
     FAKE_ACP_LOG: logFile,
   });
+  writeBunProgram(host.fakeProgramsDir, "agy", join(import.meta.dirname, "fake-acp-agent.ts"), { FAKE_ACP_PROMPTS: promptsFile, FAKE_ACP_MODES: "1" });
   writeFileSync(promptsFile, "");
   writeFileSync(logFile, "");
   await host.start();
   page = await browser.newPage();
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
-  for (const [name, environment] of [
-    ["Forks", "FAKE_ACP_FORKS=1"],
-    ["Fresh", ""],
+  for (const [name, environment, agent] of [
+    ["Forks", "FAKE_ACP_FORKS=1", "opencode"],
+    ["Fresh", "", "opencode"],
+    ["Agy", "", "Antigravity"],
   ]) {
-    const profiles = await createProfile(page, name!, environment!, "", "opencode");
+    const profiles = await createProfile(page, name!, environment!, "", agent);
     await profiles.getByRole("button", { name: "Close" }).click();
   }
 });
@@ -45,9 +47,25 @@ const sideAnswers = () => sideChat().locator(".timeline .message.agent");
 const sidebarRow = (conversationId: string) => page.locator(`.workspace li[data-reorder-id="${conversationId}"]`);
 const shownConversationId = () => page.url().match(/#\/c\/(.+)$/)![1]!;
 
-async function startOn(profile: string) {
-  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${profile} · opencode` });
+async function startOn(profile: string, agent = "opencode") {
+  await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${profile} · ${agent}` });
   return startConversation(page, { withModels: false });
+}
+
+/** What the host answers a person's own socket that asks to open a side chat beside the conversation. */
+async function personAsksForSideChat(personPage: Page, conversationId: string) {
+  return personPage.evaluate(
+    (beside) =>
+      new Promise<string>((answered) => {
+        const socket = new WebSocket(new URL("ws", location.href.replace(/^http/, "ws")));
+        socket.onmessage = ({ data }) => {
+          const message = JSON.parse(String(data));
+          if (message.type === "snapshot") socket.send(JSON.stringify({ type: "conversation.side-chat.start", requestId: "asked", conversationId: beside, text: "CHOICES" }));
+          if (message.type === "error" || message.type === "conversation.side-chat.started") answered(message.problem?.code ?? message.type);
+        };
+      }),
+    conversationId,
+  );
 }
 
 async function askWithBtw(question: string) {
@@ -252,4 +270,61 @@ test("the divider beside a side chat drags it wider, keeps that width after a re
   await expect.poll(sideWidth).toBeLessThan(dragged - 10);
   await divider.dblclick();
   await expect.poll(async () => Math.abs((await sideWidth()) - before)).toBeLessThan(1);
+});
+
+test("Antigravity's side chats only read, unless Settings or their workspace let them change files, and only the owner opens one", async ({ browser }) => {
+  const mainId = await startOn("Agy", "Antigravity");
+  await sendMessage(page, "SAY the build retries twice");
+  await waitForTurnToEnd(page);
+
+  await test.step("by default a side chat is held to reading, in the agent's plan mode", async () => {
+    await askWithBtw("CHOICES by default");
+    await expect(sideAnswers().last()).toContainText("mode plan");
+    await expect(sideChat().locator(".side-chat-access")).toHaveText("Read-only");
+  });
+
+  await test.step("once Settings let side chats change files, a new one works in the conversation's mode and asks the user what its agent asks to do", async () => {
+    const settings = await openSettings(page, "Conversations");
+    await settings.getByLabel("New side chats").selectOption({ label: "Can change files" });
+    await settings.getByRole("button", { name: "Close" }).click();
+    await askWithBtw("CHOICES once Settings let it");
+    await expect(sideAnswers().last()).toContainText("mode default");
+    await expect(sideChat().locator(".side-chat-access")).toHaveText("Can change files");
+    const composer = sideChat().locator(".composer textarea");
+    await composer.fill('TOOLS [{"kind":"edit","title":"Fix the typo"}]');
+    await composer.press("Enter");
+    const permission = page.locator(".permission.pending:visible");
+    await expect(permission).toHaveCount(1);
+    await permission.getByRole("button", { name: "Reject", exact: true }).click();
+    await expect(sideAnswers().last()).toHaveText("Fix the typo: reject");
+  });
+
+  await test.step("a workspace that holds its side chats to reading wins over Settings", async () => {
+    await clickWorkspaceButton(workspaceCard(page, host.projectDir), "Where conversations work…");
+    const dialog = page.getByRole("dialog", { name: /^Where conversations work in / });
+    await expect(dialog.getByRole("radio", { name: /^As in Settings/ })).toBeChecked();
+    await dialog.getByRole("radio", { name: /^Read-only/ }).check();
+    await dialog.getByRole("button", { name: "Save" }).click();
+    await expect(dialog).toBeHidden();
+    await sideChat().locator(".composer textarea").focus();
+    await page.keyboard.press("Escape");
+    await mainChat().getByRole("button", { name: "Side chat", exact: true }).click();
+    await expect(sideChat().locator(".side-chat-heading h2")).toHaveText("New question");
+    await expect(sideChat().locator(".side-chat-access")).toHaveText("Read-only");
+    await page.keyboard.press("Alt+KeyB");
+    await askWithBtw("CHOICES once the workspace holds it");
+    await expect(sideAnswers().last()).toContainText("mode plan");
+    await expect(sideChat().locator(".side-chat-access")).toHaveText("Read-only");
+  });
+
+  await test.step("a person signed in on their own browser is refused a side chat beside the owner's conversation", async () => {
+    const mia = host.admitPerson("Mia");
+    const miaContext = await browser.newContext();
+    await miaContext.addCookies([mia.cookie]);
+    const miaPage = await miaContext.newPage();
+    await miaPage.goto(host.origin);
+    expect(await personAsksForSideChat(miaPage, mainId)).toBe("only-the-owner");
+    await miaContext.close();
+    await expect(sidebarRow(mainId).locator(".delegated-toggle")).toHaveAccessibleName("3 side chats");
+  });
 });

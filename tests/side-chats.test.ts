@@ -1,13 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import type { Conversation, StoredEvent } from "../shared/model.ts";
+import { DEFAULT_SIDE_CHAT_ACCESS, type Conversation, type StoredEvent } from "../shared/model.ts";
 import {
   answerForMainChat,
   askedOutsideQuotes,
+  canHoldSideChatsToReading,
   conversationAsText,
   isSideChatBrief,
   quoted,
   sideChatBrief,
   sideChatIsReadOnly,
+  sideChatMayChangeFiles,
   sideChatModeOf,
   sideChatQuestionIn,
 } from "../shared/side-chats.ts";
@@ -48,13 +50,23 @@ describe("the side chat's first message", () => {
 
 describe("what a side chat's agent hears first", () => {
   test("a copied session needs no conversation, a new one gets it as text, and the fake agent can tell the brief apart", () => {
-    const copy = sideChatBrief(null);
+    const copy = sideChatBrief(null, false);
     expect(copy).toContain("copy of the main conversation");
     expect(copy).not.toContain("<conversation>");
-    const handedOver = sideChatBrief("User: hi");
+    const handedOver = sideChatBrief("User: hi", false);
     expect(handedOver).toContain("<conversation>\nUser: hi\n</conversation>");
     expect(isSideChatBrief(copy) && isSideChatBrief(handedOver)).toBe(true);
     expect(isSideChatBrief("SAY hello")).toBe(false);
+  });
+
+  test("forbids changes to a side chat held to reading, and warns one that may change files of the main conversation's edits", () => {
+    const readingOnly = sideChatBrief(null, false);
+    expect(readingOnly).toContain("do not change files");
+    expect(readingOnly).not.toContain("may be editing");
+    const changingFiles = sideChatBrief("User: hi", true);
+    expect(changingFiles).not.toContain("do not change files");
+    expect(changingFiles).toContain("The main conversation's agent may be editing the same files");
+    expect(isSideChatBrief(changingFiles)).toBe(true);
   });
 
   test("the conversation as text keeps the newest messages when it is too long", () => {
@@ -73,9 +85,39 @@ describe("read-only", () => {
       "plan",
       null,
     ]);
-    expect(sideChatIsReadOnly("claude")).toBe(true);
-    expect(sideChatIsReadOnly("opencode")).toBe(false);
-    expect(sideChatIsReadOnly("pi")).toBe(false);
+    expect(sideChatIsReadOnly({ harness: "claude" })).toBe(true);
+    expect(sideChatIsReadOnly({ harness: "opencode" })).toBe(false);
+    expect(sideChatIsReadOnly({ harness: "pi" })).toBe(false);
+  });
+
+  test("is not promised to a side chat that Settings or its workspace let change files", () => {
+    expect(sideChatIsReadOnly({ harness: "codex", sideChatMayChangeFiles: true })).toBe(false);
+    expect(sideChatIsReadOnly({ harness: "antigravity" })).toBe(true);
+  });
+});
+
+describe("whether a new side chat may change files", () => {
+  const ownConversation = { harness: "claude", roomId: undefined, broughtIntoRoom: undefined } as const;
+  const lettingChanges = { parent: ownConversation, openedByOwner: true, workspaceChoice: null, setting: "can-change-files" } as const;
+
+  test("follows Settings unless the workspace chose otherwise, and is read-only by default", () => {
+    expect(sideChatMayChangeFiles(lettingChanges)).toBe(true);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, setting: "read-only" })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, workspaceChoice: "read-only" })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, setting: "read-only", workspaceChoice: "can-change-files" })).toBe(true);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, setting: DEFAULT_SIDE_CHAT_ACCESS })).toBe(false);
+  });
+
+  test("is only for the owner's side chats of their own conversations", () => {
+    expect(sideChatMayChangeFiles({ ...lettingChanges, openedByOwner: false })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, parent: { ...ownConversation, roomId: "room" } })).toBe(false);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, parent: { ...ownConversation, broughtIntoRoom: true } })).toBe(false);
+  });
+
+  test("is no choice on agents that can't be held to reading, whose side chats can change files anyway", () => {
+    expect((["claude", "codex", "antigravity", "opencode", "pi", "copilot"] as const).filter(canHoldSideChatsToReading)).toEqual(["claude", "codex", "antigravity"]);
+    expect(sideChatMayChangeFiles({ ...lettingChanges, parent: { ...ownConversation, harness: "opencode" } })).toBe(false);
+    expect(sideChatIsReadOnly({ harness: "pi", sideChatMayChangeFiles: true })).toBe(false);
   });
 });
 

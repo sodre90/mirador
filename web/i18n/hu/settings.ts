@@ -91,6 +91,11 @@ export const settings: Messages["settings"] = {
     hint: "Minden munkaterület a legutóbb aktív beszélgetéseit listázza, a többit a Továbbiak alá csukja. A kedvencek, a rád várók, az emlékeztetővel ellátottak és a még dolgozók a listában maradnak, és beleszámítanak ebbe a számba.",
     atMost: "Beszélgetések munkaterületenként",
   },
+  sideChats: {
+    title: "Mellékszálak",
+    hint: "Mit tehet egy új mellékszál, hacsak a munkaterülete másként nem dönt a „Hol dolgoznak a beszélgetések” ablakban. A Claude Code, a Codex és az Antigravity csak olvasásra tudja korlátozni a mellékszálat; más ágensek nem, így az ő mellékszálaik mindig módosíthatnak fájlokat. Egy szoba beszélgetéseinek mellékszálai mindig csak olvashatnak.",
+    access: "Új mellékszálak",
+  },
   sleep: {
     title: "Alvás",
     hint: "A host őrzi meg. A gépe így is elalszik, ha lecsukod a laptop fedelét, és a kijelzője is kikapcsol.",

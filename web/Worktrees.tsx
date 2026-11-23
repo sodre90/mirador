@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type Dispatch } from "react";
-import { conversationPlaces, placeOfNewConversation, type ConversationPlace, type Workspace } from "../shared/model.ts";
+import { conversationPlaces, placeOfNewConversation, SIDE_CHAT_ACCESS_CHOICES, type ConversationPlace, type SideChatAccess, type Workspace } from "../shared/model.ts";
 import { startConversationIn } from "./actions.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { Modal } from "./Palette.tsx";
 import { usePlacedBeside } from "./placed-beside.ts";
+import { sideChatAccessLabels } from "./SideChat.tsx";
 import type { AppAction, AppState } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import { openWorkspaceSandbox } from "./WorkspaceSandbox.tsx";
@@ -17,6 +18,14 @@ const placeWords: Record<ConversationPlace, { label: string; detail: string }> =
 };
 
 const otherPlace = (place: ConversationPlace): ConversationPlace => (place === "folder" ? "worktree" : "folder");
+
+/** The workspace's own choice of what its side chats may do, or null for Settings'. */
+const sideChatChoices = [null, ...SIDE_CHAT_ACCESS_CHOICES];
+
+const sideChatChoiceWords = (choice: SideChatAccess | null, setting: SideChatAccess) =>
+  choice === null
+    ? { label: words.sideChatsAsInSettings, detail: words.sideChatsAsInSettingsDetail(sideChatAccessLabels[setting]) }
+    : { label: sideChatAccessLabels[choice], detail: choice === "read-only" ? words.sideChatsReadOnlyDetail : words.sideChatsCanChangeDetail };
 
 const inSidebar = (selector: string) => document.querySelector(`.sidebar ${selector}`);
 const conversationRow = (conversationId: string) => `li[data-reorder-id="${CSS.escape(conversationId)}"]`;
@@ -44,12 +53,23 @@ export function WorktreeMark({ branch }: { branch: string }) {
 }
 
 /**
- * Where a workspace's new conversations work and what sets a new worktree up, with a way to start one conversation in
- * the other place without changing that.
+ * Where a workspace's new conversations work, what sets a new worktree up and what its new side chats may do, with a way
+ * to start one conversation in the other place without changing that.
  */
-export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: Workspace; dispatch: Dispatch<AppAction>; onClose: () => void }) {
+export function WorktreesDialog({
+  workspace,
+  sideChatSetting,
+  dispatch,
+  onClose,
+}: {
+  workspace: Workspace;
+  sideChatSetting: SideChatAccess;
+  dispatch: Dispatch<AppAction>;
+  onClose: () => void;
+}) {
   const [place, setPlace] = useState(workspace.newConversationsIn);
   const [setup, setSetup] = useState(workspace.worktreeSetup);
+  const [sideChatAccess, setSideChatAccess] = useState(workspace.sideChatAccess);
   const typingAidAttributes = useTypingAidAttributes();
   const sandboxed = workspace.sandbox.on;
   const startsIn = placeOfNewConversation({ ...workspace, newConversationsIn: place });
@@ -63,6 +83,7 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
 
   const save = () => {
     connection.send({ type: "workspace.set-worktree-settings", workspaceId: workspace.id, newConversationsIn: place, worktreeSetup: setup });
+    if (sideChatAccess !== workspace.sideChatAccess) connection.send({ type: "workspace.set-side-chat-access", workspaceId: workspace.id, sideChatAccess });
     onClose();
   };
   const startElsewhere = () => {
@@ -108,6 +129,22 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
           <input type="text" value={setup} placeholder="bun install" spellCheck={false} onChange={(event) => setSetup(event.target.value)} {...typingAidAttributes} />
         </label>
         <p className="hint">{words.setupDetail}</p>
+        <fieldset className="side-chat-access-choice">
+          <legend>{words.sideChats}</legend>
+          {sideChatChoices.map((choice) => {
+            const { label, detail } = sideChatChoiceWords(choice, sideChatSetting);
+            return (
+              <label key={choice ?? "as-in-settings"} className="worktree-place">
+                <input type="radio" name="side-chat-access" checked={sideChatAccess === choice} onChange={() => setSideChatAccess(choice)} />
+                <span>
+                  {label}
+                  <small>{detail}</small>
+                </span>
+              </label>
+            );
+          })}
+          <p className="hint">{words.sideChatsOnlySome}</p>
+        </fieldset>
         <div className="form-actions">
           {!sandboxed && (
             <button type="button" className="link start-elsewhere" onClick={startElsewhere}>

@@ -36,6 +36,7 @@ import type {
   KeepAwake,
   KeepDeletedCanvas,
   OlderAfter,
+  SideChatAccess,
   ConversationsShown,
   ClaudeProgram,
   Conversation,
@@ -134,6 +135,8 @@ export type ClientMessage =
   | { type: "workspace.move"; workspaceId: string; groupId?: string | null; beforeWorkspaceId: string | null; beforeGroupId?: string | null }
   | { type: "workspace.set-color"; workspaceId: string; color: Pastel | null }
   | { type: "workspace.set-worktree-settings"; workspaceId: string; newConversationsIn: ConversationPlace; worktreeSetup: string }
+  /** What the workspace's new side chats may do; null for what Settings say. */
+  | { type: "workspace.set-side-chat-access"; workspaceId: string; sideChatAccess: SideChatAccess | null }
   /**
    * Whether the workspace's own conversations run their agents in a sandbox, and work freely there; those already at work
    * start afresh. Turning it on where something stands in its way fails with why.
@@ -185,6 +188,8 @@ export type ClientMessage =
   | { type: "settings.set-room-invites-connect"; connect: RoomInviteConnect }
   | { type: "settings.set-older-after"; olderAfter: OlderAfter }
   | { type: "settings.set-conversations-shown"; shown: ConversationsShown }
+  /** What new side chats may do, in every workspace that doesn't say otherwise. */
+  | { type: "settings.set-side-chat-access"; sideChatAccess: SideChatAccess }
   | { type: "settings.set-claude-program"; path: string }
   /** Looks for a newer Mirador now; what it finds comes as newer-version.found, before the answer. */
   | { type: "newer-version.check"; requestId: string }
@@ -635,6 +640,7 @@ export type ServerMessage =
       conversationOrder?: ConversationOrder;
       olderAfter: OlderAfter;
       conversationsShown: ConversationsShown;
+      sideChatAccess: SideChatAccess;
       /** The kinds of notification a phone may register for pushes of. Missing from a host older than reminders, which refuses a registration with a kind it doesn't know. */
       pushKinds?: NotificationKind[];
     }
@@ -665,6 +671,7 @@ export type ServerMessage =
   | { type: "settings.keep-deleted-canvas"; keep: KeepDeletedCanvas }
   | { type: "settings.older-after"; olderAfter: OlderAfter }
   | { type: "settings.conversations-shown"; shown: ConversationsShown }
+  | { type: "settings.side-chat-access"; sideChatAccess: SideChatAccess }
   | { type: "settings.claude-program"; claudeProgram: ClaudeProgram }
   | { type: "settings.script-program"; scriptProgram: string }
   | { type: "settings.editor"; editor: EditorState }

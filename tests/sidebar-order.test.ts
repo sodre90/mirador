@@ -50,6 +50,7 @@ const workspace = (id: string, groupId: string | null, position: number): Worksp
   newConversationsIn: "folder",
   worktreeSetup: "",
   sandbox: NO_SANDBOX,
+  sideChatAccess: null,
   createdAt: 0,
 });
 

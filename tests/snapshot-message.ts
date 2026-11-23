@@ -51,5 +51,6 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   pluginLooks: {},
   olderAfter: "1-week",
   conversationsShown: "8",
+  sideChatAccess: "read-only",
   ...fields,
 });

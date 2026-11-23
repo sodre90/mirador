@@ -152,7 +152,7 @@ describe("Mirador's own git", () => {
     afterAll(() => rmSync(root, { recursive: true, force: true }));
 
     test("Mirador's git takes the repository's own config, from the workspace and from a folder within it, and never runs that filter", async () => {
-      const workspace: Workspace = { id: `ws-${crypto.randomUUID()}`, name: "commondir", path: repository, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, createdAt: 0 };
+      const workspace: Workspace = { id: `ws-${crypto.randomUUID()}`, name: "commondir", path: repository, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, sideChatAccess: null, createdAt: 0 };
 
       expect((await uncommittedChanges(repository))?.map(({ path }) => path)).toEqual(["notes.txt"]);
       expect((await git(join(repository, "sub"), ["status", "--porcelain"])).stdout).toContain("notes.txt");
@@ -203,7 +203,7 @@ describe("Mirador's own git", () => {
 
     test.each(["untracked", "submodule", "submodule its .gitmodules never ignores"] as const)("Mirador's git never runs the nested repository's filter: %s", async (how) => {
       const repository = repositoryHoldingAnother(how);
-      const workspace: Workspace = { id: `ws-${crypto.randomUUID()}`, name: "nested", path: repository, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, createdAt: 0 };
+      const workspace: Workspace = { id: `ws-${crypto.randomUUID()}`, name: "nested", path: repository, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, sideChatAccess: null, createdAt: 0 };
       const checkpoints = new Checkpoints(join(root, `data-${crypto.randomUUID()}`));
 
       expect(await checkpoints.snapshot(workspace)).toMatch(/^[0-9a-f]{40}$/);

@@ -10,12 +10,14 @@ import {
   isCanvasUse,
   isKeepDeletedCanvas,
   isOlderAfter,
+  isSideChatAccess,
   isConversationsShown,
   isKeepAwake,
   isPastel,
   type CanvasUse,
   type KeepDeletedCanvas,
   type OlderAfter,
+  type SideChatAccess,
   type ConversationsShown,
   type KeepAwake,
   type ClientAddress,
@@ -1442,6 +1444,12 @@ export function startServer(services: HostServices) {
     hub.broadcast({ type: "settings.conversations-shown", shown });
   }
 
+  function setSideChatAccess(sideChatAccess: SideChatAccess) {
+    if (!isSideChatAccess(sideChatAccess)) throw new HostProblemError({ code: "unknown-side-chat-access", value: String(sideChatAccess) });
+    store.setSideChatAccess(sideChatAccess);
+    hub.broadcast({ type: "settings.side-chat-access", sideChatAccess });
+  }
+
   function setConversationOrder(order: ConversationOrder) {
     if (!isConversationOrder(order)) throw new HostProblemError({ code: "unknown-conversation-order", value: JSON.stringify(order) });
     store.setChosenConversationOrder(order);
@@ -1515,6 +1523,8 @@ export function startServer(services: HostServices) {
         return colorWorkspace(message.workspaceId, message.color);
       case "workspace.set-worktree-settings":
         return conversations.setWorktreeSettings(message.workspaceId, message.newConversationsIn, message.worktreeSetup);
+      case "workspace.set-side-chat-access":
+        return conversations.setSideChatAccess(message.workspaceId, message.sideChatAccess);
       case "workspace.set-sandbox":
         return workspaceSandboxes.setSandbox(message.workspaceId, message.sandbox);
       case "workspace.check-sandbox":
@@ -1563,6 +1573,8 @@ export function startServer(services: HostServices) {
         return setOlderAfter(message.olderAfter);
       case "settings.set-conversations-shown":
         return setConversationsShown(message.shown);
+      case "settings.set-side-chat-access":
+        return setSideChatAccess(message.sideChatAccess);
       case "settings.set-keep-deleted-canvas":
         return setKeepDeletedCanvas(message.keep);
       case "settings.set-room-invites-connect":
@@ -2349,6 +2361,7 @@ export function startServer(services: HostServices) {
       conversationOrder: store.chosenConversationOrder(),
       olderAfter: store.olderAfter(),
       conversationsShown: store.conversationsShown(),
+      sideChatAccess: store.sideChatAccess(),
       pushKinds: [...NOTIFICATION_KINDS],
       claudeProgram,
       scriptProgram: store.scriptProgramSetting(),

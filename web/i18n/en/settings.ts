@@ -89,6 +89,11 @@ export const settings = {
     hint: "Each workspace lists its most recently active conversations and folds the rest under More. Favourites, ones waiting for you, ones with a reminder and ones still at work stay in the list, and count towards this many.",
     atMost: "Conversations per workspace",
   },
+  sideChats: {
+    title: "Side chats",
+    hint: "What a new side chat may do, unless its workspace chooses otherwise under Where conversations work. Claude Code, Codex and Antigravity can hold a side chat to reading; other agents can't, so their side chats can always change files. Side chats of a room's conversations stay read-only.",
+    access: "New side chats",
+  },
   sleep: {
     title: "Sleep",
     hint: "Kept by the host. Its computer can still sleep when you close a laptop's lid, and its display still turns off.",

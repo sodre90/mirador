@@ -105,6 +105,12 @@ export const shell: Messages["shell"] = {
     deleteBoth: "Mindkettő törlése",
     whileSandboxed: "Amíg ez a munkaterület sandboxban futtatja az ágenseit, az új beszélgetések a projektmappában indulnak: a sandbox nem látja a worktree-ket.",
     sandboxSettings: "Sandbox-beállítások…",
+    sideChats: "Mellékszálak",
+    sideChatsAsInSettings: "Ahogy a Beállítások mondják",
+    sideChatsAsInSettingsDetail: (access) => `A Beállítások szerint: ${access}.`,
+    sideChatsReadOnlyDetail: "Olvasnak és keresnek, de semmit nem módosítanak.",
+    sideChatsCanChangeDetail: "A beszélgetésük módjában dolgoznak, miközben annak ágense ugyanezeket a fájlokat szerkesztheti.",
+    sideChatsOnlySome: "Ez a Claude Code, a Codex és az Antigravity mellékszálaira vonatkozik. Más ágensek mellékszálai mindig módosíthatnak fájlokat, egy szoba beszélgetéseinek mellékszálai pedig mindig csak olvashatnak.",
   },
   workspaceSandbox: {
     open: "Sandbox",

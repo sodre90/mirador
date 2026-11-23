@@ -111,6 +111,12 @@ export const shell: Messages["shell"] = {
     deleteBoth: "Eliminar ambos",
     whileSandboxed: "Mientras este espacio de trabajo ejecuta sus agentes en un sandbox, las conversaciones nuevas empiezan en la carpeta del proyecto: el sandbox no ve los worktrees.",
     sandboxSettings: "Configuración del sandbox…",
+    sideChats: "Chats laterales",
+    sideChatsAsInSettings: "Como en la configuración",
+    sideChatsAsInSettingsDetail: (access) => `La configuración dice: ${access}.`,
+    sideChatsReadOnlyDetail: "Leen y buscan, pero no cambian nada.",
+    sideChatsCanChangeDetail: "Trabajan en el modo de su conversación, mientras su agente puede estar editando los mismos archivos.",
+    sideChatsOnlySome: "Esto vale para Claude Code, Codex y Antigravity. Los chats laterales de otros agentes siempre pueden cambiar archivos, y los de las conversaciones de una sala siguen siendo de solo lectura.",
   },
   workspaceSandbox: {
     open: "Sandbox",

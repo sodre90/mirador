@@ -91,6 +91,11 @@ export const settings: Messages["settings"] = {
     hint: "每个工作区只列出最近有活动的对话，其余的折叠到“更多”下。收藏的、等你处理的、设了提醒的和仍在工作的对话留在列表里，并计入这个数量。",
     atMost: "每个工作区的对话数",
   },
+  sideChats: {
+    title: "旁聊",
+    hint: "新旁聊可以做什么，除非它的工作区在“对话在哪里工作”中另作选择。Claude Code、Codex 和 Antigravity 能把旁聊限制为只读；其他 Agent 不能，所以它们的旁聊总是可以更改文件。房间里对话的旁聊始终只读。",
+    access: "新旁聊",
+  },
   sleep: {
     title: "睡眠",
     hint: "由 host 保存。合上笔记本盖子时，它所在的电脑仍可能休眠，显示器也仍会关闭。",

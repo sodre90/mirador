@@ -1,5 +1,5 @@
 import type { CanvasItem, Profile } from "../shared/model.ts";
-import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
+import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, SETUP_NOT_STARTED } from "../shared/sandbox.ts";
@@ -207,6 +207,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       pluginLooks: {},
       olderAfter: DEFAULT_OLDER_AFTER,
       conversationsShown: DEFAULT_CONVERSATIONS_SHOWN,
+      sideChatAccess: DEFAULT_SIDE_CHAT_ACCESS,
     };
   };
 
@@ -232,6 +233,7 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "settings.keep-deleted-canvas": HIDDEN,
     "settings.older-after": HIDDEN,
     "settings.conversations-shown": HIDDEN,
+    "settings.side-chat-access": HIDDEN,
     "settings.claude-program": HIDDEN,
     "settings.script-program": HIDDEN,
     "settings.editor": HIDDEN,

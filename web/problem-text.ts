@@ -143,6 +143,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.unknownOlderAfter(problem.value);
     case "unknown-conversations-shown":
       return words.unknownConversationsShown(problem.value);
+    case "unknown-side-chat-access":
+      return words.unknownSideChatAccess(problem.value);
     case "unknown-keep-awake":
       return words.unknownKeepAwake(problem.value);
     case "unknown-conversation-order":

@@ -217,6 +217,7 @@ export const problems: Messages["problems"] = {
   unknownKeepDeletedCanvas: (value) => `Unbekannte Einstellung zum Aufbewahren gelöschter Canvas: ${value}`,
   unknownOlderAfter: (value) => `Unbekannte Einstellung zum Einklappen älterer Unterhaltungen: ${value}`,
   unknownConversationsShown: (value) => `Unbekannte Einstellung dafür, wie viele Unterhaltungen ein Arbeitsbereich listet: ${value}`,
+  unknownSideChatAccess: (value) => `Unbekannte Einstellung dafür, was Nebenchats dürfen: ${value}`,
   unknownWorkspaceColour: (value) => `Unbekannte Arbeitsbereichsfarbe: ${value}`,
   notAMachineAddress: (address) => `„${address}“ ist keine Adresse eines Rechners.`,
   machineAlreadyAdded: (origin) => `${origin} gehört schon zu deinen Rechnern.`,

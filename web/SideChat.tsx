@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode, type RefObject } from "react";
-import type { Conversation } from "../shared/model.ts";
+import type { Conversation, SideChatAccess } from "../shared/model.ts";
 import { latestReply } from "../shared/replies.ts";
 import { answerForMainChat, quoted, sideChatIsReadOnly } from "../shared/side-chats.ts";
 import type { TimelineBlock } from "../shared/timeline.ts";
@@ -96,10 +96,14 @@ export function SideChatColumn({ parent, children }: { parent: Conversation; chi
   );
 }
 
-function ReadOnlyChip({ harness }: Pick<Conversation, "harness">) {
-  const readOnly = sideChatIsReadOnly(harness);
+export const sideChatAccessLabels: Record<SideChatAccess, string> = { "read-only": words.readOnly, "can-change-files": words.canChange };
+
+/** Read-only where its agent holds it to reading; else it can change files, let to or only asked not to. */
+function AccessChip({ sideChat }: { sideChat: Pick<Conversation, "harness" | "sideChatMayChangeFiles"> }) {
+  const readOnly = sideChatIsReadOnly(sideChat);
+  const hint = readOnly ? hints.sideChatReadOnly : sideChat.sideChatMayChangeFiles ? hints.sideChatChangesFiles : hints.sideChatCanChange;
   return (
-    <span className={`side-chat-access ${readOnly ? "read-only" : "can-change"}`} data-hint={readOnly ? hints.sideChatReadOnly : hints.sideChatCanChange}>
+    <span className={`side-chat-access ${readOnly ? "read-only" : "can-change"}`} data-hint={hint}>
       {readOnly ? words.readOnly : words.canChange}
     </span>
   );
@@ -120,7 +124,7 @@ export function SideChatHeader({ sideChat, parent, onOpenAsConversation }: { sid
         <span className="side-chat-kind">{words.label}</span>
         <h2 title={shownTitle(sideChat)}>{shownTitle(sideChat)}</h2>
       </div>
-      <ReadOnlyChip harness={sideChat.harness} />
+      <AccessChip sideChat={sideChat} />
       <button type="button" className="icon side-chat-new" aria-label={words.newSideChat} data-hint={hints.sideChatNew} onClick={() => askInSideChat(parent.id)}>
         +
       </button>
@@ -146,8 +150,8 @@ export function SendToMainChat({ parent, timeline, busy }: { parent: Conversatio
   );
 }
 
-/** A side chat still to be asked: the text quoted so far, and the question. */
-export function NewSideChat({ parent, quotes }: { parent: Conversation; quotes: string[] }) {
+/** A side chat still to be asked: the text quoted so far, and the question; `mayChangeFiles` as its workspace, else Settings, would let it. */
+export function NewSideChat({ parent, quotes, mayChangeFiles }: { parent: Conversation; quotes: string[]; mayChangeFiles: boolean }) {
   const [question, setQuestion] = useDraft(`side-chat-${parent.id}`);
   const [starting, setStarting] = useState(false);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -172,7 +176,7 @@ export function NewSideChat({ parent, quotes }: { parent: Conversation; quotes: 
           <span className="side-chat-kind">{words.label}</span>
           <h2>{words.newSideChat}</h2>
         </div>
-        <ReadOnlyChip harness={parent.harness} />
+        <AccessChip sideChat={{ harness: parent.harness, ...(mayChangeFiles && { sideChatMayChangeFiles: true }) }} />
         <CloseButton parentId={parent.id} />
       </header>
       <div className="side-chat-draft">

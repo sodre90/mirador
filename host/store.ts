@@ -28,7 +28,7 @@ import type {
   Workspace,
   WorkspaceGroup,
 } from "../shared/model.ts";
-import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, isCanvasUse, isConversationPlace, isConversationsShown, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, keptForMs, type CanvasUse, type ConversationPlace, type ConversationsShown, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type JoinedRoom, type Pastel } from "../shared/model.ts";
+import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS, isCanvasUse, isConversationPlace, isConversationsShown, isKeepAwake, isKeepDeletedCanvas, isOlderAfter, isPastel, isSideChatAccess, keptForMs, type CanvasUse, type ConversationPlace, type ConversationsShown, type ConversationWorktree, type KeepAwake, type OlderAfter, type KeepDeletedCanvas, type JoinedRoom, type Pastel, type SideChatAccess } from "../shared/model.ts";
 import { defaultPromptTemplates } from "../shared/prompt-templates.ts";
 import { isRoomInviteConnect, joinedRoomsIn, LONGEST_MACHINE_NAME, type RoomInviteConnect } from "../shared/machines.ts";
 import type { TunnelPlaces } from "../shared/tunnel.ts";
@@ -339,6 +339,8 @@ const addedColumns = [
   { table: "room_invites", column: "lets_in", definition: "TEXT NOT NULL DEFAULT 'at-once'" },
   { table: "machines", column: "owner_name", definition: "TEXT" },
   { table: "machines", column: "knocks", definition: "TEXT" },
+  { table: "workspaces", column: "side_chat_access", definition: "TEXT" },
+  { table: "conversations", column: "side_chat_may_change_files", definition: "INTEGER NOT NULL DEFAULT 0" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -371,6 +373,7 @@ type WorkspaceRow = {
   new_conversations_in: string;
   worktree_setup: string;
   sandbox: string;
+  side_chat_access: string | null;
   created_at: number;
 };
 
@@ -411,6 +414,7 @@ type ConversationRow = {
   delegated_reply: string | null;
   delegation_dismissed: number;
   side_chat_of: string | null;
+  side_chat_may_change_files: number;
   room_id: string | null;
   brought_into_room: number;
   plugin_settings: string | null;
@@ -436,6 +440,7 @@ const toWorkspace = (row: WorkspaceRow): Workspace => ({
   newConversationsIn: isConversationPlace(row.new_conversations_in) ? row.new_conversations_in : "folder",
   worktreeSetup: row.worktree_setup,
   sandbox: sandboxSettingIn(JSON.parse(row.sandbox)),
+  sideChatAccess: isSideChatAccess(row.side_chat_access) ? row.side_chat_access : null,
   createdAt: row.created_at,
 });
 
@@ -543,6 +548,7 @@ const toConversation = (row: ConversationRow): Conversation => ({
   ...(row.worktree && { worktree: JSON.parse(row.worktree) as ConversationWorktree }),
   ...startedByOf(row),
   ...(row.side_chat_of && { sideChatOf: row.side_chat_of }),
+  ...(row.side_chat_may_change_files === 1 && { sideChatMayChangeFiles: true as const }),
   ...(row.room_id && { roomId: row.room_id }),
   ...(row.brought_into_room === 1 && { broughtIntoRoom: true as const }),
   ...(row.plugin_settings && { pluginSettings: JSON.parse(row.plugin_settings) as Record<string, Record<string, string>> }),
@@ -857,12 +863,12 @@ export class Store {
   }
 
   /** Adds the workspace first in the sidebar, in no group. */
-  insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId" | "newConversationsIn" | "worktreeSetup" | "sandbox">): Workspace {
+  insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId" | "newConversationsIn" | "worktreeSetup" | "sandbox" | "sideChatAccess">): Workspace {
     const position = this.firstSidebarPosition();
     this.db
       .query("INSERT INTO workspaces (id, name, path, default_harness, default_profile_id, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(workspace.id, workspace.name, workspace.path, workspace.defaultLaunch.harness, workspace.defaultLaunch.profileId, position, workspace.createdAt);
-    return { ...workspace, color: null, position, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX };
+    return { ...workspace, color: null, position, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, sideChatAccess: null };
   }
 
   /** Numbers the positions of the workspaces and the groups, which share one order, in the given order. */
@@ -933,6 +939,10 @@ export class Store {
 
   setWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
     this.db.query("UPDATE workspaces SET new_conversations_in = ?, worktree_setup = ? WHERE id = ?").run(newConversationsIn, worktreeSetup, workspaceId);
+  }
+
+  setWorkspaceSideChatAccess(workspaceId: string, sideChatAccess: SideChatAccess | null) {
+    this.db.query("UPDATE workspaces SET side_chat_access = ? WHERE id = ?").run(sideChatAccess, workspaceId);
   }
 
   setWorkspaceSandbox(workspaceId: string, sandbox: SandboxSetting) {
@@ -1149,8 +1159,8 @@ export class Store {
       .get(conversation.workspaceId) as { first: number };
     this.db
       .query(
-        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, room_id, brought_into_room, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO conversations (id, workspace_id, harness, profile_id, title, title_set_by_user, acp_session_id, ask_mode, bypass_permissions, config_options, position, worktree, side_chat_of, side_chat_may_change_files, room_id, brought_into_room, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .run(
         conversation.id,
@@ -1166,6 +1176,7 @@ export class Store {
         position,
         conversation.worktree ? JSON.stringify(conversation.worktree) : null,
         conversation.sideChatOf ?? null,
+        conversation.sideChatMayChangeFiles ? 1 : 0,
         conversation.roomId ?? null,
         conversation.broughtIntoRoom ? 1 : 0,
         conversation.createdAt,
@@ -1194,7 +1205,7 @@ export class Store {
 
   /** The side chat becomes a conversation of its own. */
   endSideChat(conversationId: string) {
-    this.db.query("UPDATE conversations SET side_chat_of = NULL WHERE id = ?").run(conversationId);
+    this.db.query("UPDATE conversations SET side_chat_of = NULL, side_chat_may_change_files = 0 WHERE id = ?").run(conversationId);
   }
 
   /** The conversation a plugin's tool started works for the caller, which is owed word of how its work ends. */
@@ -1955,6 +1966,16 @@ export class Store {
 
   setOlderAfter(olderAfter: OlderAfter) {
     this.setSetting("older_after", olderAfter);
+  }
+
+  /** What new side chats may do, unless their workspace says otherwise. */
+  sideChatAccess(): SideChatAccess {
+    const saved = this.setting("side_chat_access");
+    return isSideChatAccess(saved) ? saved : DEFAULT_SIDE_CHAT_ACCESS;
+  }
+
+  setSideChatAccess(sideChatAccess: SideChatAccess) {
+    this.setSetting("side_chat_access", sideChatAccess);
   }
 
   conversationsShown(): ConversationsShown {

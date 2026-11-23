@@ -11,6 +11,7 @@ import {
   harnessIds,
   harnessLabels,
   isConversationPlace,
+  isSideChatAccess,
   placeOfNewConversation,
   isUntitled,
   UNTITLED,
@@ -39,6 +40,7 @@ import {
   type RestoreFiles,
   type RestorePlan,
   type SessionSearchHit,
+  type SideChatAccess,
   type StartedBy,
   type StoredEvent,
   type TerminalActivity,
@@ -82,7 +84,7 @@ import { awaitingDelivery, USER_COMMAND_EVENT_TYPES, userCommandsIn, withCommand
 import { withCanvasNotes, type CanvasNote } from "./canvas/notes.ts";
 import { NO_CANVAS_PLUGINS, type CanvasPluginGuidance } from "./canvas/guidance.ts";
 import { forkPointThrough, forkTitle, shownSessionTitle, withoutForkMarks } from "../shared/forks.ts";
-import { askedOutsideQuotes, conversationAsText, sideChatBrief, sideChatModeOf } from "../shared/side-chats.ts";
+import { askedOutsideQuotes, conversationAsText, sideChatBrief, sideChatMayChangeFiles, sideChatModeOf } from "../shared/side-chats.ts";
 import { endsTurn, joinedRunningTurn, lastAgentMessageId, pendingReverts, REVERT_EVENT_TYPES, rewindPointBefore, turnTitle, turnsFrom, whyNoRewindTo, withRevertNotes, type Revert } from "../shared/reverts.ts";
 import { MODE_NAME_META_KEY } from "../shared/notices.ts";
 import { returnedSteerSeqs } from "../shared/steered-messages.ts";
@@ -685,6 +687,14 @@ export class ConversationService {
     this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
   }
 
+  /** What the workspace's new side chats may do; null for what Settings say. Side chats already open stay as they started. */
+  setSideChatAccess(workspaceId: string, sideChatAccess: SideChatAccess | null) {
+    this.existingWorkspace(workspaceId);
+    if (sideChatAccess !== null && !isSideChatAccess(sideChatAccess)) throw new HostProblemError({ code: "unknown-side-chat-access", value: String(sideChatAccess) });
+    this.store.setWorkspaceSideChatAccess(workspaceId, sideChatAccess);
+    this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
+  }
+
   /**
    * For a plugin's tool: a conversation beside the caller's, on another profile, working on `prompt` at once, in the
    * caller's worktree if it has one. It works for the caller, which hears through the plugin how its work ended. A
@@ -1105,15 +1115,24 @@ export class ConversationService {
 
   /**
    * A side chat about the conversation, asking `text` at once, while the conversation goes on undisturbed. It works
-   * where the conversation does, on the same profile, in its agent's read-only mode, and whatever its agent asks
-   * permission for is turned down. Asked from a side chat, it is about the conversation that one is beside.
+   * where the conversation does, on the same profile. Unless its workspace, else Settings, lets it change files, it
+   * works in its agent's read-only mode and whatever its agent asks permission for is turned down; one the owner didn't
+   * open, or of a conversation that works for a room, always does. Asked from a side chat, it is about the conversation
+   * that one is beside.
    */
   startSideChat(conversationId: string, text: string, authorId?: string): Conversation {
     const asked = this.get(conversationId);
     const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
     if (parent.roomId && this.sandboxOf(parent)) throw new HostProblemError({ code: "sandboxed-room-side-chat" });
     const { workspaceId, harness, profileId, worktree } = parent;
-    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, titleFrom(askedOutsideQuotes(text)) || UNTITLED, true, worktree, parent.id);
+    const mayChangeFiles = sideChatMayChangeFiles({
+      parent,
+      openedByOwner: authorId !== undefined && authorId === this.store.ownerId(),
+      workspaceChoice: this.existingWorkspace(workspaceId).sideChatAccess,
+      setting: this.store.sideChatAccess(),
+    });
+    const title = titleFrom(askedOutsideQuotes(text)) || UNTITLED;
+    const sideChat = this.insertConversation(workspaceId, { harness, profileId }, title, true, worktree, { of: parent.id, mayChangeFiles });
     this.store.copyLoadedPlugins(parent.id, sideChat.id);
     this.ensureSession(sideChat.id, () => this.openSideChatSession(sideChat.id, parent.id)).catch(() => {});
     this.send(sideChat.id, text, [], { authorId }).catch(() => {});
@@ -1140,8 +1159,8 @@ export class ConversationService {
     this.bindSession(sideChatId, sessionId, configOptions);
     const modelAndEffort = (parent?.configOptions ?? []).filter(({ category }) => category === "model" || category === "thought_level");
     await this.restoreConfigChoices(sideChatId, sessionId, modelAndEffort);
-    await this.keepSideChatReadOnly(sideChatId, sessionId);
-    runtime.sideChatBrief = sideChatBrief(copied ? null : conversationAsText(this.store.listEvents(parentId)));
+    await this.applySideChatMode(sideChatId, sessionId);
+    runtime.sideChatBrief = sideChatBrief(copied ? null : conversationAsText(this.store.listEvents(parentId)), sideChat.sideChatMayChangeFiles === true);
     return sessionId;
   }
 
@@ -1170,7 +1189,7 @@ export class ConversationService {
 
   /**
    * Only an agent whose process runs in its sandbox's VM, while that VM is known to run and its room or workspace lets it
-   * work freely there. A side chat stays read-only, and an agent brought into someone else's room asks as usual.
+   * work freely there. A side chat is held to reading or asks, and an agent brought into someone else's room asks as usual.
    */
   private worksFreelyInSandbox(conversation: Conversation) {
     const sandbox = this.sandboxOf(conversation);
@@ -1474,10 +1493,27 @@ export class ConversationService {
     if (sessionId) await this.keepToRoomAgentModel(conversationId, sessionId);
   }
 
-  private async keepSideChatReadOnly(sideChatId: string, sessionId: string) {
-    const mode = sideChatModeOf(this.get(sideChatId).harness);
-    const modeOption = this.get(sideChatId).configOptions.find(({ category }) => category === "mode");
+  /** Each session of a side chat that may change files works in `modeOfFileChangingSideChat`; that of any other in its agent's read-only mode. */
+  private async applySideChatMode(sideChatId: string, sessionId: string) {
+    const sideChat = this.get(sideChatId);
+    const mode = sideChat.sideChatMayChangeFiles ? this.modeOfFileChangingSideChat(sideChat) : sideChatModeOf(sideChat.harness);
+    const modeOption = sideChat.configOptions.find(({ category }) => category === "mode");
     if (mode && modeOption && offersValue(modeOption, mode)) await this.trySetConfigOption(sideChatId, sessionId, modeOption.id, mode);
+  }
+
+  /**
+   * The mode the conversation it is beside is in, else the one it would start in by itself: its profile's, or in a sandbox
+   * the one that asks. Never the mode a sandboxed conversation works freely in, as a side chat in a sandbox never works
+   * freely, nor the agent's read-only mode the conversation may be planning in, which would hold the side chat to reading.
+   */
+  private modeOfFileChangingSideChat(sideChat: Conversation) {
+    const parent = sideChat.sideChatOf === undefined ? undefined : this.store.findConversation(sideChat.sideChatOf);
+    const parentMode = parent?.configOptions.find(({ category }) => category === "mode")?.currentValue;
+    const worksFreelyInSandbox = parent !== undefined && parentMode === WORKS_FREELY_MODE && this.sandboxOf(parent) !== null;
+    const readsOnly = parentMode === sideChatModeOf(sideChat.harness);
+    if (typeof parentMode === "string" && !worksFreelyInSandbox && !readsOnly) return parentMode;
+    const profile = sideChat.profileId === null ? undefined : this.store.findProfile(sideChat.profileId);
+    return this.startingModeOf(sideChat, profile);
   }
 
   /** The side chat goes on as a conversation of its own, in the mode the conversation it was beside is in, else its profile's. */
@@ -1516,7 +1552,7 @@ export class ConversationService {
     title: string,
     titleSetByUser = false,
     worktree?: ConversationWorktree,
-    sideChatOf?: string,
+    sideChat?: { of: string; mayChangeFiles: boolean },
     { roomId, broughtIntoRoom }: Pick<Conversation, "roomId" | "broughtIntoRoom"> = {},
   ): Conversation {
     this.existingWorkspace(workspaceId);
@@ -1531,7 +1567,7 @@ export class ConversationService {
       titleSetByUser,
       acpSessionId: null,
       askMode: roomId ? "next-message" : profile.askMode,
-      bypassPermissions: sideChatOf === undefined && roomId === undefined && !broughtIntoRoom && profile.bypassPermissions,
+      bypassPermissions: sideChat === undefined && roomId === undefined && !broughtIntoRoom && profile.bypassPermissions,
       status: "idle",
       statusDetail: null,
       openInTerminal: null,
@@ -1546,7 +1582,8 @@ export class ConversationService {
       activity: null,
       configOptions: [],
       ...(worktree && { worktree }),
-      ...(sideChatOf && { sideChatOf }),
+      ...(sideChat && { sideChatOf: sideChat.of }),
+      ...(sideChat?.mayChangeFiles && { sideChatMayChangeFiles: true as const }),
       ...(roomId && { roomId }),
       ...(broughtIntoRoom && { broughtIntoRoom }),
       createdAt: now,
@@ -3128,7 +3165,7 @@ export class ConversationService {
     this.bindSession(conversationId, created.sessionId, created.configOptions);
     runtime.roomContextLost = Boolean(conversation.roomId) && (!isFirstSession || this.contextClearedBefore(conversationId));
     await this.restoreConfigChoices(conversationId, created.sessionId, setupKept ? conversation.configOptions : choicesBesideMode(conversation.configOptions));
-    if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
+    if (conversation.sideChatOf) await this.applySideChatMode(conversationId, created.sessionId);
     else await this.applyNewSessionChoices(conversation, created.sessionId, { isFirstSession, setupKept });
     await this.keepToRoomPreset(conversationId, created.sessionId);
     await this.keepToRoomAgentModel(conversationId, created.sessionId);
@@ -3966,7 +4003,7 @@ export class ConversationService {
     if (allowOptionId && this.preAllowsCanvasTool(conversationId, canvasToolAskedFor(request.toolCall, reports))) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
-    if (this.get(conversationId).sideChatOf) return turnedDown(request.options);
+    if (isToReadOnly(this.get(conversationId))) return turnedDown(request.options);
     const runtime = this.runtime(conversationId);
     const askedAbout = this.toolCallAskedAbout(conversationId, request.toolCall, signal).then(async (toolCall) => ({ toolCall, edits: await this.editsAskedFor(conversationId, toolCall) }));
     const inArrivalOrder = (runtime.permissionArriving ?? Promise.resolve()).then(() => askedAbout);
@@ -4540,6 +4577,9 @@ export const queuedBeforeSessionChange = (queue: QueuedMessage[]) => {
   const changeAt = queue.findIndex(({ text }) => replacesSession(text));
   return changeAt === -1 ? queue : queue.slice(0, changeAt);
 };
+
+/** A side chat that is to read and search only, whether its agent holds it to that or is only asked to. */
+const isToReadOnly = ({ sideChatOf, sideChatMayChangeFiles }: Pick<Conversation, "sideChatOf" | "sideChatMayChangeFiles">) => sideChatOf !== undefined && !sideChatMayChangeFiles;
 
 /** A side chat's agent is told no once, so it can still ask for something else. */
 function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionResponse {

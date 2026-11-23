@@ -216,6 +216,7 @@ export const problems: Messages["problems"] = {
   unknownKeepDeletedCanvas: (value) => `Ismeretlen beállítás a törölt vásznak megőrzéséhez: ${value}`,
   unknownOlderAfter: (value) => `Ismeretlen beállítás a régebbi beszélgetések összecsukásához: ${value}`,
   unknownConversationsShown: (value) => `Ismeretlen beállítás arra, hány beszélgetést listázzon egy munkaterület: ${value}`,
+  unknownSideChatAccess: (value) => `Ismeretlen beállítás arra, mit tehetnek a mellékszálak: ${value}`,
   unknownWorkspaceColour: (value) => `Ismeretlen munkaterület-szín: ${value}`,
   notAMachineAddress: (address) => `Ez nem egy gép címe: „${address}”.`,
   machineAlreadyAdded: (origin) => `Ez már a gépeid között van: ${origin}.`,

@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from "react";
 import type { Conversation } from "../shared/model.ts";
-import { SIDE_CHAT_COMMAND, quoted } from "../shared/side-chats.ts";
+import { SIDE_CHAT_COMMAND, quoted, sideChatMayChangeFiles } from "../shared/side-chats.ts";
 import type { SlashCommand } from "../shared/slash-commands.ts";
 import { connection } from "./connection.ts";
-import type { AppAction } from "./state.ts";
+import type { AppAction, AppState } from "./state.ts";
 import { addToComposerFromTab } from "./tab-handoffs.ts";
 
 export const sideChatSlashCommand: SlashCommand = { name: SIDE_CHAT_COMMAND, description: "Ask about this conversation in a side chat, without interrupting it", hint: "question" };
@@ -103,6 +103,10 @@ export function selectingBeside(action: AppAction, conversations: Conversation[]
 
 /** The conversation a side chat is beside, or the conversation itself. */
 export const sideChatParentOf = (conversation: Pick<Conversation, "id" | "sideChatOf">) => conversation.sideChatOf ?? conversation.id;
+
+/** Whether a side chat the owner opens beside the conversation now may change files, as the host decides it: this page is the owner's. */
+export const newSideChatMayChangeFiles = ({ workspaces, sideChatAccess }: Pick<AppState, "workspaces" | "sideChatAccess">, parent: Conversation) =>
+  sideChatMayChangeFiles({ parent, openedByOwner: true, workspaceChoice: workspaces.find(({ id }) => id === parent.workspaceId)?.sideChatAccess ?? null, setting: sideChatAccess });
 
 /** Into the open composer of that conversation; false when none took it. */
 export function addToComposer(conversationId: string, text: string) {

@@ -50,6 +50,7 @@ export type HostProblem =
   | { code: "unknown-keep-awake"; value: string }
   | { code: "unknown-older-after"; value: string }
   | { code: "unknown-conversations-shown"; value: string }
+  | { code: "unknown-side-chat-access"; value: string }
   | { code: "unknown-conversation-order"; value: string }
   | { code: "unknown-plugin-update-mode"; value: string }
   | { code: "unknown-workspace-colour"; value: string }
