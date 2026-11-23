@@ -80,7 +80,7 @@ import type { OwnerKey } from "./person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, SOCKETS_OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES, type RouteHandlers } from "./routes.ts";
 import { admittedFromPerson, type PersonInRooms } from "./person-admission.ts";
 import { RoomPresenceService } from "./room-presence.ts";
-import { namesOthersGoBy, personView } from "./person-view.ts";
+import { conversationBehindStandIn, namesOthersGoBy, personView } from "./person-view.ts";
 import type { SystemNotifications } from "./system-notifications.ts";
 import { inviteIn, isRoomId, isRoomInviteConnect, LONGEST_MACHINE_NAME, machineAddress, roomInviteText, type RoomInviteConnect } from "../shared/machines.ts";
 import { nameRefused, nameTaken, personName, readsAsMiradorsWords } from "../shared/people.ts";
@@ -373,6 +373,7 @@ export function startServer(services: HostServices) {
 
   const personInRooms = (personId: string): PersonInRooms => ({
     roleIn: (roomId) => store.findRoom(roomId)?.people.find((person) => person.personId === personId)?.role ?? null,
+    conversationBehind: (standIn) => conversationBehindStandIn(store, personId, standIn),
   });
 
   function authenticate(request: Request) {
@@ -2466,7 +2467,8 @@ export function startServer(services: HostServices) {
       if (socket.data.role === "notifier") return;
       try {
         const sent: unknown = JSON.parse(String(raw));
-        await dispatch(socket, socket.data.isOwner ? (sent as ClientMessage) : admittedFromPerson(sent, personInRooms(socket.data.personId)));
+        const admitted = socket.data.isOwner ? (sent as ClientMessage) : admittedFromPerson(sent, personInRooms(socket.data.personId));
+        if (admitted) await dispatch(socket, admitted);
       } catch (error) {
         hub.send(socket, { type: "error", ...failure(error) });
       }

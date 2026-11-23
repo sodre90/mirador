@@ -78,8 +78,8 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             room={room}
             timeline={state.roomTimeline?.roomId === room.id ? state.roomTimeline : null}
             profiles={state.profiles}
-            roomConversations={[]}
-            threadConversations={[]}
+            roomConversations={state.roomConversations}
+            threadConversations={state.threadConversations}
             people={state.people}
             ownerId={state.ownerId}
             ownerPicture={null}

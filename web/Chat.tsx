@@ -352,6 +352,9 @@ const CanvasShowsEdits = createContext(false);
 
 /** Whether the agent is at work in the conversation, so a failed turn cannot be tried again yet. */
 const ConversationBusy = createContext(false);
+
+/** Read by someone other than the machine's owner: nothing in the timeline then acts on the conversation or opens files on the owner's machine. */
+const OnlyReadsTimeline = createContext(false);
 /** Who writes the messages, who reads them, and the picture the owner set, or null: their initials or the person icon stand in. */
 export const MessageWriters = createContext<{ people: Person[]; ownerId: string | null; ownerPicture: string | null; you: string | null }>({ people: [], ownerId: null, ownerPicture: null, you: null });
 
@@ -439,6 +442,7 @@ function CommandCard({ command, conversationId }: { command: UserCommand; conver
   const status = !command.ended ? "in_progress" : command.exitCode === 0 ? "completed" : "failed";
   const output = useMemo(() => plainTextOf(parseAnsi(outputOf(command))).trimEnd(), [command]);
   const stop = () => connection.send({ type: "conversation.stop-command", conversationId, commandId: command.commandId });
+  const onlyReads = useContext(OnlyReadsTimeline);
   return (
     <div className={`shell user-command tool-${status}`}>
       <div className="shell-header">
@@ -447,7 +451,7 @@ function CommandCard({ command, conversationId }: { command: UserCommand; conver
           {commandDelivery(command)}
         </span>
         {status === "failed" && <span className="shell-exit">{command.exitCode === null ? words.tool.stopped : words.tool.exit(command.exitCode)}</span>}
-        {!command.ended && (
+        {!command.ended && !onlyReads && (
           <button type="button" className="link stop-command" onClick={stop}>
             {words.tool.stop}
           </button>
@@ -458,6 +462,17 @@ function CommandCard({ command, conversationId }: { command: UserCommand; conver
         <TerminalOutput output={output} finished={command.ended} awaitingPermission={false} />
       </div>
     </div>
+  );
+}
+
+function ToolLocation({ path, line, conversationId }: { path: string; line: number | null | undefined; conversationId: string }) {
+  const onlyReads = useContext(OnlyReadsTimeline);
+  const shown = `${path}${line ? `:${line}` : ""}`;
+  if (onlyReads) return <span className="location">{shown}</span>;
+  return (
+    <button type="button" className="location" data-hint={hints.openFile} onClick={() => connection.send({ type: "files.open", conversationId, path })}>
+      {shown}
+    </button>
   );
 }
 
@@ -475,14 +490,7 @@ function ToolCard({ block, conversationId }: { block: ToolBlock; conversationId:
           {block.locations.map((location, index) => (
             <Fragment key={index}>
               {index > 0 && ", "}
-              <button
-                type="button"
-                className="location"
-                data-hint={hints.openFile}
-                onClick={() => connection.send({ type: "files.open", conversationId, path: location.path })}
-              >
-                {`${location.path}${location.line ? `:${location.line}` : ""}`}
-              </button>
+              <ToolLocation path={location.path} line={location.line} conversationId={conversationId} />
             </Fragment>
           ))}
         </div>
@@ -753,6 +761,7 @@ function AgentNoticeLine({ block }: { block: AgentNoticeBlock }) {
 }
 
 function PermissionCard({ block, conversationId }: { block: PermissionBlock; conversationId: string }) {
+  const onlyReads = useContext(OnlyReadsTimeline);
   const editsInCanvas = useContext(CanvasShowsEdits) && block.edits?.length ? block.edits : null;
   const chosen = block.options.find(({ optionId }) => optionId === block.chosenOptionId);
   return (
@@ -777,7 +786,7 @@ function PermissionCard({ block, conversationId }: { block: PermissionBlock; con
       )}
       {block.resolved ? (
         <div className="permission-outcome">{chosen ? chosen.name : words.permission.cancelled}</div>
-      ) : (
+      ) : onlyReads ? null : (
         <PermissionOptions options={block.options} onChoose={(optionId) => answerPermission(conversationId, block.permissionId, optionId)} />
       )}
     </div>
@@ -986,7 +995,7 @@ const TimestampedEntry = memo(function TimestampedEntry({
  * room's thread shows its agent's work so, its replies headed with the agent's name in the room. Its turns cannot be
  * undone from there.
  */
-export function TimelineOfEvents({ conversation, events, agentName }: { conversation: Conversation; events: StoredEvent[]; agentName: string }) {
+export function TimelineOfEvents({ conversation, events, agentName, onlyReads }: { conversation: Conversation; events: StoredEvent[]; agentName: string; onlyReads: boolean }) {
   const built = useTimeline(events);
   const timeline = useMemo(() => built.map((block) => (block.kind === "user" ? { ...block, turnSeq: undefined } : block)), [built]);
   const timelineNow = useRef(timeline);
@@ -997,27 +1006,29 @@ export function TimelineOfEvents({ conversation, events, agentName }: { conversa
   const runningSteps = useMemo(() => (busy ? stepsRunning(timeline) : new Set<string>()), [timeline, busy]);
   const endsOfReplies = useMemo(() => replyEnds(timeline), [timeline]);
   return (
-    <ToolCallsAwaitingPermission.Provider value={awaitingPermission}>
-      <SubagentStates.Provider value={subagentStates}>
-        <StepsAtWork.Provider value={runningSteps}>
-          <ConversationBusy.Provider value={busy}>
-            <TimelineNow.Provider value={timelineNow}>
-              {timeline.map((block, index) => (
-                <TimestampedEntry
-                  key={block.key}
-                  block={block}
-                  startsGroup={index === 0 || startsAuthorGroup(timeline, index)}
-                  harness={conversation.harness}
-                  agentName={agentName}
-                  conversationId={conversation.id}
-                  endsReply={endsOfReplies.has(block.key)}
-                />
-              ))}
-            </TimelineNow.Provider>
-          </ConversationBusy.Provider>
-        </StepsAtWork.Provider>
-      </SubagentStates.Provider>
-    </ToolCallsAwaitingPermission.Provider>
+    <OnlyReadsTimeline.Provider value={onlyReads}>
+      <ToolCallsAwaitingPermission.Provider value={awaitingPermission}>
+        <SubagentStates.Provider value={subagentStates}>
+          <StepsAtWork.Provider value={runningSteps}>
+            <ConversationBusy.Provider value={busy}>
+              <TimelineNow.Provider value={timelineNow}>
+                {timeline.map((block, index) => (
+                  <TimestampedEntry
+                    key={block.key}
+                    block={block}
+                    startsGroup={index === 0 || startsAuthorGroup(timeline, index)}
+                    harness={conversation.harness}
+                    agentName={agentName}
+                    conversationId={conversation.id}
+                    endsReply={endsOfReplies.has(block.key)}
+                  />
+                ))}
+              </TimelineNow.Provider>
+            </ConversationBusy.Provider>
+          </StepsAtWork.Provider>
+        </SubagentStates.Provider>
+      </ToolCallsAwaitingPermission.Provider>
+    </OnlyReadsTimeline.Provider>
   );
 }
 
@@ -1036,12 +1047,14 @@ function ForkThroughTurnButton({ turnSeq }: { turnSeq: number }) {
 
 function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }: { block: TimelineBlock; conversationId: string; harness: HarnessId; canRewind: boolean; endsReply?: boolean }) {
   const askToRevert = useContext(AskToRevert);
+  const onlyReads = useContext(OnlyReadsTimeline);
+  const filesOpenIn = onlyReads ? undefined : conversationId;
   switch (block.kind) {
     case "user":
       return (
         <>
           <div className="message user">
-            <SlackMessageText text={block.text} conversationId={conversationId} />
+            <SlackMessageText text={block.text} conversationId={filesOpenIn} />
             <MessageImages conversationId={conversationId} imageIds={block.imageIds} carried={block.images} />
           </div>
           {block.turnSeq !== undefined && (block.filesKept || canRewind) && (
@@ -1053,11 +1066,11 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
         </>
       );
     case "agent": {
-      const refused = harness === "claude" ? refusedPanelCommand(block.text) : null;
+      const refused = harness === "claude" && !onlyReads ? refusedPanelCommand(block.text) : null;
       return (
         <>
           <div className="message agent">
-            <MarkdownText text={block.text} conversationId={conversationId} />
+            <MarkdownText text={block.text} conversationId={filesOpenIn} />
             <MessageImages conversationId={conversationId} carried={block.images} />
             {refused && (
               <div className="terminal-command">
@@ -1078,7 +1091,7 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
       return (
         <details className="thought">
           <summary>{words.entry.thinking}</summary>
-          <MarkdownText text={block.text} conversationId={conversationId} />
+          <MarkdownText text={block.text} conversationId={filesOpenIn} />
         </details>
       );
     case "tool":
@@ -1105,14 +1118,14 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
     case "permission":
       return <PermissionCard block={block} conversationId={conversationId} />;
     case "notice":
-      if (block.about.kind === "update-available") return <UpdateAvailableLine about={block.about} conversationId={conversationId} />;
+      if (block.about.kind === "update-available" && !onlyReads) return <UpdateAvailableLine about={block.about} conversationId={conversationId} />;
       return <div className="notice-line">{noticeText(block.about)}</div>;
     case "info":
       return <InfoLine text={block.text} />;
     case "agent-notice":
       return <AgentNoticeLine block={block} />;
     case "error":
-      if (block.authRequired && !block.signedInSince) {
+      if (block.authRequired && !block.signedInSince && !onlyReads) {
         return (
           <div className="error-line sign-in-line">
             <span>{errorText(block, t.problems)}</span>
@@ -1129,10 +1142,11 @@ function TimelineEntry({ block, conversationId, harness, canRewind, endsReply }:
 
 function FailedTurnLine({ message, conversationId, errorSeq }: { message: string; conversationId: string; errorSeq: number }) {
   const busy = useContext(ConversationBusy);
+  const onlyReads = useContext(OnlyReadsTimeline);
   return (
     <div className="error-line try-again-line">
       <span>{message}</span>
-      {!busy && (
+      {!busy && !onlyReads && (
         <button type="button" data-hint={hints.tryAgain} onClick={() => connection.send({ type: "conversation.try-again", conversationId, errorSeq })}>
           {words.entry.tryAgain}
         </button>

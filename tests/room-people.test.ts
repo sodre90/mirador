@@ -6,16 +6,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { freePorts } from "../e2e/free-ports.ts";
 import { DeviceService, inviteKey } from "../host/devices.ts";
+import { conversationStandIn } from "../host/person-view.ts";
 import { NO_AUTHORITY, roomJoinStatement } from "../host/person-keys.ts";
 import { DEVICE_ROUTES, OPEN_TO_PEOPLE, THIS_MACHINE_ROUTES } from "../host/routes.ts";
 import { Store } from "../host/store.ts";
 import { PROBLEM_HEADER } from "../shared/host-problems.ts";
-import type { Person, Profile, Workspace } from "../shared/model.ts";
+import type { Person, Profile, StoredEvent, Workspace } from "../shared/model.ts";
 import { PERSON_MESSAGE_TYPES } from "../shared/person-messages.ts";
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { inviteIn, machineAddress } from "../shared/machines.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
-import { agentStandIn, type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole, type RoomThread } from "../shared/rooms.ts";
+import { type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole, type RoomThread } from "../shared/rooms.ts";
 
 /**
  * A real host, with the owner and three other people of the machine, each signed in on a device of their own: Mia and
@@ -27,6 +28,7 @@ const repoRoot = join(import.meta.dirname, "..");
 const root = mkdtempSync(join(tmpdir(), "mirador-room-people-"));
 const dataDir = join(root, "data");
 const projectDir = join(root, "project");
+const otherProjectDir = join(root, "other-project");
 const fakePrograms = join(root, "fake-programs");
 const promptsFile = join(root, "prompts.txt");
 const STEP_MS = 15_000;
@@ -262,7 +264,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
 };
 
 /** All a person other than the owner may get from the host. */
-const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
+const SHOWN_TO_PEOPLE = new Set<ServerMessage["type"]>(["conversation.upserted", "conversation.deleted", "conversation.history", "conversation.earlier", "conversation.event", "tool-raw-output.got", "snapshot", "people.listed", "profile.upserted", "room.upserted", "room.deleted", "room.timeline", "room.message", "room.presence", "canvas.upserted", "settings.saved", "error", "pong", "room.votes", "rooms.reading", "room.alert", "room.agent-brought", "room.brought-task", "rooms.waiting-to-join", "room.approvals"]);
 
 type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type SettingsSaved = Extract<ServerMessage, { type: "settings.saved" }>;
@@ -343,6 +345,7 @@ let hostOutput = "";
 let port = 0;
 let profile: Profile;
 let workspace: Workspace;
+let otherWorkspace: Workspace;
 const mia: Omit<Person, "number"> = { id: crypto.randomUUID(), name: "Mia", color: "mint" };
 const gus: Omit<Person, "number"> = { id: crypto.randomUUID(), name: "Gus", color: "sky" };
 const stan: Omit<Person, "number"> = { id: crypto.randomUUID(), name: "Stan", color: null };
@@ -363,12 +366,14 @@ function seed() {
   writeFileSync(join(projectDir, "README.md"), "# project\n");
   writeFileSync(promptsFile, "");
   mkdirSync(fakePrograms, { recursive: true });
-  writeFileSync(join(fakePrograms, "opencode"), `#!/bin/sh\nexec bun '${join(repoRoot, "e2e", "fake-acp-agent.ts")}' "$@"\n`);
+  writeFileSync(join(fakePrograms, "opencode"), `#!/bin/sh\nFAKE_ACP_COMMANDS='${JSON.stringify(OWNERS_COMMANDS)}' exec bun '${join(repoRoot, "e2e", "fake-acp-agent.ts")}' "$@"\n`);
   chmodSync(join(fakePrograms, "opencode"), 0o755);
   const store = new Store(join(dataDir, "state.sqlite"));
   profile = { id: crypto.randomUUID(), name: "Builder", harness: "opencode", environment: `OPENCODE_FAKE_ACP_PROMPTS=${promptsFile}\nROOM_ONLY_SECRET_NAME=room-only`, prelaunch: `echo ${PRELAUNCH_SECRET}`, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [PLUGIN_OFF_SECRET], createdAt: Date.now() };
   store.saveProfile(profile);
   workspace = store.insertWorkspace({ id: crypto.randomUUID(), name: "project", path: projectDir, defaultLaunch: { harness: "opencode", profileId: profile.id }, createdAt: Date.now() });
+  mkdirSync(otherProjectDir, { recursive: true });
+  otherWorkspace = store.insertWorkspace({ id: crypto.randomUUID(), name: "other", path: otherProjectDir, defaultLaunch: { harness: "opencode", profileId: profile.id }, createdAt: Date.now() });
   const devices = new DeviceService(store);
   [mia, gus, stan].forEach((person) => {
     store.insertPerson(person);
@@ -479,6 +484,12 @@ async function refusesAllButTheirOwnMessages(pages: Page[]) {
     expect(came.every(({ type }) => type === "error")).toBe(true);
   }
 }
+
+/** The room agent's / menu, which its session announces as it starts: the owner's to see. */
+const OWNERS_COMMANDS = [{ name: "owners-command", description: "Owned" }];
+
+/** What came to a page about conversations, refusals included. */
+const answersAboutConversations = (came: ServerMessage[]) => came.filter(({ type }) => type.startsWith("conversation.") || type === "error");
 
 /** Asks for every route of the host's but the ones open to people, signed in with the token, and expects each refused; the ones it asked for. */
 async function routesRefusedTo(token: string) {
@@ -654,7 +665,7 @@ describe("a person other than the owner", () => {
     const tagged = await miaPage.waitFor(isType("room.message", ({ message }) => message.tags.includes(profile.id)), miaMark);
     miasThread = tagged.threads[0]!;
     const canvasItem = await miaPage.waitFor(isType("canvas.upserted", ({ item }) => item.kind === "show"), miaMark);
-    expect(canvasItem.item.conversationId).toBe(agentStandIn(roomA.id, profile.id));
+    expect(canvasItem.item.conversationId).toBe(conversationStandIn(roomA.id, profile.id, agentConversationId));
     expect(tagged.message.taskHeld).toBeUndefined();
     await miaPage.waitFor(isType("room.message", ({ message }) => message.answers === tagged.message.id && "profileId" in message.author), miaMark);
     expect(JSON.stringify(gusPage.received)).not.toContain("Gus asks");
@@ -710,13 +721,13 @@ describe("a person other than the owner", () => {
     expect(own.taskHeld).toBeUndefined();
     const { approvals } = await miaPage.waitFor(isType("room.approvals", ({ roomId, approvals }) => roomId === roomA.id && approvals.length === 1), miaMark);
     const { request } = approvals[0]!;
-    expect(approvals[0]).toMatchObject({ conversationId: agentStandIn(roomA.id, profile.id), profileId: profile.id, approvers: expect.arrayContaining([mia.id]) });
+    expect(approvals[0]).toMatchObject({ conversationId: conversationStandIn(roomA.id, profile.id, agentConversationId), profileId: profile.id, approvers: expect.arrayContaining([mia.id]) });
     await miaPage.waitFor(isType("rooms.reading", ({ readings }) => readings.some(({ roomId, toApprove }) => roomId === roomA.id && toApprove === 1)), miaMark);
     await miaPage.waitFor(isType("room.alert", ({ roomId, alert }) => roomId === roomA.id && alert.about === "approve" && alert.what === "Run pwd"), miaMark);
     const miaOpensAgain = await Page.open(port, tokens[mia.id]!);
     const { roomApprovals } = await miaOpensAgain.waitFor(isType("snapshot"));
     miaOpensAgain.close();
-    expect(roomApprovals.map(({ conversationId, request: { permissionId } }) => [conversationId, permissionId])).toEqual([[agentStandIn(roomA.id, profile.id), request.permissionId]]);
+    expect(roomApprovals.map(({ conversationId, request: { permissionId } }) => [conversationId, permissionId])).toEqual([[conversationStandIn(roomA.id, profile.id, agentConversationId), request.permissionId]]);
 
     gusPage.send({ type: "room.approve", roomId: roomA.id, profileId: profile.id, permissionId: request.permissionId, answer: "allow" });
     await gusPage.waitForError("room-approval-not-yours", gusMark);
@@ -758,6 +769,92 @@ describe("a person other than the owner", () => {
     await miaPage.waitFor(isType("room.upserted", ({ room }) => !room.peoplesTasksWait && roleOf(room, mia.id) === "member" && roleOf(room, gus.id) === "guest"), miaMark);
     await Promise.all([miaPage, gusPage].map((page) => page.settledSince(page.mark)));
   }, 60_000);
+
+  test("as a collaborator follows a room agent's work by its conversation's stand-in, never its id, without what its turns took; so does an approver; no longer either, lets go of it", async () => {
+    const roleOf = (room: Room, personId: string) => room.people.find((person) => person.personId === personId)?.role;
+    const standIn = conversationStandIn(roomA.id, profile.id, agentConversationId);
+    let [miaMark, gusMark] = [miaPage.mark, gusPage.mark];
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "collaborator" });
+    const { room } = await miaPage.waitFor(isType("room.upserted", ({ room }) => roleOf(room, mia.id) === "collaborator"), miaMark);
+    expect(room.agents[0]!.conversationId).toBe(standIn);
+    const { conversation } = await miaPage.waitFor(isType("conversation.upserted", ({ conversation }) => conversation.id === standIn), miaMark);
+    expect(conversation).toMatchObject({ id: standIn, roomId: roomA.id, workspaceId: "", title: "", acpSessionId: null, configOptions: [], queuedMessages: [], contextUsage: null });
+    gusMark = gusPage.mark;
+    gusPage.send({ type: "conversation.subscribe", conversationId: standIn });
+    expect(answersAboutConversations(await gusPage.settledSince(gusMark))).toEqual([]);
+
+    miaMark = miaPage.mark;
+    miaPage.send({ type: "conversation.subscribe", conversationId: agentConversationId });
+    miaPage.send({ type: "conversation.subscribe", conversationId: standIn, lowData: { latestTurns: 1 } });
+    miaPage.send({ type: "tool-raw-output.get", requestId: "raw-by-id", conversationId: agentConversationId, toolCallId: "probe" });
+    await miaPage.waitForErrors("only-the-owner", 2, miaMark);
+    expect(answersAboutConversations(await miaPage.settledSince(miaMark)).filter(({ type }) => type !== "error")).toEqual([]);
+
+    miaMark = miaPage.mark;
+    miaPage.send({ type: "conversation.subscribe", conversationId: standIn });
+    const history = await miaPage.waitFor(isType("conversation.history", ({ conversationId }) => conversationId === standIn), miaMark);
+    expect(history.events.some(({ event }) => event.type === "user-message" && event.roomMessageId !== undefined)).toBe(true);
+    const toolCall = history.events.flatMap(({ event }) => (event.type === "acp" && event.update.sessionUpdate === "tool_call" ? [event.update.toolCallId] : []))[0]!;
+    expect(toolCall).toBeDefined();
+    miaPage.send({ type: "tool-raw-output.get", requestId: "raw", conversationId: standIn, toolCallId: toolCall });
+    await miaPage.waitFor(isType("tool-raw-output.got", ({ requestId }) => requestId === "raw"), miaMark);
+    miaPage.send({ type: "conversation.load-earlier", requestId: "earlier", conversationId: standIn, beforeSeq: history.events[0]!.seq });
+    expect((await miaPage.waitFor(isType("conversation.earlier", ({ requestId }) => requestId === "earlier"), miaMark)).conversationId).toBe(standIn);
+
+    miaMark = miaPage.mark;
+    await ownerWritesIn(roomA, "@Builder TOKENS 1200 300 0.05 SAY Spent where Mia reads", [profile.id]);
+    const turnEnd = await miaPage.waitFor(isType("conversation.event", ({ conversationId, event }) => conversationId === standIn && event.event.type === "turn-end"), miaMark);
+    expect(Object.keys(turnEnd.event.event).filter((key) => !["type", "stopReason", "startedAt", "toolCalls", "filesEdited"].includes(key))).toEqual([]);
+    const ownerMark = owner.mark;
+    owner.send({ type: "conversation.subscribe", conversationId: agentConversationId });
+    const ownersHistory = await owner.waitFor(isType("conversation.history", ({ conversationId }) => conversationId === agentConversationId), ownerMark);
+    owner.send({ type: "conversation.unsubscribe", conversationId: agentConversationId });
+    const ofSessionState = ({ event }: StoredEvent) => event.type === "acp" && ["available_commands_update", "session_info_update", "config_option_update"].includes(event.update.sessionUpdate);
+    expect(ownersHistory.events.some(ofSessionState)).toBe(true);
+    expect(history.events.some(ofSessionState)).toBe(false);
+    const sentToMia = miaPage.received.slice(miaMark).filter(isType("conversation.event"));
+    expect(sentToMia.every(({ conversationId }) => conversationId === standIn)).toBe(true);
+    expect(sentToMia.some(({ event }) => ofSessionState(event))).toBe(false);
+
+    gusMark = gusPage.mark;
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "approver" });
+    await gusPage.waitFor(isType("conversation.upserted", ({ conversation }) => conversation.id === standIn), gusMark);
+    gusMark = gusPage.mark;
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: gus.id, role: "guest" });
+    await gusPage.waitFor(isType("conversation.deleted", ({ conversationId }) => conversationId === standIn), gusMark);
+
+    miaMark = miaPage.mark;
+    owner.send({ type: "room.set-workspace", roomId: roomA.id, workspaceId: otherWorkspace.id });
+    await miaPage.waitFor(isType("conversation.deleted", ({ conversationId }) => conversationId === standIn), miaMark);
+    const movedMark = owner.mark;
+    await ownerWritesIn(roomA, "@Builder SAY Started afresh", [profile.id]);
+    const freshId = (await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && room.agents[0]!.conversationId !== null), movedMark)).room.agents[0]!.conversationId!;
+    const freshStandIn = conversationStandIn(roomA.id, profile.id, freshId);
+    expect(freshStandIn).not.toBe(standIn);
+    await miaPage.waitFor(isType("conversation.upserted", ({ conversation }) => conversation.id === freshStandIn), miaMark);
+    miaPage.send({ type: "conversation.subscribe", conversationId: freshStandIn });
+    await miaPage.waitFor(isType("conversation.history", ({ conversationId }) => conversationId === freshStandIn), miaMark);
+
+    miaMark = miaPage.mark;
+    owner.send({ type: "room.set-person-role", roomId: roomA.id, personId: mia.id, role: "member" });
+    await miaPage.waitFor(isType("conversation.deleted", ({ conversationId }) => conversationId === freshStandIn), miaMark);
+    const demotedMark = miaPage.mark;
+    await ownerWritesIn(roomA, "@Builder SAY After Mia's collaboration", [profile.id]);
+    await miaPage.waitFor(roomMessageSaying("After Mia's collaboration"), demotedMark);
+    expect((await miaPage.settledSince(demotedMark)).some(({ type }) => type.startsWith("conversation."))).toBe(false);
+    const followingMark = miaPage.mark;
+    miaPage.send({ type: "conversation.subscribe", conversationId: freshStandIn });
+    expect(answersAboutConversations(await miaPage.settledSince(followingMark))).toEqual([]);
+
+    const backMark = owner.mark;
+    owner.send({ type: "room.set-workspace", roomId: roomA.id, workspaceId: workspace.id });
+    await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && room.workspaceId === workspace.id), backMark);
+    for (const page of [miaPage, gusPage, stanPage]) [agentConversationId, freshId].forEach((id) => expect(JSON.stringify(page.received)).not.toContain(id));
+    await ownerWritesIn(roomA, "@Builder SAY Back in the project", [profile.id]);
+    agentConversationId = (await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomA.id && room.agents[0]!.conversationId !== null), backMark)).room.agents[0]!.conversationId!;
+    await miaPage.waitFor(roomMessageSaying("Back in the project"), demotedMark);
+    await Promise.all([miaPage, gusPage, stanPage].map((page) => page.settledSince(page.mark)));
+  }, 90_000);
 
   test("is refused every message type but their own few, whatever it names", async () => {
     await refusesAllButTheirOwnMessages([miaPage, gusPage, stanPage]);
@@ -836,11 +933,9 @@ describe("a person other than the owner", () => {
   test("can't follow a room agent's conversation, and hears none of its events", async () => {
     const mark = miaPage.mark;
     miaPage.send({ type: "conversation.subscribe", conversationId: agentConversationId });
-    await miaPage.waitForError("only-the-owner", mark);
     miaPage.send({ type: "room.write", roomId: roomA.id, text: "@Builder SAY Busy agent", tags: [profile.id], threadId: null });
     await miaPage.waitFor(roomMessageSaying("Busy agent"), mark);
-    const came = await miaPage.settledSince(mark);
-    expect(came.some(({ type }) => type.startsWith("conversation."))).toBe(false);
+    expect(answersAboutConversations(await miaPage.settledSince(mark))).toEqual([]);
   }, 30_000);
 
   test("changes nothing of what a room's agents are given or read, as a member or as a guest", async () => {

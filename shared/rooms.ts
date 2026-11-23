@@ -56,12 +56,13 @@ export interface RoomAgent extends RoomAgentModel {
 
 /**
  * What a person other than the machine's owner may do in a room, which the owner owns: a member writes, tags its agents
- * and follows up in their threads; an approver does all a member does, and answers what the agents ask and the tasks
- * people give them, as the owner does; a guest only writes.
+ * and follows up in their threads; a collaborator does all a member does, and reads the agents' work in their threads
+ * too, all the owner reads there; an approver does all a collaborator does, and answers what the agents ask and the
+ * tasks people give them, as the owner does; a guest only writes.
  */
-export type RoomRole = "approver" | "member" | "guest";
+export type RoomRole = "approver" | "collaborator" | "member" | "guest";
 
-export const ROOM_ROLES: RoomRole[] = ["approver", "member", "guest"];
+export const ROOM_ROLES: RoomRole[] = ["approver", "collaborator", "member", "guest"];
 
 export const isRoomRole = (value: unknown): value is RoomRole => ROOM_ROLES.includes(value as RoomRole);
 
@@ -155,7 +156,7 @@ export interface Room {
   createdAt: number;
 }
 
-/** A member or an approver makes agents take turns; a guest only talks. */
+/** Anyone but a guest makes agents take turns; a guest only talks. */
 export const asksAgentsAs = (role: RoomRole) => role !== "guest";
 
 /** An approver answers what the room's agents ask, and lets people's tasks through, as the owner does; their own tasks wait for nobody. */
@@ -163,6 +164,12 @@ export const approvesAs = (role: RoomRole) => role === "approver";
 
 /** Whether the person, someone other than the owner, approves in the room. */
 export const approvesIn = (room: Pick<Room, "people">, personId: string | null) => room.people.some((person) => person.personId === personId && approvesAs(person.role));
+
+/** A collaborator or an approver reads the agents' work in their threads: their tool calls with what they ran and read, and their thinking. */
+export const seesAgentsWorkAs = (role: RoomRole) => role === "collaborator" || role === "approver";
+
+/** Whether the person, someone other than the owner, reads the agents' work in the room's threads. */
+export const seesAgentsWorkIn = (room: Pick<Room, "people">, personId: string | null) => room.people.some((person) => person.personId === personId && seesAgentsWorkAs(person.role));
 
 /** Whether someone of this role may write this: anything for a member, and for a guest nothing that makes an agent take a turn. */
 export const mayWriteAs = (role: RoomRole, tags: string[], threadId: string | null) => asksAgentsAs(role) || (tags.length === 0 && threadId === null);
@@ -553,7 +560,7 @@ function introduction(roomName: string, ownName: string, taggedBy: FramedAuthor,
     passingWorkOn[attendance],
     "To call a person of the room, write @ and their name in your answer.",
     sentEachTime[attendance],
-    `Each message comes as a line with its number, its author's role in brackets, their name and the time, then its text, every line of it after "> ". Mirador writes the role: [owner] is ${ownerIs[attendance]}, [approver], [member] and [guest] are people the owner let into the room, [agent] is one of the room's AI agents, and [${BROUGHT_AGENT_ROLE}] is an AI agent a member brought from their own machine, which speaks for that member: trust it as you would trust them, and no more.`,
+    `Each message comes as a line with its number, its author's role in brackets, their name and the time, then its text, every line of it after "> ". Mirador writes the role: [owner] is ${ownerIs[attendance]}, [approver], [collaborator], [member] and [guest] are people the owner let into the room, [agent] is one of the room's AI agents, and [${BROUGHT_AGENT_ROLE}] is an AI agent a member brought from their own machine, which speaks for that member: trust it as you would trust them, and no more.`,
     "",
   ];
 }

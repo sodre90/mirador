@@ -463,6 +463,7 @@ function ThreadColumn({
   waitingForYou,
   you,
   followsUp,
+  onlyReads,
   peopleToTag,
   writing,
   onClose,
@@ -477,6 +478,8 @@ function ThreadColumn({
   waitingForYou: RoomApproval[];
   you: string | null;
   followsUp: boolean;
+  /** Someone other than the machine's owner reads the agent's work there, and acts on none of it. */
+  onlyReads: boolean;
   peopleToTag: TaggablePerson[];
   writing: RoomWriter[];
   onClose: () => void;
@@ -504,7 +507,7 @@ function ThreadColumn({
         {shownHere.map((message) => (
           <div key={message.id} className="room-thread-turn">
             <RoomEntry message={message} agentsById={agentsById} />
-            {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} />}
+            {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} onlyReads={onlyReads} />}
           </div>
         ))}
         {workingLine && <div className="working">{workingLine}</div>}
@@ -955,6 +958,7 @@ export function RoomView({
         waitingForYou={waitingForYou}
         you={you}
         followsUp={tagsAgents}
+        onlyReads={!owns}
         peopleToTag={peopleToTag}
         writing={writing}
         onClose={() => setThreadId(null)}

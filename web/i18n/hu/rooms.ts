@@ -40,7 +40,7 @@ export const rooms: Messages["rooms"] = {
   inviteSomeone: "Valaki meghívása",
   inviteTo: (room) => `Valaki meghívása ide: ${room}`,
   joinsAs: "Így csatlakozik",
-  roleChoices: { approver: "Jóváhagyó: megkérheti az ágenseket, és jóváhagyja a kéréseiket", member: "Tag: megkérheti az ágenseket", guest: "Vendég: beszélgethet" },
+  roleChoices: { approver: "Jóváhagyó: megkérheti az ágenseket, látja a munkájukat, és jóváhagyja a kéréseiket", collaborator: "Munkatárs: megkérheti az ágenseket, és látja a munkájukat", member: "Tag: megkérheti az ágenseket", guest: "Vendég: beszélgethet" },
   connect: "Kapcsolódás",
   connectsBy: (way) => `Kapcsolódás: ${way}`,
   connectChoices: {
@@ -128,7 +128,7 @@ export const rooms: Messages["rooms"] = {
   emptyForGuest: "Vendégként te is írhatsz ide, mint bárki más. Az ágenseknek a tagok adnak feladatot.",
   guestPlaceholder: (room) => `Írj ide: ${room}…`,
   people: "Emberek",
-  peopleHint: "A tag ír, megjelöli az ágenseket, és válaszol a témáikban; a vendég csak ír. A jóváhagyó mindent megtehet, amit a tag, emellett válaszol az ágensek kéréseire, és jóváhagyja mások feladatait; a saját feladatai nem várnak. A szobát csak te módosíthatod.",
+  peopleHint: "A tag ír, megjelöli az ágenseket, és válaszol a témáikban; a vendég csak ír. A munkatárs mindent megtehet, amit a tag, emellett a témákban látja az ágensek teljes munkáját: mit futtatnak és olvasnak, a kimenetükkel együtt, és a gondolkodásukat. A jóváhagyó mindent megtehet, amit a munkatárs, emellett válaszol az ágensek kéréseire, és jóváhagyja mások feladatait; a saját feladatai nem várnak. A szobát csak te módosíthatod.",
   noPeople: "Ebben a szobában még nincs más.",
   peopleReach: {
     "ask-everything": "Az ágenseken át az itteni emberek azt érik el, amit engedélyezel: olvasás, szerkesztés és parancs előtt téged kérdeznek.",
@@ -284,8 +284,8 @@ export const rooms: Messages["rooms"] = {
     discard: "Elvetés",
   },
   peoplesTasksHint: "Különben egy tag megjelölése vagy válasza csak akkor jut el az ágenshez, ha engedélyezed.",
-  roles: { approver: "Jóváhagyó", member: "Tag", guest: "Vendég" },
-  authorRoles: { owner: "Tulajdonos", approver: "Jóváhagyó", member: "Tag", guest: "Vendég", agent: "Ágens", "member's agent": "Tag ágense" },
+  roles: { approver: "Jóváhagyó", collaborator: "Munkatárs", member: "Tag", guest: "Vendég" },
+  authorRoles: { owner: "Tulajdonos", approver: "Jóváhagyó", collaborator: "Munkatárs", member: "Tag", guest: "Vendég", agent: "Ágens", "member's agent": "Tag ágense" },
   roleOf: (person) => `${person} szerepe`,
   nameless: "Valaki név nélkül",
   inNoRoom: "Még egy szobában sem vagy. Ha a gép tulajdonosa felvesz egybe, itt látod.",

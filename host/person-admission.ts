@@ -12,11 +12,17 @@ import { approvesAs, asksAgentsAs, isBroughtAnswerEnd, mayWriteAs, ROOM_MESSAGE_
 /** A signed-in person other than the machine's owner, as far as what they send goes: the role they have in each room they are in. */
 export interface PersonInRooms {
   roleIn(roomId: string): RoomRole | null;
+  /** The conversation a room's agent works in now, by the stand-in the person knows it by, where they read the agents' work. */
+  conversationBehind(standIn: string): string | null;
 }
 
 const OWNER_ONLY = null;
 
-type Admission<K extends ClientMessage["type"]> = (message: Extract<ClientMessage, { type: K }>, person: PersonInRooms) => void;
+/** What a check returns to let nothing of a message through, without refusing it. */
+const IGNORED = null;
+
+/** A check that throws what refuses the message; one that returns a message lets that one through in its place. */
+type Admission<K extends ClientMessage["type"]> = (message: Extract<ClientMessage, { type: K }>, person: PersonInRooms) => Extract<ClientMessage, { type: K }> | typeof IGNORED | void;
 
 const unreadable = () => new Error("The host could not read that message.");
 const isStringList = (value: unknown): value is string[] => Array.isArray(value) && value.every((each) => typeof each === "string");
@@ -44,6 +50,15 @@ const isRequestId = (value: unknown) => typeof value === "string" && value.lengt
 function assertTaskNamed({ agentId, taskId }: { agentId: unknown; taskId: unknown }) {
   if (!isRoomId(agentId) || !isRoomId(taskId)) throw unreadable();
 }
+
+/** A room agent's conversation the person reads the work of, by its real id; they name it by its stand-in alone, and any other id is the owner's. */
+function conversationOf(person: PersonInRooms, standIn: unknown) {
+  const conversationId = typeof standIn === "string" ? person.conversationBehind(standIn) : null;
+  if (conversationId === null) throw new HostProblemError({ code: "only-the-owner" });
+  return conversationId;
+}
+
+const isSeq = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
 /** A room the person is not in is as good as gone for them. */
 function roleOf(person: PersonInRooms, roomId: unknown): RoomRole {
@@ -120,12 +135,33 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "conversation.set-unread": OWNER_ONLY,
   "conversation.set-reminder": OWNER_ONLY,
   "conversation.set-profile": OWNER_ONLY,
-  "conversation.subscribe": OWNER_ONLY,
-  "conversation.load-earlier": OWNER_ONLY,
+  /**
+   * A collaborator or an approver follows a room agent's work by its conversation's stand-in, in a page's form; a phone's
+   * low-data form is the owner's. Any other id gets nothing, as the owner's page gets for a conversation gone: a page may
+   * still ask for a stand-in it lost a moment ago, or for the conversation of an address it opened.
+   */
+  "conversation.subscribe": ({ conversationId, lowData }, person) => {
+    if (lowData !== undefined) throw new HostProblemError({ code: "only-the-owner" });
+    if (typeof conversationId !== "string") throw unreadable();
+    const followed = person.conversationBehind(conversationId);
+    return followed === null ? IGNORED : { type: "conversation.subscribe", conversationId: followed };
+  },
+  "conversation.load-earlier": ({ requestId, conversationId, beforeSeq, turns, reaching }, person) => {
+    if (!isRequestId(requestId) || !isSeq(beforeSeq) || turns !== undefined || !(reaching === undefined || isSeq(reaching))) throw unreadable();
+    return { type: "conversation.load-earlier", requestId, conversationId: conversationOf(person, conversationId), beforeSeq, ...(reaching !== undefined && { reaching }) };
+  },
   "conversation.find": OWNER_ONLY,
-  "tool-raw-output.get": OWNER_ONLY,
+  "tool-raw-output.get": ({ requestId, conversationId, toolCallId }, person) => {
+    if (!isRequestId(requestId) || typeof toolCallId !== "string") throw unreadable();
+    return { type: "tool-raw-output.get", requestId, conversationId: conversationOf(person, conversationId), toolCallId };
+  },
   "tool-output.get": OWNER_ONLY,
-  "conversation.unsubscribe": OWNER_ONLY,
+  /** Letting go is never refused: a stand-in the person reads no longer was let go of when they lost it. */
+  "conversation.unsubscribe": ({ conversationId }, person) => {
+    if (typeof conversationId !== "string") throw unreadable();
+    const followed = person.conversationBehind(conversationId);
+    return followed === null ? IGNORED : { type: "conversation.unsubscribe", conversationId: followed };
+  },
   "conversation.prompt": OWNER_ONLY,
   "conversation.cancel": OWNER_ONLY,
   "conversation.revert-preview": OWNER_ONLY,
@@ -331,11 +367,11 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   },
 };
 
-/** The message, from what a person other than the owner sent, when they may send it; anything else throws what refuses it. */
-export function admittedFromPerson(sent: unknown, person: PersonInRooms): ClientMessage {
+/** The message, from what a person other than the owner sent, when they may send it, or null when it is let go quietly; anything else throws what refuses it. */
+export function admittedFromPerson(sent: unknown, person: PersonInRooms): ClientMessage | null {
   const type = typeof sent === "object" && sent !== null ? (sent as { type?: unknown }).type : undefined;
   const admission = typeof type === "string" && Object.hasOwn(admissions, type) ? admissions[type as ClientMessage["type"]] : OWNER_ONLY;
   if (admission === OWNER_ONLY) throw new HostProblemError({ code: "only-the-owner" });
-  (admission as Admission<ClientMessage["type"]>)(sent as ClientMessage, person);
-  return sent as ClientMessage;
+  const admitted = (admission as Admission<ClientMessage["type"]>)(sent as ClientMessage, person);
+  return admitted === undefined ? (sent as ClientMessage) : admitted;
 }

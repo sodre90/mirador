@@ -394,7 +394,7 @@ describe("an agent's question in a room, as a vote", () => {
 });
 
 describe("what a person other than the owner may send of votes, confirmations and mutes", () => {
-  const inRooms = { roleIn: (roomId: string) => ({ launch: "member" as const, garden: "guest" as const })[roomId] ?? null };
+  const inRooms = { roleIn: (roomId: string) => ({ launch: "member" as const, garden: "guest" as const })[roomId] ?? null, conversationBehind: () => null };
   const admitted = (sent: unknown) =>
     refusal(() => admittedFromPerson(sent, inRooms)) === "refused" ? "unreadable" : refusal(() => admittedFromPerson(sent, inRooms));
   const vote = { type: "room.vote", roomId: "launch", itemId: "q1", question: 0, option: 1 };

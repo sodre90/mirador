@@ -1,10 +1,10 @@
-import type { CanvasItem, Profile } from "../shared/model.ts";
+import type { CanvasItem, Conversation, Profile, StoredEvent } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER, DEFAULT_SIDE_CHAT_ACCESS } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { NO_SANDBOX, SETUP_NOT_STARTED } from "../shared/sandbox.ts";
 import type { RoomApproval, RoomPresence, RoomTaskApproval } from "../shared/rooms.ts";
-import { agentStandIn, broughtAgentName, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
+import { agentStandIn, broughtAgentName, PROFILES_MODEL, seesAgentsWorkIn, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
 import type { ShownToPerson, SocketData } from "./hub.ts";
 import type { Store } from "./store.ts";
@@ -16,10 +16,26 @@ type Snapshot = Extract<ServerMessage, { type: "snapshot" }>;
 type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { type: K }>, socket: SocketData) => ServerMessage[];
 
 /**
+ * What people in a room know one conversation of its agent by: the room and the agent, and a digest that tells it apart
+ * from the agent's other conversations there, as when the room moves to another workspace, without naming it.
+ */
+export const conversationStandIn = (roomId: string, profileId: string, conversationId: string) =>
+  `${agentStandIn(roomId, profileId)}/${new Bun.CryptoHasher("sha256").update(conversationId).digest("hex").slice(0, 16)}`;
+
+/** The conversation a room agent works in now, by the stand-in the person knows it by, in a room where they read the agents' work; null for any other. */
+export function conversationBehindStandIn(store: Pick<Store, "roomsOf">, personId: string, standIn: string): string | null {
+  const watched = store
+    .roomsOf(personId)
+    .filter((room) => seesAgentsWorkIn(room, personId))
+    .flatMap((room) => room.agents.flatMap(({ profileId, conversationId }) => (conversationId !== null && conversationStandIn(room.id, profileId, conversationId) === standIn ? [conversationId] : [])));
+  return watched[0] ?? null;
+}
+
+/**
  * A room as a person in it sees it: its people by id and role alone, whom they tag and see vote, nothing of the
  * workspace its agents work in, the models the owner chose for them, what they are given or whether they run in a sandbox, and in place of each
- * agent's conversation there, which they never open, a stand-in that names none; of an agent someone brought, who did,
- * its name and kind, and whether it is here.
+ * agent's conversation there a stand-in that names none; of an agent someone brought, who did, its name and kind, and
+ * whether it is here.
  */
 const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, membersBringAgents, createdAt }: Room): Room => ({
   id,
@@ -27,7 +43,7 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, m
   workspaceId: "",
   agents: agents.map(({ profileId, conversationId, answering, brought }) => ({
     profileId,
-    conversationId: conversationId === null ? null : agentStandIn(id, profileId),
+    conversationId: conversationId === null ? null : conversationStandIn(id, profileId, conversationId),
     answering,
     ...PROFILES_MODEL,
     variables: {},
@@ -44,11 +60,70 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, m
   createdAt,
 });
 
-/** A page or question of a room's agent as people in the room see it: its agent's stand-in in place of its conversation. */
-const canvasItemSeen = (item: CanvasItem, roomId: string, profileId: string): CanvasItem => ({ ...item, conversationId: agentStandIn(roomId, profileId) });
+/** A page or question of a room's agent as people in the room see it: its conversation's stand-in in place of its conversation. */
+const canvasItemSeen = (item: CanvasItem, roomId: string, profileId: string): CanvasItem => ({ ...item, conversationId: conversationStandIn(roomId, profileId, item.conversationId) });
 
-/** A request a room's agent waits on, as an approver of the room sees it: its agent's stand-in in place of its conversation. */
-const approvalSeen = (approval: RoomApproval): RoomApproval => ({ ...approval, conversationId: agentStandIn(approval.roomId, approval.profileId) });
+/** A request a room's agent waits on, as an approver of the room sees it: its conversation's stand-in in place of its conversation. */
+const approvalSeen = (approval: RoomApproval): RoomApproval => ({ ...approval, conversationId: conversationStandIn(approval.roomId, approval.profileId, approval.conversationId) });
+
+/**
+ * A room agent's conversation as a person who reads its work sees it: under its stand-in, whether it is at work, and
+ * nothing of its settings, its title, what waits in it or what it took.
+ */
+const conversationSeen = ({ harness, profileId, status, roomId, createdAt, updatedAt }: Conversation, standIn: string): Conversation => ({
+  id: standIn,
+  workspaceId: "",
+  harness,
+  profileId,
+  title: "",
+  titleSetByUser: false,
+  acpSessionId: null,
+  askMode: "wait",
+  bypassPermissions: false,
+  status,
+  statusDetail: null,
+  openInTerminal: null,
+  contextUsage: null,
+  queuedMessages: [],
+  usageLimit: null,
+  jobWaits: [],
+  asyncTasks: [],
+  waitingFor: null,
+  pendingRequest: null,
+  lastWords: null,
+  activity: null,
+  configOptions: [],
+  position: 0,
+  ...(roomId !== undefined && { roomId }),
+  createdAt,
+  updatedAt,
+});
+
+/** What of a turn's end a person who reads the agent's work sees: not what the turn took or on which model, which the room tells its owner alone. */
+const MEASURES_SEEN = ["startedAt", "toolCalls", "filesEdited"] as const;
+
+const measuresSeen = (spend: Partial<Record<(typeof MEASURES_SEEN)[number], number>>) =>
+  Object.fromEntries(MEASURES_SEEN.flatMap((measure) => (spend[measure] === undefined ? [] : [[measure, spend[measure]]])));
+
+/** What an agent's session tells of its own state, which is the owner's: its commands, its title and its model choices. */
+const OWNERS_SESSION_STATE = new Set(["available_commands_update", "session_info_update", "config_option_update"]);
+
+/**
+ * An event of a room agent's conversation as a person who reads its work sees it: none of the session's own state, and
+ * a turn's end or failure without what it took; null for one they don't see.
+ */
+function eventSeen(stored: StoredEvent): StoredEvent | null {
+  const { event } = stored;
+  if (event.type === "acp" && OWNERS_SESSION_STATE.has(event.update.sessionUpdate)) return null;
+  if (event.type === "turn-end") return { ...stored, event: { type: "turn-end", stopReason: event.stopReason, ...(event.cutShortByRestart && { cutShortByRestart: true }), ...measuresSeen(event) } };
+  if (event.type === "error") {
+    const { message, problem, usageLimit, authRequired, continuable, endsTurn } = event;
+    return { ...stored, event: { type: "error", message, ...(problem && { problem }), ...(usageLimit && { usageLimit }), ...(authRequired && { authRequired }), ...(continuable && { continuable }), ...(endsTurn && { endsTurn }), ...measuresSeen(event) } };
+  }
+  return stored;
+}
+
+const eventsSeen = (events: StoredEvent[]) => events.flatMap((event) => eventSeen(event) ?? []);
 
 /** A room's agent as people in the room see it: its name and the agent it runs on, none of its settings. */
 const agentSeen = ({ id, name, harness }: Profile): Profile => ({
@@ -123,19 +198,62 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
   const waitsFor = (socket: SocketData) => (waiting: RoomApproval | RoomTaskApproval) => isIn(socket, waiting.roomId) && waiting.approvers.includes(socket.personId);
 
   const agentsOf = (rooms: Room[]) => agentsOfRooms(store, rooms);
+
+  /** The agents' conversations of the room whose work the person reads there, each by its real id with its stand-in. */
+  const watchedIn = (room: Room, personId: string) =>
+    new Map(
+      seesAgentsWorkIn(room, personId)
+        ? room.agents.flatMap(({ profileId, conversationId }) => (conversationId === null ? [] : [[conversationId, conversationStandIn(room.id, profileId, conversationId)] as const]))
+        : [],
+    );
+
+  /** A conversation an agent works in now, by its stand-in and room, in a room where the person reads the agents' work; null for any other. */
+  const watched = (conversationId: string, socket: SocketData) => {
+    const roomId = store.findConversation(conversationId)?.roomId;
+    const room = typeof roomId === "string" ? store.findRoom(roomId) : undefined;
+    const standIn = room && watchedIn(room, socket.personId).get(conversationId);
+    return room && standIn ? { standIn, roomId: room.id } : null;
+  };
+
+  const watchedStandIn = (conversationId: string, socket: SocketData) => watched(conversationId, socket)?.standIn ?? null;
+
+  /** The page is told of a conversation it may read, under its stand-in; one it was told of and may read no longer, of the agent's past ones or after a change of role, goes, and so does following it. */
+  const watchedConversationsNews = (room: Room, socket: SocketData, conversations: Conversation[]): ServerMessage[] => {
+    const readable = watchedIn(room, socket.personId);
+    const gone = [...socket.agentConversationsShown].filter(([conversationId, shown]) => shown.roomId === room.id && !readable.has(conversationId));
+    gone.forEach(([conversationId]) => {
+      socket.agentConversationsShown.delete(conversationId);
+      socket.subscriptions.delete(conversationId);
+      socket.lowDataSubscriptions.delete(conversationId);
+    });
+    const added = conversations.flatMap((conversation) => {
+      const standIn = readable.get(conversation.id);
+      if (standIn === undefined || socket.agentConversationsShown.has(conversation.id)) return [];
+      socket.agentConversationsShown.set(conversation.id, { standIn, roomId: room.id });
+      return [{ type: "conversation.upserted", conversation: conversationSeen(conversation, standIn) } satisfies ServerMessage];
+    });
+    return [...gone.map(([, { standIn }]): ServerMessage => ({ type: "conversation.deleted", conversationId: standIn })), ...added];
+  };
+
+  const agentConversationsOf = (room: Room) =>
+    room.agents.flatMap(({ conversationId }) => {
+      const conversation = conversationId === null ? undefined : store.findConversation(conversationId);
+      return conversation ? [conversation] : [];
+    });
   const isAgentOfTheirRooms = (profileId: string, socket: SocketData) =>
     store.roomsOf(socket.personId).some(({ agents }) => agents.some((agent) => agent.profileId === profileId));
   const peopleSeen = (personId: string) => peopleSeenBy(store, personId);
 
   /** The room as it is now for a person in it, with its agents, which they may not have been told of; for a person just taken out of it, that it is gone. */
   const roomNewsFor = (room: Room, socket: SocketData): ServerMessage[] => {
+    const conversations = watchedConversationsNews(room, socket, agentConversationsOf(room));
     if (room.people.some(({ personId }) => personId === socket.personId)) {
       socket.roomsShown.add(room.id);
       const agents = agentsOf([room]).map((profile): ServerMessage => ({ type: "profile.upserted", profile: agentSeen(profile) }));
-      return [...agents, { type: "room.upserted", room: roomSeenBy(room) }];
+      return [...agents, ...conversations, { type: "room.upserted", room: roomSeenBy(room) }];
     }
     socket.roomSubscriptions.delete(room.id);
-    return shownIf(socket.roomsShown.delete(room.id), { type: "room.deleted", roomId: room.id });
+    return [...conversations, ...shownIf(socket.roomsShown.delete(room.id), { type: "room.deleted", roomId: room.id })];
   };
 
   const canvasItemFor = (item: CanvasItem, socket: SocketData): ServerMessage[] => {
@@ -160,14 +278,16 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     return { here: here.filter((personId) => seen.has(personId)), writing: writing.filter(({ personId, threadId }) => seen.has(personId) && inTheRoom(threadId)) };
   };
 
-  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting }: Snapshot, socket: SocketData): Snapshot => {
+  const snapshotFor = ({ hostRunId, roomApprovals, roomTasksWaiting, conversations }: Snapshot, socket: SocketData): Snapshot => {
     const rooms = store.roomsOf(socket.personId);
     rooms.forEach(({ id }) => socket.roomsShown.add(id));
+    socket.agentConversationsShown.clear();
+    const conversationsNews = rooms.flatMap((room) => watchedConversationsNews(room, socket, conversations));
     return {
       type: "snapshot",
       workspaces: [],
       workspaceGroups: [],
-      conversations: [],
+      conversations: conversationsNews.flatMap((message) => (message.type === "conversation.upserted" ? [message.conversation] : [])),
       rooms: rooms.map(roomSeenBy),
       roomApprovals: roomApprovals.filter(waitsFor(socket)).map(approvalSeen),
       roomTasksWaiting: roomTasksWaiting.filter(waitsFor(socket)),
@@ -252,8 +372,18 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "workspace.deleted": HIDDEN,
     "workspace-group.upserted": HIDDEN,
     "workspace-group.deleted": HIDDEN,
-    "conversation.upserted": HIDDEN,
-    "conversation.deleted": HIDDEN,
+    "conversation.upserted": ({ conversation }, socket) => {
+      const shown = watched(conversation.id, socket);
+      if (shown === null) return [];
+      socket.agentConversationsShown.set(conversation.id, shown);
+      return [{ type: "conversation.upserted", conversation: conversationSeen(conversation, shown.standIn) }];
+    },
+    "conversation.deleted": ({ conversationId }, socket) => {
+      const shown = socket.agentConversationsShown.get(conversationId);
+      if (!shown) return [];
+      socket.agentConversationsShown.delete(conversationId);
+      return [{ type: "conversation.deleted", conversationId: shown.standIn }];
+    },
     "room.created": HIDDEN,
     "room.upserted": ({ room }, socket) => roomNewsFor(room, socket),
     "room.deleted": (message, socket) => shownIf(socket.roomsShown.delete(message.roomId), message),
@@ -285,13 +415,26 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
     "brought-agents.listed": HIDDEN,
     "machine.agent-brought": HIDDEN,
     "rooms.people-here": HIDDEN,
-    "conversation.history": HIDDEN,
-    "conversation.earlier": HIDDEN,
+    "conversation.history": (message, socket) => {
+      const standIn = watchedStandIn(message.conversationId, socket);
+      if (standIn === null) return [];
+      const canvas = message.canvas.filter(shownOnRoomCanvas).map((item) => ({ ...item, conversationId: standIn }));
+      return [{ ...message, conversationId: standIn, events: eventsSeen(message.events), canvas }];
+    },
+    "conversation.earlier": (message, socket) => {
+      const standIn = watchedStandIn(message.conversationId, socket);
+      return standIn === null ? [] : [{ ...message, conversationId: standIn, events: eventsSeen(message.events) }];
+    },
     "tool-output.got": HIDDEN,
     "conversation.found": HIDDEN,
-    "tool-raw-output.got": HIDDEN,
+    /** Only ever the answer to the page that asked, which the host let ask only of a conversation it reads. */
+    "tool-raw-output.got": (message) => [message],
     "async-task.output.got": HIDDEN,
-    "conversation.event": HIDDEN,
+    "conversation.event": ({ conversationId, event }, socket) => {
+      const standIn = watchedStandIn(conversationId, socket);
+      const seen = standIn === null ? null : eventSeen(event);
+      return standIn === null || seen === null ? [] : [{ type: "conversation.event", conversationId: standIn, event: seen }];
+    },
     "conversation.revert-previewed": HIDDEN,
     "conversation.reverted": HIDDEN,
     "conversation.revert-failed": HIDDEN,

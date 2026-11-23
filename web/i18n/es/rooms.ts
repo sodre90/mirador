@@ -41,7 +41,7 @@ export const rooms: Messages["rooms"] = {
   inviteSomeone: "Invitar a alguien",
   inviteTo: (room) => `Invitar a alguien a ${room}`,
   joinsAs: "Entra como",
-  roleChoices: { approver: "Aprobador: puede pedir tareas a los agentes y aprobar sus solicitudes", member: "Miembro: puede pedir tareas a los agentes", guest: "Invitado: puede chatear" },
+  roleChoices: { approver: "Aprobador: puede pedir tareas a los agentes, ver su trabajo y aprobar sus solicitudes", collaborator: "Colaborador: puede pedir tareas a los agentes y ver su trabajo", member: "Miembro: puede pedir tareas a los agentes", guest: "Invitado: puede chatear" },
   connect: "Conexión",
   connectsBy: (way) => `Conexión: ${way}`,
   connectChoices: {
@@ -129,7 +129,7 @@ export const rooms: Messages["rooms"] = {
   emptyForGuest: "Como invitado escribes junto con todos los demás aquí. Los miembros les dan tareas a los agentes.",
   guestPlaceholder: (room) => `Escribe en ${room}…`,
   people: "Personas",
-  peopleHint: "Un miembro escribe, etiqueta a los agentes y responde en sus hilos; un invitado solo escribe. Un aprobador hace lo mismo que un miembro y, además, responde a las solicitudes de los agentes y aprueba las tareas de los demás; sus propias tareas nunca esperan. Solo tú cambias la sala.",
+  peopleHint: "Un miembro escribe, etiqueta a los agentes y responde en sus hilos; un invitado solo escribe. Un colaborador hace lo mismo que un miembro y, además, ve en los hilos todo el trabajo de los agentes: lo que ejecutan y leen, con su salida, y lo que piensan. Un aprobador hace lo mismo que un colaborador y, además, responde a las solicitudes de los agentes y aprueba las tareas de los demás; sus propias tareas nunca esperan. Solo tú cambias la sala.",
   noPeople: "Nadie más está en esta sala todavía.",
   peopleReach: {
     "ask-everything": "A través de los agentes, las personas de aquí llegan a lo que permitas: leer, editar y ejecutar comandos te preguntan antes.",
@@ -285,8 +285,8 @@ export const rooms: Messages["rooms"] = {
     discard: "Descartar",
   },
   peoplesTasksHint: "Si no, la etiqueta o el seguimiento de un miembro no llega a ningún agente hasta que lo permitas.",
-  roles: { approver: "Aprobador", member: "Miembro", guest: "Invitado" },
-  authorRoles: { owner: "Propietario", approver: "Aprobador", member: "Miembro", guest: "Invitado", agent: "Agente", "member's agent": "Agente de un miembro" },
+  roles: { approver: "Aprobador", collaborator: "Colaborador", member: "Miembro", guest: "Invitado" },
+  authorRoles: { owner: "Propietario", approver: "Aprobador", collaborator: "Colaborador", member: "Miembro", guest: "Invitado", agent: "Agente", "member's agent": "Agente de un miembro" },
   roleOf: (person) => `Rol de ${person}`,
   nameless: "Alguien sin nombre",
   inNoRoom: "Aún no estás en ninguna sala. Cuando el propietario de esta máquina te añada a una, aparecerá aquí.",

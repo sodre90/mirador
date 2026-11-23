@@ -315,7 +315,7 @@ describe("who writes in a room", () => {
 });
 
 describe("a person's presence and writing, as the host takes them", () => {
-  const inRooms = { roleIn: (roomId: string) => (roomId === "launch" ? ("member" as const) : null) };
+  const inRooms = { roleIn: (roomId: string) => (roomId === "launch" ? ("member" as const) : null), conversationBehind: () => null };
   const refusal = (sent: unknown) => {
     try {
       admittedFromPerson(sent, inRooms);

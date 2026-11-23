@@ -462,7 +462,7 @@ describe("taking a brought agent out", () => {
 });
 
 describe("what a person's Mirador may send about the agents they brought", () => {
-  const mia = { personId: "m1", roleIn: (roomId: string) => (roomId === "r1" ? ("member" as const) : null) };
+  const mia = { personId: "m1", roleIn: (roomId: string) => (roomId === "r1" ? ("member" as const) : null), conversationBehind: () => null };
   const admitted = (sent: Record<string, unknown>) => refusal(() => admittedFromPerson(sent, mia));
 
   test("ids of the room's form and texts of bounded length, in a room they are in", () => {

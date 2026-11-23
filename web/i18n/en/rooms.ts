@@ -50,7 +50,7 @@ export const rooms = {
   inviteSomeone: "Invite someone",
   inviteTo: (room: string) => `Invite someone to ${room}`,
   joinsAs: "They join as",
-  roleChoices: { approver: "Approver: can ask the agents and approve their requests", member: "Member: can ask the agents", guest: "Guest: can chat" } satisfies Record<RoomRole, string>,
+  roleChoices: { approver: "Approver: can ask the agents, see their work and approve their requests", collaborator: "Collaborator: can ask the agents and see their work", member: "Member: can ask the agents", guest: "Guest: can chat" } satisfies Record<RoomRole, string>,
   connect: "Connect",
   connectsBy: (way: string) => `Connect: ${way}`,
   connectChoices: {
@@ -138,7 +138,7 @@ export const rooms = {
   emptyForGuest: "As a guest you write along with everyone here. The members give the agents tasks.",
   guestPlaceholder: (room: string) => `Write in ${room}…`,
   people: "People",
-  peopleHint: "A member writes, tags the agents and follows up in their threads; a guest only writes. An approver does what a member does, and also answers the agents' requests and allows people's tasks; their own tasks never wait. Only you change the room.",
+  peopleHint: "A member writes, tags the agents and follows up in their threads; a guest only writes. A collaborator does what a member does, and also sees all of the agents' work in their threads: what they run and read, output included, and their thinking. An approver does what a collaborator does, and also answers the agents' requests and allows people's tasks; their own tasks never wait. Only you change the room.",
   noPeople: "Nobody else is in this room yet.",
   peopleReach: {
     "ask-everything": "Through the agents, people here reach what you allow: reading, edits and commands ask you first.",
@@ -297,8 +297,8 @@ export const rooms = {
     discard: "Discard",
   },
   peoplesTasksHint: "Otherwise a member's tag or follow-up reaches no agent until you allow it.",
-  roles: { approver: "Approver", member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
-  authorRoles: { owner: "Owner", approver: "Approver", member: "Member", guest: "Guest", agent: "Agent", "member's agent": "Member's agent" } satisfies Record<RoomAuthorRole, string>,
+  roles: { approver: "Approver", collaborator: "Collaborator", member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
+  authorRoles: { owner: "Owner", approver: "Approver", collaborator: "Collaborator", member: "Member", guest: "Guest", agent: "Agent", "member's agent": "Member's agent" } satisfies Record<RoomAuthorRole, string>,
   roleOf: (person: string) => `Role of ${person}`,
   nameless: "Someone without a name",
   inNoRoom: "You are in no room yet. When the owner of this machine adds you to one, it shows here.",

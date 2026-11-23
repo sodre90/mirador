@@ -40,7 +40,7 @@ export const rooms: Messages["rooms"] = {
   inviteSomeone: "邀请某人",
   inviteTo: (room) => `邀请某人进入 ${room}`,
   joinsAs: "对方加入的身份",
-  roleChoices: { approver: "批准人：可以让 Agent 做事，并批准它们的请求", member: "成员：可以让 Agent 做事", guest: "访客：可以聊天" },
+  roleChoices: { approver: "批准人：可以让 Agent 做事，查看它们的工作，并批准它们的请求", collaborator: "协作者：可以让 Agent 做事，并查看它们的工作", member: "成员：可以让 Agent 做事", guest: "访客：可以聊天" },
   connect: "连接方式",
   connectsBy: (way) => `连接方式：${way}`,
   connectChoices: {
@@ -126,7 +126,7 @@ export const rooms: Messages["rooms"] = {
   emptyForGuest: "作为访客，你可以和这里的大家一起写。由成员给 Agent 分配任务。",
   guestPlaceholder: (room) => `在 ${room} 中写点什么…`,
   people: "人员",
-  peopleHint: "成员可以发言、标记 Agent 并在其话题中跟进；访客只能发言。批准人能做成员能做的一切，还能回应 Agent 的请求并批准他人的任务；他们自己的任务从不等待。只有你能更改房间。",
+  peopleHint: "成员可以发言、标记 Agent 并在其话题中跟进；访客只能发言。协作者能做成员能做的一切，还能在话题中看到 Agent 的全部工作：它们运行和读取的内容（包括输出）以及思考过程。批准人能做协作者能做的一切，还能回应 Agent 的请求并批准他人的任务；他们自己的任务从不等待。只有你能更改房间。",
   noPeople: "这个房间里还没有其他人。",
   peopleReach: {
     "ask-everything": "通过 Agent，这里的人能接触到你允许的内容：读取、编辑和命令都会先问你。",
@@ -277,8 +277,8 @@ export const rooms: Messages["rooms"] = {
     discard: "丢弃",
   },
   peoplesTasksHint: "否则，成员的标记或跟进要等你允许后才会到达 Agent。",
-  roles: { approver: "批准人", member: "成员", guest: "访客" },
-  authorRoles: { owner: "所有者", approver: "批准人", member: "成员", guest: "访客", agent: "Agent", "member's agent": "成员的 Agent" },
+  roles: { approver: "批准人", collaborator: "协作者", member: "成员", guest: "访客" },
+  authorRoles: { owner: "所有者", approver: "批准人", collaborator: "协作者", member: "成员", guest: "访客", agent: "Agent", "member's agent": "成员的 Agent" },
   roleOf: (person) => `${person} 的角色`,
   nameless: "没有名字的人",
   inNoRoom: "你还不在任何房间里。这台机器的所有者把你加入房间后，它会显示在这里。",

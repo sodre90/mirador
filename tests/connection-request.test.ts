@@ -36,7 +36,7 @@ describe("Connection.send", () => {
 
   test("signed in as a person other than the owner, sends nothing the host refuses people, held or not", () => {
     const { connection, sentMessages } = connectionWithSocket();
-    connection.send({ type: "conversation.subscribe", conversationId: "c1" });
+    connection.send({ type: "conversation.cancel", conversationId: "c1" });
     connection.send({ type: "room.subscribe", roomId: "r1" });
     connection.dispatchMessage(snapshotFor("mia"));
     expect(connection.send({ type: "room.usage.get", requestId: "u1", roomId: "r1", since: null })).toBe(false);
