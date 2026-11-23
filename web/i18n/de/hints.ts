@@ -73,17 +73,17 @@ export const hints: Messages["hints"] = {
   canvasAddress:
     "Woher eine Canvas-Seite D3, Mermaid und three lädt. Mirador stellt sie auf einem eigenen Port (4601) bereit, einem anderen Origin als dem der App, damit eine Seite, die ein Agent geschrieben hat, nicht an den Speicher dieses Mirador herankommt. Ein Proxy muss auch diesen Port weiterleiten: https://macbook.example.ts.net:4601.",
   reachRoute:
-    "Mirador ist für andere Geräte immer nur auf einem Weg erreichbar. Eine Auswahl zeigt ihn nur an; erst ihr Button Diese verwenden oder Adresse speichern wendet ihn an und nimmt den anderen zurück, sodass hier nichts eingestellt ist, was der Host nicht nutzt. Der Host liest es ab seinem nächsten Start. Eine Adresse, unter der er erreichbar ist, muss ein Proxy bereitstellen, etwa tailscale serve, oder der Host stellt selbst HTTPS im Netzwerk bereit, mit einem Zertifikat, das er erzeugt.",
+    "Browser und andere Computer erreichen Mirador immer nur auf einem Weg. Eine Auswahl zeigt ihn nur an; erst Speichern wendet ihn an und nimmt den anderen zurück, sodass hier nichts eingestellt ist, was der Host nicht nutzt. Der Host liest es ab seinem nächsten Start. Eine Adresse, unter der er erreichbar ist, muss ein Proxy bereitstellen, etwa tailscale serve, oder der Host stellt selbst HTTPS im Netzwerk bereit, mit einem Zertifikat, das er erzeugt.",
   proxyElsewhere:
     "Für einen Proxy wie Nginx Proxy Manager auf einem anderen Rechner deines Netzwerks, der die Ports dieses Rechners nicht erreichen kann. Beim Speichern der Adresse stellt Mirador dann auch HTTPS im Netzwerk bereit, und der Proxy leitet an diese Ports weiter.",
   networkReachability:
     "Mirador stellt auf diesem Port selbst HTTPS bereit, mit einer Zertifizierungsstelle, die es erzeugt, sodass Geräte im selben Netzwerk weder Proxy noch Adresse brauchen. Jeder Browser warnt einmal wegen des Zertifikats (oder vertraut ihm dauerhaft, sobald er mirador-ca.pem installiert).",
   useThisNetwork:
-    "Lässt Geräte im selben Netzwerk dieses Mirador über HTTPS erreichen, wie die Auswahl unten. Der Host verwendet es ab seinem nächsten Start.",
+    "Lässt Geräte im selben Netzwerk dieses Mirador über HTTPS erreichen, wie Dieses Netzwerk unter Verbindung. Der Host verwendet es ab seinem nächsten Start.",
   inviteDevice:
     "Erzeugt einen Einmalcode, mit dem ein anderer Browser oder eine App diesem Mirador innerhalb von 15 Minuten beitritt. Ein beigetretenes Gerät kann hier alles, auch Befehle in Terminals ausführen.",
-  inviteRoute:
-    "Peer-to-Peer erreicht diesen Mac von überall, ohne VPN, über die Mirador-App auf einem Handy; ein Browser kann nur über die Adresse beitreten. QR-Code und Link ändern sich mit der Auswahl.",
+  inviteJoins:
+    "Ein Handy mit der Mirador-App tritt über Peer-to-Peer bei, wo das funktioniert: aus den meisten Netzwerken, ohne VPN. Ein Browser oder ein anderer Computer tritt unter der Adresse dieses Rechners bei. QR-Code und Link ändern sich mit der Auswahl.",
   removeMachineArmed:
     "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Er läuft weiter, und dieser Computer bleibt unter seinen Geräten, bis du ihn dort widerrufst.",
   thisComputer: "Die eigenen Arbeitsbereiche und Unterhaltungen dieses Computers",

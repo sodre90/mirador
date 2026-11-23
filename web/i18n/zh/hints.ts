@@ -68,17 +68,17 @@ export const hints: Messages["hints"] = {
   canvasAddress:
     "画布页面加载 D3、Mermaid 和 three 的地址。Mirador 在它们自己的端口（4601）上提供这些库，这是与应用分开的源，所以 Agent 写的页面无法访问这个 Mirador 自己的存储。代理也必须转发这个端口：https://macbook.example.ts.net:4601。",
   reachRoute:
-    "Mirador 一次只通过一种方式连接其他设备。选一个选项只是预览；它的“使用这个”或“保存地址”按钮才会应用并取消另一个，所以这里不会出现 host 没有使用的设置。host 从下次启动起读取它。可访问的地址必须由代理提供，例如 tailscale serve，或者由 host 自己在网络上用它生成的证书提供 HTTPS。",
+    "浏览器和其他电脑一次只通过一种方式访问 Mirador。选一个选项只是预览；“保存”才会应用并取消另一个，所以这里不会出现 host 没有使用的设置。host 从下次启动起读取它。可访问的地址必须由代理提供，例如 tailscale serve，或者由 host 自己在网络上用它生成的证书提供 HTTPS。",
   proxyElsewhere:
     "适用于你网络中另一台机器上的代理，例如 Nginx Proxy Manager，它无法访问这台机器自己的端口。保存地址后，Mirador 也会在网络上提供 HTTPS，由代理转发到这些端口。",
   networkReachability:
     "Mirador 在这个端口上自己提供 HTTPS，使用它生成的证书颁发机构，所以同一网络上的设备不需要代理，也不需要地址。每个浏览器会对证书警告一次（安装 mirador-ca.pem 后则永久信任）。",
   useThisNetwork:
-    "让同一网络上的设备通过 HTTPS 访问这个 Mirador，与下方的选项相同。host 从下次启动起使用它。",
+    "让同一网络上的设备通过 HTTPS 访问这个 Mirador，与“连接”中的“这个网络”相同。host 从下次启动起使用它。",
   inviteDevice:
     "生成一次性邀请码，另一个浏览器或应用可在 15 分钟内用它加入这个 Mirador。加入的设备可以在这里做任何事，包括在终端里运行命令。",
-  inviteRoute:
-    "点对点方式可以从任何地方连接这台 Mac，无需 VPN，需通过手机上的 Mirador 应用；浏览器只能通过地址加入。二维码和链接会随选择而变化。",
+  inviteJoins:
+    "装有 Mirador 应用的手机在可用时通过点对点加入：大多数网络下都行，无需 VPN。浏览器或另一台电脑通过这台机器的地址加入。二维码和链接会随选择而变化。",
   removeMachineArmed: "再次点击，将从列表中移除这台机器。它会继续运行，这台电脑仍留在它的设备中，直到你在那里撤销。",
   thisComputer: "这台电脑自己的工作区和对话",
   manageMachines: "添加或移除机器",

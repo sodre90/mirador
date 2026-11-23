@@ -69,17 +69,17 @@ export const hints: Messages["hints"] = {
   canvasAddress:
     "Ahonnan egy vászonoldal betölti a D3-at, a Mermaidot és a three-t. A Mirador saját porton szolgálja ki őket (4601), az alkalmazásétól eltérő originen, így egy ágens által írt oldal nem fér hozzá a Mirador saját tárolójához. Egy proxynak ezt a portot is továbbítania kell: https://macbook.example.ts.net:4601.",
   reachRoute:
-    "A Mirador egyszerre csak egyféleképpen éri el a többi készüléket. A kiválasztás önmagában csak megmutatja a lehetőséget; a Használat vagy a Cím mentése gomb alkalmazza, és visszavonja a másikat, így itt nem marad olyan beállítás, amelyet a host nem használ. A host a következő indulásakor olvassa be. Egy elérhető címet egy proxynak kell adnia, például a tailscale serve-nek, különben a host maga szolgál ki HTTPS-t a hálózaton egy általa készített tanúsítvánnyal.",
+    "A böngészők és más számítógépek egyszerre csak egyféleképpen érik el a Miradort. A kiválasztás önmagában csak megmutatja a lehetőséget; a Mentés alkalmazza, és visszavonja a másikat, így itt nem marad olyan beállítás, amelyet a host nem használ. A host a következő indulásakor olvassa be. Egy elérhető címet egy proxynak kell adnia, például a tailscale serve-nek, különben a host maga szolgál ki HTTPS-t a hálózaton egy általa készített tanúsítvánnyal.",
   proxyElsewhere:
     "Egy másik gépen futó proxyhoz a hálózatodon, például Nginx Proxy Managerhez, amely nem éri el ennek a gépnek a saját portjait. A cím mentésekor a Mirador ilyenkor HTTPS-t is kiszolgál a hálózaton, és a proxy ezekre a portokra továbbít.",
   networkReachability:
     "A Mirador maga szolgál ki HTTPS-t ezen a porton, egy általa készített tanúsítványkiadóval, így az ugyanazon a hálózaton lévő készülékeknek nem kell sem proxy, sem cím. Minden böngésző egyszer figyelmeztet a tanúsítványra (vagy végleg megbízik benne, ha telepíti a mirador-ca.pem-et).",
   useThisNetwork:
-    "Az ugyanazon a hálózaton lévő eszközök HTTPS-en érik el ezt a Miradort, ahogy a lenti választás is. A host a következő indulásától használja.",
+    "Az ugyanazon a hálózaton lévő készülékek HTTPS-en érik el ezt a Miradort, ahogy a Kapcsolat alatti Ez a hálózat lehetőséggel. A host a következő indulásától használja.",
   inviteDevice:
     "Egyszer használható kódot készít, amellyel egy másik böngésző vagy alkalmazás 15 percen belül csatlakozhat ehhez a Miradorhoz. Egy csatlakozott készülék itt mindent megtehet, terminálokban parancsokat is futtathat.",
-  inviteRoute:
-    "Az egyenrangú (peer to peer) kapcsolat bárhonnan eléri ezt a Macet VPN nélkül, egy telefonon futó Mirador alkalmazáson keresztül; böngésző csak a címen csatlakozhat. A QR-kód és a link a választással együtt változik.",
+  inviteJoins:
+    "Egy telefon a Mirador alkalmazással egyenrangú (peer to peer) kapcsolattal csatlakozik, ahol az működik: a legtöbb hálózatról, VPN nélkül. Böngésző vagy másik számítógép ennek a gépnek a címén csatlakozik. A QR-kód és a link a választással együtt változik.",
   removeMachineArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Tovább fut, és ez a számítógép a készülékei között marad, amíg ott vissza nem vonod.",
   thisComputer: "Ennek a számítógépnek a saját munkaterületei és beszélgetései",
   manageMachines: "Gépek hozzáadása vagy eltávolítása",

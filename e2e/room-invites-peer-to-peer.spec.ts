@@ -347,7 +347,7 @@ test("on a machine reached both ways, room invites connect peer to peer until Se
   };
   const connectChoice = async () => {
     const settings = await openSettings(page, "Devices");
-    return { settings, choice: settings.getByRole("group", { name: "Room invites connect" }) };
+    return { settings, choice: settings.getByLabel("Room invites") };
   };
 
   await test.step("an invite connects peer to peer at first, with no address in it", async () => {
@@ -363,12 +363,12 @@ test("on a machine reached both ways, room invites connect peer to peer until Se
 
   await test.step("Settings name peer to peer until the owner picks the address, which the host keeps", async () => {
     const { settings, choice } = await connectChoice();
-    await expect(choice.getByLabel("Directly, peer to peer")).toBeChecked();
-    await choice.getByLabel("At this machine's address").check();
+    await expect(choice.locator("option:checked")).toHaveText("Directly, peer to peer");
+    await choice.selectOption("At this machine's address");
     await settings.getByRole("button", { name: "Close" }).click();
     await page.reload();
     const reopened = await connectChoice();
-    await expect(reopened.choice.getByLabel("At this machine's address")).toBeChecked();
+    await expect(reopened.choice.locator("option:checked")).toHaveText("At this machine's address");
     await reopened.settings.getByRole("button", { name: "Close" }).click();
   });
 

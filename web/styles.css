@@ -8123,21 +8123,40 @@ body.reordering * {
   color: var(--danger);
 }
 
-.device-list {
-  display: grid;
-  gap: 6px;
+.settings-rows {
   margin: 8px 0 12px;
   padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   list-style: none;
 }
 
-.device-list li {
+.settings-rows > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 8px 12px;
+}
+
+.settings-rows > li + li {
+  border-top: 1px solid var(--border);
+}
+
+.devices-heading {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 6px 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  margin-top: 24px;
+}
+
+.modal.settings .devices-heading h3 {
+  margin: 0;
+}
+
+.modal.settings .connection-settings h3 {
+  margin-top: 24px;
 }
 
 .device-name {
@@ -8156,6 +8175,7 @@ body.reordering * {
 
 .device-seen {
   flex: 1;
+  min-width: 180px;
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
 }
@@ -8173,11 +8193,28 @@ body.reordering * {
   background: var(--ok);
 }
 
+button.device-revoke {
+  margin-left: auto;
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+button.device-revoke:hover:not(:disabled) {
+  color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .device-seen {
+    order: 1;
+    flex-basis: 100%;
+  }
+}
+
 .connected-devices-switch {
   display: flex;
   align-items: center;
   gap: 6px;
-  margin-top: 10px;
 }
 
 .sidebar .connected-devices {
@@ -8197,14 +8234,7 @@ body.reordering * {
 }
 
 .device-list li.device-none {
-  border-style: dashed;
   color: var(--muted);
-}
-
-.device-invite {
-  display: grid;
-  gap: 8px;
-  justify-items: start;
 }
 
 .plugin-title {
@@ -8743,24 +8773,121 @@ body.reordering * {
 
 .invite {
   display: grid;
-  gap: 4px;
+  gap: 12px;
+  margin: 8px 0 12px;
+  padding: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+}
+
+.invite-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.invite-joins {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
+}
+
+.invite-joins label {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.invite-joins label + label {
+  border-left: 1px solid var(--border);
+}
+
+.invite-joins label[data-chosen="true"] {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+
+.invite-joins label:has(:focus-visible) {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* The segments show the choice; the radios stay for the keyboard and screen readers. */
+.invite-joins input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+}
+
+.invite-body {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.invite-body .qr-code {
+  flex: none;
+}
+
+.invite-how {
+  flex: 1 1 260px;
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: 8px;
+  min-width: 0;
+  max-width: 64ch;
+}
+
+.invite-how .hint,
+.invite-how .warning {
+  margin: 0;
+}
+
+.invite-ways {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+}
+
+.invite-over {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  border-color: var(--border);
+}
+
+.invite-over > [role="status"] {
+  flex: 1;
+}
+
+.invite-over.joined {
+  border-color: var(--ok);
+}
+
+.invite-over.joined > [role="status"] {
+  color: var(--ok);
+}
+
+.invite-over.joined > [role="status"]::before {
+  content: "✓ ";
 }
 
 .invite-without-link {
   display: grid;
   gap: 6px;
   justify-items: start;
-  max-width: 60ch;
 }
 
 .invite-without-link p {
   margin: 0;
-}
-
-.invite-routes {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
 }
 
 .invite-code {
@@ -8779,6 +8906,57 @@ body.reordering * {
   border-radius: 6px;
 }
 
+.connection-what {
+  flex: 1 1 220px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.connection-what .hint {
+  margin: 0;
+}
+
+.peer-to-peer-problem {
+  color: var(--warn-on-soft);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.peer-to-peer-status {
+  color: var(--muted);
+}
+
+.peer-to-peer-status[data-status="ready"] {
+  color: var(--ok);
+}
+
+.peer-to-peer-status:is([data-status="broker-unreachable"], [data-status="sidecar-unavailable"]) {
+  color: var(--warn-on-soft);
+}
+
+.settings-rows > li.restart-needed {
+  margin: 0;
+  background: var(--warn-soft);
+}
+
+.address-editor {
+  flex: 1;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.address-editor .hint,
+.address-editor .setting-problem {
+  margin: 0;
+}
+
+.address-editor-actions {
+  display: flex;
+  gap: 8px;
+}
+
 .public-address {
   display: grid;
   gap: 8px;
@@ -8791,7 +8969,7 @@ body.reordering * {
 
 .address-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr auto;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
   align-items: end;
 }
@@ -8841,16 +9019,9 @@ body.reordering * {
   margin: 10px 0;
 }
 
-.route-card {
+.route-option {
   display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-}
-
-.route-card[data-chosen="true"] {
-  border-color: var(--accent);
+  gap: 2px;
 }
 
 .route-choice {
@@ -8860,8 +9031,9 @@ body.reordering * {
   font-weight: 600;
 }
 
-.route-card .hint {
-  margin: 0;
+.route-option > .hint,
+.route-controls {
+  padding-left: 20px;
 }
 
 .route-controls {
@@ -11251,26 +11423,6 @@ select.sandbox-folder-access:focus-visible {
   font-family: var(--mono);
   font-size: calc(11.5px * var(--font-scale));
   word-break: break-all;
-}
-
-.room-invites-connect {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin: 16px 0 0;
-  padding: 0;
-  border: none;
-}
-
-.room-invites-connect legend {
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-
-.room-invites-connect label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 /* A bar this narrow keeps its room for the title; ⌥B, /btw and selected text still open a side chat. */

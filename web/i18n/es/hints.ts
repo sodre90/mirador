@@ -73,17 +73,17 @@ export const hints: Messages["hints"] = {
   canvasAddress:
     "De dónde carga una página del lienzo D3, Mermaid y three. Mirador las sirve en un puerto propio (4601), un origen distinto del de la aplicación, para que una página escrita por un agente no pueda llegar al almacenamiento de este Mirador. Un proxy también tiene que reenviar ese puerto: https://macbook.example.ts.net:4601.",
   reachRoute:
-    "Mirador llega a otros dispositivos de una sola manera a la vez. Elegir una opción solo la muestra; su botón Usar esta o Guardar dirección la aplica y retira la otra, así que aquí no queda definido nada que el host no use. El host lo lee desde su próximo inicio. Una dirección en la que se pueda llegar a él tiene que darla un proxy, como tailscale serve, o el host sirve HTTPS en la red él mismo con un certificado que genera.",
+    "Los navegadores y otros equipos llegan a Mirador de una sola manera a la vez. Elegir una opción solo la muestra; Guardar la aplica y retira la otra, así que aquí no queda definido nada que el host no use. El host lo lee desde su próximo inicio. Una dirección en la que se pueda llegar a él tiene que darla un proxy, como tailscale serve, o el host sirve HTTPS en la red él mismo con un certificado que genera.",
   proxyElsewhere:
     "Para un proxy como Nginx Proxy Manager en otra máquina de tu red, que no puede llegar a los puertos de esta máquina. Al guardar la dirección, Mirador también sirve HTTPS en la red, y el proxy reenvía a esos puertos.",
   networkReachability:
     "Mirador sirve HTTPS él mismo en este puerto, con una autoridad de certificación que genera, así que los dispositivos de la misma red no necesitan proxy ni dirección. Cada navegador avisa una vez del certificado (o confía en él para siempre cuando instala mirador-ca.pem).",
   useThisNetwork:
-    "Permite que los dispositivos de la misma red lleguen a este Mirador por HTTPS, como la opción de abajo. El host lo usa desde su próximo inicio.",
+    "Permite que los dispositivos de la misma red lleguen a este Mirador por HTTPS, como Esta red en Conexión. El host lo usa desde su próximo inicio.",
   inviteDevice:
     "Genera un código de un solo uso con el que otro navegador o aplicación se une a este Mirador, durante 15 minutos. Un dispositivo unido puede hacer de todo aquí, incluso ejecutar comandos en las terminales.",
-  inviteRoute:
-    "De igual a igual llega a este Mac desde cualquier lugar, sin VPN, mediante la aplicación Mirador en un teléfono; un navegador solo puede unirse en la dirección. El código QR y el enlace cambian con la elección.",
+  inviteJoins:
+    "Un teléfono con la aplicación Mirador se une de igual a igual donde eso funciona: desde la mayoría de las redes, sin VPN. Un navegador u otro equipo se une en la dirección de esta máquina. El código QR y el enlace cambian con la elección.",
   removeMachineArmed:
     "Haz clic de nuevo para quitar esta máquina de la lista. Sigue funcionando, y este equipo permanece entre sus dispositivos hasta que lo revoques allí.",
   thisComputer: "Los espacios de trabajo y conversaciones de este equipo",

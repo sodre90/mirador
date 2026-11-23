@@ -56,10 +56,10 @@ test("a device joins over HTTPS with an invite link that names the host's certif
   await signIn(page, host);
   await addWorkspace(page, host.projectDir);
   const settings = await openSettings(page, "Devices");
-  const addressRoute = settings.getByRole("radio", { name: "At an address a proxy gives it" });
-  await expect(addressRoute, "the address the environment sets is what invite links use").toBeChecked();
-  await expect(addressRoute).toBeDisabled();
+  await expect(settings.getByText(`Address: 127.0.0.1:${host.port + 2}`), "the address the environment sets is what invite links use").toBeVisible();
+  await expect(settings.getByRole("button", { name: "Change…" })).toHaveCount(0);
   await expect(settings).toContainText("The host's environment sets how other devices reach it");
+  await expect(settings.getByRole("link", { name: "certificate authority" })).toHaveAttribute("href", "/mirador-ca.pem");
 
   const authority = authorityOf(host);
   const fingerprint = createHash("sha256").update(new X509Certificate(authority).raw).digest("base64url");
@@ -100,24 +100,27 @@ test("the host's own page loads canvas libraries from this machine, though agent
 test("turning the network on in Settings takes effect when the host restarts", async ({ page }) => {
   await signIn(page, hostSwitchedInSettings);
   let settings = await openSettings(page, "Devices");
-  const networkRoute = () => settings.getByRole("radio", { name: "Over the network, with no address" });
-  await networkRoute().check();
-  await settings.getByRole("button", { name: "Use this" }).click();
-  await expect(settings.getByText("Saved. The host uses it from its next start.")).toBeVisible();
+  const saveRoute = async (name: string) => {
+    await settings.getByRole("button", { name: "Change…" }).click();
+    await settings.getByRole("radio", { name }).check();
+    await settings.getByRole("button", { name: "Save" }).click();
+  };
+  await saveRoute("This network");
+  await expect(settings.getByText("After the next restart: this network")).toBeVisible();
   expect(JSON.parse(readFileSync(join(hostSwitchedInSettings.dataDir, "config.json"), "utf8"))).toEqual({ network: true });
 
   await settings.getByRole("button", { name: "Restart host" }).click();
   await expect(settings, "the page reloads once the restarted host answers").toBeHidden({ timeout: 30_000 });
   settings = await openSettings(page, "Devices");
-  await expect(networkRoute()).toBeChecked();
   await expect(settings.getByRole("link", { name: "certificate authority" })).toHaveAttribute("href", "/mirador-ca.pem");
-  await expect(settings.getByText(new RegExp(`reach it directly at https://.+:${hostSwitchedInSettings.port + 2}`))).toBeVisible();
+  await expect(settings.getByText(new RegExp(`^Address: .+:${hostSwitchedInSettings.port + 2}$`))).toBeVisible();
+  await expect(settings.getByText("After the next restart")).toHaveCount(0);
   const authority = authorityOf(hostSwitchedInSettings);
   expect(await fetchTrusting(authority, `${networkOriginAt(hostSwitchedInSettings.port)}/mirador-ca.pem`)).toBe(authority);
 
-  await settings.getByRole("radio", { name: "Only on this machine" }).check();
-  await settings.getByRole("button", { name: "Use this" }).click();
-  await expect(settings.getByText("Saved. The host uses it from its next start.")).toBeVisible();
+  await saveRoute("No address");
+  await expect(settings.getByText("After the next restart: no address")).toBeVisible();
+  await expect(settings.getByText(new RegExp(`^Address: .+:${hostSwitchedInSettings.port + 2}$`)), "the address it has until then").toBeVisible();
 });
 
 test("an invite from a Mirador nothing else reaches warns so, and one click puts it on the network", async ({ page }) => {
@@ -125,7 +128,7 @@ test("an invite from a Mirador nothing else reaches warns so, and one click puts
   let settings = await openSettings(page, "Devices");
   const invite = async () => {
     await settings.getByRole("button", { name: "Invite a device" }).click();
-    return settings.getByLabel("Invite");
+    return settings.getByRole("region", { name: "Invite" });
   };
 
   const warned = await invite();
@@ -139,7 +142,7 @@ test("an invite from a Mirador nothing else reaches warns so, and one click puts
     await warning.getByRole("button", { name: "Use this network" }).click();
     await expect(warning).toContainText("Restart the host, then invite again");
     expect(JSON.parse(readFileSync(join(hostOnlyOnThisMachine.dataDir, "config.json"), "utf8"))).toEqual({ network: true });
-    await expect(settings.getByRole("radio", { name: "Over the network, with no address" })).toBeChecked();
+    await expect(settings.getByText("After the next restart: this network")).toBeVisible();
   });
 
   await test.step("after the restart, the invite has a link at the network address", async () => {

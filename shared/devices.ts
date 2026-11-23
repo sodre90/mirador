@@ -17,6 +17,10 @@ export const connectedFrom = ({ fromAddress, tailscaleUser }: DeviceConnection) 
 export const ownersOtherConnectedDevices = (devices: ListedDevice[], thisDeviceId: string | null, ownerId: string) =>
   devices.filter(({ id, personId, connection }) => connection !== null && id !== thisDeviceId && personId === ownerId);
 
+/** Connected devices first, as they joined, then the others by when they were last seen. */
+export const connectedFirst = (devices: ListedDevice[]) =>
+  devices.toSorted((one, other) => Number(other.connection !== null) - Number(one.connection !== null) || (one.connection === null ? other.lastSeenAt - one.lastSeenAt : 0));
+
 /** What `mirador devices` lists: the devices that joined, and the people whose they are when not the owner's. */
 export interface DevicesAndPeople {
   devices: ListedDevice[];

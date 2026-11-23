@@ -100,7 +100,7 @@ After a number, nouns stay singular: "3 fájl", "5 perc".
 
 The Hungarian tooltips name these buttons and labels; translate the UI with the same words:
 Leállítás, Kényszerített leállítás, Küldés, Szerkesztés, Előzmények, Ellenőrzőlista, Modell (menu), Mód,
-Rád vár / Kész / Sikertelen / Olvasatlan, Gépek…, Csere, Egyesített / Osztott, Használat, Cím mentése,
+Rád vár / Kész / Sikertelen / Olvasatlan, Gépek…, Csere, Egyesített / Osztott, Mentés,
 Összes eltávolítása, Modellek ezen a Macen, „a körhöz csatlakozik” / „a kör után”.
 The palette command "Elrendezés visszaállítása az alapértelmezettre" is `t.settings.layout.resetCommand`: reuse it.
 
@@ -119,7 +119,7 @@ tell the user what to do use *tú* imperatives ("Elige un perfil").
 Sentence case, as in English. Spanish punctuation: ¿…? and ¡…!.
 
 The Spanish tooltips name these buttons and labels; translate the UI with the same words:
-Esperándote / Listo / Falló / No leída, Usar esta, Guardar dirección, Quitar todo, Modelos en este Mac, Intercambiar,
+Esperándote / Listo / Falló / No leída, Guardar, Quitar todo, Modelos en este Mac, Intercambiar,
 Modelo (menu), Modo.
 
 ## Chinese
@@ -143,7 +143,7 @@ Developer words stay English where German developers use them: commit, branch, P
 The German tooltips name these buttons and labels; translate the UI with the same words:
 Stoppen, Stoppen erzwingen, Senden, Bearbeiten, Verlauf, Checkliste, Modell (menu), Modus,
 Wartet auf dich / Fertig / Fehlgeschlagen / Ungelesen, Rechner…, Tauschen, Vereint / Geteilt, Nutzung,
-Adresse speichern, Alle entfernen, Modelle auf diesem Mac, „schließt sich der Runde an“ / „nach der Runde“.
+Speichern, Alle entfernen, Modelle auf diesem Mac, „schließt sich der Runde an“ / „nach der Runde“.
 The palette command "Layout auf Standard zurücksetzen" is `t.settings.layout.resetCommand`: reuse it.
 
 ## Every language
