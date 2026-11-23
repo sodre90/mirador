@@ -408,6 +408,9 @@ export const rooms: Messages["rooms"] = {
   membersBringAgentsHint:
     "Egy tag behozhat egy ágenst a saját Miradorjából: az ő gépén fut, az ő munkaterületén, az ő engedélyeivel, és a válaszai a szobába kerülnek. A te fájljaidat sosem olvassa. Kikapcsolva a már itt lévők távoznak.",
   moreFor: (room) => `Továbbiak: ${room}`,
+  leaveRoom: "Kilépés a szobából",
+  leaveArmed: "Végleg kilépsz?",
+  leaveArmedHint: "Kattints újra. Csak új meghívóval jöhetsz vissza, és a szobába behozott ágenseid is kikerülnek.",
   bringAgent: "Ágens behozása…",
   bringAgentInto: (room) => `Ágens behozása ide: ${room}`,
   agent: "Ágens",

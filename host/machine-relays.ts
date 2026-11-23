@@ -347,6 +347,7 @@ export class MachineRelays {
   private roomJoined(machineId: string, answer: { roomId?: unknown; waiting?: unknown }) {
     const joined = roomJoinedIn(answer);
     if (joined.roomId === null) return joined;
+    this.store.setJoinedRoomLeft(machineId, joined.roomId, false);
     const otherKnocks = (this.store.findMachine(machineId)?.knocks ?? []).filter(({ roomId }) => roomId !== joined.roomId);
     this.store.setMachineKnocks(machineId, joined.waiting ? [...otherKnocks, { roomId: joined.roomId, turnedAway: false }] : otherKnocks);
     return joined;

@@ -409,6 +409,9 @@ export const rooms: Messages["rooms"] = {
   membersBringAgentsHint:
     "Ein Mitglied kann einen Agenten aus dem eigenen Mirador mitbringen: Er läuft auf dessen Computer, in dessen Arbeitsbereich, mit dessen Berechtigungen, und seine Antworten kommen in den Raum. Deine Dateien liest er nie. Ausgeschaltet gehen die, die schon hier sind.",
   moreFor: (room) => `Mehr zu ${room}`,
+  leaveRoom: "Raum verlassen",
+  leaveArmed: "Endgültig verlassen?",
+  leaveArmedHint: "Klicke erneut. Um zurückzukommen, brauchst du eine neue Einladung, und Agenten, die du in den Raum mitgebracht hast, gehen mit.",
   bringAgent: "Agenten mitbringen…",
   bringAgentInto: (room) => `Agenten in ${room} mitbringen`,
   agent: "Agent",

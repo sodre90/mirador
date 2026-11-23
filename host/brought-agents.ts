@@ -154,6 +154,10 @@ export class BroughtAgents {
     this.changed();
   }
 
+  takeOutOf(machineId: string, roomId: string) {
+    this.broughtInto(machineId, roomId).forEach(({ id }) => this.takeOut(id));
+  }
+
   /** The socket to the machine opened: it is told this host takes the tasks of the owner's agents there. */
   connected(machineId: string) {
     this.machines.send(machineId, { type: "room.brought-agents-here" });

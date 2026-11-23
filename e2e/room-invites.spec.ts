@@ -133,7 +133,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(visitor.getByRole("list", { name: "Invited" }).locator(".room-card-name")).toHaveText(["Garden"]);
     await expect(joined.locator(".room-card-subline")).toHaveText("Ann · Ann's machine");
     const menu = await openRoomMenu(visitor, "Garden");
-    await expect(menu.getByRole("menuitem")).toHaveText(["Bring an agent…"]);
+    await expect(menu.getByRole("menuitem")).toHaveText(["Bring an agent…", "Leave room"]);
     await visitor.keyboard.press("Escape");
     await expect(menu).toHaveCount(0);
     await joined.click();

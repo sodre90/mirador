@@ -2,7 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { forgetSignInAt, signInRevoked } from "../host/machine-sign-in.ts";
+import { forgetSignInAt, leftEveryRoomAt, signInRevoked } from "../host/machine-sign-in.ts";
 import type { MachineReach } from "../host/machine-tunnels.ts";
 import { MachineWatch, MOST_ROOM_CALLS_A_MINUTE } from "../host/machine-watch.ts";
 import type { Way } from "../host/p2p/dial.ts";
@@ -29,6 +29,7 @@ type Socket = Bun.ServerWebSocket<{ path: string }>;
 function fakeMachine(port = 0) {
   const sockets: Socket[] = [];
   const signIns: string[] = [];
+  const heard: unknown[] = [];
   let acceptedCookie = "mirador_token=device-token";
   const server = Bun.serve<{ path: string }>({
     hostname: "127.0.0.1",
@@ -41,7 +42,7 @@ function fakeMachine(port = 0) {
     },
     websocket: {
       open: (socket) => void sockets.push(socket),
-      message() {},
+      message: (_, message) => void heard.push(JSON.parse(String(message))),
     },
   });
   const origin = `http://127.0.0.1:${server.port}`;
@@ -50,7 +51,7 @@ function fakeMachine(port = 0) {
     acceptedCookie = "";
     sockets.splice(0).forEach((socket) => socket.close(1000, "device revoked"));
   };
-  return { server, origin, sockets, signIns, send, revokeDevice };
+  return { server, origin, sockets, signIns, heard, send, revokeDevice };
 }
 
 const conversation = (id: string, waitingFor: string | null) => ({ id, waitingFor });
@@ -357,6 +358,103 @@ describe("MachineWatch", () => {
     machine.send("/ws", { type: "rooms.reading", personId: "ann", readings: [{ roomId: "r1", unread: 7 }] } as never);
     await Bun.sleep(1_200);
     expect(saved).toHaveBeenCalledTimes(2);
+  });
+
+  const snapshotOf = (...rooms: { id: string; name: string }[]) => ({ type: "snapshot", conversations: [], machines: [], rooms }) as never;
+  const [launch, garden] = [
+    { id: "r1", name: "Launch" },
+    { id: "r2", name: "Garden" },
+  ];
+
+  test("joined as a person, leaves a room at once and tells the machine, and shows it again only once the machine took them out and back in", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store } = watching(machine.origin, { asPerson: true });
+    const roomIds = () => watch.statuses()[0]!.rooms.map(({ id }) => id);
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    machine.send("/ws", snapshotOf(launch, garden));
+    await eventually(() => expect(roomIds()).toEqual(["r1", "r2"]));
+    watch.muteRoomHere("m1", "r1", true);
+
+    watch.leaveRoom("m1", "r1");
+    expect(roomIds()).toEqual(["r2"]);
+    expect(store.machineRooms("m1").map(({ id }) => id)).toEqual(["r2"]);
+    expect(store.joinedRoomsMutedHere("m1")).toEqual([]);
+    await eventually(() => expect(machine.heard).toEqual([{ type: "room.leave", roomId: "r1" }]));
+
+    machine.send("/ws", { type: "room.upserted", room: { ...launch, name: "Launch, renamed before the machine heard" } } as never);
+    await Bun.sleep(1_200);
+    expect(roomIds()).toEqual(["r2"]);
+
+    machine.send("/ws", { type: "room.deleted", roomId: "r1" });
+    await eventually(() => expect(store.joinedRoomsLeft("m1")).toEqual([]));
+    machine.send("/ws", { type: "room.upserted", room: launch } as never);
+    await eventually(() => expect(roomIds()).toEqual(["r2", "r1"]));
+  });
+
+  test("joined as a person, leaves no room it is not in, nor any of a machine of this computer's owner", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    machine.send("/ws", snapshotOf(launch));
+    await eventually(() => expect(watch.statuses()[0]!.rooms).toHaveLength(1));
+    watch.leaveRoom("m1", "r2");
+    watch.leaveRoom("gone", "r1");
+    await Bun.sleep(100);
+    expect(store.joinedRoomsLeft("m1")).toEqual([]);
+    expect(machine.heard).toEqual([]);
+  });
+
+  test("joined as a person, tells a machine it left a room of while it was away once it answers, also when this host restarted meanwhile", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    machine.send("/ws", snapshotOf(launch, garden));
+    await eventually(() => expect(store.machineRooms("m1")).toHaveLength(2));
+    const restarted = () => {
+      watch.stopAll();
+      watch.start("m1");
+    };
+    restarted();
+    watch.leaveRoom("m1", "r1");
+    expect(machine.heard).toEqual([]);
+    await eventually(() => expect(machine.sockets).toHaveLength(2));
+    machine.send("/ws", snapshotOf(launch, garden));
+    await eventually(() => expect(machine.heard).toEqual([{ type: "room.leave", roomId: "r1" }]));
+
+    restarted();
+    expect(watch.statuses()[0]!.rooms.map(({ id }) => id)).toEqual(["r2"]);
+    await eventually(() => expect(machine.sockets).toHaveLength(3));
+    machine.send("/ws", snapshotOf(launch, garden));
+    await eventually(() => expect(machine.heard).toHaveLength(2));
+    expect(watch.statuses()[0]!.rooms.map(({ id }) => id)).toEqual(["r2"]);
+    expect(store.joinedRoomsLeft("m1")).toEqual(["r1"]);
+
+    machine.send("/ws", snapshotOf(garden));
+    await eventually(() => expect(store.joinedRoomsLeft("m1")).toEqual([]));
+  });
+
+  test("joined as a person, knows that leaving the last room is why the machine signs it out, but not while it waits at a door there", async () => {
+    const machine = fakeMachine();
+    cleanUp.push(() => machine.server.stop(true));
+    const { watch, store, signedOut } = watching(machine.origin, { asPerson: true });
+    await eventually(() => expect(machine.sockets).toHaveLength(1));
+    machine.send("/ws", snapshotOf(launch));
+    await eventually(() => expect(store.machineRooms("m1")).toHaveLength(1));
+    expect(leftEveryRoomAt(store, "m1")).toBe(false);
+
+    watch.leaveRoom("m1", "r1");
+    expect(leftEveryRoomAt(store, "m1")).toBe(true);
+    store.setMachineKnocks("m1", [{ roomId: "r3", turnedAway: false }]);
+    expect(leftEveryRoomAt(store, "m1")).toBe(false);
+    store.setMachineKnocks("m1", [{ roomId: "r3", turnedAway: true }]);
+
+    machine.send("/ws", { type: "room.deleted", roomId: "r1" });
+    machine.sockets.forEach((socket) => socket.close(OUT_OF_ROOMS_CLOSE_CODE, "out of every room"));
+    await eventually(() => expect(signedOut).toEqual(["m1"]));
+    expect(leftEveryRoomAt(store, "m1")).toBe(true);
   });
 
   test("takes no rooms from a machine joined as a device: its own rooms are not the person's", async () => {

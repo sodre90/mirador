@@ -235,13 +235,14 @@ const ownRoomEntries = (room: Room, dispatch: Dispatch<AppAction>): RoomMenuEntr
   { label: words.deleteRoom, asked: { armedText: words.deleteArmed, armedHint: words.deleteArmedHint }, onChoose: () => connection.send({ type: "room.delete", roomId: room.id }) },
 ];
 
-/** Of a room of someone else's machine: bringing an agent of your own into it, and taking out those you brought. */
+/** Of a room of someone else's machine: bringing an agent of your own into it, taking out those you brought, and leaving it. */
 const joinedRoomEntries = ({ machine, room }: JoinedRoomShown, brought: BroughtAgentHere[], profiles: Profile[], dispatch: Dispatch<AppAction>): RoomMenuEntry[] => [
   { label: words.bringAgent, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "bring-agent", machineId: machine.id, roomId: room.id } }) },
   ...brought.map(({ id, profileId }) => ({
     label: words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone),
     onChoose: () => connection.send({ type: "machine.take-agent-out", broughtId: id }),
   })),
+  { label: words.leaveRoom, asked: { armedText: words.leaveArmed, armedHint: words.leaveArmedHint }, onChoose: () => connection.send({ type: "machine.leave-room", machineId: machine.id, roomId: room.id }) },
 ];
 
 /** The section's "+": a new room of this machine, or joining someone else's with their invite. */

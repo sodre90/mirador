@@ -6,7 +6,7 @@ import type { Conversation, JoinedRoom, Machine, MachineSeen, MachineStatus, Roo
 import { OUT_OF_ROOMS_CLOSE_CODE, TOKEN_COOKIE, type ClientMessage, type ServerMessage } from "../shared/protocol.ts";
 import { roomNotification, type SystemNotification } from "../shared/system-notifications.ts";
 import { SenderLimit } from "./join-requests.ts";
-import { signInRevoked } from "./machine-sign-in.ts";
+import { leftEveryRoomAt, signInRevoked } from "./machine-sign-in.ts";
 import { DIRECT_REACH, type MachineReach } from "./machine-tunnels.ts";
 import { trusting } from "./machine-trust.ts";
 import { webSocketTo } from "./p2p/dial.ts";
@@ -145,6 +145,8 @@ interface WatchedMachine {
   waitingIn: Map<string, WaitingFor>;
   /** The rooms as the machine last listed them, which its status takes at most every ROOMS_SAVED_EVERY_MS. */
   rooms: JoinedRoom[];
+  /** The rooms this computer's owner left, which the machine may not have heard of yet. */
+  left: Set<string>;
   roomsSavedAt: number;
   roomsToSave?: ReturnType<typeof setTimeout>;
   /** Who owns the machine, as its snapshot said, so a later list of people names them again. */
@@ -274,7 +276,7 @@ export class MachineWatch {
     if (!machine?.joined) return;
     const rooms = this.store.machineRooms(machineId);
     const status: MachineStatus = { machineId, reachable: false, waiting: [], joinedThere: [], rooms, mutedHere: this.store.joinedRoomsMutedHere(machineId) };
-    const watched: WatchedMachine = { sockets: [], status, waitingIn: new Map(), rooms, roomsSavedAt: 0, ownerId: null };
+    const watched: WatchedMachine = { sockets: [], status, waitingIn: new Map(), rooms, left: new Set(this.store.joinedRoomsLeft(machineId)), roomsSavedAt: 0, ownerId: null };
     const signIn = (origin: string) => {
       const token = this.store.machineDeviceToken(machineId);
       return token ? { headers: { Origin: origin, Cookie: `${TOKEN_COOKIE}=${token}` }, ...trusting(this.store.machineAuthority(machineId)) } : null;
@@ -332,6 +334,18 @@ export class MachineWatch {
     this.update(watched, { mutedHere: this.store.joinedRoomsMutedHere(machineId) });
   }
 
+  /** The room of a machine joined as a person goes from this computer at once; a machine that isn't answering hears of it once it does. */
+  leaveRoom(machineId: string, roomId: string) {
+    const watched = this.watched.get(machineId);
+    if (!watched?.rooms.some(({ id }) => id === roomId)) return;
+    this.store.setJoinedRoomLeft(machineId, roomId, true);
+    this.muteRoomHere(machineId, roomId, false);
+    watched.left.add(roomId);
+    watched.rooms = withoutJoinedRoom(watched.rooms, roomId);
+    this.saveRooms(watched);
+    this.send(machineId, { type: "room.leave", roomId });
+  }
+
   private follow(watched: WatchedMachine, message: ServerMessage) {
     switch (message.type) {
       case "snapshot":
@@ -372,8 +386,25 @@ export class MachineWatch {
         this.learnOwnerName(watched, message.people);
         break;
     }
-    watched.rooms = roomsAfter(watched.rooms, message);
+    watched.rooms = roomsAfter(watched.rooms, message).filter(({ id }) => !watched.left.has(id));
+    this.followRoomsLeft(watched, message);
     this.saveRoomsSoon(watched);
+  }
+
+  /** A room this computer's owner left that the machine still lists is one it did not hear they left, so it is told again. */
+  private followRoomsLeft(watched: WatchedMachine, message: ServerMessage) {
+    if (message.type === "room.deleted") return this.doneLeaving(watched, message.roomId);
+    if (message.type !== "snapshot") return;
+    const listed = new Set(joinedRoomsIn(message.rooms).map(({ id }) => id));
+    [...watched.left].forEach((roomId) => (listed.has(roomId) ? this.send(watched.status.machineId, { type: "room.leave", roomId }) : this.doneLeaving(watched, roomId)));
+  }
+
+  /** The machine no longer has them in the room. Of the last room they left, its record stays to tell why the machine signs this computer out next. */
+  private doneLeaving(watched: WatchedMachine, roomId: string) {
+    const { machineId } = watched.status;
+    if (!watched.left.has(roomId) || (watched.rooms.length === 0 && leftEveryRoomAt(this.store, machineId))) return;
+    watched.left.delete(roomId);
+    this.store.setJoinedRoomLeft(machineId, roomId, false);
   }
 
   private learnOwnerName(watched: WatchedMachine, people: unknown) {

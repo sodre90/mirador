@@ -455,6 +455,8 @@ export type ClientMessage =
   | { type: "machine.room-opened"; machineId: string; roomId: string }
   /** Keeps a room of a machine joined as a person quiet on this computer, whatever that machine does, or lets it call again. */
   | { type: "machine.mute-room"; machineId: string; roomId: string; muted: boolean }
+  /** Leaves a room of a machine joined as a person: it goes from here at once, and a machine that isn't answering hears of it once it does. */
+  | { type: "machine.leave-room"; machineId: string; roomId: string }
   /** Forgets that the owner of a machine joined as a person turned this computer's owner away from one of its rooms. */
   | { type: "machine.dismiss-knock"; machineId: string; roomId: string }
   /** Brings an agent of one of your profiles into a room of a machine joined as a person, to work in one of your workspaces; the host answers `machine.agent-brought`. */
@@ -521,6 +523,8 @@ export type ClientMessage =
   | { type: "room.confirm"; roomId: string; itemId: string; answers: RoomConfirmedAnswer[] }
   /** Whether the room notifies you; muted, it still counts what you have not read. */
   | { type: "room.mute"; roomId: string; muted: boolean }
+  /** From a person other than the machine's owner: they leave the room; out of their last room, they are signed out of the machine. */
+  | { type: "room.leave"; roomId: string }
   /** Whether the room's members may bring agents of their own Miradors into it; turned off, those already there go. */
   | { type: "room.set-members-bring-agents"; roomId: string; allowed: boolean }
   /** From a member's own Mirador: an agent of theirs joins the room under this name, of this kind; the host answers `room.agent-brought`. */

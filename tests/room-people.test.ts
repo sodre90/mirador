@@ -222,6 +222,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "machine.ask-to-join": true,
   "machine.room-opened": true,
   "machine.mute-room": true,
+  "machine.leave-room": true,
   "machine.dismiss-knock": true,
   "search": true,
   "room.create": true,
@@ -252,6 +253,7 @@ const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
   "room.vote": true,
   "room.confirm": true,
   "room.mute": true,
+  "room.leave": true,
   "room.set-members-bring-agents": true,
   "room.bring-agent": true,
   "room.take-agent-out": true,
@@ -1356,6 +1358,37 @@ describe("a person a room invite lets in, from their own Mirador", () => {
     back.page.close();
     expect(back.snapshot.you).toBe(dora.personId);
     expect(back.snapshot.rooms.map(({ id }) => id)).toEqual([roomD.id]);
+  });
+
+  test("leaves a room on their own word, and only their own place in it: none they are not in, and out of the last, every way in", async () => {
+    const { code } = await ownerInvites(roomC, "guest");
+    const { page, token } = await joined(await joining(code, doraKey));
+    const other = await joined(await joining((await ownerInvites(roomC, "member")).code, newKey(), { name: "Finn" }));
+
+    const beforeLeaving = owner.mark;
+    let mark = page.mark;
+    page.send({ type: "room.leave", roomId: roomA.id });
+    await page.waitForError("room-gone", mark);
+    page.send({ type: "room.leave", roomId: roomC.id, personId: other.snapshot.you } as never);
+    await page.waitFor(isType("room.deleted", ({ roomId }) => roomId === roomC.id), mark);
+    const stillIn = (personId: string, { people }: Room) => people.some((person) => person.personId === personId);
+    const { room } = await owner.waitFor(isType("room.upserted", ({ room }) => room.id === roomC.id && !stillIn(dora.personId, room)), beforeLeaving);
+    expect(stillIn(other.snapshot.you, room)).toBe(true);
+    let ownerMark = owner.mark;
+    owner.send({ type: "room.leave", roomId: roomC.id });
+    await owner.waitForError("room-person-unknown", ownerMark);
+
+    mark = page.mark;
+    page.send({ type: "room.leave", roomId: roomC.id });
+    await page.waitForError("room-gone", mark);
+    ownerMark = owner.mark;
+    page.send({ type: "room.leave", roomId: roomD.id });
+    expect(await page.closed).toBe(OUT_OF_ROOMS_CLOSE_CODE);
+    const { devices } = await owner.waitFor(isType("devices.listed", ({ devices }) => !devices.some(({ personId }) => personId === dora.personId)), ownerMark);
+    expect(devices.some(({ personId }) => personId === other.snapshot.you)).toBe(true);
+    await expect(Page.open(port, token)).rejects.toThrow();
+    owner.send({ type: "room.remove-person", roomId: roomC.id, personId: other.snapshot.you });
+    await other.page.closed;
   });
 
   describe("with one invite for several people, which waits for the owner's OK", () => {

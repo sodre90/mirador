@@ -421,6 +421,9 @@ export const rooms = {
   membersBringAgentsHint:
     "A member can bring an agent from their own Mirador: it runs on their computer, in their workspace, with their permissions, and its answers come into the room. It never reads your files. Turned off, those already here go.",
   moreFor: (room: string) => `More for ${room}`,
+  leaveRoom: "Leave room",
+  leaveArmed: "Leave for good?",
+  leaveArmedHint: "Click again. You need a new invite to come back, and agents you brought into the room go too.",
   bringAgent: "Bring an agent…",
   bringAgentInto: (room: string) => `Bring an agent into ${room}`,
   agent: "Agent",

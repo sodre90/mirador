@@ -172,6 +172,8 @@ const schema = `
     read_through INTEGER NOT NULL DEFAULT 0, muted INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (room_id, person_id));
   CREATE TABLE IF NOT EXISTS joined_room_mutes (
     machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE, room_id TEXT NOT NULL, PRIMARY KEY (machine_id, room_id));
+  CREATE TABLE IF NOT EXISTS joined_rooms_left (
+    machine_id TEXT NOT NULL REFERENCES machines(id) ON DELETE CASCADE, room_id TEXT NOT NULL, PRIMARY KEY (machine_id, room_id));
   CREATE TABLE IF NOT EXISTS person_keys (
     public_key TEXT PRIMARY KEY, person_id TEXT NOT NULL UNIQUE REFERENCES people(id) ON DELETE CASCADE);
   CREATE TABLE IF NOT EXISTS tunnel_keys_over (key TEXT PRIMARY KEY, address TEXT NOT NULL, kind TEXT NOT NULL, until INTEGER NOT NULL);
@@ -2283,6 +2285,16 @@ export class Store {
   setJoinedRoomMutedHere(machineId: string, roomId: string, muted: boolean) {
     if (muted) this.db.query("INSERT INTO joined_room_mutes (machine_id, room_id) VALUES (?, ?) ON CONFLICT DO NOTHING").run(machineId, roomId);
     else this.db.query("DELETE FROM joined_room_mutes WHERE machine_id = ? AND room_id = ?").run(machineId, roomId);
+  }
+
+  /** The rooms of the machine joined as a person that this computer's owner left, until the machine no longer has them in. */
+  joinedRoomsLeft(machineId: string): string[] {
+    return (this.db.query("SELECT room_id FROM joined_rooms_left WHERE machine_id = ? ORDER BY room_id").all(machineId) as { room_id: string }[]).map(({ room_id }) => room_id);
+  }
+
+  setJoinedRoomLeft(machineId: string, roomId: string, left: boolean) {
+    if (left) this.db.query("INSERT INTO joined_rooms_left (machine_id, room_id) VALUES (?, ?) ON CONFLICT DO NOTHING").run(machineId, roomId);
+    else this.db.query("DELETE FROM joined_rooms_left WHERE machine_id = ? AND room_id = ?").run(machineId, roomId);
   }
 
   setMachineOutOfRooms(id: string, outOfRooms: boolean) {

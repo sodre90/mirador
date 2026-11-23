@@ -276,6 +276,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
   "machine.ask-to-join": OWNER_ONLY,
   "machine.room-opened": OWNER_ONLY,
   "machine.mute-room": OWNER_ONLY,
+  "machine.leave-room": OWNER_ONLY,
   "machine.dismiss-knock": OWNER_ONLY,
   "machine.bring-agent": OWNER_ONLY,
   "machine.take-agent-out": OWNER_ONLY,
@@ -341,6 +342,7 @@ const admissions: { [K in ClientMessage["type"]]: K extends PersonMessageType ? 
     if (typeof muted !== "boolean") throw unreadable();
     void roleOf(person, roomId);
   },
+  "room.leave": ({ roomId }, person) => void roleOf(person, roomId),
   "room.set-members-bring-agents": OWNER_ONLY,
   /** Into a room the person is in; that only a member brings one, never a guest, while the room lets them, and how many, the room's host checks and answers. */
   "room.bring-agent": ({ requestId, roomId, name, harness }, person) => {

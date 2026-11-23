@@ -791,6 +791,7 @@ describe("joining a machine that made its own certificate", () => {
       { roomId: "../x", waiting: true },
     ]);
     store.setMachineKnocks("box", [{ roomId: "r1", turnedAway: true }]);
+    ["r1", "r2", "r3"].forEach((roomId) => store.setJoinedRoomLeft("box", roomId, true));
 
     expect(await relays.join("box", "ABCD-EFGH-JKLM")).toEqual({ roomId: "r1", waiting: true });
     expect(await relays.join("box", "ABCD-EFGH-JKLN")).toEqual({ roomId: "r2", waiting: true });
@@ -801,6 +802,7 @@ describe("joining a machine that made its own certificate", () => {
     expect(await relays.join("box", "ABCD-EFGH-JKLP")).toEqual({ roomId: "r2", waiting: false });
     expect(await relays.join("box", "ABCD-EFGH-JKLQ")).toEqual({ roomId: null, waiting: false });
     expect(store.findMachine("box")?.knocks).toEqual([{ roomId: "r1", turnedAway: false }]);
+    expect(store.joinedRoomsLeft("box")).toEqual(["r3"]);
   });
 
   test("signs nothing for a machine whose challenge is not one a Mirador makes, such as text that runs over more lines, and joins it as a device", async () => {

@@ -182,6 +182,17 @@ describe("bringing an agent of your own into a room of someone else's machine", 
     expect(store.hasConversation(agent.conversationId!)).toBe(true);
     expect(() => brought.takeOut(agent.id)).toThrow(HostProblemError);
   });
+
+  test("leaving a room takes out those brought into it alone", async () => {
+    const { brought, bringCoder, sentToAnn, store } = miasMirador();
+    const agent = await bringCoder();
+    brought.takeOutOf("ann", "r2");
+    brought.takeOutOf("bo", "r1");
+    expect(store.listBroughtAgents().map(({ id }) => id)).toEqual([agent.id]);
+    brought.takeOutOf("ann", "r1");
+    expect(sentToAnn("room.take-agent-out")).toEqual([{ type: "room.take-agent-out", roomId: "r1", agentId: "a1" }]);
+    expect(store.listBroughtAgents()).toEqual([]);
+  });
 });
 
 describe("a task a room's machine sends an agent you brought", () => {

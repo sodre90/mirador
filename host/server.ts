@@ -90,6 +90,7 @@ import { placesIn, type InviteTunnel } from "../shared/tunnel.ts";
 import { isLoopback, pageOnHost, socketData, webSocketCompression, type BrowserSocket, type Hub, type SignedIn, type SocketData } from "./hub.ts";
 import { newestOnly } from "./newest-only.ts";
 import type { MachineRelays } from "./machine-relays.ts";
+import { forgetMachine } from "./machine-sign-in.ts";
 import type { MachineWatch } from "./machine-watch.ts";
 import type { MachineTunnels } from "./machine-tunnels.ts";
 import { wayToMachine } from "./machine-trust.ts";
@@ -769,10 +770,7 @@ export function startServer(services: HostServices) {
 
   /** Unlike a machine removed, which is hidden, it is gone as if never added. */
   function forgetMachineNotJoined(machineId: string) {
-    relays.stop(machineId);
-    watch.stop(machineId);
-    tunnels.forget(machineId);
-    store.deleteMachine(machineId);
+    forgetMachine({ store, relays, watch, tunnels }, machineId);
     broadcastMachines();
   }
 
@@ -792,10 +790,7 @@ export function startServer(services: HostServices) {
   function removeMachine(machineId: string) {
     const machine = store.findMachine(machineId);
     if (!machine) return;
-    relays.stop(machineId);
-    watch.stop(machineId);
-    tunnels.forget(machineId);
-    store.deleteMachine(machineId);
+    forgetMachine({ store, relays, watch, tunnels }, machineId);
     store.hideMachine({ name: machine.name, origin: machine.origin, hostId: machine.hostId });
     broadcastMachines();
     broadcastHiddenMachines();
@@ -2119,6 +2114,10 @@ export function startServer(services: HostServices) {
       case "machine.mute-room":
         if (isRoomId(message.roomId) && typeof message.muted === "boolean") watch.muteRoomHere(message.machineId, message.roomId, message.muted);
         return;
+      case "machine.leave-room":
+        if (!isRoomId(message.roomId)) return;
+        broughtAgents.takeOutOf(message.machineId, message.roomId);
+        return watch.leaveRoom(message.machineId, message.roomId);
       case "machine.dismiss-knock":
         return watch.dismissKnock(message.machineId, message.roomId);
       case "join-request.approve": {
@@ -2254,6 +2253,9 @@ export function startServer(services: HostServices) {
         return roomQuestions.confirm(message.roomId, message.itemId, message.answers, socket.data.personId);
       case "room.mute":
         return roomReading.mute(message.roomId, socket.data.personId, message.muted);
+      case "room.leave":
+        rooms.removePerson(message.roomId, socket.data.personId);
+        return roomPeopleChanged(message.roomId);
       case "room.set-members-bring-agents":
         return rooms.setMembersBringAgents(message.roomId, message.allowed);
       case "room.bring-agent": {
