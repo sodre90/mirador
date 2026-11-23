@@ -10659,6 +10659,15 @@ button.link.more-rows {
   background: var(--rail-hover);
 }
 
+.add-room-menu button.danger {
+  color: var(--danger);
+}
+
+.add-room-menu button.armed,
+.add-room-menu button.armed:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
 .rooms li.room-card {
   display: flex;
   align-items: center;
@@ -10670,11 +10679,27 @@ button.link.more-rows {
   display: grid;
   flex: none;
   place-items: center;
+  box-sizing: border-box;
   width: 24px;
   height: 24px;
   border-radius: 6px;
+  background: var(--room-mark);
   color: #fff;
   font-size: calc(12px * var(--font-scale));
+  font-weight: 600;
+}
+
+.room-mark.hollow {
+  border: 2px solid var(--room-mark);
+  background: none;
+  color: var(--room-mark);
+}
+
+.rooms-invited-heading {
+  margin: 8px 0 2px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: calc(11.5px * var(--font-scale));
   font-weight: 600;
 }
 

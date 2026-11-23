@@ -602,11 +602,18 @@ export async function createRoom(scope: Page | FrameLocator, name: string, agent
   await expect(scope.getByRole("heading", { name: `# ${name}` })).toBeVisible();
 }
 
-/** Opens a room's settings from the ⋯ its card shows while pointed at, at a page of them when given. */
-export async function openRoomSettings(scope: Page | FrameLocator, room: string, tab?: "General" | "People" | "Agents" | "Permissions" | "Usage") {
+/** Opens the menu of the ⋯ a room's card shows while pointed at. */
+export async function openRoomMenu(scope: Page | FrameLocator, room: string) {
   const card = roomCard(scope, room);
   await card.hover();
-  await card.getByRole("button", { name: `Settings of ${room}` }).click();
+  await card.getByRole("button", { name: `More for ${room}` }).click();
+  return scope.getByRole("menu", { name: `More for ${room}` });
+}
+
+/** Opens a room's settings from its card's menu, at a page of them when given. */
+export async function openRoomSettings(scope: Page | FrameLocator, room: string, tab?: "General" | "People" | "Agents" | "Permissions" | "Usage") {
+  const menu = await openRoomMenu(scope, room);
+  await menu.getByRole("menuitem", { name: "Room settings" }).click();
   const dialog = scope.getByRole("dialog", { name: "Room settings" });
   if (tab) await dialog.getByRole("tab", { name: tab }).click();
   return dialog;

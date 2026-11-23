@@ -28,6 +28,7 @@ export const rooms = {
   noAgentsYet: "No agents yet",
   someoneHere: "Someone is here now",
   onMachine: (machine: string) => `on ${machine}`,
+  invited: "Invited",
   findAgent: "Find an agent",
   findAgentPlaceholder: "Type a name, Enter adds it",
   noAgentFound: "No agent by that name.",

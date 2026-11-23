@@ -18,6 +18,7 @@ export const rooms: Messages["rooms"] = {
   noAgentsYet: "Még nincs ágens",
   someoneHere: "Most is van itt valaki",
   onMachine: (machine) => `${machine} gépen`,
+  invited: "Ahová meghívtak",
   findAgent: "Ágens keresése",
   findAgentPlaceholder: "Írj be egy nevet, az Enter hozzáadja",
   noAgentFound: "Nincs ilyen nevű ágens.",

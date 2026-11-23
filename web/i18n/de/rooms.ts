@@ -19,6 +19,7 @@ export const rooms: Messages["rooms"] = {
   noAgentsYet: "Noch keine Agenten",
   someoneHere: "Gerade ist jemand hier",
   onMachine: (machine) => `auf ${machine}`,
+  invited: "Eingeladen",
   findAgent: "Agenten suchen",
   findAgentPlaceholder: "Namen tippen, Enter fügt ihn hinzu",
   noAgentFound: "Kein Agent heißt so.",

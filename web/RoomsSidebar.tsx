@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type Dispatch, type MouseEvent } from "react";
+import { useEffect, useId, useRef, useState, type CSSProperties, type Dispatch } from "react";
 import { workspaceMarkColor } from "../shared/marks.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { JoinedRoom, Machine, MachineStatus, Person, Profile, RoomKnock } from "../shared/model.ts";
@@ -6,6 +6,7 @@ import { personGoesBy } from "../shared/people.ts";
 import type { RoomReading } from "../shared/room-reading.ts";
 import { broughtAgentName, type Room } from "../shared/rooms.ts";
 import { placedBelow, useClosing } from "./BarMenu.tsx";
+import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
@@ -64,7 +65,10 @@ function knockText({ ownerName }: Machine, { turnedAway }: RoomKnock) {
   return ownerName ? words.waitingToBeLetIn(ownerName) : words.waitingToBeLetInNoName;
 }
 
-const machineMarkStyle = (machine: Machine): CSSProperties => (machine.color ? { ...pastelVariables(machine.color), background: "var(--pastel-stripe)" } : { background: workspaceMarkColor(machine.name) });
+/** A room of someone else's machine has a hollow mark, in its machine's colour. */
+function JoinedRoomMark({ machine }: { machine: Machine }) {
+  return <RoomMark hollow style={machine.color ? { ...pastelVariables(machine.color), "--room-mark": "var(--pastel-stripe)" } : { "--room-mark": workspaceMarkColor(machine.name) }} />;
+}
 
 const dismissKnock = (machineId: string, roomId: string) => connection.send({ type: "machine.dismiss-knock", machineId, roomId });
 
@@ -80,7 +84,7 @@ export function KnockView({ machine, knock }: KnockShown) {
         <LayoutToggles />
       </div>
       <section className={`empty-state room-knock-view${knock.turnedAway ? " turned-away" : ""}`} aria-label={knockText(machine, knock)}>
-        <RoomMark style={machineMarkStyle(machine)} />
+        <JoinedRoomMark machine={machine} />
         <h2>{knockText(machine, knock)}</h2>
         {knock.turnedAway ? (
           <>
@@ -110,13 +114,16 @@ function roomSubline(room: Room, profiles: Profile[], people: Person[], manages:
   return [manages && room.people.length > 0 && words.peopleCount(room.people.length), agents.length > 0 ? agents.join(", ") : words.noAgentsYet].filter(Boolean).join(" · ");
 }
 
-function RoomMark({ style }: { style: CSSProperties }) {
+function RoomMark({ style, hollow = false }: { style: CSSProperties & { "--room-mark": string }; hollow?: boolean }) {
   return (
-    <span className="room-mark" style={style} aria-hidden="true">
+    <span className={`room-mark${hollow ? " hollow" : ""}`} style={style} aria-hidden="true">
       #
     </span>
   );
 }
+
+/** Whose room it is and on which machine, as far as its owner has said a name. */
+const ownerAndMachine = ({ ownerName, name }: Machine) => (ownerName ? `${ownerName} · ${name}` : words.onMachine(name));
 
 type ReadingCounts = Pick<RoomReading, "unread" | "mentions" | "toConfirm" | "toApprove" | "muted">;
 
@@ -180,49 +187,62 @@ function MuteHereToggle({ machineId, roomId, mutedHere }: { machineId: string; r
   );
 }
 
-/** A joined room's "⋯": bringing an agent of your own into it, and taking out those you brought. */
-function JoinedRoomMenu({ machineId, room, brought, profiles, dispatch }: { machineId: string; room: JoinedRoom; brought: BroughtAgentHere[]; profiles: Profile[]; dispatch: Dispatch<AppAction> }) {
+interface RoomMenuEntry {
+  label: string;
+  onChoose: () => void;
+  /** Asks again in place before it is chosen. */
+  asked?: { armedText: string; armedHint: string };
+}
+
+/** A room's "⋯", and what it offers. */
+function RoomMenu({ roomName, entries }: { roomName: string; entries: RoomMenuEntry[] }) {
   const opener = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
   const open = placement !== null;
   useClosing(open, [opener, menu], () => setPlacement(null));
-  const choose = (event: MouseEvent, act: () => void) => {
-    event.stopPropagation();
+  const choose = (entry: RoomMenuEntry) => {
     setPlacement(null);
-    act();
+    entry.onChoose();
   };
   return (
-    <>
-      <button
-        ref={opener}
-        type="button"
-        className="icon"
-        aria-label={words.moreFor(room.name)}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={(event) => {
-          event.stopPropagation();
-          setPlacement(open ? null : placedBelow(event.currentTarget));
-        }}
-      >
+    <span className="room-menu" onClick={(event) => event.stopPropagation()}>
+      <button ref={opener} type="button" className="icon" aria-label={words.moreFor(roomName)} aria-haspopup="menu" aria-expanded={open} onClick={(event) => setPlacement(open ? null : placedBelow(event.currentTarget))}>
         ⋯
       </button>
       {open && (
-        <div ref={menu} className="add-room-menu joined-room-menu" role="menu" aria-label={words.moreFor(room.name)} style={placement}>
-          <button type="button" role="menuitem" onClick={(event) => choose(event, () => dispatch({ type: "open-overlay", overlay: { kind: "bring-agent", machineId, roomId: room.id } }))}>
-            {words.bringAgent}
-          </button>
-          {brought.map(({ id, profileId }) => (
-            <button key={id} type="button" role="menuitem" onClick={(event) => choose(event, () => connection.send({ type: "machine.take-agent-out", broughtId: id }))}>
-              {words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone)}
-            </button>
-          ))}
+        <div ref={menu} className="add-room-menu" role="menu" aria-label={words.moreFor(roomName)} style={placement}>
+          {entries.map((entry, index) =>
+            entry.asked ? (
+              <ConfirmButton key={index} role="menuitem" className="danger" label={entry.label} {...entry.asked} onConfirm={() => choose(entry)}>
+                {entry.label}
+              </ConfirmButton>
+            ) : (
+              <button key={index} type="button" role="menuitem" onClick={() => choose(entry)}>
+                {entry.label}
+              </button>
+            ),
+          )}
         </div>
       )}
-    </>
+    </span>
   );
 }
+
+const ownRoomEntries = (room: Room, dispatch: Dispatch<AppAction>): RoomMenuEntry[] => [
+  { label: words.inviteSomeone, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } }) },
+  { label: words.editRoom, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId: room.id } }) },
+  { label: words.deleteRoom, asked: { armedText: words.deleteArmed, armedHint: words.deleteArmedHint }, onChoose: () => connection.send({ type: "room.delete", roomId: room.id }) },
+];
+
+/** Of a room of someone else's machine: bringing an agent of your own into it, and taking out those you brought. */
+const joinedRoomEntries = ({ machine, room }: JoinedRoomShown, brought: BroughtAgentHere[], profiles: Profile[], dispatch: Dispatch<AppAction>): RoomMenuEntry[] => [
+  { label: words.bringAgent, onChoose: () => dispatch({ type: "open-overlay", overlay: { kind: "bring-agent", machineId: machine.id, roomId: room.id } }) },
+  ...brought.map(({ id, profileId }) => ({
+    label: words.takeOutAgent(profiles.find((profile) => profile.id === profileId)?.name ?? words.agentGone),
+    onChoose: () => connection.send({ type: "machine.take-agent-out", broughtId: id }),
+  })),
+];
 
 /** The section's "+": a new room of this machine, or joining someone else's with their invite. */
 function AddRoomMenu({ canJoin, dispatch }: { canJoin: boolean; dispatch: Dispatch<AppAction> }) {
@@ -256,6 +276,119 @@ function AddRoomMenu({ canJoin, dispatch }: { canJoin: boolean; dispatch: Dispat
           </button>
         </div>
       )}
+    </>
+  );
+}
+
+function JoinedRoomCard({
+  joined,
+  broughtHere,
+  profiles,
+  dispatch,
+  onOpen,
+}: {
+  joined: JoinedRoomShown;
+  broughtHere: BroughtAgentHere[];
+  profiles: Profile[];
+  dispatch: Dispatch<AppAction>;
+  onOpen: () => void;
+}) {
+  const { machine, status, room } = joined;
+  const away = status?.reachable === false;
+  const mutedHere = status?.mutedHere.includes(room.id) === true;
+  const agentNames = broughtHere.map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone);
+  return (
+    <li
+      className={["room-card", "joined-room", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || mutedHere })].filter(Boolean).join(" ")}
+      data-waiting-tone={needsYou(undefined, room) ? "decision" : undefined}
+      data-machine={machine.id}
+      onClick={onOpen}
+    >
+      <JoinedRoomMark machine={machine} />
+      <span className="room-card-text">
+        <span className="room-card-name">{room.name}</span>
+        <span className="room-card-subline">{[ownerAndMachine(machine), away && t.shell.machines.notAnswering, ...agentNames].filter(Boolean).join(" · ")}</span>
+      </span>
+      <ReadingMarks reading={room} />
+      <MuteHereToggle machineId={machine.id} roomId={room.id} mutedHere={mutedHere} />
+      <RoomMenu roomName={room.name} entries={joinedRoomEntries(joined, broughtHere, profiles, dispatch)} />
+    </li>
+  );
+}
+
+function KnockCard({ machine, knock, selected, dispatch }: KnockShown & { selected: boolean; dispatch: Dispatch<AppAction> }) {
+  return (
+    <li
+      className={["room-card", "room-knock", knock.turnedAway && "turned-away", selected && "selected"].filter(Boolean).join(" ")}
+      data-machine={machine.id}
+      onClick={() => dispatch({ type: "select-knock", machineId: machine.id, roomId: knock.roomId })}
+    >
+      <JoinedRoomMark machine={machine} />
+      <span className="room-card-text">
+        <span className="room-card-name">{knockText(machine, knock)}</span>
+        <span className="room-card-subline">{words.onMachine(machine.name)}</span>
+      </span>
+      {knock.turnedAway && (
+        <button
+          type="button"
+          className="link"
+          onClick={(event) => {
+            event.stopPropagation();
+            dismissKnock(machine.id, knock.roomId);
+          }}
+        >
+          {words.dismissKnock}
+        </button>
+      )}
+    </li>
+  );
+}
+
+/** The rooms of someone else's machines this computer's owner was invited to, and the doors of those they wait at or were turned away from. */
+function InvitedRooms({
+  joinedRooms,
+  knocks,
+  selectedKnock,
+  broughtAgents,
+  profiles,
+  dispatch,
+  onOpenJoinedRoom,
+}: {
+  joinedRooms: JoinedRoomShown[];
+  knocks: KnockShown[];
+  selectedKnock: AppState["selectedKnock"];
+  broughtAgents: BroughtAgentHere[];
+  profiles: Profile[];
+  dispatch: Dispatch<AppAction>;
+  onOpenJoinedRoom: (machineId: string, roomId: string) => void;
+}) {
+  const heading = useId();
+  return (
+    <>
+      <h3 id={heading} className="rooms-invited-heading">
+        {words.invited}
+      </h3>
+      <ul aria-labelledby={heading}>
+        {joinedRooms.map((joined) => (
+          <JoinedRoomCard
+            key={`${joined.machine.id}:${joined.room.id}`}
+            joined={joined}
+            broughtHere={broughtAgents.filter(({ machineId, roomId }) => machineId === joined.machine.id && roomId === joined.room.id)}
+            profiles={profiles}
+            dispatch={dispatch}
+            onOpen={() => onOpenJoinedRoom(joined.machine.id, joined.room.id)}
+          />
+        ))}
+        {knocks.map(({ machine, knock }) => (
+          <KnockCard
+            key={`knock:${machine.id}:${knock.roomId}`}
+            machine={machine}
+            knock={knock}
+            selected={selectedKnock?.machineId === machine.id && selectedKnock.roomId === knock.roomId}
+            dispatch={dispatch}
+          />
+        ))}
+      </ul>
     </>
   );
 }
@@ -317,85 +450,21 @@ export function RoomsSection({
               data-waiting-tone={needsYou(waiting, reading) ? "decision" : undefined}
               onClick={() => dispatch({ type: "select-room", roomId: room.id })}
             >
-              <RoomMark style={{ background: workspaceMarkColor(room.name) }} />
+              <RoomMark style={{ "--room-mark": workspaceMarkColor(room.name) }} />
               <span className="room-card-text">
                 <span className="room-card-name">{room.name}</span>
                 <span className="room-card-subline">{roomSubline(room, profiles, people, manages)}</span>
               </span>
               {roomsWithPeopleHere.includes(room.id) && <span className="room-people-here" role="img" aria-label={words.someoneHere} data-hint={words.someoneHere} />}
               <ReadingMarks reading={reading} waiting={waiting} />
-              {manages && (
-                <button
-                  type="button"
-                  className="icon"
-                  aria-label={words.roomSettings(room.name)}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    dispatch({ type: "open-overlay", overlay: { kind: "room", roomId: room.id } });
-                  }}
-                >
-                  ⋯
-                </button>
-              )}
+              {manages && <RoomMenu roomName={room.name} entries={ownRoomEntries(room, dispatch)} />}
             </li>
           );
         })}
-        {onOpenJoinedRoom &&
-          joinedRooms.map(({ machine, status, room }) => {
-            const away = status?.reachable === false;
-            const mutedHere = status?.mutedHere.includes(room.id) === true;
-            const broughtHere = broughtAgents.filter((agent) => agent.machineId === machine.id && agent.roomId === room.id);
-            return (
-              <li
-                key={`${machine.id}:${room.id}`}
-                className={["room-card", "joined-room", away && "away", needsYou(undefined, room) && "waiting", ...readingClasses({ ...room, muted: room.muted || mutedHere })].filter(Boolean).join(" ")}
-                data-waiting-tone={needsYou(undefined, room) ? "decision" : undefined}
-                data-machine={machine.id}
-                onClick={() => onOpenJoinedRoom(machine.id, room.id)}
-              >
-                <RoomMark style={machineMarkStyle(machine)} />
-                <span className="room-card-text">
-                  <span className="room-card-name">{room.name}</span>
-                  <span className="room-card-subline">
-                    {[words.onMachine(machine.name), away && t.shell.machines.notAnswering, ...broughtHere.map(({ profileId }) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone)]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </span>
-                </span>
-                <ReadingMarks reading={room} />
-                <MuteHereToggle machineId={machine.id} roomId={room.id} mutedHere={mutedHere} />
-                <JoinedRoomMenu machineId={machine.id} room={room} brought={broughtHere} profiles={profiles} dispatch={dispatch} />
-              </li>
-            );
-          })}
-        {onOpenJoinedRoom &&
-          knocks.map(({ machine, knock }) => (
-            <li
-              key={`knock:${machine.id}:${knock.roomId}`}
-              className={["room-card", "room-knock", knock.turnedAway && "turned-away", selectedKnock?.machineId === machine.id && selectedKnock.roomId === knock.roomId && "selected"].filter(Boolean).join(" ")}
-              data-machine={machine.id}
-              onClick={() => dispatch({ type: "select-knock", machineId: machine.id, roomId: knock.roomId })}
-            >
-              <RoomMark style={machineMarkStyle(machine)} />
-              <span className="room-card-text">
-                <span className="room-card-name">{knockText(machine, knock)}</span>
-                <span className="room-card-subline">{words.onMachine(machine.name)}</span>
-              </span>
-              {knock.turnedAway && (
-                <button
-                  type="button"
-                  className="link"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    dismissKnock(machine.id, knock.roomId);
-                  }}
-                >
-                  {words.dismissKnock}
-                </button>
-              )}
-            </li>
-          ))}
       </ul>
+      {onOpenJoinedRoom && joinedRooms.length + knocks.length > 0 && (
+        <InvitedRooms joinedRooms={joinedRooms} knocks={knocks} selectedKnock={selectedKnock} broughtAgents={broughtAgents} profiles={profiles} dispatch={dispatch} onOpenJoinedRoom={onOpenJoinedRoom} />
+      )}
     </section>
   );
 }

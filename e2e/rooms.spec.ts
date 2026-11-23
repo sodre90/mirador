@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, literally, openNewRoom, openRoomSettings, removeWorkspace, roomCard, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, literally, openNewRoom, openRoomMenu, openRoomSettings, removeWorkspace, roomCard, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -168,6 +168,27 @@ test("a workspace a room works in stays until the room moves to another, where i
     await composer.pressSequentially(rest);
     await composer.press("Enter");
   };
+
+  await test.step("the room's ⋯ opens a menu that invites someone, opens its settings and deletes it once asked again, and the list has no Invited heading while there is no invited room", async () => {
+    await expect(page.getByRole("heading", { name: "Invited" })).toHaveCount(0);
+    const menu = await openRoomMenu(page, "Moving");
+    await expect(menu.getByRole("menuitem")).toHaveText(["Invite someone", "Room settings", "Delete room"]);
+    await menu.getByRole("menuitem", { name: "Invite someone" }).click();
+    await page.getByRole("dialog", { name: "Invite to Moving" }).getByRole("button", { name: "Cancel" }).click();
+    await expect(menu).toHaveCount(0);
+
+    await createRoom(page, "Brief", ["Mover"]);
+    await openRoomMenu(page, "Brief");
+    await page.getByRole("menuitem", { name: "Delete room" }).click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menuitem", { name: "Delete room" })).toHaveCount(0);
+    await expect(roomCard(page, "Brief")).toBeVisible();
+    await openRoomMenu(page, "Brief");
+    await page.getByRole("menuitem", { name: "Delete room" }).click();
+    await page.getByRole("menuitem", { name: "Confirm: Delete room" }).click();
+    await expect(roomCard(page, "Brief")).toHaveCount(0);
+    await roomCard(page, "Moving").click();
+  });
 
   await test.step("the empty room offers its agents to tag, says only tags reach them, and invites people", async () => {
     const empty = page.getByRole("region", { name: "Nothing written yet" });

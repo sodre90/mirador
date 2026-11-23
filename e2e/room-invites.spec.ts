@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type FrameLocator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openInviteDialog, openRoomSettings, openSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, nameOwnProfile, openInviteDialog, openRoomMenu, openRoomSettings, openSettings, primaryModifier, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { machineAddress, roomInviteLink } from "../shared/machines.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -130,8 +130,12 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await rail.getByRole("button", { name: "This computer" }).click();
     const joined = roomCard(visitor, "Garden");
     await expect(joined).toHaveClass(/joined-room/);
-    await expect(joined.locator(".room-card-subline")).toHaveText("on Ann's machine");
-    await expect(joined.getByRole("button", { name: "Settings of Garden" })).toHaveCount(0);
+    await expect(visitor.getByRole("list", { name: "Invited" }).locator(".room-card-name")).toHaveText(["Garden"]);
+    await expect(joined.locator(".room-card-subline")).toHaveText("Ann · Ann's machine");
+    const menu = await openRoomMenu(visitor, "Garden");
+    await expect(menu.getByRole("menuitem")).toHaveText(["Bring an agent…"]);
+    await visitor.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
     await joined.click();
     await expect(rail.getByRole("button", { name: "Ann's machine" })).toHaveAttribute("aria-current", "true");
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
@@ -374,7 +378,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(roomsListed(frame)).toHaveText(["Garden", "Shed"]);
     await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
     await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-name")).toHaveText(["Garden", "Shed"]);
-    await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-subline")).toHaveText(["on Ann's machine", "on Ann's machine"]);
+    await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-subline")).toHaveText(["Ann · Ann's machine", "Ann · Ann's machine"]);
     await roomCard(visitor, "Garden").click();
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
     const settings = await openRoomSettings(page, "Shed");

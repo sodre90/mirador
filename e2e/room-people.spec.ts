@@ -101,7 +101,7 @@ test("a person the owner lets into a room sees only that room on their own brows
     await expect(miaPage.getByRole("heading", { name: "Pick a room on the left." })).toBeVisible();
     await expect(roomsListed(miaPage)).toHaveText(["Launch"]);
     await expect(miaPage.locator(".sidebar .workspace")).toHaveCount(0);
-    for (const name of ["New room", "New room or join one", "Settings of Launch", "Settings", "Plugins", "Profiles", "Machines"]) await expect(miaPage.getByRole("button", { name, exact: true })).toHaveCount(0);
+    for (const name of ["New room", "New room or join one", "More for Launch", "Settings", "Plugins", "Profiles", "Machines"]) await expect(miaPage.getByRole("button", { name, exact: true })).toHaveCount(0);
     await expect(miaPage.locator("body")).not.toContainText("Secret");
   });
 

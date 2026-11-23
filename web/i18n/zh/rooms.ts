@@ -18,6 +18,7 @@ export const rooms: Messages["rooms"] = {
   noAgentsYet: "还没有 Agent",
   someoneHere: "现在有人在这里",
   onMachine: (machine) => `在 ${machine} 上`,
+  invited: "受邀加入",
   findAgent: "查找 Agent",
   findAgentPlaceholder: "输入名称，按 Enter 添加",
   noAgentFound: "没有叫这个名字的 Agent。",
