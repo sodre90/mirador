@@ -262,7 +262,7 @@ export const rooms: Messages["rooms"] = {
       insideComputersOwn: (folder) => `Egy olyan mappában van, amelyből ez a gép magától futtat programokat, ezért add hozzá inkább csak olvashatóan: ${folder}`,
       overlapsSandboxWorkspace: (folder) => `Egy másik sandbox dolgozik egy mappában, amely ez a mappa, tartalmazza, vagy benne van; csak egy sandbox írhat oda: ${folder}`,
       overlapsSandboxFolder: (folder) => `Egy másik sandbox olvashatóan és írhatóan kapott meg egy mappát, amely ez a mappa, tartalmazza, vagy benne van; csak egy sandbox írhat oda: ${folder}`,
-      insideWhereASandboxWrites: (folder) => `Egy másik sandbox ágensei írnak egy mappába, amely ezt a mappát tartalmazza, így a sandbox indulásakor hivatkozásra cserélhetnék. Add hozzá inkább magát azt a mappát: ${folder}`,
+      insideWhereASandboxWrites: (folder) => `Egy másik sandbox ágensei írnak a(z) ${folder} mappába, amely ezt a mappát tartalmazza, így a sandbox indulásakor hivatkozásra cserélhetnék. Add hozzá inkább magát a(z) ${folder} mappát.`,
       couldNotMount: (cause) => `Nem sikerült csatolni: ${cause}`,
     },
   },
