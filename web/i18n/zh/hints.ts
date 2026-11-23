@@ -199,6 +199,7 @@ export const hints: Messages["hints"] = {
   newConversation: "在这个工作区中开始一个对话，使用这张卡片上所选的配置。",
   continueSession: "将在终端里启动的会话作为这个工作区中的对话继续。",
   whereConversationsWork: "选择新对话是在项目文件夹中工作，还是各自在自己的 git 工作树中工作。",
+  workspaceSandbox: "选择这个工作区的 Agent 是否在沙箱中运行，与这台电脑的其他部分隔开。",
   removeWorkspace:
     "移除这个工作区。它的对话和它在 Mirador 数据文件夹中的工作树会一起被删除，但项目目录会保留。再点一次确认。",
   addWorkspace: "添加一个项目目录。它的对话以该目录作为工作目录运行。",

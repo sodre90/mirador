@@ -126,7 +126,7 @@ test("the sandbox switch stays off, with the reason under it, where the computer
     await addWorkspaceFromSidebar(page, worktree());
     await createRoom(page, "Branched", ["Builder"], { workspace: "worktree" });
     const dialog = await openRoomSettings(page, "Branched", "Permissions");
-    await expect(reasons(dialog)).toHaveText(/^The room's workspace is a git worktree/);
+    await expect(reasons(dialog)).toHaveText(/^The workspace is a git worktree/);
     await expect(sandboxSwitch(dialog)).toBeDisabled();
     await dialog.getByRole("button", { name: "Done" }).click();
   });

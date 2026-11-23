@@ -7,6 +7,7 @@ import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
 import { agentEditsIn, Changes, COMMAND_WINDOW_SLACK_MS, commandWindows, OutsideWorkspace, toolCallWindows, writerOf } from "../host/changes.ts";
 import { Checkpoints } from "../host/checkpoints.ts";
 import { commitFiles } from "../host/commit-files.ts";
+import { sandboxLeft } from "../host/sandbox/hooks-off.ts";
 import { Store } from "../host/store.ts";
 import { createdSince, filesWrittenSince, ignoredFilesWritten, loggedCommitsIn, projectFiles, treeChangesIn, uncommittedChanges, writtenSince } from "../host/working-tree.ts";
 import type { StoredEvent } from "../shared/model.ts";
@@ -1096,10 +1097,24 @@ test("a commit where a room of the workspace is sandboxed, or was lately, runs n
   await identifyCommitter();
   await agentWorks();
   await writeFile(join(projectDir, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho the hook says no >&2\nexit 1\n", { mode: 0o755 });
-  store.setSandboxLastOnAt("w1", Date.now());
+  sandboxLeft(store, projectDir);
 
   expect((await changes.committable("c1")).hooksOff).toBe(true);
   await changes.commit("c1", ["made.txt"], "Past the hook");
+
+  expect(await git(projectDir, ["log", "-1", "--format=%s"])).toBe("Past the hook");
+});
+
+test("a commit in a repository nested in a sandboxed workspace's folder, whose hooks its VM could write, runs none of them", async () => {
+  await identifyCommitter();
+  await agentWorks();
+  await writeFile(join(projectDir, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho the hook says no >&2\nexit 1\n", { mode: 0o755 });
+  store.insertWorkspace({ id: "w0", name: "everything", path: root, defaultLaunch: { harness: "claude", profileId: null }, createdAt: 2 });
+  store.setWorkspaceSandbox("w0", { on: true, workFreely: true, allowsSharedKernel: false });
+  const changesInW1 = new Changes(store, checkpoints, () => store.findWorkspace("w1")!, () => {}, async () => true, async () => true);
+
+  expect((await changesInW1.committable("c1")).hooksOff).toBe(true);
+  await changesInW1.commit("c1", ["made.txt"], "Past the hook");
 
   expect(await git(projectDir, ["log", "-1", "--format=%s"])).toBe("Past the hook");
 });

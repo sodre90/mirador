@@ -1,3 +1,4 @@
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { describe, expect, test } from "bun:test";
 import type { Conversation, Workspace } from "../shared/model.ts";
 import {
@@ -262,7 +263,7 @@ describe("terminalKeyAction", () => {
   });
 });
 
-const workspace = (id: string): Workspace => ({ id, name: id, path: `/p/${id}`, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", createdAt: 0 });
+const workspace = (id: string): Workspace => ({ id, name: id, path: `/p/${id}`, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, createdAt: 0 });
 
 const conversation = (id: string, workspaceId: string, createdAt: number, position = 0): Conversation => ({
   id,

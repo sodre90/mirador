@@ -3,7 +3,7 @@ import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { buildImage, imageExists, imageTag, serviceRuns, startService } from "./image.ts";
-import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type RoomVmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
 const READY_WITHIN_S = 30;
@@ -17,7 +17,7 @@ const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${
  * `container run` of a room's VM: detached, removed once stopped, its first process, as root, under an init that passes
  * signals on, with no network at all.
  */
-export const runArguments = ({ name, labels, image, memory, mounts, entry }: RoomVmPlan) => [
+export const runArguments = ({ name, labels, image, memory, mounts, entry }: VmPlan) => [
   "run",
   "--detach",
   "--rm",
@@ -107,7 +107,7 @@ export class AppleContainer implements VmLauncher {
     return tag;
   }
 
-  async start(plan: RoomVmPlan) {
+  async start(plan: VmPlan) {
     const run = await this.usable().run(runArguments(plan));
     if (run.exitCode !== 0) throw new SandboxNotReady({ kind: "could-not-start", cause: lastLineOf(run.output) || `exit ${run.exitCode}` });
     await this.ready(plan.name);

@@ -3,22 +3,22 @@ import type { SandboxAvailability, SandboxNotReadyWhy, SandboxSetup } from "../.
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
-/** Why a room's agent can't run in its sandbox: the turn fails with it, and never runs on this computer instead. */
+/** Why a sandboxed agent can't run in its sandbox: the turn fails with it, and never runs on this computer instead. */
 export class SandboxNotReady extends HostProblemError {
   constructor(readonly why: SandboxNotReadyWhy) {
     super({ code: "sandbox-not-ready", why });
   }
 }
 
-/** The labels Mirador gives its VMs: the host that started one, told apart by its data folder, and the room it is for. */
+/** The labels Mirador gives its VMs: the host that started one, told apart by its data folder, and the room or workspace it is for. */
 export const HOST_LABEL = "mirador.host";
-export const ROOM_LABEL = "mirador.room";
+export const OWNER_LABEL = "mirador.owner";
 
 /** What a VM's first process prints once its agents can reach Mirador's sockets. */
 export const VM_READY_LINE = "relays ready";
 
-/** A room's VM: its name, labels and image, its memory, what of this computer it sees, and its first process, run as the launcher's first process user. */
-export interface RoomVmPlan {
+/** A sandbox's VM: its name, labels and image, its memory, what of this computer it sees, and its first process, run as the launcher's first process user. */
+export interface VmPlan {
   name: string;
   labels: Record<string, string>;
   image: string;
@@ -27,7 +27,7 @@ export interface RoomVmPlan {
   entry: string[];
 }
 
-/** An agent run in a room's VM as an unprivileged user that can't regain root, in its folder, with only the environment it is given. */
+/** An agent run in a sandbox's VM as an unprivileged user that can't regain root, in its folder, with only the environment it is given. */
 export interface AgentInVm {
   vm: string;
   user: string;
@@ -37,7 +37,7 @@ export interface AgentInVm {
 }
 
 /**
- * What runs rooms' VMs on this computer, with no network of their own: Apple's `container` on a Mac, rootless Podman's
+ * What runs sandboxes' VMs on this computer, with no network of their own: Apple's `container` on a Mac, rootless Podman's
  * containers on Linux. A launcher for another computer takes its place without anything else of the sandboxes changing.
  */
 export interface VmLauncher {
@@ -51,7 +51,7 @@ export interface VmLauncher {
   /** The runtime runs and the image of this Claude Code version is there, built where it was not, its progress told; the image. */
   prepare(claudeCodeVersion: string, progress: (setup: SandboxSetup) => void): Promise<string>;
   /** Starts the VM, once its first process says it is ready; throws SandboxNotReady where it does not get there. */
-  start(plan: RoomVmPlan): Promise<void>;
+  start(plan: VmPlan): Promise<void>;
   /** The process on this computer that runs the agent in its VM, its stdin, stdout and signals the agent's. */
   agentProcess(agent: AgentInVm): Pick<AgentLaunch, "command" | "environment">;
   /** Runs a command in the VM as this user, dropped as an agent is, reading `input`: its exit code and stdout. */

@@ -39,15 +39,15 @@ function turnThatPlays(updates: Update[]) {
     runtime(conversationId: string): { sessionId?: Promise<string> };
     handleSessionUpdate(notification: SessionNotification): void;
   };
-  const conversation = conversations.create("w1", { harness: "claude", profileId: "p1" });
-  internals.sessions.bind(conversation.id, sessionId);
-  internals.runtime(conversation.id).sessionId = Promise.resolve(sessionId);
   internals.agentProcesses.set("p1", {
     prompt: async () => {
       updates.forEach((update) => internals.handleSessionUpdate({ sessionId, update }));
       return { stopReason: "end_turn", usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } };
     },
   });
+  const conversation = conversations.create("w1", { harness: "claude", profileId: "p1" });
+  internals.sessions.bind(conversation.id, sessionId);
+  internals.runtime(conversation.id).sessionId = Promise.resolve(sessionId);
   const eventsOfTurn = () => store.listEvents(conversation.id).map(({ event }) => event);
   return { conversations, conversation, eventsOfTurn };
 }

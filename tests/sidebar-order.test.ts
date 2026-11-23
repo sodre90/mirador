@@ -1,3 +1,4 @@
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { describe, expect, test } from "bun:test";
 import type { Workspace, WorkspaceGroup } from "../shared/model.ts";
 import {
@@ -48,6 +49,7 @@ const workspace = (id: string, groupId: string | null, position: number): Worksp
   groupId,
   newConversationsIn: "folder",
   worktreeSetup: "",
+  sandbox: NO_SANDBOX,
   createdAt: 0,
 });
 

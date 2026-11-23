@@ -74,7 +74,7 @@ export const roomsWaitingFor = ({ you, roomApprovals, roomTasksWaiting, roomConv
   mostPressingPerRoom([
     ...[...roomApprovals, ...roomTasksWaiting].filter(({ approvers }) => you !== null && approvers.includes(you)).map(({ roomId }): [string, RoomWait] => [roomId, "answer"]),
     ...roomConversations.flatMap(({ roomId, waitingFor }): [string, RoomWait][] => (roomId && waitingFor === "question" ? [[roomId, "answer"]] : [])),
-    ...heldChanges.map(({ roomId }): [string, RoomWait] => [roomId, "held-change"]),
+    ...heldChanges.flatMap(({ owner }): [string, RoomWait][] => (owner.kind === "room" ? [[owner.id, "held-change"]] : [])),
     ...roomJoiners.map(({ roomId }): [string, RoomWait] => [roomId, "door"]),
   ]);
 

@@ -75,6 +75,12 @@ function sandboxNotReadyText(why: SandboxNotReadyWhy, words: ProblemWords) {
   }
 }
 
+const refusesTheAgent = (why: SandboxNotReadyWhy) => why.kind === "blocked" && (why.blocker.kind === "agent-kind-coming" || why.blocker.kind === "agent-signs-in-elsewhere");
+
+/** A sandboxed workspace's agent that can't run there is a matter of the profile picked, which the owner can change. */
+const workspaceSandboxNotReadyText = (why: SandboxNotReadyWhy, words: ProblemWords) =>
+  refusesTheAgent(why) ? words.workspaceSandboxRefusesAgent(sandboxNotReadyText(why, words)) : words.workspaceSandboxNotReady(sandboxNotReadyText(why, words));
+
 const causeText = ({ cause, causeProblem }: { cause: string; causeProblem?: HostProblem }, words: ProblemWords): string =>
   causeProblem ? problemText(causeProblem, words) : cause;
 
@@ -471,6 +477,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.profileTestUnanswered(problem.seconds);
     case "sandbox-not-ready":
       return words.sandboxNotReady(sandboxNotReadyText(problem.why, words));
+    case "workspace-sandbox-not-ready":
+      return workspaceSandboxNotReadyText(problem.why, words);
     default:
       return words.fixed[problem.code];
   }

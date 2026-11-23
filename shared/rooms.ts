@@ -1,7 +1,7 @@
 import type { CanvasItem, HarnessId, PendingPermissionRequest, StoredEvent } from "./model.ts";
 import type { PermissionPreset } from "./room-permissions.ts";
 import type { ClaudeSetup, VariablesChosen } from "./room-agent-setup.ts";
-import type { RoomSandbox } from "./sandbox.ts";
+import type { SandboxSetting } from "./sandbox.ts";
 import type { RoomMention } from "./room-mentions.ts";
 import { cutWithEllipsis } from "./text-cut.ts";
 import { LINE_BREAKS, oneLine, squareBracketsMadeRound } from "./written-text.ts";
@@ -150,7 +150,7 @@ export interface Room {
   /** Whether its members may bring agents of their own Miradors; guests never do. */
   membersBringAgents: boolean;
   /** Whether its agents run in a light VM of their own; for the owner's eyes. */
-  sandbox: RoomSandbox;
+  sandbox: SandboxSetting;
   createdAt: number;
 }
 

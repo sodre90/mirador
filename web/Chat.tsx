@@ -124,6 +124,8 @@ import { useTypingAidAttributes } from "./typing-aids.ts";
 import { FullscreenToggle, PaneGrip } from "./Workspace.tsx";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { ConversationSettingsPopover, ConversationSettingsToggle, useConversationSettings } from "./ConversationSettings.tsx";
+import { HeldChangeCard } from "./Sandbox.tsx";
+import { openWorkspaceSandbox, SandboxedMark, type ConversationSandbox } from "./WorkspaceSandbox.tsx";
 
 const words = t.chat;
 
@@ -168,6 +170,7 @@ function ChatHeader({
   sideChatShown,
   forkable,
   begun,
+  onOpenSandbox,
 }: {
   conversation: Conversation;
   profiles: Profile[];
@@ -181,6 +184,8 @@ function ChatHeader({
   sideChatShown: boolean;
   forkable: boolean;
   begun: boolean;
+  /** Opens the settings of the workspace sandbox the conversation's agent runs in; null where it runs on this computer. */
+  onOpenSandbox: (() => void) | null;
 }) {
   const statusDetail = statusDetailOf(conversation);
   const settings = useConversationSettings();
@@ -208,6 +213,7 @@ function ChatHeader({
             </span>
           )}
           <span className="header-actions">
+            {onOpenSandbox && <SandboxedMark className="conversation-sandboxed" hint={t.shell.workspaceSandbox.conversationSandboxed} onOpen={onOpenSandbox} />}
             <ConversationSettingsToggle conversation={conversation} profiles={profiles} settings={settings} />
             {conversation.bypassPermissions && (
               <span className="yolo-on" data-hint={hints.yoloOn}>
@@ -2312,6 +2318,7 @@ export function ChatPanel({
   reminderMorning,
   dispatch,
   side,
+  sandbox,
 }: {
   conversation: Conversation;
   /** The conversations this one's plugin tools started that the user hasn't dismissed. */
@@ -2336,6 +2343,7 @@ export function ChatPanel({
   dispatch: Dispatch<AppAction>;
   /** For a side chat in the column beside its conversation. */
   side?: { parent: Conversation; onOpenAsConversation: () => void };
+  sandbox: ConversationSandbox;
 }) {
   const timeline = useTimeline(open.events);
   const sideChatShown = conversation.id in useSideChatsShown();
@@ -2431,6 +2439,7 @@ export function ChatPanel({
                         sideChatShown={sideChatShown}
                         forkable={canFork(conversation, open)}
                         begun={begun}
+                        onOpenSandbox={sandbox.sandboxed ? () => openWorkspaceSandbox(dispatch, conversation.workspaceId) : null}
                       />
                     )}
                     {find.query !== null && <FindBar find={find} />}
@@ -2471,6 +2480,13 @@ export function ChatPanel({
                     {broughtTasks.map((task) => (
                       <BroughtTaskCard key={task.id} task={task} />
                     ))}
+                    <HeldChangeCard
+                      changes={sandbox.heldChanges}
+                      holdsTooMany={sandbox.holdsTooMany}
+                      agentName={(profileId) => profiles.find(({ id }) => id === profileId)?.name ?? t.rooms.agentGone}
+                      countOf={t.rooms.approvalPosition}
+                      unknownAgent={t.shell.workspaceSandbox.anAgentHere}
+                    />
                     {!side && <ReminderBanner conversation={conversation} dispatch={dispatch} />}
                     <Composer
                       conversation={conversation}

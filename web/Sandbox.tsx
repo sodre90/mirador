@@ -8,16 +8,16 @@ import {
   type HeldChange,
   type HeldChangeAnswer,
   type HeldChangeText,
-  type RoomSandbox,
   type SandboxCheck,
   type SandboxKind,
+  type SandboxSetting,
   type SandboxSetup,
 } from "../shared/sandbox.ts";
 import { DiffView } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { sandboxBlockerText, sandboxUnavailableText } from "./problem-text.ts";
-import { nameOf, StartsAfreshWarning, useChangeStartingAfresh, workingThere } from "./RoomAgentSetup.tsx";
+import { nameOf, roomStartsAfreshText, StartsAfreshWarning, useChangeStartingAfresh, workingThere } from "./RoomAgentSetup.tsx";
 
 const words = t.rooms.sandbox;
 const heldWords = t.rooms.held;
@@ -32,7 +32,7 @@ function checkedAgainst(room: Room, profiles: Profile[]) {
 }
 
 /** Whether this computer and the room can have a sandbox, asked again whenever the room's workspace or agents change. */
-function useSandboxCheck(room: Room, profiles: Profile[]) {
+function useRoomSandboxCheck(room: Room, profiles: Profile[]) {
   const [check, setCheck] = useState<SandboxCheck | null>(null);
   const against = checkedAgainst(room, profiles);
   useEffect(() => {
@@ -53,11 +53,11 @@ function useSandboxCheck(room: Room, profiles: Profile[]) {
   return check;
 }
 
-/** What stands in the sandbox's way, in plain words: this computer's reason alone, or else the room's. */
+/** What stands in the sandbox's way, in plain words: this computer's reason alone, or else the room's or workspace's. */
 const reasonsOf = ({ availability, blockers }: SandboxCheck) =>
   availability.available ? blockers.map((blocker) => sandboxBlockerText(blocker, t.problems)) : [sandboxUnavailableText(availability.why, t.problems)];
 
-/** The kind of sandbox this computer gives its rooms, where it gives any. */
+/** The kind of sandbox this computer gives, where it gives any. */
 const kindOf = (check: SandboxCheck | null): SandboxKind | null => (check?.availability.available ? check.availability.kind : null);
 
 /** Whether this computer's sandbox runs outside the SELinux confinement Linux enforces here. */
@@ -74,7 +74,7 @@ function SetupProgress({ setup, kind }: { setup: SandboxSetup; kind: SandboxKind
   );
 }
 
-/** What a sandbox sharing this computer's kernel keeps the agents from, and what not, said before the room gets one. */
+/** What a sandbox sharing this computer's kernel keeps the agents from, and what not, said before it is turned on. */
 function SharedKernelWarning({ withoutSelinux, confirmation, onConfirm, onKeepOff }: { withoutSelinux: boolean; confirmation: string; onConfirm: () => void; onKeepOff?: () => void }) {
   return (
     <div className="room-sandbox-shared-kernel" role="alert">
@@ -93,21 +93,46 @@ function SharedKernelWarning({ withoutSelinux, confirmation, onConfirm, onKeepOf
   );
 }
 
+/** What a room's or workspace's sandbox switch says of its own. */
+export interface SandboxSwitchWords {
+  turnOn: string;
+  checking: string;
+  /** The option under which the agents still ask: the room's preset, or their profile's mode. */
+  stillAsks: string;
+}
+
 /**
- * The room's sandbox switch, which this computer or the room can keep off with a reason said under it, and the kind of
- * sandbox this computer gives; once on, how the agents work inside and where setting it up on this computer stands. A
- * sandbox that shares this computer's kernel is said to before it is turned on, and taken only once the owner allows it.
- * Changing it starts the agents at work afresh.
+ * A room's or workspace's sandbox switch, which this computer or the room or workspace can keep off with a reason said
+ * under it, and the kind of sandbox this computer gives; once on, how the agents work inside and where setting it up on
+ * this computer stands. A sandbox that shares this computer's kernel is said to before it is turned on, and taken only
+ * once the owner allows it. A change that starts conversations at work afresh waits for the owner to confirm it.
  */
-export function SandboxField({ room, profiles, roomConversations, setup }: { room: Room; profiles: Profile[]; roomConversations: Conversation[]; setup: SandboxSetup }) {
-  const check = useSandboxCheck(room, profiles);
-  const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(room.sandbox, (sandbox) => connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox }));
+export function SandboxSwitch({
+  id,
+  setting,
+  check,
+  setup,
+  switchWords,
+  startsAfresh,
+  startsAfreshText,
+  send,
+}: {
+  id: string;
+  setting: SandboxSetting;
+  check: SandboxCheck | null;
+  setup: SandboxSetup;
+  switchWords: SandboxSwitchWords;
+  /** What starts afresh on a change: the agents or conversations at work. */
+  startsAfresh: string[];
+  startsAfreshText: (startsAfresh: string[], stopsTurn: boolean) => string;
+  send: (sandbox: SandboxSetting) => void;
+}) {
+  const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(setting, send);
   const [askingToShareKernel, setAskingToShareKernel] = useState(false);
-  const startsAfresh = room.agents.filter((agent) => !agent.brought && workingThere(agent, roomConversations)).map(({ profileId }) => nameOf(profiles, profileId));
-  const choose = (sandbox: RoomSandbox) => change(sandbox, startsAfresh, narrowsSandbox(room.sandbox, sandbox));
+  const choose = (sandbox: SandboxSetting) => change(sandbox, startsAfresh, narrowsSandbox(setting, sandbox));
   const reasons = check ? reasonsOf(check) : [];
   const turnsOn = check !== null && reasons.length === 0;
-  const reasonsId = `room-sandbox-reasons-${room.id}`;
+  const reasonsId = `${id}-sandbox-reasons`;
   const kind = kindOf(check);
   const kernelShared = kind !== null && sharesKernel(kind);
   const withoutSelinux = outsideSelinux(check);
@@ -131,9 +156,9 @@ export function SandboxField({ room, profiles, roomConversations, setup }: { roo
           aria-describedby={reasons.length > 0 ? reasonsId : undefined}
           onChange={(event) => turn(event.target.checked)}
         />
-        {words.turnOn}
+        {switchWords.turnOn}
       </label>
-      {check === null && <p className="hint">{words.checking}</p>}
+      {check === null && <p className="hint">{switchWords.checking}</p>}
       {kind !== null && <p className={`hint room-sandbox-kind${kernelShared ? " shares-kernel" : ""}`}>{words.kinds[kind]}</p>}
       {askingToShareKernel && <SharedKernelWarning withoutSelinux={withoutSelinux} confirmation={words.sharedKernel.turnOn} onConfirm={turnOnSharingKernel} onKeepOff={() => setAskingToShareKernel(false)} />}
       {shown.on && kernelShared && !shown.allowsSharedKernel && pending === null && (
@@ -154,44 +179,65 @@ export function SandboxField({ room, profiles, roomConversations, setup }: { roo
           <p className="hint">{words.network}</p>
           <div className="room-sandbox-work">
             <label className="room-agent-choice">
-              <input type="radio" name="room-sandbox-work" checked={shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: true })} />
+              <input type="radio" name={`${id}-sandbox-work`} checked={shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: true })} />
               {words.workFreely}
             </label>
             <label className="room-agent-choice">
-              <input type="radio" name="room-sandbox-work" checked={!shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: false })} />
-              {words.presetApplies}
+              <input type="radio" name={`${id}-sandbox-work`} checked={!shown.workFreely} disabled={pending !== null} onChange={() => choose({ ...shown, workFreely: false })} />
+              {switchWords.stillAsks}
             </label>
           </div>
           {kind !== null && <SetupProgress setup={setup} kind={kind} />}
         </>
       )}
-      {pending && <StartsAfreshWarning agents={startsAfresh} stopsTurn={pending.narrows} onConfirm={confirm} onKeep={keep} />}
+      {pending && <StartsAfreshWarning text={startsAfreshText(startsAfresh, pending.narrows)} onConfirm={confirm} onKeep={keep} />}
     </fieldset>
   );
 }
 
-/** The long story of the sandbox, under "What does this mean?". */
+const roomSwitchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.presetApplies };
+
+/** The room's sandbox switch; changing it starts the room's agents at work afresh. */
+export function SandboxField({ room, profiles, roomConversations, setup }: { room: Room; profiles: Profile[]; roomConversations: Conversation[]; setup: SandboxSetup }) {
+  const check = useRoomSandboxCheck(room, profiles);
+  const startsAfresh = room.agents.filter((agent) => !agent.brought && workingThere(agent, roomConversations)).map(({ profileId }) => nameOf(profiles, profileId));
+  return (
+    <SandboxSwitch
+      id={`room-${room.id}`}
+      setting={room.sandbox}
+      check={check}
+      setup={setup}
+      switchWords={roomSwitchWords}
+      startsAfresh={startsAfresh}
+      startsAfreshText={roomStartsAfreshText}
+      send={(sandbox) => connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox })}
+    />
+  );
+}
+
+/** The long story of the room's sandbox, under "What does this mean?". */
 export function SandboxMeaning() {
   return words.meaning.map((paragraph) => <p key={paragraph}>{paragraph}</p>);
 }
 
 const heldTitles = { add: heldWords.wantsToAdd, change: heldWords.wantsToChange, delete: heldWords.wantsToDelete } satisfies Record<HeldChange["kind"], unknown>;
 
-const answerHeld = ({ roomId, id }: HeldChange, answer: HeldChangeAnswer) => connection.send({ type: "room.answer-held-change", roomId, changeId: id, answer });
+const answerHeld = ({ owner, id }: HeldChange, answer: HeldChangeAnswer) => connection.send({ type: "sandbox.answer-held-change", owner, changeId: id, answer });
 
 const UNSHOWN: HeldChangeText = { unshown: true };
 
 /** A held change's text, asked for as the change is shown: null until it comes. */
-function useHeldText({ roomId, id, at, unshown }: HeldChange) {
+function useHeldText({ owner, id, at, unshown }: HeldChange) {
   const [text, setText] = useState<HeldChangeText | null>(null);
+  const { kind, id: ownerId } = owner;
   useEffect(() => {
     let wanted = true;
     setText(unshown ? UNSHOWN : null);
     if (!unshown)
       connection
         .sendAndAwait(
-          (requestId) => ({ type: "room.held-change-text", requestId, roomId, changeId: id }),
-          (message, requestId): HeldChangeText | undefined => (message.type === "room.held-change-text" && message.requestId === requestId ? (message.text ?? UNSHOWN) : undefined),
+          (requestId) => ({ type: "sandbox.held-change-text", requestId, owner: { kind, id: ownerId }, changeId: id }),
+          (message, requestId): HeldChangeText | undefined => (message.type === "sandbox.held-change-text" && message.requestId === requestId ? (message.text ?? UNSHOWN) : undefined),
         )
         .then(
           (got) => wanted && setText(got),
@@ -200,7 +246,7 @@ function useHeldText({ roomId, id, at, unshown }: HeldChange) {
     return () => {
       wanted = false;
     };
-  }, [roomId, id, at, unshown]);
+  }, [kind, ownerId, id, at, unshown]);
   return text;
 }
 
@@ -212,17 +258,30 @@ function HeldText({ change }: { change: HeldChange }) {
 }
 
 /**
- * The oldest agent config file change of a sandboxed room, put back as it was and held for the owner: which agents may
- * have made it, what it would write, and Allow or Discard; and, where the room holds as many as it may, that its VM
- * stopped until some are answered.
+ * The oldest agent config file change of a sandbox, put back as it was and held for the owner: which agents may have
+ * made it, what it would write, and Allow or Discard; and, where the sandbox holds as many as it may, that its VM
+ * stopped until some are answered. Where none of its agents was at work, `unknownAgent` says who may have made it.
  */
-export function HeldChangeCard({ changes, holdsTooMany, agentName, countOf }: { changes: HeldChange[]; holdsTooMany: boolean; agentName: (profileId: string) => string; countOf: (count: number) => string }) {
+export function HeldChangeCard({
+  changes,
+  holdsTooMany,
+  agentName,
+  countOf,
+  unknownAgent,
+}: {
+  changes: HeldChange[];
+  holdsTooMany: boolean;
+  agentName: (profileId: string) => string;
+  countOf: (count: number) => string;
+  unknownAgent?: string;
+}) {
   const first = changes[0];
   if (!first) return null;
+  const agents = first.agents.length === 0 && unknownAgent ? [unknownAgent] : first.agents.map(agentName);
   return (
     <section className="room-held" aria-label={heldWords.label} data-held-path={first.path}>
       <div className="room-held-head">
-        <span className="room-held-title">{heldTitles[first.kind](first.agents.map(agentName), first.path)}</span>
+        <span className="room-held-title">{heldTitles[first.kind](agents, first.path)}</span>
         {changes.length > 1 && <span className="room-approval-count">{countOf(changes.length)}</span>}
       </div>
       {holdsTooMany && (

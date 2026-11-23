@@ -1,6 +1,6 @@
 import type { HarnessId } from "./model.ts";
 import { parseEnvironment, type ProfileEnvironment } from "./profile-environment.ts";
-import type { RoomSandbox } from "./sandbox.ts";
+import type { SandboxSetting } from "./sandbox.ts";
 
 /**
  * What a room's Claude Code agents load of the owner's own Claude Code setup, each part on its own: the owner's settings
@@ -133,7 +133,7 @@ export function environmentInRoom(harness: HarnessId, host: Record<string, strin
 }
 
 /** What a room's agent session was started under: a session started under anything else is not taken up again. */
-export function roomSetupFingerprint(harness: HarnessId, environmentText: string, { variables, wholeHostEnvironment }: EnvironmentChoices, claudeSetup: ClaudeSetup, sandbox: RoomSandbox) {
+export function roomSetupFingerprint(harness: HarnessId, environmentText: string, { variables, wholeHostEnvironment }: EnvironmentChoices, claudeSetup: ClaudeSetup, sandbox: SandboxSetting) {
   const given = profileVariablesInRoom(harness, environmentText, variables).flatMap(({ name, given: isGiven }) => (isGiven ? [name] : []));
   const loaded = harness === "claude" ? CLAUDE_SETUP_PARTS.filter((part) => claudeSetup[part]) : [];
   return JSON.stringify({ given: given.toSorted(), wholeHostEnvironment, loaded, ...(sandbox.on && { sandbox: sandbox.workFreely ? "works-freely" : "preset" }) });

@@ -66,10 +66,13 @@ export function useChangeStartingAfresh<T>(kept: T, send: (value: T) => void) {
   };
 }
 
-export function StartsAfreshWarning({ agents, stopsTurn, onConfirm, onKeep }: { agents: string[]; stopsTurn: boolean; onConfirm: () => void; onKeep: () => void }) {
+/** What a change costs the room's agents at work: they start afresh, and, where it leaves them with less, stop their turns. */
+export const roomStartsAfreshText = (agents: string[], stopsTurn: boolean) => (stopsTurn ? words.stopsAndStartsAfresh(agents) : words.startsAfresh(agents));
+
+export function StartsAfreshWarning({ text, onConfirm, onKeep }: { text: string; onConfirm: () => void; onKeep: () => void }) {
   return (
     <div className="room-starts-afresh" role="alert">
-      <span>{stopsTurn ? words.stopsAndStartsAfresh(agents) : words.startsAfresh(agents)}</span>
+      <span>{text}</span>
       <button type="button" className="primary" onClick={onConfirm}>
         {words.applyChange}
       </button>
@@ -117,7 +120,7 @@ export function AgentValues({ room, agent, profile, roomConversations }: { room:
         {words.wholeHostEnvironment}
       </label>
       {room.sandbox.on && <p className="hint room-values-sandboxed">{words.sandbox.wholeEnvironmentIgnored}</p>}
-      {pending && <StartsAfreshWarning agents={startsAfresh} stopsTurn={pending.narrows} onConfirm={confirm} onKeep={keep} />}
+      {pending && <StartsAfreshWarning text={roomStartsAfreshText(startsAfresh, pending.narrows)} onConfirm={confirm} onKeep={keep} />}
       <p className="hint room-values-warning">{words.wholeHostEnvironmentHint}</p>
       <p className="hint room-values-warning">{words.valuesReadable}</p>
     </details>
@@ -148,7 +151,7 @@ export function ClaudeSetupField({ room, profiles, roomConversations }: { room: 
           ))}
         </div>
       )}
-      {pending && <StartsAfreshWarning agents={startsAfresh} stopsTurn={pending.narrows} onConfirm={confirm} onKeep={keep} />}
+      {pending && <StartsAfreshWarning text={roomStartsAfreshText(startsAfresh, pending.narrows)} onConfirm={confirm} onKeep={keep} />}
     </fieldset>
   );
 }

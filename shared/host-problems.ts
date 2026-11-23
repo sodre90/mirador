@@ -218,7 +218,8 @@ export type HostProblem =
   /** `mixedIn` names the agent log when another start of the profile ran its pre-launch command meanwhile, so the output isn't quoted. */
   | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string; mixedIn: string | null }
   | { code: "profile-test-unanswered"; seconds: number }
-  | { code: "sandbox-not-ready"; why: SandboxNotReadyWhy };
+  | { code: "sandbox-not-ready"; why: SandboxNotReadyWhy }
+  | { code: "workspace-sandbox-not-ready"; why: SandboxNotReadyWhy };
 
 /** Why the agent process went away, in English. */
 export const englishAgentGone = (gone: AgentGone) => goneText(gone, englishWords);

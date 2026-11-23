@@ -189,7 +189,7 @@ export class StatuslineService {
     const runsClaudeCode = conversation.harness === "claude";
     const [gitBranch, command, promptCache] = await Promise.all([
       currentGitBranch(directory),
-      configDir && this.runsUserCommands && runsClaudeCode && !this.inSandboxedRoom(conversation) ? statusLineCommandIn(configDir) : null,
+      configDir && this.runsUserCommands && runsClaudeCode && !this.inSandbox(conversation) ? statusLineCommandIn(configDir) : null,
       configDir && runsClaudeCode && conversation.acpSessionId ? claudeTranscriptEnd(configDir, conversation.acpSessionId).then(promptCacheOf) : null,
     ]);
     if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints, promptCache };
@@ -205,9 +205,10 @@ export class StatuslineService {
       : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips, contextHints, promptCache };
   }
 
-  /** The owner's statusline command would run on this computer in a workspace that a sandboxed room's agents write. */
-  private inSandboxedRoom({ roomId }: Conversation) {
-    return roomId !== undefined && this.store.findRoom(roomId)?.sandbox.on === true;
+  /** The owner's statusline command would run on this computer in a workspace that a sandboxed room's or workspace's agents write. */
+  private inSandbox({ roomId, workspaceId }: Conversation) {
+    if (roomId !== undefined) return this.store.findRoom(roomId)?.sandbox.on === true;
+    return this.store.findWorkspace(workspaceId)?.sandbox.on === true;
   }
 
   /** A profile whose environment does not parse cannot run anything; its conversation says why elsewhere. */

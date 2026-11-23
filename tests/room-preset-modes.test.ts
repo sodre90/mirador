@@ -66,7 +66,7 @@ test("a room's agent runs in its preset's mode, not its profile's, ignores its p
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const { agent, promptedIn } = codexAgent();
   const inRoom = conversations.startInRoom("r1", "w1", { harness: "codex", profileId: "p1" }, "Room: p");
-  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, inRoom), agent);
+  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, inRoom, false), agent);
   expect(conversations.get(inRoom.id).bypassPermissions).toBe(false);
 
   await conversations.send(inRoom.id, "first", []);
@@ -129,7 +129,7 @@ test("a room's agent opens its session on the model and effort chosen for it in 
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const { agent, promptedOn } = agentWithModels();
   const inRoom = conversations.startInRoom("r1", "w1", { harness: "codex", profileId: "p1" }, "Room: p");
-  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, inRoom), agent);
+  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, inRoom, false), agent);
 
   await conversations.send(inRoom.id, "first", []);
   await until(() => promptedOn.length === 1 && conversations.get(inRoom.id).status === "idle");
@@ -155,7 +155,7 @@ test("an agent brought into someone else's room asks as usual: never YOLO, and i
   withSessions.ensureSession = async () => "not-started";
   const brought = conversations.createBroughtIntoRoom("w1", { harness: "codex", profileId: "p1" }, "Garden · Ann's machine");
   withSessions.ensureSession = ensureSession;
-  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, brought), agent);
+  (conversations as unknown as { agentProcesses: Map<string, unknown> }).agentProcesses.set(agentProcessKey(store.findProfile("p1")!, brought, false), agent);
   expect(conversations.get(brought.id).bypassPermissions).toBe(false);
   expect(() => conversations.setBypassPermissions(brought.id, true)).toThrow();
 

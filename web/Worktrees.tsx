@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type Dispatch } from "react";
-import { conversationPlaces, type ConversationPlace, type Workspace } from "../shared/model.ts";
+import { conversationPlaces, placeOfNewConversation, type ConversationPlace, type Workspace } from "../shared/model.ts";
 import { startConversationIn } from "./actions.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
@@ -7,6 +7,7 @@ import { Modal } from "./Palette.tsx";
 import { usePlacedBeside } from "./placed-beside.ts";
 import type { AppAction, AppState } from "./state.ts";
 import { useTypingAidAttributes } from "./typing-aids.ts";
+import { openWorkspaceSandbox } from "./WorkspaceSandbox.tsx";
 
 const words = t.shell.worktrees;
 
@@ -50,6 +51,8 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
   const [place, setPlace] = useState(workspace.newConversationsIn);
   const [setup, setSetup] = useState(workspace.worktreeSetup);
   const typingAidAttributes = useTypingAidAttributes();
+  const sandboxed = workspace.sandbox.on;
+  const startsIn = placeOfNewConversation({ ...workspace, newConversationsIn: place });
   const elsewhere = otherPlace(workspace.newConversationsIn);
 
   useEffect(() => {
@@ -66,6 +69,10 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
     onClose();
     startConversationIn(workspace, dispatch, undefined, elsewhere);
   };
+  const openSandbox = () => {
+    onClose();
+    openWorkspaceSandbox(dispatch, workspace.id);
+  };
 
   return (
     <Modal label={words.title(workspace.name)} className="worktrees" onClose={onClose}>
@@ -80,13 +87,21 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
           <legend>{words.startIn}</legend>
           {conversationPlaces.map((each) => (
             <label key={each} className="worktree-place">
-              <input type="radio" name="new-conversations-in" checked={place === each} onChange={() => setPlace(each)} />
+              <input type="radio" name="new-conversations-in" checked={startsIn === each} disabled={sandboxed} onChange={() => setPlace(each)} />
               <span>
                 {placeWords[each].label}
                 <small>{placeWords[each].detail}</small>
               </span>
             </label>
           ))}
+          {sandboxed && (
+            <p className="hint worktrees-sandboxed">
+              {words.whileSandboxed}{" "}
+              <button type="button" className="link" onClick={openSandbox}>
+                {words.sandboxSettings}
+              </button>
+            </p>
+          )}
         </fieldset>
         <label className="worktree-setup">
           {words.setup}
@@ -94,9 +109,11 @@ export function WorktreesDialog({ workspace, dispatch, onClose }: { workspace: W
         </label>
         <p className="hint">{words.setupDetail}</p>
         <div className="form-actions">
-          <button type="button" className="link start-elsewhere" onClick={startElsewhere}>
-            {words.startOne[elsewhere]}
-          </button>
+          {!sandboxed && (
+            <button type="button" className="link start-elsewhere" onClick={startElsewhere}>
+              {words.startOne[elsewhere]}
+            </button>
+          )}
           <button type="button" className="link" onClick={onClose}>
             {words.cancel}
           </button>

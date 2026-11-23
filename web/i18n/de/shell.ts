@@ -109,6 +109,53 @@ export const shell: Messages["shell"] = {
     deleteKeeps: (branches) =>
       branches.length === 1 ? `Dort gemachte Commits bleiben erhalten, auf dem Branch ${branches[0]}.` : `Dort gemachte Commits bleiben erhalten, auf den Branches ${branches.join(", ")}.`,
     deleteBoth: "Beides löschen",
+    whileSandboxed: "Solange dieser Arbeitsbereich seine Agenten in einer Sandbox ausführt, beginnen neue Unterhaltungen im Projektordner: Die Sandbox sieht keine Worktrees.",
+    sandboxSettings: "Sandbox-Einstellungen…",
+  },
+  workspaceSandbox: {
+    open: "Sandbox",
+    title: (workspace) => `Sandbox für ${workspace}`,
+    lead: "Hält die Agenten der Unterhaltungen dieses Arbeitsbereichs vom Rest dieses Rechners getrennt. Seine Räume haben eigene Sandboxes.",
+    turnOn: "Agenten dieses Arbeitsbereichs in einer Sandbox ausführen",
+    checking: "Prüfe, ob dieser Arbeitsbereich eine Sandbox haben kann…",
+    profileModeApplies: "Der Berechtigungsmodus ihres Profils gilt weiter",
+    startsOnRefused: (why) => `Neue Unterhaltungen beginnen hier mit einem Profil, das nicht in der Sandbox laufen kann. ${why} Wähle unter dem Namen des Arbeitsbereichs ein Claude-Profil, das sich mit einem API-Schlüssel anmeldet.`,
+    inWorktrees: (count) =>
+      plural(
+        count,
+        "1 Unterhaltung hier arbeitet in einem Worktree, den die Sandbox nicht sieht: Sie kann nicht weitergehen, solange die Sandbox an ist.",
+        `${count} Unterhaltungen hier arbeiten in Worktrees, die die Sandbox nicht sieht: Sie können nicht weitergehen, solange die Sandbox an ist.`,
+      ),
+    startsAfresh: (count) =>
+      plural(
+        count,
+        "1 Unterhaltung hier fängt beim Weitermachen neu an: Ihr Agent erinnert sich nicht an das, was vorher gesagt wurde.",
+        `${count} Unterhaltungen hier fangen beim Weitermachen neu an: Ihre Agenten erinnern sich nicht an das, was vorher gesagt wurde.`,
+      ),
+    stopsAndStartsAfresh: (count) =>
+      plural(
+        count,
+        "1 Unterhaltung hier stoppt eine laufende Runde und fängt neu an: Ihr Agent erinnert sich nicht an das, was vorher gesagt wurde.",
+        `${count} Unterhaltungen hier stoppen laufende Runden und fangen neu an: Ihre Agenten erinnern sich nicht an das, was vorher gesagt wurde.`,
+      ),
+    done: "Fertig",
+    on: "An",
+    off: "Aus",
+    workspaceSandboxed: "Die Agenten dieses Arbeitsbereichs laufen in einer Sandbox. Klicke für ihre Einstellungen.",
+    conversationSandboxed: "Der Agent dieser Unterhaltung läuft in der Sandbox seines Arbeitsbereichs. Klicke für ihre Einstellungen.",
+    heldWaits: "Wartet auf dich: Die Sandbox hält eine Änderung an Agent-Einstellungen bis zu deiner Genehmigung zurück. Klicke, um sie zu sehen.",
+    anAgentHere: "Ein Agent dieses Arbeitsbereichs",
+    meaning: [
+      "Die Claude-Code-Agenten der Unterhaltungen dieses Arbeitsbereichs laufen in einer eigenen Sandbox auf diesem Rechner: auf einem Mac in einer leichten VM, erstellt mit Apples container-Tool; unter Linux in einem Podman-Container, der sich den Kernel des Rechners teilt und die Agenten daher weniger gut einschließt als eine VM; er wird erst genutzt, wenn du es erlaubst. Die Sandbox sieht den Projektordner und einen Ordner des Arbeitsbereichs für die Claude-Code-Einstellungen und Sitzungen der Agenten, sonst nichts von diesem Rechner: weder deine eigenen Claude-Code-Einstellungen noch andere Arbeitsbereiche. Ihr Netzwerk erreicht nur das Modell, über Mirador, das den Schlüssel des Profils hinzufügt, sodass er nie in die Sandbox gelangt, und Miradors Canvas.",
+      "Auf dem Canvas können die Agenten dir Seiten zeigen und dir Fragen stellen, bekommen aber keine anderen Tools von Mirador, da diese auf diesem Rechner arbeiten.",
+      "Vorerst laufen darin nur Claude-Code-Agenten, deren Profil sich mit einem API-Schlüssel anmeldet. Eine Unterhaltung mit einem anderen Profil startet nicht: Wähle für sie ein Profil, das es kann, oder schalte die Sandbox aus.",
+      "Arbeiten sie frei, fragen die Agenten nach nichts, da die Sandbox sie einschließt, und YOLO wirkt nur, solange die Sandbox läuft. Sonst fragt jede Unterhaltung so, wie es der Modus ihres Profils sagt.",
+      "Die Dateien, aus denen Agenten ihre Einstellungen, Anweisungen und MCP-Server laden, werden zurückgehalten, ebenso die Dateien, die von selbst laufen: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml und .envrc. Die beim Start der Sandbox vorhandenen sind darin schreibgeschützt; eine neue wird sofort zurückgesetzt, und du erlaubst oder verwirfst sie in der Unterhaltung, in der sie geschah, oder hier.",
+      "Jede andere Datei, die die Agenten im Projektordner ändern, kann laufen, wenn du sie selbst ausführst: Tests, Skripte, package.json oder ein Commit aus deinem Terminal, der die Hooks des Repositorys ausführt. Sieh dir an, was sie geändert haben, bevor du dort etwas ausführst.",
+      "Konfiguration und Hooks des Repositorys sind in der Sandbox schreibgeschützt, die eines Repositorys im Projektordner aber nicht. Mirador führt Git im Arbeitsbereich ohne Hooks und fsmonitor aus, und solange der Arbeitsbereich eine Sandbox hat und 7 Tage danach überspringen auch seine Commits, Merges und neuen Worktrees im Projektordner oder einem Ordner darin die Hooks der Repositorys.",
+      "Neue Unterhaltungen beginnen im Projektordner statt in einem Worktree, da die Sandbox keinen Worktree sieht. !-Befehle, Sitzungen aus deinem Terminal und die eigenen Panels von Claude Code laufen hier ebenfalls nicht: Sie würden auf diesem Rechner laufen.",
+      "Sie ein- oder auszuschalten oder zu ändern, wie die Agenten darin arbeiten, lässt die Unterhaltungen hier neu anfangen.",
+    ],
   },
   workspaceDelete: {
     title: "Den Arbeitsbereich und seine Worktrees entfernen?",

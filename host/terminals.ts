@@ -61,6 +61,7 @@ interface Shell {
   titleCarry: string;
   program: string;
   programKey: string | undefined;
+  runsTheAgent: boolean;
   saved: boolean;
 }
 
@@ -74,6 +75,8 @@ export interface TerminalProgram {
   environment?: Record<string, string>;
   /** While a program with the same key runs in the conversation's terminals, opening this one shows that one instead. */
   key?: string;
+  /** The conversation's agent itself, as its sign-in and Claude Code's own panels run it, on this computer. */
+  runsTheAgent?: boolean;
 }
 
 interface Tab {
@@ -256,6 +259,13 @@ export class TerminalService {
     this.shellsIn(conversationId).forEach(({ id }) => this.close(id));
   }
 
+  /** The tabs that run the conversation's agent on this computer close; its own shells stay. */
+  closeAgentPrograms(conversationId: string) {
+    this.shellsIn(conversationId)
+      .filter(({ runsTheAgent }) => runsTheAgent)
+      .forEach(({ id }) => this.close(id));
+  }
+
   /**
    * Saves what every terminal shows, then waits for the shells to exit: one still running when the host re-executes
    * itself would be left a zombie. Their tabs stay saved for the next run.
@@ -363,6 +373,7 @@ export class TerminalService {
       titleCarry: "",
       program: command[0]!,
       programKey: program?.key,
+      runsTheAgent: program?.runsTheAgent === true,
       saved: tab.saved,
     };
     shell.child = Bun.spawn(command, {

@@ -22,6 +22,8 @@ import { DesktopMenu } from "./DesktopMenu.tsx";
 import { FavouriteStar, favouriteLabel, setFavourite } from "./FavouriteStar.tsx";
 import { useDragToReorder, usePointerDrag } from "./drag-to-reorder.ts";
 import { forkConversation, startConversationIn } from "./actions.ts";
+import { openWorkspaceSandbox, SandboxedMark } from "./WorkspaceSandbox.tsx";
+import { ofSandbox, workspaceSandbox } from "../shared/sandbox.ts";
 import { hints, statusHints, waitingHints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { waitingOnJobsHint } from "./job-waits.ts";
@@ -71,6 +73,7 @@ function useDirectoryCompletions(prefix: string) {
 }
 
 const words = t.shell.sidebar;
+const sandboxWords = t.shell.workspaceSandbox;
 
 
 const typedName = (path: string) => path.split(/[\\/]/).pop();
@@ -467,6 +470,7 @@ function WorkspaceSection({
   homeDir,
   selectedConversationId,
   pickingColor,
+  holdsChanges,
   folded,
   dispatch,
   dragClasses,
@@ -484,6 +488,8 @@ function WorkspaceSection({
   homeDir: string;
   selectedConversationId: string | null;
   pickingColor: boolean;
+  /** Its sandbox holds agent config changes for your OK. */
+  holdsChanges: boolean;
   folded: boolean;
   dispatch: Dispatch<AppAction>;
   dragClasses: string[];
@@ -584,6 +590,11 @@ function WorkspaceSection({
           <div className="workspace-name">{workspace.name}</div>
         </div>
         <WaitingCount conversations={conversations} />
+        {holdsChanges && (
+          <button type="button" className="waiting-pill tone-decision workspace-held" data-hint={sandboxWords.heldWaits} onClick={() => openWorkspaceSandbox(dispatch, workspace.id)}>
+            {waitingLabels.decision}
+          </button>
+        )}
         <button
           type="button"
           className="icon workspace-action"
@@ -601,6 +612,15 @@ function WorkspaceSection({
           onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } })}
         >
           <WorktreeIcon />
+        </button>
+        <button
+          type="button"
+          className="icon workspace-action"
+          aria-label={`${sandboxWords.open}…`}
+          data-hint={hints.workspaceSandbox}
+          onClick={() => openWorkspaceSandbox(dispatch, workspace.id)}
+        >
+          <LineIcon shape="shield" />
         </button>
         <ConfirmButton
           className="icon workspace-action workspace-remove"
@@ -623,6 +643,7 @@ function WorkspaceSection({
           +
         </button>
         <div className="workspace-subline">
+          {workspace.sandbox.on && <SandboxedMark className="workspace-sandboxed" hint={sandboxWords.workspaceSandboxed} wordless onOpen={() => openWorkspaceSandbox(dispatch, workspace.id)} />}
           <span className="workspace-folder">{parentFolder(workspace.path, homeDir)}</span>
           <LaunchPicker workspace={workspace} profiles={profiles} dispatch={dispatch} />
         </div>
@@ -951,6 +972,7 @@ export function Sidebar({
       homeDir={state.homeDir}
       selectedConversationId={state.selectedConversationId}
       pickingColor={state.overlay?.kind === "workspace-color" && state.overlay.workspaceId === workspace.id}
+      holdsChanges={state.heldChanges.some(ofSandbox(workspaceSandbox(workspace.id)))}
       folded={foldedWorkspaces.has(workspace.id)}
       dispatch={dispatch}
       onConversationMenu={openConversationMenu}

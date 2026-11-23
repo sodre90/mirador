@@ -15,7 +15,7 @@ import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
 import { AgentSetupMeaning, AgentValues, ClaudeSetupField, UnconfinedLine } from "./RoomAgentSetup.tsx";
-import { SandboxField, SandboxMeaning } from "./RoomSandbox.tsx";
+import { SandboxField, SandboxMeaning } from "./Sandbox.tsx";
 import { useSentChoice } from "./sent-choice.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { compactTokenCount, formatCost } from "./usage.ts";

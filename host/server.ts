@@ -107,7 +107,8 @@ import type { HostRestart } from "./restart.ts";
 import { signInLink, type SignInCodes } from "./sign-in-codes.ts";
 import { showWithNotifySend } from "./notify-send.ts";
 import type { StatuslineService } from "./statusline.ts";
-import type { RoomSandboxes } from "./sandbox/room-sandboxes.ts";
+import type { Sandboxes } from "./sandbox/sandboxes.ts";
+import type { WorkspaceSandboxes } from "./workspace-sandbox.ts";
 import type { Store } from "./store.ts";
 import type { TerminalService } from "./terminals.ts";
 import { VoiceUnavailable, type Voice } from "./voice/voice.ts";
@@ -118,13 +119,14 @@ import { TunnelRefused, type PeerToPeer, type TunnelEnd, type TunnelListener } f
 import { thisMacModelsInUse, voiceSettingsProblem, voiceSettingsWithoutKeys, type VoiceSettings } from "../shared/voice.ts";
 import { described, englishProblem, HostProblemError, problemFieldsOf, problemOf, type DescribedProblem, type HostProblem } from "../shared/host-problems.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
+import { isSandboxOwner } from "../shared/sandbox.ts";
 
 export interface HostServices {
   config: HostConfig;
   store: Store;
   hub: Hub;
   conversations: ConversationService;
-  sandboxes: Pick<RoomSandboxes, "setup" | "heldChanges" | "roomsHoldingTooMany" | "heldChangeText">;
+  sandboxes: Pick<Sandboxes, "setup" | "heldChanges" | "holdingTooMany" | "heldChangeText">;
   canvas: CanvasService;
   mcp: CanvasMcpEndpoints;
   apps: AppDocuments;
@@ -167,6 +169,7 @@ export interface HostServices {
   pushes: PushNotifications;
   notifications: SystemNotifications;
   rooms: RoomService;
+  workspaceSandboxes: WorkspaceSandboxes;
   roomQuestions: RoomQuestions;
   roomReading: RoomReadingService;
   broughtAgents: BroughtAgents;
@@ -266,6 +269,7 @@ export function startServer(services: HostServices) {
     pushes,
     notifications,
     rooms,
+    workspaceSandboxes,
     roomQuestions,
     roomReading,
     broughtAgents,
@@ -1218,6 +1222,7 @@ export function startServer(services: HostServices) {
       .filter((conversation) => conversation.workspaceId === workspaceId)
       .forEach((conversation) => deleteConversation(conversation.id, { keepsUncommittedWork }));
     apps.forgetWorkspace(workspaceId);
+    workspaceSandboxes.workspaceGone(workspaceId);
     store.deleteWorkspace(workspaceId);
     hub.broadcast({ type: "workspace.deleted", workspaceId });
   }
@@ -1507,6 +1512,10 @@ export function startServer(services: HostServices) {
         return colorWorkspace(message.workspaceId, message.color);
       case "workspace.set-worktree-settings":
         return conversations.setWorktreeSettings(message.workspaceId, message.newConversationsIn, message.worktreeSetup);
+      case "workspace.set-sandbox":
+        return workspaceSandboxes.setSandbox(message.workspaceId, message.sandbox);
+      case "workspace.check-sandbox":
+        return reply({ type: "workspace.sandbox-checked", requestId: message.requestId, workspaceId: message.workspaceId, ...(await workspaceSandboxes.sandboxCheck(message.workspaceId)) });
       case "workspace-group.create":
         return createWorkspaceGroup(message.name, message.parentId);
       case "workspace-group.rename":
@@ -2172,10 +2181,14 @@ export function startServer(services: HostServices) {
         return rooms.setSandbox(message.roomId, message.sandbox);
       case "room.check-sandbox":
         return reply({ type: "room.sandbox-checked", requestId: message.requestId, roomId: message.roomId, ...(await rooms.sandboxCheck(message.roomId)) });
-      case "room.answer-held-change":
-        return rooms.answerHeldChange(message.roomId, message.changeId, message.answer);
-      case "room.held-change-text":
-        return reply({ type: "room.held-change-text", requestId: message.requestId, text: sandboxes.heldChangeText(message.roomId, message.changeId) });
+      case "sandbox.answer-held-change":
+        if (!isSandboxOwner(message.owner)) throw new Error("A held change belongs to a room's or a workspace's sandbox.");
+        return message.owner.kind === "room"
+          ? rooms.answerHeldChange(message.owner.id, message.changeId, message.answer)
+          : workspaceSandboxes.answerHeldChange(message.owner.id, message.changeId, message.answer);
+      case "sandbox.held-change-text":
+        if (!isSandboxOwner(message.owner)) throw new Error("A held change belongs to a room's or a workspace's sandbox.");
+        return reply({ type: "sandbox.held-change-text", requestId: message.requestId, text: sandboxes.heldChangeText(message.owner, message.changeId) });
       case "room.set-agent-variable":
         return rooms.chooseAgentVariable(message.roomId, message.profileId, message.name, message.given);
       case "room.set-agent-host-environment":
@@ -2306,7 +2319,7 @@ export function startServer(services: HostServices) {
       roomTasksWaiting: rooms.allTasksWaiting(),
       sandboxSetup: sandboxes.setup(),
       heldChanges: sandboxes.heldChanges(),
-      roomsHoldingTooMany: sandboxes.roomsHoldingTooMany(),
+      sandboxesHoldingTooMany: sandboxes.holdingTooMany(),
       roomInvites: roomInvites.waiting(),
       roomJoiners: roomInvites.joiners(),
       broughtAgents: broughtAgents.list().agents,

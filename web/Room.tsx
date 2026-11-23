@@ -56,7 +56,7 @@ import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
-import { HeldChangeCard } from "./RoomSandbox.tsx";
+import { HeldChangeCard } from "./Sandbox.tsx";
 import { JoinerAtTheDoor, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";

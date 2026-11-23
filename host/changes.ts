@@ -345,9 +345,11 @@ export class Changes {
     return commitFiles(this.workspaceOf(conversationId).path, paths, message, { ownersHooks: !this.hooksOff(conversationId) });
   }
 
+  /** Off where the conversation's workspace, or the worktree it commits in, lies where a sandbox works or worked lately. */
   private hooksOff(conversationId: string) {
-    const workspaceId = this.store.findConversation(conversationId)?.workspaceId;
-    return workspaceId === undefined || repositoryHooksOff(this.store, workspaceId);
+    const conversation = this.store.findConversation(conversationId);
+    const workspace = conversation && this.store.findWorkspace(conversation.workspaceId);
+    return workspace === undefined || repositoryHooksOff(this.store, [workspace.path, this.workspaceOf(conversationId).path]);
   }
 
   async files(conversationId: string): Promise<ProjectFiles> {

@@ -1,3 +1,4 @@
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { describe, expect, test } from "bun:test";
 import { checkGroupMove, checkLanding, type SidebarNow } from "../host/sidebar-moves.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
@@ -13,6 +14,7 @@ const workspace = (id: string, groupId: string | null, position: number): Worksp
   groupId,
   newConversationsIn: "folder",
   worktreeSetup: "",
+  sandbox: NO_SANDBOX,
   createdAt: 0,
 });
 

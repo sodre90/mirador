@@ -1,11 +1,11 @@
 import type { SandboxAvailability, SandboxSetup } from "../shared/sandbox.ts";
-import { SandboxNotReady, type AgentInVm, type RoomVmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
+import { SandboxNotReady, type AgentInVm, type VmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
 import { runHere } from "./in-vm-here.ts";
 
 /** A launcher of rooms' VMs that starts nothing: it notes what it was asked, and fails where a test says. */
 export class FakeVmLauncher implements VmLauncher {
   readonly firstProcessUser = "root";
-  readonly started: RoomVmPlan[] = [];
+  readonly started: VmPlan[] = [];
   readonly stopped: string[] = [];
   readonly agents: AgentInVm[] = [];
   readonly ranAsAgent: string[][] = [];
@@ -25,7 +25,7 @@ export class FakeVmLauncher implements VmLauncher {
     return `fake-image:${claudeCodeVersion}`;
   }
 
-  async start(plan: RoomVmPlan) {
+  async start(plan: VmPlan) {
     if (this.startFails) throw new SandboxNotReady({ kind: "could-not-start", cause: this.startFails });
     this.started.push(plan);
   }

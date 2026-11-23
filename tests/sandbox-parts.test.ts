@@ -9,7 +9,7 @@ import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
 import { baseImageOf, buildStepIn, claudeCodeVersionIn, imageReferencesIn, imageTag, RECIPE } from "../host/sandbox/image.ts";
 import { PODMAN_READS } from "../host/sandbox/podman.ts";
 import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces } from "../host/sandbox/workspace-mounts.ts";
-import { narrowsSandbox, roomSandboxIn, sameSandbox, sharesKernel, signInElsewhere } from "../shared/sandbox.ts";
+import { narrowsSandbox, sandboxSettingIn, sameSandbox, sharesKernel, signInElsewhere } from "../shared/sandbox.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -68,10 +68,10 @@ test("Podman's storage is read from its info, and none from info that names none
 
 test("a room's sandbox setting reads as off unless it is on, allows a shared kernel only while on, and narrows when it is turned on, stops working freely or no longer allows a shared kernel", () => {
   const sandbox = (on: boolean, workFreely: boolean, allowsSharedKernel = false) => ({ on, workFreely, allowsSharedKernel });
-  expect(roomSandboxIn({ on: "yes", workFreely: 0 })).toEqual(sandbox(false, true));
-  expect(roomSandboxIn({ on: true, workFreely: false })).toEqual(sandbox(true, false));
-  expect(roomSandboxIn({ on: true, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(true, true, true));
-  expect(roomSandboxIn({ on: false, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(false, true));
+  expect(sandboxSettingIn({ on: "yes", workFreely: 0 })).toEqual(sandbox(false, true));
+  expect(sandboxSettingIn({ on: true, workFreely: false })).toEqual(sandbox(true, false));
+  expect(sandboxSettingIn({ on: true, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(true, true, true));
+  expect(sandboxSettingIn({ on: false, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(false, true));
   expect(narrowsSandbox(sandbox(false, true), sandbox(true, true))).toBe(true);
   expect(narrowsSandbox(sandbox(true, true), sandbox(true, false))).toBe(true);
   expect(narrowsSandbox(sandbox(true, false), sandbox(true, true))).toBe(false);

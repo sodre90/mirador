@@ -3,18 +3,33 @@ import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
-import { HELD_CHANGES_MOST, SETUP_NOT_STARTED, sharesKernel, type HeldChange, type HeldChangeAnswer, type HeldChangeText, type SandboxSetup } from "../../shared/sandbox.ts";
+import {
+  HELD_CHANGES_MOST,
+  ownerKey,
+  roomSandbox,
+  SETUP_NOT_STARTED,
+  sharesKernel,
+  workspaceSandbox,
+  type HeldChange,
+  type HeldChangeAnswer,
+  type HeldChangeText,
+  type SandboxOwner,
+  type SandboxSetting,
+  type SandboxSetup,
+} from "../../shared/sandbox.ts";
+import type { Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
+import type { Store } from "../store.ts";
 import { AGENT_USER, BUN_IN_VM, environmentInVm } from "./agent-environment.ts";
-import { startCanvasSocket, type RoomCanvas } from "./canvas-socket.ts";
-import { HeldFiles, type HeldRoom } from "./held-files.ts";
+import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
+import { HeldFiles, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import { startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
-import { HOST_LABEL, ROOM_LABEL, SandboxNotReady, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type VmLauncher } from "./vm-launcher.ts";
 import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces, type Mount } from "./workspace-mounts.ts";
 
-/** The ports a room's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
+/** The ports a sandbox's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
 export const MODEL_RELAY_PORT = 7702;
 
@@ -28,36 +43,63 @@ const VM_MEMORY = "3G";
 
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
-/** Where a sandboxed room's agents keep their Claude Code config: in Mirador's data, and at the same path in the VM. */
-export const sandboxConfigFolder = (dataDir: string, roomId: string) => join(dataDir, "sandbox", roomId, "claude");
+/** A sandbox's own folder in Mirador's data: a room's by its id, as it always was, and a workspace's apart from them. */
+const sandboxFolder = (dataDir: string, { kind, id }: SandboxOwner) => (kind === "room" ? join(dataDir, "sandbox", id) : join(dataDir, "sandbox", "workspaces", id));
 
-/** Where the copies of a sandboxed room's repository config, which its VM reads, are taken as the VM starts. */
-const gitConfigCopies = (dataDir: string, roomId: string) => join(dataDir, "sandbox", roomId, "git-config");
+/** Where a sandbox's agents keep their Claude Code config: in Mirador's data, and at the same path in the VM. */
+export const sandboxConfigFolder = (dataDir: string, owner: SandboxOwner) => join(sandboxFolder(dataDir, owner), "claude");
 
-/** The canvas of a conversation, as its agent reaches it in its room's VM. */
+/** Where the copies of a sandboxed workspace's repository config, which its VM reads, are taken as the VM starts. */
+const gitConfigCopies = (dataDir: string, owner: SandboxOwner) => join(sandboxFolder(dataDir, owner), "git-config");
+
+/** The canvas of a conversation, as its agent reaches it in its sandbox's VM. */
 export const sandboxCanvasAddress = (conversationId: string) => `http://127.0.0.1:${CANVAS_RELAY_PORT}/mcp/${conversationId}`;
 
-const modelAddress = (profileId: string) => `http://127.0.0.1:${MODEL_RELAY_PORT}/p/${profileId}`;
+/** Whether the conversation's agent works in this sandbox: a room's work in their room's, a workspace's own, outside its rooms, in its workspace's. */
+export const belongsToSandbox = ({ roomId, workspaceId }: Pick<Conversation, "roomId" | "workspaceId">, owner: SandboxOwner) =>
+  owner.kind === "room" ? roomId === owner.id : workspaceId === owner.id && roomId === undefined;
 
-/** What the sandboxes need of the rest of the host. */
-export interface SandboxHost {
-  dataDir: string;
-  places: MiradorPlaces;
-  workspaceOf(roomId: string): string | null;
-  canvasOf(roomId: string): RoomCanvas;
-  agentsAtWork(roomId: string): string[];
-  setupChanged(setup: SandboxSetup): void;
-  /** The room's held changes, each time one comes or is answered, and whether it holds as many as it may. */
-  heldChanged(roomId: string, changes: HeldChange[], full: boolean): void;
+/** The sandbox a conversation's agent runs in: its room's or workspace's, and how that has it set. */
+export interface ConversationSandbox {
+  owner: SandboxOwner;
+  setting: SandboxSetting;
 }
 
 /**
- * What an agent's launch in the VM needs: whether its room allows a sandbox that shares this computer's kernel, its
- * profile's Claude Code version, the folder it works in, what its room gives it, the model API its requests go on to
- * with the key, and its command in the VM.
+ * The sandbox a conversation's agent runs in while its room, or else its workspace, has one on: nothing of the
+ * conversation runs on this computer then. Null where it runs on this computer.
+ */
+export function sandboxOfConversation(store: Pick<Store, "findRoom" | "findWorkspace">, { roomId, workspaceId }: { roomId?: string; workspaceId?: string }): ConversationSandbox | null {
+  if (roomId) {
+    const room = store.findRoom(roomId);
+    return room?.sandbox.on ? { owner: roomSandbox(roomId), setting: room.sandbox } : null;
+  }
+  const workspace = workspaceId === undefined ? undefined : store.findWorkspace(workspaceId);
+  return workspace?.sandbox.on ? { owner: workspaceSandbox(workspace.id), setting: workspace.sandbox } : null;
+}
+
+const modelAddress = (profileId: string) => `http://127.0.0.1:${MODEL_RELAY_PORT}/p/${profileId}`;
+
+/** What the sandboxes need of the rest of the host, for each room or workspace with one. */
+export interface SandboxHost {
+  dataDir: string;
+  places: MiradorPlaces;
+  workspaceOf(owner: SandboxOwner): string | null;
+  canvasOf(owner: SandboxOwner): SandboxCanvas;
+  /** The agents at work in the sandbox, by profile id, and their conversations. */
+  atWork(owner: SandboxOwner): { agents: string[]; conversationIds: string[] };
+  setupChanged(setup: SandboxSetup): void;
+  /** The sandbox's held changes, each time one comes or is answered, and whether it holds as many as it may. */
+  heldChanged(owner: SandboxOwner, changes: HeldChange[], full: boolean): void;
+}
+
+/**
+ * What an agent's launch in the VM needs: the room or workspace it works for and whether that allows a sandbox that
+ * shares this computer's kernel, its profile's Claude Code version, the folder it works in, what it is given, the model
+ * API its requests go on to with the key, and its command in the VM.
  */
 export interface AgentInSandbox {
-  roomId: string;
+  owner: SandboxOwner;
   allowsSharedKernel: boolean;
   profileId: string;
   claudeCodeVersion: string;
@@ -67,10 +109,11 @@ export interface AgentInSandbox {
   agent: string[];
 }
 
-interface RoomVm {
+interface SandboxVm {
+  owner: SandboxOwner;
   name: string;
   image: string;
-  /** The workspace as the room named it when the VM started. */
+  /** The workspace as its room or workspace named it when the VM started. */
   workspace: string | null;
   /** The workspace's own path, without links, once the VM started on it. */
   realWorkspace?: string;
@@ -115,16 +158,18 @@ const agentPackages = () => dirname(dirname(dirname(Bun.resolveSync("@agentclien
 const hostLabelOf = (dataDir: string) => shortHash(dataDir);
 
 /**
- * One light VM per sandboxed room, run by the launcher this computer has: set up on first use (the runtime, then the
- * image, built here), started on the room's first turn, and stopped once its last agent has gone. Its agents start in it
- * as the agent user; it has no network, only Mirador's canvas and model sockets relayed in, and the workspace with its
- * repository's config and hooks read-only. Whatever is not ready fails the turn.
+ * One light VM per sandboxed room and per sandboxed workspace, run by the launcher this computer has: set up on first use
+ * (the runtime, then the image, built here), started on its first turn, and stopped once its last agent has gone. Its
+ * agents start in it as the agent user; it has no network, only Mirador's canvas and model sockets relayed in, and the
+ * workspace with its repository's config and hooks read-only. No VM sees another's sockets, config folder or canvases.
+ * Whatever is not ready fails the turn.
  */
-export class RoomSandboxes {
+export class Sandboxes {
   private setupState: SandboxSetup = SETUP_NOT_STARTED;
   private settingUp?: Promise<string>;
-  private readonly rooms = new Map<string, RoomVm>();
-  /** Each room's launch under way: one at a time, so no two VMs of one room ever start. */
+  /** The VMs by `ownerKey`. */
+  private readonly vms = new Map<string, SandboxVm>();
+  /** Each sandbox's launch under way: one at a time, so no two VMs of one room or workspace ever start. */
   private readonly launching = new Map<string, Promise<unknown>>();
   private readonly hostLabel: string;
 
@@ -146,21 +191,22 @@ export class RoomSandboxes {
     return this.setupState;
   }
 
-  confirmedRunning(roomId: string): boolean {
-    return this.rooms.get(roomId)?.running === true;
+  confirmedRunning(owner: SandboxOwner): boolean {
+    return this.vms.get(ownerKey(owner))?.running === true;
   }
 
   heldChanges(): HeldChange[] {
-    return [...this.rooms.values()].flatMap(({ held }) => held?.changes() ?? []).concat(this.heldOfStoppedRooms());
+    return [...this.vms.values()].flatMap(({ held }) => held?.changes() ?? []).concat(this.heldOfStoppedVms());
   }
 
-  /** The rooms whose VM stopped as they hold as many changes as a room may. */
-  roomsHoldingTooMany(): string[] {
-    return [...new Set([...this.rooms.keys(), ...this.stoppedRoomsHeld.keys()])].filter((roomId) => this.heldOf(roomId)?.full());
+  /** The rooms and workspaces whose VM stopped as they hold as many changes as one may. */
+  holdingTooMany(): SandboxOwner[] {
+    const owners = new Map([...this.vms.values(), ...this.stoppedHeld.values()].map(({ owner }) => [ownerKey(owner), owner]));
+    return [...owners.values()].filter((owner) => this.heldOf(owner)?.full());
   }
 
-  heldChangeText(roomId: string, changeId: string): HeldChangeText | null {
-    return this.heldOf(roomId)?.textOf(changeId) ?? null;
+  heldChangeText(owner: SandboxOwner, changeId: string): HeldChangeText | null {
+    return this.heldOf(owner)?.textOf(changeId) ?? null;
   }
 
   /** The workspace's own path, as this host's sandboxes know it: whether it can be shown to one. */
@@ -169,21 +215,21 @@ export class RoomSandboxes {
   }
 
   /**
-   * Before an agent session starts on this computer in a folder a sandboxed room works in, its held files are looked at
-   * once more, so none the agents planted is loaded meanwhile; where one stays, the session does not start.
+   * Before an agent session starts on this computer in a folder a sandbox works in, its held files are looked at once
+   * more, so none the agents planted is loaded meanwhile; where one stays, the session does not start.
    */
   async settleHeldFilesFor(directory: string) {
     const real = await realpath(directory).catch(() => directory);
-    const helds = [...[...this.rooms.values()].flatMap(({ held }) => (held ? [held] : [])), ...this.stoppedRoomsHeld.values()];
+    const helds = [...[...this.vms.values()].flatMap(({ held }) => (held ? [held] : [])), ...[...this.stoppedHeld.values()].map(({ held }) => held)];
     const settled = await Promise.all(helds.filter((held) => overlap(real, held.workspace)).map((held) => held.check()));
     if (settled.includes(false)) throw new HostProblemError({ code: "sandbox-held-files-unsettled" });
   }
 
-  /** The VMs of rooms working in or around this folder stop, before Mirador writes there itself, so none races it. */
-  async stopRoomsWorkingIn(directory: string) {
+  /** The VMs working in or around this folder stop, before Mirador writes there itself, so none races it. */
+  async stopSandboxesWorkingIn(directory: string) {
     const real = await realpath(directory).catch(() => directory);
-    const working = [...this.rooms.entries()].filter(([, vm]) => vm.realWorkspace && overlap(real, vm.realWorkspace)).map(([roomId]) => roomId);
-    await Promise.all(working.map((roomId) => this.stopRoom(roomId)));
+    const working = [...this.vms.values()].filter((vm) => vm.realWorkspace && overlap(real, vm.realWorkspace));
+    await Promise.all(working.map(({ owner }) => this.stop(owner)));
   }
 
   /** Sets up what every sandbox needs, as the owner turns one on, so the first turn need not wait for it. */
@@ -198,16 +244,16 @@ export class RoomSandboxes {
   }
 
   /**
-   * The command and environment that start the agent in its room's VM, the VM started first where it isn't running.
+   * The command and environment that start the agent in its sandbox's VM, the VM started first where it isn't running.
    * Throws SandboxNotReady when anything of it is not ready; nothing here ever runs the agent on this computer.
    */
   async launch(agent: AgentInSandbox): Promise<AgentLaunch> {
     const available = this.availability();
     if (!available.available) throw new SandboxNotReady({ kind: "unavailable", why: available.why });
     if (sharesKernel(available.kind) && !agent.allowsSharedKernel) throw new SandboxNotReady({ kind: "shared-kernel-not-allowed" });
-    if (this.heldOf(agent.roomId)?.full()) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
-    const vm = await this.oneLaunchAtATime(agent.roomId, () => this.startedVm(agent.roomId, agent.claudeCodeVersion));
-    const configDir = sandboxConfigFolder(this.host.dataDir, agent.roomId);
+    if (this.heldOf(agent.owner)?.full()) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
+    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedVm(agent.owner, agent.claudeCodeVersion));
+    const configDir = sandboxConfigFolder(this.host.dataDir, agent.owner);
     const environment = environmentInVm(agent.given, { configDir, modelBaseUrl: modelAddress(agent.profileId), keyVariable: agent.route.keyVariable });
     const started = this.launcher.agentProcess({ vm: vm.name, user: AGENT_USER, workingDirectory: agent.workingDirectory, environment, command: agent.agent });
     vm.agents += 1;
@@ -219,102 +265,105 @@ export class RoomSandboxes {
       gone: () => {
         if (gone) return;
         gone = true;
-        this.agentGone(agent.roomId, vm);
+        this.agentGone(vm);
       },
     };
   }
 
-  private oneLaunchAtATime<T>(roomId: string, launch: () => Promise<T>): Promise<T> {
-    const launched = (this.launching.get(roomId) ?? Promise.resolve()).catch(() => {}).then(launch);
-    this.launching.set(roomId, launched);
+  private oneLaunchAtATime<T>(owner: SandboxOwner, launch: () => Promise<T>): Promise<T> {
+    const key = ownerKey(owner);
+    const launched = (this.launching.get(key) ?? Promise.resolve()).catch(() => {}).then(launch);
+    this.launching.set(key, launched);
     const forget = () => {
-      if (this.launching.get(roomId) === launched) this.launching.delete(roomId);
+      if (this.launching.get(key) === launched) this.launching.delete(key);
     };
     launched.then(forget, forget);
     return launched;
   }
 
-  /** One of the room's agents went away; with the last of them, the VM stops a moment later. */
-  private agentGone(roomId: string, vm: RoomVm) {
-    if (this.rooms.get(roomId) !== vm) return;
+  /** One of the VM's agents went away; with the last of them, the VM stops a moment later. */
+  private agentGone(vm: SandboxVm) {
+    if (this.vms.get(ownerKey(vm.owner)) !== vm) return;
     vm.agents = Math.max(0, vm.agents - 1);
     if (vm.agents > 0) return;
     clearTimeout(vm.stopTimer);
-    vm.stopTimer = setTimeout(() => void this.stopRoom(roomId), this.idleStopMs);
+    vm.stopTimer = setTimeout(() => void this.stop(vm.owner), this.idleStopMs);
     vm.stopTimer.unref();
   }
 
   /** At each turn's end the held files are looked at again, in case a watch event was missed. */
-  async turnEnded(roomId: string) {
-    await this.rooms.get(roomId)?.held?.check();
+  async turnEnded(owner: SandboxOwner) {
+    await this.vms.get(ownerKey(owner))?.held?.check();
   }
 
-  async answerHeldChange(roomId: string, changeId: string, answer: HeldChangeAnswer) {
-    await this.heldOf(roomId)?.answer(changeId, answer);
+  async answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer) {
+    await this.heldOf(owner)?.answer(changeId, answer);
   }
 
-  private heldOf(roomId: string) {
-    return this.rooms.get(roomId)?.held ?? this.stoppedRoomsHeld.get(roomId);
+  private heldOf(owner: SandboxOwner) {
+    const key = ownerKey(owner);
+    return this.vms.get(key)?.held ?? this.stoppedHeld.get(key)?.held;
   }
 
-  private heldChanged(roomId: string) {
-    const held = this.heldOf(roomId);
-    this.host.heldChanged(roomId, held?.changes() ?? [], held?.full() ?? false);
+  private heldChanged(owner: SandboxOwner) {
+    const held = this.heldOf(owner);
+    this.host.heldChanged(owner, held?.changes() ?? [], held?.full() ?? false);
   }
 
-  /** Stops the room's VM, its sockets and its watch, after a last look at the held files. */
-  async stopRoom(roomId: string) {
-    const vm = this.rooms.get(roomId);
+  /** Stops the VM, its sockets and its watch, after a last look at the held files. */
+  async stop(owner: SandboxOwner) {
+    const vm = this.vms.get(ownerKey(owner));
     if (!vm) return;
-    vm.stopping ??= this.tearDown(roomId, vm);
+    vm.stopping ??= this.tearDown(vm);
     await vm.stopping;
   }
 
-  /** A deleted room's VM stops, and what it held goes unanswered: the files are as they were. */
-  async roomGone(roomId: string) {
-    await this.stopRoom(roomId);
-    this.stoppedRoomsHeld.delete(roomId);
-    this.host.heldChanged(roomId, [], false);
+  /** A deleted room's or workspace's VM stops, and what it held goes unanswered: the files are as they were. */
+  async ownerGone(owner: SandboxOwner) {
+    await this.stop(owner);
+    this.stoppedHeld.delete(ownerKey(owner));
+    this.host.heldChanged(owner, [], false);
   }
 
   async stopAll() {
-    await Promise.all([...this.rooms.keys()].map((roomId) => this.stopRoom(roomId)));
+    await Promise.all([...this.vms.values()].map(({ owner }) => this.stop(owner)));
   }
 
-  /** Held files of rooms whose VM stopped wait for the owner's answer still. */
-  private readonly stoppedRoomsHeld = new Map<string, HeldFiles>();
+  /** Held files of sandboxes whose VM stopped wait for the owner's answer still, by `ownerKey`. */
+  private readonly stoppedHeld = new Map<string, { owner: SandboxOwner; held: HeldFiles }>();
 
-  private heldOfStoppedRooms() {
-    return [...this.stoppedRoomsHeld.entries()].filter(([roomId]) => !this.rooms.has(roomId)).flatMap(([, held]) => held.changes());
+  private heldOfStoppedVms() {
+    return [...this.stoppedHeld.entries()].filter(([key]) => !this.vms.has(key)).flatMap(([, { held }]) => held.changes());
   }
 
-  private async tearDown(roomId: string, vm: RoomVm) {
+  private async tearDown(vm: SandboxVm) {
+    const key = ownerKey(vm.owner);
     clearTimeout(vm.stopTimer);
-    await this.halt(vm).catch((error: unknown) => console.error(`stopping the VM of room ${roomId} failed:`, error));
+    await this.halt(vm).catch((error: unknown) => console.error(`stopping the VM of ${key} failed:`, error));
     await Promise.all(vm.sockets.map((socket) => socket.stop().catch(() => {})));
     if (vm.socketsFolder) await rm(vm.socketsFolder, { recursive: true, force: true }).catch(() => {});
     if (vm.held) {
       await vm.held.stop().catch(() => {});
-      if (vm.held.changes().length > 0) this.stoppedRoomsHeld.set(roomId, vm.held);
+      if (vm.held.changes().length > 0) this.stoppedHeld.set(key, { owner: vm.owner, held: vm.held });
     }
-    if (this.rooms.get(roomId) === vm) this.rooms.delete(roomId);
+    if (this.vms.get(key) === vm) this.vms.delete(key);
   }
 
   /** The VM stops, and nothing is put back inside it from then on; the rest of its teardown may follow. */
-  private halt(vm: RoomVm) {
+  private halt(vm: SandboxVm) {
     vm.running = false;
     vm.halted ??= this.launcher.stop(vm.name);
     return vm.halted;
   }
 
-  private heldRoom(roomId: string, vm: RoomVm): HeldRoom {
+  private heldSandbox(vm: SandboxVm): HeldSandbox {
     return {
-      agentsAtWork: () => this.host.agentsAtWork(roomId),
-      changed: () => this.heldChanged(roomId),
+      atWork: () => this.host.atWork(vm.owner),
+      changed: () => this.heldChanged(vm.owner),
       inVm: () => (vm.running ? (request) => this.putBackInVm(vm, request) : null),
       halt: async () => {
-        await this.halt(vm).catch((error: unknown) => console.error(`stopping the VM of room ${roomId} failed:`, error));
-        void this.stopRoom(roomId);
+        await this.halt(vm).catch((error: unknown) => console.error(`stopping the VM of ${ownerKey(vm.owner)} failed:`, error));
+        void this.stop(vm.owner);
       },
       untilStopped: () => (vm.halted ?? Promise.resolve()).then(
         () => true,
@@ -324,70 +373,74 @@ export class RoomSandboxes {
   }
 
   /** Puts held places back inside the VM as the agent user, so a link on the way leads only to what the VM sees. */
-  private async putBackInVm(vm: RoomVm, request: PlacesRequest): Promise<PlacesPutBack> {
+  private async putBackInVm(vm: SandboxVm, request: PlacesRequest): Promise<PlacesPutBack> {
     const ran = await this.launcher.runAsAgent(vm.name, AGENT_USER, [BUN_IN_VM, `${SCRIPTS_IN_VM}/held-places.ts`], JSON.stringify(request), PUT_BACK_WITHIN_MS);
     if (ran.exitCode !== 0) throw new Error(`putting held files back in the VM failed: exit ${ran.exitCode}`);
     return putBackIn(ran.stdout);
   }
 
   /**
-   * The room's VM, running: the one there is, or a new one where there is none, where the room's workspace changed, or
-   * where it runs another image and no agent of it is at work.
+   * The sandbox's VM, running: the one there is, or a new one where there is none, where the workspace it works in
+   * changed, or where it runs another image and no agent of it is at work.
    */
-  private async startedVm(roomId: string, claudeCodeVersion: string): Promise<RoomVm> {
+  private async startedVm(owner: SandboxOwner, claudeCodeVersion: string): Promise<SandboxVm> {
     const image = await this.preparedImage(claudeCodeVersion);
-    const existing = this.rooms.get(roomId);
-    const outdated = existing && !existing.stopping && (existing.workspace !== this.host.workspaceOf(roomId) || (existing.image !== image && existing.agents === 0));
-    if (outdated) await this.stopRoom(roomId);
+    const key = ownerKey(owner);
+    const existing = this.vms.get(key);
+    const outdated = existing && !existing.stopping && (existing.workspace !== this.host.workspaceOf(owner) || (existing.image !== image && existing.agents === 0));
+    if (outdated) await this.stop(owner);
     if (existing && !existing.stopping) {
       if (existing.image !== image) throw new SandboxNotReady({ kind: "versions-differ" });
       await existing.started;
       return existing;
     }
     await existing?.stopping;
-    const vm: RoomVm = {
-      name: `mirador-${this.hostLabel}-${shortHash(roomId, 8)}`,
+    const vm: SandboxVm = {
+      owner,
+      name: `mirador-${this.hostLabel}-${shortHash(key, 8)}`,
       image,
-      workspace: this.host.workspaceOf(roomId),
+      workspace: this.host.workspaceOf(owner),
       started: Promise.resolve(),
       running: false,
       agents: 0,
       sockets: [],
       routes: new Map(),
     };
-    vm.started = this.start(roomId, vm).catch(async (error: unknown) => {
-      await this.tearDown(roomId, vm);
+    vm.started = this.start(vm).catch(async (error: unknown) => {
+      await this.tearDown(vm);
       throw error instanceof HostProblemError ? error : new SandboxNotReady({ kind: "could-not-start", cause: messageOf(error) });
     });
-    this.rooms.set(roomId, vm);
+    this.vms.set(key, vm);
     await vm.started;
     return vm;
   }
 
-  private async start(roomId: string, vm: RoomVm) {
+  private async start(vm: SandboxVm) {
+    const { owner } = vm;
+    const key = ownerKey(owner);
     const workspace = vm.workspace && (await realpath(vm.workspace).catch(() => null));
     if (!workspace) throw new HostProblemError({ code: "workspace-gone" });
     const refused = await this.workspaceRefusal(workspace);
     if (refused) throw new SandboxNotReady({ kind: "blocked", blocker: refused });
     vm.realWorkspace = workspace;
-    vm.held = new HeldFiles(workspace, roomId, await gitFoldersOf(workspace), this.heldRoom(roomId, vm));
-    const stoppedHeld = this.stoppedRoomsHeld.get(roomId);
-    if (stoppedHeld) vm.held.takeOver(stoppedHeld);
-    this.stoppedRoomsHeld.delete(roomId);
+    vm.held = new HeldFiles(workspace, owner, await gitFoldersOf(workspace), this.heldSandbox(vm));
+    const stoppedHeld = this.stoppedHeld.get(key);
+    if (stoppedHeld) vm.held.takeOver(stoppedHeld.held);
+    this.stoppedHeld.delete(key);
     const heldReadOnly = await vm.held.start();
-    const planned = await workspaceMounts(workspace, gitConfigCopies(this.host.dataDir, roomId), this.host.places, heldReadOnly);
+    const planned = await workspaceMounts(workspace, gitConfigCopies(this.host.dataDir, owner), this.host.places, heldReadOnly);
     if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
-    const configFolder = sandboxConfigFolder(this.host.dataDir, roomId);
+    const configFolder = sandboxConfigFolder(this.host.dataDir, owner);
     await mkdir(configFolder, { recursive: true, mode: 0o700 });
-    // Unix socket paths hold about a hundred bytes on macOS, so each room's sockets live in a short private folder.
+    // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
     vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
     const sockets = { canvas: join(vm.socketsFolder, "canvas.sock"), model: join(vm.socketsFolder, "model.sock") };
-    vm.sockets.push(await startCanvasSocket(sockets.canvas, CANVAS_RELAY_PORT, this.host.canvasOf(roomId)));
+    vm.sockets.push(await startCanvasSocket(sockets.canvas, CANVAS_RELAY_PORT, this.host.canvasOf(owner)));
     vm.sockets.push(await startModelProxy(sockets.model, MODEL_RELAY_PORT, (profileId) => vm.routes.get(profileId) ?? null));
     if (this.launcher.firstProcessUser === "nobody") await reachableByNobody(Object.values(sockets));
     await this.launcher.start({
       name: vm.name,
-      labels: { [HOST_LABEL]: this.hostLabel, [ROOM_LABEL]: roomId },
+      labels: { [HOST_LABEL]: this.hostLabel, [OWNER_LABEL]: key },
       image: vm.image,
       memory: VM_MEMORY,
       mounts: [
@@ -403,7 +456,7 @@ export class RoomSandboxes {
     vm.running = true;
   }
 
-  /** The runtime runs and the image of this Claude Code version is there: set up once for every room, its progress told as it goes. */
+  /** The runtime runs and the image of this Claude Code version is there: set up once for every sandbox, its progress told as it goes. */
   private async preparedImage(claudeCodeVersion: string): Promise<string> {
     if (this.setupState.stage === "ready" && this.ready?.claudeCodeVersion === claudeCodeVersion) return this.ready.image;
     const previous = this.settingUp ?? Promise.resolve("");
@@ -434,14 +487,14 @@ export class RoomSandboxes {
   }
 }
 
-/** What a room's conversations need of the sandboxes. */
-export type RoomAgentSandboxes = Pick<RoomSandboxes, "launch" | "confirmedRunning" | "turnEnded" | "settleHeldFilesFor" | "stopRoomsWorkingIn">;
+/** What the conversations of sandboxed rooms and workspaces need of the sandboxes. */
+export type SandboxedAgents = Pick<Sandboxes, "launch" | "confirmedRunning" | "turnEnded" | "settleHeldFilesFor" | "stopSandboxesWorkingIn">;
 
-/** Until the host gives its conversations the sandboxes, a sandboxed room's agent never starts. */
-export const NO_SANDBOXES: RoomAgentSandboxes = {
+/** Until the host gives its conversations the sandboxes, a sandboxed room's or workspace's agent never starts. */
+export const NO_SANDBOXES: SandboxedAgents = {
   launch: () => Promise.reject(new SandboxNotReady({ kind: "unavailable", why: "turned-off" })),
   confirmedRunning: () => false,
   turnEnded: async () => {},
   settleHeldFilesFor: async () => {},
-  stopRoomsWorkingIn: async () => {},
+  stopSandboxesWorkingIn: async () => {},
 };

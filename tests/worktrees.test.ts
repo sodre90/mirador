@@ -1,3 +1,4 @@
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
@@ -26,6 +27,7 @@ const workspaceAt = (path: string): Workspace => ({
   groupId: null,
   newConversationsIn: "worktree",
   worktreeSetup: "",
+  sandbox: NO_SANDBOX,
   createdAt: 0,
 });
 

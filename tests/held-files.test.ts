@@ -2,9 +2,9 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { HeldFiles, type HeldRoom } from "../host/sandbox/held-files.ts";
+import { HeldFiles, type HeldSandbox } from "../host/sandbox/held-files.ts";
 import { putPlacesBack, type PlacesPutBack, type PlacesRequest } from "../host/sandbox/in-vm/held-places.ts";
-import { HELD_CHANGES_MOST, isHeldConfigPath } from "../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, isHeldConfigPath, roomSandbox } from "../shared/sandbox.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "held-files-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -27,7 +27,7 @@ async function eventually(check: () => void, timeoutMs = 3000) {
 }
 
 /** A room's VM as the held files see it: running until halted, its put-backs done here as the in-VM helper would. */
-class FakeRoom implements HeldRoom {
+class FakeRoom implements HeldSandbox {
   running = true;
   halts = 0;
   told = 0;
@@ -35,7 +35,7 @@ class FakeRoom implements HeldRoom {
   /** What a put-back in the VM does instead of putting places back, where a test says. */
   putBackInVm: (request: PlacesRequest) => Promise<PlacesPutBack> = async (request) => putPlacesBack(request);
 
-  agentsAtWork = () => ["builder"];
+  atWork = () => ({ agents: ["builder"], conversationIds: ["conversation-1"] });
   changed = () => void (this.told += 1);
   inVm = () =>
     this.running
@@ -61,7 +61,7 @@ async function heldWorkspace(files: Record<string, string> = {}, before: (at: (p
   });
   before(at);
   const room = new FakeRoom();
-  const held = new HeldFiles(workspace, "room-1", [".git"], room);
+  const held = new HeldFiles(workspace, roomSandbox("room-1"), [".git"], room);
   const readOnly = await held.start();
   await Bun.sleep(WATCH_STARTS_MS);
   const textAt = (path: string) => (existsSync(at(path)) ? readFileSync(at(path), "utf8") : null);
@@ -96,7 +96,7 @@ describe("the held files of a sandboxed room", () => {
     await eventually(() => {
       expect(textAt(".mcp.json")).toBeNull();
       expect(textAt(".envrc")).toBeNull();
-      expect(changeAt(".mcp.json")).toMatchObject({ roomId: "room-1", agents: ["builder"], kind: "add" });
+      expect(changeAt(".mcp.json")).toMatchObject({ owner: roomSandbox("room-1"), agents: ["builder"], conversationIds: ["conversation-1"], kind: "add" });
       expect(changeAt(".envrc")).toBeDefined();
     });
     expect(room.putBacks.length).toBeGreaterThan(0);

@@ -51,7 +51,7 @@ beforeAll(async () => {
   const route: ModelRoute = { upstream: `http://127.0.0.1:${upstream.port}/base`, keyVariable: "ANTHROPIC_API_KEY", key: KEY, customHeaders: "X-Team: blue\nbroken line" };
   modelProxy = await startModelProxy(modelSocket, MODEL_PORT, (profileId) => (profileId === "builder" ? route : null));
   canvasSocket = await startCanvasSocket(canvasSocketPath, CANVAS_PORT, {
-    isRoomsConversation: (conversationId) => conversationId === "conversation-1" || conversationId === "conversation-2",
+    belongs: (conversationId) => conversationId === "conversation-1" || conversationId === "conversation-2",
     tokenOf: (conversationId) => `token-of-${conversationId}`,
     handle: (conversationId) => {
       handledCanvas.push(conversationId);

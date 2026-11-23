@@ -39,7 +39,7 @@ import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
-import { roomSandboxIn, type RoomSandbox } from "../shared/sandbox.ts";
+import { NO_SANDBOX, sandboxSettingIn, type SandboxSetting } from "../shared/sandbox.ts";
 import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
@@ -185,6 +185,7 @@ const schema = `
     id TEXT PRIMARY KEY, machine_id TEXT NOT NULL, task_id TEXT NOT NULL, brought_id TEXT NOT NULL REFERENCES brought_agents(id) ON DELETE CASCADE,
     state TEXT NOT NULL, by_name TEXT NOT NULL, by_role TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL, answer TEXT, ended TEXT,
     answered_at INTEGER, UNIQUE (machine_id, task_id));
+  CREATE TABLE IF NOT EXISTS sandbox_left_folders (path TEXT PRIMARY KEY, left_at INTEGER NOT NULL);
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -330,7 +331,7 @@ const addedColumns = [
   { table: "room_agents", column: "brought_harness", definition: "TEXT" },
   { table: "room_agents", column: "brought_here", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "room_messages", column: "brought_by", definition: "TEXT" },
-  { table: "workspaces", column: "sandbox_last_on_at", definition: "INTEGER" },
+  { table: "workspaces", column: "sandbox", definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: "room_invites", column: "seats", definition: "INTEGER NOT NULL DEFAULT 1" },
   { table: "room_invites", column: "lets_in", definition: "TEXT NOT NULL DEFAULT 'at-once'" },
   { table: "machines", column: "owner_name", definition: "TEXT" },
@@ -366,6 +367,7 @@ type WorkspaceRow = {
   group_id: string | null;
   new_conversations_in: string;
   worktree_setup: string;
+  sandbox: string;
   created_at: number;
 };
 
@@ -428,6 +430,7 @@ const toWorkspace = (row: WorkspaceRow): Workspace => ({
   groupId: row.group_id,
   newConversationsIn: isConversationPlace(row.new_conversations_in) ? row.new_conversations_in : "folder",
   worktreeSetup: row.worktree_setup,
+  sandbox: sandboxSettingIn(JSON.parse(row.sandbox)),
   createdAt: row.created_at,
 });
 
@@ -796,13 +799,16 @@ export class Store {
     return this.db.query("SELECT * FROM workspaces ORDER BY position, created_at").all().map((row) => toWorkspace(row as WorkspaceRow));
   }
 
-  /** When a room of the workspace last had its sandbox on, before it was turned off, the room deleted or moved elsewhere. */
-  sandboxLastOnAt(workspaceId: string): number | null {
-    return (this.db.query("SELECT sandbox_last_on_at AS at FROM workspaces WHERE id = ?").get(workspaceId) as { at: number | null } | null)?.at ?? null;
+  /**
+   * The folders sandboxes worked in, each with when one last left it: its sandbox turned off, its room or workspace
+   * deleted, or the room moved to another workspace. Kept by folder, so a workspace removed and added again keeps it.
+   */
+  foldersSandboxesLeft(): { path: string; leftAt: number }[] {
+    return this.db.query("SELECT path, left_at AS leftAt FROM sandbox_left_folders").all() as { path: string; leftAt: number }[];
   }
 
-  setSandboxLastOnAt(workspaceId: string, at: number) {
-    this.db.query("UPDATE workspaces SET sandbox_last_on_at = ? WHERE id = ?").run(at, workspaceId);
+  setSandboxLeft(path: string, at: number) {
+    this.db.query("INSERT INTO sandbox_left_folders (path, left_at) VALUES (?, ?) ON CONFLICT (path) DO UPDATE SET left_at = MAX(left_at, excluded.left_at)").run(path, at);
   }
 
   findWorkspace(id: string): Workspace | undefined {
@@ -816,12 +822,12 @@ export class Store {
   }
 
   /** Adds the workspace first in the sidebar, in no group. */
-  insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId" | "newConversationsIn" | "worktreeSetup">): Workspace {
+  insertWorkspace(workspace: Omit<Workspace, "position" | "color" | "groupId" | "newConversationsIn" | "worktreeSetup" | "sandbox">): Workspace {
     const position = this.firstSidebarPosition();
     this.db
       .query("INSERT INTO workspaces (id, name, path, default_harness, default_profile_id, position, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
       .run(workspace.id, workspace.name, workspace.path, workspace.defaultLaunch.harness, workspace.defaultLaunch.profileId, position, workspace.createdAt);
-    return { ...workspace, color: null, position, groupId: null, newConversationsIn: "folder", worktreeSetup: "" };
+    return { ...workspace, color: null, position, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX };
   }
 
   /** Numbers the positions of the workspaces and the groups, which share one order, in the given order. */
@@ -892,6 +898,10 @@ export class Store {
 
   setWorktreeSettings(workspaceId: string, newConversationsIn: ConversationPlace, worktreeSetup: string) {
     this.db.query("UPDATE workspaces SET new_conversations_in = ?, worktree_setup = ? WHERE id = ?").run(newConversationsIn, worktreeSetup, workspaceId);
+  }
+
+  setWorkspaceSandbox(workspaceId: string, sandbox: SandboxSetting) {
+    this.db.query("UPDATE workspaces SET sandbox = ? WHERE id = ?").run(JSON.stringify(sandbox), workspaceId);
   }
 
   deleteWorkspace(id: string) {
@@ -1209,12 +1219,12 @@ export class Store {
     this.db.query("UPDATE conversations SET favourite = ? WHERE id = ?").run(favourite ? 1 : 0, conversationId);
   }
 
-  /** What a room agent's session was started under, as `roomSetupFingerprint` puts it; null for none. */
-  roomSetupOfSession(conversationId: string): string | null {
+  /** What a conversation's session was started under: its room's setup, as `roomSetupFingerprint` puts it, or its workspace's sandbox; null for neither. */
+  setupOfSession(conversationId: string): string | null {
     return (this.db.query("SELECT room_setup FROM conversations WHERE id = ?").get(conversationId) as { room_setup: string | null } | null)?.room_setup ?? null;
   }
 
-  setRoomSetupOfSession(conversationId: string, setup: string) {
+  setSetupOfSession(conversationId: string, setup: string | null) {
     this.db.query("UPDATE conversations SET room_setup = ? WHERE id = ?").run(setup, conversationId);
   }
 
@@ -1310,7 +1320,7 @@ export class Store {
       claudeSetup: claudeSetupIn(JSON.parse(claude_setup)),
       agentsReadGuests: agents_read_guests === 1,
       membersBringAgents: members_bring_agents === 1,
-      sandbox: roomSandboxIn(JSON.parse(sandbox)),
+      sandbox: sandboxSettingIn(JSON.parse(sandbox)),
       createdAt: created_at,
     };
   }
@@ -1439,7 +1449,7 @@ export class Store {
     this.db.query("UPDATE rooms SET peoples_tasks_wait = ? WHERE id = ?").run(wait ? 1 : 0, id);
   }
 
-  setRoomSandbox(id: string, sandbox: RoomSandbox) {
+  setRoomSandbox(id: string, sandbox: SandboxSetting) {
     this.db.query("UPDATE rooms SET sandbox = ? WHERE id = ?").run(JSON.stringify(sandbox), id);
   }
 

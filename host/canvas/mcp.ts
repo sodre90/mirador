@@ -29,6 +29,7 @@ import { registerUsageStatsTool } from "./usage-stats-tool.ts";
 import { registerPlanUsageTool } from "./plan-usage-tool.ts";
 import { registerLandTool } from "./land-tool.ts";
 import { registerRoomTools, type RoomTools } from "./room-tools.ts";
+import { sandboxOfConversation } from "../sandbox/sandboxes.ts";
 
 const PROGRESS_HEARTBEAT_MS = 15_000;
 
@@ -167,16 +168,25 @@ const worksForARoomHere = (store: Store | null, conversationId: string) => {
   return conversation !== undefined && worksForARoom(conversation);
 };
 
-function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning) {
+/** A conversation of a room or workspace whose sandbox is on, whose agent runs in that sandbox's VM. */
+const runsInASandboxHere = (store: Store | null, conversationId: string) => {
+  const conversation = store?.findConversation(conversationId);
+  return store !== null && conversation !== undefined && sandboxOfConversation(store, conversation) !== null;
+};
+
+/** Where a canvas request came from: this computer, or a sandbox's VM through its canvas socket. */
+export type CanvasRequestFrom = "this-computer" | "sandbox";
+
+function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cutInstructionsWarning: CutInstructionsWarning, from: CanvasRequestFrom) {
   const { canvas, conversations, assetsOrigin, apps = null, canvasPlugins = null, catalog = null, store = null, rooms = null, antigravityAskWaitMs = ANTIGRAVITY_ASK_WAIT_MS } = parts;
   const harness = store?.findConversation(conversationId)?.harness;
   const askWaitLimitMs = harness === "antigravity" ? antigravityAskWaitMs : null;
   const reviewFree = reviewFreeFor(harness);
   const inRoom = Boolean(store?.findConversation(conversationId)?.roomId);
-  const forARoom = worksForARoomHere(store, conversationId);
+  const showAndAskAlone = worksForARoomHere(store, conversationId) || from === "sandbox" || runsInASandboxHere(store, conversationId);
   const plugins = canvasPlugins?.guidanceFor(conversationId) ?? NO_CANVAS_PLUGINS;
   const pluginsHere = getsPluginLinesInSystemPrompt(harness) ? withoutPluginLines(plugins) : plugins;
-  const instructions = forARoom ? canvasInstructions(assetsOrigin) : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
+  const instructions = showAndAskAlone ? canvasInstructions(assetsOrigin) : canvasServerInstructions(harness, store?.canvasUse() ?? "often", assetsOrigin, withAppTools(pluginsHere, apps, catalog));
   cutInstructionsWarning.check(harness, instructions);
   const server = new McpServer({ name: CANVAS_SERVER_NAME, version: MIRADOR_VERSION }, { instructions });
 
@@ -184,14 +194,14 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
    * The conversations on one opencode agent process each add their canvas server under the same name, and opencode keeps
    * only the last one added: every call reaches that conversation's address, whichever conversation made it. opencode 2
    * names the session that calls, which finds its conversation; a session that finds none is refused. A conversation
-   * that works for a room runs on an agent process of its own, so its address serves it alone, and no other
-   * conversation's address serves one that works for a room.
+   * that works for a room, or runs in a sandbox, runs on an agent process of its own, so its address serves it alone,
+   * and no other conversation's address serves one that works for a room.
    */
   const callingConversation = async ({ mcpReq }: ServerContext) => {
     const sessionId = mcpReq._meta?.[OPENCODE_SESSION_META];
     const caller = sessionId === undefined ? conversationId : typeof sessionId === "string" ? await conversations.conversationOfSession(sessionId) : undefined;
     if (caller === undefined) throw new Error(CALLER_UNKNOWN);
-    if (caller !== conversationId && (forARoom || worksForARoomHere(store, caller))) throw new Error(CALLER_ELSEWHERE);
+    if (caller !== conversationId && (showAndAskAlone || worksForARoomHere(store, caller))) throw new Error(CALLER_ELSEWHERE);
     return caller;
   };
   everyToolFindingItsCallerFirst(server, callingConversation);
@@ -274,7 +284,7 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
     },
   );
 
-  if (forARoom) {
+  if (showAndAskAlone) {
     if (inRoom && rooms) registerRoomTools(server, rooms, callingConversation, { _meta: loadedUpFront, ...reviewFree });
     return server;
   }
@@ -338,32 +348,42 @@ function buildCanvasServer(conversationId: string, parts: CanvasServerParts, cut
   return server;
 }
 
+/**
+ * Each conversation's canvas server, built anew for each request, so what it offers follows the conversation's room and
+ * workspace as they are then. A sandbox's VM reaches its own handlers, whose agents get show and ask alone, and the room's
+ * own tools in a room, whatever their room or workspace says by then: nothing that acts on this computer.
+ */
 export class CanvasMcpEndpoints {
-  private readonly handlers = new Map<string, McpHttpHandler>();
+  private readonly handlers: Record<CanvasRequestFrom, Map<string, McpHttpHandler>> = { "this-computer": new Map(), sandbox: new Map() };
   private readonly cutInstructionsWarning = new CutInstructionsWarning();
 
   constructor(private readonly parts: CanvasServerParts) {}
 
   handle(conversationId: string, request: Request) {
-    return this.handlerFor(conversationId).fetch(request);
+    return this.handlerFor(conversationId, "this-computer").fetch(request);
+  }
+
+  handleFromSandbox(conversationId: string, request: Request) {
+    return this.handlerFor(conversationId, "sandbox").fetch(request);
   }
 
   forget(conversationId: string) {
-    this.handlers.delete(conversationId);
+    Object.values(this.handlers).forEach((handlers) => handlers.delete(conversationId));
   }
 
   /** The profile's conversations list their tools again, once a save turned one of its plugins on or off; Claude Code does at once. */
   toolsChangedForProfile(profileId: string) {
-    for (const [conversationId, handler] of this.handlers) {
+    for (const [conversationId, handler] of this.handlers["this-computer"]) {
       if (this.parts.store?.findConversation(conversationId)?.profileId === profileId) handler.notify.toolsChanged();
     }
   }
 
-  private handlerFor(conversationId: string) {
-    let handler = this.handlers.get(conversationId);
+  private handlerFor(conversationId: string, from: CanvasRequestFrom) {
+    const handlers = this.handlers[from];
+    let handler = handlers.get(conversationId);
     if (!handler) {
-      handler = createMcpHandler(() => buildCanvasServer(conversationId, this.parts, this.cutInstructionsWarning));
-      this.handlers.set(conversationId, handler);
+      handler = createMcpHandler(() => buildCanvasServer(conversationId, this.parts, this.cutInstructionsWarning, from));
+      handlers.set(conversationId, handler);
     }
     return handler;
   }

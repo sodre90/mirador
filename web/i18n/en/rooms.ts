@@ -227,7 +227,7 @@ export const rooms = {
       "Working freely, the agents ask for nothing, as the sandbox keeps them in. Otherwise the room's permission preset applies as it does on this computer.",
       "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",
       "Any other file the agents change in the workspace may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
-      "The repository's config and hooks are read-only in the sandbox. Mirador runs git on the workspace without its hooks and fsmonitor, and while the room is sandboxed, and for 7 days after, its commits and lands there skip the repository's hooks too.",
+      "The repository's config and hooks are read-only in the sandbox, but not those of a repository inside the workspace. Mirador runs git on the workspace without hooks and fsmonitor, and while the room is sandboxed, and for 7 days after, its commits, lands and new worktrees in the workspace, or in any folder inside it, skip the repositories' hooks too.",
       "Turning it on or off, or changing how the agents work in it, starts them afresh.",
     ],
   },

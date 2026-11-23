@@ -635,3 +635,18 @@ test.skipIf(process.platform === "win32")("a program that ignores the hangup is 
   expect(ended).toBe("ended");
   expect(await eventually(() => isRunning(-group), (running) => !running)).toBe(false);
 }, 15_000);
+
+test("closing a conversation's agent programs ends its sign-in and panel tabs, and leaves its shells and other programs running", async () => {
+  const browser = fakeBrowser();
+  terminals.attach(browser.socket, "c1");
+  const signIn = terminals.openProgram("c1", 80, 24, { tabName: "Claude Code sign-in", command: waitingForALine, runsTheAgent: true });
+  const panel = terminals.openProgram("c1", 80, 24, { tabName: "/mcp", key: "panel /mcp", command: waitingForALine, runsTheAgent: true });
+  const follow = terminals.openProgram("c1", 80, 24, { tabName: "follow", command: waitingForALine });
+  const shellTab = terminals.open("c1", 80, 24);
+
+  terminals.closeAgentPrograms("c1");
+  await Promise.all([signIn.exited, panel.exited]);
+
+  const left = await tabsOnceSettled(browser.received, (tabs) => tabs.length === 2);
+  expect(left.map(({ id }) => id).sort()).toEqual([follow.tabId, shellTab.tabId].sort());
+});

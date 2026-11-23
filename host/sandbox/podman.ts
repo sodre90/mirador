@@ -7,7 +7,7 @@ import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { baseImageOf, buildStepIn, IMAGE_NAME, imageTag, mustRun, RECIPE } from "./image.ts";
-import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type RoomVmPlan, type VmLauncher } from "./vm-launcher.ts";
+import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
 const READY_WITHIN_S = 30;
@@ -43,7 +43,7 @@ const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${
  * all, and a log of its own that keeps only so much. SELinux labels are left off, so the workspace is shown as it is
  * rather than relabelled.
  */
-export function runArguments({ name, labels, image, memory, mounts, entry }: RoomVmPlan) {
+export function runArguments({ name, labels, image, memory, mounts, entry }: VmPlan) {
   const [uid, gid] = AGENT_USER.split(":");
   return [
     "run",
@@ -192,7 +192,7 @@ export class Podman implements VmLauncher {
     return tag;
   }
 
-  async start(plan: RoomVmPlan) {
+  async start(plan: VmPlan) {
     const run = await this.usable().run(runArguments(plan), { timeoutMs: RUN_TIMEOUT_MS });
     if (run.exitCode !== 0) throw new SandboxNotReady({ kind: "could-not-start", cause: lastLineOf(run.output) || `exit ${run.exitCode}` });
     await this.ready(plan.name);

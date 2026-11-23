@@ -11,6 +11,7 @@ import {
   harnessIds,
   harnessLabels,
   isConversationPlace,
+  placeOfNewConversation,
   isUntitled,
   UNTITLED,
   worksForARoom,
@@ -66,7 +67,7 @@ import { canTryAgain } from "../shared/try-again.ts";
 import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts";
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
-import { askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
+import { askingDefaultModeOf, askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
 import { PROFILES_MODEL, type Room, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
@@ -104,12 +105,12 @@ import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from
 import { HarnessProcess, type AgentLaunch, type ConfigValue } from "./acp/harness.ts";
 import { versionOf } from "./acp/claude-program.ts";
 import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
-import { NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, type AgentInSandbox, type RoomAgentSandboxes } from "./sandbox/room-sandboxes.ts";
+import { NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents } from "./sandbox/sandboxes.ts";
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
 import { claudeCodeVersionIn } from "./sandbox/image.ts";
 import { BUN_IN_VM } from "./sandbox/agent-environment.ts";
 import { modelRouteOf } from "./sandbox/model-proxy.ts";
-import { NO_SANDBOX, runsInSandbox, signInElsewhere } from "../shared/sandbox.ts";
+import { NO_SANDBOX, ownerKey, runsInSandbox, signInElsewhere } from "../shared/sandbox.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
 import { ROOM_CANVAS_TOOLS } from "./canvas/tool-names.ts";
@@ -435,28 +436,44 @@ const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity"
  */
 const readsSettingsPerSession = (harness: HarnessId) => harness === "claude" || harness === "pi" || harness === "codex" || harness === "copilot";
 
-/** The mode a room's Claude Code agent works in without asking, which it has only where it does not run as root. */
+/** The mode a sandboxed Claude Code agent works in without asking, which it has only where it does not run as root. */
 const WORKS_FREELY_MODE = "bypassPermissions";
 
-/** What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id and the room it works for. */
-export type ProcessLaunch = Launch & { id?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom">;
+/**
+ * What of a session's choices carries into one that replaces it under another setup: never its mode, which a sandbox may
+ * have set to ask for nothing, and which on this computer would let the agent do anything.
+ */
+const choicesBesideMode = (options: acp.SessionConfigOption[]) => options.filter(({ category }) => category !== "mode");
+
+/** Marks a sandboxed workspace conversation's process apart from one of its own on this computer, so neither is ever taken for the other. */
+const SANDBOXED_KEY_SUFFIX = "sandboxed";
+
+/**
+ * What picks the agent process a conversation runs on: its launch, and, for a conversation that exists, its id, its
+ * workspace and the room it works for.
+ */
+export type ProcessLaunch = Launch & { id?: string; workspaceId?: string } & Pick<Conversation, "roomId" | "broughtIntoRoom">;
 
 /**
  * The agent process serving a conversation. Antigravity keeps one canvas MCP server per process, the one its first
  * session registered, so every conversation on one profile would reach that first conversation's canvas; it takes a
  * process of its own. So does a conversation that works for a room, on every agent: opencode keeps one canvas server per
  * folder, and a room's agent shares no process, canvas server or environment with the owner's conversations or another
- * room's. The others share one per profile.
+ * room's. A conversation of a sandboxed workspace takes one of its own too, which starts in the workspace's sandbox or
+ * not at all. The others share one per profile.
  */
-export const agentProcessKey = (profile: Pick<Profile, "id" | "harness">, launch: ProcessLaunch) =>
-  launch.id && (profile.harness === "antigravity" || worksForARoom(launch)) ? `${profile.id}/${launch.id}` : profile.id;
+export function agentProcessKey(profile: Pick<Profile, "id" | "harness">, launch: ProcessLaunch, inSandboxedWorkspace: boolean) {
+  if (!launch.id) return profile.id;
+  if (inSandboxedWorkspace) return `${profile.id}/${launch.id}/${SANDBOXED_KEY_SUFFIX}`;
+  return profile.harness === "antigravity" || worksForARoom(launch) ? `${profile.id}/${launch.id}` : profile.id;
+}
 
 export class ConversationService {
   private readonly runtimes = new Map<string, Runtime>();
-  /** Agent processes by `agentProcessKey`: one per profile, except Antigravity's conversations and rooms', which each get their own. */
+  /** Agent processes by `agentProcessKey`: one per profile, except those of Antigravity's, rooms' and sandboxed workspaces' conversations, which each get their own. */
   private readonly agentProcesses = new Map<string, HarnessProcess>();
-  /** Room conversations' agent processes, each stopped once it has sat idle for `roomAgentIdleMs` since its last turn ended. */
-  private readonly idleRoomProcesses = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Room and sandboxed workspace conversations' agent processes, each stopped once it has sat idle for `roomAgentIdleMs` since its last turn ended. */
+  private readonly idleOwnProcesses = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly sessions = new ConversationSessions();
   private readonly subagentSessions = new SubagentSessions();
   /** Sessions whose agent left an option change unanswered for too long, so their next changes don't wait. */
@@ -500,10 +517,10 @@ export class ConversationService {
   private turnsHeard: TurnListener = { turnStarted: () => {}, turnEnded: () => {} };
   private broughtTasks = NO_BROUGHT_TASKS;
   private roomRules = NO_ROOM_RULES;
-  private sandboxes: RoomAgentSandboxes = NO_SANDBOXES;
-  /** The agent processes that run in their room's sandbox, each by the start that put it there. */
+  private sandboxes: SandboxedAgents = NO_SANDBOXES;
+  /** The agent processes that run in their room's or workspace's sandbox, each by the start that put it there. */
   private readonly sandboxStarts = new WeakMap<HarnessProcess, object>();
-  /** The room agents' processes that started on this computer, as their room had no sandbox then. */
+  /** The room agents' and sandboxed workspaces' own processes that started on this computer, as they had no sandbox then. */
   private readonly startedOnThisComputer = new WeakSet<HarnessProcess>();
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
   private deletesWithAllItHolds: (conversationId: string, options: DeleteOptions) => void = (conversationId, options) => this.delete(conversationId, options);
@@ -561,6 +578,11 @@ export class ConversationService {
   /** The turn the conversation's agent is in, or last was in: the seq of the message that started it. */
   latestTurnSeq(conversationId: string): number | null {
     return this.store.latestTurnStart(conversationId)?.seq ?? null;
+  }
+
+  /** Whether the conversation's agent is in a turn now. */
+  isAtWork(conversationId: string) {
+    return this.runtimes.get(conversationId)?.running === true;
   }
 
   get(conversationId: string): Conversation {
@@ -638,7 +660,7 @@ export class ConversationService {
   /** Like `create`, where the workspace starts its conversations unless `startsIn` names the other place. */
   async start(workspaceId: string, launch?: Launch, prompt?: string, startsIn?: ConversationPlace, authorId?: string): Promise<Conversation> {
     const workspace = this.existingWorkspace(workspaceId);
-    const worktree = (startsIn ?? workspace.newConversationsIn) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    const worktree = placeOfNewConversation(workspace, startsIn) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
     return this.create(workspaceId, launch, prompt, undefined, {}, worktree, { authorId });
   }
 
@@ -671,7 +693,9 @@ export class ConversationService {
   async startInOwnWorktree(callerId: string, plugin: string, profileName: string, prompt: string, title?: string, choices?: ConversationChoices, from?: string): Promise<StartedConversation> {
     const caller = this.callerThatMayStart(callerId);
     const profile = this.profileNamed(profileName);
-    const worktree = await this.worktrees.plan(this.existingWorkspace(caller.workspaceId), { from });
+    const workspace = this.existingWorkspace(caller.workspaceId);
+    if (workspace.sandbox.on) throw new Error("This workspace runs its agents in a sandbox, which sees only the workspace's folder and no worktree: start the conversation beside you instead.");
+    const worktree = await this.worktrees.plan(workspace, { from });
     const conversation = this.createFor(caller, plugin, profile, title, choices, worktree);
     this.ensureSession(conversation.id)
       .then(
@@ -711,7 +735,7 @@ export class ConversationService {
   async startForPlugin(workspaceId: string, pluginTitle: string, { profileId, prompt, title, model, effort }: WorkspaceConversationStart): Promise<StartedConversation> {
     const workspace = this.existingWorkspace(workspaceId);
     const profile = this.profileWithId(profileId);
-    const worktree = workspace.newConversationsIn === "worktree" ? await this.worktrees.plan(workspace) : undefined;
+    const worktree = placeOfNewConversation(workspace) === "worktree" ? await this.worktrees.plan(workspace) : undefined;
     return this.startedOf(this.create(workspaceId, { harness: profile.harness, profileId: profile.id }, prompt, title, { model, effort }, worktree, { fromPlugin: pluginTitle }));
   }
 
@@ -861,7 +885,7 @@ export class ConversationService {
   }
 
   /** Where the agents of sandboxed rooms start. */
-  startsSandboxedAgentsIn(sandboxes: RoomAgentSandboxes) {
+  startsSandboxedAgentsIn(sandboxes: SandboxedAgents) {
     this.sandboxes = sandboxes;
   }
 
@@ -993,6 +1017,7 @@ export class ConversationService {
    * and one an agent works on a room's tasks in is the room's.
    */
   private async harnessSessions(workspaceId: string, launch: Launch) {
+    this.refuseSessionsFromThisComputerIn(workspaceId);
     const directory = await recordedDirectory(this.existingWorkspace(workspaceId));
     const profile = profileToLaunch(this.store, launch);
     const harness = this.harnessFor(launch);
@@ -1005,8 +1030,20 @@ export class ConversationService {
     return { profile, sessions: sessions.filter(({ cwd, sessionId }) => cwd === directory && !heldElsewhere.has(sessionId)), conversationIdBySession };
   }
 
-  /** Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation. */
-  adopt(
+  /**
+   * Continues (or forks) a session started elsewhere, e.g. in a terminal, replaying its history into the conversation.
+   * A sandboxed workspace's agents keep their sessions in its sandbox, which holds none from this computer.
+   */
+  adopt(workspaceId: string, launch: Launch, session: Pick<ExternalSession, "sessionId" | "title">, mode: AdoptMode): Conversation {
+    this.refuseSessionsFromThisComputerIn(workspaceId);
+    return this.adoptSession(workspaceId, launch, session, mode);
+  }
+
+  private refuseSessionsFromThisComputerIn(workspaceId: string) {
+    if (this.existingWorkspace(workspaceId).sandbox.on) throw new HostProblemError({ code: "sandboxed-workspace-outside-session" });
+  }
+
+  private adoptSession(
     workspaceId: string,
     launch: Launch,
     session: Pick<ExternalSession, "sessionId" | "title"> & { titleSetByUser?: boolean },
@@ -1033,7 +1070,7 @@ export class ConversationService {
     const { workspaceId, harness, profileId, acpSessionId, title, titleSetByUser, worktree } = this.get(conversationId);
     if (!acpSessionId || !this.canFork(conversationId)) throw new HostProblemError({ code: "nothing-to-fork-yet" });
     const forkPoint = throughTurnSeq === undefined ? null : this.forkPointThrough(conversationId, throughTurnSeq);
-    const forked = this.adopt(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree);
+    const forked = this.adoptSession(workspaceId, { harness, profileId }, { sessionId: acpSessionId, title, titleSetByUser }, "fork", forkPoint, worktree);
     this.store.copyLoadedPlugins(conversationId, forked.id);
     return forked;
   }
@@ -1045,9 +1082,13 @@ export class ConversationService {
     return point && { messageId: point.messageId, canvasShownBefore: point.canvasBefore };
   }
 
-  /** The agent has a session to copy once it has worked on a message there. */
+  /**
+   * The agent has a session to copy once it has worked on a message there, and only while the session was started
+   * where the agent runs now: one from before its workspace's sandbox was turned on or off stays where it was.
+   */
   canFork(conversationId: string): boolean {
-    return this.get(conversationId).acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId));
+    const conversation = this.get(conversationId);
+    return conversation.acpSessionId !== null && sessionHasRecord(this.store.listEvents(conversationId)) && this.keepsSessionSetup(conversation);
   }
 
   /**
@@ -1058,7 +1099,7 @@ export class ConversationService {
   startSideChat(conversationId: string, text: string, authorId?: string): Conversation {
     const asked = this.get(conversationId);
     const parent = asked.sideChatOf ? this.get(asked.sideChatOf) : asked;
-    if (this.inSandboxedRoom(parent)) throw new HostProblemError({ code: "sandboxed-room-side-chat" });
+    if (parent.roomId && this.sandboxOf(parent)) throw new HostProblemError({ code: "sandboxed-room-side-chat" });
     const { workspaceId, harness, profileId, worktree } = parent;
     const sideChat = this.insertConversation(workspaceId, { harness, profileId }, titleFrom(askedOutsideQuotes(text)) || UNTITLED, true, worktree, parent.id);
     this.store.copyLoadedPlugins(parent.id, sideChat.id);
@@ -1105,39 +1146,66 @@ export class ConversationService {
   }
 
   /**
-   * The mode its room's preset runs a room's conversation in, where its agent has one for it, or none that asks where it
-   * works freely in its room's sandbox; null for any other conversation.
+   * The mode a room's or sandboxed workspace's conversation runs in: none that asks where it works freely in its sandbox,
+   * otherwise its room's preset's, where its agent has one for it; null for any other conversation, which takes its
+   * profile's.
    */
-  private roomPresetMode(conversation: Conversation) {
+  private sandboxOrRoomMode(conversation: Conversation) {
+    if (this.worksFreelyInSandbox(conversation)) return WORKS_FREELY_MODE;
     const room = conversation.roomId ? this.store.findRoom(conversation.roomId) : undefined;
-    if (!room) return null;
-    return this.worksFreelyInSandbox(conversation) ? WORKS_FREELY_MODE : presetModeOf(conversation.harness, room.permissions);
+    return room ? presetModeOf(conversation.harness, room.permissions) : null;
   }
 
-  /** Only an agent whose process runs in its room's VM, while that VM is known to run and the room lets them work freely there. */
+  /**
+   * Only an agent whose process runs in its sandbox's VM, while that VM is known to run and its room or workspace lets it
+   * work freely there. A side chat stays read-only, and an agent brought into someone else's room asks as usual.
+   */
   private worksFreelyInSandbox(conversation: Conversation) {
-    const room = conversation.roomId ? this.store.findRoom(conversation.roomId) : undefined;
-    return room?.sandbox.on === true && room.sandbox.workFreely && this.runsInSandbox(conversation) && this.sandboxes.confirmedRunning(room.id);
+    const sandbox = this.sandboxOf(conversation);
+    if (!sandbox?.setting.workFreely || conversation.sideChatOf || conversation.broughtIntoRoom) return false;
+    return this.runsInSandbox(conversation) && this.sandboxes.confirmedRunning(sandbox.owner);
   }
 
-  /** A conversation of a room whose sandbox is on: nothing of it runs on this computer. */
-  private inSandboxedRoom(conversation: Conversation) {
-    const room = conversation.roomId ? this.store.findRoom(conversation.roomId) : undefined;
-    return room?.sandbox.on === true;
+  private sandboxOf(conversation: { roomId?: string; workspaceId?: string }) {
+    return sandboxOfConversation(this.store, conversation);
+  }
+
+  /** A launch of a conversation outside any room in a workspace whose sandbox is on, as the store has it now. */
+  private inSandboxedWorkspace({ id, roomId, workspaceId }: ProcessLaunch) {
+    return id !== undefined && roomId === undefined && workspaceId !== undefined && this.store.findWorkspace(workspaceId)?.sandbox.on === true;
+  }
+
+  private processKeyOf(profile: Profile, launch: ProcessLaunch) {
+    return agentProcessKey(profile, launch, this.inSandboxedWorkspace(launch));
+  }
+
+  /** The process the conversation's agent runs on now, as its profile, room and workspace pick it; none before it is made. */
+  private currentProcessOf(conversation: Conversation) {
+    const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
+    return profile && this.agentProcesses.get(this.processKeyOf(profile, conversation));
   }
 
   private runsInSandbox(conversation: Conversation) {
-    const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
-    const harness = profile && this.agentProcesses.get(agentProcessKey(profile, conversation));
+    const harness = this.currentProcessOf(conversation);
     return harness !== undefined && this.sandboxStarts.has(harness);
   }
 
   /**
-   * A room's session goes to its room's mode as it opens, new or resumed, and as the preset changes. A mode the agent
-   * switches to in between, as an option on its request can, holds until then.
+   * YOLO approves whatever the agent asks, outside rooms only; in a sandboxed workspace only for an agent whose process
+   * runs in its VM while that VM is known to run.
+   */
+  private approvesEverything(conversation: Conversation) {
+    if (!conversation.bypassPermissions || worksForARoom(conversation)) return false;
+    const sandbox = this.sandboxOf(conversation);
+    return sandbox === null || (this.runsInSandbox(conversation) && this.sandboxes.confirmedRunning(sandbox.owner));
+  }
+
+  /**
+   * A room's or sandboxed workspace's session goes to its mode as it opens, new or resumed, and as the room's preset
+   * changes. A mode the agent switches to in between, as an option on its request can, holds until then.
    */
   private async keepToRoomPreset(conversationId: string, sessionId: string) {
-    const mode = this.roomPresetMode(this.get(conversationId));
+    const mode = this.sandboxOrRoomMode(this.get(conversationId));
     const modeOption = this.get(conversationId).configOptions.find(({ category }) => category === "mode");
     if (mode && modeOption && offersValue(modeOption, mode)) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
   }
@@ -1169,34 +1237,94 @@ export class ConversationService {
    */
   startAfreshInRoom(conversationId: string, { stopsTurn }: { stopsTurn: boolean }) {
     if (!this.runtimes.get(conversationId)?.running) return this.startAfresh(conversationId);
-    if (stopsTurn) this.stopAgentProcess(conversationId);
+    if (stopsTurn) this.stopTurnUnderOldSetup(conversationId);
+  }
+
+  /**
+   * The conversations of a workspace whose sandbox was turned on or off or changed, those of its rooms aside, leave the
+   * processes they ran on, in the sandbox or on this computer, at once, or, at work, once their turn ends; one at work
+   * stops at once when the change leaves it with less. Each starts afresh as it next goes on, as its session was started
+   * under another setup than its workspace's, so the conversations nobody goes back to keep theirs on screen untouched.
+   */
+  startAfreshInWorkspace(workspaceId: string, { stopsTurn }: { stopsTurn: boolean }) {
+    this.store
+      .listConversations()
+      .filter((conversation) => conversation.workspaceId === workspaceId && conversation.roomId === undefined)
+      .forEach(({ id }) => {
+        if (!this.runtimes.get(id)?.running) this.leaveProcess(id);
+        else if (stopsTurn) this.stopTurnUnderOldSetup(id);
+      });
   }
 
   private startAfresh(conversationId: string) {
     const conversation = this.store.findConversation(conversationId);
     if (this.stopping || !conversation) return;
-    this.stopAgentProcess(conversationId);
+    this.leaveProcess(conversationId);
     if (conversation.acpSessionId === null) return;
     this.forgetContextUsage(conversationId);
     this.save({ ...conversation, acpSessionId: null });
     this.append(conversationId, { type: "context-cleared" });
   }
 
-  private stopAgentProcess(conversationId: string) {
-    const conversation = this.store.findConversation(conversationId);
-    const profile = conversation?.profileId ? this.store.findProfile(conversation.profileId) : undefined;
-    const harness = conversation && profile && this.agentProcesses.get(agentProcessKey(profile, conversation));
-    if (harness) void this.killAgent(harness, { kind: "stopped" });
+  /**
+   * The conversation's own processes stop; on the process its profile shares with other conversations, which goes on
+   * serving them, only its session is let go.
+   */
+  private leaveProcess(conversationId: string) {
+    const runtime = this.runtimes.get(conversationId);
+    if (runtime?.harness && !this.isOwnProcess(conversationId, runtime.harness)) void this.releaseSession(conversationId, runtime, this.get(conversationId).acpSessionId);
+    this.ownProcessesOf(conversationId).forEach((harness) => void this.killAgent(harness, { kind: "stopped" }));
   }
 
-  /** A room's agent whose session was started under another setup than its room's now starts afresh before its next turn. */
-  private startAfreshOnChangedRoomSetup(conversationId: string) {
+  /**
+   * A turn on the process the profile shares is cancelled, as stopping that process would stop every other
+   * conversation's, and its session, with the background shells it runs, is let go once the turn ends.
+   */
+  private stopTurnUnderOldSetup(conversationId: string) {
+    const runtime = this.runtimes.get(conversationId);
+    const harness = runtime?.harness;
+    if (harness && this.isOwnProcess(conversationId, harness)) return void this.killAgent(harness, { kind: "stopped" });
+    const sessionId = this.get(conversationId).acpSessionId;
+    void this.cancel(conversationId).catch(() => {});
+    if (runtime && harness) void runtime.turnEnded?.then(() => this.releaseSessionStillOn(conversationId, runtime, harness, sessionId));
+  }
+
+  /** A session another start took the conversation off meanwhile is left to that start. */
+  private async releaseSessionStillOn(conversationId: string, runtime: Runtime, harness: HarnessProcess, sessionId: string | null) {
+    if (runtime.harness === harness) await this.releaseSession(conversationId, runtime, sessionId);
+  }
+
+  /** The keys of the processes that serve only this conversation: its Antigravity, room or sandboxed workspace process. */
+  private isOwnProcessKey(key: string, conversationId: string) {
+    return key.endsWith(`/${conversationId}`) || key.endsWith(`/${conversationId}/${SANDBOXED_KEY_SUFFIX}`);
+  }
+
+  private ownProcessesOf(conversationId: string) {
+    return [...this.agentProcesses].filter(([key]) => this.isOwnProcessKey(key, conversationId)).map(([, harness]) => harness);
+  }
+
+  private isOwnProcess(conversationId: string, harness: HarnessProcess) {
+    return this.ownProcessesOf(conversationId).includes(harness);
+  }
+
+  /** A conversation whose session was started under another setup than its room's or workspace's now starts afresh before its next turn. */
+  private startAfreshOnChangedSetup(conversationId: string) {
     const conversation = this.get(conversationId);
-    if (conversation.acpSessionId !== null && !this.keepsRoomSetup(conversation)) this.startAfresh(conversationId);
+    if (conversation.acpSessionId !== null && !this.keepsSessionSetup(conversation)) this.startAfresh(conversationId);
   }
 
-  private keepsRoomSetup(conversation: Conversation) {
-    return !conversation.roomId || this.store.roomSetupOfSession(conversation.id) === this.roomSetupOf(conversation);
+  private keepsSessionSetup(conversation: Conversation) {
+    return this.store.setupOfSession(conversation.id) === this.sessionSetupOf(conversation);
+  }
+
+  /**
+   * What a session is started under, which it can't take up once open: a room's agent's setup, or whether its
+   * workspace's sandbox lets it work freely. Null for a conversation that runs on this computer outside any room.
+   */
+  private sessionSetupOf(conversation: Conversation) {
+    if (conversation.roomId) return this.roomSetupOf(conversation);
+    const sandbox = this.sandboxOf(conversation);
+    return sandbox && JSON.stringify({ sandbox: sandbox.setting.workFreely ? "works-freely" : "profile-mode" });
   }
 
   private roomSetupOf({ roomId, profileId }: Conversation) {
@@ -1206,19 +1334,21 @@ export class ConversationService {
     return roomSetupFingerprint(profile.harness, profile.environment, this.environmentChoicesOf(roomId, profile.id), room?.claudeSetup ?? ALL_OF_CLAUDE_SETUP, room?.sandbox ?? NO_SANDBOX);
   }
 
-  /** A room's agent process that started on this computer before its room was sandboxed, or the other way round, is not taken up again. */
-  private stopAgentStartedElsewhere(conversationId: string) {
+  /**
+   * A process that started on this computer before its room or workspace was sandboxed, or the other way round, is not
+   * taken up again; nor is one the conversation no longer runs on, nor a session still open on such a process.
+   */
+  private leaveProcessStartedElsewhere(conversationId: string) {
     const conversation = this.get(conversationId);
-    const profile = conversation.roomId && conversation.profileId ? this.store.findProfile(conversation.profileId) : undefined;
-    const harness = profile && this.agentProcesses.get(agentProcessKey(profile, conversation));
+    const runtime = this.runtime(conversationId);
+    const harness = this.currentProcessOf(conversation);
+    this.ownProcessesOf(conversationId)
+      .filter((own) => own !== harness)
+      .forEach((own) => void this.killAgent(own, { kind: "stopped" }));
+    if (runtime.harness && runtime.harness !== harness) void this.releaseSession(conversationId, runtime, conversation.acpSessionId);
     if (!harness) return;
-    const startedElsewhere = this.store.findRoom(conversation.roomId!)?.sandbox.on ? this.startedOnThisComputer.has(harness) : this.sandboxStarts.has(harness);
+    const startedElsewhere = this.sandboxOf(conversation) ? this.startedOnThisComputer.has(harness) : this.sandboxStarts.has(harness);
     if (startedElsewhere) void this.killAgent(harness, { kind: "stopped" });
-  }
-
-  private recordRoomSetup(conversation: Conversation) {
-    const setup = this.roomSetupOf(conversation);
-    if (setup !== null) this.store.setRoomSetupOfSession(conversation.id, setup);
   }
 
   /** A room agent's model and effort reach its open session at once; one not open takes them as it next opens. */
@@ -1355,7 +1485,8 @@ export class ConversationService {
   async landable(conversationId: string): Promise<Landable | null> {
     const { workspaceId, worktree } = this.get(conversationId);
     if (!worktree || !(await this.worktrees.isMade(worktree))) return null;
-    return this.worktrees.landable(this.existingWorkspace(workspaceId), worktree, repositoryHooksOff(this.store, workspaceId));
+    const workspace = this.existingWorkspace(workspaceId);
+    return this.worktrees.landable(workspace, worktree, this.hooksOffIn(workspace, worktree));
   }
 
   /**
@@ -1368,7 +1499,13 @@ export class ConversationService {
     if (!worktree) throw new HostProblemError({ code: "landing-needs-worktree" });
     const waitsForTheAnswer = (id: string) => byAgent && id === conversationId;
     const mayRebase = this.store.conversationsInWorktree(worktree.id).every((id) => waitsForTheAnswer(id) || !this.runtimes.get(id)?.running);
-    return this.worktrees.land(this.existingWorkspace(workspaceId), worktree, { mayRebase, ownersHooks: !repositoryHooksOff(this.store, workspaceId) });
+    const workspace = this.existingWorkspace(workspaceId);
+    return this.worktrees.land(workspace, worktree, { mayRebase, ownersHooks: !this.hooksOffIn(workspace, worktree) });
+  }
+
+  /** A worktree's repository is its workspace's, so its hooks are off where either folder lies where a sandbox works. */
+  private hooksOffIn(workspace: Workspace, worktree: ConversationWorktree) {
+    return repositoryHooksOff(this.store, [workspace.path, worktree.root]);
   }
 
   /** Those of the conversations still there that neither work nor wait for the user, which deleting a workspace's Older fold may take. */
@@ -1603,7 +1740,7 @@ export class ConversationService {
   }
 
   private async restartAgentProcessOf(conversation: Conversation) {
-    const harness = this.agentProcesses.get(agentProcessKey(this.profileOf(conversation), conversation));
+    const harness = this.agentProcesses.get(this.processKeyOf(this.profileOf(conversation), conversation));
     if (!harness) return;
     this.continueStoppedTurns(await this.killAgent(harness, { kind: "restarted-for-reload" }));
   }
@@ -1761,8 +1898,8 @@ export class ConversationService {
     if (runtime.running) throw new HostProblemError({ code: "agent-still-working" });
     if (isClearCommand(text)) return this.clearContext(conversationId);
     if (isReloadCommand(text)) return this.reloadAgent(conversationId);
-    this.startAfreshOnChangedRoomSetup(conversationId);
-    this.stopAgentStartedElsewhere(conversationId);
+    this.startAfreshOnChangedSetup(conversationId);
+    this.leaveProcessStartedElsewhere(conversationId);
     runtime.running = true;
     this.announceRunningTurnsCount();
     this.endUsageLimitWait(runtime);
@@ -1858,29 +1995,45 @@ export class ConversationService {
     this.sendNextQueuedMessage(conversationId);
     if (!this.nudgeAfterStall(conversationId, turn, endedOnItsOwn)) this.followUpOnCanvasUse(conversationId, turn, endedOnItsOwn);
     this.lookAtHeldFilesAgain(conversationId);
-    this.stopRoomProcessOnceIdle(conversationId);
+    this.leaveSandboxTurnedOff(conversationId);
+    this.stopOwnProcessOnceIdle(conversationId);
   }
 
-  /** A sandboxed room's agent config files are looked at again as each turn ends, in case a change went unnoticed. */
+  /**
+   * A turn that went on in a sandbox's VM after its sandbox was turned off leaves the VM as it ends, so the VM stops once
+   * no conversation works in it. The conversation's next turn starts on this computer.
+   */
+  private leaveSandboxTurnedOff(conversationId: string) {
+    const harness = this.runtimes.get(conversationId)?.harness;
+    const conversation = this.store.findConversation(conversationId);
+    if (harness && conversation && this.sandboxStarts.has(harness) && !this.sandboxOf(conversation)) void this.killAgent(harness, { kind: "stopped" });
+  }
+
+  /** A sandbox's agent config files are looked at again as each turn ends, in case a change went unnoticed. */
   private lookAtHeldFilesAgain(conversationId: string) {
-    const roomId = this.store.findConversation(conversationId)?.roomId;
-    if (roomId) void this.sandboxes.turnEnded(roomId).catch((error: unknown) => console.error(`looking at the held files of room ${roomId} failed:`, error));
+    const conversation = this.store.findConversation(conversationId);
+    const owner = conversation && this.sandboxOf(conversation)?.owner;
+    if (owner) void this.sandboxes.turnEnded(owner).catch((error: unknown) => console.error(`looking at the held files of ${ownerKey(owner)} failed:`, error));
   }
 
-  /** A room's agents are tagged now and then, so their processes, one per room conversation, would otherwise pile up. */
-  private stopRoomProcessOnceIdle(conversationId: string) {
-    if (!this.store.findConversation(conversationId)?.roomId) return;
-    clearTimeout(this.idleRoomProcesses.get(conversationId));
-    const timer = setTimeout(() => this.stopIdleRoomProcess(conversationId), this.config.roomAgentIdleMs);
+  /**
+   * A room's agents are tagged now and then, and a sandboxed workspace's conversations each keep a process in its VM, so
+   * their processes, one per conversation, would otherwise pile up.
+   */
+  private stopOwnProcessOnceIdle(conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation || (!conversation.roomId && !this.sandboxOf(conversation))) return;
+    clearTimeout(this.idleOwnProcesses.get(conversationId));
+    const timer = setTimeout(() => this.stopIdleOwnProcess(conversationId), this.config.roomAgentIdleMs);
     timer.unref();
-    this.idleRoomProcesses.set(conversationId, timer);
+    this.idleOwnProcesses.set(conversationId, timer);
   }
 
-  private stopIdleRoomProcess(conversationId: string) {
-    this.idleRoomProcesses.delete(conversationId);
+  private stopIdleOwnProcess(conversationId: string) {
+    this.idleOwnProcesses.delete(conversationId);
     const runtime = this.runtimes.get(conversationId);
     const busy = runtime?.running || runtime?.pendingPermissions.size || runtime?.queuedMessages.length;
-    if (this.stopping || !runtime?.harness || busy) return;
+    if (this.stopping || !runtime?.harness || busy || !this.isOwnProcess(conversationId, runtime.harness)) return;
     void this.killAgent(runtime.harness, { kind: "stopped" });
   }
 
@@ -2012,9 +2165,9 @@ export class ConversationService {
     return plan;
   }
 
-  /** The files back as the checkpoint keeps them, once no sandboxed room's VM works in them to race the restore. */
+  /** The files back as the checkpoint keeps them, once no sandbox's VM works in them to race the restore. */
   private async restoredWithNoVmAtWork(workspace: Workspace, checkpoint: Parameters<Checkpoints["restore"]>[1]) {
-    await this.sandboxes.stopRoomsWorkingIn(workspace.path);
+    await this.sandboxes.stopSandboxesWorkingIn(workspace.path);
     return this.checkpoints.restore(workspace, checkpoint);
   }
 
@@ -2323,14 +2476,22 @@ export class ConversationService {
     if (this.store.hasConversation(conversationId)) this.publish(this.get(conversationId));
   }
 
-  /** Runs a `!` command from the message box where the conversation works, with the environment its agent gets. */
+  /**
+   * Runs a `!` command from the message box where the conversation works, with the environment its agent gets. A
+   * sandboxed conversation's would run on this computer, so it is not run.
+   */
   runCommand(conversationId: string, command: string, authorId?: string) {
     const conversation = this.get(conversationId);
-    if (this.inSandboxedRoom(conversation)) throw new HostProblemError({ code: "sandboxed-room-command" });
+    if (this.sandboxOf(conversation)) throw new HostProblemError({ code: conversation.roomId ? "sandboxed-room-command" : "sandboxed-workspace-command" });
     const workspace = this.store.findWorkspace(conversation.workspaceId);
     if (!workspace) throw new HostProblemError({ code: "conversation-workspace-gone" });
     const environment = profileEnvironment(this.profileOf(conversation));
     void this.commands.run(command, workingCopyOf(workspace, conversation).path, environment, (event) => this.append(conversationId, event), authorId);
+  }
+
+  /** Claude Code's own panels and sign-in would run the agent on this computer, in the folder a sandboxed conversation's agents change. */
+  private refuseAgentHereFor(conversation: Conversation) {
+    if (this.sandboxOf(conversation)) throw new HostProblemError({ code: "sandboxed-agent-here" });
   }
 
   /** A command the host no longer runs (it was restarted meanwhile) is marked as stopped, so its card stops waiting. */
@@ -2353,8 +2514,9 @@ export class ConversationService {
   /** The agent's own sign-in, with the environment of the conversation's profile, so a profile with its own account signs that one in. */
   loginProgram(conversationId: string, pageOnHost: boolean): TerminalProgram {
     const conversation = this.get(conversationId);
+    this.refuseAgentHereFor(conversation);
     const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
-    return { tabName: `${harnessLabels[conversation.harness]} sign-in`, command: loginCommand(conversation.harness, environment, undefined, pageOnHost), environment };
+    return { tabName: `${harnessLabels[conversation.harness]} sign-in`, command: loginCommand(conversation.harness, environment, undefined, pageOnHost), environment, runsTheAgent: true };
   }
 
   /** A command Claude Code shows a panel for only in its own terminal, run in a tab of the conversation's terminals. */
@@ -2362,9 +2524,10 @@ export class ConversationService {
     const command = panelCommandRun(line);
     if (command === null) throw new HostProblemError({ code: "not-a-slash-command", line });
     const conversation = this.get(conversationId);
+    this.refuseAgentHereFor(conversation);
     if (conversation.harness !== "claude") throw new HostProblemError({ code: "agent-has-no-such-command", agent: harnessLabels[conversation.harness], line });
     const environment = launchEnvironment(conversation.harness, this.profileOf(conversation), this.store.claudeProgramSetting());
-    return { tabName: command, command: [environment.CLAUDE_CODE_EXECUTABLE!, command], environment, key: `panel ${command}` };
+    return { tabName: command, command: [environment.CLAUDE_CODE_EXECUTABLE!, command], environment, key: `panel ${command}`, runsTheAgent: true };
   }
 
   loginEnded(conversationId: string, signedIn: boolean) {
@@ -2413,6 +2576,7 @@ export class ConversationService {
     this.replaceQueue(conversationId, (queue) => queue.filter(({ id }) => id !== messageId), messageId);
   }
 
+  /** The stop reaches the process the turn runs on, which a sandbox turned on or off since no longer picks. */
   async cancel(conversationId: string, { force = false } = {}): Promise<void> {
     if (force) return this.forceCancel(conversationId);
     const runtime = this.runtime(conversationId);
@@ -2425,7 +2589,7 @@ export class ConversationService {
     }
     if (runtime.running && conversation.acpSessionId) {
       await this.awaitRecordedPrompt(conversation, runtime.turn);
-      await this.harnessFor(conversation).cancel(conversation.acpSessionId);
+      await (runtime.harness ?? this.harnessFor(conversation)).cancel(conversation.acpSessionId);
     }
   }
 
@@ -2674,7 +2838,7 @@ export class ConversationService {
   private async makeWorktree(conversation: Conversation, worktree: ConversationWorktree) {
     const workspace = this.existingWorkspace(conversation.workspaceId);
     this.setBusy(conversation.id, "making-worktree");
-    await this.worktrees.make(workspace, worktree, { ownersHooks: !repositoryHooksOff(this.store, workspace.id) });
+    await this.worktrees.make(workspace, worktree, { ownersHooks: !this.hooksOffIn(workspace, worktree) });
     if (!this.store.hasConversation(conversation.id)) {
       await this.worktrees.remove(workspace, worktree);
       throw new HostProblemError({ code: "conversation-deleted-while-opening" });
@@ -2712,13 +2876,12 @@ export class ConversationService {
   }
 
   /**
-   * A conversation's own agent process, an Antigravity conversation's or a room's, serves only it, so it goes with the
-   * conversation or with the profile it moves off. With no profile left to name it by, as when the conversation was
-   * deleted already, its id finds the key.
+   * A conversation's own agent process, an Antigravity conversation's, a room's or a sandboxed workspace's, serves only
+   * it, so it goes with the conversation or with the profile it moves off. With no profile left to name it by, as when
+   * the conversation was deleted already, its id finds the key.
    */
-  private stopDedicatedHarness(
-profileId: string | null, conversationId: string) {
-    const keys = profileId ? [`${profileId}/${conversationId}`] : [...this.agentProcesses.keys()].filter((key) => key.endsWith(`/${conversationId}`));
+  private stopDedicatedHarness(profileId: string | null, conversationId: string) {
+    const keys = [...this.agentProcesses.keys()].filter((key) => this.isOwnProcessKey(key, conversationId) && (profileId === null || key.startsWith(`${profileId}/`)));
     keys.forEach((key) => {
       const harness = this.agentProcesses.get(key);
       if (!harness) return;
@@ -2811,6 +2974,7 @@ profileId: string | null, conversationId: string) {
     }
     const conversation = this.get(conversationId);
     const isFirstSession = conversation.acpSessionId === null;
+    const setupKept = this.keepsSessionSetup(conversation);
     const harness = this.harnessFor(conversation);
     this.runtime(conversationId).harness = harness;
     const capabilities = await harness.start();
@@ -2818,7 +2982,7 @@ profileId: string | null, conversationId: string) {
 
     const canResume = Boolean(capabilities.agentCapabilities?.sessionCapabilities?.resume) && !replaysHistoryOnResume(conversation.harness);
     const canLoad = Boolean(capabilities.agentCapabilities?.loadSession);
-    if (conversation.acpSessionId && (canResume || canLoad) && this.agentHasRecorded(conversationId) && this.keepsRoomSetup(conversation)) {
+    if (conversation.acpSessionId && (canResume || canLoad) && this.agentHasRecorded(conversationId) && setupKept) {
       try {
         const replay: acp.SessionNotification[] = [];
         const resumed = canResume
@@ -2842,11 +3006,10 @@ profileId: string | null, conversationId: string) {
     this.closeSessionIfConversationDeleted(conversationId, harness, created.sessionId);
     this.muteNotifier(conversation, created.sessionId);
     this.bindSession(conversationId, created.sessionId, created.configOptions);
-    this.recordRoomSetup(conversation);
     runtime.roomContextLost = Boolean(conversation.roomId) && (!isFirstSession || this.contextClearedBefore(conversationId));
-    await this.restoreConfigChoices(conversationId, created.sessionId, conversation.configOptions);
+    await this.restoreConfigChoices(conversationId, created.sessionId, setupKept ? conversation.configOptions : choicesBesideMode(conversation.configOptions));
     if (conversation.sideChatOf) await this.keepSideChatReadOnly(conversationId, created.sessionId);
-    else await this.applyNewSessionChoices(conversation, created.sessionId, isFirstSession);
+    else await this.applyNewSessionChoices(conversation, created.sessionId, { isFirstSession, setupKept });
     await this.keepToRoomPreset(conversationId, created.sessionId);
     await this.keepToRoomAgentModel(conversationId, created.sessionId);
     runtime.startChoices = undefined;
@@ -3000,6 +3163,7 @@ profileId: string | null, conversationId: string) {
     this.sessions.bind(conversationId, sessionId);
     this.runtime(conversationId).cancelledReply = undefined;
     this.save({ ...this.get(conversationId), acpSessionId: sessionId, configOptions: configOptions ?? [] });
+    this.store.setSetupOfSession(conversationId, this.sessionSetupOf(this.get(conversationId)));
     this.updatesForUnknownSessions.take(sessionId).forEach((notification) => this.handleSessionUpdate(notification));
   }
 
@@ -3010,18 +3174,21 @@ profileId: string | null, conversationId: string) {
     if (choice) await this.trySetConfigOption(conversationId, sessionId, "model", choice);
   }
 
-  /** A sandboxed room's agents keep their Claude Code config in a folder of the room's, which their VM is given. */
+  /** A sandbox's agents keep their Claude Code config in a folder of their room's or workspace's, which their VM is given. */
   private claudeConfigDirOf(conversation: Conversation) {
-    if (conversation.roomId && this.store.findRoom(conversation.roomId)?.sandbox.on) return sandboxConfigFolder(this.config.dataDir, conversation.roomId);
+    const sandbox = this.sandboxOf(conversation);
+    if (sandbox) return sandboxConfigFolder(this.config.dataDir, sandbox.owner);
     const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
     return claudeConfigDir(profileEnvironment(profile ?? null, profile && this.environmentGivenTo(conversation, profile)));
   }
 
-  /** A room's agent gets the environment its room gives it, or, its room gone, what a room gives by default. */
-  private environmentGivenTo({ roomId }: { roomId?: string | null }, profile: Profile): EnvironmentGiven | undefined {
-    if (!roomId) return undefined;
-    const choices = this.environmentChoicesOf(roomId, profile.id);
-    return (host, environment) => environmentInRoom(profile.harness, host, environment, choices);
+  /**
+   * A room's agent gets the environment its room gives it, or, its room gone, what a room gives by default. A sandboxed
+   * workspace's agent gets what a room gives by default: of this computer's own environment, only what every program needs.
+   */
+  private environmentGivenTo(launch: ProcessLaunch, profile: Profile): EnvironmentGiven | undefined {
+    const choices = launch.roomId ? this.environmentChoicesOf(launch.roomId, profile.id) : this.inSandboxedWorkspace(launch) ? NO_ENVIRONMENT_CHOICES : null;
+    return choices ? (host, environment) => environmentInRoom(profile.harness, host, environment, choices) : undefined;
   }
 
   /** This computer's whole environment never goes into a sandboxed room's VM, whatever the room's agent was given. */
@@ -3047,15 +3214,31 @@ profileId: string | null, conversationId: string) {
    * choice stands. A room's conversation takes its room's mode instead, where the agent has one for the room's preset.
    */
   private async applyProfileChoices(conversationId: string, sessionId: string) {
-    const { profileId } = this.get(conversationId);
-    const profile = profileId === null ? undefined : this.store.findProfile(profileId);
-    const mode = this.roomPresetMode(this.get(conversationId)) ?? this.profileModeFor(this.get(conversationId), profile);
-    const modeOption = this.get(conversationId).configOptions.find(({ category }) => category === "mode");
-    if (mode && modeOption) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
+    const profile = await this.applyStartingMode(conversationId, sessionId);
     const effortOption = this.get(conversationId).configOptions.find(({ category }) => category === "thought_level");
     if (profile?.effort && effortOption && offersValue(effortOption, profile.effort)) {
       await this.trySetConfigOption(conversationId, sessionId, effortOption.id, profile.effort);
     }
+  }
+
+  /** Sets the mode the session starts in, as `startingModeOf` says; returns the conversation's profile. */
+  private async applyStartingMode(conversationId: string, sessionId: string) {
+    const conversation = this.get(conversationId);
+    const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
+    const mode = this.startingModeOf(conversation, profile);
+    const modeOption = conversation.configOptions.find(({ category }) => category === "mode");
+    if (mode && modeOption) await this.trySetConfigOption(conversationId, sessionId, modeOption.id, mode);
+    return profile;
+  }
+
+  /**
+   * Its sandbox's or room's mode, else its profile's. A sandbox's agents can write the Claude Code settings its sessions
+   * start from, so a sandboxed session whose profile names no mode is set to the one that asks all the same, and no
+   * default mode they planted there holds.
+   */
+  private startingModeOf(conversation: Conversation, profile: Profile | undefined) {
+    const sandboxDefault = this.sandboxOf(conversation) ? askingDefaultModeOf(conversation.harness) : null;
+    return this.sandboxOrRoomMode(conversation) ?? this.profileModeFor(conversation, profile) ?? sandboxDefault;
   }
 
   /** A resumed or replacement session starts from the agent's defaults, so re-apply what the user had chosen. */
@@ -3069,9 +3252,10 @@ profileId: string | null, conversationId: string) {
    * A new session takes its model before any effort, as the efforts on offer depend on it: the profile's model under a test
    * host's and a plugin's, then the profile's mode and effort, a test host's effort over the profile's, and a plugin's over
    * both. The profile's model and a plugin's choices hold the first message back until the agent has taken them, so it goes
-   * out on them, though for no longer than `startChoicesTimeoutMs` in all.
+   * out on them, though for no longer than `startChoicesTimeoutMs` in all. One that replaces a session started under
+   * another setup, in a sandbox or out of one, takes its starting mode rather than the mode that session had.
    */
-  private async applyNewSessionChoices(conversation: Conversation, sessionId: string, isFirstSession: boolean) {
+  private async applyNewSessionChoices(conversation: Conversation, sessionId: string, { isFirstSession, setupKept }: { isFirstSession: boolean; setupKept: boolean }) {
     const { id } = conversation;
     const test = this.onUsersOwnSetup(conversation) ? this.config.testModelOverride : {};
     const chosen = this.runtime(id).startChoices ?? {};
@@ -3080,6 +3264,7 @@ profileId: string | null, conversationId: string) {
     if (test.model) await this.trySetConfigOption(id, sessionId, "model", test.model);
     if (chosen.model) await this.applyChosenModel(id, sessionId, chosen.model, holdUntil);
     if (isFirstSession) await this.applyProfileChoices(id, sessionId);
+    else if (!setupKept) await this.applyStartingMode(id, sessionId);
     if (test.effort) await this.trySetConfigOption(id, sessionId, "effort", test.effort);
     if (chosen.effort) await this.applyChosenEffort(id, sessionId, chosen.effort, holdUntil);
   }
@@ -3182,14 +3367,14 @@ profileId: string | null, conversationId: string) {
 
   private harnessFor(launch: ProcessLaunch): HarnessProcess {
     const profile = this.profileOf(launch);
-    const key = agentProcessKey(profile, launch);
+    const key = this.processKeyOf(profile, launch);
     const existing = this.agentProcesses.get(key);
     if (existing) return existing;
     const spec = harnessSpec(profile, this.store.claudeProgramSetting(), this.environmentGivenTo(launch, profile));
     const onThisComputer = { ...spec, environment: { ...spec.environment, ...this.scriptEnvironmentFor(launch, spec.environment.PATH), ...this.testModelEnvironment(launch) } };
-    const { roomId } = launch;
+    const mayBeSandboxed = launch.roomId !== undefined || this.inSandboxedWorkspace(launch);
     const harness: HarnessProcess = new HarnessProcess(
-      roomId ? { ...onThisComputer, launching: () => this.roomAgentLaunch(harness, roomId, launch, profile, onThisComputer) } : onThisComputer,
+      mayBeSandboxed ? { ...onThisComputer, launching: () => this.sandboxedAgentLaunch(harness, launch, profile, onThisComputer) } : onThisComputer,
       {
         onSessionUpdate: (notification) => this.handleSessionUpdate(notification),
         onPermissionRequest: (request, signal) => this.handlePermissionRequest(request, signal),
@@ -3203,19 +3388,27 @@ profileId: string | null, conversationId: string) {
   }
 
   /**
-   * A room's agent starts in its room's sandbox while the room has one, as decided the moment it starts, so a sandbox
-   * turned on meanwhile is never missed. One that can't start there fails its turn; it never starts on this computer.
+   * A room's agent starts in its room's sandbox while the room has one, and a sandboxed workspace's in the workspace's, as
+   * decided the moment it starts, so a sandbox turned on meanwhile is never missed. One that can't start there fails its
+   * turn; it never starts on this computer. A sandboxed workspace's process never does at all: one whose workspace had
+   * its sandbox turned off as it started fails too, and the conversation's next turn starts on a process of this computer.
+   * An agent brought into someone else's room never starts beside the workspace's own conversations in its sandbox.
    */
-  private async roomAgentLaunch(harness: HarnessProcess, roomId: string, launch: ProcessLaunch, profile: Profile, onThisComputer: AgentLaunch): Promise<AgentLaunch> {
+  private async sandboxedAgentLaunch(harness: HarnessProcess, launch: ProcessLaunch, profile: Profile, onThisComputer: AgentLaunch): Promise<AgentLaunch> {
     this.sandboxStarts.delete(harness);
     this.startedOnThisComputer.delete(harness);
-    const room = this.store.findRoom(roomId);
-    if (!room) throw new HostProblemError({ code: "room-gone" });
-    if (!room.sandbox.on) {
+    if (launch.roomId && !this.store.findRoom(launch.roomId)) throw new HostProblemError({ code: "room-gone" });
+    const sandbox = this.sandboxOf(launch);
+    if (!sandbox && !launch.roomId) throw new HostProblemError({ code: "workspace-sandbox-turned-off" });
+    if (sandbox && launch.broughtIntoRoom) throw new HostProblemError({ code: "brought-agent-in-sandboxed-workspace" });
+    if (!sandbox) {
       this.startedOnThisComputer.add(harness);
       return onThisComputer;
     }
-    const launched = await this.sandboxes.launch(await this.agentInSandbox(room, launch, profile, onThisComputer));
+    const launching = this.agentInSandbox(sandbox, launch, profile, onThisComputer).then((agent) => this.sandboxes.launch(agent));
+    const launched = await launching.catch((error: unknown) => {
+      throw sandbox.owner.kind === "workspace" && error instanceof SandboxNotReady ? new HostProblemError({ code: "workspace-sandbox-not-ready", why: error.why }) : error;
+    });
     const start = {};
     this.sandboxStarts.set(harness, start);
     return {
@@ -3227,17 +3420,19 @@ profileId: string | null, conversationId: string) {
     };
   }
 
-  private async agentInSandbox({ id: roomId, sandbox }: Room, launch: ProcessLaunch, profile: Profile, { command, environment }: AgentLaunch): Promise<AgentInSandbox> {
+  /** A sandbox sees its workspace's folder alone, so a workspace's conversation that works in a worktree of its own can't start in it. */
+  private async agentInSandbox({ owner, setting }: ConversationSandbox, launch: ProcessLaunch, profile: Profile, { command, environment }: AgentLaunch): Promise<AgentInSandbox> {
     if (!runsInSandbox(profile.harness)) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "agent-kind-coming", agent: profile.name, harness: profile.harness } });
     const route = modelRouteOf(environment);
     const how = signInElsewhere(environment);
     if (how || !route) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "agent-signs-in-elsewhere", agent: profile.name, how: how ?? "subscription" } });
+    if (owner.kind === "workspace" && launch.id && this.get(launch.id).worktree) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "conversation-in-worktree" } });
     const claudeCodeVersion = claudeCodeVersionIn(environment.CLAUDE_CODE_EXECUTABLE ? await versionOf(environment.CLAUDE_CODE_EXECUTABLE) : null);
     if (!claudeCodeVersion) throw new SandboxNotReady({ kind: "no-claude-code-version" });
-    const workspace = launch.id ? this.workspaceOf(launch.id) : this.existingWorkspace(this.store.findRoom(roomId)?.workspaceId ?? "");
+    const workspace = launch.id ? this.workspaceOf(launch.id) : this.existingWorkspace(this.store.findRoom(owner.id)?.workspaceId ?? "");
     return {
-      roomId,
-      allowsSharedKernel: sandbox.allowsSharedKernel,
+      owner,
+      allowsSharedKernel: setting.allowsSharedKernel,
       profileId: profile.id,
       claudeCodeVersion,
       workingDirectory: await recordedDirectory(workspace),
@@ -3259,9 +3454,12 @@ profileId: string | null, conversationId: string) {
     return harness === "claude" && !profile?.environment.trim();
   }
 
-  /** A room's agent works on tasks of people other than the owner too, so it gets no token to reach the host with as the owner's scripts do. */
+  /**
+   * A room's agent works on tasks of people other than the owner too, and a sandboxed workspace's is kept from this
+   * computer, so neither gets a token to reach the host with as the owner's scripts do.
+   */
   private scriptEnvironmentFor(launch: ProcessLaunch, path: string | undefined) {
-    return worksForARoom(launch) ? {} : this.scriptEnvironment(path);
+    return worksForARoom(launch) || this.inSandboxedWorkspace(launch) ? {} : this.scriptEnvironment(path);
   }
 
   /** The mirador command, and where it reaches the host from the agent or a script it starts (mirador message, mirador when-done). */
@@ -3631,7 +3829,7 @@ profileId: string | null, conversationId: string) {
     const conversationId = this.sessions.conversationOf(request.sessionId);
     if (!conversationId) return { outcome: { outcome: "cancelled" } };
     const allowOptionId = optionThatAllows(request.options);
-    if (allowOptionId && approvesEverything(this.get(conversationId))) {
+    if (allowOptionId && this.approvesEverything(this.get(conversationId))) {
       return { outcome: { outcome: "selected", optionId: allowOptionId } };
     }
     const reports = this.store.toolCallReports(conversationId, request.toolCall.toolCallId);
@@ -3646,12 +3844,13 @@ profileId: string | null, conversationId: string) {
     const { toolCall, edits } = await inArrivalOrder;
     if (signal.aborted || !this.store.hasConversation(conversationId)) return { outcome: { outcome: "cancelled" } };
     // YOLO switched on while the files were read approves only the requests already waiting.
-    if (allowOptionId && approvesEverything(this.get(conversationId))) return { outcome: { outcome: "selected", optionId: allowOptionId } };
+    if (allowOptionId && this.approvesEverything(this.get(conversationId))) return { outcome: { outcome: "selected", optionId: allowOptionId } };
     const kindSeenBefore = runtime.openToolCalls.kindOf(request.toolCall.toolCallId);
     const asked = askedPermissionOf(toolCall, kindSeenBefore);
-    const { roomId } = this.get(conversationId);
-    const allowedInRoom = roomId && (this.worksFreelyInSandbox(this.get(conversationId)) || this.roomRules.allowsByItself(conversationId, asked));
-    if (allowOptionId && allowedInRoom) return { outcome: { outcome: "selected", optionId: allowOptionId } };
+    const conversation = this.get(conversationId);
+    const { roomId } = conversation;
+    const allowedByItself = this.worksFreelyInSandbox(conversation) || (roomId !== undefined && this.roomRules.allowsByItself(conversationId, asked));
+    if (allowOptionId && allowedByItself) return { outcome: { outcome: "selected", optionId: allowOptionId } };
     const permissionId = crypto.randomUUID();
     if (runtime.turn && !runtime.turn.ended) runtime.turn.awaitedUser = true;
     this.append(conversationId, {
@@ -4217,9 +4416,6 @@ function turnedDown(options: acp.PermissionOption[]): acp.RequestPermissionRespo
   const rejecting = optionThatRejects(options);
   return rejecting ? { outcome: { outcome: "selected", optionId: rejecting } } : { outcome: { outcome: "cancelled" } };
 }
-
-/** YOLO, which a conversation working for a room never runs in, whatever its profile says: its room's preset decides, or it asks as usual. */
-const approvesEverything = (conversation: Conversation) => conversation.bypassPermissions && !worksForARoom(conversation);
 
 /** No once, so the agent can still ask for something else. */
 function optionThatRejects(options: acp.PermissionOption[]): string | null {

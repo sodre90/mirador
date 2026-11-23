@@ -2,12 +2,12 @@ import { afterAll, describe, expect, test } from "bun:test";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import type { SandboxAvailability, SandboxNotReadyWhy, SandboxSetup } from "../shared/sandbox.ts";
+import { roomSandbox, type SandboxAvailability, type SandboxNotReadyWhy, type SandboxSetup } from "../shared/sandbox.ts";
 import { KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
 import { IMAGE_NAME } from "../host/sandbox/image.ts";
 import { ANTHROPIC_API } from "../host/sandbox/model-proxy.ts";
 import { computersOwnOnLinux, containersLabelled, imageNamesIn, Podman } from "../host/sandbox/podman.ts";
-import { RoomSandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/room-sandboxes.ts";
+import { Sandboxes, type AgentInSandbox, type SandboxHost } from "../host/sandbox/sandboxes.ts";
 import { FakePodmanCli, NODE_IMAGE } from "./fake-podman-cli.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "podman-sandbox-"));
@@ -30,8 +30,8 @@ function hostFor(workspace: string) {
   const host: SandboxHost = {
     dataDir: join(scratch, `data-${crypto.randomUUID()}`),
     workspaceOf: () => workspace,
-    canvasOf: () => ({ isRoomsConversation: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
-    agentsAtWork: () => ["builder"],
+    canvasOf: () => ({ belongs: () => true, tokenOf: () => "token", handle: () => new Response("canvas") }),
+    atWork: () => ({ agents: ["builder"], conversationIds: [] }),
     setupChanged: (setup) => setups.push(setup),
     heldChanged: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
@@ -40,7 +40,7 @@ function hostFor(workspace: string) {
 }
 
 const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): AgentInSandbox => ({
-  roomId: "room-1",
+  owner: roomSandbox("room-1"),
   allowsSharedKernel: true,
   profileId: "builder",
   claudeCodeVersion: "2.1.330",
@@ -63,7 +63,7 @@ describe("a room's sandbox on rootless Podman", () => {
     const workspace = repository();
     const { host, setups } = hostFor(workspace);
     const cli = new FakePodmanCli();
-    const sandboxes = new RoomSandboxes(new Podman(cli, PLAIN), host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), host, IDLE_STOP_MS);
 
     const launched = await sandboxes.launch(agentIn(workspace));
 
@@ -77,7 +77,7 @@ describe("a room's sandbox on rootless Podman", () => {
     expect(valueAfter(run!, "--network")).toBe("none");
     expect([valueAfter(run!, "--memory"), valueAfter(run!, "--memory-swap"), valueAfter(run!, "--cpus"), valueAfter(run!, "--pids-limit")]).toEqual(["3G", "3G", "4", "4096"]);
     expect([valueAfter(run!, "--log-driver"), valueAfter(run!, "--log-opt")]).toEqual(["k8s-file", "max-size=1mb"]);
-    expect(valuesAfter(run!, "--label")).toContain("mirador.room=room-1");
+    expect(valuesAfter(run!, "--label")).toContain("mirador.owner=room:room-1");
     const mounts = valuesAfter(run!, "-v");
     expect(mounts).toContain(`${workspace}:${workspace}`);
     expect(mounts).toContain(`${workspace}/.git/hooks:${workspace}/.git/hooks:ro`);
@@ -116,7 +116,7 @@ describe("a room's sandbox on rootless Podman", () => {
   test("never lets a value the room gives its agent steer Podman on this computer: Podman's own variables reach the container on the command line, and Podman sees only this computer's", async () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
-    const sandboxes = new RoomSandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
     const steering = {
       CONTAINER_HOST: "ssh://elsewhere.example/run/podman/podman.sock",
       CONTAINERS_CONF: "/tmp/given/containers.conf",
@@ -140,7 +140,7 @@ describe("a room's sandbox on rootless Podman", () => {
   test("is never a plain container sharing this computer's kernel for a room that did not allow it", async () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
-    const sandboxes = new RoomSandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
 
     await expect(sandboxes.launch(agentIn(workspace, { allowsSharedKernel: false }))).rejects.toMatchObject(notReady({ kind: "shared-kernel-not-allowed" }));
 
@@ -152,10 +152,10 @@ describe("a room's sandbox on rootless Podman", () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
     cli.images.add(`localhost/${IMAGE_NAME}:claude-2.1.329-bun-1.4.3-0123456789`);
-    const sandboxes = new RoomSandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
 
     (await sandboxes.launch(agentIn(workspace))).gone!();
-    await sandboxes.stopRoom("room-1");
+    await sandboxes.stop(roomSandbox("room-1"));
     (await sandboxes.launch(agentIn(workspace))).gone!();
 
     expect(cli.callsOf("build")).toHaveLength(1);
@@ -171,7 +171,7 @@ describe("a room's sandbox on rootless Podman", () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
     cli.images.add(NODE_IMAGE);
-    const sandboxes = new RoomSandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
 
     (await sandboxes.launch(agentIn(workspace))).gone!();
 
@@ -183,7 +183,7 @@ describe("a room's sandbox on rootless Podman", () => {
     const workspace = repository();
     const cli = new FakePodmanCli();
     cli.endsAtStart = "starting relays\nError: listen EADDRINUSE 127.0.0.1:7701";
-    const sandboxes = new RoomSandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
+    const sandboxes = new Sandboxes(new Podman(cli, PLAIN), hostFor(workspace).host, IDLE_STOP_MS);
     const startedAt = Date.now();
 
     await expect(sandboxes.launch(agentIn(workspace))).rejects.toMatchObject(notReady({ kind: "could-not-start", cause: "Error: listen EADDRINUSE 127.0.0.1:7701" }));
@@ -206,7 +206,7 @@ describe("a room's sandbox on rootless Podman", () => {
 
   test("removes at start only the sandboxes this host left behind", async () => {
     const cli = new FakePodmanCli();
-    cli.containers.set("mirador-ours", { "mirador.host": "abc", "mirador.room": "r" });
+    cli.containers.set("mirador-ours", { "mirador.host": "abc", "mirador.owner": "room:r" });
     cli.containers.set("mirador-theirs", { "mirador.host": "def" });
     cli.containers.set("plex", {});
 

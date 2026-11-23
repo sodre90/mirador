@@ -217,7 +217,7 @@ export const rooms: Messages["rooms"] = {
       "Ha szabadon dolgoznak, az ágensek semmire sem kérnek engedélyt, mert a sandbox bent tartja őket. Különben a szoba engedélybeállítása érvényes, mint ezen a gépen.",
       "Az ágensek beállításait, utasításait és MCP-szervereit adó fájlok visszatartva vannak, és azok is, amelyek maguktól futnak: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml és .envrc. Amelyek a sandbox indulásakor megvannak, azok benne csak olvashatók; egy újat azonnal visszaállít, te pedig a szobában engedélyezed vagy elveted.",
       "Minden más fájl, amelyet az ágensek a munkaterületen módosítanak, lefuthat, ha te magad futtatod: tesztek, szkriptek, a package.json, vagy egy commit a terminálodból, amely lefuttatja a repó hookjait. Nézd át, mit változtattak, mielőtt bármit futtatsz ott.",
-      "A repó beállításai és hookjai a sandboxban csak olvashatók. A Mirador a hookjai és az fsmonitor nélkül futtatja a gitet a munkaterületen, és amíg a szoba sandboxolt, valamint utána 7 napig, az ottani commitjai és beolvasztásai is kihagyják a repó hookjait.",
+      "A repó beállításai és hookjai a sandboxban csak olvashatók, a munkaterületen lévő más repóké viszont nem. A Mirador hookok és fsmonitor nélkül futtatja a gitet a munkaterületen, és amíg a szoba sandboxolt, valamint utána 7 napig, a munkaterületen vagy bármely benne lévő mappában a commitjai, beolvasztásai és új worktree-i is kihagyják a repók hookjait.",
       "Be- vagy kikapcsolása, vagy annak módosítása, hogyan dolgoznak benne az ágensek, elölről kezdeti őket.",
     ],
   },

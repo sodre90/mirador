@@ -21,7 +21,7 @@ import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type 
 import type { RoomReading } from "../shared/room-reading.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
-import { SETUP_NOT_STARTED, type HeldChange, type SandboxSetup } from "../shared/sandbox.ts";
+import { roomSandbox, sameOwner, SETUP_NOT_STARTED, workspaceSandbox, type HeldChange, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -49,6 +49,7 @@ export type Overlay =
   | { kind: "sessions"; workspaceId: string }
   | { kind: "workspace-color"; workspaceId: string }
   | { kind: "worktrees"; workspaceId: string }
+  | { kind: "workspace-sandbox"; workspaceId: string }
   | { kind: "add-workspace" }
   | { kind: "add-workspace-group"; parentId: string | null }
   | { kind: "new-room" }
@@ -97,12 +98,12 @@ export interface AppState {
   roomJoiners: RoomJoiner[];
   /** On a page of a person other than the owner: the rooms here they wait to be let into. */
   waitingToJoin: string[];
-  /** Where first use of room sandboxes stands on this computer. */
+  /** Where first use of sandboxes stands on this computer. */
   sandboxSetup: SandboxSetup;
   /** The agent config file changes sandboxed agents made, held for the owner's answer. */
   heldChanges: HeldChange[];
-  /** The rooms whose sandbox stopped as they hold as many changes as a room may. */
-  roomsHoldingTooMany: string[];
+  /** The rooms and workspaces whose sandbox stopped as they hold as many changes as one may. */
+  sandboxesHoldingTooMany: SandboxOwner[];
   /** The agents you brought into rooms of other machines, and the tasks of others that wait for your OK. */
   broughtAgents: BroughtAgentHere[];
   broughtTasks: BroughtTaskWaiting[];
@@ -244,7 +245,7 @@ export const initialState: AppState = {
   waitingToJoin: [],
   sandboxSetup: SETUP_NOT_STARTED,
   heldChanges: [],
-  roomsHoldingTooMany: [],
+  sandboxesHoldingTooMany: [],
   broughtAgents: [],
   broughtTasks: [],
   roomsWithPeopleHere: [],
@@ -424,6 +425,15 @@ function withThisPagesAssetsOrigin(state: AppState, item: CanvasItem): CanvasIte
   return !written || written === reachable ? item : (JSON.parse(JSON.stringify(item).replaceAll(written, reachable)) as CanvasItem);
 }
 
+/** A room's or workspace's held changes as they are now, in place of those it held before. */
+function withHeldChangesOf(state: AppState, owner: SandboxOwner, changes: HeldChange[], full: boolean): Pick<AppState, "heldChanges" | "sandboxesHoldingTooMany"> {
+  const ofOthers = <T>(items: T[], ownerOf: (item: T) => SandboxOwner) => items.filter((item) => !sameOwner(ownerOf(item), owner));
+  return {
+    heldChanges: [...ofOthers(state.heldChanges, (change) => change.owner), ...changes],
+    sandboxesHoldingTooMany: [...ofOthers(state.sandboxesHoldingTooMany, (holding) => holding), ...(full ? [owner] : [])],
+  };
+}
+
 /** Ids never repeat, so dismissing a notice by its id cannot take a later one with it. */
 function withNotice(state: AppState, text: string): AppState {
   const id = state.noticesEverShown + 1;
@@ -447,7 +457,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomJoiners: message.roomJoiners,
         sandboxSetup: message.sandboxSetup,
         heldChanges: message.heldChanges,
-        roomsHoldingTooMany: message.roomsHoldingTooMany,
+        sandboxesHoldingTooMany: message.sandboxesHoldingTooMany,
         broughtAgents: message.broughtAgents,
         broughtTasks: message.broughtTasks,
         profiles: message.profiles,
@@ -518,6 +528,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         ...state,
         workspaces: state.workspaces.filter(({ id }) => id !== message.workspaceId),
         workspaceToDelete: state.workspaceToDelete?.workspaceId === message.workspaceId ? null : state.workspaceToDelete,
+        ...withHeldChangesOf(state, workspaceSandbox(message.workspaceId), [], false),
       };
     case "workspace-group.upserted":
       return { ...state, workspaceGroups: upsert(state.workspaceGroups, message.group).sort(inSidebarOrder) };
@@ -735,8 +746,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomTasksWaiting: state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId),
         roomInvites: state.roomInvites.filter(({ roomId }) => roomId !== message.roomId),
         roomJoiners: state.roomJoiners.filter(({ roomId }) => roomId !== message.roomId),
-        heldChanges: state.heldChanges.filter(({ roomId }) => roomId !== message.roomId),
-        roomsHoldingTooMany: state.roomsHoldingTooMany.filter((roomId) => roomId !== message.roomId),
+        ...withHeldChangesOf(state, roomSandbox(message.roomId), [], false),
       };
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
@@ -767,14 +777,11 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       };
     case "sandbox.setup":
       return { ...state, sandboxSetup: message.setup };
-    case "room.held-changes":
-      return {
-        ...state,
-        heldChanges: [...state.heldChanges.filter(({ roomId }) => roomId !== message.roomId), ...message.changes],
-        roomsHoldingTooMany: [...state.roomsHoldingTooMany.filter((roomId) => roomId !== message.roomId), ...(message.full ? [message.roomId] : [])],
-      };
+    case "sandbox.held-changes":
+      return { ...state, ...withHeldChangesOf(state, message.owner, message.changes, message.full) };
     case "room.sandbox-checked":
-    case "room.held-change-text":
+    case "workspace.sandbox-checked":
+    case "sandbox.held-change-text":
       return state;
     case "room.presence": {
       const { roomId, here, writing } = message;

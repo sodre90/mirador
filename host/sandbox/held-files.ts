@@ -1,7 +1,7 @@
 import { watch, type FSWatcher } from "node:fs";
 import { lstat, readdir, readlink } from "node:fs/promises";
 import { join, sep } from "node:path";
-import { GIT_CONFIG_REDIRECTS, HELD_CHANGES_MOST, HELD_TEXT_SHOWN, holdsAllInside, isHeldConfigPath, isNeverHeldFolder, type HeldChange, type HeldChangeAnswer, type HeldChangeText } from "../../shared/sandbox.ts";
+import { GIT_CONFIG_REDIRECTS, HELD_CHANGES_MOST, HELD_TEXT_SHOWN, holdsAllInside, isHeldConfigPath, isNeverHeldFolder, type HeldChange, type HeldChangeAnswer, type HeldChangeText, ownerKey, type SandboxOwner } from "../../shared/sandbox.ts";
 import { bytesAtMost, putPlacesBack, type FoundEntry, type PlaceEntry, type PlacesPutBack, type PlacesRequest } from "./in-vm/held-places.ts";
 
 const NONE: PlaceEntry = { kind: "none" };
@@ -16,15 +16,16 @@ export const HELD_MOUNTS_MOST = 100;
 
 export class HeldFilesRefused extends Error {}
 
-/** What the held files of a room ask of its sandbox. */
-export interface HeldRoom {
-  agentsAtWork(): string[];
+/** What the held files of a sandbox ask of it. */
+export interface HeldSandbox {
+  /** The agents at work in the sandbox, by profile id, and their conversations. */
+  atWork(): { agents: string[]; conversationIds: string[] };
   changed(): void;
-  /** Puts places back inside the room's VM, as its agent user, while it runs; null once it doesn't. */
+  /** Puts places back inside the VM, as its agent user, while it runs; null once it doesn't. */
   inVm(): ((request: PlacesRequest) => Promise<PlacesPutBack>) | null;
-  /** Stops the room's VM, once its agents held too many changes, or its put-back did not hold. */
+  /** Stops the VM, once its agents held too many changes, or its put-back did not hold. */
   halt(): Promise<void>;
-  /** Once a stop asked for is done: whether no VM of the room runs, so this computer may put places back with none racing it. */
+  /** Once a stop asked for is done: whether the sandbox's VM no longer runs, so this computer may put places back with none racing it. */
   untilStopped(): Promise<boolean>;
 }
 
@@ -67,7 +68,7 @@ interface Held {
 }
 
 /**
- * While a room's VM runs, its agents may write any file of the workspace but the held ones: those agents load their
+ * While a sandbox's VM runs, its agents may write any file of the workspace but the held ones: those agents load their
  * settings, instructions or MCP servers from, and those that run by themselves. The ones there as the VM starts are
  * mounted read-only into it. Each one written where there was none is put back at once, inside the VM while it runs,
  * and what was written is kept aside for the owner to allow or discard; a folder, link or anything else standing at a
@@ -87,9 +88,9 @@ export class HeldFiles {
 
   constructor(
     readonly workspace: string,
-    private readonly roomId: string,
+    private readonly owner: SandboxOwner,
     private readonly gitFolders: string[],
-    private readonly room: HeldRoom,
+    private readonly sandbox: HeldSandbox,
   ) {}
 
   /**
@@ -138,7 +139,7 @@ export class HeldFiles {
     await this.check();
   }
 
-  /** The changes a previous run of the room's VM held, still waiting for the owner. */
+  /** The changes a previous run of the sandbox's VM held, still waiting for the owner. */
   takeOver(previous: HeldFiles) {
     previous.held.forEach((kept, path) => this.held.set(path, kept));
   }
@@ -147,7 +148,7 @@ export class HeldFiles {
     return [...this.held.values()].map(({ change }) => change);
   }
 
-  /** Whether it holds as many changes as a room may: its VM does not start again until the owner answers some. */
+  /** Whether it holds as many changes as a sandbox may: its VM does not start again until the owner answers some. */
   full() {
     return this.held.size >= HELD_CHANGES_MOST;
   }
@@ -171,7 +172,7 @@ export class HeldFiles {
       else this.expected.set(path, proposed);
       await this.queue(path);
     }
-    this.room.changed();
+    this.sandbox.changed();
   }
 
   private async heard(path: string) {
@@ -192,7 +193,7 @@ export class HeldFiles {
       while (this.pending.size > 0) {
         const roots = outermost([...this.pending]);
         this.pending.clear();
-        await this.settle(roots).catch((error: unknown) => console.error(`holding agent config files of room ${this.roomId}:`, error));
+        await this.settle(roots).catch((error: unknown) => console.error(`holding agent config files of ${ownerKey(this.owner)}:`, error));
       }
     } finally {
       this.draining = undefined;
@@ -207,15 +208,15 @@ export class HeldFiles {
   }
 
   private async putBack(differing: string[]) {
-    const inVm = this.room.inVm();
+    const inVm = this.sandbox.inVm();
     if (inVm) {
       const putBack = await inVm(this.requestFor(differing)).catch(() => null);
       if (putBack) await this.keepAside(putBack.found.filter(({ path }) => isPathUnderAny(path, differing)));
       const left = await this.differingAmong(differing);
       if (left.length === 0) return;
-      await this.room.halt();
+      await this.sandbox.halt();
     }
-    if (await this.room.untilStopped()) await this.keepAside(putPlacesBack(this.requestFor(await this.differingAmong(differing))).found);
+    if (await this.sandbox.untilStopped()) await this.keepAside(putPlacesBack(this.requestFor(await this.differingAmong(differing))).found);
   }
 
   private requestFor(paths: string[]): PlacesRequest {
@@ -226,8 +227,8 @@ export class HeldFiles {
   private async keepAside(found: FoundEntry[]) {
     const proposals = found.filter(({ path, found }) => !this.gitRedirects.includes(path) && !this.isAsLeft(path, found));
     const overflowing = proposals.filter(({ path, found }) => !this.hold(path, found));
-    if (proposals.length > overflowing.length) this.room.changed();
-    if (overflowing.length > 0) await this.room.halt();
+    if (proposals.length > overflowing.length) this.sandbox.changed();
+    if (overflowing.length > 0) await this.sandbox.halt();
   }
 
   private isAsLeft(path: string, found: PlaceEntry) {
@@ -235,14 +236,14 @@ export class HeldFiles {
     return sameEntry(this.expected.get(path) ?? NONE, found) || (allowedOver !== undefined && sameEntry(allowedOver, found));
   }
 
-  /** Keeps the proposal aside, in place of one for the same path; false where the room holds as many as it may. */
+  /** Keeps the proposal aside, in place of one for the same path; false where the sandbox holds as many as it may. */
   private hold(path: string, proposed: PlaceEntry) {
     const kept = this.held.get(path);
     if (!kept && this.full()) return false;
     const before = this.expected.get(path) ?? NONE;
     const [beforeText, afterText] = [textOf(before), textOf(proposed)];
     const unshown = beforeText === undefined || afterText === undefined;
-    const change: HeldChange = { id: kept?.change.id ?? crypto.randomUUID(), roomId: this.roomId, path, agents: this.room.agentsAtWork(), kind: kindOfChange(before, proposed), ...(unshown && { unshown: true as const }), at: Date.now() };
+    const change: HeldChange = { id: kept?.change.id ?? crypto.randomUUID(), owner: this.owner, path, ...this.sandbox.atWork(), kind: kindOfChange(before, proposed), ...(unshown && { unshown: true as const }), at: Date.now() };
     this.held.set(path, { change, before, proposed });
     return true;
   }

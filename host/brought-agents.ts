@@ -122,6 +122,7 @@ export class BroughtAgents {
     const joined = machine?.asPerson === true && machine.joined && this.store.machineRooms(machineId).some(({ id }) => id === roomId);
     const profile = this.store.findProfile(profileId);
     if (!joined || !profile || !this.store.findWorkspace(workspaceId) || !isOthersTasks(othersTasks)) throw new Error("An agent is brought into a room you joined, from one of your profiles, to work in one of your workspaces.");
+    if (this.store.findWorkspace(workspaceId)?.sandbox.on) throw new HostProblemError({ code: "brought-agent-in-sandboxed-workspace" });
     if (this.broughtInto(machineId, roomId).length >= MOST_AGENTS_BROUGHT) throw new HostProblemError({ code: "room-agents-brought-too-many" });
     const name = personName(shownAsWritten(profile.name)) || profile.harness;
     const brought: BroughtAgentHere = { id: crypto.randomUUID(), machineId, roomId, agentId: null, profileId, workspaceId, othersTasks, conversationId: null };

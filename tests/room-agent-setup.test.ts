@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { claudeRoomSessionMeta, profileEnvironment, settingSourcesLeftOut } from "../host/acp/harnesses.ts";
 import type { Profile } from "../shared/model.ts";
 import { parseEnvironment } from "../shared/profile-environment.ts";
-import { NO_SANDBOX, type RoomSandbox } from "../shared/sandbox.ts";
+import { NO_SANDBOX, type SandboxSetting } from "../shared/sandbox.ts";
 import {
   ALL_OF_CLAUDE_SETUP,
   claudeSetupIn,
@@ -250,7 +250,7 @@ describe("a room's agent's process environment", () => {
   });
 
   test("a session is told apart by what it was started under: the values given, all of the host's environment, for Claude Code its setup, and its sandbox", () => {
-    const fingerprint = (harness: Profile["harness"], text: string, choices: EnvironmentChoices = NOTHING_CHOSEN, setup: ClaudeSetup = ALL_OF_CLAUDE_SETUP, sandbox: RoomSandbox = NO_SANDBOX) =>
+    const fingerprint = (harness: Profile["harness"], text: string, choices: EnvironmentChoices = NOTHING_CHOSEN, setup: ClaudeSetup = ALL_OF_CLAUDE_SETUP, sandbox: SandboxSetting = NO_SANDBOX) =>
       roomSetupFingerprint(harness, text, choices, setup, sandbox);
     const base = fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x");
     expect(fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x", { variables: { ANTHROPIC_API_KEY: true }, wholeHostEnvironment: false })).toBe(base);

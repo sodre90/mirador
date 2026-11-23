@@ -218,7 +218,7 @@ export const rooms: Messages["rooms"] = {
       "Arbeiten sie frei, fragen die Agenten nach nichts, da die Sandbox sie einschließt. Sonst gilt die Berechtigungsvorgabe des Raums wie auf diesem Rechner.",
       "Die Dateien, aus denen Agenten ihre Einstellungen, Anweisungen und MCP-Server laden, werden zurückgehalten, ebenso die Dateien, die von selbst laufen: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml und .envrc. Die beim Start der Sandbox vorhandenen sind darin schreibgeschützt; eine neue wird sofort zurückgesetzt, und du erlaubst oder verwirfst sie im Raum.",
       "Jede andere Datei, die die Agenten im Arbeitsbereich ändern, kann laufen, wenn du sie selbst ausführst: Tests, Skripte, package.json oder ein Commit aus deinem Terminal, der die Hooks des Repositorys ausführt. Sieh dir an, was sie geändert haben, bevor du dort etwas ausführst.",
-      "Konfiguration und Hooks des Repositorys sind in der Sandbox schreibgeschützt. Mirador führt Git im Arbeitsbereich ohne seine Hooks und fsmonitor aus, und solange der Raum eine Sandbox hat und 7 Tage danach überspringen auch seine Commits und Merges dort die Hooks des Repositorys.",
+      "Konfiguration und Hooks des Repositorys sind in der Sandbox schreibgeschützt, die eines Repositorys im Arbeitsbereich aber nicht. Mirador führt Git im Arbeitsbereich ohne Hooks und fsmonitor aus, und solange der Raum eine Sandbox hat und 7 Tage danach überspringen auch seine Commits, Merges und neuen Worktrees im Arbeitsbereich oder einem Ordner darin die Hooks der Repositorys.",
       "Sie ein- oder auszuschalten oder zu ändern, wie die Agenten darin arbeiten, lässt sie neu anfangen.",
     ],
   },

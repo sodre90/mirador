@@ -112,6 +112,49 @@ export const shell = {
     deleteKeeps: (branches: string[]) =>
       branches.length === 1 ? `Commits made there stay, on the branch ${branches[0]}.` : `Commits made there stay, on the branches ${branches.join(", ")}.`,
     deleteBoth: "Delete both",
+    whileSandboxed: "While this workspace runs its agents in a sandbox, new conversations start in the project folder: the sandbox doesn't see worktrees.",
+    sandboxSettings: "Sandbox settings…",
+  },
+  workspaceSandbox: {
+    open: "Sandbox",
+    title: (workspace: string) => `Sandbox for ${workspace}`,
+    lead: "Keeps the agents of this workspace's conversations apart from the rest of this computer. Its rooms have sandboxes of their own.",
+    turnOn: "Run this workspace's agents in a sandbox",
+    checking: "Checking whether this workspace can have a sandbox…",
+    profileModeApplies: "Their profile's permission mode still applies",
+    startsOnRefused: (why: string) => `New conversations here start on a profile that can't run in the sandbox. ${why} Pick a Claude profile that signs in with an API key under the workspace's name.`,
+    inWorktrees: (count: number) =>
+      plural(
+        count,
+        "1 conversation here works in a worktree, which the sandbox doesn't see: it can't go on while the sandbox is on.",
+        `${count} conversations here work in worktrees, which the sandbox doesn't see: they can't go on while the sandbox is on.`,
+      ),
+    startsAfresh: (count: number) =>
+      plural(count, "1 conversation here starts afresh as it goes on: its agent won't remember what was said before.", `${count} conversations here start afresh as they go on: their agents won't remember what was said before.`),
+    stopsAndStartsAfresh: (count: number) =>
+      plural(
+        count,
+        "1 conversation here stops any turn under way and starts afresh: its agent won't remember what was said before.",
+        `${count} conversations here stop any turns under way and start afresh: their agents won't remember what was said before.`,
+      ),
+    done: "Done",
+    on: "On",
+    off: "Off",
+    workspaceSandboxed: "This workspace's agents run in a sandbox. Click for its settings.",
+    conversationSandboxed: "This conversation's agent runs in its workspace's sandbox. Click for its settings.",
+    heldWaits: "Needs you: the sandbox holds an agent config change for your OK. Click to see it.",
+    anAgentHere: "An agent of this workspace",
+    meaning: [
+      "The Claude Code agents of this workspace's conversations run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the project folder and a folder of the workspace's for the agents' Claude Code settings and sessions, and nothing else of this computer: not your own Claude Code settings, nor other workspaces. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "On the canvas the agents can show you pages and ask you questions, but they get none of Mirador's other tools, as those act on this computer.",
+      "Only Claude Code agents whose profile signs in with an API key run in it for now. A conversation on another profile doesn't start: pick a profile that can for it, or turn the sandbox off.",
+      "Working freely, the agents ask for nothing, as the sandbox keeps them in, and YOLO works only while the sandbox runs. Otherwise each conversation asks as its profile's permission mode says.",
+      "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the conversation where it happened, or here.",
+      "Any other file the agents change in the project folder may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
+      "The repository's config and hooks are read-only in the sandbox, but not those of a repository inside the project folder. Mirador runs git on the workspace without hooks and fsmonitor, and while the workspace is sandboxed, and for 7 days after, its commits, lands and new worktrees in the project folder, or in any folder inside it, skip the repositories' hooks too.",
+      "New conversations start in the project folder rather than a worktree, as the sandbox sees no worktree. ! commands, sessions from your terminal and Claude Code's own panels don't run here either: they would run on this computer.",
+      "Turning it on or off, or changing how the agents work in it, starts the conversations here afresh.",
+    ],
   },
   workspaceDelete: {
     title: "Remove the workspace and its worktrees?",

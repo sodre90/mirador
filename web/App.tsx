@@ -73,6 +73,8 @@ import { joinedRoomsOf, KnockView, knocksOf, useOpenedWhenLetIn } from "./RoomsS
 import { RoomSettingsDialog } from "./RoomSettings.tsx";
 import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./workspace-tabs.ts";
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
+import { holdsTooMany, ofSandbox, roomSandbox, workspaceSandbox } from "../shared/sandbox.ts";
+import { conversationSandboxOf, openWorkspaceSandbox, WorkspaceSandboxDialog } from "./WorkspaceSandbox.tsx";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
 const roomFromHash = () => location.hash.match(/^#\/r\/(.+)$/)?.[1] ?? null;
@@ -230,6 +232,13 @@ function paletteEntries(
       detail: t.shell.worktrees[workspace.newConversationsIn],
       kind: "action",
       run: () => dispatch({ type: "open-overlay", overlay: { kind: "worktrees", workspaceId: workspace.id } }),
+    },
+    {
+      id: `sandbox-${workspace.id}`,
+      label: `${t.shell.workspaceSandbox.title(workspace.name)}…`,
+      detail: workspace.sandbox.on ? t.shell.workspaceSandbox.on : t.shell.workspaceSandbox.off,
+      kind: "action",
+      run: () => openWorkspaceSandbox(dispatch, workspace.id),
     },
     {
       id: `color-${workspace.id}`,
@@ -724,6 +733,7 @@ export function App() {
   const invitedRoom = overlay?.kind === "room-invite" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
   const bringingInto = overlay?.kind === "bring-agent" ? joinedRoomsOf(state.machines, state.machineStatuses).find(({ machine, room }) => machine.id === overlay.machineId && room.id === overlay.roomId) : undefined;
   const worktreesWorkspace = overlay?.kind === "worktrees" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
+  const sandboxWorkspace = overlay?.kind === "workspace-sandbox" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const layoutToggles = {
     sidebar: { visible: !sidebarHidden, toggle: toggleSidebar },
     canvas: { visible: canvasInView, toggle: toggleCanvas, disabled: !(conversation && open) && !shownRoom },
@@ -767,6 +777,7 @@ export function App() {
           reminderMorning={state.reminderMorning}
           dispatch={dispatch}
           side={{ parent, onOpenAsConversation: () => openSideChatAsConversation(sideChat) }}
+          sandbox={conversationSandboxOf(state, sideChat)}
         />
       </SideChatColumn>
     );
@@ -808,6 +819,7 @@ export function App() {
                           onFork={(throughTurnSeq) => forkConversation(keptConversation, dispatch, throughTurnSeq)}
                           reminderMorning={state.reminderMorning}
                           dispatch={dispatch}
+                          sandbox={conversationSandboxOf(state, keptConversation)}
                         />
                       </AskToRevert.Provider>
                     }
@@ -830,8 +842,8 @@ export function App() {
             ownerPicture={state.avatar}
             approvals={state.roomApprovals.filter(({ roomId }) => roomId === shownRoom.id)}
             tasks={state.roomTasksWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
-            heldChanges={state.heldChanges.filter(({ roomId }) => roomId === shownRoom.id)}
-            holdsTooMany={state.roomsHoldingTooMany.includes(shownRoom.id)}
+            heldChanges={state.heldChanges.filter(ofSandbox(roomSandbox(shownRoom.id)))}
+            holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, roomSandbox(shownRoom.id))}
             presence={state.roomPresence?.roomId === shownRoom.id ? state.roomPresence : null}
             joiners={state.roomJoiners.filter(({ roomId }) => roomId === shownRoom.id)}
             muted={isMuted(state.roomReadings, shownRoom.id)}
@@ -1031,6 +1043,18 @@ export function App() {
       )}
       {sessionsWorkspace && <SessionsDialog workspace={sessionsWorkspace} profiles={state.profiles} dispatch={dispatch} onClose={closeOverlay} />}
       {worktreesWorkspace && <WorktreesDialog key={worktreesWorkspace.id} workspace={worktreesWorkspace} dispatch={dispatch} onClose={closeOverlay} />}
+      {sandboxWorkspace && (
+        <WorkspaceSandboxDialog
+          key={sandboxWorkspace.id}
+          workspace={sandboxWorkspace}
+          profiles={state.profiles}
+          conversations={state.conversations}
+          setup={state.sandboxSetup}
+          heldChanges={state.heldChanges.filter(ofSandbox(workspaceSandbox(sandboxWorkspace.id)))}
+          holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, workspaceSandbox(sandboxWorkspace.id))}
+          onClose={closeOverlay}
+        />
+      )}
       {overlay?.kind === "new-room" && (
         <NewRoomDialog
           workspaces={state.workspaces}

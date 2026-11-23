@@ -40,6 +40,9 @@ export const askingModeOf = (harness: HarnessId, mode: string | undefined | null
   return !mode || !asking || Object.values(asking).includes(mode) ? (mode ?? undefined) : undefined;
 };
 
+/** The agent's own mode that asks before edits and commands alike; null for an agent with no modes for a room's presets. */
+export const askingDefaultModeOf = (harness: HarnessId) => presetModes[harness]?.["ask-everything"] ?? null;
+
 /** A permission request as the host judges it: the tool's kind, its title, the whole command it would run, and the paths it names. */
 export interface AskedPermission {
   toolKind: ToolKind | null;

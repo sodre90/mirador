@@ -1,3 +1,4 @@
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { appendFile, chmod, lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, stat, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -30,7 +31,7 @@ beforeEach(async () => {
   await git(projectDir, ["add", "-A"]);
   await git(projectDir, ["commit", "-qm", "base"]);
   checkpoints = new Checkpoints(dataDir);
-  workspace = { id: "ws-1", name: "project", path: projectDir, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", createdAt: 0 };
+  workspace = { id: "ws-1", name: "project", path: projectDir, defaultLaunch: { harness: "claude", profileId: null }, color: null, position: 0, groupId: null, newConversationsIn: "folder", worktreeSetup: "", sandbox: NO_SANDBOX, createdAt: 0 };
 });
 
 afterEach(() => rm(dataDir, { recursive: true, force: true }));

@@ -32,21 +32,21 @@ function roomAndOwnersConversations() {
   const inside = conversations as unknown as {
     agentProcesses: Map<string, unknown>;
     runtime(conversationId: string): { harness?: unknown; running: boolean };
-    stopRoomProcessOnceIdle(conversationId: string): void;
-    startAfreshOnChangedRoomSetup(conversationId: string): void;
-    recordRoomSetup(conversation: Conversation): void;
+    stopOwnProcessOnceIdle(conversationId: string): void;
+    startAfreshOnChangedSetup(conversationId: string): void;
+    sessionSetupOf(conversation: Conversation): string | null;
     environmentGivenTo(conversation: { roomId: string | null }, profile: Profile): EnvironmentGiven | undefined;
   };
   const stops: string[] = [];
   const onItsProcess = (conversation: Conversation, name: string) => {
-    const harness = { stop: async () => void stops.push(name) };
-    inside.agentProcesses.set(agentProcessKey(profile, conversation), harness);
+    const harness = { stop: async () => void stops.push(name), closeSession: async () => {} };
+    inside.agentProcesses.set(agentProcessKey(profile, conversation, false), harness);
     inside.runtime(conversation.id).harness = harness;
     return conversation;
   };
   const room = onItsProcess(conversations.startInRoom("r1", "w1", launch, "Launch: Builder"), "room");
   const owners = onItsProcess(conversations.create("w1", launch), "owner's");
-  const turnEnded = (conversation: Conversation) => inside.stopRoomProcessOnceIdle(conversation.id);
+  const turnEnded = (conversation: Conversation) => inside.stopOwnProcessOnceIdle(conversation.id);
   return { store, config, conversations, inside, stops, room, owners, turnEnded, onItsProcess };
 }
 
@@ -66,7 +66,7 @@ test("a room conversation's agent process working on a turn again stays up", asy
   inside.runtime(room.id).running = true;
   await Bun.sleep(IDLE_MS * 4);
   expect(stops).toEqual([]);
-  expect(inside.agentProcesses.has(agentProcessKey(profile, room))).toBe(true);
+  expect(inside.agentProcesses.has(agentProcessKey(profile, room, false))).toBe(true);
 });
 
 test("a room conversation's agent started afresh loses its session and its process at once when idle; at work, its process stops at once only when it is left with less", () => {
@@ -82,30 +82,30 @@ test("a room conversation's agent started afresh loses its session and its proce
   conversations.startAfreshInRoom(room.id, { stopsTurn: false });
   expect(store.findConversation(room.id)!.acpSessionId).toBeNull();
   expect(store.listEventsOfTypes(room.id, ["context-cleared"])).toHaveLength(1);
-  expect(inside.agentProcesses.has(agentProcessKey(profile, owners))).toBe(true);
+  expect(inside.agentProcesses.has(agentProcessKey(profile, owners, false))).toBe(true);
 });
 
 test("a room agent's session started under another setup than its room's now starts afresh before its next turn, after a restart of the host too", () => {
   const { store, config, inside, stops, room, onItsProcess } = roomAndOwnersConversations();
   store.setRoomAgents("r1", [profile.id]);
   store.updateConversation({ ...store.findConversation(room.id)!, acpSessionId: "room-session" });
-  inside.recordRoomSetup(store.findConversation(room.id)!);
-  inside.startAfreshOnChangedRoomSetup(room.id);
+  store.setSetupOfSession(room.id, inside.sessionSetupOf(store.findConversation(room.id)!));
+  inside.startAfreshOnChangedSetup(room.id);
   expect(store.findConversation(room.id)!.acpSessionId).toBe("room-session");
   store.setRoomAgentWholeHostEnvironment("r1", profile.id, true);
   const afterRestart = new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const restarted = afterRestart as unknown as typeof inside;
-  restarted.startAfreshOnChangedRoomSetup(room.id);
+  restarted.startAfreshOnChangedSetup(room.id);
   expect(store.findConversation(room.id)!.acpSessionId).toBeNull();
   expect(stops).toEqual([]);
   onItsProcess(store.findConversation(room.id)!, "room");
   store.updateConversation({ ...store.findConversation(room.id)!, acpSessionId: "fresh-session" });
-  inside.recordRoomSetup(store.findConversation(room.id)!);
+  store.setSetupOfSession(room.id, inside.sessionSetupOf(store.findConversation(room.id)!));
   store.setRoomAgentVariables("r1", profile.id, { DEPLOY_TOKEN: true });
-  inside.startAfreshOnChangedRoomSetup(room.id);
+  inside.startAfreshOnChangedSetup(room.id);
   expect(store.findConversation(room.id)!.acpSessionId).toBe("fresh-session");
   store.saveProfile({ ...profile, environment: "DEPLOY_TOKEN=x" });
-  inside.startAfreshOnChangedRoomSetup(room.id);
+  inside.startAfreshOnChangedSetup(room.id);
   expect(store.findConversation(room.id)!.acpSessionId).toBeNull();
   expect(stops).toEqual(["room"]);
 });

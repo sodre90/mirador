@@ -3,30 +3,57 @@ import { parseEnvironment } from "./profile-environment.ts";
 import { switchedOn } from "./room-agent-setup.ts";
 
 /**
- * Whether a room's agents run in a sandbox of their own rather than on this computer, and whether they work there
- * without asking or under the room's permission preset still. Its network is only the model and Mirador. Where this
- * computer's sandbox shares its kernel, the owner allowed that for the room: it is never chosen for them.
+ * Whether a room's or a workspace's agents run in a sandbox of their own rather than on this computer, and whether they
+ * work there without asking or under the room's permission preset, or their profile's permission mode, still. Its
+ * network is only the model and Mirador. Where this computer's sandbox shares its kernel, the owner allowed that for the
+ * room or workspace: it is never chosen for them.
  */
-export interface RoomSandbox {
+export interface SandboxSetting {
   on: boolean;
   workFreely: boolean;
   allowsSharedKernel: boolean;
 }
 
-export const NO_SANDBOX: RoomSandbox = { on: false, workFreely: true, allowsSharedKernel: false };
+export const NO_SANDBOX: SandboxSetting = { on: false, workFreely: true, allowsSharedKernel: false };
 
-/** A room's sandbox setting as stored or sent; a shared kernel is allowed only while the sandbox is on, so turning it on again asks again. */
-export function roomSandboxIn(value: unknown): RoomSandbox {
+/** A sandbox setting as stored or sent; a shared kernel is allowed only while the sandbox is on, so turning it on again asks again. */
+export function sandboxSettingIn(value: unknown): SandboxSetting {
   const named = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
   const on = named.on === true;
   return { on, workFreely: named.workFreely !== false, allowsSharedKernel: on && named.allowsSharedKernel === true };
 }
 
-export const sameSandbox = (a: RoomSandbox, b: RoomSandbox) => a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel;
+export const sameSandbox = (a: SandboxSetting, b: SandboxSetting) => a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel;
 
 /** Turning the sandbox on, "work freely" off in it, or a shared kernel no longer allowed leaves an agent with less: its turn under way stops at once. */
-export const narrowsSandbox = (before: RoomSandbox, after: RoomSandbox) =>
+export const narrowsSandbox = (before: SandboxSetting, after: SandboxSetting) =>
   (!before.on && after.on) || (before.on && after.on && ((before.workFreely && !after.workFreely) || (before.allowsSharedKernel && !after.allowsSharedKernel)));
+
+/**
+ * What a sandbox belongs to: a room, whose agents run in it, or a workspace, whose own conversations' agents do. Each has
+ * a VM of its own, which sees nothing of another's.
+ */
+export type SandboxOwner = { kind: "room"; id: string } | { kind: "workspace"; id: string };
+
+export const roomSandbox = (roomId: string): SandboxOwner => ({ kind: "room", id: roomId });
+
+export const workspaceSandbox = (workspaceId: string): SandboxOwner => ({ kind: "workspace", id: workspaceId });
+
+export const sameOwner = (a: SandboxOwner, b: SandboxOwner) => a.kind === b.kind && a.id === b.id;
+
+/** Whether a held change, or anything else of a sandbox, is this one's. */
+export const ofSandbox = (owner: SandboxOwner) => (of: { owner: SandboxOwner }) => sameOwner(of.owner, owner);
+
+/** Whether the sandbox is among those that stopped as they hold as many changes as one may. */
+export const holdsTooMany = (holdingTooMany: SandboxOwner[], owner: SandboxOwner) => holdingTooMany.some((holding) => sameOwner(holding, owner));
+
+/** The owner as one string, kept apart by its kind, for maps and names. */
+export const ownerKey = ({ kind, id }: SandboxOwner) => `${kind}:${id}`;
+
+export function isSandboxOwner(value: unknown): value is SandboxOwner {
+  const named = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+  return (named.kind === "room" || named.kind === "workspace") && typeof named.id === "string" && named.id !== "";
+}
 
 /**
  * What rooms' sandboxes are on this computer: a light VM of Apple's `container` on a Mac; on Linux a rootless Podman
@@ -49,7 +76,7 @@ export type SandboxAvailability =
   | { available: true; kind: "podman"; selinuxEnforcing: boolean }
   | { available: false; why: SandboxUnavailable };
 
-/** Why a room can't have its sandbox, as it is set up now; each one is said at the switch. */
+/** Why a room or workspace can't have its sandbox, as it is set up now; each one is said at the switch. */
 export type SandboxBlocker =
   | { kind: "agent-kind-coming"; agent: string; harness: HarnessId }
   | { kind: "agent-signs-in-elsewhere"; agent: string; how: SignInElsewhere }
@@ -62,15 +89,22 @@ export type SandboxBlocker =
   | { kind: "workspace-is-home" }
   | { kind: "workspace-holds-mirador-data" }
   | { kind: "workspace-is-mirador" }
-  | { kind: "workspace-holds-computers-own"; folder: string };
+  | { kind: "workspace-holds-computers-own"; folder: string }
+  /** A workspace's conversation that works in a worktree of its own, which lies outside the folder its sandbox sees. */
+  | { kind: "conversation-in-worktree" };
 
-/** Why a room can't have its sandbox: this computer's reason, and each of its agents' and its workspace's. */
+/** Why a room or workspace can't have its sandbox: this computer's reason, and each of a room's agents' and its workspace's. */
 export interface SandboxCheck {
   availability: SandboxAvailability;
   blockers: SandboxBlocker[];
 }
 
-/** Why a sandboxed room's agent did not start: it never starts on this computer instead. */
+/** A workspace's check, with why the profile its new conversations start on can't run in its sandbox, null where it can. */
+export interface WorkspaceSandboxCheck extends SandboxCheck {
+  startsOn: SandboxBlocker | null;
+}
+
+/** Why a sandboxed room's or workspace's agent did not start: it never starts on this computer instead. */
 export type SandboxNotReadyWhy =
   | { kind: "unavailable"; why: SandboxUnavailable }
   | { kind: "blocked"; blocker: SandboxBlocker }
@@ -125,10 +159,12 @@ export const SETUP_NOT_STARTED: SandboxSetup = { stage: "not-started" };
  */
 export interface HeldChange {
   id: string;
-  roomId: string;
+  owner: SandboxOwner;
   path: string;
-  /** The room's agents at work when it came, by profile id; the change may be any of theirs. */
+  /** The agents at work in the sandbox when it came, by profile id; the change may be any of theirs. */
   agents: string[];
+  /** The conversations at work in the sandbox when it came, which show it. */
+  conversationIds: string[];
   kind: "add" | "change" | "delete";
   /** Too long, or not text, to be shown as a diff. */
   unshown?: true;
@@ -138,7 +174,7 @@ export interface HeldChange {
 /** A held change's text before and as proposed, null where there was or is no file; or that it can't be shown. */
 export type HeldChangeText = { before: string | null; after: string | null } | { unshown: true };
 
-/** The most changes a room's sandbox holds: past that, its VM stops until the owner has answered some. */
+/** The most changes a sandbox holds: past that, its VM stops until the owner has answered some. */
 export const HELD_CHANGES_MOST = 100;
 
 export type HeldChangeAnswer = "allow" | "discard";

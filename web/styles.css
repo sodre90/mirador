@@ -3121,6 +3121,73 @@ input.picker-search {
   margin-right: auto;
 }
 
+.worktrees-sandboxed {
+  margin: 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.modal.workspace-sandbox {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(560px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+}
+
+.modal.workspace-sandbox h2 {
+  margin: 0;
+}
+
+.workspace-sandbox-lead {
+  margin: -6px 0 0;
+  color: var(--muted);
+  font-size: calc(12.5px * var(--font-scale));
+}
+
+.workspace-sandbox-warning {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn-on-soft);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.modal.workspace-sandbox .room-held {
+  margin: 0;
+}
+
+.modal.workspace-sandbox .form-actions {
+  justify-content: flex-end;
+  margin-top: 0;
+}
+
+/* The dialog's title names the sandbox already; the legend still names the switch's group for screen readers. */
+.modal.workspace-sandbox .room-sandbox > legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.workspace-subline .workspace-sandboxed {
+  flex: none;
+  padding: 2px 4px;
+}
+
+.workspace-subline .workspace-sandboxed .line-icon {
+  width: calc(12px * var(--font-scale));
+  height: calc(12px * var(--font-scale));
+}
+
+button.waiting-pill.workspace-held {
+  cursor: pointer;
+}
+
 .modal.commit-changes {
   width: min(620px, 100%);
   display: flex;
@@ -9825,7 +9892,8 @@ button.link.more-rows {
   font-weight: 600;
 }
 
-.room-sandboxed {
+.room-sandboxed,
+.sandboxed-mark {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -9838,6 +9906,7 @@ button.link.more-rows {
 }
 
 .room-sandboxed .line-icon,
+.sandboxed-mark .line-icon,
 .room-settings-button .line-icon {
   width: calc(14px * var(--font-scale));
   height: calc(14px * var(--font-scale));

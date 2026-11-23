@@ -912,8 +912,8 @@ describe("CanvasPlugins", () => {
     const listed: string[] = [];
     for (const conversationId of ["c1", "c2"]) {
       await endpoints.handle(conversationId, new Request(`http://127.0.0.1/mcp/${conversationId}`, { method: "GET" }));
-      const { handlers } = endpoints as unknown as { handlers: Map<string, McpHttpHandler> };
-      handlers.get(conversationId)!.bus.subscribe((event) => void listed.push(`${conversationId} ${event.kind}`));
+      const { handlers } = endpoints as unknown as { handlers: Record<"this-computer", Map<string, McpHttpHandler>> };
+      handlers["this-computer"].get(conversationId)!.bus.subscribe((event) => void listed.push(`${conversationId} ${event.kind}`));
     }
 
     endpoints.toolsChangedForProfile("main");

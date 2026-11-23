@@ -11,6 +11,7 @@ import { agentProcessKey, type ConversationService, type WaitingPermission } fro
 import { Hub, socketData, type BrowserSocket } from "../host/hub.ts";
 import { SenderLimit } from "../host/join-requests.ts";
 import { absolutePathNamed, MOST_ROOM_MESSAGES_A_MINUTE, RoomService, type HostsHome, type RoomSessions } from "../host/rooms.ts";
+import { HOOKS_OFF_AFTER_SANDBOX_MS, repositoryHooksOff } from "../host/sandbox/hooks-off.ts";
 import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
@@ -1602,16 +1603,17 @@ describe("the conversation of an agent you brought into a room elsewhere", () =>
 
   test("runs on an agent process of its own", () => {
     const harnesses = ["claude", "opencode", "pi", "codex", "copilot", "antigravity"] as const;
-    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1", broughtIntoRoom: true }))).toEqual(harnesses.map(() => "p1/c1"));
+    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1", broughtIntoRoom: true }, false))).toEqual(harnesses.map(() => "p1/c1"));
   });
 });
 
 describe("a room conversation's agent process", () => {
-  test("is its own on every agent, as an Antigravity conversation's is; the owner's other conversations share their profile's", () => {
+  test("is its own on every agent, as an Antigravity conversation's is and a sandboxed workspace's, apart from any on this computer; the owner's other conversations share their profile's", () => {
     const harnesses = ["claude", "opencode", "pi", "codex", "copilot", "antigravity"] as const;
-    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1", roomId: "r1" }))).toEqual(harnesses.map(() => "p1/c1"));
-    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1" }))).toEqual(["p1", "p1", "p1", "p1", "p1", "p1/c1"]);
-    expect(agentProcessKey({ id: "p1", harness: "opencode" }, { harness: "opencode", profileId: "p1" })).toBe("p1");
+    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1", roomId: "r1" }, false))).toEqual(harnesses.map(() => "p1/c1"));
+    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1" }, false))).toEqual(["p1", "p1", "p1", "p1", "p1", "p1/c1"]);
+    expect(harnesses.map((harness) => agentProcessKey({ id: "p1", harness }, { harness, profileId: "p1", id: "c1" }, true))).toEqual(harnesses.map(() => "p1/c1/sandboxed"));
+    expect(agentProcessKey({ id: "p1", harness: "opencode" }, { harness: "opencode", profileId: "p1" }, false)).toBe("p1");
   });
 });
 
@@ -1979,5 +1981,27 @@ describe("what a room's agents are given of the owner's setup", () => {
       { conversationId: conversationOf("p1"), stopsTurn: true },
     ]);
     expect(() => rooms.setAgentWholeHostEnvironment(room.id, "p1", "on" as never)).toThrow();
+  });
+});
+
+describe("a room's sandbox leaving its workspace", () => {
+  const SANDBOX_ON = { on: true, workFreely: true, allowsSharedKernel: false };
+
+  test("turned off, or gone with its room, it leaves the repositories' hooks off in the workspace's folder for 7 days", async () => {
+    const { store, rooms, room } = machineWithRooms();
+    const other = rooms.create("Other", "w1", ["p1"], DEFAULT_PERMISSION_PRESET);
+    store.setRoomSandbox(room.id, SANDBOX_ON);
+    const before = Date.now();
+
+    await rooms.setSandbox(room.id, NO_SANDBOX);
+    expect(repositoryHooksOff(store, ["/tmp/project"], before + HOOKS_OFF_AFTER_SANDBOX_MS - 1)).toBe(true);
+    expect(repositoryHooksOff(store, ["/tmp/project"], Date.now() + HOOKS_OFF_AFTER_SANDBOX_MS)).toBe(false);
+
+    store.setRoomSandbox(other.id, SANDBOX_ON);
+    const beforeDeleting = Date.now();
+    rooms.delete(other.id);
+    expect(store.listRooms().some(({ sandbox }) => sandbox.on)).toBe(false);
+    const [{ leftAt }] = store.foldersSandboxesLeft();
+    expect(leftAt).toBeGreaterThanOrEqual(beforeDeleting);
   });
 });

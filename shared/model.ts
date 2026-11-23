@@ -10,6 +10,7 @@ import type { ConversationReply, PluginItemPlacement, StatuslineChip } from "./c
 import type { HostProblem } from "./host-problems.ts";
 import type { Reminder } from "./reminders.ts";
 import type { EditDiff } from "./review.ts";
+import type { SandboxSetting } from "./sandbox.ts";
 import type { TerminalLayout } from "./terminal-layout.ts";
 
 export type HarnessId = "claude" | "opencode" | "pi" | "codex" | "copilot" | "antigravity";
@@ -357,6 +358,8 @@ export interface Workspace {
   newConversationsIn: ConversationPlace;
   /** A command run in each new worktree before its agent starts, such as one installing dependencies; "" for none. */
   worktreeSetup: string;
+  /** Whether its own conversations' agents, outside any room, run in a sandbox of the workspace's, and how. */
+  sandbox: SandboxSetting;
   createdAt: number;
 }
 
@@ -364,6 +367,13 @@ export interface Workspace {
 export const conversationPlaces = ["folder", "worktree"] as const;
 export type ConversationPlace = (typeof conversationPlaces)[number];
 export const isConversationPlace = (value: unknown): value is ConversationPlace => conversationPlaces.includes(value as ConversationPlace);
+
+/**
+ * Where a new conversation of the workspace works: in its folder while it is sandboxed, as its sandbox sees no worktree;
+ * otherwise where it was asked to, or where the workspace starts its conversations.
+ */
+export const placeOfNewConversation = (workspace: Pick<Workspace, "sandbox" | "newConversationsIn">, startsIn?: ConversationPlace): ConversationPlace =>
+  workspace.sandbox.on ? "folder" : (startsIn ?? workspace.newConversationsIn);
 
 /**
  * A git worktree of the workspace's repository that Mirador made for a conversation, on a branch of its own. The

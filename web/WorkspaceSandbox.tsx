@@ -1,0 +1,141 @@
+import { useEffect, useState, type Dispatch } from "react";
+import type { Conversation, Profile, Workspace } from "../shared/model.ts";
+import { holdsTooMany, ofSandbox, workspaceSandbox, type HeldChange, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
+import { connection } from "./connection.ts";
+import { t } from "./i18n/index.ts";
+import { LineIcon } from "./LineIcon.tsx";
+import { Modal } from "./Palette.tsx";
+import { sandboxBlockerText } from "./problem-text.ts";
+import { WhatItMeans } from "./RoomSettings.tsx";
+import { HeldChangeCard, SandboxSwitch, type SandboxSwitchWords } from "./Sandbox.tsx";
+import type { AppAction, AppState } from "./state.ts";
+
+const words = t.shell.workspaceSandbox;
+
+const switchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.profileModeApplies };
+
+/** What the host's check of the workspace hangs on: its folder, and the profile its new conversations start on. */
+function checkedAgainst(workspace: Workspace, profiles: Profile[]) {
+  const startsOn = profiles.find(({ id }) => id === workspace.defaultLaunch.profileId);
+  return JSON.stringify([workspace.path, startsOn?.id, startsOn?.harness, startsOn?.environment]);
+}
+
+/** Whether this computer and the workspace can have a sandbox, asked again whenever the workspace's folder or default profile change. */
+function useWorkspaceSandboxCheck(workspace: Workspace, profiles: Profile[]) {
+  const [check, setCheck] = useState<WorkspaceSandboxCheck | null>(null);
+  const against = checkedAgainst(workspace, profiles);
+  useEffect(() => {
+    let wanted = true;
+    connection
+      .sendAndAwait(
+        (requestId) => ({ type: "workspace.check-sandbox", requestId, workspaceId: workspace.id }),
+        (message, requestId) =>
+          message.type === "workspace.sandbox-checked" && message.requestId === requestId ? { availability: message.availability, blockers: message.blockers, startsOn: message.startsOn } : undefined,
+      )
+      .then(
+        (got) => wanted && setCheck(got),
+        () => {},
+      );
+    return () => {
+      wanted = false;
+    };
+  }, [workspace.id, against]);
+  return check;
+}
+
+/** The workspace's own conversations, those of its rooms aside. */
+const ownConversations = (workspace: Workspace, conversations: Conversation[]) => conversations.filter(({ workspaceId, roomId }) => workspaceId === workspace.id && roomId === undefined);
+
+const profileName = (profiles: Profile[]) => (profileId: string) => profiles.find(({ id }) => id === profileId)?.name ?? t.rooms.agentGone;
+
+/**
+ * The workspace's sandbox, on its own: the switch with what keeps it off, the profile its new conversations start on
+ * where that can't run in it, its conversations in worktrees, which can't go on there, the changes it holds for the
+ * owner's OK, and the long story folded away.
+ */
+export function WorkspaceSandboxDialog({
+  workspace,
+  profiles,
+  conversations,
+  setup,
+  heldChanges,
+  holdsTooMany,
+  onClose,
+}: {
+  workspace: Workspace;
+  profiles: Profile[];
+  conversations: Conversation[];
+  setup: SandboxSetup;
+  heldChanges: HeldChange[];
+  holdsTooMany: boolean;
+  onClose: () => void;
+}) {
+  const check = useWorkspaceSandboxCheck(workspace, profiles);
+  const own = ownConversations(workspace, conversations);
+  const startsAfresh = own.filter(({ acpSessionId }) => acpSessionId !== null).map(({ id }) => id);
+  const inWorktrees = own.filter(({ worktree }) => worktree !== undefined).length;
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <Modal label={words.title(workspace.name)} className="workspace-sandbox" onClose={onClose}>
+      <h2>{words.title(workspace.name)}</h2>
+      <p className="hint workspace-sandbox-lead">{words.lead}</p>
+      <SandboxSwitch
+        id={`workspace-${workspace.id}`}
+        setting={workspace.sandbox}
+        check={check}
+        setup={setup}
+        switchWords={switchWords}
+        startsAfresh={startsAfresh}
+        startsAfreshText={(conversationIds, stopsTurn) => (stopsTurn ? words.stopsAndStartsAfresh(conversationIds.length) : words.startsAfresh(conversationIds.length))}
+        send={(sandbox) => connection.send({ type: "workspace.set-sandbox", workspaceId: workspace.id, sandbox })}
+      />
+      {check?.startsOn && <p className="workspace-sandbox-warning workspace-sandbox-starts-on">{words.startsOnRefused(sandboxBlockerText(check.startsOn, t.problems))}</p>}
+      {inWorktrees > 0 && <p className="workspace-sandbox-warning workspace-sandbox-in-worktrees">{words.inWorktrees(inWorktrees)}</p>}
+      <WhatItMeans>
+        {words.meaning.map((paragraph) => (
+          <p key={paragraph}>{paragraph}</p>
+        ))}
+      </WhatItMeans>
+      <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={profileName(profiles)} countOf={t.rooms.approvalPosition} unknownAgent={words.anAgentHere} />
+      <div className="form-actions">
+        <button type="button" className="primary" onClick={onClose}>
+          {words.done}
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+/** Marks a sandboxed workspace, or a conversation of one, and opens the workspace's sandbox settings; a wordless one is its shield alone, where room is short. */
+export function SandboxedMark({ className, hint, wordless = false, onOpen }: { className: string; hint: string; wordless?: boolean; onOpen: () => void }) {
+  return (
+    <button type="button" className={`sandboxed-mark ${className}`} aria-label={wordless ? t.rooms.sandboxed : undefined} data-hint={hint} onClick={onOpen}>
+      <LineIcon shape="shield" />
+      {!wordless && t.rooms.sandboxed}
+    </button>
+  );
+}
+
+export const openWorkspaceSandbox = (dispatch: Dispatch<AppAction>, workspaceId: string) => dispatch({ type: "open-overlay", overlay: { kind: "workspace-sandbox", workspaceId } });
+
+/** What a conversation shows of its workspace's sandbox: whether its agent runs there, and the changes held as it worked. */
+export interface ConversationSandbox {
+  sandboxed: boolean;
+  heldChanges: HeldChange[];
+  holdsTooMany: boolean;
+}
+
+export function conversationSandboxOf(state: Pick<AppState, "workspaces" | "heldChanges" | "sandboxesHoldingTooMany">, { id, workspaceId, roomId }: Conversation): ConversationSandbox {
+  const owner = workspaceSandbox(workspaceId);
+  return {
+    sandboxed: roomId === undefined && state.workspaces.some((workspace) => workspace.id === workspaceId && workspace.sandbox.on),
+    heldChanges: roomId === undefined ? state.heldChanges.filter((change) => ofSandbox(owner)(change) && change.conversationIds.includes(id)) : [],
+    holdsTooMany: holdsTooMany(state.sandboxesHoldingTooMany, owner),
+  };
+}

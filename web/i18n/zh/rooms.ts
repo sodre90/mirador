@@ -210,7 +210,7 @@ export const rooms: Messages["rooms"] = {
       "自由工作时，Agent 什么都不用请求批准，因为沙箱把它们关在里面。否则房间的权限预设照常适用，和在这台电脑上一样。",
       "Agent 读取设置、指令和 MCP 服务器的文件会被暂扣，会自行运行的文件也一样：.claude、.mcp.json、CLAUDE.md、AGENTS.md、.codex、opencode.json、.opencode、.pi、.husky、.githooks、.vscode、.pre-commit-config.yaml、lefthook.yml 和 .envrc。沙箱启动时已有的这些文件在其中是只读的；新出现的会立即被撤回，由你在房间里批准或丢弃。",
       "Agent 在工作区改动的其他任何文件，在你自己运行时都可能被执行：测试、脚本、package.json，或者在终端里提交（会运行仓库的 Hook）。在那里运行任何东西之前，请先看看它们改了什么。",
-      "仓库的配置和 Hook 在沙箱里是只读的。Mirador 在工作区运行 git 时不使用它的 Hook 和 fsmonitor；在房间开着沙箱期间及之后 7 天内，Mirador 在那里的提交和合入也不运行仓库的 Hook。",
+      "仓库的配置和 Hook 在沙箱里是只读的，但工作区内其他仓库的配置和 Hook 不是。Mirador 在工作区运行 git 时不使用 Hook 和 fsmonitor；在房间开着沙箱期间及之后 7 天内，Mirador 在工作区或其中任何文件夹里的提交、合入和新工作树也不运行这些仓库的 Hook。",
       "开启或关闭它，或者更改 Agent 在里面的工作方式，都会让 Agent 重新开始。",
     ],
   },

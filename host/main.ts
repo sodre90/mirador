@@ -72,7 +72,9 @@ import { homedir } from "node:os";
 import { AppleContainer } from "./sandbox/apple-container.ts";
 import { claudeCodeVersionIn } from "./sandbox/image.ts";
 import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
-import { RoomSandboxes } from "./sandbox/room-sandboxes.ts";
+import { belongsToSandbox, Sandboxes } from "./sandbox/sandboxes.ts";
+import type { SandboxControl } from "./sandbox/sandbox-control.ts";
+import { WorkspaceSandboxes } from "./workspace-sandbox.ts";
 
 if (process.platform === "win32") stopIgnoringCtrlC();
 const config = loadConfig();
@@ -202,34 +204,47 @@ const mcp = new CanvasMcpEndpoints({
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
 const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
-const sandboxes = new RoomSandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
+const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
   dataDir: config.dataDir,
   places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir, computersOwn: podman ? computersOwnOnLinux(homedir(), podman) : [] },
-  workspaceOf: (roomId) => {
-    const room = store.findRoom(roomId);
-    return (room && store.findWorkspace(room.workspaceId)?.path) ?? null;
-  },
-  canvasOf: (roomId) => ({
-    isRoomsConversation: (conversationId) => store.findConversation(conversationId)?.roomId === roomId,
+  workspaceOf: (owner) => store.findWorkspace(owner.kind === "room" ? (store.findRoom(owner.id)?.workspaceId ?? "") : owner.id)?.path ?? null,
+  canvasOf: (owner) => ({
+    belongs: (conversationId) => {
+      const conversation = store.findConversation(conversationId);
+      return conversation !== undefined && belongsToSandbox(conversation, owner);
+    },
     tokenOf: (conversationId) => conversationCanvasToken(config.mcpToken, conversationId),
-    handle: (conversationId, request) => mcp.handle(conversationId, request),
+    handle: (conversationId, request) => mcp.handleFromSandbox(conversationId, request),
   }),
-  agentsAtWork: (roomId) => (store.findRoom(roomId)?.agents ?? []).filter(({ answering }) => answering !== null).map(({ profileId }) => profileId),
+  atWork: (owner) => {
+    const working =
+      owner.kind === "room"
+        ? (store.findRoom(owner.id)?.agents ?? []).filter(({ answering }) => answering !== null).map(({ profileId, conversationId }) => ({ profileId, id: conversationId }))
+        : store.listConversations().filter((conversation) => belongsToSandbox(conversation, owner) && conversations.isAtWork(conversation.id));
+    return {
+      agents: [...new Set(working.flatMap(({ profileId }) => profileId ?? []))],
+      conversationIds: working.flatMap(({ id }) => id ?? []),
+    };
+  },
   setupChanged: (setup) => hub.broadcast({ type: "sandbox.setup", setup }),
-  heldChanged: (roomId, changes, full) => hub.broadcast({ type: "room.held-changes", roomId, changes, full }),
+  heldChanged: (owner, changes, full) => hub.broadcast({ type: "sandbox.held-changes", owner, changes, full }),
 });
 const claudeCodeVersionHere = async () => {
   const program = findClaudeProgram(store.claudeProgramSetting());
   return program && claudeCodeVersionIn(await versionOf(program));
 };
 conversations.startsSandboxedAgentsIn(sandboxes);
-rooms.keepsSandboxesWith({
+const sandboxControl: SandboxControl = {
   availability: () => sandboxes.availability(),
   prepare: () => void claudeCodeVersionHere().then((version) => version && sandboxes.prepareInBackground(version)),
-  answerHeldChange: (roomId, changeId, answer) => sandboxes.answerHeldChange(roomId, changeId, answer),
+  answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
   workspaceRefusal: (workspace) => sandboxes.workspaceRefusal(workspace),
-  roomGone: (roomId) => sandboxes.roomGone(roomId),
-});
+  ownerGone: (owner) => sandboxes.ownerGone(owner),
+};
+rooms.keepsSandboxesWith(sandboxControl);
+const terminals = new TerminalService(hub, store);
+const workspaceSandboxes = new WorkspaceSandboxes(store, hub, conversations, terminals);
+workspaceSandboxes.keepsSandboxesWith(sandboxControl);
 void sandboxes.reapLeftovers().catch((error: unknown) => console.error("removing the sandboxes a previous run left failed:", error));
 const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugins.viewCode(pathname);
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
@@ -245,7 +260,6 @@ profiles.whenSavedOver((previous, saved) => {
   if (canvasPlugins.pluginsOffFor(previous).join("\n") !== canvasPlugins.pluginsOffFor(saved).join("\n")) mcp.toolsChangedForProfile(saved.id);
 });
 const statusline = new StatuslineService(store, conversations, canvasPlugins, config.runsUserStatusLine);
-const terminals = new TerminalService(hub, store);
 const restart = new HostRestart(hub, conversations, config.dataDir, stopServices, relaunchHow && (() => relaunch(relaunchHow)));
 const desktopApp = new DesktopAppCheck(
   () => desktopAppCode(join(sourceDir, "desktop")),
@@ -336,7 +350,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, sandboxes, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, roomQuestions, roomReading, broughtAgents });
+const server = startServer({ config, store, hub, conversations, sandboxes, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, roomQuestions, roomReading, broughtAgents });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);
