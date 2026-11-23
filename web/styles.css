@@ -10601,6 +10601,18 @@ select.room-agent-choice-select:focus-visible {
   margin-bottom: 4px;
 }
 
+.room-field > legend {
+  padding: 0;
+}
+
+:is(.room-permissions-field, .room-sandbox) > p.hint {
+  margin: 0;
+}
+
+.room-sandbox > :is(.hint, .room-sandbox-reasons, .room-sandbox-setup) {
+  padding-left: 26px;
+}
+
 .room-sandbox-work {
   display: grid;
   gap: 4px;

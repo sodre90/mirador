@@ -99,6 +99,7 @@ export const rooms: Messages["rooms"] = {
     "read-freely": "Lesen im Arbeitsbereich ist frei, alles andere fragt nach",
     "work-freely": "Frei arbeiten im Arbeitsbereich",
   },
+  presetsAsideInSandbox: "Agenten in der Sandbox arbeiten darin frei, egal was du hier wählst.",
   permissionsHint:
     "Lesen außerhalb des Arbeitsbereichs, Lesen oder Suchen ohne genannte Datei und Miradors eigene Daten fragen immer nach. Gilt ab der nächsten Anfrage der Agenten, auch wenn ein Profil auf YOLO steht. Ein Agent, der seine Tools ohne Nachfrage ausführt, wie pi und standardmäßig opencode oder Codex beim Lesen, ist nicht daran gebunden.",
   approvalsWaiting: "Anfragen, die auf Genehmigung warten",

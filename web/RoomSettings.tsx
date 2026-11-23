@@ -361,6 +361,7 @@ function PermissionsTab({ room, profiles, roomConversations, sandboxSetup }: { r
             {words.presets[preset]}
           </label>
         ))}
+        {room.sandbox.on && room.sandbox.workFreely && <p className="hint">{words.presetsAsideInSandbox}</p>}
       </fieldset>
       <WhatItMeans>
         <p>{words.permissionsHint}</p>

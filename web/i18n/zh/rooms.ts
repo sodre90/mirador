@@ -97,6 +97,7 @@ export const rooms: Messages["rooms"] = {
     "read-freely": "可自由读取工作区，其他都需询问",
     "work-freely": "在工作区内自由工作",
   },
+  presetsAsideInSandbox: "无论这里选什么，沙箱中的 Agent 都在里面自由工作。",
   permissionsHint: "读取工作区以外的内容、未指明文件的读取或搜索，以及 Mirador 自己的数据，总是需要询问。从 Agent 的下一个请求起生效，即使配置设为 YOLO 也一样。不询问就运行工具的 Agent（如 pi、默认设置下的 opencode，以及读取时的 Codex）不受它约束。",
   approvalsWaiting: "等待批准的请求",
   asks: (agent) => `${agent} 请求`,

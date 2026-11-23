@@ -108,6 +108,7 @@ export const rooms = {
     "read-freely": "Reading the workspace is free, the rest asks",
     "work-freely": "Work freely inside the workspace",
   } satisfies Record<PermissionPreset, string>,
+  presetsAsideInSandbox: "Agents in the sandbox work freely there, whatever is chosen here.",
   permissionsHint:
     "Reading outside the workspace, a read or search that names no file, and Mirador's own data always ask. Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default and Codex does when it reads, isn't held to it.",
   approvalsWaiting: "Requests waiting for approval",

@@ -73,6 +73,13 @@ const roomComposer = (page: Page, room: string) => page.getByRole("textbox", { n
 const answerSaying = (page: Page, text: string | RegExp) => page.locator(".room-timeline .room-entry .message.agent", { hasText: text });
 const sandboxSwitch = (dialog: Locator) => dialog.getByRole("switch", { name: "Run the agents in a sandbox" });
 const reasons = (dialog: Locator) => dialog.locator(".room-sandbox-reasons");
+const textStart = (shown: Locator) =>
+  shown.evaluate((element) => {
+    const text = document.createRange();
+    text.selectNodeContents(element);
+    return text.getBoundingClientRect().left;
+  });
+const presetsAside = (dialog: Locator) => dialog.getByRole("group", { name: "What the agents may do without asking" }).getByText("Agents in the sandbox work freely there, whatever is chosen here.");
 const heldCard = (page: Page) => page.getByRole("region", { name: "Agent config change held for you" });
 
 async function tag(page: Page, room: string, agent: string, rest: string) {
@@ -137,12 +144,15 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
 
   await expect(dialog.getByText("Network: only the model and Mirador")).toBeVisible();
   await expect(dialog.getByRole("radio", { name: "Agents work freely inside" })).toBeChecked();
+  await expect(presetsAside(dialog)).toBeVisible();
   const setup = dialog.locator(".room-sandbox-setup");
   await expect(setup).toHaveText("Building the agents' image on this Mac: step 2 of 3…");
   await expect(setup.getByRole("progressbar")).toHaveAttribute("value", "2");
   await keepScreenshot(dialog, "setup-progress");
   writeFileSync(buildHeldBy(), "");
   await expect(setup).toHaveText("Set up on this Mac.");
+  const optionsStart = (await dialog.getByRole("radio", { name: "Agents work freely inside" }).boundingBox())!.x;
+  for (const underTheSwitch of [dialog.getByText("Network: only the model and Mirador"), setup]) expect(Math.abs((await textStart(underTheSwitch)) - optionsStart)).toBeLessThan(2);
   await keepScreenshot(dialog, "switch-on");
   expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-room-agent:claude-2\.1\.330-bun-/)] });
   await dialog.getByRole("button", { name: "Done" }).click();
@@ -230,6 +240,7 @@ test("working freely, the agent asks for nothing in its VM; under the room's pre
   await expect(dialog.getByRole("alert")).toContainText("Builder");
   await dialog.getByRole("button", { name: "Change" }).click();
   await expect(dialog.getByRole("radio", { name: "The room's permission preset still applies" })).toBeChecked();
+  await expect(presetsAside(dialog)).toBeHidden();
   await dialog.getByRole("button", { name: "Done" }).click();
 
   await tag(page, "Sandboxed", "Builder", `${runLs} `);

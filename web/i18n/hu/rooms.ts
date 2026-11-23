@@ -98,6 +98,7 @@ export const rooms: Messages["rooms"] = {
     "read-freely": "A munkaterületen olvasni szabad, minden másra engedélyt kérnek",
     "work-freely": "Szabadon dolgozhatnak a munkaterületen belül",
   },
+  presetsAsideInSandbox: "A sandboxban lévő ágensek szabadon dolgoznak benne, bármit választasz itt.",
   permissionsHint:
     "A munkaterületen kívüli olvasás, a fájlt nem megnevező olvasás vagy keresés, és a Mirador saját adatai mindig engedélyt kérnek. Az ágensek következő kérésétől érvényes, akkor is, ha egy profilban YOLO van beállítva. Arra az ágensre, amely kérdezés nélkül futtatja az eszközeit, ahogy a pi és alapból az opencode, vagy olvasáskor a Codex, nem vonatkozik.",
   approvalsWaiting: "Jóváhagyásra váró kérések",

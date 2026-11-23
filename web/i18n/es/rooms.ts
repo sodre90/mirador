@@ -99,6 +99,7 @@ export const rooms: Messages["rooms"] = {
     "read-freely": "Leer el espacio de trabajo es libre, lo demás pregunta",
     "work-freely": "Trabajar libremente dentro del espacio de trabajo",
   },
+  presetsAsideInSandbox: "Los agentes del sandbox trabajan libremente dentro, elijas lo que elijas aquí.",
   permissionsHint:
     "Leer fuera del espacio de trabajo, una lectura o búsqueda que no nombra ningún archivo y los datos propios de Mirador siempre preguntan. Se aplica desde la siguiente solicitud de los agentes, aunque un perfil tenga YOLO activado. Un agente que ejecuta sus herramientas sin preguntar, como pi y opencode por defecto, o Codex al leer, no queda sujeto a ello.",
   approvalsWaiting: "Solicitudes en espera de aprobación",
