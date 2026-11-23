@@ -62,7 +62,7 @@ import { requestProgram } from "./program-request.ts";
 import { usePluginCommands } from "./plugin-commands.tsx";
 import { AskToRevert, UndoButton } from "./Revert.tsx";
 import { HighlightedText, MarkdownText, SlackMessageText } from "./Markdown.tsx";
-import { FormattedBox, type FormattedBoxExtras } from "./FormattedBox.tsx";
+import { enterSends, FormattedBox } from "./FormattedBox.tsx";
 import { useMessageBox } from "./message-box.ts";
 import { FormatBarToggle } from "./FormatBar.tsx";
 import { ReadAloud, ReadsRepliesAloud } from "./ReadAloud.tsx";
@@ -2120,9 +2120,6 @@ function Composer({
     textarea.current?.focus();
   };
   const afterTurnFor = (event: KeyboardEvent<HTMLTextAreaElement>) => (enterWhileBusy === "after-turn") !== event.altKey;
-  /** In the formatted box, Enter in a list or code block adds a line, and ⌘Enter (Ctrl+Enter) sends from anywhere. */
-  const enterSends = (event: KeyboardEvent<HTMLTextAreaElement>) =>
-    event.metaKey || event.ctrlKey || !(textarea.current as Partial<FormattedBoxExtras> | null)?.enterAddsLine?.();
   const slashCommands = useSlashCommandMenu({
     conversationId: conversation.id,
     harness: conversation.harness,

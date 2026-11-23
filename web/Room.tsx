@@ -48,12 +48,15 @@ import { connection } from "./connection.ts";
 import { HintedWhenCutShort } from "./cut-short.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
 import type { EditRequest } from "./edit-approval.ts";
+import { FormatBarToggle } from "./FormatBar.tsx";
+import { enterSends, FormattedBox } from "./FormattedBox.tsx";
 import { hints } from "./hints.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { MarkdownText, MentionsOfMessage, SlackMessageText } from "./Markdown.tsx";
+import { useMessageBox } from "./message-box.ts";
 import { writersIn, writingLine, WritingSignals } from "./room-writing.ts";
 import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
@@ -211,6 +214,8 @@ function useTagMenu({ taggable, text, caret, take }: { taggable: Taggable[]; tex
   return { onKeyDown, textareaAttributes: suggestionAttributes(TAG_MENU_ID, open, pickedIndex), menu };
 }
 
+const isTooLongForARoom = (message: string) => roomMessageLength(message) > ROOM_MESSAGE_MOST_CHARACTERS;
+
 interface RoomComposerHandle {
   /** Tags the agent where the caret is and gives the composer the focus, to go on writing its task. */
   tag: (agent: RoomAgentShown) => void;
@@ -239,6 +244,7 @@ function RoomComposer({
   const [caret, setCaret] = useState(0);
   const [tagged, setTagged] = useState<RoomAgentShown[]>([]);
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const messageBox = useMessageBox();
   const typingAidAttributes = useTypingAidAttributes();
   const [writingSignals] = useState(() => new WritingSignals(tellWriting));
   useEffect(() => () => writingSignals.stopped(), []);
@@ -255,13 +261,18 @@ function RoomComposer({
   const take = (taken: Taggable) => write(withMention(text, caret, { path: nameToTag(taken), directory: false }), "agent" in taken ? taken.agent : null);
   useImperativeHandle(ref, () => ({ tag: (agent) => write(withTagAtCaret(text, caret, agent.name), agent) }));
   const tagMenu = useTagMenu({ taggable: [...agents.map((agent) => ({ agent })), ...people.map((person) => ({ person }))], text, caret, take });
-  const length = roomMessageLength(text);
-  const tooLong = length > ROOM_MESSAGE_MOST_CHARACTERS;
-  const send = () => {
-    if (!text.trim() || tooLong) return;
+  const boxAttributes = { ...typingAidAttributes, ...tagMenu.textareaAttributes };
+  const tooLong = isTooLongForARoom(text);
+  const typed = (value: string, caretAfter: number) => {
+    setText(value);
+    setCaret(caretAfter);
+    writingSignals.typed(value);
+  };
+  const send = (message = text) => {
+    if (!message.trim() || isTooLongForARoom(message)) return;
     onSend(
-      text,
-      tagged.filter(({ name }) => text.includes(`@${name}`)).map(({ profileId }) => profileId),
+      message,
+      tagged.filter(({ name }) => message.includes(`@${name}`)).map(({ profileId }) => profileId),
     );
     writingSignals.sent();
     setText("");
@@ -269,39 +280,40 @@ function RoomComposer({
   };
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (tagMenu.onKeyDown(event)) return;
-    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing || !enterSends(event)) return;
     event.preventDefault();
-    send();
+    // The formatted box tells its text as it changes, but this handler may be the last render's, from before.
+    send(event.currentTarget.value);
   };
   return (
     <div className="composer-area room-composer">
       <div className="composer">
         {tagMenu.menu}
-        <textarea
-          ref={textarea}
-          rows={2}
-          {...typingAidAttributes}
-          {...tagMenu.textareaAttributes}
-          value={text}
-          placeholder={placeholder}
-          aria-label={placeholder}
-          onChange={(event) => {
-            setText(event.target.value);
-            setCaret(event.target.selectionStart);
-            writingSignals.typed(event.target.value);
-          }}
-          onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
-          onKeyDown={onKeyDown}
-        />
+        {messageBox === "formatted" ? (
+          <FormattedBox text={text} facade={textarea} placeholder={placeholder} label={placeholder} attributes={boxAttributes} onText={typed} onCaret={setCaret} onKeyDown={onKeyDown} />
+        ) : (
+          <textarea
+            ref={textarea}
+            rows={2}
+            {...boxAttributes}
+            value={text}
+            placeholder={placeholder}
+            aria-label={placeholder}
+            onChange={(event) => typed(event.target.value, event.target.selectionStart)}
+            onSelect={(event) => setCaret(event.currentTarget.selectionStart)}
+            onKeyDown={onKeyDown}
+          />
+        )}
         <div className="composer-actions">
-          <button type="button" className="primary" disabled={!text.trim() || tooLong} onClick={send}>
+          {messageBox === "formatted" && <FormatBarToggle />}
+          <button type="button" className="primary" disabled={!text.trim() || tooLong} onClick={() => send()}>
             {words.send}
           </button>
         </div>
       </div>
       {tooLong && (
         <div className="notice-line room-message-too-long" role="alert">
-          {words.messageTooLong(formatNumber(length), formatNumber(ROOM_MESSAGE_MOST_CHARACTERS))}
+          {words.messageTooLong(formatNumber(roomMessageLength(text)), formatNumber(ROOM_MESSAGE_MOST_CHARACTERS))}
         </div>
       )}
     </div>
@@ -884,6 +896,7 @@ export function RoomView({
   const voteOn = (item: AskItem) => <RoomVote key={item.id} roomId={room.id} item={item} votes={votesOf.get(item.id)} you={you} takesOwnWords={owns || approvesIn(room, you) || !room.peoplesTasksWait} />;
   const pending = timeline ? workPending(timeline, room.agents) : [];
   const writing = presence?.writing ?? [];
+  const { ref: roomTimeline, onScroll } = useScrollAnchor();
   const timelineEnd = useRef<HTMLDivElement>(null);
   useEffect(() => {
     timelineEnd.current?.scrollIntoView({ block: "end" });
@@ -924,7 +937,7 @@ export function RoomView({
         </div>
       </header>
       {owns && <DoorBanner joiners={joiners} onShowAll={presence ? () => setPeopleShown(true) : null} />}
-      <div className="timeline room-timeline">
+      <div className="timeline room-timeline" ref={roomTimeline} onScroll={onScroll}>
         {!timeline && <div className="notice-line">{words.loading}</div>}
         {timeline && shown.length === 0 && <EmptyRoom tagsAgents={tagsAgents} agentsToTag={agentsToTag} onTag={(agent) => composer.current?.tag(agent)} onInvite={owns ? invite : null} />}
         {shown.map((message) => {

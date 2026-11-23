@@ -40,9 +40,13 @@ import { $formatSelection, FormatBar } from "./FormatBar.tsx";
 import { useFormatBar } from "./message-box.ts";
 
 /** What the composer reads off its box beyond a textarea's own: whether Enter, there, adds a line instead of sending. */
-export interface FormattedBoxExtras {
+interface FormattedBoxExtras {
   enterAddsLine(): boolean;
 }
+
+/** In the formatted box, Enter in a list or code block adds a line, and ⌘Enter (Ctrl+Enter) sends from anywhere. */
+export const enterSends = (event: KeyboardEvent<HTMLTextAreaElement>) =>
+  event.metaKey || event.ctrlKey || !(event.currentTarget as Partial<FormattedBoxExtras>).enterAddsLine?.();
 
 const WRITTEN_FORMATS = new Set<TextFormatType>(["bold", "italic", "strikethrough", "code"]);
 const FORMAT_KEYS: { code: string; shift: boolean; format: TextFormatType }[] = [
@@ -149,12 +153,13 @@ interface Props {
   text: string;
   facade: RefObject<HTMLTextAreaElement | null>;
   placeholder: string;
+  label?: string;
   attributes: Record<string, unknown>;
-  style: CSSProperties | undefined;
+  style?: CSSProperties | undefined;
   onText: (text: string, caret: number) => void;
   onCaret: (caret: number) => void;
   onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
-  onPaste: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 function Bridge({ text, facade, onText, onCaret, onKeyDown, onPaste, element }: Props & { element: RefObject<HTMLDivElement | null> }) {
@@ -277,7 +282,7 @@ function Bridge({ text, facade, onText, onCaret, onKeyDown, onPaste, element }: 
           PASTE_COMMAND,
           (event) => {
             if (!(event instanceof ClipboardEvent)) return false;
-            handlers.current.onPaste(event as unknown as ClipboardEvent<HTMLTextAreaElement>);
+            handlers.current.onPaste?.(event as unknown as ClipboardEvent<HTMLTextAreaElement>);
             if (event.defaultPrevented) return true;
             const plain = event.clipboardData?.getData("text/plain");
             if (!plain || !clipboardIsUnformatted(event)) return false;
@@ -392,7 +397,7 @@ export function FormattedBox(props: Props) {
               ref={setElement}
               className="formatted-box"
               style={grownTo(props.style)}
-              aria-label="Message"
+              aria-label={props.label ?? "Message"}
               aria-placeholder={props.placeholder}
               placeholder={<div className="formatted-box-placeholder">{props.placeholder}</div>}
             />

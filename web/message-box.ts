@@ -20,3 +20,21 @@ const formatBar = storedChoice<FormatBarChoice>("mirador-format-bar", ["hidden",
 
 export const setFormatBar = formatBar.set;
 export const useFormatBar = formatBar.use;
+
+const RAIL_MESSAGE_BOX_MESSAGE = "mirador:rail-message-box";
+
+/** The rail gives someone else's machine the message box chosen on this computer, which that machine's page can't keep for itself. */
+export function giveMessageBoxToMachine(frame: HTMLIFrameElement | null) {
+  frame?.contentWindow?.postMessage({ type: RAIL_MESSAGE_BOX_MESSAGE, messageBox: messageBox.get(), formatBar: formatBar.get() }, "*");
+}
+
+/** A person's page of someone else's machine, in their own computer's rail, has the message box of that computer. */
+export function takeMessageBoxFromTheRail() {
+  if (window.parent === window) return;
+  window.addEventListener("message", ({ source, data }: MessageEvent) => {
+    const given = (typeof data === "object" && data !== null ? data : {}) as { type?: unknown; messageBox?: unknown; formatBar?: unknown };
+    if (source !== window.parent || given.type !== RAIL_MESSAGE_BOX_MESSAGE) return;
+    messageBox.showIfOneOfThem(given.messageBox);
+    formatBar.showIfOneOfThem(given.formatBar);
+  });
+}

@@ -13,6 +13,7 @@ import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
 import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
 import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
+import { giveMessageBoxToMachine, useFormatBar, useMessageBox } from "./message-box.ts";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 import { pastelVariables } from "./pastels.ts";
 import { giveThemeToMachine } from "./theme.ts";
@@ -267,6 +268,12 @@ function MachineFrame({
     chosen.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     return () => chosen.disconnect();
   }, []);
+  const messageBox = useMessageBox();
+  const formatBar = useFormatBar();
+  const giveMessageBox = () => {
+    if (machine.asPerson) giveMessageBoxToMachine(frame.current);
+  };
+  useEffect(giveMessageBox, [messageBox, formatBar]);
   useEffect(() => {
     if (machine.asPerson) return;
     const rememberPlace = (event: MessageEvent) => {
@@ -287,6 +294,7 @@ function MachineFrame({
       onLoad={() => {
         tellTheMachineItIsShown(frame.current, shown);
         giveThemeToMachine(frame.current);
+        giveMessageBox();
       }}
     />
   );

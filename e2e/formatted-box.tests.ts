@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, dropFiles, openSettings, pasteHtml, pasteImage, pasteText, primaryModifier, signIn, waitForTurnToEnd } from "./helpers.ts";
+import { expect, test, type Locator, type Page } from "@playwright/test";
+import { addWorkspace, createProfile, createRoom, dropFiles, openSettings, pasteHtml, pasteImage, pasteText, primaryModifier, signIn, waitForTurnToEnd } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const COMMANDS = [
@@ -24,6 +24,16 @@ const holdFrames = (page: Page) =>
   });
 
 const releaseFrames = (page: Page) => page.evaluate(() => (window as unknown as { releaseHeldFrames(): void }).releaseHeldFrames());
+
+/** Pastes the text and presses Enter before the page has drawn it, as a fast hand on a busy machine may. */
+const pasteAndPressEnterAtOnce = (target: Locator, text: string) =>
+  target.evaluate(async (element, pasted) => {
+    const transfer = new DataTransfer();
+    transfer.setData("text/plain", pasted);
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
+    await Promise.resolve();
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
+  }, text);
 
 /** The formatted message box's tests, run by one spec per browser: the desktop app is WebKit, where a contenteditable differs most. */
 export function formattedBoxTests() {
@@ -60,7 +70,7 @@ export function formattedBoxTests() {
   const box = () => page.locator(".composer:visible .formatted-box");
   const promptsSoFar = () => readFileSync(promptsFile, "utf8");
   /** The box's text and selection as the composer reads them: the markdown the agent gets, with offsets into it. */
-  const boxValue = () => box().evaluate((element) => (element as unknown as HTMLTextAreaElement).value);
+  const boxValue = (ofBox = box()) => ofBox.evaluate((element) => (element as unknown as HTMLTextAreaElement).value);
   /** The kind of marker drawn before each list item in the box: a number, a bullet, or none. */
   const markers = () =>
     box()
@@ -307,13 +317,7 @@ export function formattedBoxTests() {
   test("Enter pressed before the page shows a paste still sends what was pasted", async () => {
     await page.keyboard.type("Look: ");
     const before = promptsSoFar().length;
-    await box().evaluate(async (element) => {
-      const transfer = new DataTransfer();
-      transfer.setData("text/plain", "pasted");
-      element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: transfer, bubbles: true, cancelable: true }));
-      await Promise.resolve();
-      element.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", code: "Enter", bubbles: true, cancelable: true }));
-    });
+    await pasteAndPressEnterAtOnce(box(), "pasted");
     await expect.poll(() => promptsSoFar().slice(before)).toContain("Look: pasted");
     await waitForTurnToEnd(page);
     await expect(box()).toHaveText("");
@@ -460,5 +464,108 @@ export function formattedBoxTests() {
     await box().click();
     await page.keyboard.press("ControlOrMeta+a");
     await page.keyboard.press("Backspace");
+  });
+
+  test("a room's box and its threads' format too, with Aa, tags and lists, and its agent gets the markdown", async () => {
+    await createRoom(page, "Launch", ["formatted"]);
+    const roomBox = page.getByRole("textbox", { name: "Write in Launch, @ tags an agent…" });
+    const entries = page.locator(".room-timeline:visible .room-entry");
+    const bar = page.getByRole("toolbar", { name: "Formatting" });
+
+    await test.step("what is typed formats there and then, and shows so once sent", async () => {
+      await roomBox.click();
+      await page.keyboard.type("Ship **today**");
+      await expect(roomBox.locator(".box-bold")).toHaveText("today");
+      await page.keyboard.press("Enter");
+      await expect(entries.locator(".message.user strong")).toHaveText(["today"]);
+      await expect(roomBox).toHaveText("");
+    });
+
+    await test.step("Enter adds an item to a list, and ⌘Enter sends it", async () => {
+      await page.keyboard.type("- one");
+      await page.keyboard.press("Enter");
+      await page.keyboard.type("two");
+      await expect(roomBox.locator("li")).toHaveText(["one", "two"]);
+      await page.keyboard.press("ControlOrMeta+Enter");
+      await expect(entries.last().locator(".message.user li")).toHaveText(["one", "two"]);
+      await expect(roomBox.locator("li")).toHaveCount(0);
+    });
+
+    await test.step("Enter pressed before the page shows a paste sends what was pasted", async () => {
+      await page.keyboard.type("Look: ");
+      await pasteAndPressEnterAtOnce(roomBox, "pasted");
+      await expect(entries.last().locator(".message.user")).toHaveText("Look: pasted");
+      await expect(roomBox).toHaveText("");
+    });
+
+    await test.step("Aa shows the formatting buttons over the box", async () => {
+      await expect(bar).toHaveCount(0);
+      await page.getByRole("button", { name: "Formatting" }).click();
+      await expect(bar).toBeVisible();
+      await page.keyboard.type("make it loud");
+      for (let step = 0; step < "loud".length; step++) await page.keyboard.press("Shift+ArrowLeft");
+      await bar.getByRole("button", { name: "Bold" }).click();
+      await expect.poll(() => boxValue(roomBox)).toBe("make it **loud**");
+      await page.keyboard.press("ControlOrMeta+a");
+      await page.keyboard.press("Backspace");
+    });
+
+    await test.step("a tag picked among the formats keeps them, and its agent gets the markdown", async () => {
+      const before = promptsSoFar().length;
+      await page.keyboard.type("**now** @for");
+      await expect(page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@formatted" })).toBeVisible();
+      await page.keyboard.press("Enter");
+      await expect.poll(() => boxValue(roomBox)).toBe("**now** @formatted ");
+      await page.keyboard.type("SAY Done");
+      await page.keyboard.press("Enter");
+      await expect(entries.last().locator(".message.agent")).toHaveText("Done");
+      expect(promptsSoFar().slice(before)).toContain("> **now** @formatted SAY Done");
+      await expect(roomBox).toHaveText("");
+    });
+
+    await test.step("the room's latest message stays in sight as the box grows with its lines", async () => {
+      const size = page.viewportSize()!;
+      await page.setViewportSize({ ...size, height: 520 });
+      const latest = entries.last().locator(".message.agent");
+      await latest.scrollIntoViewIfNeeded();
+      await roomBox.click();
+      const emptyBox = (await roomBox.boundingBox())!.height;
+      for (let line = 1; line < 8; line++) {
+        await page.keyboard.type(`line ${line}`);
+        await page.keyboard.press("Shift+Enter");
+      }
+      await expect.poll(async () => (await roomBox.boundingBox())!.height).toBeGreaterThan(emptyBox * 2);
+      await expect(latest).toBeInViewport({ ratio: 1 });
+      await page.keyboard.press("ControlOrMeta+a");
+      await page.keyboard.press("Backspace");
+      await page.setViewportSize(size);
+    });
+
+    await test.step("a thread's box formats too, with room for its buttons", async () => {
+      await entries.last().getByRole("button", { name: "Open thread" }).click();
+      const thread = page.getByRole("complementary", { name: "Thread of formatted" });
+      const followUp = thread.getByRole("textbox", { name: "Follow up with formatted…" });
+      expect(await thread.getByRole("toolbar", { name: "Formatting" }).evaluate((buttons) => buttons.scrollWidth <= buttons.clientWidth)).toBe(true);
+      const before = promptsSoFar().length;
+      await followUp.click();
+      await page.keyboard.type("`this` SAY Noted too");
+      await expect(followUp.locator(".box-code")).toHaveText("this");
+      await page.keyboard.press("Enter");
+      await expect(thread.locator(".message.agent")).toHaveText(["Done", "Noted too"]);
+      expect(promptsSoFar().slice(before)).toContain("> `this` SAY Noted too");
+      await thread.getByRole("button", { name: "Close thread" }).click();
+    });
+  });
+
+  test("an empty room's agent is tagged where the caret is in what is written", async () => {
+    await createRoom(page, "Quiet", ["formatted"]);
+    const roomBox = page.getByRole("textbox", { name: "Write in Quiet, @ tags an agent…" });
+    await roomBox.click();
+    await page.keyboard.type("**first** then");
+    await page.getByRole("region", { name: "Nothing written yet" }).getByRole("button", { name: "@formatted" }).click();
+    await expect.poll(() => boxValue(roomBox)).toBe("**first** then @formatted ");
+    await expect(roomBox).toBeFocused();
+    await page.keyboard.type("go");
+    await expect.poll(() => boxValue(roomBox)).toBe("**first** then @formatted go");
   });
 }
