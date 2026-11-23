@@ -177,6 +177,20 @@ function RoleSelect({ label, role, onChange }: { label: string; role: RoomRole; 
   );
 }
 
+export function RemovePerson({ roomId, personId, name }: { roomId: string; personId: string; name: string }) {
+  return (
+    <ConfirmButton
+      className="link danger room-remove-person"
+      label={words.removePerson(name)}
+      armedText={words.removeArmed}
+      armedHint={words.removePersonArmedHint}
+      onConfirm={() => connection.send({ type: "room.remove-person", roomId, personId })}
+    >
+      {words.remove}
+    </ConfirmButton>
+  );
+}
+
 /** Who is in the room and as what, who waits at its door, whether their tasks start unasked, the invites still waiting, and inviting someone. */
 function PeopleTab({ room, people, ownerId, invites, joiners, onInvite }: { room: Room; people: Person[]; ownerId: string | null; invites: RoomInvite[]; joiners: RoomJoiner[]; onInvite: () => void }) {
   const waiting = useUnexpired(invites.filter(({ roomId }) => roomId === room.id));
@@ -196,15 +210,7 @@ function PeopleTab({ room, people, ownerId, invites, joiners, onInvite }: { room
             <li key={personId}>
               <span className="room-settings-row-name">{name}</span>
               <RoleSelect label={words.roleOf(name)} role={role} onChange={(next) => setRole(personId, next)} />
-              <ConfirmButton
-                className="link danger"
-                label={words.removePerson(name)}
-                armedText={words.removeArmed}
-                armedHint={words.removePersonArmedHint}
-                onConfirm={() => connection.send({ type: "room.remove-person", roomId: room.id, personId })}
-              >
-                {words.remove}
-              </ConfirmButton>
+              <RemovePerson roomId={room.id} personId={personId} name={name} />
               {nameClash && <span className="hint room-person-name-clash">{words.nameClash(nameClash)}</span>}
             </li>
           );

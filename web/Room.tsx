@@ -15,6 +15,7 @@ import {
   canvasItemsOfAnswers,
   eventsAnswering,
   firstReachingTheAgent,
+  isRoomRole,
   messagesOfThread,
   reachedAmong,
   ROOM_MESSAGE_MOST_CHARACTERS,
@@ -59,7 +60,7 @@ import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./stat
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
 import { HeldChangeCard } from "./Sandbox.tsx";
-import { JoinerAtTheDoor, WaitingToJoin } from "./RoomSettings.tsx";
+import { JoinerAtTheDoor, RemovePerson, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -691,9 +692,22 @@ function EmptyRoom({ tagsAgents, agentsToTag, onTag, onInvite }: { tagsAgents: b
   );
 }
 
+function PersonListed({ roomId, personId, role, isHere, removable }: { roomId: string; personId: string; role: RoleShown; isHere: boolean; removable: boolean }) {
+  const name = usePersonName(personId);
+  return (
+    <li>
+      <PersonAvatar personId={personId} />
+      <PersonName personId={personId} />
+      {role && <span className="room-role-label">{words.authorRoles[role]}</span>}
+      {isHere && <span className="room-here-mark" role="img" aria-label={words.isHere} data-hint={words.isHere} />}
+      {removable && <RemovePerson roomId={roomId} personId={personId} name={name} />}
+    </li>
+  );
+}
+
 /**
- * "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which
- * model for the owner, who changes it there; the room's door banner opens it too.
+ * "3 here" in the room's bar, which opens who is in the room, whom the owner removes there, who of them is here now, and
+ * which agents work, on which model for the owner, who changes it there; the room's door banner opens it too.
  */
 function RoomPeople({
   room,
@@ -745,12 +759,7 @@ function RoomPeople({
           <h3>{words.people}</h3>
           <ul aria-label={words.people}>
             {peopleOfRoom(room, ownerId, here).map(({ personId, role }) => (
-              <li key={personId}>
-                <PersonAvatar personId={personId} />
-                <PersonName personId={personId} />
-                {role && <span className="room-role-label">{words.authorRoles[role]}</span>}
-                {hereNow.has(personId) && <span className="room-here-mark" role="img" aria-label={words.isHere} data-hint={words.isHere} />}
-              </li>
+              <PersonListed key={personId} roomId={room.id} personId={personId} role={role} isHere={hereNow.has(personId)} removable={owns && isRoomRole(role)} />
             ))}
           </ul>
           {owns && <WaitingToJoin joiners={joiners} />}

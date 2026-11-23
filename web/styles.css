@@ -10233,8 +10233,13 @@ button.link.more-rows {
   text-overflow: ellipsis;
 }
 
-.room-people :is(.avatar, .room-role-label, .room-here-mark, .room-agent-working) {
+.room-people :is(.avatar, .room-role-label, .room-here-mark, .room-agent-working, .room-remove-person) {
   flex: none;
+}
+
+.room-people .room-remove-person {
+  margin-left: auto;
+  padding-block: 0;
 }
 
 .room-people li.room-people-agent {

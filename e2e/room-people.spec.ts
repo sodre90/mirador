@@ -40,17 +40,12 @@ async function makeRoom(page: Page, name: string) {
   return page.url().match(/#\/r\/(.+)$/)![1]!;
 }
 
-/** Mia is let into the room with the role, given it there, or taken out of it, each as the room's settings apply it at once. */
-async function setRoleOfMia(page: Page, room: string, role: "Member" | "Guest" | "Not in the room") {
+/** Mia is let into the room with the role, or given it there, each as the room's settings apply it at once. */
+async function setRoleOfMia(page: Page, room: string, role: "Member" | "Guest") {
   const dialog = await openRoomSettings(page, room);
   const inRoom = (await dialog.getByLabel("Role of Mia").count()) > 0;
-  if (role === "Not in the room") {
-    await dialog.getByRole("button", { name: "Remove Mia" }).click();
-    await dialog.getByRole("button", { name: "Confirm: Remove Mia" }).click();
-  } else {
-    if (!inRoom) await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
-    await dialog.getByLabel("Role of Mia").selectOption({ label: role });
-  }
+  if (!inRoom) await dialog.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
+  await dialog.getByLabel("Role of Mia").selectOption({ label: role });
   await dialog.getByRole("button", { name: "Done" }).click();
   await expect(dialog).toBeHidden();
 }
@@ -118,11 +113,13 @@ test("a person the owner lets into a room sees only that room on their own brows
     await expect(roomMessages(page)).toHaveText(["Morning from Mia"]);
   });
 
-  await test.step("Mia's list of who is in the room shows its agent without the owner's model pickers, inside its box and the window", async () => {
+  await test.step("Mia's list of who is in the room shows its agent without the owner's model pickers, and nobody to remove, inside its box and the window", async () => {
     await miaPage.locator(".room-here-count").click();
     const people = miaPage.getByRole("dialog", { name: "People in the room" });
     await expect(people.locator(".room-people-agent-name")).toHaveText(["Builder"]);
     await expect(people.getByRole("combobox")).toHaveCount(0);
+    await expect(people.getByRole("list", { name: "People" }).getByRole("listitem")).toHaveCount(2);
+    await expect(people.getByRole("button")).toHaveCount(0);
     await expectPopoverFits(people);
     await miaPage.keyboard.press("Escape");
   });
@@ -220,8 +217,24 @@ test("a person the owner lets into a room sees only that room on their own brows
     await expect(page.locator(".room-timeline .room-entry .author").first()).toContainText("Mia Rossi");
   });
 
+  await test.step("the owner's list of who is in the room removes anyone but the owner, and asks again first", async () => {
+    await page.locator(".room-here-count").click();
+    const people = page.getByRole("dialog", { name: "People in the room" });
+    const rows = people.getByRole("list", { name: "People" }).getByRole("listitem");
+    await expect(rows).toHaveCount(2);
+    await expect(people.getByRole("button", { name: /^Remove / })).toHaveCount(1);
+    await people.getByRole("button", { name: "Remove Mia Rossi", exact: true }).click();
+    const confirm = people.getByRole("button", { name: "Confirm: Remove Mia Rossi" });
+    await expect(confirm).toHaveText("Remove for good?");
+    await expectPopoverFits(people);
+    await expect(roomsListed(miaPage)).toHaveText(["Launch"]);
+    await confirm.click();
+    await expect(rows).toHaveCount(1);
+    await expect(rows.locator(".room-role-label")).toHaveText(["Owner"]);
+    await page.keyboard.press("Escape");
+  });
+
   await test.step("taken out of her last room, Mia's open page loses it at once, and says she is in no room any more", async () => {
-    await setRoleOfMia(page, "Launch", "Not in the room");
     await expect(roomsListed(miaPage)).toHaveCount(0);
     await expect(miaPage.getByRole("heading", { name: "You are in no room on this machine any more. Its owner can invite you again." })).toBeVisible();
   });
