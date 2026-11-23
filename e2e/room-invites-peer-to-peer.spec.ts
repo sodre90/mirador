@@ -4,7 +4,7 @@ import { createServer } from "node:net";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { machineAddress } from "../shared/machines.ts";
+import { machineAddress, roomInviteLink } from "../shared/machines.ts";
 import { addWorkspace, copiedInvite, createProfile, createRoom, inviteIntoRoom, joinRoom, openRoomSettings, openSettings, reachedAtOwnPort, reloadFromRestartedHost, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
@@ -114,6 +114,7 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     await expect(dialog.getByLabel("Directly, peer to peer")).toBeChecked();
     await expect(dialog.getByLabel(/^At this machine's address/)).toHaveCount(0);
     const shown = await copiedInvite(dialog);
+    expect(shown).toMatch(/^mirador:\/\/room-invite\/ROOM-[\w-]+\?tunnel=[\w-]+$/);
     const parsed = machineAddress(shown)!;
     expect(parsed.forRoom).toBe(true);
     expect(parsed.tunnel).toMatchObject({ name: "Ann's Mac", port: 4600, broker: { address: `localhost:${brokerPort}`, key: brokerKey } });
@@ -277,9 +278,10 @@ test("a used link says the invite is over, and a person taken out of the room or
     await expect.poll(tunnelFiles).toEqual([]);
   });
 
-  await test.step("a new invite's code alone, typed in the machine's place, is not enough, and the whole invite lets the person in again", async () => {
-    const link = await inviteIntoRoom(page, "Garden");
-    await joinPanel.getByLabel("Paste the invite").fill(machineAddress(link)!.joinCode!);
+  await test.step("a new invite's code alone, typed in the machine's place, is not enough, and the whole invite lets the person in again, as the link to the tunnel that Miradors made before too", async () => {
+    const { origin, joinCode, tunnel } = machineAddress(await inviteIntoRoom(page, "Garden"))!;
+    const link = roomInviteLink(origin, joinCode!, null, tunnel);
+    await joinPanel.getByLabel("Paste the invite").fill(joinCode!);
     await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
     await expect(joinPanel.locator(".join-problem")).toHaveText("Ann's Mac is reached peer to peer, so joining it takes the whole invite link, not just its code.");
     await joinPanel.getByLabel("Paste the invite").fill(link);

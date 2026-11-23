@@ -37,9 +37,19 @@ export const inviteLink = (origin: string, code: string, authorityFingerprint: s
 const roomInvitePath = /^#\/room-invite\/([\w-]+?)(?:\/([\w-]+))?(?:\?(tunnel|name)=([\w-]+))?$/;
 
 /**
+ * The #part that a link only Mirador opens stands for, or null for any other text. Such a link, mirador://…, is for a
+ * machine its tunnel alone reaches, which has no address a browser could open: what follows mirador:// in it is what
+ * follows #/ in a link to an address.
+ */
+export function hashOfMiradorLink(text: string) {
+  const path = /^mirador:\/\/(\S+)$/i.exec(text.trim())?.[1];
+  return path === undefined ? null : `#/${path}`;
+}
+
+/**
  * Into a room of someone else's machine, which another Mirador joins as a person there, never as one of its owner's
  * devices. With a tunnel, the link alone is enough to join from anywhere: its origin is then the machine's address in
- * the tunnel unless the machine has an address of its own as well.
+ * the tunnel unless the machine has an address of its own as well. Miradors before mirador:// links made theirs so.
  */
 export const roomInviteLink = (origin: string, code: string, authorityFingerprint: string | null = null, tunnel: InviteTunnel | null = null) =>
   `${origin}/#/room-invite/${code}${authorityFingerprint ? `/${authorityFingerprint}` : ""}${tunnel ? `?tunnel=${encodedInviteTunnel(tunnel)}` : ""}`;
@@ -67,7 +77,7 @@ const LONGEST_NAME_IN_INVITE = 200;
 
 /** A room invite's whole text, which is all a person pastes into Join a room: a link that carries one way to the machine alone. */
 export function roomInviteText(code: string, way: RoomInviteWay) {
-  if ("tunnel" in way) return roomInviteLink(tunnelOrigin(way.tunnel), code, null, way.tunnel);
+  if ("tunnel" in way) return `mirador://room-invite/${code}?tunnel=${encodedInviteTunnel(way.tunnel)}`;
   const name = way.machineName.trim();
   return `${roomInviteLink(way.origin, code, way.authorityFingerprint)}${name ? `?name=${base64UrlOf(name)}` : ""}`;
 }
@@ -80,7 +90,7 @@ function nameOf(encoded: string | undefined) {
 }
 
 /** The code in what reads as an invite link, however broken the rest of it is. */
-const codeInBrokenLink = (text: string) => /#\/(?:room-invite|join)\/([\w-]+)/.exec(text)?.[1] ?? null;
+const codeInBrokenLink = (text: string) => /(?:#\/|mirador:\/\/)(?:room-invite|join)\/([\w-]+)/i.exec(text)?.[1] ?? null;
 
 /**
  * What someone pastes to join a machine: the invite code itself, or the whole invite link, which may carry the way
@@ -103,18 +113,29 @@ export interface MachineAddress {
   name: string | null;
 }
 
+const tunnelInRoomInvite = (roomInvite: RegExpExecArray) => (roomInvite[3] === "tunnel" ? tunnelOf(roomInvite[4]) : null);
+
+/** A link only Mirador opens names the machine by its tunnel alone, so one whose tunnel isn't one is no link. */
+function addressInTunnel(hash: string): MachineAddress | null {
+  const roomInvite = roomInvitePath.exec(hash);
+  const tunnel = roomInvite ? tunnelInRoomInvite(roomInvite) : tunnelIn(hash);
+  if (!tunnel) return null;
+  return { origin: tunnelOrigin(tunnel), joinCode: roomInvite?.[1] ?? joinCodeIn(hash), authorityFingerprint: null, forRoom: roomInvite !== null, tunnel: roomInvite ? tunnel : null, name: null };
+}
+
 /** What someone types or pastes for a machine: its name on the network, its address, or an invite link from it; a room invite's link whose tunnel isn't one is none. */
 export function machineAddress(text: string): MachineAddress | null {
   const trimmed = text.trim();
   if (!trimmed) return null;
+  const miradorLinkHash = hashOfMiradorLink(trimmed);
+  if (miradorLinkHash) return addressInTunnel(miradorLinkHash);
   try {
     const url = new URL(/^[a-z]+:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
     if (url.protocol !== "https:" && url.protocol !== "http:") return null;
     const roomInvite = roomInvitePath.exec(url.hash);
-    const carried = roomInvite?.[4];
-    const tunnel = roomInvite?.[3] === "tunnel" ? tunnelOf(carried) : null;
+    const tunnel = roomInvite && tunnelInRoomInvite(roomInvite);
     if (roomInvite?.[3] === "tunnel" && !tunnel) return null;
-    const name = roomInvite?.[3] === "name" ? nameOf(carried) : null;
+    const name = roomInvite?.[3] === "name" ? nameOf(roomInvite[4]) : null;
     if (roomInvite) return { origin: url.origin, joinCode: roomInvite[1]!, authorityFingerprint: roomInvite[2] ?? null, forRoom: true, tunnel, name };
     return { origin: url.origin, joinCode: joinCodeIn(url.hash), authorityFingerprint: authorityFingerprintIn(url.hash), forRoom: false, tunnel: null, name: null };
   } catch {

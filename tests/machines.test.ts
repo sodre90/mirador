@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { isPrivateHostname, wayToMachine } from "../host/machine-trust.ts";
 import {
   authorityFingerprintIn,
+  hashOfMiradorLink,
   inviteConnectFor,
   inviteIn,
   inviteLink,
@@ -184,6 +185,30 @@ test("a room invite's link whose tunnel isn't one is no link at all, so it never
   expect(inviteIn(`http://[${tunnel.hostAddress}]:4600/#/room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=${encoded(broken)}`)).toEqual({ code: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, tunnel: null });
 });
 
+test("a link only Mirador opens names the machine by its tunnel alone, so without a whole tunnel it is no link and only gives its code", () => {
+  expect(machineAddress(`  ${roomInviteText("ROOM-ABCD-EFGH-JKLM", { tunnel })}\n`)).toMatchObject({ origin: tunnelOrigin(tunnel), forRoom: true, tunnel });
+  const broken = [
+    "mirador://room-invite/ROOM-ABCD-EFGH-JKLM",
+    "mirador://room-invite/ROOM-ABCD-EFGH-JKLM?name=U3R1ZGlv",
+    "mirador://room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=bm90LWEtdHVubmVs",
+    `mirador://room-invite/ROOM-ABCD-EFGH-JKLM?tunnel=${encoded({ ...tunnel, hostKey: "not a key" })}`,
+  ];
+  broken.forEach((link) => {
+    expect(machineAddress(link)).toBeNull();
+    expect(inviteIn(link)).toEqual({ code: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, tunnel: null });
+  });
+  expect(machineAddress("mirador://")).toBeNull();
+  expect(machineAddress("mirador://somewhere/else")).toBeNull();
+});
+
+test("a device's invite as a link only Mirador opens gives a phone the code and the way through the tunnel", () => {
+  const link = `mirador://join/ABCD-EFGH-JKLM?tunnel=${encoded(tunnel)}`;
+  expect(machineAddress(link)).toEqual({ origin: tunnelOrigin(tunnel), joinCode: "ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: false, tunnel: null, name: null });
+  expect(tunnelIn(hashOfMiradorLink(link)!)).toEqual(tunnel);
+  expect(hashOfMiradorLink("https://box.local/#/join/ABCD-EFGH-JKLM")).toBeNull();
+  expect(machineAddress("mirador://join/ABCD-EFGH-JKLM")).toBeNull();
+});
+
 test("a device's place a host answered with is taken only with every field as a host makes it", () => {
   const { joinKey: _joinKey, joinAddress, name: _name, ...places } = tunnel;
   expect(checkedDeviceTunnel({ ...places, deviceAddress: joinAddress, token: "not kept" })).toEqual({ ...places, deviceAddress: joinAddress });
@@ -256,7 +281,8 @@ test("a hidden machine is the one at its address, or with its id at another", ()
 
 test("a room invite's text carries one way to the machine: peer to peer its tunnel and no address, at its address no tunnel", () => {
   const peerToPeer = roomInviteText("ROOM-ABCD-EFGH-JKLM", { tunnel });
-  expect(peerToPeer).toMatch(/^http:\/\/\[fd12:3456:789a:1::1\]:4600\/#\/room-invite\/ROOM-ABCD-EFGH-JKLM\?tunnel=[\w-]+$/);
+  expect(peerToPeer).toMatch(/^mirador:\/\/room-invite\/ROOM-ABCD-EFGH-JKLM\?tunnel=[\w-]+$/);
+  expect(inviteIn(peerToPeer)).toEqual({ code: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, tunnel });
   expect(machineAddress(peerToPeer)).toEqual({ origin: tunnelOrigin(tunnel), joinCode: "ROOM-ABCD-EFGH-JKLM", authorityFingerprint: null, forRoom: true, tunnel, name: null });
 
   const atAddress = roomInviteText("ROOM-ABCD-EFGH-JKLM", { origin: "https://box.example.ts.net", authorityFingerprint: fingerprint, machineName: "Ann's Mac ✨" });
