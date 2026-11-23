@@ -119,7 +119,10 @@ export const shell: Messages["shell"] = {
     turnOn: "Agenten dieses Arbeitsbereichs in einer Sandbox ausführen",
     checking: "Prüfe, ob dieser Arbeitsbereich eine Sandbox haben kann…",
     profileModeApplies: "Der Berechtigungsmodus ihres Profils gilt weiter",
-    startsOnRefused: (why) => `Neue Unterhaltungen beginnen hier mit einem Profil, das nicht in der Sandbox laufen kann. ${why} Wähle unter dem Namen des Arbeitsbereichs ein Claude-Profil, das sich mit einem API-Schlüssel anmeldet.`,
+    startsOnRefused: (why) => `Neue Unterhaltungen beginnen hier mit einem Profil, das nicht in der Sandbox laufen kann. ${why}`,
+    startOn: "Neue Unterhaltungen beginnen mit",
+    pickProfile: "Profil wählen",
+    noProfileRuns: "Keines deiner Profile kann in der Sandbox laufen. Ein Claude-Code-Profil, das sich mit einem API-Schlüssel anmeldet, kann es.",
     inWorktrees: (count) =>
       plural(
         count,

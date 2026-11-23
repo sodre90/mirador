@@ -119,7 +119,10 @@ export const shell: Messages["shell"] = {
     turnOn: "Ejecutar los agentes de este espacio de trabajo en un sandbox",
     checking: "Comprobando si este espacio de trabajo puede tener un sandbox…",
     profileModeApplies: "El modo de permisos de su perfil sigue aplicándose",
-    startsOnRefused: (why) => `Las conversaciones nuevas de aquí empiezan con un perfil que no puede ejecutarse en el sandbox. ${why} Elige, bajo el nombre del espacio de trabajo, un perfil de Claude que inicie sesión con una clave de API.`,
+    startsOnRefused: (why) => `Las conversaciones nuevas de aquí empiezan con un perfil que no puede ejecutarse en el sandbox. ${why}`,
+    startOn: "Empezar las conversaciones nuevas con",
+    pickProfile: "Elige un perfil",
+    noProfileRuns: "Ninguno de tus perfiles puede ejecutarse en el sandbox. Un perfil de Claude Code que inicie sesión con una clave de API sí puede.",
     inWorktrees: (count) =>
       plural(
         count,

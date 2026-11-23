@@ -3,7 +3,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFile
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, lastAgentMessage, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, clickWorkspaceButton, createProfile, lastAgentMessage, openProfiles, sendMessage, signIn, waitForTurnToEnd, workspaceCard } from "./helpers.ts";
 import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 const sandboxesRunHere = process.platform === "darwin" && process.arch === "arm64" && Number(release().split(".")[0]) >= 25;
@@ -76,6 +76,7 @@ const projectCard = (page: Page) => workspaceCard(page, host.projectDir);
 const sandboxDialog = (page: Page, workspace: string) => page.getByRole("dialog", { name: `Sandbox for ${workspace}` });
 const sandboxSwitch = (dialog: Locator) => dialog.getByRole("switch", { name: "Run this workspace's agents in a sandbox" });
 const reasons = (dialog: Locator) => dialog.locator(".room-sandbox-reasons");
+const startOnPicker = (dialog: Locator) => dialog.getByRole("combobox", { name: "Start new conversations on" });
 const heldCard = (scope: Page | Locator) => scope.getByRole("region", { name: "Agent config change held for you" });
 const chatHeader = (page: Page) => page.locator(".chat-header:visible");
 
@@ -274,9 +275,11 @@ test("while the workspace is sandboxed, a Codex profile is refused with what to 
 
   await test.step("the sandbox's settings say new conversations start on a profile that can't run there", async () => {
     const dialog = await openSandboxOf(page, card, "project");
-    await expect(dialog.locator(".workspace-sandbox-starts-on")).toHaveText(
-      "New conversations here start on a profile that can't run in the sandbox. Coder isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming. Pick a Claude profile that signs in with an API key under the workspace's name.",
+    await expect(dialog.locator(".workspace-sandbox-starts-on-why")).toHaveText(
+      "New conversations here start on a profile that can't run in the sandbox. Coder isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming.",
     );
+    await expect(startOnPicker(dialog).locator("option:not([disabled])")).toHaveText(["Builder · Claude Code"]);
+    await keepScreenshot(dialog, "starts-on-refused");
     await expect(sandboxSwitch(dialog)).toBeChecked();
     await dialog.getByRole("button", { name: "Done" }).click();
   });
@@ -292,7 +295,14 @@ test("while the workspace is sandboxed, a Codex profile is refused with what to 
     await keepPageScreenshot(page, "codex-refused");
     expect(containerCalls().filter(([command]) => command === "exec")).toHaveLength(execsBefore);
   });
-  await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Builder · Claude Code" });
+
+  await test.step("the sandbox's settings start new conversations on a profile picked there from those that can run in it", async () => {
+    const dialog = await openSandboxOf(page, card, "project");
+    await startOnPicker(dialog).selectOption({ label: "Builder · Claude Code" });
+    await expect(dialog.locator(".workspace-sandbox-starts-on")).toHaveCount(0);
+    await expect(card.locator(".agent-chip-label")).toHaveText("Builder · Claude Code");
+    await dialog.getByRole("button", { name: "Done" }).click();
+  });
 
   await test.step("the worktree choice is off, says why, and leads to the sandbox's settings", async () => {
     await clickWorkspaceButton(card, "Where conversations work…");
@@ -328,4 +338,20 @@ test("turned off, the workspace's conversations start afresh on this computer on
   const where = page.getByRole("dialog", { name: "Where conversations work in project" });
   await expect(where.getByRole("radio", { name: /A worktree of their own/ })).toBeChecked();
   await expect(where.getByRole("radio", { name: /A worktree of their own/ })).toBeEnabled();
+});
+
+test("where none of the profiles can run in the sandbox, its settings say so and name the kind that could", async ({ page }) => {
+  await signIn(page, host);
+  const card = projectCard(page);
+  await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Coder · Codex" });
+  const profiles = await openProfiles(page);
+  await profiles.locator(".profile-list li", { hasText: "Builder" }).click();
+  await profiles.getByRole("button", { name: "Delete profile" }).click();
+  await profiles.getByRole("button", { name: "Confirm: Delete profile" }).click();
+  await profiles.getByRole("button", { name: "Close" }).click();
+
+  const dialog = await openSandboxOf(page, card, "project");
+  await expect(dialog.locator(".workspace-sandbox-no-profile-runs")).toHaveText("None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can.");
+  await expect(startOnPicker(dialog)).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Done" }).click();
 });

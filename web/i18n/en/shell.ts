@@ -122,7 +122,10 @@ export const shell = {
     turnOn: "Run this workspace's agents in a sandbox",
     checking: "Checking whether this workspace can have a sandbox…",
     profileModeApplies: "Their profile's permission mode still applies",
-    startsOnRefused: (why: string) => `New conversations here start on a profile that can't run in the sandbox. ${why} Pick a Claude profile that signs in with an API key under the workspace's name.`,
+    startsOnRefused: (why: string) => `New conversations here start on a profile that can't run in the sandbox. ${why}`,
+    startOn: "Start new conversations on",
+    pickProfile: "Pick a profile",
+    noProfileRuns: "None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can.",
     inWorktrees: (count: number) =>
       plural(
         count,

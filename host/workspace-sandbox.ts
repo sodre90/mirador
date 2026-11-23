@@ -1,4 +1,5 @@
 import { HostProblemError } from "../shared/host-problems.ts";
+import type { Profile } from "../shared/model.ts";
 import { NO_ENVIRONMENT_CHOICES } from "../shared/room-agent-setup.ts";
 import {
   isHeldChangeAnswer,
@@ -14,6 +15,9 @@ import { assertSandboxCanRun, NO_SANDBOX_CONTROL, profileSandboxBlocker, type Sa
 import { sandboxLeft, sandboxLeftWritableFolders } from "./sandbox/hooks-off.ts";
 import { belongsToSandbox } from "./sandbox/sandboxes.ts";
 import type { Store } from "./store.ts";
+
+/** Why an agent of this profile can't run in a workspace's sandbox, where it gets none of a room's choices of its environment; null where it can. */
+const workspaceProfileBlocker = (profile: Profile) => profileSandboxBlocker(profile, NO_ENVIRONMENT_CHOICES);
 
 /** What a workspace's sandbox setting needs of its conversations. */
 export interface WorkspaceConversations {
@@ -70,7 +74,7 @@ export class WorkspaceSandboxes {
 
   /**
    * What stands in the way of the workspace's sandbox, and whether the profile its new conversations start on can run in
-   * it, which doesn't keep the sandbox off: a conversation may pick another.
+   * it, which doesn't keep the sandbox off: a conversation may pick another, and the workspace one of the profiles that can.
    */
   async sandboxCheck(workspaceId: string): Promise<WorkspaceSandboxCheck> {
     const workspace = this.existingWorkspace(workspaceId);
@@ -80,7 +84,11 @@ export class WorkspaceSandboxes {
     return {
       availability: this.sandboxes.availability(),
       blockers: refused ? [refused] : [],
-      startsOn: startsOnProfile ? profileSandboxBlocker(startsOnProfile, NO_ENVIRONMENT_CHOICES) : null,
+      startsOn: startsOnProfile ? workspaceProfileBlocker(startsOnProfile) : null,
+      profilesThatRun: this.store
+        .listProfiles()
+        .filter((profile) => workspaceProfileBlocker(profile) === null)
+        .map(({ id }) => id),
     };
   }
 

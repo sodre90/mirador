@@ -3155,6 +3155,23 @@ input.picker-search {
   font-size: calc(12px * var(--font-scale));
 }
 
+.workspace-sandbox-starts-on {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.workspace-sandbox-starts-on p {
+  margin: 0;
+}
+
+.workspace-sandbox-start-on {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 .modal.workspace-sandbox .room-held {
   margin: 0;
 }

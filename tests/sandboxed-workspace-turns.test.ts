@@ -214,6 +214,25 @@ test("a sandboxed workspace's conversation moved to a profile that can't run in 
   await conversations.shutdown();
 });
 
+test("a workspace's sandbox check names the profiles that can run in it, for the workspace to start its new conversations on, and none where none can", async () => {
+  const { store, workspaceSandboxes, conversations } = sandboxedWorkspace();
+  store.setWorkspaceDefaultLaunch("w1", { harness: "codex", profileId: "coder" });
+
+  const onCodex = await workspaceSandboxes.sandboxCheck("w1");
+
+  expect(onCodex.startsOn).toEqual({ kind: "agent-kind-coming", agent: "Coder", harness: "codex" });
+  expect(onCodex.profilesThatRun).toEqual(["builder"]);
+  store.setWorkspaceDefaultLaunch("w1", BUILDER);
+  expect(await workspaceSandboxes.sandboxCheck("w1")).toMatchObject({ startsOn: null, profilesThatRun: ["builder"] });
+  store.setWorkspaceDefaultLaunch("w1", { harness: "claude", profileId: "subscriber" });
+  store.deleteProfile("builder");
+  expect(await workspaceSandboxes.sandboxCheck("w1")).toMatchObject({
+    startsOn: { kind: "agent-signs-in-elsewhere", agent: "Subscriber", how: "subscription" },
+    profilesThatRun: [],
+  });
+  await conversations.shutdown();
+});
+
 test("a sandboxed workspace's side chats and forks start in its VM too", async () => {
   const { store, conversations, launcher, claude } = sandboxedWorkspace();
   const conversation = conversations.create("w1", BUILDER);

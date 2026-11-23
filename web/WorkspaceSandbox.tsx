@@ -1,8 +1,9 @@
 import { useEffect, useState, type Dispatch } from "react";
 import type { Conversation, Profile, Workspace } from "../shared/model.ts";
-import { holdsTooMany, ofSandbox, workspaceSandbox, type HeldChange, type SandboxFolders, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
+import { holdsTooMany, ofSandbox, workspaceSandbox, type HeldChange, type SandboxBlocker, type SandboxFolders, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
+import { launchLabel } from "./launch-label.ts";
 import { LineIcon } from "./LineIcon.tsx";
 import { Modal } from "./Palette.tsx";
 import { sandboxBlockerText } from "./problem-text.ts";
@@ -15,13 +16,12 @@ const words = t.shell.workspaceSandbox;
 
 const switchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.profileModeApplies };
 
-/** What the host's check of the workspace hangs on: its folder, and the profile its new conversations start on. */
+/** What the host's check of the workspace hangs on: its folder, the profile its new conversations start on, and every profile, any of which may start them. */
 function checkedAgainst(workspace: Workspace, profiles: Profile[]) {
-  const startsOn = profiles.find(({ id }) => id === workspace.defaultLaunch.profileId);
-  return JSON.stringify([workspace.path, startsOn?.id, startsOn?.harness, startsOn?.environment]);
+  return JSON.stringify([workspace.path, workspace.defaultLaunch.profileId, profiles.map(({ id, harness, environment }) => [id, harness, environment])]);
 }
 
-/** Whether this computer and the workspace can have a sandbox, asked again whenever the workspace's folder or default profile change. */
+/** Whether this computer and the workspace can have a sandbox, asked again whenever the workspace's folder, default profile or the profiles change. */
 function useWorkspaceSandboxCheck(workspace: Workspace, profiles: Profile[]) {
   const [check, setCheck] = useState<WorkspaceSandboxCheck | null>(null);
   const against = checkedAgainst(workspace, profiles);
@@ -31,7 +31,9 @@ function useWorkspaceSandboxCheck(workspace: Workspace, profiles: Profile[]) {
       .sendAndAwait(
         (requestId) => ({ type: "workspace.check-sandbox", requestId, workspaceId: workspace.id }),
         (message, requestId) =>
-          message.type === "workspace.sandbox-checked" && message.requestId === requestId ? { availability: message.availability, blockers: message.blockers, startsOn: message.startsOn } : undefined,
+          message.type === "workspace.sandbox-checked" && message.requestId === requestId
+            ? { availability: message.availability, blockers: message.blockers, startsOn: message.startsOn, profilesThatRun: message.profilesThatRun }
+            : undefined,
       )
       .then(
         (got) => wanted && setCheck(got),
@@ -50,9 +52,43 @@ const ownConversations = (workspace: Workspace, conversations: Conversation[]) =
 const profileName = (profiles: Profile[]) => (profileId: string) => profiles.find(({ id }) => id === profileId)?.name ?? t.rooms.agentGone;
 
 /**
+ * That new conversations here start on a profile that can't run in the sandbox, and why, with the profiles that can to
+ * start them on instead; or, where none can, the kind of profile that would.
+ */
+function StartsOnRefused({ workspace, profiles, why, profilesThatRun }: { workspace: Workspace; profiles: Profile[]; why: SandboxBlocker; profilesThatRun: string[] }) {
+  const runnable = profiles.filter(({ id }) => profilesThatRun.includes(id));
+  const startOn = (profileId: string) => {
+    const profile = runnable.find(({ id }) => id === profileId);
+    if (profile) connection.send({ type: "workspace.set-default-launch", workspaceId: workspace.id, launch: { harness: profile.harness, profileId } });
+  };
+  return (
+    <div className="workspace-sandbox-warning workspace-sandbox-starts-on">
+      <p className="workspace-sandbox-starts-on-why">{words.startsOnRefused(sandboxBlockerText(why, t.problems))}</p>
+      {runnable.length === 0 ? (
+        <p className="workspace-sandbox-no-profile-runs">{words.noProfileRuns}</p>
+      ) : (
+        <label className="workspace-sandbox-start-on">
+          {words.startOn}
+          <select value="" onChange={(event) => startOn(event.target.value)}>
+            <option value="" disabled>
+              {words.pickProfile}
+            </option>
+            {runnable.map(({ id, harness }) => (
+              <option key={id} value={id}>
+                {launchLabel({ harness, profileId: id }, profiles)}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+    </div>
+  );
+}
+
+/**
  * The workspace's sandbox, on its own: the switch with what keeps it off, the profile its new conversations start on
- * where that can't run in it, its conversations in worktrees, which can't go on there, the folders of this computer it
- * sees, the changes it holds for the owner's OK, and the long story folded away.
+ * where that can't run in it, with those that can to pick, its conversations in worktrees, which can't go on there, the
+ * folders of this computer it sees, the changes it holds for the owner's OK, and the long story folded away.
  */
 export function WorkspaceSandboxDialog({
   workspace,
@@ -101,7 +137,7 @@ export function WorkspaceSandboxDialog({
         send={(sandbox) => connection.send({ type: "workspace.set-sandbox", workspaceId: workspace.id, sandbox })}
         folders={<SandboxFolderList folders={sandboxFolders} homeDir={homeDir} />}
       />
-      {check?.startsOn && <p className="workspace-sandbox-warning workspace-sandbox-starts-on">{words.startsOnRefused(sandboxBlockerText(check.startsOn, t.problems))}</p>}
+      {check?.startsOn && <StartsOnRefused workspace={workspace} profiles={profiles} why={check.startsOn} profilesThatRun={check.profilesThatRun} />}
       {inWorktrees > 0 && <p className="workspace-sandbox-warning workspace-sandbox-in-worktrees">{words.inWorktrees(inWorktrees)}</p>}
       <WhatItMeans>
         {words.meaning.map((paragraph) => (

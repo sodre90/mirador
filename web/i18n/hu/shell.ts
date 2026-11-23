@@ -113,7 +113,10 @@ export const shell: Messages["shell"] = {
     turnOn: "A munkaterület ágensei sandboxban futnak",
     checking: "Annak ellenőrzése, hogy lehet-e a munkaterületnek sandboxa…",
     profileModeApplies: "A profiljuk engedélyezési módja továbbra is érvényes",
-    startsOnRefused: (why) => `Az új beszélgetések itt egy olyan profilon indulnak, amely nem futhat a sandboxban. ${why} Válassz a munkaterület neve alatt egy Claude-profilt, amely API-kulccsal jelentkezik be.`,
+    startsOnRefused: (why) => `Az új beszélgetések itt egy olyan profilon indulnak, amely nem futhat a sandboxban. ${why}`,
+    startOn: "Az új beszélgetések profilja",
+    pickProfile: "Válassz profilt",
+    noProfileRuns: "Egyik profil sem futhat a sandboxban. Egy API-kulccsal bejelentkező Claude Code-profil futhat benne.",
     inWorktrees: (count) => `${count} itteni beszélgetés worktree-ben dolgozik, amelyet a sandbox nem lát: nem folytatódhat, amíg a sandbox be van kapcsolva.`,
     startsAfresh: (count) =>
       `${count} itteni beszélgetés elölről kezd, amikor folytatódik: ${count === 1 ? "az ágense nem emlékszik" : "az ágenseik nem emlékeznek"} arra, ami korábban elhangzott.`,

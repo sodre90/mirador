@@ -160,9 +160,13 @@ export interface SandboxCheck {
   blockers: SandboxBlocker[];
 }
 
-/** A workspace's check, with why the profile its new conversations start on can't run in its sandbox, null where it can. */
+/**
+ * A workspace's check, with why the profile its new conversations start on can't run in its sandbox, null where it can,
+ * and the profiles that can, by id.
+ */
 export interface WorkspaceSandboxCheck extends SandboxCheck {
   startsOn: SandboxBlocker | null;
+  profilesThatRun: string[];
 }
 
 /** Why a sandboxed room's or workspace's agent did not start: it never starts on this computer instead. */
