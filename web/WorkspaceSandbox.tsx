@@ -139,11 +139,7 @@ export function WorkspaceSandboxDialog({
       />
       {check?.startsOn && <StartsOnRefused workspace={workspace} profiles={profiles} why={check.startsOn} profilesThatRun={check.profilesThatRun} />}
       {inWorktrees > 0 && <p className="workspace-sandbox-warning workspace-sandbox-in-worktrees">{words.inWorktrees(inWorktrees)}</p>}
-      <WhatItMeans>
-        {words.meaning.map((paragraph) => (
-          <p key={paragraph}>{paragraph}</p>
-        ))}
-      </WhatItMeans>
+      <WhatItMeans text={words.meaning} />
       <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={profileName(profiles)} countOf={t.rooms.approvalPosition} homeDir={homeDir} unknownAgent={words.anAgentHere} />
       <div className="form-actions">
         <button type="button" className="primary" onClick={onClose}>

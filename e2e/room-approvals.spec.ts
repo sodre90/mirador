@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, notificationsShown, openProfileTab, openRoomSettings, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, allowNotifications, clickNotification, createProfile, createRoom, notificationsShown, openProfileTab, openRoomSettings, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -109,9 +109,7 @@ test("each permission preset lets through by itself what it names, and asks for 
   await test.step("never asking lets a command and an edit outside the workspace through without asking", async () => {
     const dialog = await openRoomSettings(page, "Free", "Permissions");
     await dialog.getByLabel("Never ask, anywhere on this computer").check();
-    const meaning = dialog.locator(".room-permissions-field + .what-it-means");
-    await meaning.getByText("What does this mean?").click();
-    await expect(meaning).toContainText("Through the agents, people here can do anything you can on this computer");
+    await expect(dialog.locator(".room-permissions-field + .what-it-means")).toHaveAttribute("data-hint", /Through the agents, people here can do anything you can on this computer/);
     await dialog.getByRole("button", { name: "Done" }).click();
     const outside = { kind: "edit", title: "Edit anywhere.md", path: join(host.root, "anywhere.md") };
     await tag(page, "Free", "Builder", ask([read, run("git rebase origin/main"), outside]));
@@ -246,8 +244,7 @@ test("a member's task waits until the owner, told who asks and as what, allows i
   const openSettings = () => openRoomSettings(page, "People");
   const addMia = () => settings.getByRole("combobox", { name: "Add someone you let in before" }).selectOption({ label: "Mia" });
   await openSettings();
-  await settings.locator(".room-tab-panel").getByText("What does this mean?").click();
-  await expect(settings.locator(".room-people-reach")).toHaveText(
+  expect(await whatItMeans(page, settings.locator(".room-tab-panel"))).toContain(
     "Through the agents, people here read the workspace's files and reach what else you allow: edits and commands ask you first. Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",
   );
   await expect(settings.getByLabel("People's tasks start without asking me")).not.toBeChecked();

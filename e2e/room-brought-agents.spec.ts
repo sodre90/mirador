@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 test.describe.configure({ mode: "serial" });
@@ -93,9 +93,9 @@ test("Mia brings an agent of hers into Ann's room: Ann's tasks for it wait for M
     const dialog = await bringCoder("Only after my OK");
     await expect(dialog.getByLabel("Only after my OK")).toBeChecked();
     await expect(dialog).toContainText("The room sees it by this profile's name, after yours.");
-    await dialog.getByText("What does this mean?").click();
-    await expect(dialog).toContainText("reading files in that workspace usually goes ahead without asking");
-    await expect(dialog).toContainText("Its owner could pass a task off as yours");
+    const meaning = (await whatItMeans(mia, dialog)).join("\n");
+    expect(meaning).toContain("reading files in that workspace usually goes ahead without asking");
+    expect(meaning).toContain("Its owner could pass a task off as yours");
     await screenshot(mia, "bring-dialog");
     await dialog.getByRole("button", { name: "Bring", exact: true }).click();
     await expect(dialog).toHaveCount(0);

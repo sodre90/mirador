@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 import type { Conversation, Person, Profile, Workspace } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { PERMISSION_PRESETS } from "../shared/room-permissions.ts";
@@ -14,8 +14,8 @@ import { formatNumber, locale, t } from "./i18n/index.ts";
 import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
-import { AgentSetupMeaning, AgentValues, ClaudeSetupField, UnconfinedLine } from "./RoomAgentSetup.tsx";
-import { SandboxField, SandboxMeaning } from "./Sandbox.tsx";
+import { agentSetupMeaning, AgentValues, ClaudeSetupField, UnconfinedLine } from "./RoomAgentSetup.tsx";
+import { SandboxField } from "./Sandbox.tsx";
 import { useSentChoice } from "./sent-choice.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { compactTokenCount, formatCost } from "./usage.ts";
@@ -24,13 +24,12 @@ const words = t.rooms;
 
 export const ROOM_SETTINGS_TABS: RoomSettingsTab[] = ["people", "agents", "permissions", "usage"];
 
-/** The long story behind a setting, folded away under "What does this mean?". */
-export function WhatItMeans({ children }: { children: ReactNode }) {
+/** The long story behind a setting, shown in a hint when its marker is pointed at or focused. */
+export function WhatItMeans({ text }: { text: string | readonly string[] }) {
   return (
-    <details className="what-it-means">
-      <summary>{words.whatDoesThisMean}</summary>
-      {children}
-    </details>
+    <button type="button" className="link what-it-means" data-hint={typeof text === "string" ? text : text.join("\n\n")} data-hint-long="">
+      {words.whatDoesThisMean}
+    </button>
   );
 }
 
@@ -160,9 +159,7 @@ function RoomGeneral({ room, workspaces }: { room: Room; workspaces: Workspace[]
           ))}
         </select>
       </label>
-      <WhatItMeans>
-        <p>{words.workspaceHint}</p>
-      </WhatItMeans>
+      <WhatItMeans text={words.workspaceHint} />
     </div>
   );
 }
@@ -232,14 +229,7 @@ function PeopleTab({ room, people, ownerId, invites, joiners, onInvite }: { room
         <input type="checkbox" role="switch" checked={agentsReadGuests} onChange={(event) => setAgentsReadGuests(event.target.checked)} />
         {words.agentsReadGuests}
       </label>
-      <WhatItMeans>
-        <p>{words.peoplesTasksHint}</p>
-        <p>{words.agentsReadGuestsHint}</p>
-        <p>{words.peopleHint}</p>
-        <p className="room-people-reach">
-          {words.peopleReach[room.permissions]} {words.peopleReachBeyond}
-        </p>
-      </WhatItMeans>
+      <WhatItMeans text={[words.peoplesTasksHint, words.agentsReadGuestsHint, words.peopleHint, `${words.peopleReach[room.permissions]} ${words.peopleReachBeyond}`]} />
       {waiting.length > 0 && <h3 className="room-invites-heading">{words.waitingInvites}</h3>}
       {waiting.length > 0 && (
         <ul className="room-invites" aria-label={words.waitingInvites}>
@@ -315,9 +305,7 @@ function AgentsTab({ room, profiles, people, roomConversations }: { room: Room; 
       {profiles.length === 0 ? <p className="hint">{words.noProfiles}</p> : <AgentSearch profiles={profiles} chosenIds={profileIds} label={words.addAgent} onAdd={(profileId) => setAgents([...profileIds, profileId])} />}
       <p className="hint">{words.agentsHint}</p>
       <ClaudeSetupField room={room} profiles={profiles} roomConversations={roomConversations} />
-      <WhatItMeans>
-        <AgentSetupMeaning room={room} profiles={profiles} />
-      </WhatItMeans>
+      <WhatItMeans text={agentSetupMeaning(room, profiles)} />
       <BroughtAgents room={room} people={people} />
     </>
   );
@@ -355,11 +343,10 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
           })}
         </ul>
       )}
-      <label className="room-agent-choice room-members-bring-agents">
+      <label className="room-agent-choice room-members-bring-agents" data-hint={words.membersBringAgentsHint}>
         <input type="checkbox" role="switch" checked={membersBring} onChange={(event) => setMembersBring(event.target.checked)} />
         {words.membersBringAgents}
       </label>
-      <p className="hint">{words.membersBringAgentsHint}</p>
     </>
   );
 }
@@ -393,14 +380,9 @@ function PermissionsTab({
         ))}
         {room.sandbox.on && room.sandbox.workFreely && <p className="hint">{words.presetsAsideInSandbox}</p>}
       </fieldset>
-      <WhatItMeans>
-        <p>{words.permissionsHint}</p>
-        <p>{words.peopleReach[room.permissions]}</p>
-      </WhatItMeans>
+      <WhatItMeans text={[words.permissionsHint, words.peopleReach[room.permissions]]} />
       <SandboxField room={room} profiles={profiles} roomConversations={roomConversations} setup={sandboxSetup} folders={sandboxFolders} homeDir={homeDir} />
-      <WhatItMeans>
-        <SandboxMeaning />
-      </WhatItMeans>
+      <WhatItMeans text={words.sandbox.meaning} />
     </>
   );
 }
@@ -499,9 +481,7 @@ function UsageTab({ room, profiles, people, ownerId }: { room: Room; profiles: P
           )}
         </>
       )}
-      <WhatItMeans>
-        <p>{words.usageHint}</p>
-      </WhatItMeans>
+      <WhatItMeans text={words.usageHint} />
     </div>
   );
 }

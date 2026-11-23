@@ -110,8 +110,23 @@ test("the workspace's sandbox switch stays off, with the reason under it, where 
   await addWorkspaceFromSidebar(page, worktree());
   const dialog = await openSandboxOf(page, workspaceCard(page, worktree()), "worktree");
   await expect(sandboxSwitch(dialog)).toBeDisabled();
-  await dialog.getByText("What does this mean?").click();
-  await expect(dialog.locator(".what-it-means")).toContainText("On the canvas the agents can show you pages and ask you questions, but they get none of Mirador's other tools, as those act on this computer.");
+  await test.step("what it means shows in a hint that stays while it is pointed at and scrolled", async () => {
+    const marker = dialog.getByRole("button", { name: "What does this mean?" });
+    const hint = page.locator(".hint-bubble.long");
+    await marker.hover();
+    await expect(hint).toContainText("On the canvas the agents can show you pages and ask you questions, but they get none of Mirador's other tools, as those act on this computer.");
+    await expect(dialog.getByText("On the canvas the agents can show you pages")).toHaveCount(0);
+    const from = (await marker.boundingBox())!;
+    const to = (await hint.boundingBox())!;
+    const gapY = to.y > from.y ? (from.y + from.height + to.y) / 2 : (to.y + to.height + from.y) / 2;
+    await page.mouse.move(from.x + 4, gapY);
+    await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2);
+    await page.mouse.wheel(0, 400);
+    await expect.poll(() => hint.evaluate((bubble) => bubble.scrollTop)).toBeGreaterThan(0);
+    await expect(hint).toBeVisible();
+    await page.mouse.move(0, 0);
+    await expect(hint).toBeHidden();
+  });
   if (!sandboxesRunHere) {
     await expect(reasons(dialog)).toBeVisible();
     return;

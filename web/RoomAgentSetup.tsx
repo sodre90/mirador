@@ -102,7 +102,7 @@ export function AgentValues({ room, agent, profile, roomConversations }: { room:
   const chooseWholeHostEnvironment = (given: boolean) => change({ ...kept, wholeHostEnvironment: given }, startsAfresh, narrows(agent.wholeHostEnvironment, given));
   return (
     <details className="room-agent-values">
-      <summary>{words.environmentGiven(variables.filter(({ given }) => given).length, variables.length, shown.wholeHostEnvironment)}</summary>
+      <summary data-hint={words.valuesReadable}>{words.environmentGiven(variables.filter(({ given }) => given).length, variables.length, shown.wholeHostEnvironment)}</summary>
       {variables.length > 0 && (
         <ul aria-label={words.valuesOf(profile.name)}>
           {variables.map(({ name, given, fixed }) => (
@@ -115,14 +115,12 @@ export function AgentValues({ room, agent, profile, roomConversations }: { room:
           ))}
         </ul>
       )}
-      <label className="room-agent-choice room-agent-host-environment">
+      <label className="room-agent-choice room-agent-host-environment" data-hint={words.wholeHostEnvironmentHint}>
         <input type="checkbox" role="switch" checked={shown.wholeHostEnvironment} disabled={pending !== null} onChange={(event) => chooseWholeHostEnvironment(event.target.checked)} />
         {words.wholeHostEnvironment}
       </label>
       {room.sandbox.on && <p className="hint room-values-sandboxed">{words.sandbox.wholeEnvironmentIgnored}</p>}
       {pending && <StartsAfreshWarning text={roomStartsAfreshText(startsAfresh, pending.narrows)} onConfirm={confirm} onKeep={keep} />}
-      <p className="hint room-values-warning">{words.wholeHostEnvironmentHint}</p>
-      <p className="hint room-values-warning">{words.valuesReadable}</p>
     </details>
   );
 }
@@ -157,13 +155,7 @@ export function ClaudeSetupField({ room, profiles, roomConversations }: { room: 
 }
 
 /** The long story of what the room's agents are given, for the agent kinds the room has. */
-export function AgentSetupMeaning({ room, profiles }: { room: Room; profiles: Profile[] }) {
+export function agentSetupMeaning(room: Room, profiles: Profile[]) {
   const harnesses = room.agents.flatMap(({ profileId }) => profiles.find(({ id }) => id === profileId)?.harness ?? []);
-  return (
-    <>
-      <p>{words.valuesHint}</p>
-      {harnesses.some((harness) => !heldToAskingInRooms(harness)) && <p>{words.actsUnaskedHint}</p>}
-      {harnesses.includes("claude") && <p>{words.claudeSetupHint}</p>}
-    </>
-  );
+  return [words.valuesHint, harnesses.some((harness) => !heldToAskingInRooms(harness)) && words.actsUnaskedHint, harnesses.includes("claude") && words.claudeSetupHint].filter((line): line is string => Boolean(line));
 }

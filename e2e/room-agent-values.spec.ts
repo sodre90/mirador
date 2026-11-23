@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomSettings, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, openNewRoom, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const HOSTS_SECRET = "hosts-own-secret";
@@ -120,7 +120,7 @@ test("a room's agent gets this computer's environment only when the owner turns 
   await test.step("turning on everything from this computer's environment starts the agent afresh, once the owner confirms", async () => {
     const settings = await openRoomSettings(page, "Hosts", "Agents");
     await settings.locator(".room-agent-values summary").click();
-    await expect(settings.getByText("It can hold tokens and your SSH agent")).toBeVisible();
+    await expect(settings.locator("label", { hasText: "Everything from this computer's environment" })).toHaveAttribute("data-hint", /^It can hold tokens and your SSH agent/);
     await settings.getByRole("switch", { name: "Everything from this computer's environment" }).check();
     await expect(settings.locator(".room-starts-afresh")).toContainText("Builder starts afresh and reads the room again, once.");
     await settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" }).click();
@@ -176,8 +176,7 @@ test("whether a room's agents read what guests write stays as the owner set it",
   await settings.getByRole("button", { name: "Done" }).click();
   const again = await openRoomSettings(page, "Guests", "People");
   await expect(again.getByRole("switch", { name: "Agents read what guests write" })).not.toBeChecked();
-  await again.getByRole("tabpanel").getByText("What does this mean?").click();
-  await expect(again.getByText("Turned off, no agent reads it")).toBeVisible();
+  expect((await whatItMeans(page, again.getByRole("tabpanel"))).join("\n")).toContain("Turned off, no agent reads it");
 });
 
 test("an agent the host can't hold to asking carries a warning when a room is made with it, and a room without Claude agents offers no Claude setup", async ({ page }) => {
@@ -192,6 +191,5 @@ test("an agent the host can't hold to asking carries a warning when a room is ma
   await dialog.getByRole("button", { name: "Create room" }).click();
   const settings = await openRoomSettings(page, "Marks", "Agents");
   await expect(settings.getByText("What Claude agents load of your Claude Code setup")).toHaveCount(0);
-  await settings.getByRole("tabpanel").getByText("What does this mean?").click();
-  await expect(settings.getByText("Codex reads any file on this computer unasked")).toBeVisible();
+  expect((await whatItMeans(page, settings.getByRole("tabpanel"))).join("\n")).toContain("Codex reads any file on this computer unasked");
 });

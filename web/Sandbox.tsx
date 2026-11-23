@@ -237,11 +237,6 @@ export function SandboxField({
   );
 }
 
-/** The long story of the room's sandbox, under "What does this mean?". */
-export function SandboxMeaning() {
-  return words.meaning.map((paragraph) => <p key={paragraph}>{paragraph}</p>);
-}
-
 const heldTitles = { add: heldWords.wantsToAdd, change: heldWords.wantsToChange, delete: heldWords.wantsToDelete } satisfies Record<HeldChange["kind"], unknown>;
 
 const answerHeld = ({ owner, id }: HeldChange, answer: HeldChangeAnswer) => connection.send({ type: "sandbox.answer-held-change", owner, changeId: id, answer });

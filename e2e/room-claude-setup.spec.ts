@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSyn
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { FakeClaudeApi, fakeClaudeEnvironment } from "./fake-claude-api.ts";
-import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn } from "./helpers.ts";
+import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn, whatItMeans } from "./helpers.ts";
 import { TestHost } from "./test-host.ts";
 
 const api = new FakeClaudeApi();
@@ -93,8 +93,7 @@ test("a room's Claude agent loads all of the owner's Claude Code setup until the
     await settings.locator(".room-starts-afresh").getByRole("button", { name: "Change" }).click();
     await expect(setup.getByRole("switch", { name: "Start clean" })).toBeChecked();
     await expect(setup.getByRole("checkbox")).toHaveCount(0);
-    await settings.getByRole("tabpanel").getByText("What does this mean?").click();
-    await expect(settings.getByText("The deny and ask rules and the sandbox of settings left out stay.")).toBeVisible();
+    expect((await whatItMeans(page, settings.getByRole("tabpanel"))).join("\n")).toContain("The deny and ask rules and the sandbox of settings left out stay.");
     await settings.getByRole("button", { name: "Done" }).click();
   });
 

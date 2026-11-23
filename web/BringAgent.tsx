@@ -80,11 +80,7 @@ export function BringAgentDialog({
             </label>
           ))}
         </fieldset>
-        <WhatItMeans>
-          {words.bringMeaning.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </WhatItMeans>
+        <WhatItMeans text={words.bringMeaning} />
         {profiles.length === 0 && <p className="hint">{words.noProfiles}</p>}
         {problem && <p className="warning bring-agent-problem">{problem}</p>}
         <div className="form-actions">
