@@ -12,6 +12,8 @@ export const rooms: Messages["rooms"] = {
   joinRoom: "Unirse a una sala",
   roomSettings: (room) => `Configuración de ${room}`,
   editRoom: "Configuración de la sala",
+  sandboxed: "En sandbox",
+  sandboxedHint: "Los agentes se ejecutan en un sandbox. Haz clic para ver su configuración.",
   name: "Nombre de la sala",
   peopleCount: (count) => (count === 1 ? "1 persona" : `${count} personas`),
   noAgentsYet: "Aún sin agentes",

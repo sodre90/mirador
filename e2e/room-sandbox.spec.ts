@@ -147,6 +147,13 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   expect(containerStateNow()).toMatchObject({ builderRunning: false, images: [expect.stringMatching(/^mirador-room-agent:claude-2\.1\.330-bun-/)] });
   await dialog.getByRole("button", { name: "Done" }).click();
 
+  await test.step("the room's bar says it is sandboxed, and opens the sandbox's settings", async () => {
+    await page.locator(".room-header:visible").getByRole("button", { name: "Sandboxed", exact: true }).click();
+    await expect(dialog.getByRole("tab", { name: "Permissions" })).toHaveAttribute("aria-selected", "true");
+    await expect(sandboxSwitch(dialog)).toBeChecked();
+    await dialog.getByRole("button", { name: "Done" }).click();
+  });
+
   await tag(page, "Sandboxed", "Builder", "ENV ANTHROPIC_API_KEY");
   await expect(answerSaying(page, "ANTHROPIC_API_KEY is kept-by-mirador")).toBeVisible();
   await tag(page, "Sandboxed", "Builder", "FOLDER");

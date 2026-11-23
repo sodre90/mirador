@@ -11,6 +11,8 @@ export const rooms: Messages["rooms"] = {
   joinRoom: "加入房间",
   roomSettings: (room) => `${room} 的设置`,
   editRoom: "房间设置",
+  sandboxed: "沙箱中",
+  sandboxedHint: "Agent 在沙箱中运行。点击查看它的设置。",
   name: "房间名称",
   peopleCount: (count) => `${count} 人`,
   noAgentsYet: "还没有 Agent",

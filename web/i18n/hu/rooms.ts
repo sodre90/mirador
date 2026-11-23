@@ -11,6 +11,8 @@ export const rooms: Messages["rooms"] = {
   joinRoom: "Csatlakozás egy szobához",
   roomSettings: (room) => `${room} beállításai`,
   editRoom: "Szoba beállításai",
+  sandboxed: "Sandboxban",
+  sandboxedHint: "Az ágensek sandboxban futnak. Kattints a beállításaiért.",
   name: "Szoba neve",
   peopleCount: (count) => `${count} ember`,
   noAgentsYet: "Még nincs ágens",

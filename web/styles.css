@@ -9792,8 +9792,21 @@ button.link.more-rows {
   white-space: nowrap;
 }
 
-.room-here-count {
+/* The bar's buttons wrap as one group, to the right, so none is left alone under the room's name. */
+.room-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
+}
+
+.room-header-actions > * {
+  white-space: nowrap;
+}
+
+.room-here-count {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -9802,6 +9815,37 @@ button.link.more-rows {
   background: none;
   color: var(--muted);
   font-size: calc(12px * var(--font-scale));
+}
+
+.room-door-waiting {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn-on-soft);
+  font-weight: 600;
+}
+
+.room-sandboxed {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-color: transparent;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-on-soft);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-sandboxed .line-icon,
+.room-settings-button .line-icon {
+  width: calc(14px * var(--font-scale));
+  height: calc(14px * var(--font-scale));
+}
+
+.room-settings-button {
+  display: inline-flex;
+  align-items: center;
 }
 
 .room-here-count::before,
@@ -10280,7 +10324,7 @@ button.link.more-rows {
   margin-left: auto;
 }
 
-.room-here-count ~ .room-mute {
+.room-header-actions .room-mute {
   margin-left: 0;
 }
 

@@ -358,9 +358,17 @@ test("with a long model, the room's bar keeps to one line by cutting the agent's
     await expect(chipLabel("Builder")).not.toHaveAttribute("data-hint");
   });
 
-  await test.step("in a bar too narrow for a few letters of each chip, the bar wraps", async () => {
+  await test.step("in a bar too narrow for a few letters of each chip, the bar wraps, its buttons kept together on the right", async () => {
     await sizeRoomBarTo(page, 460);
     expect(await inviteBesideTitle()).toBe(false);
+    const [here, invite, settings] = await Promise.all(
+      [bar.locator(".room-here-count"), bar.getByRole("button", { name: "Invite someone" }), bar.getByRole("button", { name: "Room settings" })].map(async (button) => (await button.boundingBox())!),
+    );
+    const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+    expect(Math.abs(middle(here) - middle(invite))).toBeLessThan(4);
+    expect(Math.abs(middle(settings) - middle(invite))).toBeLessThan(4);
+    const barBox = (await bar.boundingBox())!;
+    expect(settings.x + settings.width).toBeGreaterThan(barBox.x + barBox.width - 40);
   });
 
   await test.step("the room's settings show the agent's whole name beside its model and effort, and cut it short with a hint only where too narrow", async () => {

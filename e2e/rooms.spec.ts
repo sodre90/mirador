@@ -129,8 +129,10 @@ test("people write in a room, a tagged agent answers in its thread, and another 
     await roomComposer(page).fill("");
   });
 
-  await test.step("deleting the room takes it away", async () => {
-    const dialog = await openRoomSettings(page, "Launch");
+  await test.step("the room's settings open from its bar, and deleting the room there takes it away", async () => {
+    await page.locator(".room-header:visible").getByRole("button", { name: "Room settings" }).click();
+    const dialog = page.getByRole("dialog", { name: "Room settings" });
+    await expect(dialog.getByRole("tab", { name: "People" })).toHaveAttribute("aria-selected", "true");
     await dialog.getByRole("button", { name: "Delete room" }).click();
     await dialog.getByRole("button", { name: "Confirm: Delete room" }).click();
     await expect(page.locator(".sidebar .rooms li")).toHaveCount(0);

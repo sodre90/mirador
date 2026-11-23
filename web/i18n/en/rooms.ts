@@ -21,6 +21,8 @@ export const rooms = {
   joinRoom: "Join a room",
   roomSettings: (room: string) => `Settings of ${room}`,
   editRoom: "Room settings",
+  sandboxed: "Sandboxed",
+  sandboxedHint: "The agents run in a sandbox. Click for its settings.",
   name: "Room name",
   peopleCount: (count: number) => counted(count, "person", "people"),
   noAgentsYet: "No agents yet",

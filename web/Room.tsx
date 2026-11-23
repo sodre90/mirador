@@ -46,6 +46,7 @@ import { HintedWhenCutShort } from "./cut-short.tsx";
 import { useEarlierHistory } from "./earlier-history.ts";
 import type { EditRequest } from "./edit-approval.ts";
 import { hints } from "./hints.ts";
+import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { formatNumber, t } from "./i18n/index.ts";
 import { LayoutToggles } from "./LayoutToggles.tsx";
 import { LineIcon } from "./LineIcon.tsx";
@@ -642,7 +643,13 @@ function RoomPeople({ room, agents, here, joiners, ownerId, owns }: { room: Room
         aria-expanded={placement !== null}
         onClick={() => setPlacement(placement || !opener.current ? null : placedBelowOnItsSide(opener.current))}
       >
-        {[words.hereCount(here.length), owns && joiners.length > 0 && words.waitingCount(joiners.length)].filter(Boolean).join(" · ")}
+        {words.hereCount(here.length)}
+        {owns && joiners.length > 0 && (
+          <>
+            {" "}
+            <span className="room-door-waiting">{words.waitingCount(joiners.length)}</span>
+          </>
+        )}
       </button>
       {placement && (
         <div ref={popover} className="room-people" role="dialog" aria-label={words.peopleOfRoom} style={placement}>
@@ -751,6 +758,7 @@ export function RoomView({
     return { profileId, name: profile?.name ?? words.agentGone, harness: profile?.harness, brought: undefined, profile, conversation, answering, model: { model, effort } };
   });
   const owns = you !== null && you === ownerId;
+  const openSettings = (tab?: RoomSettingsTab) => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId: room.id, tab } });
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
   const tagsAgents = !isGuestIn(room, you);
   const peopleToTag = taggablePeople(room, ownerId, people, you);
@@ -787,13 +795,26 @@ export function RoomView({
             ))}
           </ul>
         )}
-        {presence && <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} />}
-        <MuteToggle roomId={room.id} muted={muted} />
-        {owns && (
-          <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>
-            {words.inviteSomeone}
-          </button>
-        )}
+        <div className="room-header-actions">
+          {owns && room.sandbox.on && (
+            <button type="button" className="room-sandboxed" data-hint={words.sandboxedHint} onClick={() => openSettings("permissions")}>
+              <LineIcon shape="shield" />
+              {words.sandboxed}
+            </button>
+          )}
+          {presence && <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} />}
+          <MuteToggle roomId={room.id} muted={muted} />
+          {owns && (
+            <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>
+              {words.inviteSomeone}
+            </button>
+          )}
+          {owns && (
+            <button type="button" className="icon room-settings-button" aria-label={words.editRoom} data-hint={words.editRoom} onClick={() => openSettings()}>
+              <LineIcon shape="sliders" />
+            </button>
+          )}
+        </div>
       </header>
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}

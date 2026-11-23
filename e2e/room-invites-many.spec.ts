@@ -101,7 +101,8 @@ test("one invite brings several people to a room's door, where the owner lets ea
   await test.step("the owner turns the other away from the room's list of people, after a second click", async () => {
     await roomCard(page, "Garden").click();
     const count = page.locator(".room-header .room-here-count");
-    await expect(count).toContainText("1 waiting");
+    await expect(count.locator(".room-door-waiting")).toHaveText("1 waiting");
+    await expect(count).toHaveAccessibleName(/^\d+ here 1 waiting$/);
     await count.click();
     const people = page.getByRole("dialog", { name: "People in the room" });
     await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Eli"]);
