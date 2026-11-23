@@ -1,4 +1,4 @@
-import { createContext, useCallback, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type KeyboardEvent, type RefObject } from "react";
+import { createContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore, type KeyboardEvent, type RefObject } from "react";
 import { focusPane } from "./actions.ts";
 import { ignoringCase, matchCount, occurrencesIn, type MatchOptions } from "../shared/find.ts";
 import type { EntryMatchCount } from "../shared/model.ts";
@@ -12,8 +12,8 @@ import type { TimelineBlock } from "../shared/timeline.ts";
 
 const words = t.canvas.find;
 
-/** Whether text matches what the find bar looks for, so that output folded away unfolds where it matches. */
-export const MatchesFind = createContext<(text: string) => boolean>(() => false);
+/** Whether text matches what the find bar looks for, so that what is folded away unfolds where it matches; null while it looks for nothing. */
+export const MatchesFind = createContext<((text: string) => boolean) | null>(null);
 
 /** A search hit to show: its conversation opens with the find bar on the hit's entry. */
 interface FindRequest {
@@ -292,7 +292,7 @@ export function useFind({
     searchAgain();
     setOptions(({ caseSensitive }) => ({ caseSensitive: !caseSensitive }));
   };
-  const matches = useCallback((text: string) => !!query && matchCount(text, query, options) > 0, [query, options]);
+  const matches = useMemo(() => (query ? (text: string) => matchCount(text, query, options) > 0 : null), [query, options]);
   const step = (direction: 1 | -1) => {
     const entries = withMatches.current;
     const current = placeOf(entries, place.current);

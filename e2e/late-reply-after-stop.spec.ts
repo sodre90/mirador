@@ -41,6 +41,11 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await expect(turnEndings(page).nth(nth)).toBeVisible({ timeout: 60_000 });
     await waitForTurnToEnd(page);
   };
+  const openedSubagentSays = async (nth: number, report: string) => {
+    const card = page.locator(".timeline:visible .tool.subagent").filter({ hasText: "look around" }).nth(nth);
+    await card.locator(":scope > summary").click();
+    await expect(card.locator(".subagent-work")).toContainText(report);
+  };
   const waitsForStop = (text: string) =>
     expect.poll(() => existsSync(promptsFile) && readFileSync(promptsFile, "utf8").includes(text), { timeout: 60_000 }).toBe(true);
 
@@ -51,7 +56,7 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await stop();
     await waitTurnCancelled(0);
     // The late chunks land 300 ms after the stop; a subagent's report among them shows, as its own call keeps reporting.
-    await expect(page.locator(".timeline:visible .subagent-work").filter({ hasText: "A subagent reports on the streamed one" })).toHaveCount(1);
+    await openedSubagentSays(0, "A subagent reports on the streamed one");
     // A late chunk not dropped would join the bubble that streamed before the stop: the half reply stays one bubble, whole.
     await expect(agentBubbles(page).filter({ hasText: "The rest about" })).toHaveCount(0);
     await expect(agentBubbles(page).filter({ hasText: "Half a reply about the streamed one" }).filter({ hasNotText: "The rest about" })).toHaveCount(1);
@@ -62,7 +67,7 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await waitsForStop("STOPPED BEFORE the late one");
     await stop();
     await waitTurnCancelled(1);
-    await expect(page.locator(".timeline:visible .subagent-work").filter({ hasText: "A subagent reports on the late one" })).toHaveCount(1);
+    await openedSubagentSays(1, "A subagent reports on the late one");
     await expect(agentBubbles(page).filter({ hasText: "The rest about" })).toHaveCount(0);
   });
 
@@ -71,7 +76,7 @@ test("the reply a stopped turn keeps streaming after 'Turn ended: cancelled' sta
     await waitsForStop("STOPPED BESIDE SUBAGENT the watched one");
     await stop();
     await waitTurnCancelled(2);
-    await expect(page.locator(".timeline:visible .subagent-work").filter({ hasText: "A subagent reports on the watched one" })).toHaveCount(1);
+    await openedSubagentSays(2, "A subagent reports on the watched one");
     await expect(agentBubbles(page).filter({ hasText: "The rest about" })).toHaveCount(0);
   });
 

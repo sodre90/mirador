@@ -101,6 +101,16 @@ describe("occurrencesIn", () => {
     expect(occurrencesIn(card!, "needle")).toBe(3);
   });
 
+  test("counts what a tool call printed to its terminal", () => {
+    const [card] = buildTimeline(
+      stored([
+        acp({ sessionUpdate: "tool_call", toolCallId: "t", title: "ls", kind: "execute", status: "in_progress", rawInput: { command: "ls" } }),
+        acp({ sessionUpdate: "tool_call_update", toolCallId: "t", status: "completed", _meta: { terminal_output: { terminal_id: "t", data: "needle.txt" } } }),
+      ]),
+    );
+    expect(occurrencesIn(card!, "needle")).toBe(1);
+  });
+
   test("counts a message by its markdown source", () => {
     const [message] = buildTimeline(stored([acp({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "A **needle** and a needle" } })]));
     expect(occurrencesIn(message!, "needle")).toBe(2);

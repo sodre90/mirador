@@ -59,6 +59,7 @@ test("while only a background subagent works, a message joins the turn and the a
   await tellingTheStoredAgentUpdates(async () => {
     await sendMessage(page, `SUBAGENT RUN ${SUBAGENT_COMMAND}`);
     await expect(card.locator(".subagent-facts")).toContainText("in the background", { timeout: 60_000 });
+    await card.locator(":scope > summary").click();
     await expect(command).toHaveClass(/tool-in_progress/, { timeout: 60_000 });
     await expect(chip).toHaveText("◐ 1 subagent running");
 
@@ -102,6 +103,7 @@ test("a message sent while a subagent works in the foreground joins the turn at 
   const badge = page.locator(".chat-header .badge");
   await tellingTheStoredAgentUpdates(async () => {
     await sendMessage(page, `FOREGROUND SUBAGENT RUN ${SUBAGENT_COMMAND}`);
+    await card.locator(":scope > summary").click({ timeout: 60_000 });
     await expect(command).toHaveClass(/tool-in_progress/, { timeout: 60_000 });
     await expect(facts, "the agent waits for its subagent").not.toContainText("in the background");
 
@@ -132,7 +134,8 @@ test("a message joins the turn also while a background subagent waits for permis
   await page.getByLabel("Agent", { exact: true }).selectOption({ label: `${PROFILE} · Claude Code` });
   await startConversation(page);
   const permission = page.locator(".timeline .permission.pending");
-  const command = page.locator(".timeline .tool.subagent .subagent-work .shell", { hasText: "rm -rf scratch" });
+  const card = page.locator(".timeline .tool.subagent");
+  const command = card.locator(".subagent-work .shell", { hasText: "rm -rf scratch" });
   await sendMessage(page, `SUBAGENT RUN ${COMMAND_TO_APPROVE}`);
   await expect(permission).toBeVisible({ timeout: 60_000 });
 
@@ -156,6 +159,7 @@ test("a message joins the turn also while a background subagent waits for permis
   });
 
   await permission.locator("button.option-allow_once").click();
+  await card.locator(":scope > summary").click();
   await expect(command).toHaveClass(/tool-completed/, { timeout: 60_000 });
   await expect(command).toContainText("removed");
   await expect.poll(() => api.endedCommandsWaiting, { timeout: 30_000 }).toBe(1);

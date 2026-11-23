@@ -66,6 +66,7 @@ function toolTexts(block: ToolBlock): string[] {
     }),
     ...wordsIn(block.rawInput),
     ...wordsIn(block.rawOutput),
+    ...(block.terminalOutput ? [block.terminalOutput] : []),
     ...(block.subagent?.blocks.flatMap(textsOf) ?? []),
   ];
 }

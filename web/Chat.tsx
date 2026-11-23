@@ -1,7 +1,8 @@
 import type { ToolCallContent } from "@agentclientprotocol/sdk/unstable";
-import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type PointerEvent, type RefObject, type SetStateAction } from "react";
+import { createContext, Fragment, memo, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type Dispatch, type KeyboardEvent, type PointerEvent, type RefObject, type SetStateAction, type ToggleEvent } from "react";
 import { modelLabel } from "../shared/claude-models.ts";
 import { hasBegun } from "../shared/conversation-begun.ts";
+import { textsOf } from "../shared/find.ts";
 import { allInputTokens, formatTokens, type SubagentUsage } from "../shared/subagent-usage.ts";
 import {
   harnessLabels,
@@ -377,7 +378,8 @@ function CommandLine({ command, directory }: { command: string; directory?: stri
 function TerminalOutput({ output, finished, awaitingPermission }: { output: string; finished: boolean; awaitingPermission: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const lines = output ? output.split("\n") : [];
-  const foldedLinesMatch = useContext(MatchesFind)(lines.slice(PREVIEW_LINES).join("\n"));
+  const matchesFind = useContext(MatchesFind);
+  const foldedLinesMatch = matchesFind?.(lines.slice(PREVIEW_LINES).join("\n")) ?? false;
   const hiddenCount = expanded || foldedLinesMatch ? 0 : Math.max(0, lines.length - PREVIEW_LINES);
   if (lines.length === 0) {
     const quiet = finished ? words.tool.noOutput : awaitingPermission ? words.tool.waitingForApproval : words.tool.running;
@@ -524,8 +526,26 @@ function useTallerThanTimeline(ref: RefObject<HTMLElement | null>) {
   return taller;
 }
 
+/** The subagent the user asked to see, whose card opens at its latest work. */
+const SubagentToShow = createContext<string | null>(null);
+
+/**
+ * A subagent's card draws its work from the first time it opens, and while find has a match in it: in a conversation
+ * followed for hours the cards nobody opened would hold hundreds of thousands of elements, which slow the whole page.
+ */
+function useDrawnWork(block: SubagentBlock) {
+  const [everOpened, setEverOpened] = useState(false);
+  const askedFor = useContext(SubagentToShow) === block.toolCallId;
+  if (askedFor && !everOpened) setEverOpened(true);
+  const matchesFind = useContext(MatchesFind);
+  const drawsWork = everOpened || (matchesFind !== null && textsOf(block).some(matchesFind));
+  const drawOnceOpened = (event: ToggleEvent<HTMLDetailsElement>) => event.currentTarget.open && setEverOpened(true);
+  return { drawsWork, drawOnceOpened };
+}
+
 function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock; conversationId: string; harness: HarnessId }) {
   const card = useRef<HTMLDetailsElement>(null);
+  const { drawsWork, drawOnceOpened } = useDrawnWork(block);
   const closesAtItsEnd = useTallerThanTimeline(card);
   const close = () => {
     card.current!.open = false;
@@ -546,7 +566,7 @@ function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock
     runsInBackground(block) && words.subagent.inBackground,
   ].filter(Boolean);
   return (
-    <details ref={card} className={`tool subagent subagent-${state}`} data-tool-call-id={block.toolCallId}>
+    <details ref={card} className={`tool subagent subagent-${state}`} data-tool-call-id={block.toolCallId} onToggle={drawOnceOpened}>
       <summary>
         <span className="tool-status" aria-label={words.subagent.state[state]}>
           {subagentIcons[state]}
@@ -556,24 +576,28 @@ function SubagentCard({ block, conversationId, harness }: { block: SubagentBlock
         <span className="subagent-facts">{facts.join(" · ")}</span>
         {state === "running" && latestCall && <span className="subagent-now">{words.subagent.now(readableToolTitle(latestCall))}</span>}
       </summary>
-      {typeof prompt === "string" && (
-        <details className="raw subagent-prompt">
-          <summary>{words.tool.prompt}</summary>
-          <pre>{prompt}</pre>
-        </details>
-      )}
-      <StepsAtWork.Provider value={atWork}>
-        <div className="subagent-work">
-          {block.subagent.blocks.map((child) => (
-            <TimelineEntry key={child.key} block={child} conversationId={conversationId} harness={harness} canRewind={false} />
+      {drawsWork && (
+        <>
+          {typeof prompt === "string" && (
+            <details className="raw subagent-prompt">
+              <summary>{words.tool.prompt}</summary>
+              <pre>{prompt}</pre>
+            </details>
+          )}
+          <StepsAtWork.Provider value={atWork}>
+            <div className="subagent-work">
+              {block.subagent.blocks.map((child) => (
+                <TimelineEntry key={child.key} block={child} conversationId={conversationId} harness={harness} canRewind={false} />
+              ))}
+            </div>
+          </StepsAtWork.Provider>
+          {block.content.map((content, index) => (
+            <ToolContent key={index} content={content} />
           ))}
-        </div>
-      </StepsAtWork.Provider>
-      {block.content.map((content, index) => (
-        <ToolContent key={index} content={content} />
-      ))}
-      <RawJson label={words.tool.input} value={block.rawInput} />
-      <RawOutput block={block} conversationId={conversationId} />
+          <RawJson label={words.tool.input} value={block.rawInput} />
+          <RawOutput block={block} conversationId={conversationId} />
+        </>
+      )}
       {closesAtItsEnd && (
         <button type="button" className="link subagent-close" onClick={close}>
           {words.subagent.close}
@@ -2444,30 +2468,32 @@ export function ChatPanel({
                     )}
                     {find.query !== null && <FindBar find={find} />}
                     <MatchesFind.Provider value={find.matches}>
-                      <ForkThroughTurn.Provider value={!side && canFork(conversation, open) ? onFork : null}>
-                        <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
-                          {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
-                          {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
-                          {(firstLoaded > 0 || earlier.available) && (
-                            <button type="button" className="notice-line load-earlier" onClick={loadEarlier}>
-                              {earlierEntriesLabel(firstLoaded, earlier)}
-                            </button>
-                          )}
-                          {timeline.slice(firstLoaded).map((block, offset) => (
-                            <TimestampedEntry
-                              key={block.key}
-                              block={block}
-                              startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
-                              harness={conversation.harness}
-                              agentName={agentNames[conversation.harness]}
-                              conversationId={conversation.id}
-                              endsReply={endsOfReplies.has(block.key)}
-                            />
-                          ))}
-                          {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
-                          {side && <SendToMainChat parent={side.parent} timeline={timeline} busy={busy} />}
-                        </div>
-                      </ForkThroughTurn.Provider>
+                      <SubagentToShow.Provider value={subagentToShow}>
+                        <ForkThroughTurn.Provider value={!side && canFork(conversation, open) ? onFork : null}>
+                          <div className="timeline" ref={ref} onScroll={onTimelineScroll}>
+                            {!open.loaded && <div className="notice-line">{words.timeline.loading}</div>}
+                            {open.loaded && timeline.length === 0 && <div className="notice-line">{words.timeline.empty(harnessLabels[conversation.harness])}</div>}
+                            {(firstLoaded > 0 || earlier.available) && (
+                              <button type="button" className="notice-line load-earlier" onClick={loadEarlier}>
+                                {earlierEntriesLabel(firstLoaded, earlier)}
+                              </button>
+                            )}
+                            {timeline.slice(firstLoaded).map((block, offset) => (
+                              <TimestampedEntry
+                                key={block.key}
+                                block={block}
+                                startsGroup={offset === 0 || startsAuthorGroup(timeline, firstLoaded + offset)}
+                                harness={conversation.harness}
+                                agentName={agentNames[conversation.harness]}
+                                conversationId={conversation.id}
+                                endsReply={endsOfReplies.has(block.key)}
+                              />
+                            ))}
+                            {conversation.status === "running" && <div className="working">{words.timeline.working}</div>}
+                            {side && <SendToMainChat parent={side.parent} timeline={timeline} busy={busy} />}
+                          </div>
+                        </ForkThroughTurn.Provider>
+                      </SubagentToShow.Provider>
                     </MatchesFind.Provider>
                     {awayFromLatest && <JumpToLatest onJump={jumpToLatest} />}
                     {approvalsOutOfView.length > 0 && <ApprovalsWaiting approvals={approvalsOutOfView} timeline={timeline} onShow={showApproval} />}
