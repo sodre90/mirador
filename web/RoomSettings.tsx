@@ -101,8 +101,26 @@ export function WaitingToJoin({ joiners }: { joiners: RoomJoiner[] }) {
   );
 }
 
-/** The room's name, taken on Enter or as the field loses focus; its workspace; and deleting it. */
-function RoomGeneral({ room, workspaces, onDeleted }: { room: Room; workspaces: Workspace[]; onDeleted: () => void }) {
+function DeleteRoom({ room, onDeleted }: { room: Room; onDeleted: () => void }) {
+  return (
+    <ConfirmButton
+      className="link danger room-delete"
+      label={words.deleteRoom}
+      hint={words.deleteHint}
+      armedText={words.deleteArmed}
+      armedHint={words.deleteArmedHint}
+      onConfirm={() => {
+        connection.send({ type: "room.delete", roomId: room.id });
+        onDeleted();
+      }}
+    >
+      {words.deleteRoom}
+    </ConfirmButton>
+  );
+}
+
+/** The room's name, taken on Enter or as the field loses focus, and its workspace. */
+function RoomGeneral({ room, workspaces }: { room: Room; workspaces: Workspace[] }) {
   const [name, setName] = useState(room.name);
   const [workspaceId, moveTo] = useSentChoice(room.workspaceId, (workspaceId) => connection.send({ type: "room.set-workspace", roomId: room.id, workspaceId }));
   const rename = () => {
@@ -134,19 +152,6 @@ function RoomGeneral({ room, workspaces, onDeleted }: { room: Room; workspaces: 
       <WhatItMeans>
         <p>{words.workspaceHint}</p>
       </WhatItMeans>
-      <ConfirmButton
-        className="link danger room-delete"
-        label={words.deleteRoom}
-        hint={words.deleteHint}
-        armedText={words.deleteArmed}
-        armedHint={words.deleteArmedHint}
-        onConfirm={() => {
-          connection.send({ type: "room.delete", roomId: room.id });
-          onDeleted();
-        }}
-      >
-        {words.deleteRoom}
-      </ConfirmButton>
     </div>
   );
 }
@@ -509,7 +514,7 @@ export function RoomSettingsDialog({
   return (
     <Modal label={words.editRoom} className="room-dialog room-settings" onClose={onClose}>
       <h2>{words.roomSettings(room.name)}</h2>
-      <RoomGeneral room={room} workspaces={workspaces} onDeleted={onClose} />
+      <RoomGeneral room={room} workspaces={workspaces} />
       <div className="room-tabs" role="tablist" aria-label={words.editRoom}>
         {ROOM_SETTINGS_TABS.map((each) => (
           <button key={each} type="button" role="tab" id={`room-tab-${each}`} aria-selected={shownTab === each} aria-controls="room-tab-panel" onClick={() => setShownTab(each)}>
@@ -524,6 +529,7 @@ export function RoomSettingsDialog({
         {shownTab === "usage" && <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />}
       </div>
       <div className="form-actions">
+        <DeleteRoom room={room} onDeleted={onClose} />
         <button type="button" className="primary" onClick={onClose}>
           {words.done}
         </button>

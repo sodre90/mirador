@@ -10759,10 +10759,6 @@ select.room-agent-choice-select:focus-visible {
   margin-bottom: 12px;
 }
 
-.room-general .room-delete {
-  align-self: flex-start;
-}
-
 .room-tabs {
   display: flex;
   gap: 2px;
