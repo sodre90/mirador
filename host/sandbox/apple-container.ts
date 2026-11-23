@@ -1,20 +1,21 @@
 import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts";
-import { sandboxRuntime } from "./availability.ts";
+import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
+import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
 import { buildImage, imageExists, imageTag, serviceRuns, startService } from "./image.ts";
 import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type RoomVmPlan, type VmLauncher } from "./vm-launcher.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
 const READY_WITHIN_S = 30;
 
-/** What the `container` process itself needs of this Mac's environment to run: the agent's values of these go on its command line. */
-const CLIENTS_OWN = ["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "SHELL"];
+/** What the `container` process itself reads of this Mac's environment to run: the agent's values of these go on its command line. */
+export const CONTAINER_READS = readByTool(["PATH", "HOME", "TMPDIR", "USER", "LOGNAME", "SHELL"]);
 
 const mountFlags = ({ source, target, readOnly }: Mount) => ["-v", `${source}:${target}${readOnly ? ":ro" : ""}`];
 
 /**
- * `container run` of a room's VM: detached, removed once stopped, its first process under an init that passes signals
- * on, with no network at all.
+ * `container run` of a room's VM: detached, removed once stopped, its first process, as root, under an init that passes
+ * signals on, with no network at all.
  */
 export const runArguments = ({ name, labels, image, memory, mounts, entry }: RoomVmPlan) => [
   "run",
@@ -47,22 +48,18 @@ export function droppedTo(user: string, command: string[]) {
   return ["setpriv", `--reuid=${uid}`, `--regid=${gid}`, "--clear-groups", "--inh-caps=-all", "--bounding-set=-all", "--no-new-privs", "--", ...command];
 }
 
-/**
- * `container exec` of an agent, as its user, in its folder. Its values go in by name, from the exec process's own
- * environment, so none shows on its command line; only those that process needs this Mac's of are written out.
- */
-export function execArguments({ vm, user, workingDirectory, environment, command }: AgentInVm) {
-  const names = Object.keys(environment);
-  const written = names.filter((name) => CLIENTS_OWN.includes(name)).flatMap((name) => ["-e", `${name}=${environment[name]}`]);
-  const byName = names.filter((name) => !CLIENTS_OWN.includes(name)).flatMap((name) => ["-e", name]);
-  return ["exec", "-i", "--user", "0:0", "-w", workingDirectory, ...written, ...byName, vm, ...droppedTo(user, command)];
-}
-
-/** The environment of the `container exec` process on this Mac: the agent's values, but this Mac's own of what that process needs. */
-export function execProcessEnvironment(environment: Record<string, string>, thisMac: Record<string, string | undefined>) {
-  const own = Object.fromEntries(CLIENTS_OWN.flatMap((name) => (thisMac[name] === undefined ? [] : [[name, thisMac[name]!]])));
-  return { ...environment, ...own };
-}
+/** `container exec` of an agent, as its user, in its folder, its values by name. */
+export const execArguments = ({ vm, user, workingDirectory, environment, command }: AgentInVm) => [
+  "exec",
+  "-i",
+  "--user",
+  "0:0",
+  "-w",
+  workingDirectory,
+  ...environmentFlags(environment, CONTAINER_READS),
+  vm,
+  ...droppedTo(user, command),
+];
 
 type ListedContainer = { configuration?: { id?: unknown; labels?: Record<string, unknown> } };
 
@@ -85,6 +82,8 @@ export const vmIdsLabelled = (listed: string, label: string, value: string): str
 
 /** Rooms' VMs on Apple's `container`, macOS 26 on Apple silicon: its service started and the image built on first use. */
 export class AppleContainer implements VmLauncher {
+  readonly firstProcessUser = "root";
+
   constructor(
     private readonly cli: ContainerCli | null,
     private readonly available: SandboxAvailability,
@@ -92,7 +91,7 @@ export class AppleContainer implements VmLauncher {
 
   /** The `container` the setting names, else the one installed; none where the setting is off or this Mac can't run it. */
   static here(setting: string | undefined, path: string) {
-    const { program, availability } = sandboxRuntime(setting, path);
+    const { program, availability } = appleContainerRuntime(setting, path);
     return new AppleContainer(program ? containerCli(program) : null, availability);
   }
 
@@ -116,7 +115,7 @@ export class AppleContainer implements VmLauncher {
 
   agentProcess(agent: AgentInVm) {
     const cli = this.usable();
-    return { command: [cli.program, ...execArguments(agent)], environment: execProcessEnvironment(agent.environment, process.env) };
+    return { command: [cli.program, ...execArguments(agent)], environment: execProcessEnvironment(agent.environment, process.env, CONTAINER_READS) };
   }
 
   async runAsAgent(vm: string, user: string, command: string[], input: string, timeoutMs: number) {

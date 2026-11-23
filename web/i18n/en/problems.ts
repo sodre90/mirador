@@ -1,3 +1,5 @@
+import type { SandboxUnavailable } from "../../../shared/sandbox.ts";
+
 export const problems = {
   fixed: {
     "sandbox-held-files-unsettled": "A sandboxed room's agent changed an agent config file in this folder that Mirador could not put back, so this agent did not start here.",
@@ -427,12 +429,15 @@ export const problems = {
   },
   sandboxNotReady: (why: string) => `The room's sandbox is not ready, so its agent did not start. ${why}`,
   sandboxUnavailable: {
-    "not-a-mac": "Sandboxes run only on a Mac for now.",
+    "unsupported-system": "Sandboxes run only on a Mac or on Linux for now.",
     "not-apple-silicon": "Sandboxes need a Mac with Apple silicon.",
     "macos-too-old": "Sandboxes need macOS 26 or later.",
     "no-container-tool": "Sandboxes need Apple's container tool, from github.com/apple/container.",
+    "no-podman": "Sandboxes on Linux need Podman, from podman.io.",
+    "podman-fails": "Podman doesn't work for Mirador's user here: podman info tells why.",
+    "podman-not-rootless": "Sandboxes need Podman rootless, run as your own user: Mirador runs as root here.",
     "turned-off": "Sandboxes are turned off on this Mirador.",
-  },
+  } satisfies Record<SandboxUnavailable, string>,
   sandboxAgentKindComing: (agent: string) => `${agent} isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming.`,
   sandboxAgentSignsInElsewhere: {
     subscription: (agent: string) => `${agent} signs in with a Claude subscription, which would have to go into the sandbox: give its profile an API key instead.`,
@@ -441,7 +446,7 @@ export const problems = {
     foundry: (agent: string) => `${agent} uses Microsoft Foundry, which sandboxes don't support yet.`,
   },
   sandboxWorkspace: {
-    "workspace-not-a-repository": "The room's workspace isn't a git repository: a sandbox needs one, as a repository the agents made there could run programs on this Mac.",
+    "workspace-not-a-repository": "The room's workspace isn't a git repository: a sandbox needs one, as a repository the agents made there could run programs on this computer.",
     "workspace-is-worktree": "The room's workspace is a git worktree, whose repository lies outside it: a sandbox needs a workspace with its own .git folder.",
     "workspace-has-commondir": "The room's repository takes its config from another folder (.git/commondir), which a sandbox can't keep read-only.",
     "workspace-is-home": "The room's workspace is your home folder: a sandbox would see all of it.",
@@ -451,12 +456,15 @@ export const problems = {
   sandboxWorktreePointsElsewhere: (worktree: string) => `The repository's worktree folder .git/${worktree} takes its config from somewhere other than this repository.`,
   sandboxPartIsLink: (part: string) => `The repository's ${part} is a link, which a sandbox can't keep read-only.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `The repository's git config includes ${file}, a file of the workspace the sandbox could change: take that include out to use a sandbox.`,
+  sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
+    `The room's workspace is or holds ${folder}, which this computer runs programs from by itself: a sandbox could change them.`,
   sandboxTooManyHeldChanges: (most: number) => `Its agents changed more than ${most} held files, which wait for your answer: allow or discard some first.`,
   sandboxSetupFailed: (cause: string) => `Setting up sandboxes failed: ${cause}`,
-  sandboxCouldNotStart: (cause: string) => `Its VM could not start: ${cause}`,
-  sandboxNotReadyInTime: (seconds: number) => `Its VM did not get ready within ${seconds} s.`,
+  sandboxCouldNotStart: (cause: string) => `It could not start: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `It did not get ready within ${seconds} s.`,
   sandboxNotReadyFixed: {
     "no-claude-code-version": "Mirador could not tell which version of Claude Code to put in it.",
     "versions-differ": "The room's agents use different versions of Claude Code, and a sandbox runs one.",
+    "shared-kernel-not-allowed": "On this computer it would be a Podman container sharing this computer's kernel, which the room hasn't allowed: allow it in the room's settings.",
   },
 };

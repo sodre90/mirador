@@ -399,10 +399,13 @@ export const problems: Messages["problems"] = {
   },
   sandboxNotReady: (why: string) => `房间的沙箱尚未就绪，所以它的 Agent 没有启动。${why}`,
   sandboxUnavailable: {
-    "not-a-mac": "沙箱目前只能在 Mac 上运行。",
+    "unsupported-system": "沙箱目前只能在 Mac 或 Linux 上运行。",
     "not-apple-silicon": "沙箱需要搭载 Apple 芯片的 Mac。",
     "macos-too-old": "沙箱需要 macOS 26 或更高版本。",
     "no-container-tool": "沙箱需要 Apple 的 container 工具，见 github.com/apple/container。",
+    "no-podman": "在 Linux 上，沙箱需要 Podman，见 podman.io。",
+    "podman-fails": "这里的 Podman 无法为 Mirador 的用户工作：运行 podman info 可以看到原因。",
+    "podman-not-rootless": "沙箱需要 rootless 的 Podman，以你自己的用户运行：这里的 Mirador 以 root 身份运行。",
     "turned-off": "这个 Mirador 关闭了沙箱。",
   },
   sandboxAgentKindComing: (agent: string) => `${agent} 不是 Claude Code Agent：沙箱目前只运行 Claude Code Agent，其他类型即将支持。`,
@@ -413,7 +416,7 @@ export const problems: Messages["problems"] = {
     foundry: (agent: string) => `${agent} 使用 Microsoft Foundry，沙箱尚不支持。`,
   },
   sandboxWorkspace: {
-    "workspace-not-a-repository": "房间的工作区不是 git 仓库：沙箱需要一个，因为 Agent 在其中创建的仓库可能会在这台 Mac 上运行程序。",
+    "workspace-not-a-repository": "房间的工作区不是 git 仓库：沙箱需要一个，因为 Agent 在其中创建的仓库可能会在这台电脑上运行程序。",
     "workspace-is-worktree": "房间的工作区是一个 git 工作树，它的仓库在工作区之外：沙箱需要一个有自己 .git 文件夹的工作区。",
     "workspace-has-commondir": "房间的仓库从另一个文件夹（.git/commondir）读取配置，沙箱无法让它保持只读。",
     "workspace-is-home": "房间的工作区是你的主文件夹：沙箱会看到其中的一切。",
@@ -423,12 +426,15 @@ export const problems: Messages["problems"] = {
   sandboxWorktreePointsElsewhere: (worktree: string) => `仓库的工作树文件夹 .git/${worktree} 从本仓库以外的地方读取配置。`,
   sandboxPartIsLink: (part: string) => `仓库的 ${part} 是一个链接，沙箱无法让它保持只读。`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `仓库的 git 配置包含了 ${file}，这是沙箱可以改动的工作区文件：要使用沙箱，请去掉这个包含。`,
+  sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
+    `房间的工作区就是或包含 ${folder}，这台电脑会自行从中运行程序：沙箱可能会改动它们。`,
   sandboxTooManyHeldChanges: (most: number) => `它的 Agent 改动了超过 ${most} 个暂扣的文件，正等待你的答复：请先允许或丢弃其中一些。`,
   sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,
-  sandboxCouldNotStart: (cause: string) => `它的虚拟机无法启动：${cause}`,
-  sandboxNotReadyInTime: (seconds: number) => `它的虚拟机没有在 ${seconds} 秒内就绪。`,
+  sandboxCouldNotStart: (cause: string) => `它无法启动：${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `它没有在 ${seconds} 秒内就绪。`,
   sandboxNotReadyFixed: {
     "no-claude-code-version": "Mirador 无法确定要放入哪个版本的 Claude Code。",
     "versions-differ": "房间的 Agent 使用不同版本的 Claude Code，而一个沙箱只运行一个版本。",
+    "shared-kernel-not-allowed": "在这台电脑上它会是一个与这台电脑共用内核的 Podman 容器，而房间还没有允许：请在房间的设置中允许。",
   },
 };

@@ -1,7 +1,18 @@
 import { useEffect, useState } from "react";
 import type { Conversation, Profile } from "../shared/model.ts";
 import type { Room } from "../shared/rooms.ts";
-import { HELD_CHANGES_MOST, narrowsSandbox, type HeldChange, type HeldChangeAnswer, type HeldChangeText, type RoomSandbox, type SandboxCheck, type SandboxSetup } from "../shared/sandbox.ts";
+import {
+  HELD_CHANGES_MOST,
+  narrowsSandbox,
+  sharesKernel,
+  type HeldChange,
+  type HeldChangeAnswer,
+  type HeldChangeText,
+  type RoomSandbox,
+  type SandboxCheck,
+  type SandboxKind,
+  type SandboxSetup,
+} from "../shared/sandbox.ts";
 import { DiffView } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
@@ -46,28 +57,68 @@ function useSandboxCheck(room: Room, profiles: Profile[]) {
 const reasonsOf = ({ availability, blockers }: SandboxCheck) =>
   availability.available ? blockers.map((blocker) => sandboxBlockerText(blocker, t.problems)) : [sandboxUnavailableText(availability.why, t.problems)];
 
-function SetupProgress({ setup }: { setup: SandboxSetup }) {
+/** The kind of sandbox this computer gives its rooms, where it gives any. */
+const kindOf = (check: SandboxCheck | null): SandboxKind | null => (check?.availability.available ? check.availability.kind : null);
+
+/** Whether this computer's sandbox runs outside the SELinux confinement Linux enforces here. */
+const outsideSelinux = (check: SandboxCheck | null) => check?.availability.available === true && check.availability.kind === "podman" && check.availability.selinuxEnforcing;
+
+function SetupProgress({ setup, kind }: { setup: SandboxSetup; kind: SandboxKind }) {
   const { stage, step, problem } = setup;
+  const stages = words.setup[kind];
   return (
     <div className="room-sandbox-setup" role="status">
-      <span>{stage === "failed" && problem ? words.setupFailed(problem) : stage === "building-image" && step ? words.buildingStep(step.at, step.of) : words.setup[stage]}</span>
-      {stage === "building-image" && <progress value={step?.at} max={step?.of} aria-label={words.setup["building-image"]} />}
+      <span>{stage === "failed" && problem ? words.setupFailed(problem) : stage === "building-image" && step ? words.buildingStep[kind](step.at, step.of) : stages[stage]}</span>
+      {stage === "building-image" && <progress value={step?.at} max={step?.of} aria-label={stages["building-image"]} />}
+    </div>
+  );
+}
+
+/** What a sandbox sharing this computer's kernel keeps the agents from, and what not, said before the room gets one. */
+function SharedKernelWarning({ withoutSelinux, confirmation, onConfirm, onKeepOff }: { withoutSelinux: boolean; confirmation: string; onConfirm: () => void; onKeepOff?: () => void }) {
+  return (
+    <div className="room-sandbox-shared-kernel" role="alert">
+      <p>{words.sharedKernel.warning}</p>
+      {withoutSelinux && <p className="room-sandbox-without-selinux">{words.sharedKernel.withoutSelinux}</p>}
+      {!onKeepOff && <p>{words.sharedKernel.turnsFailUntilAllowed}</p>}
+      <button type="button" className="primary" onClick={onConfirm}>
+        {confirmation}
+      </button>
+      {onKeepOff && (
+        <button type="button" className="link" onClick={onKeepOff}>
+          {words.sharedKernel.keepOff}
+        </button>
+      )}
     </div>
   );
 }
 
 /**
- * The room's sandbox switch, which this computer or the room can keep off with a reason said under it; once on, how the
- * agents work inside and where setting it up on this computer stands. Changing it starts the agents at work afresh.
+ * The room's sandbox switch, which this computer or the room can keep off with a reason said under it, and the kind of
+ * sandbox this computer gives; once on, how the agents work inside and where setting it up on this computer stands. A
+ * sandbox that shares this computer's kernel is said to before it is turned on, and taken only once the owner allows it.
+ * Changing it starts the agents at work afresh.
  */
 export function SandboxField({ room, profiles, roomConversations, setup }: { room: Room; profiles: Profile[]; roomConversations: Conversation[]; setup: SandboxSetup }) {
   const check = useSandboxCheck(room, profiles);
   const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(room.sandbox, (sandbox) => connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox }));
+  const [askingToShareKernel, setAskingToShareKernel] = useState(false);
   const startsAfresh = room.agents.filter((agent) => !agent.brought && workingThere(agent, roomConversations)).map(({ profileId }) => nameOf(profiles, profileId));
   const choose = (sandbox: RoomSandbox) => change(sandbox, startsAfresh, narrowsSandbox(room.sandbox, sandbox));
   const reasons = check ? reasonsOf(check) : [];
   const turnsOn = check !== null && reasons.length === 0;
   const reasonsId = `room-sandbox-reasons-${room.id}`;
+  const kind = kindOf(check);
+  const kernelShared = kind !== null && sharesKernel(kind);
+  const withoutSelinux = outsideSelinux(check);
+  const turn = (on: boolean) => {
+    setAskingToShareKernel(on && kernelShared);
+    if (!on || !kernelShared) choose({ ...shown, on, allowsSharedKernel: false });
+  };
+  const turnOnSharingKernel = () => {
+    setAskingToShareKernel(false);
+    choose({ ...shown, on: true, allowsSharedKernel: true });
+  };
   return (
     <fieldset className="room-field room-sandbox">
       <legend>{words.legend}</legend>
@@ -76,13 +127,18 @@ export function SandboxField({ room, profiles, roomConversations, setup }: { roo
           type="checkbox"
           role="switch"
           checked={shown.on}
-          disabled={pending !== null || (!shown.on && !turnsOn)}
+          disabled={pending !== null || askingToShareKernel || (!shown.on && !turnsOn)}
           aria-describedby={reasons.length > 0 ? reasonsId : undefined}
-          onChange={(event) => choose({ ...shown, on: event.target.checked })}
+          onChange={(event) => turn(event.target.checked)}
         />
         {words.turnOn}
       </label>
       {check === null && <p className="hint">{words.checking}</p>}
+      {kind !== null && <p className={`hint room-sandbox-kind${kernelShared ? " shares-kernel" : ""}`}>{words.kinds[kind]}</p>}
+      {askingToShareKernel && <SharedKernelWarning withoutSelinux={withoutSelinux} confirmation={words.sharedKernel.turnOn} onConfirm={turnOnSharingKernel} onKeepOff={() => setAskingToShareKernel(false)} />}
+      {shown.on && kernelShared && !shown.allowsSharedKernel && pending === null && (
+        <SharedKernelWarning withoutSelinux={withoutSelinux} confirmation={words.sharedKernel.allow} onConfirm={() => choose({ ...shown, allowsSharedKernel: true })} />
+      )}
       {reasons.length > 0 && (
         <div className="room-sandbox-reasons" id={reasonsId}>
           {shown.on && <p>{words.turnsFailUntil}</p>}
@@ -106,7 +162,7 @@ export function SandboxField({ room, profiles, roomConversations, setup }: { roo
               {words.presetApplies}
             </label>
           </div>
-          <SetupProgress setup={setup} />
+          {kind !== null && <SetupProgress setup={setup} kind={kind} />}
         </>
       )}
       {pending && <StartsAfreshWarning agents={startsAfresh} stopsTurn={pending.narrows} onConfirm={confirm} onKeep={keep} />}

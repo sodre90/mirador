@@ -1,4 +1,4 @@
-/** What a run of Apple's `container` command gave: its exit code, its output, stdout and stderr together, and stdout alone. */
+/** What a run of a container tool gave: its exit code, its output, stdout and stderr together, and stdout alone. */
 export interface ContainerRun {
   exitCode: number;
   output: string;
@@ -15,7 +15,7 @@ export interface ContainerRunOptions {
   stdoutMostBytes?: number;
 }
 
-/** Apple's `container` command line, which runs Linux VMs on this Mac; a test gives a fake of it. */
+/** A container tool's command line, Apple's `container` on a Mac or `podman` on Linux; a test gives a fake of it. */
 export interface ContainerCli {
   readonly program: string;
   run(args: string[], options?: ContainerRunOptions): Promise<ContainerRun>;
@@ -42,7 +42,7 @@ async function readLines(stream: ReadableStream<Uint8Array>, onLine: (line: stri
   return size <= most ? new TextDecoder().decode(Buffer.concat(kept)) : null;
 }
 
-/** The `container` program at `program`, run with the host's own environment, which carries nothing into a VM by itself. */
+/** The container tool at `program`, run with the host's own environment, which carries nothing into a VM by itself. */
 export function containerCli(program: string): ContainerCli {
   return {
     program,
@@ -60,5 +60,5 @@ export function containerCli(program: string): ContainerCli {
   };
 }
 
-/** The last line of what `container` said, for one plain message. */
+/** The last line of what the container tool said, for one plain message. */
 export const lastLineOf = (output: string) => output.trim().split("\n").at(-1)?.trim().slice(0, 300) ?? "";

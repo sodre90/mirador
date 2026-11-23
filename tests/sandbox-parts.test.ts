@@ -3,16 +3,18 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { environmentInVm, KEY_PLACEHOLDER } from "../host/sandbox/agent-environment.ts";
-import { execArguments, execProcessEnvironment, vmIdsLabelled } from "../host/sandbox/apple-container.ts";
-import { sandboxAvailability, sandboxRuntime } from "../host/sandbox/availability.ts";
-import { buildStepIn, claudeCodeVersionIn, imageReferencesIn, imageTag } from "../host/sandbox/image.ts";
+import { CONTAINER_READS, execArguments, vmIdsLabelled } from "../host/sandbox/apple-container.ts";
+import { appleContainerAvailability, appleContainerRuntime, podmanAvailability, podmanStorageIn, selinuxEnforcingAt } from "../host/sandbox/availability.ts";
+import { execProcessEnvironment } from "../host/sandbox/exec-environment.ts";
+import { baseImageOf, buildStepIn, claudeCodeVersionIn, imageReferencesIn, imageTag, RECIPE } from "../host/sandbox/image.ts";
+import { PODMAN_READS } from "../host/sandbox/podman.ts";
 import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces } from "../host/sandbox/workspace-mounts.ts";
-import { narrowsSandbox, roomSandboxIn, signInElsewhere } from "../shared/sandbox.ts";
+import { narrowsSandbox, roomSandboxIn, sameSandbox, sharesKernel, signInElsewhere } from "../shared/sandbox.ts";
 
 const scratch = realpathSync(mkdtempSync(join(tmpdir(), "sandbox-parts-")));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
 
-const ELSEWHERE: MiradorPlaces = { home: "/nonexistent-home", dataDir: "/nonexistent-data", checkout: "/nonexistent-checkout" };
+const ELSEWHERE: MiradorPlaces = { home: "/nonexistent-home", dataDir: "/nonexistent-data", checkout: "/nonexistent-checkout", computersOwn: [] };
 
 function repositoryIn(name: string) {
   const workspace = join(scratch, `${name}-${crypto.randomUUID()}`);
@@ -24,22 +26,59 @@ function repositoryIn(name: string) {
 const MAC_26 = { platform: "darwin" as const, arch: "arm64", darwinMajor: 25 };
 
 test("sandboxes run on macOS 26 on Apple silicon with Apple's container, and each other computer is told why not", () => {
-  expect(sandboxAvailability(MAC_26, "/usr/local/bin/container")).toEqual({ available: true });
-  expect(sandboxAvailability({ ...MAC_26, platform: "linux" }, "/usr/bin/container")).toEqual({ available: false, why: "not-a-mac" });
-  expect(sandboxAvailability({ ...MAC_26, arch: "x64" }, "/usr/local/bin/container")).toEqual({ available: false, why: "not-apple-silicon" });
-  expect(sandboxAvailability({ ...MAC_26, darwinMajor: 24 }, "/usr/local/bin/container")).toEqual({ available: false, why: "macos-too-old" });
-  expect(sandboxAvailability(MAC_26, null)).toEqual({ available: false, why: "no-container-tool" });
-  expect(sandboxRuntime("off", "/usr/bin", MAC_26)).toEqual({ program: null, availability: { available: false, why: "turned-off" } });
-  expect(sandboxRuntime(join(scratch, "no-such-container"), "/usr/bin", MAC_26).availability).toEqual({ available: false, why: "no-container-tool" });
+  expect(appleContainerAvailability(MAC_26, "/usr/local/bin/container")).toEqual({ available: true, kind: "apple-container" });
+  expect(appleContainerAvailability({ ...MAC_26, platform: "win32" }, "/usr/bin/container")).toEqual({ available: false, why: "unsupported-system" });
+  expect(appleContainerAvailability({ ...MAC_26, arch: "x64" }, "/usr/local/bin/container")).toEqual({ available: false, why: "not-apple-silicon" });
+  expect(appleContainerAvailability({ ...MAC_26, darwinMajor: 24 }, "/usr/local/bin/container")).toEqual({ available: false, why: "macos-too-old" });
+  expect(appleContainerAvailability(MAC_26, null)).toEqual({ available: false, why: "no-container-tool" });
+  expect(appleContainerRuntime("off", "/usr/bin", MAC_26)).toEqual({ program: null, availability: { available: false, why: "turned-off" } });
+  expect(appleContainerRuntime(join(scratch, "no-such-container"), "/usr/bin", MAC_26).availability).toEqual({ available: false, why: "no-container-tool" });
 });
 
-test("a room's sandbox setting reads as off unless it is on, and narrows when it is turned on or stops working freely", () => {
-  expect(roomSandboxIn({ on: "yes", workFreely: 0 })).toEqual({ on: false, workFreely: true });
-  expect(roomSandboxIn({ on: true, workFreely: false })).toEqual({ on: true, workFreely: false });
-  expect(narrowsSandbox({ on: false, workFreely: true }, { on: true, workFreely: true })).toBe(true);
-  expect(narrowsSandbox({ on: true, workFreely: true }, { on: true, workFreely: false })).toBe(true);
-  expect(narrowsSandbox({ on: true, workFreely: false }, { on: true, workFreely: true })).toBe(false);
-  expect(narrowsSandbox({ on: true, workFreely: true }, { on: false, workFreely: true })).toBe(false);
+test("on Linux, rootless Podman runs sandboxes in plain containers, which share this computer's kernel, and rootful or failing Podman runs none", () => {
+  const info = (rootless: unknown) => JSON.stringify({ host: { os: "linux", security: { rootless } } });
+  expect(podmanAvailability({ info: info(true), selinuxEnforcing: false })).toEqual({ available: true, kind: "podman", selinuxEnforcing: false });
+  expect(podmanAvailability({ info: info(false), selinuxEnforcing: false })).toEqual({ available: false, why: "podman-not-rootless" });
+  expect(podmanAvailability({ info: null, selinuxEnforcing: false })).toEqual({ available: false, why: "podman-fails" });
+  expect(podmanAvailability({ info: "Error: not json", selinuxEnforcing: false })).toEqual({ available: false, why: "podman-fails" });
+  expect(podmanAvailability({ info: info("yes"), selinuxEnforcing: false })).toEqual({ available: false, why: "podman-fails" });
+  expect(sharesKernel("podman")).toBe(true);
+  expect(sharesKernel("apple-container")).toBe(false);
+});
+
+test("a Podman sandbox says it runs outside SELinux's confinement where the kernel says SELinux enforces its rules, and only there", () => {
+  const info = JSON.stringify({ host: { security: { rootless: true } } });
+  const enforce = join(scratch, `enforce-${crypto.randomUUID()}`);
+  expect(selinuxEnforcingAt(enforce)).toBe(false);
+  writeFileSync(enforce, "0");
+  expect(selinuxEnforcingAt(enforce)).toBe(false);
+  writeFileSync(enforce, "1\n");
+  expect(selinuxEnforcingAt(enforce)).toBe(true);
+  expect(podmanAvailability({ info, selinuxEnforcing: true })).toEqual({ available: true, kind: "podman", selinuxEnforcing: true });
+});
+
+test("Podman's storage is read from its info, and none from info that names none", () => {
+  expect(podmanStorageIn(JSON.stringify({ store: { graphRoot: "/home/me/.local/share/containers/storage", runRoot: "/run/user/1000/containers" } }))).toEqual([
+    "/home/me/.local/share/containers/storage",
+    "/run/user/1000/containers",
+  ]);
+  expect(podmanStorageIn(JSON.stringify({ host: { security: { rootless: true } } }))).toEqual([]);
+  expect(podmanStorageIn("Error: not json")).toEqual([]);
+});
+
+test("a room's sandbox setting reads as off unless it is on, allows a shared kernel only while on, and narrows when it is turned on, stops working freely or no longer allows a shared kernel", () => {
+  const sandbox = (on: boolean, workFreely: boolean, allowsSharedKernel = false) => ({ on, workFreely, allowsSharedKernel });
+  expect(roomSandboxIn({ on: "yes", workFreely: 0 })).toEqual(sandbox(false, true));
+  expect(roomSandboxIn({ on: true, workFreely: false })).toEqual(sandbox(true, false));
+  expect(roomSandboxIn({ on: true, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(true, true, true));
+  expect(roomSandboxIn({ on: false, workFreely: true, allowsSharedKernel: true })).toEqual(sandbox(false, true));
+  expect(narrowsSandbox(sandbox(false, true), sandbox(true, true))).toBe(true);
+  expect(narrowsSandbox(sandbox(true, true), sandbox(true, false))).toBe(true);
+  expect(narrowsSandbox(sandbox(true, false), sandbox(true, true))).toBe(false);
+  expect(narrowsSandbox(sandbox(true, true), sandbox(false, true))).toBe(false);
+  expect(narrowsSandbox(sandbox(true, true, true), sandbox(true, true))).toBe(true);
+  expect(narrowsSandbox(sandbox(true, true), sandbox(true, true, true))).toBe(false);
+  expect(sameSandbox(sandbox(true, true), sandbox(true, true, true))).toBe(false);
 });
 
 test("an agent that signs in with a key works in a sandbox; one on a subscription, Bedrock, Vertex or Foundry does not yet", () => {
@@ -60,6 +99,9 @@ test("the image is told apart by Claude Code's version, Bun's and the recipe's, 
   expect(buildStepIn("#7 [stage-1 3/6] RUN npm install -g @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 3, of: 6 });
   expect(buildStepIn("#5 [2/4] RUN apt-get update")).toEqual({ at: 2, of: 4 });
   expect(buildStepIn("#7 DONE 12.3s")).toBeNull();
+  expect(buildStepIn("STEP 5/8: RUN npm install -g bun@1.4.4 @anthropic-ai/claude-code@2.1.330")).toEqual({ at: 5, of: 8 });
+  expect(buildStepIn("--> 3f2a1b")).toBeNull();
+  expect(baseImageOf(await Bun.file(RECIPE).text())).toBe("docker.io/library/node:22-bookworm-slim");
   const listed = `[{"descriptor":{"digest":"sha256:abc"},"fullSize":"79,9 MB","reference":"docker.io/library/node:22"},{"descriptor":{"annotations":{"io.containerd.image.name":"docker.io/library/mirador-room-agent:claude-2"}},"reference":"mirador-room-agent:claude-2"}]`;
   expect(imageReferencesIn(listed)).toEqual(new Set(["docker.io/library/node:22", "mirador-room-agent:claude-2"]));
   expect(imageReferencesIn("not json")).toEqual(new Set());
@@ -89,7 +131,15 @@ test("the agent's environment in the VM keeps the key and this Mac's own places 
   expect(args).toContain("DEPLOY");
   expect(args).toContain("HOME=/home/node");
   expect(args.join(" ")).not.toContain("staging");
-  expect(execProcessEnvironment(inVm, { HOME: "/Users/me", PATH: "/opt/mac/bin", SECRET_OF_THE_MAC: "s" })).toEqual({ ...inVm, HOME: "/Users/me", PATH: "/opt/mac/bin" });
+  const { PATH, HOME, TMPDIR, USER, LOGNAME, SHELL, ...notReadByContainer } = inVm;
+  expect(execProcessEnvironment(inVm, { HOME: "/Users/me", PATH: "/opt/mac/bin", SECRET_OF_THE_MAC: "s" }, CONTAINER_READS)).toEqual({ ...notReadByContainer, HOME: "/Users/me", PATH: "/opt/mac/bin" });
+  expect([PATH, HOME, TMPDIR, USER, LOGNAME, SHELL].every((value) => args.join(" ").includes(`=${value}`))).toBe(true);
+});
+
+test("podman's exec process reads only this computer's own of the variables Podman reads, never the agent's, even where this computer has none", () => {
+  const agents = { CONTAINER_HOST: "ssh://elsewhere", CONTAINERS_CONF: "/given/containers.conf", _CONTAINERS_ROOTLESS_UID: "0", STORAGE_OPTS: "given", XDG_RUNTIME_DIR: "/run/user/given", DEPLOY: "staging" };
+  const here = { PATH: "/usr/bin", XDG_RUNTIME_DIR: "/run/user/1000", CONTAINERS_STORAGE_CONF: "/home/me/storage.conf", SECRET_HERE: "s" };
+  expect(execProcessEnvironment(agents, here, PODMAN_READS)).toEqual({ DEPLOY: "staging", PATH: "/usr/bin", XDG_RUNTIME_DIR: "/run/user/1000", CONTAINERS_STORAGE_CONF: "/home/me/storage.conf" });
 });
 
 test("a workspace's repository and its submodules keep copies of their config, and their hooks and worktrees read-only, in folders that can't be moved aside, and a hooks folder its config names in the workspace too", async () => {
@@ -244,13 +294,18 @@ test("a repository whose config includes a file of the workspace, by any conditi
   expect(await sandboxRefusalOf(elsewhere, ELSEWHERE)).toBeNull();
 });
 
-test("the home folder, and a folder holding or within Mirador's data or its own checkout, are never a sandbox's workspace", async () => {
+test("the home folder, a folder holding or within Mirador's data or its own checkout, and one that is or holds a folder this computer runs programs from, are never a sandbox's workspace", async () => {
   const workspace = repositoryIn("mirador-places");
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, home: workspace })).toEqual({ kind: "workspace-is-home" });
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, dataDir: join(workspace, "data") })).toEqual({ kind: "workspace-holds-mirador-data" });
   expect(await sandboxRefusalOf(join(workspace, ".git"), { ...ELSEWHERE, dataDir: workspace })).toEqual({ kind: "workspace-holds-mirador-data" });
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, checkout: workspace })).toEqual({ kind: "workspace-is-mirador" });
   expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, home: scratch })).toBeNull();
+  const config = join(workspace, ".config");
+  mkdirSync(config);
+  expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, computersOwn: [config] })).toEqual({ kind: "workspace-holds-computers-own", folder: config });
+  expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, computersOwn: [workspace] })).toEqual({ kind: "workspace-holds-computers-own", folder: workspace });
+  expect(await sandboxRefusalOf(workspace, { ...ELSEWHERE, computersOwn: [join(scratch, "elsewhere", ".local")] })).toBeNull();
 });
 
 test("a relative hooks folder this Mac's own config names is read-only in the VM, taken from the workspace", async () => {

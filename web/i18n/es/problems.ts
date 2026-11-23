@@ -430,10 +430,13 @@ export const problems: Messages["problems"] = {
   },
   sandboxNotReady: (why: string) => `El sandbox de la sala no está listo, así que su agente no se inició. ${why}`,
   sandboxUnavailable: {
-    "not-a-mac": "Por ahora, los sandboxes solo funcionan en un Mac.",
+    "unsupported-system": "Por ahora, los sandboxes solo funcionan en un Mac o en Linux.",
     "not-apple-silicon": "Los sandboxes necesitan un Mac con Apple silicon.",
     "macos-too-old": "Los sandboxes necesitan macOS 26 o posterior.",
     "no-container-tool": "Los sandboxes necesitan la herramienta container de Apple, de github.com/apple/container.",
+    "no-podman": "En Linux, los sandboxes necesitan Podman, de podman.io.",
+    "podman-fails": "Podman no funciona aquí para el usuario de Mirador: podman info dice por qué.",
+    "podman-not-rootless": "Los sandboxes necesitan Podman rootless, ejecutado con tu propio usuario: aquí Mirador se ejecuta como root.",
     "turned-off": "Los sandboxes están desactivados en este Mirador.",
   },
   sandboxAgentKindComing: (agent: string) => `${agent} no es un agente de Claude Code: por ahora los sandboxes solo ejecutan agentes de Claude Code; los demás tipos llegarán.`,
@@ -444,7 +447,7 @@ export const problems: Messages["problems"] = {
     foundry: (agent: string) => `${agent} usa Microsoft Foundry, que los sandboxes aún no admiten.`,
   },
   sandboxWorkspace: {
-    "workspace-not-a-repository": "El espacio de trabajo de la sala no es un repositorio git: un sandbox necesita uno, porque un repositorio que los agentes crearan allí podría ejecutar programas en este Mac.",
+    "workspace-not-a-repository": "El espacio de trabajo de la sala no es un repositorio git: un sandbox necesita uno, porque un repositorio que los agentes crearan allí podría ejecutar programas en este equipo.",
     "workspace-is-worktree": "El espacio de trabajo de la sala es un worktree de git, cuyo repositorio está fuera de él: un sandbox necesita un espacio de trabajo con su propia carpeta .git.",
     "workspace-has-commondir": "El repositorio de la sala toma su configuración de otra carpeta (.git/commondir), que un sandbox no puede dejar de solo lectura.",
     "workspace-is-home": "El espacio de trabajo de la sala es tu carpeta personal: un sandbox la vería entera.",
@@ -454,12 +457,15 @@ export const problems: Messages["problems"] = {
   sandboxWorktreePointsElsewhere: (worktree: string) => `La carpeta de worktree .git/${worktree} del repositorio toma su configuración de otro sitio que no es este repositorio.`,
   sandboxPartIsLink: (part: string) => `${part} del repositorio es un enlace, que un sandbox no puede dejar de solo lectura.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `La configuración de git del repositorio incluye ${file}, un archivo del espacio de trabajo que el sandbox podría cambiar: quita esa inclusión para usar un sandbox.`,
+  sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
+    `El espacio de trabajo de la sala es o contiene ${folder}, desde donde este equipo ejecuta programas por sí solo: un sandbox podría cambiarlos.`,
   sandboxTooManyHeldChanges: (most: number) => `Sus agentes cambiaron más de ${most} archivos retenidos, que esperan tu respuesta: permite o descarta algunos primero.`,
   sandboxSetupFailed: (cause: string) => `No se pudieron preparar los sandboxes: ${cause}`,
-  sandboxCouldNotStart: (cause: string) => `Su máquina virtual no pudo iniciarse: ${cause}`,
-  sandboxNotReadyInTime: (seconds: number) => `Su máquina virtual no estuvo lista en ${seconds} s.`,
+  sandboxCouldNotStart: (cause: string) => `No pudo iniciarse: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `No estuvo listo en ${seconds} s.`,
   sandboxNotReadyFixed: {
     "no-claude-code-version": "Mirador no pudo saber qué versión de Claude Code poner en él.",
     "versions-differ": "Los agentes de la sala usan versiones distintas de Claude Code, y un sandbox ejecuta una sola.",
+    "shared-kernel-not-allowed": "En este equipo sería un contenedor de Podman que comparte el kernel del equipo, y la sala no lo ha permitido: permítelo en los ajustes de la sala.",
   },
 };

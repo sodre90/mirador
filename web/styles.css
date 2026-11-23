@@ -10568,6 +10568,28 @@ select.room-agent-choice-select:focus-visible {
   font-size: calc(12px * var(--font-scale));
 }
 
+.room-sandbox-kind.shares-kernel {
+  color: var(--warn-on-soft);
+}
+
+.room-sandbox-shared-kernel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn-on-soft);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-sandbox-shared-kernel p {
+  flex-basis: 100%;
+  margin: 0;
+}
+
 .room-sandbox-reasons p,
 .room-sandbox-reasons ul {
   margin: 0;

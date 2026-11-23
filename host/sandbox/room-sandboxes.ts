@@ -1,19 +1,20 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, isAbsolute, join, relative } from "node:path";
 import { HostProblemError } from "../../shared/host-problems.ts";
-import { HELD_CHANGES_MOST, SETUP_NOT_STARTED, type HeldChange, type HeldChangeAnswer, type HeldChangeText, type SandboxSetup } from "../../shared/sandbox.ts";
+import { HELD_CHANGES_MOST, SETUP_NOT_STARTED, sharesKernel, type HeldChange, type HeldChangeAnswer, type HeldChangeText, type SandboxSetup } from "../../shared/sandbox.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import { AGENT_USER, BUN_IN_VM, environmentInVm } from "./agent-environment.ts";
 import { startCanvasSocket, type RoomCanvas } from "./canvas-socket.ts";
 import { HeldFiles, type HeldRoom } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
 import { startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
+import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
 import { HOST_LABEL, ROOM_LABEL, SandboxNotReady, type VmLauncher } from "./vm-launcher.ts";
 import { gitFoldersOf, sandboxRefusalOf, workspaceMounts, type MiradorPlaces, type Mount } from "./workspace-mounts.ts";
 
-/** The ports a room's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this Mac. */
+/** The ports a room's VM gives its agents on its own 127.0.0.1, relayed to Mirador's sockets on this computer. */
 export const CANVAS_RELAY_PORT = 7701;
 export const MODEL_RELAY_PORT = 7702;
 
@@ -51,11 +52,13 @@ export interface SandboxHost {
 }
 
 /**
- * What an agent's launch in the VM needs: its profile's Claude Code version, the folder it works in, what its room gives
- * it, the model API its requests go on to with the key, and its command in the VM.
+ * What an agent's launch in the VM needs: whether its room allows a sandbox that shares this computer's kernel, its
+ * profile's Claude Code version, the folder it works in, what its room gives it, the model API its requests go on to
+ * with the key, and its command in the VM.
  */
 export interface AgentInSandbox {
   roomId: string;
+  allowsSharedKernel: boolean;
   profileId: string;
   claudeCodeVersion: string;
   workingDirectory: string;
@@ -78,6 +81,8 @@ interface RoomVm {
   agents: number;
   stopTimer?: ReturnType<typeof setTimeout>;
   sockets: RunningSocket[];
+  /** The folder of the VM's own sockets, once made. */
+  socketsFolder?: string;
   /** The model API of each agent's profile, by profile id, as the agents last started. */
   routes: Map<string, ModelRoute>;
   held?: HeldFiles;
@@ -90,6 +95,12 @@ const atItsOwnPath = (path: string, readOnly: boolean): Mount => ({ source: path
 
 const overlap = (a: string, b: string) => [relative(a, b), relative(b, a)].some((inside) => inside === "" || (!inside.startsWith("..") && !isAbsolute(inside)));
 
+/**
+ * Lets the relays, which run as nobody from the start, another user of this computer to Mirador, connect to its
+ * sockets: their folder, this user's alone, keeps every other user out, and the container is shown the sockets alone.
+ */
+const reachableByNobody = (sockets: string[]) => Promise.all(sockets.map((socket) => chmod(socket, 0o666)));
+
 /** What a put-back in the VM printed, as far as it has the shape of one: anything else is taken as no answer. */
 function putBackIn(printed: string): PlacesPutBack {
   const parsed = JSON.parse(printed) as Partial<PlacesPutBack>;
@@ -97,7 +108,7 @@ function putBackIn(printed: string): PlacesPutBack {
   return { found: parsed.found, failed: [] };
 }
 
-/** The folder of this Mac's packages, with Mirador's own claude-agent-acp, which its agents run in the VM. */
+/** The folder of this computer's packages, with Mirador's own claude-agent-acp, which its agents run in the VM. */
 const agentPackages = () => dirname(dirname(dirname(Bun.resolveSync("@agentclientprotocol/claude-agent-acp/package.json", import.meta.dir))));
 
 /** This host's VMs, told from another Mirador's on this computer by the data folder they were started for. */
@@ -115,13 +126,14 @@ export class RoomSandboxes {
   private readonly rooms = new Map<string, RoomVm>();
   /** Each room's launch under way: one at a time, so no two VMs of one room ever start. */
   private readonly launching = new Map<string, Promise<unknown>>();
-  private socketsFolder?: Promise<string>;
   private readonly hostLabel: string;
 
   constructor(
     private readonly launcher: VmLauncher,
     private readonly host: SandboxHost,
     private readonly idleStopMs = 5_000,
+    /** Where each VM's sockets get a folder of their own. */
+    private readonly socketsParent = tmpdir(),
   ) {
     this.hostLabel = hostLabelOf(host.dataDir);
   }
@@ -157,8 +169,8 @@ export class RoomSandboxes {
   }
 
   /**
-   * Before an agent session starts on this Mac in a folder a sandboxed room works in, its held files are looked at once
-   * more, so none the agents planted is loaded meanwhile; where one stays, the session does not start.
+   * Before an agent session starts on this computer in a folder a sandboxed room works in, its held files are looked at
+   * once more, so none the agents planted is loaded meanwhile; where one stays, the session does not start.
    */
   async settleHeldFilesFor(directory: string) {
     const real = await realpath(directory).catch(() => directory);
@@ -179,18 +191,20 @@ export class RoomSandboxes {
     if (this.availability().available) void this.preparedImage(claudeCodeVersion).catch(() => {});
   }
 
-  /** The VMs a previous run of this host left behind, from a crash. */
+  /** The VMs a previous run of this host left behind, from a crash, and the socket folders of any host gone since. */
   async reapLeftovers() {
+    await removeLeftSocketFolders(this.socketsParent);
     if (this.availability().available) await this.launcher.removeLeftovers(this.hostLabel);
   }
 
   /**
    * The command and environment that start the agent in its room's VM, the VM started first where it isn't running.
-   * Throws SandboxNotReady when anything of it is not ready; nothing here ever runs the agent on this Mac.
+   * Throws SandboxNotReady when anything of it is not ready; nothing here ever runs the agent on this computer.
    */
   async launch(agent: AgentInSandbox): Promise<AgentLaunch> {
     const available = this.availability();
     if (!available.available) throw new SandboxNotReady({ kind: "unavailable", why: available.why });
+    if (sharesKernel(available.kind) && !agent.allowsSharedKernel) throw new SandboxNotReady({ kind: "shared-kernel-not-allowed" });
     if (this.heldOf(agent.roomId)?.full()) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
     const vm = await this.oneLaunchAtATime(agent.roomId, () => this.startedVm(agent.roomId, agent.claudeCodeVersion));
     const configDir = sandboxConfigFolder(this.host.dataDir, agent.roomId);
@@ -265,9 +279,6 @@ export class RoomSandboxes {
 
   async stopAll() {
     await Promise.all([...this.rooms.keys()].map((roomId) => this.stopRoom(roomId)));
-    const folder = await this.socketsFolder?.catch(() => null);
-    this.socketsFolder = undefined;
-    if (folder) await rm(folder, { recursive: true, force: true });
   }
 
   /** Held files of rooms whose VM stopped wait for the owner's answer still. */
@@ -281,6 +292,7 @@ export class RoomSandboxes {
     clearTimeout(vm.stopTimer);
     await this.halt(vm).catch((error: unknown) => console.error(`stopping the VM of room ${roomId} failed:`, error));
     await Promise.all(vm.sockets.map((socket) => socket.stop().catch(() => {})));
+    if (vm.socketsFolder) await rm(vm.socketsFolder, { recursive: true, force: true }).catch(() => {});
     if (vm.held) {
       await vm.held.stop().catch(() => {});
       if (vm.held.changes().length > 0) this.stoppedRoomsHeld.set(roomId, vm.held);
@@ -365,12 +377,14 @@ export class RoomSandboxes {
     const heldReadOnly = await vm.held.start();
     const planned = await workspaceMounts(workspace, gitConfigCopies(this.host.dataDir, roomId), this.host.places, heldReadOnly);
     if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
-    const sockets = join(await this.privateSocketsFolder(), shortHash(roomId, 8));
-    await mkdir(sockets, { recursive: true, mode: 0o700 });
     const configFolder = sandboxConfigFolder(this.host.dataDir, roomId);
     await mkdir(configFolder, { recursive: true, mode: 0o700 });
-    vm.sockets.push(await startCanvasSocket(join(sockets, "canvas.sock"), CANVAS_RELAY_PORT, this.host.canvasOf(roomId)));
-    vm.sockets.push(await startModelProxy(join(sockets, "model.sock"), MODEL_RELAY_PORT, (profileId) => vm.routes.get(profileId) ?? null));
+    // Unix socket paths hold about a hundred bytes on macOS, so each room's sockets live in a short private folder.
+    vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
+    const sockets = { canvas: join(vm.socketsFolder, "canvas.sock"), model: join(vm.socketsFolder, "model.sock") };
+    vm.sockets.push(await startCanvasSocket(sockets.canvas, CANVAS_RELAY_PORT, this.host.canvasOf(roomId)));
+    vm.sockets.push(await startModelProxy(sockets.model, MODEL_RELAY_PORT, (profileId) => vm.routes.get(profileId) ?? null));
+    if (this.launcher.firstProcessUser === "nobody") await reachableByNobody(Object.values(sockets));
     await this.launcher.start({
       name: vm.name,
       labels: { [HOST_LABEL]: this.hostLabel, [ROOM_LABEL]: roomId },
@@ -381,18 +395,12 @@ export class RoomSandboxes {
         atItsOwnPath(configFolder, false),
         atItsOwnPath(agentPackages(), true),
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
-        { source: join(sockets, "canvas.sock"), target: `${SOCKETS_IN_VM}/canvas.sock`, readOnly: false },
-        { source: join(sockets, "model.sock"), target: `${SOCKETS_IN_VM}/model.sock`, readOnly: false },
+        { source: sockets.canvas, target: `${SOCKETS_IN_VM}/canvas.sock`, readOnly: false },
+        { source: sockets.model, target: `${SOCKETS_IN_VM}/model.sock`, readOnly: false },
       ],
-      entry: ["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, `${CANVAS_RELAY_PORT}=${SOCKETS_IN_VM}/canvas.sock`, `${MODEL_RELAY_PORT}=${SOCKETS_IN_VM}/model.sock`],
+      entry: ["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, this.launcher.firstProcessUser, `${CANVAS_RELAY_PORT}=${SOCKETS_IN_VM}/canvas.sock`, `${MODEL_RELAY_PORT}=${SOCKETS_IN_VM}/model.sock`],
     });
     vm.running = true;
-  }
-
-  /** Unix socket paths have room for about a hundred bytes on macOS, so they live in a short private folder of their own. */
-  private privateSocketsFolder() {
-    this.socketsFolder ??= mkdtemp(join(tmpdir(), "mirador-sandbox-"));
-    return this.socketsFolder;
   }
 
   /** The runtime runs and the image of this Claude Code version is there: set up once for every room, its progress told as it goes. */

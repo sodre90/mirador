@@ -67,7 +67,7 @@ import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts"
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
 import { askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
-import { PROFILES_MODEL, type RoomAgentModel } from "../shared/rooms.ts";
+import { PROFILES_MODEL, type Room, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
@@ -3215,7 +3215,7 @@ profileId: string | null, conversationId: string) {
       this.startedOnThisComputer.add(harness);
       return onThisComputer;
     }
-    const launched = await this.sandboxes.launch(await this.agentInSandbox(room.id, launch, profile, onThisComputer));
+    const launched = await this.sandboxes.launch(await this.agentInSandbox(room, launch, profile, onThisComputer));
     const start = {};
     this.sandboxStarts.set(harness, start);
     return {
@@ -3227,7 +3227,7 @@ profileId: string | null, conversationId: string) {
     };
   }
 
-  private async agentInSandbox(roomId: string, launch: ProcessLaunch, profile: Profile, { command, environment }: AgentLaunch): Promise<AgentInSandbox> {
+  private async agentInSandbox({ id: roomId, sandbox }: Room, launch: ProcessLaunch, profile: Profile, { command, environment }: AgentLaunch): Promise<AgentInSandbox> {
     if (!runsInSandbox(profile.harness)) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "agent-kind-coming", agent: profile.name, harness: profile.harness } });
     const route = modelRouteOf(environment);
     const how = signInElsewhere(environment);
@@ -3237,6 +3237,7 @@ profileId: string | null, conversationId: string) {
     const workspace = launch.id ? this.workspaceOf(launch.id) : this.existingWorkspace(this.store.findRoom(roomId)?.workspaceId ?? "");
     return {
       roomId,
+      allowsSharedKernel: sandbox.allowsSharedKernel,
       profileId: profile.id,
       claudeCodeVersion,
       workingDirectory: await recordedDirectory(workspace),

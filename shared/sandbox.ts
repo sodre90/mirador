@@ -3,28 +3,51 @@ import { parseEnvironment } from "./profile-environment.ts";
 import { switchedOn } from "./room-agent-setup.ts";
 
 /**
- * Whether a room's agents run in a light VM of their own rather than on this computer, and whether they work there
- * without asking or under the room's permission preset still. Its network is only the model and Mirador.
+ * Whether a room's agents run in a sandbox of their own rather than on this computer, and whether they work there
+ * without asking or under the room's permission preset still. Its network is only the model and Mirador. Where this
+ * computer's sandbox shares its kernel, the owner allowed that for the room: it is never chosen for them.
  */
 export interface RoomSandbox {
   on: boolean;
   workFreely: boolean;
+  allowsSharedKernel: boolean;
 }
 
-export const NO_SANDBOX: RoomSandbox = { on: false, workFreely: true };
+export const NO_SANDBOX: RoomSandbox = { on: false, workFreely: true, allowsSharedKernel: false };
 
+/** A room's sandbox setting as stored or sent; a shared kernel is allowed only while the sandbox is on, so turning it on again asks again. */
 export function roomSandboxIn(value: unknown): RoomSandbox {
   const named = typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
-  return { on: named.on === true, workFreely: named.workFreely !== false };
+  const on = named.on === true;
+  return { on, workFreely: named.workFreely !== false, allowsSharedKernel: on && named.allowsSharedKernel === true };
 }
 
-/** Turning the sandbox on, or "work freely" off in it, leaves an agent with less: its turn under way stops at once. */
-export const narrowsSandbox = (before: RoomSandbox, after: RoomSandbox) => (!before.on && after.on) || (before.on && after.on && before.workFreely && !after.workFreely);
+export const sameSandbox = (a: RoomSandbox, b: RoomSandbox) => a.on === b.on && a.workFreely === b.workFreely && a.allowsSharedKernel === b.allowsSharedKernel;
+
+/** Turning the sandbox on, "work freely" off in it, or a shared kernel no longer allowed leaves an agent with less: its turn under way stops at once. */
+export const narrowsSandbox = (before: RoomSandbox, after: RoomSandbox) =>
+  (!before.on && after.on) || (before.on && after.on && ((before.workFreely && !after.workFreely) || (before.allowsSharedKernel && !after.allowsSharedKernel)));
+
+/**
+ * What rooms' sandboxes are on this computer: a light VM of Apple's `container` on a Mac; on Linux a rootless Podman
+ * container, which shares this computer's kernel.
+ */
+export type SandboxKind = "apple-container" | "podman";
+
+/** Whether a sandbox of this kind shares this computer's kernel, which keeps the agents in less than a VM does. */
+export const sharesKernel = (kind: SandboxKind) => kind === "podman";
 
 /** Why this computer can't run sandboxes at all. */
-export type SandboxUnavailable = "not-a-mac" | "not-apple-silicon" | "macos-too-old" | "no-container-tool" | "turned-off";
+export type SandboxUnavailable = "unsupported-system" | "not-apple-silicon" | "macos-too-old" | "no-container-tool" | "no-podman" | "podman-fails" | "podman-not-rootless" | "turned-off";
 
-export type SandboxAvailability = { available: true } | { available: false; why: SandboxUnavailable };
+/**
+ * Whether this computer runs sandboxes, of which kind, and why not where it doesn't. A Podman container runs outside
+ * SELinux's confinement, which Linux may enforce here: in it, Podman would have to relabel the owner's workspace.
+ */
+export type SandboxAvailability =
+  | { available: true; kind: "apple-container" }
+  | { available: true; kind: "podman"; selinuxEnforcing: boolean }
+  | { available: false; why: SandboxUnavailable };
 
 /** Why a room can't have its sandbox, as it is set up now; each one is said at the switch. */
 export type SandboxBlocker =
@@ -38,7 +61,8 @@ export type SandboxBlocker =
   | { kind: "config-includes-workspace-file"; file: string }
   | { kind: "workspace-is-home" }
   | { kind: "workspace-holds-mirador-data" }
-  | { kind: "workspace-is-mirador" };
+  | { kind: "workspace-is-mirador" }
+  | { kind: "workspace-holds-computers-own"; folder: string };
 
 /** Why a room can't have its sandbox: this computer's reason, and each of its agents' and its workspace's. */
 export interface SandboxCheck {
@@ -54,6 +78,7 @@ export type SandboxNotReadyWhy =
   | { kind: "could-not-start"; cause: string }
   | { kind: "no-claude-code-version" }
   | { kind: "versions-differ" }
+  | { kind: "shared-kernel-not-allowed" }
   | { kind: "not-ready-in-time"; seconds: number }
   | { kind: "too-many-held-changes"; most: number };
 
@@ -81,7 +106,7 @@ export const modelKeyVariableOf = (environment: Record<string, string>): ModelKe
 
 export const profileEnvironmentSet = (environmentText: string) => parseEnvironment(environmentText).set;
 
-/** Where first use of the sandbox stands: the service, then the image, built on this computer. */
+/** Where first use of the sandbox stands: the service, where its kind has one, then the image, built on this computer. */
 export type SandboxSetupStage = "not-started" | "starting-service" | "building-image" | "ready" | "failed";
 
 export interface SandboxSetup {

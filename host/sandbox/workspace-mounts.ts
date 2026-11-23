@@ -5,7 +5,7 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SandboxBlocker } from "../../shared/sandbox.ts";
 import { git } from "../git-command.ts";
 
-/** A folder or file of this Mac shown in the VM at `target`, read-only or not. */
+/** A folder or file of this computer shown in the VM at `target`, read-only or not. */
 export interface Mount {
   source: string;
   target: string;
@@ -14,11 +14,15 @@ export interface Mount {
 
 export type WorkspaceMounts = { mounts: Mount[] } | { refused: SandboxBlocker };
 
-/** Where Mirador itself lives on this computer, which no sandbox may see: the owner's home, its data, its own checkout. */
+/**
+ * Where Mirador itself lives on this computer, which no sandbox may see: the owner's home, its data, its own checkout;
+ * and the folders this computer runs programs from by itself, which no sandbox may hold.
+ */
 export interface MiradorPlaces {
   home: string;
   dataDir: string;
   checkout: string;
+  computersOwn: string[];
 }
 
 const atItsOwnPath = (path: string, readOnly: boolean): Mount => ({ source: path, target: path, readOnly });
@@ -86,7 +90,7 @@ async function includedBy(file: string): Promise<string[]> {
     .map((entry) => resolve(dirname(file), expandedHome(entry.slice(entry.indexOf("\n") + 1))));
 }
 
-/** The config files git reads in the workspace now, from the origins it tells of them, this Mac's own included. */
+/** The config files git reads in the workspace now, from the origins it tells of them, this computer's own included. */
 async function configFilesRead(workspace: string): Promise<string[]> {
   const { stdout } = await git(workspace, ["config", "--list", "--show-origin", "--null"]);
   const origins = stdout.split("\0").filter((field) => field.startsWith("file:"));
@@ -109,13 +113,18 @@ async function includedWorkspaceFile(workspace: string, configFiles: string[]): 
   return null;
 }
 
-/** Why Mirador's own places keep the workspace from a sandbox: the home folder, or a folder holding or within Mirador's data or checkout. */
+/**
+ * Why Mirador's own places keep the workspace from a sandbox: the home folder, a folder holding or within Mirador's
+ * data or checkout, or one that is or holds a folder this computer runs programs from by itself.
+ */
 async function miradorsOwn(workspace: string, places: MiradorPlaces): Promise<SandboxBlocker | null> {
   const [home, dataDir, checkout] = await Promise.all([places.home, places.dataDir, places.checkout].map(realOrAsIs));
   if (workspace === home) return { kind: "workspace-is-home" };
   if (isInside(dataDir!, workspace) || isInside(workspace, dataDir!)) return { kind: "workspace-holds-mirador-data" };
   if (isInside(checkout!, workspace) || isInside(workspace, checkout!)) return { kind: "workspace-is-mirador" };
-  return null;
+  const computersOwn = await Promise.all(places.computersOwn.map(realOrAsIs));
+  const held = computersOwn.find((folder) => isInside(folder, workspace));
+  return held ? { kind: "workspace-holds-computers-own", folder: held } : null;
 }
 
 /** The first of the git folders' parts Mirador copies or mounts that is a link, from the workspace; null where none is. */
@@ -211,7 +220,7 @@ function foldersHolding(workspace: string, readOnly: Mount[]): Mount[] {
   return [...new Set(folders)].map((folder) => atItsOwnPath(folder, false));
 }
 
-/** The hooks folder git takes from this Mac's config or the repository's, a relative one taken from the workspace, as `-c` names none. */
+/** The hooks folder git takes from this computer's config or the repository's, a relative one taken from the workspace, as `-c` names none. */
 async function configuredHooksFolder(workspace: string): Promise<string | null> {
   const { stdout, exitCode } = await git(workspace, ["config", "--includes", "--show-scope", "--null", "--get-all", "core.hooksPath"]);
   if (exitCode !== 0) return null;
@@ -233,7 +242,7 @@ async function configuredHooksInside(workspace: string): Promise<Mount[]> {
 }
 
 /**
- * The workspace at its own path, with what of it would run on this Mac read-only: the config, hooks and worktrees'
+ * The workspace at its own path, with what of it would run on this computer read-only: the config, hooks and worktrees'
  * folders of the repository, its submodules' config and hooks, the config as copies kept in `copies`, the held files
  * and folders there are, and every folder holding them mounted too, so that none can be moved aside. A workspace with
  * no repository of its own is not shown to a sandbox: the agents could make one there, with a config of their own that

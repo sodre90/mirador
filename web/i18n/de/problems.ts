@@ -435,10 +435,13 @@ export const problems: Messages["problems"] = {
   },
   sandboxNotReady: (why: string) => `Die Sandbox des Raums ist nicht bereit, deshalb ist sein Agent nicht gestartet. ${why}`,
   sandboxUnavailable: {
-    "not-a-mac": "Sandboxes laufen vorerst nur auf einem Mac.",
+    "unsupported-system": "Sandboxes laufen vorerst nur auf einem Mac oder unter Linux.",
     "not-apple-silicon": "Sandboxes brauchen einen Mac mit Apple Silicon.",
     "macos-too-old": "Sandboxes brauchen macOS 26 oder neuer.",
     "no-container-tool": "Sandboxes brauchen Apples container-Tool, von github.com/apple/container.",
+    "no-podman": "Unter Linux brauchen Sandboxes Podman, von podman.io.",
+    "podman-fails": "Podman funktioniert hier für Miradors Benutzer nicht: podman info sagt, warum.",
+    "podman-not-rootless": "Sandboxes brauchen Podman rootless, unter deinem eigenen Benutzer: Mirador läuft hier als root.",
     "turned-off": "Sandboxes sind in diesem Mirador ausgeschaltet.",
   },
   sandboxAgentKindComing: (agent: string) => `${agent} ist kein Claude-Code-Agent: Sandboxes führen vorerst nur Claude-Code-Agenten aus, andere Arten kommen noch.`,
@@ -449,7 +452,7 @@ export const problems: Messages["problems"] = {
     foundry: (agent: string) => `${agent} nutzt Microsoft Foundry, das Sandboxes noch nicht unterstützen.`,
   },
   sandboxWorkspace: {
-    "workspace-not-a-repository": "Der Arbeitsbereich des Raums ist kein Git-Repository: Eine Sandbox braucht eines, da ein Repository, das die Agenten dort anlegen, Programme auf diesem Mac ausführen könnte.",
+    "workspace-not-a-repository": "Der Arbeitsbereich des Raums ist kein Git-Repository: Eine Sandbox braucht eines, da ein Repository, das die Agenten dort anlegen, Programme auf diesem Rechner ausführen könnte.",
     "workspace-is-worktree": "Der Arbeitsbereich des Raums ist ein Git-Worktree, dessen Repository außerhalb liegt: Eine Sandbox braucht einen Arbeitsbereich mit eigenem .git-Ordner.",
     "workspace-has-commondir": "Das Repository des Raums holt seine Konfiguration aus einem anderen Ordner (.git/commondir), den eine Sandbox nicht schreibgeschützt halten kann.",
     "workspace-is-home": "Der Arbeitsbereich des Raums ist dein Home-Ordner: Eine Sandbox sähe alles darin.",
@@ -459,12 +462,15 @@ export const problems: Messages["problems"] = {
   sandboxWorktreePointsElsewhere: (worktree: string) => `Der Worktree-Ordner .git/${worktree} des Repositorys holt seine Konfiguration nicht aus diesem Repository.`,
   sandboxPartIsLink: (part: string) => `${part} des Repositorys ist ein Link, den eine Sandbox nicht schreibgeschützt halten kann.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `Die Git-Konfiguration des Repositorys bindet ${file} ein, eine Datei des Arbeitsbereichs, die die Sandbox ändern könnte: Entferne diese Einbindung, um eine Sandbox zu nutzen.`,
+  sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
+    `Der Arbeitsbereich des Raums ist oder enthält ${folder}, aus dem dieser Rechner von selbst Programme startet: Eine Sandbox könnte sie ändern.`,
   sandboxTooManyHeldChanges: (most: number) => `Seine Agenten haben mehr als ${most} zurückgehaltene Dateien geändert, die auf deine Antwort warten: Erlaube oder verwirf zuerst einige.`,
   sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,
-  sandboxCouldNotStart: (cause: string) => `Ihre VM konnte nicht starten: ${cause}`,
-  sandboxNotReadyInTime: (seconds: number) => `Ihre VM war nicht innerhalb von ${seconds} s bereit.`,
+  sandboxCouldNotStart: (cause: string) => `Sie konnte nicht starten: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `Sie war nicht innerhalb von ${seconds} s bereit.`,
   sandboxNotReadyFixed: {
     "no-claude-code-version": "Mirador konnte nicht feststellen, welche Version von Claude Code hinein soll.",
     "versions-differ": "Die Agenten des Raums nutzen verschiedene Versionen von Claude Code, und eine Sandbox führt nur eine aus.",
+    "shared-kernel-not-allowed": "Auf diesem Rechner wäre sie ein Podman-Container, der sich den Kernel des Rechners teilt, und das hat der Raum nicht erlaubt: Erlaube es in den Einstellungen des Raums.",
   },
 };

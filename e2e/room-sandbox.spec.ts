@@ -132,6 +132,7 @@ test("turned on, the sandbox is set up on this Mac with its progress shown, and 
   await createRoom(page, "Sandboxed", ["Builder"], { workspace: "project" });
   const dialog = await openRoomSettings(page, "Sandboxed", "Permissions");
   await expect(dialog.getByText("Checking whether this room can have a sandbox…")).toBeHidden();
+  await expect(dialog.locator(".room-sandbox-kind")).toHaveText("Runs in a light VM of its own on this Mac, made with Apple's container tool.");
   await sandboxSwitch(dialog).check();
 
   await expect(dialog.getByText("Network: only the model and Mirador")).toBeVisible();
@@ -235,7 +236,7 @@ test("in a sandboxed room's workspace a commit or merge runs none of the reposit
   await test.step("the agent's values say this computer's environment is ignored while the room is sandboxed", async () => {
     const settings = await openRoomSettings(page, "Sandboxed", "Agents");
     await settings.locator(".room-agent-values summary").click();
-    await expect(settings.locator(".room-values-sandboxed")).toHaveText("Ignored while the room is sandboxed: only the values chosen here go into its VM.");
+    await expect(settings.locator(".room-values-sandboxed")).toHaveText("Ignored while the room is sandboxed: only the values chosen here go into its sandbox.");
     await settings.getByRole("button", { name: "Done" }).click();
   });
 

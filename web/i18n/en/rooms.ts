@@ -3,7 +3,7 @@ import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomInviteLetsIn, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
-import type { SandboxSetupStage } from "../../../shared/sandbox.ts";
+import type { SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
 
 /** The parts of a room's settings, each on a tab of its own. */
@@ -180,22 +180,48 @@ export const rooms = {
     presetApplies: "The room's permission preset still applies",
     checking: "Checking whether this room can have a sandbox…",
     turnsFailUntil: "The agents' turns fail until this is fixed:",
+    kinds: {
+      "apple-container": "Runs in a light VM of its own on this Mac, made with Apple's container tool.",
+      podman: "Runs in a Podman container, which shares this computer's Linux kernel: weaker than a VM.",
+    } satisfies Record<SandboxKind, string>,
+    sharedKernel: {
+      warning:
+        "On this computer the sandbox is a Podman container, not a VM. It still sees only the workspace and reaches only the model and Mirador, but it shares this computer's Linux kernel, so a flaw in the kernel could let the agents out.",
+      turnOn: "Turn on anyway",
+      keepOff: "Keep it off",
+      turnsFailUntilAllowed: "The agents' turns fail until you allow it.",
+      allow: "Allow the container",
+      withoutSelinux:
+        "This computer enforces SELinux, but the container also runs without SELinux's confinement, so that your workspace's files aren't relabelled for it.",
+    },
     setup: {
-      "not-started": "It is set up on this Mac on first use: Apple's container service, then the agents' image.",
-      "starting-service": "Starting Apple's container service; the first time, it downloads a Linux kernel…",
-      "building-image": "Building the agents' image on this Mac…",
-      ready: "Set up on this Mac.",
-      failed: "Setting it up failed.",
-    } satisfies Record<SandboxSetupStage, string>,
-    buildingStep: (at: number, of: number) => `Building the agents' image on this Mac: step ${at} of ${of}…`,
+      "apple-container": {
+        "not-started": "It is set up on this Mac on first use: Apple's container service, then the agents' image.",
+        "starting-service": "Starting Apple's container service; the first time, it downloads a Linux kernel…",
+        "building-image": "Building the agents' image on this Mac…",
+        ready: "Set up on this Mac.",
+        failed: "Setting it up failed.",
+      },
+      podman: {
+        "not-started": "It is set up on this computer on first use: Podman builds the agents' image.",
+        "starting-service": "Starting Podman…",
+        "building-image": "Building the agents' image on this computer…",
+        ready: "Set up on this computer.",
+        failed: "Setting it up failed.",
+      },
+    } satisfies Record<SandboxKind, Record<SandboxSetupStage, string>>,
+    buildingStep: {
+      "apple-container": (at: number, of: number) => `Building the agents' image on this Mac: step ${at} of ${of}…`,
+      podman: (at: number, of: number) => `Building the agents' image on this computer: step ${at} of ${of}…`,
+    } satisfies Record<SandboxKind, (at: number, of: number) => string>,
     setupFailed: (problem: string) => `Setting it up failed: ${problem}`,
-    wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its VM.",
+    wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its sandbox.",
     meaning: [
-      "The room's Claude Code agents run in a light VM of their own on this Mac, made with Apple's container tool. It sees the workspace and a folder of the room's for the agents' Claude Code settings and sessions, and nothing else of this Mac. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the VM, and Mirador's canvas.",
-      "Working freely, the agents ask for nothing, as the VM keeps them in. Otherwise the room's permission preset applies as it does on this Mac.",
-      "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the VM starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",
+      "The room's Claude Code agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace and a folder of the room's for the agents' Claude Code settings and sessions, and nothing else of this computer. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "Working freely, the agents ask for nothing, as the sandbox keeps them in. Otherwise the room's permission preset applies as it does on this computer.",
+      "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",
       "Any other file the agents change in the workspace may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
-      "The repository's config and hooks are read-only in the VM. Mirador runs git on the workspace without its hooks and fsmonitor, and while the room is sandboxed, and for 7 days after, its commits and lands there skip the repository's hooks too.",
+      "The repository's config and hooks are read-only in the sandbox. Mirador runs git on the workspace without its hooks and fsmonitor, and while the room is sandboxed, and for 7 days after, its commits and lands there skip the repository's hooks too.",
       "Turning it on or off, or changing how the agents work in it, starts them afresh.",
     ],
   },

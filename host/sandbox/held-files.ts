@@ -24,7 +24,7 @@ export interface HeldRoom {
   inVm(): ((request: PlacesRequest) => Promise<PlacesPutBack>) | null;
   /** Stops the room's VM, once its agents held too many changes, or its put-back did not hold. */
   halt(): Promise<void>;
-  /** Once a stop asked for is done: whether no VM of the room runs, so this Mac may put places back with none racing it. */
+  /** Once a stop asked for is done: whether no VM of the room runs, so this computer may put places back with none racing it. */
   untilStopped(): Promise<boolean>;
 }
 
@@ -71,14 +71,14 @@ interface Held {
  * settings, instructions or MCP servers from, and those that run by themselves. The ones there as the VM starts are
  * mounted read-only into it. Each one written where there was none is put back at once, inside the VM while it runs,
  * and what was written is kept aside for the owner to allow or discard; a folder, link or anything else standing at a
- * held path goes too. Files git would read config from elsewhere never stay. This Mac checks each put-back itself, and
- * stops the VM when one did not hold. A link is never followed on the way to a held path.
+ * held path goes too. Files git would read config from elsewhere never stay. This computer checks each put-back
+ * itself, and stops the VM when one did not hold. A link is never followed on the way to a held path.
  */
 export class HeldFiles {
   private readonly expected = new Map<string, PlaceEntry>();
   private readonly held = new Map<string, Held>();
   private readonly pending = new Set<string>();
-  /** What a path the owner just allowed holds until it is written as allowed: there by this Mac's doing, not the agents'. */
+  /** What a path the owner just allowed holds until it is written as allowed: there by this computer's doing, not the agents'. */
   private readonly allowedOver = new Map<string, PlaceEntry>();
   private draining?: Promise<void>;
   private watcher?: FSWatcher;
@@ -282,12 +282,12 @@ export class HeldFiles {
   }
 
   private async differingAmong(paths: string[]) {
-    const differing = await Promise.all(paths.map(async (path) => (sameEntry(this.expected.get(path) ?? NONE, await this.entryOnThisMac(path)) ? [] : [path])));
+    const differing = await Promise.all(paths.map(async (path) => (sameEntry(this.expected.get(path) ?? NONE, await this.entryOnThisComputer(path)) ? [] : [path])));
     return differing.flat();
   }
 
-  /** What stands at a place as this Mac sees it through the workspace's own folders: none where a link or file is on the way. */
-  private async entryOnThisMac(path: string): Promise<PlaceEntry> {
+  /** What stands at a place as this computer sees it through the workspace's own folders: none where a link or file is on the way. */
+  private async entryOnThisComputer(path: string): Promise<PlaceEntry> {
     for (const folder of ancestorsOf(path)) if (!(await lstat(join(this.workspace, folder)).catch(() => null))?.isDirectory()) return NONE;
     const full = join(this.workspace, path);
     const stats = await lstat(full).catch(() => null);

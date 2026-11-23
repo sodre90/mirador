@@ -1,5 +1,5 @@
-# The image a sandboxed room's agents run in, built on the owner's Mac on first use. The build gets no files of this
-# computer: on Docker Hub's official Node image, git from Debian, and Bun and Claude Code from npm.
+# The image a sandboxed room's agents run in, built on the owner's computer on first use. The build gets no files of
+# this computer: on Docker Hub's official Node image, git from Debian, and Bun and Claude Code from npm.
 FROM docker.io/library/node:22-bookworm-slim
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates \

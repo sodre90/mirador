@@ -2,7 +2,7 @@ import { chmod, rm } from "node:fs/promises";
 import { modelKeyVariableOf, type ModelKeyVariable } from "../../shared/sandbox.ts";
 import { cameThroughRelay } from "./relayed-request.ts";
 
-/** Where one of the room's agents reaches its model: its profile's API and key, which stay on this Mac. */
+/** Where one of the room's agents reaches its model: its profile's API and key, which stay on this computer. */
 export interface ModelRoute {
   upstream: string;
   keyVariable: ModelKeyVariable;
@@ -85,7 +85,7 @@ export interface RunningSocket {
   stop(): Promise<void>;
 }
 
-/** How much of this Mac a room's VM may hold through one socket: requests at once, and seconds one may go without a byte, 0 for no end. */
+/** How much of this computer a room's VM may hold through one socket: requests at once, and seconds one may go without a byte, 0 for no end. */
 export interface SocketLimits {
   mostAtOnce: number;
   idleSeconds: number;
@@ -121,7 +121,7 @@ function givingBackWhenDone(answer: Response, giveBack: () => void): Response {
   return new Response(body, { status: answer.status, statusText: answer.statusText, headers: answer.headers });
 }
 
-/** Serves a unix socket only this Mac user reaches, made anew where an old one was left, within its limits. */
+/** Serves a unix socket only this user of this computer reaches, made anew where an old one was left, within its limits. */
 export async function serveOnSocket(socketPath: string, fetch: (request: Request) => Response | Promise<Response>, { mostAtOnce, idleSeconds }: SocketLimits): Promise<RunningSocket> {
   await rm(socketPath, { force: true });
   let atOnce = 0;

@@ -430,10 +430,13 @@ export const problems: Messages["problems"] = {
   },
   sandboxNotReady: (why: string) => `A szoba sandboxa nem áll készen, ezért az ágense nem indult el. ${why}`,
   sandboxUnavailable: {
-    "not-a-mac": "Sandbox egyelőre csak Macen fut.",
+    "unsupported-system": "Sandbox egyelőre csak Macen vagy Linuxon fut.",
     "not-apple-silicon": "A sandboxhoz Apple chipes Mac kell.",
     "macos-too-old": "A sandboxhoz macOS 26 vagy újabb kell.",
     "no-container-tool": "A sandboxhoz az Apple container eszköze kell: github.com/apple/container.",
+    "no-podman": "Linuxon a sandboxhoz Podman kell: podman.io.",
+    "podman-fails": "Itt a Podman nem működik a Mirador felhasználójának: a podman info megmondja, miért.",
+    "podman-not-rootless": "A sandboxhoz rootless Podman kell, a saját felhasználóddal futtatva: itt a Mirador rootként fut.",
     "turned-off": "Ezen a Miradoron a sandboxok ki vannak kapcsolva.",
   },
   sandboxAgentKindComing: (agent: string) => `${agent} nem Claude Code-ágens: a sandbox egyelőre csak Claude Code-ágenseket futtat, a többi fajta később jön.`,
@@ -444,7 +447,7 @@ export const problems: Messages["problems"] = {
     foundry: (agent: string) => `${agent} a Microsoft Foundryt használja, amelyet a sandbox még nem támogat.`,
   },
   sandboxWorkspace: {
-    "workspace-not-a-repository": "A szoba munkaterülete nem git-repó: a sandboxhoz kell egy, mert egy ott az ágensek által létrehozott repó programokat futtathatna ezen a Macen.",
+    "workspace-not-a-repository": "A szoba munkaterülete nem git-repó: a sandboxhoz kell egy, mert egy ott az ágensek által létrehozott repó programokat futtathatna ezen a gépen.",
     "workspace-is-worktree": "A szoba munkaterülete egy git worktree, amelynek a repója rajta kívül van: a sandboxhoz saját .git mappás munkaterület kell.",
     "workspace-has-commondir": "A szoba repója egy másik mappából veszi a beállításait (.git/commondir), amelyet a sandbox nem tud csak olvashatóvá tenni.",
     "workspace-is-home": "A szoba munkaterülete a saját mappád: a sandbox az egészét látná.",
@@ -454,12 +457,15 @@ export const problems: Messages["problems"] = {
   sandboxWorktreePointsElsewhere: (worktree: string) => `A repó .git/${worktree} worktree-mappája nem ebből a repóból veszi a beállításait.`,
   sandboxPartIsLink: (part: string) => `A repó ${part} része egy link, amelyet a sandbox nem tud csak olvashatóvá tenni.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `A repó git-beállításai behúzzák a(z) ${file} fájlt, amelyet a sandbox módosíthatna: a sandboxhoz vedd ki ezt a behúzást.`,
+  sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
+    `A szoba munkaterülete maga a(z) ${folder}, vagy tartalmazza azt: ebből a gép magától futtat programokat, amelyeket egy sandbox megváltoztathatna.`,
   sandboxTooManyHeldChanges: (most: number) => `Az ágensei több mint ${most} visszatartott fájlt módosítottak, amelyek a válaszodra várnak: előbb engedélyezz vagy vess el néhányat.`,
   sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,
-  sandboxCouldNotStart: (cause: string) => `A virtuális gépe nem tudott elindulni: ${cause}`,
-  sandboxNotReadyInTime: (seconds: number) => `A virtuális gépe nem állt készen ${seconds} mp alatt.`,
+  sandboxCouldNotStart: (cause: string) => `Nem tudott elindulni: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `Nem állt készen ${seconds} mp alatt.`,
   sandboxNotReadyFixed: {
     "no-claude-code-version": "A Mirador nem tudta megállapítani, a Claude Code melyik verzióját tegye bele.",
     "versions-differ": "A szoba ágensei a Claude Code különböző verzióit használják, a sandbox pedig egyet futtat.",
+    "shared-kernel-not-allowed": "Ezen a gépen egy Podman-konténer lenne, amely osztozik a gép kernelén, és ezt a szoba nem engedélyezte: engedélyezd a szoba beállításaiban.",
   },
 };

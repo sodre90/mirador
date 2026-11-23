@@ -1,9 +1,10 @@
-import type { SandboxSetup } from "../shared/sandbox.ts";
+import type { SandboxAvailability, SandboxSetup } from "../shared/sandbox.ts";
 import { SandboxNotReady, type AgentInVm, type RoomVmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
 import { runHere } from "./in-vm-here.ts";
 
 /** A launcher of rooms' VMs that starts nothing: it notes what it was asked, and fails where a test says. */
 export class FakeVmLauncher implements VmLauncher {
+  readonly firstProcessUser = "root";
   readonly started: RoomVmPlan[] = [];
   readonly stopped: string[] = [];
   readonly agents: AgentInVm[] = [];
@@ -12,9 +13,10 @@ export class FakeVmLauncher implements VmLauncher {
   ranAsAgentGives: ((command: string[]) => { exitCode: number; stdout: string } | null) | null = null;
   prepareFails: string | null = null;
   startFails: string | null = null;
+  available: SandboxAvailability = { available: true, kind: "apple-container" };
 
   availability() {
-    return { available: true } as const;
+    return this.available;
   }
 
   async prepare(claudeCodeVersion: string, progress: (setup: SandboxSetup) => void) {

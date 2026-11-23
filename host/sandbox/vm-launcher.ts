@@ -17,7 +17,7 @@ export const ROOM_LABEL = "mirador.room";
 /** What a VM's first process prints once its agents can reach Mirador's sockets. */
 export const VM_READY_LINE = "relays ready";
 
-/** A room's VM: its name, labels and image, its memory, what of this computer it sees, and its first process, run as root. */
+/** A room's VM: its name, labels and image, its memory, what of this computer it sees, and its first process, run as the launcher's first process user. */
 export interface RoomVmPlan {
   name: string;
   labels: Record<string, string>;
@@ -37,10 +37,15 @@ export interface AgentInVm {
 }
 
 /**
- * What runs rooms' VMs on this computer, with no network of their own: Apple's `container` on a Mac. A launcher for
- * another computer takes its place without anything else of the sandboxes changing.
+ * What runs rooms' VMs on this computer, with no network of their own: Apple's `container` on a Mac, rootless Podman's
+ * containers on Linux. A launcher for another computer takes its place without anything else of the sandboxes changing.
  */
 export interface VmLauncher {
+  /**
+   * Whom a VM's first process starts as: root, which lets the agent user reach Mirador's sockets and then runs the
+   * relays as nobody, or nobody from the start, where Mirador lets nobody reach its sockets itself.
+   */
+  readonly firstProcessUser: "root" | "nobody";
   /** Whether VMs run here, and why not where they don't. */
   availability(): SandboxAvailability;
   /** The runtime runs and the image of this Claude Code version is there, built where it was not, its progress told; the image. */

@@ -49,6 +49,8 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxPartIsLink(blocker.part);
     case "config-includes-workspace-file":
       return words.sandboxConfigIncludesWorkspaceFile(blocker.file);
+    case "workspace-holds-computers-own":
+      return words.sandboxWorkspaceHoldsComputersOwn(blocker.folder);
     default:
       return words.sandboxWorkspace[blocker.kind];
   }

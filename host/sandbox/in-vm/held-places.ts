@@ -1,6 +1,6 @@
 // Puts places of the workspace back as Mirador expects them, telling what stood there instead. Run inside a room's VM
-// as the agent user, a link it meets leads only to what the VM sees; run on the Mac, the VM is stopped. Either way it
-// never acts through a link on the way to a place. usage: bun held-places.ts < request.json > found.json
+// as the agent user, a link it meets leads only to what the VM sees; run on this computer, the VM is stopped. Either
+// way it never acts through a link on the way to a place. usage: bun held-places.ts < request.json > found.json
 import { chmodSync, closeSync, constants, lstatSync, mkdirSync, openSync, readdirSync, readlinkSync, readSync, rmSync, symlinkSync, writeSync, type Stats } from "node:fs";
 import { dirname, join } from "node:path";
 

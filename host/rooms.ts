@@ -74,6 +74,8 @@ import {
   NO_SANDBOX,
   roomSandboxIn,
   runsInSandbox,
+  sameSandbox,
+  sharesKernel,
   signInElsewhere,
   isHeldChangeAnswer,
   type HeldChangeAnswer,
@@ -440,13 +442,14 @@ export class RoomService implements RoomRules, TurnListener {
 
   /**
    * The room's agents run in a sandbox of their own from their next start on, or on this computer again: each starts
-   * afresh, at once where the change leaves it with less. A sandbox is turned on only where nothing stands in its way.
+   * afresh, at once where the change leaves it with less. A sandbox is turned on only where nothing stands in its way,
+   * and one that shares this computer's kernel only where the owner allowed that.
    */
   async setSandbox(roomId: string, given: RoomSandbox) {
     const room = this.existingRoom(roomId);
     const sandbox = roomSandboxIn(given);
-    if (sandbox.on === room.sandbox.on && sandbox.workFreely === room.sandbox.workFreely) return;
-    if (sandbox.on && !room.sandbox.on) await this.assertSandboxCanRun(roomId);
+    if (sameSandbox(sandbox, room.sandbox)) return;
+    if (sandbox.on && !room.sandbox.on) await this.assertSandboxCanRun(roomId, sandbox);
     const now = this.existingRoom(roomId);
     if (!sandbox.on) this.sandboxLeaves(now);
     this.store.setRoomSandbox(roomId, sandbox);
@@ -461,9 +464,10 @@ export class RoomService implements RoomRules, TurnListener {
     if (room.sandbox.on) this.store.setSandboxLastOnAt(room.workspaceId, Date.now());
   }
 
-  private async assertSandboxCanRun(roomId: string) {
+  private async assertSandboxCanRun(roomId: string, sandbox: RoomSandbox) {
     const { availability, blockers } = await this.sandboxCheck(roomId);
     if (!availability.available) throw new HostProblemError({ code: "sandbox-not-ready", why: { kind: "unavailable", why: availability.why } });
+    if (sharesKernel(availability.kind) && !sandbox.allowsSharedKernel) throw new HostProblemError({ code: "sandbox-not-ready", why: { kind: "shared-kernel-not-allowed" } });
     if (blockers[0]) throw new HostProblemError({ code: "sandbox-not-ready", why: { kind: "blocked", blocker: blockers[0] } });
   }
 

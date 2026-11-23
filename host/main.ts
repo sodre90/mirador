@@ -71,6 +71,7 @@ import { currentPath } from "./current-path.ts";
 import { homedir } from "node:os";
 import { AppleContainer } from "./sandbox/apple-container.ts";
 import { claudeCodeVersionIn } from "./sandbox/image.ts";
+import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
 import { RoomSandboxes } from "./sandbox/room-sandboxes.ts";
 
 if (process.platform === "win32") stopIgnoringCtrlC();
@@ -200,9 +201,10 @@ const mcp = new CanvasMcpEndpoints({
   rooms,
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
-const sandboxes = new RoomSandboxes(AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
+const podman = process.platform === "linux" ? Podman.here(config.sandboxContainer, currentPath() ?? "", config.selinuxEnforceFile) : null;
+const sandboxes = new RoomSandboxes(podman ?? AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
   dataDir: config.dataDir,
-  places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir },
+  places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir, computersOwn: podman ? computersOwnOnLinux(homedir(), podman) : [] },
   workspaceOf: (roomId) => {
     const room = store.findRoom(roomId);
     return (room && store.findWorkspace(room.workspaceId)?.path) ?? null;

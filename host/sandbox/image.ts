@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { SandboxSetup } from "../../shared/sandbox.ts";
 import { lastLineOf, type ContainerCli } from "./container-cli.ts";
 
@@ -23,11 +23,14 @@ export async function imageTag(claudeCodeVersion: string, bunVersion = Bun.versi
   return `${IMAGE_NAME}:claude-${claudeCodeVersion}-bun-${bunVersion}-${recipeHash}`;
 }
 
-/** The step a build is on, as `container build --progress plain` says it: `#7 [3/6] RUN …`. */
+/** The step a build is on, as `container build --progress plain` says it, `#7 [3/6] RUN …`, or `podman build`, `STEP 3/6: RUN …`. */
 export function buildStepIn(line: string): SandboxSetup["step"] | null {
-  const match = /^#\d+ \[(?:[^\]\s]+ )?(\d+)\/(\d+)\]/.exec(line);
+  const match = /^#\d+ \[(?:[^\]\s]+ )?(\d+)\/(\d+)\]/.exec(line) ?? /^STEP (\d+)\/(\d+): /.exec(line);
   return match ? { at: Number(match[1]), of: Number(match[2]) } : null;
 }
+
+/** The image the recipe builds on, as its FROM line names it. */
+export const baseImageOf = (recipe: string) => /^FROM\s+(\S+)/m.exec(recipe)?.[1] ?? null;
 
 /** The images `container image list --format json` lists, `[{ reference, descriptor, fullSize }]`, by their references. */
 export function imageReferencesIn(listed: string): Set<string> {
@@ -43,9 +46,9 @@ const listImages = async (cli: ContainerCli) => imageReferencesIn((await cli.run
 
 export class SetupFailed extends Error {}
 
-const mustRun = async (cli: ContainerCli, args: string[], options?: Parameters<ContainerCli["run"]>[1]) => {
+export const mustRun = async (cli: ContainerCli, args: string[], options?: Parameters<ContainerCli["run"]>[1]) => {
   const result = await cli.run(args, options);
-  if (result.exitCode !== 0) throw new SetupFailed(`container ${args.slice(0, 2).join(" ")}: ${lastLineOf(result.output) || `exit ${result.exitCode}`}`);
+  if (result.exitCode !== 0) throw new SetupFailed(`${basename(cli.program)} ${args.slice(0, 2).join(" ")}: ${lastLineOf(result.output) || `exit ${result.exitCode}`}`);
   return result.output;
 };
 
