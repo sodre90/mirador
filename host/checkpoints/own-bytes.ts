@@ -1,7 +1,7 @@
 import { copyFile, lstat, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Workspace } from "../../shared/model.ts";
-import { changesIn, EXECUTABLE_MODE, WITHOUT_SAFECRLF, type Change, type CheckpointGit, type Entry, type Location } from "./git.ts";
+import { changesIn, EXECUTABLE_MODE, SUBMODULE_MODE, WITHOUT_SAFECRLF, type Change, type CheckpointGit, type Entry, type Location } from "./git.ts";
 import { HostProblemError } from "../../shared/host-problems.ts";
 
 const FILE_MODES = new Set(["100644", EXECUTABLE_MODE]);
@@ -16,6 +16,9 @@ function entriesIn(output: string) {
     return { mode, blob, path: line.slice(tab + 1) };
   });
 }
+
+/** An entry `git ls-files --stage --others` gives of the index: its mode, object and stage, a tab, and its path; others are paths alone. */
+const STAGED_ENTRY = /^(\d{6}) [0-9a-f]+ \d\t(.*)$/s;
 
 /** `git check-attr -z`: a path, an attribute and its value, again and again. */
 function attributesIn(output: string) {
@@ -82,7 +85,7 @@ export class OwnBytesStaging {
     const upToDate = state !== null && (await this.leftAsItWas(workspace, state));
     const beforeAdd = this.git.fileOf(workspace, ".before-add.index");
     if (upToDate) await copyFile(this.git.fileOf(workspace, ".index"), beforeAdd);
-    const [statChanged, added] = await Promise.all([upToDate ? this.statChangedIn(workspace, beforeAdd) : Promise.resolve([]), this.addEverything(workspace)]);
+    const [statChanged, added] = await Promise.all([upToDate ? this.statChangedIn(workspace, beforeAdd) : Promise.resolve([]), this.addEverything(workspace, location)]);
     if (added.exitCode !== 0) {
       if (state) await this.putOwnBytesState(workspace, state);
       throw new HostProblemError({ code: "git-failed", command: "add", directory: workspace.path, output: added.stderr || added.stdout });
@@ -93,24 +96,46 @@ export class OwnBytesStaging {
     return staged;
   }
 
-  private async addEverything(workspace: Workspace) {
-    const withoutCommit = await this.nestedRepositoriesWithNoCommit(workspace);
-    const excludes = withoutCommit.map((entry) => `:(exclude,literal)${entry}`);
-    return this.git.run(workspace, [...WITHOUT_SAFECRLF, "add", "-A", "--", ".", ...excludes], { pathspecMagic: true });
+  /**
+   * Every file but those of nested git repositories, submodules among them: an add that took one in would look at what
+   * changed inside it, running git there on that repository's own config, which a sandboxed room's agent may have
+   * written to run a program on this computer. Each goes in as the commit it is at instead.
+   */
+  private async addEverything(workspace: Workspace, location: Location) {
+    const nested = await this.nestedRepositories(workspace);
+    const excludes = nested.map((path) => `:(exclude,literal)${path}`);
+    const added = await this.git.run(workspace, [...WITHOUT_SAFECRLF, "add", "-A", "--", ".", ...excludes], { pathspecMagic: true });
+    if (added.exitCode === 0) await this.recordCommitsOf(workspace, location, nested);
+    return added;
+  }
+
+  /** The nested git repositories: those git lists as one untracked folder each, and those our index holds as a commit. */
+  private async nestedRepositories(workspace: Workspace) {
+    const listed = await this.git.mustRun(workspace, ["ls-files", "-z", "--stage", "--others", "--exclude-standard"]);
+    const nested = listed.stdout.split("\0").flatMap((entry) => {
+      const staged = STAGED_ENTRY.exec(entry);
+      if (staged) return staged[1] === SUBMODULE_MODE ? [staged[2]!] : [];
+      return entry.endsWith("/") ? [entry.slice(0, -1)] : [];
+    });
+    return [...new Set(nested)];
   }
 
   /**
-   * The nested git repositories with no commit of their own: git lists each untracked repository as one folder entry,
-   * and one whose HEAD cannot be read has no commit to record as a gitlink, unlike a committed one.
+   * Each nested repository goes into our index as the commit its HEAD names, which reads no file of it; one with no commit
+   * yet, or gone, goes out.
    */
-  private async nestedRepositoriesWithNoCommit(workspace: Workspace) {
-    const listed = await this.git.mustRun(workspace, ["ls-files", "-o", "--exclude-standard", "-z"]);
-    const repositories = listed.stdout.split("\0").filter((entry) => entry.endsWith("/"));
-    const withoutCommit: string[] = [];
-    for (const repository of repositories) {
-      if ((await this.git.run(workspace, ["-C", repository, "rev-parse", "--verify", "--quiet", "HEAD"])).exitCode !== 0) withoutCommit.push(repository);
-    }
-    return withoutCommit;
+  private async recordCommitsOf(workspace: Workspace, { atTop, prefix }: Location, nested: string[]) {
+    const heads = await Promise.all(nested.map(async (path) => ({ path, commit: await this.headOf(workspace, path) })));
+    const recorded = heads.flatMap(({ path, commit }) => (commit ? [`${SUBMODULE_MODE} ${commit}\t${prefix}${path}\0`] : []));
+    const gone = heads.flatMap(({ path, commit }) => (commit ? [] : [`${path}\0`]));
+    if (recorded.length > 0) await this.git.mustRun(atTop, ["update-index", "-z", "--add", "--index-info"], { input: recorded.join("") });
+    if (gone.length > 0) await this.git.mustRun(workspace, ["update-index", "-z", "--force-remove", "--stdin"], { input: gone.join("") });
+  }
+
+  private async headOf(workspace: Workspace, path: string) {
+    if (!(await lstat(join(workspace.path, path, ".git")).catch(() => null))) return null;
+    const head = await this.git.run(workspace, ["-C", path, "rev-parse", "--verify", "--quiet", "HEAD"]);
+    return head.exitCode === 0 ? head.stdout.trim() || null : null;
   }
 
   /** Whether our staging index is the one the last stage left, and the index of own bytes is there if that stage needed one. */
@@ -128,7 +153,7 @@ export class OwnBytesStaging {
   /** The files whose stat data differs from the copy of our index taken before the add, which runs meanwhile. */
   private async statChangedIn(workspace: Workspace, beforeAdd: string) {
     try {
-      return changesIn((await this.git.mustRun(workspace, ["diff-files", "-z", "--raw"], { ownIndex: beforeAdd })).stdout);
+      return changesIn((await this.git.mustRun(workspace, ["diff-files", "--ignore-submodules=dirty", "-z", "--raw"], { ownIndex: beforeAdd })).stdout);
     } finally {
       await rm(beforeAdd, { force: true });
     }

@@ -1060,6 +1060,7 @@ test("what a conversation can commit is the folder's uncommitted changes, its se
       { path: "doomed.txt", status: "deleted", added: 0, removed: 1, byAgent: false },
     ],
     branch: await git(projectDir, ["branch", "--show-current"]),
+    hooksOff: false,
   });
   await write("kept.txt", "one\ntwo\nthree\n");
   expect((await changes.committable("c1")).ofConversation.map(({ path }) => path)).toEqual(["made.txt"]);
@@ -1091,6 +1092,18 @@ test("a commit is refused without a message, without files, for a file with no u
   await expect(changes.committable("c1")).rejects.toMatchObject({ problem: { code: "not-in-git-repository" } });
 });
 
+test("a commit where a room of the workspace is sandboxed, or was lately, runs none of the repository's hooks, and says so beforehand", async () => {
+  await identifyCommitter();
+  await agentWorks();
+  await writeFile(join(projectDir, ".git", "hooks", "pre-commit"), "#!/bin/sh\necho the hook says no >&2\nexit 1\n", { mode: 0o755 });
+  store.setSandboxLastOnAt("w1", Date.now());
+
+  expect((await changes.committable("c1")).hooksOff).toBe(true);
+  await changes.commit("c1", ["made.txt"], "Past the hook");
+
+  expect(await git(projectDir, ["log", "-1", "--format=%s"])).toBe("Past the hook");
+});
+
 test("a commit git refuses says why, and an untracked file it was to take is untracked again", async () => {
   await identifyCommitter();
   await agentWorks();
@@ -1109,8 +1122,8 @@ test("committing no files, or with no message, is refused before git marks every
   }) as typeof Bun.spawn;
 
   try {
-    await expect(commitFiles(projectDir, [], "Message")).rejects.toMatchObject({ problem: { code: "commit-needs-files" } });
-    await expect(commitFiles(projectDir, ["kept.txt"], "  \n")).rejects.toMatchObject({ problem: { code: "commit-needs-message" } });
+    await expect(commitFiles(projectDir, [], "Message", { ownersHooks: true })).rejects.toMatchObject({ problem: { code: "commit-needs-files" } });
+    await expect(commitFiles(projectDir, ["kept.txt"], "  \n", { ownersHooks: true })).rejects.toMatchObject({ problem: { code: "commit-needs-message" } });
   } finally {
     Bun.spawn = realSpawn;
   }

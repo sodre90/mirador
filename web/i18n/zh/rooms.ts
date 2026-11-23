@@ -2,6 +2,8 @@ import type { Messages } from "../en/index.ts";
 
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join("，");
 
+const agentsWant = (agents: string[]) => (agents.length === 0 ? "房间里的一个 Agent 想要" : `${agents.join(" 或 ")} 想要`);
+
 export const rooms: Messages["rooms"] = {
   rooms: "房间",
   newRoom: "新建房间",
@@ -153,6 +155,45 @@ export const rooms: Messages["rooms"] = {
   startsAfresh: (agents: string[]) => `${agents.join("、")} 会重新开始，并再读一次房间。`,
   stopsAndStartsAfresh: (agents: string[]) => `${agents.join("、")} 会停止进行中的轮次，重新开始，并再读一次房间。`,
   applyChange: "更改",
+  sandbox: {
+    legend: "沙箱",
+    turnOn: "在沙箱中运行 Agent",
+    network: "网络：只有模型和 Mirador",
+    workFreely: "Agent 在里面自由工作",
+    presetApplies: "房间的权限预设仍然适用",
+    checking: "正在检查这个房间能否使用沙箱…",
+    turnsFailUntil: "解决这个问题之前，Agent 的轮次都会失败：",
+    setup: {
+      "not-started": "首次使用时在这台 Mac 上设置：先是 Apple 的 container 服务，然后是 Agent 的镜像。",
+      "starting-service": "正在启动 Apple 的 container 服务；第一次会下载一个 Linux 内核…",
+      "building-image": "正在这台 Mac 上构建 Agent 的镜像…",
+      ready: "已在这台 Mac 上设置好。",
+      failed: "设置失败。",
+    },
+    buildingStep: (at: number, of: number) => `正在这台 Mac 上构建 Agent 的镜像：第 ${at} 步，共 ${of} 步…`,
+    setupFailed: (problem: string) => `设置失败：${problem}`,
+    wholeEnvironmentIgnored: "房间开着沙箱时此项无效：只有这里选中的值会进入它的虚拟机。",
+    meaning: [
+      "房间的 Claude Code Agent 在这台 Mac 上自己的轻量虚拟机里运行，由 Apple 的 container 工具创建。它能看到工作区和房间的一个文件夹（存放 Agent 的 Claude Code 设置和会话），看不到这台 Mac 的其他内容。它的网络只能通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入虚拟机；此外只能访问 Mirador 的画布。",
+      "自由工作时，Agent 什么都不用请求批准，因为虚拟机把它们关在里面。否则房间的权限预设照常适用，和在这台 Mac 上一样。",
+      "Agent 读取设置、指令和 MCP 服务器的文件会被暂扣，会自行运行的文件也一样：.claude、.mcp.json、CLAUDE.md、AGENTS.md、.codex、opencode.json、.opencode、.pi、.husky、.githooks、.vscode、.pre-commit-config.yaml、lefthook.yml 和 .envrc。虚拟机启动时已有的这些文件在其中是只读的；新出现的会立即被撤回，由你在房间里批准或丢弃。",
+      "Agent 在工作区改动的其他任何文件，在你自己运行时都可能被执行：测试、脚本、package.json，或者在终端里提交（会运行仓库的 Hook）。在那里运行任何东西之前，请先看看它们改了什么。",
+      "仓库的配置和 Hook 在虚拟机里是只读的。Mirador 在工作区运行 git 时不使用它的 Hook 和 fsmonitor；在房间开着沙箱期间及之后 7 天内，Mirador 在那里的提交和合入也不运行仓库的 Hook。",
+      "开启或关闭它，或者更改 Agent 在里面的工作方式，都会让 Agent 重新开始。",
+    ],
+  },
+  held: {
+    label: "为你暂扣的 Agent 配置更改",
+    wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)}更改 ${path}`,
+    wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)}添加 ${path}`,
+    wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)}删除 ${path}`,
+    keptAsItWas: "在你批准之前，文件保持原样。",
+    unshown: "内容太长或不是文本，无法在这里显示。",
+    loading: "正在加载更改…",
+    tooMany: (most: number) => `沙箱已停止：它的 Agent 改动了超过 ${most} 个暂扣的文件。请允许或丢弃其中一些，它们才能继续工作。`,
+    allow: "批准",
+    discard: "丢弃",
+  },
   peoplesTasksHint: "否则，成员的标记或跟进要等你允许后才会到达 Agent。",
   roles: { member: "成员", guest: "访客" },
   authorRoles: { owner: "所有者", member: "成员", guest: "访客", agent: "Agent", "member's agent": "成员的 Agent" },

@@ -10,6 +10,7 @@ import { SystemNotifications } from "../host/system-notifications.ts";
 import { Store } from "../host/store.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { askingModeOf } from "../shared/room-permissions.ts";
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "room-preset-modes-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -61,7 +62,7 @@ test("a room's agent runs in its preset's mode, not its profile's, ignores its p
   mkdirSync(project);
   store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: null, mode: "agent-full-access", effort: null, bypassPermissions: true, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const { agent, promptedIn } = codexAgent();
   const inRoom = conversations.startInRoom("r1", "w1", { harness: "codex", profileId: "p1" }, "Room: p");
@@ -124,7 +125,7 @@ test("a room's agent opens its session on the model and effort chosen for it in 
   mkdirSync(project);
   store.saveProfile({ id: "p1", name: "p", harness: "codex", environment: "", prelaunch: "", model: "haiku", mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [], createdAt: 1 });
   store.insertWorkspace({ id: "w1", name: "p", path: project, defaultLaunch: { harness: "codex", profileId: "p1" }, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: "opus", effort: "high", variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Room", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: null, answering: null, model: "opus", effort: "high", variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
   const conversations = new ConversationService(store, new Hub(), loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`) }), { mute() {}, unmute() {} } as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const { agent, promptedOn } = agentWithModels();
   const inRoom = conversations.startInRoom("r1", "w1", { harness: "codex", profileId: "p1" }, "Room: p");

@@ -36,6 +36,10 @@ const PLUGIN_OFF_SECRET = "owner-plugin-off-secret";
 
 /** Every message a page can send; a type missing here does not compile. */
 const EVERY_CLIENT_MESSAGE: Record<ClientMessage["type"], true> = {
+  "room.set-sandbox": true,
+  "room.check-sandbox": true,
+  "room.answer-held-change": true,
+  "room.held-change-text": true,
   "workspace.create": true,
   "workspace.delete": true,
   "workspace.set-default-launch": true,
@@ -532,6 +536,7 @@ describe("a person other than the owner", () => {
       expect(snapshot.conversations).toEqual([]);
       expect(snapshot.profiles).toEqual([]);
       expect(snapshot.roomApprovals).toEqual([]);
+      expect(snapshot.heldChanges).toEqual([]);
       expect(snapshot.homeDir).toBe("");
       expect(snapshot.people.map(({ id }) => id).toSorted()).toEqual([snapshot.ownerId, person.id].toSorted());
     });

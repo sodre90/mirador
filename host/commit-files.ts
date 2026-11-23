@@ -1,6 +1,6 @@
 import type { MadeCommit } from "../shared/changes.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
-import { git, mustGit } from "./git-command.ts";
+import { git, mustGit, type GitCall } from "./git-command.ts";
 
 const untrackedAmong = async (directory: string, paths: string[]) =>
   (await mustGit(directory, ["ls-files", "--others", "-z", "--", ...paths])).split("\0").filter(Boolean);
@@ -9,14 +9,14 @@ const untrackedAmong = async (directory: string, paths: string[]) =>
  * Commits these files as they are in the folder, and nothing else: `git commit --only` takes each path's working-tree
  * content and leaves what the user or another conversation staged for other paths as it was. git commits only paths
  * its index knows, so an untracked file is first marked as one to add, a mark taken back if the commit fails. The
- * commit is the user's own: their identity, signing and hooks apply.
+ * commit is the user's own: their identity and signing apply, and their hooks where the call says so.
  */
-export async function commitFiles(directory: string, paths: string[], message: string): Promise<MadeCommit> {
+export async function commitFiles(directory: string, paths: string[], message: string, { ownersHooks }: GitCall): Promise<MadeCommit> {
   if (paths.length === 0) throw new HostProblemError({ code: "commit-needs-files" });
   if (message.trim() === "") throw new HostProblemError({ code: "commit-needs-message" });
   const untracked = await untrackedAmong(directory, paths);
   if (untracked.length > 0) await mustGit(directory, ["add", "--intent-to-add", "--", ...untracked]);
-  const committed = await git(directory, ["commit", "--quiet", "--only", "--file=-", "--", ...paths], message);
+  const committed = await git(directory, ["commit", "--quiet", "--only", "--file=-", "--", ...paths], message, { ownersHooks });
   if (committed.exitCode !== 0) {
     if (untracked.length > 0) await git(directory, ["reset", "--quiet", "--", ...untracked]);
     throw new HostProblemError({ code: "git-failed", command: "commit", directory, output: committed.output });

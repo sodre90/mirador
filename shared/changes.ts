@@ -65,6 +65,8 @@ export interface Committable {
   ofConversation: ChangedFile[];
   others: ChangedFile[];
   branch: string | null;
+  /** Whether the commit runs without the repository's hooks, as a sandboxed room works there or did lately. */
+  hooksOff: boolean;
 }
 
 /**
@@ -75,6 +77,8 @@ export interface Landable {
   branch: string | null;
   ahead: number;
   behind: number;
+  /** Whether landing runs without the repository's hooks, as a sandboxed room works there or did lately. */
+  hooksOff: boolean;
 }
 
 /** Commits a worktree conversation brought onto its project folder's branch, rebased first when that branch had moved on. */

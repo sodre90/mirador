@@ -108,6 +108,7 @@ import type { HostRestart } from "./restart.ts";
 import { signInLink, type SignInCodes } from "./sign-in-codes.ts";
 import { showWithNotifySend } from "./notify-send.ts";
 import type { StatuslineService } from "./statusline.ts";
+import type { RoomSandboxes } from "./sandbox/room-sandboxes.ts";
 import type { Store } from "./store.ts";
 import type { TerminalService } from "./terminals.ts";
 import { VoiceUnavailable, type Voice } from "./voice/voice.ts";
@@ -124,6 +125,7 @@ export interface HostServices {
   store: Store;
   hub: Hub;
   conversations: ConversationService;
+  sandboxes: Pick<RoomSandboxes, "setup" | "heldChanges" | "roomsHoldingTooMany" | "heldChangeText">;
   canvas: CanvasService;
   mcp: CanvasMcpEndpoints;
   apps: AppDocuments;
@@ -228,6 +230,7 @@ export function startServer(services: HostServices) {
     store,
     hub,
     conversations,
+    sandboxes,
     canvas,
     mcp,
     apps,
@@ -2122,6 +2125,14 @@ export function startServer(services: HostServices) {
         return rooms.setPeoplesTasksWait(message.roomId, message.wait);
       case "room.set-claude-setup":
         return rooms.setClaudeSetup(message.roomId, message.setup);
+      case "room.set-sandbox":
+        return rooms.setSandbox(message.roomId, message.sandbox);
+      case "room.check-sandbox":
+        return reply({ type: "room.sandbox-checked", requestId: message.requestId, roomId: message.roomId, ...(await rooms.sandboxCheck(message.roomId)) });
+      case "room.answer-held-change":
+        return rooms.answerHeldChange(message.roomId, message.changeId, message.answer);
+      case "room.held-change-text":
+        return reply({ type: "room.held-change-text", requestId: message.requestId, text: sandboxes.heldChangeText(message.roomId, message.changeId) });
       case "room.set-agent-variable":
         return rooms.chooseAgentVariable(message.roomId, message.profileId, message.name, message.given);
       case "room.set-agent-host-environment":
@@ -2246,6 +2257,9 @@ export function startServer(services: HostServices) {
       rooms: rooms.list(),
       roomApprovals: rooms.allApprovals(),
       roomTasksWaiting: rooms.allTasksWaiting(),
+      sandboxSetup: sandboxes.setup(),
+      heldChanges: sandboxes.heldChanges(),
+      roomsHoldingTooMany: sandboxes.roomsHoldingTooMany(),
       roomInvites: roomInvites.waiting(),
       broughtAgents: broughtAgents.list().agents,
       broughtTasks: broughtAgents.list().tasks,

@@ -325,6 +325,7 @@ export class TestHost {
       MIRADOR_PI_RELEASE_URL: "off",
       MIRADOR_DEFAULT_PLUGINS: "off",
       MIRADOR_PUSH_RELAY: "off",
+      MIRADOR_SANDBOX: "off",
       SHELL: this.options.shell ?? defaultShell,
       ...(process.platform === "win32" && { [HOST_RELAUNCH.restartExitCode]: String(HOST_RESTART_EXIT_CODE) }),
       ...(this.options.fakePrograms && withFirstOnPath(this.baseEnvironment(), this.fakeProgramsDir)),

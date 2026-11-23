@@ -2,6 +2,8 @@ import type { Messages } from "../en/index.ts";
 
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
 
+const agentsWant = (agents: string[]) => (agents.length === 0 ? "A szoba egyik ágense szeretné" : agents.length === 1 ? `${agents[0]} szeretné` : `${agents.join(" vagy ")} szeretné`);
+
 export const rooms: Messages["rooms"] = {
   rooms: "Szobák",
   newRoom: "Új szoba",
@@ -160,6 +162,45 @@ export const rooms: Messages["rooms"] = {
       ? `Leállítja a folyamatban lévő körét, elölről kezdi, és egyszer újra elolvassa a szobát: ${agents[0]}.`
       : `Leállítják a folyamatban lévő körüket, elölről kezdik, és egyszer újra elolvassák a szobát: ${agents.join(", ")}.`,
   applyChange: "Módosítás",
+  sandbox: {
+    legend: "Sandbox",
+    turnOn: "Az ágensek sandboxban futnak",
+    network: "Hálózat: csak a modell és a Mirador",
+    workFreely: "Az ágensek szabadon dolgoznak benne",
+    presetApplies: "A szoba engedélybeállítása továbbra is érvényes",
+    checking: "Annak ellenőrzése, hogy lehet-e a szobának sandboxa…",
+    turnsFailUntil: "Az ágensek körei sikertelenek, amíg ez nincs javítva:",
+    setup: {
+      "not-started": "Első használatkor beállítódik ezen a Macen: az Apple container szolgáltatása, majd az ágensek image-e.",
+      "starting-service": "Az Apple container szolgáltatásának indítása; első alkalommal letölt egy Linux-kernelt…",
+      "building-image": "Az ágensek image-ének építése ezen a Macen…",
+      ready: "Beállítva ezen a Macen.",
+      failed: "A beállítás nem sikerült.",
+    },
+    buildingStep: (at: number, of: number) => `Az ágensek image-ének építése ezen a Macen: ${of} lépésből a(z) ${at}.…`,
+    setupFailed: (problem: string) => `A beállítás nem sikerült: ${problem}`,
+    wholeEnvironmentIgnored: "Amíg a szoba sandboxolt, ez nem számít: a virtuális gépére csak az itt kiválasztott értékek kerülnek.",
+    meaning: [
+      "A szoba Claude Code-ágensei egy saját, könnyű virtuális gépen futnak ezen a Macen, az Apple container eszközével. Ez a munkaterületet és a szoba egy mappáját látja az ágensek Claude Code-beállításainak és munkameneteinek, a Macből semmi mást. A hálózata csak a modellt éri el, a Miradoron keresztül, amely hozzáadja a profil kulcsát, így a kulcs sosem kerül a virtuális gépre, valamint a Mirador vásznát.",
+      "Ha szabadon dolgoznak, az ágensek semmire sem kérnek engedélyt, mert a virtuális gép bent tartja őket. Különben a szoba engedélybeállítása érvényes, mint ezen a Macen.",
+      "Az ágensek beállításait, utasításait és MCP-szervereit adó fájlok visszatartva vannak, és azok is, amelyek maguktól futnak: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml és .envrc. Amelyek a virtuális gép indulásakor megvannak, azok benne csak olvashatók; egy újat azonnal visszaállít, te pedig a szobában engedélyezed vagy elveted.",
+      "Minden más fájl, amelyet az ágensek a munkaterületen módosítanak, lefuthat, ha te magad futtatod: tesztek, szkriptek, a package.json, vagy egy commit a terminálodból, amely lefuttatja a repó hookjait. Nézd át, mit változtattak, mielőtt bármit futtatsz ott.",
+      "A repó beállításai és hookjai a virtuális gépen csak olvashatók. A Mirador a hookjai és az fsmonitor nélkül futtatja a gitet a munkaterületen, és amíg a szoba sandboxolt, valamint utána 7 napig, az ottani commitjai és beolvasztásai is kihagyják a repó hookjait.",
+      "Be- vagy kikapcsolása, vagy annak módosítása, hogyan dolgoznak benne az ágensek, elölről kezdeti őket.",
+    ],
+  },
+  held: {
+    label: "Visszatartott ágensbeállítás-változás",
+    wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} módosítani ezt: ${path}`,
+    wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} hozzáadni ezt: ${path}`,
+    wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} törölni ezt: ${path}`,
+    keptAsItWas: "A fájl olyan marad, amilyen volt, amíg nem engedélyezed a változást.",
+    unshown: "Túl hosszú, vagy nem szöveg, ezért itt nem látszik.",
+    loading: "A változás betöltése…",
+    tooMany: (most: number) => `A sandbox leállt: az ágensei több mint ${most} visszatartott fájlt módosítottak. Engedélyezz vagy vess el néhányat, hogy újra dolgozhassanak.`,
+    allow: "Engedélyezés",
+    discard: "Elvetés",
+  },
   peoplesTasksHint: "Különben egy tag megjelölése vagy válasza csak akkor jut el az ágenshez, ha engedélyezed.",
   roles: { member: "Tag", guest: "Vendég" },
   authorRoles: { owner: "Tulajdonos", member: "Tag", guest: "Vendég", agent: "Ágens", "member's agent": "Tag ágense" },

@@ -2,6 +2,7 @@ import type { CanvasItem, Profile } from "../shared/model.ts";
 import { DEFAULT_CONVERSATIONS_SHOWN, DEFAULT_OLDER_AFTER } from "../shared/model.ts";
 import type { ServerMessage } from "../shared/protocol.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
+import { NO_SANDBOX, SETUP_NOT_STARTED } from "../shared/sandbox.ts";
 import type { RoomPresence } from "../shared/rooms.ts";
 import { agentStandIn, broughtAgentName, PROFILES_MODEL, shownOnRoomCanvas, type Room } from "../shared/rooms.ts";
 import { PERSON_WITHOUT_A_NAME, personGoesBy } from "../shared/people.ts";
@@ -16,7 +17,7 @@ type View<K extends ServerMessage["type"]> = (message: Extract<ServerMessage, { 
 
 /**
  * A room as a person in it sees it: its people by id and role alone, whom they tag and see vote, nothing of the
- * workspace its agents work in, the models the owner chose for them or what they are given, and in place of each
+ * workspace its agents work in, the models the owner chose for them, what they are given or whether they run in a sandbox, and in place of each
  * agent's conversation there, which they never open, a stand-in that names none; of an agent someone brought, who did,
  * its name and kind, and whether it is here.
  */
@@ -39,6 +40,7 @@ const roomSeenBy = ({ id, name, agents, permissions, people, peoplesTasksWait, m
   claudeSetup: ALL_OF_CLAUDE_SETUP,
   agentsReadGuests: true,
   membersBringAgents,
+  sandbox: NO_SANDBOX,
   createdAt,
 });
 
@@ -153,6 +155,9 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       rooms: rooms.map(roomSeenBy),
       roomApprovals: [],
       roomTasksWaiting: [],
+      sandboxSetup: SETUP_NOT_STARTED,
+      heldChanges: [],
+      roomsHoldingTooMany: [],
       roomInvites: [],
       broughtAgents: [],
       broughtTasks: [],
@@ -241,6 +246,10 @@ export function personView(store: PeopleSeen & Pick<Store, "findRoom" | "listPro
       shownIf(personId === socket.personId, { type: "rooms.reading", personId, readings: readings.filter(({ roomId }) => isIn(socket, roomId)) }),
     "room.alert": (message, socket) => shownIf(message.personId === socket.personId && isIn(socket, message.roomId), message),
     "room.approvals": HIDDEN,
+    "room.sandbox-checked": HIDDEN,
+    "sandbox.setup": HIDDEN,
+    "room.held-changes": HIDDEN,
+    "room.held-change-text": HIDDEN,
     "room.presence": ({ roomId, here, writing }, socket) => shownIf(isIn(socket, roomId), { type: "room.presence", roomId, ...presenceSeen(roomId, { here, writing }, socket) }),
     "room.usage.got": HIDDEN,
     "room.agent-brought": (message, socket) => shownIf(message.personId === socket.personId, message),

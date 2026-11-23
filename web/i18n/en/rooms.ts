@@ -3,6 +3,7 @@ import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
+import type { SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
 
 /** The parts of a room's settings, each on a tab of its own. */
@@ -10,6 +11,8 @@ export type RoomSettingsTab = "people" | "agents" | "permissions" | "usage";
 
 const counted = (count: number, one: string, many: string) => (count === 1 ? `1 ${one}` : `${count} ${many}`);
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
+
+const agentsWant = (agents: string[]) => (agents.length === 0 ? "An agent of the room wants" : agents.length === 1 ? `${agents[0]} wants` : `${agents.join(" or ")} wants`);
 
 export const rooms = {
   rooms: "Rooms",
@@ -169,6 +172,45 @@ export const rooms = {
       ? `${agents[0]} stops any turn under way, starts afresh and reads the room again, once.`
       : `${agents.join(", ")} stop any turns under way, start afresh and read the room again, once.`,
   applyChange: "Change",
+  sandbox: {
+    legend: "Sandbox",
+    turnOn: "Run the agents in a sandbox",
+    network: "Network: only the model and Mirador",
+    workFreely: "Agents work freely inside",
+    presetApplies: "The room's permission preset still applies",
+    checking: "Checking whether this room can have a sandbox…",
+    turnsFailUntil: "The agents' turns fail until this is fixed:",
+    setup: {
+      "not-started": "It is set up on this Mac on first use: Apple's container service, then the agents' image.",
+      "starting-service": "Starting Apple's container service; the first time, it downloads a Linux kernel…",
+      "building-image": "Building the agents' image on this Mac…",
+      ready: "Set up on this Mac.",
+      failed: "Setting it up failed.",
+    } satisfies Record<SandboxSetupStage, string>,
+    buildingStep: (at: number, of: number) => `Building the agents' image on this Mac: step ${at} of ${of}…`,
+    setupFailed: (problem: string) => `Setting it up failed: ${problem}`,
+    wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its VM.",
+    meaning: [
+      "The room's Claude Code agents run in a light VM of their own on this Mac, made with Apple's container tool. It sees the workspace and a folder of the room's for the agents' Claude Code settings and sessions, and nothing else of this Mac. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the VM, and Mirador's canvas.",
+      "Working freely, the agents ask for nothing, as the VM keeps them in. Otherwise the room's permission preset applies as it does on this Mac.",
+      "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the VM starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",
+      "Any other file the agents change in the workspace may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
+      "The repository's config and hooks are read-only in the VM. Mirador runs git on the workspace without its hooks and fsmonitor, and while the room is sandboxed, and for 7 days after, its commits and lands there skip the repository's hooks too.",
+      "Turning it on or off, or changing how the agents work in it, starts them afresh.",
+    ],
+  },
+  held: {
+    label: "Agent config change held for you",
+    wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} to change ${path}`,
+    wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} to add ${path}`,
+    wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} to delete ${path}`,
+    keptAsItWas: "The file is as it was until you allow the change.",
+    unshown: "It is too long, or not text, to show here.",
+    loading: "Loading the change…",
+    tooMany: (most: number) => `The sandbox stopped: its agents changed more than ${most} held files. Allow or discard some for them to work again.`,
+    allow: "Allow",
+    discard: "Discard",
+  },
   peoplesTasksHint: "Otherwise a member's tag or follow-up reaches no agent until you allow it.",
   roles: { member: "Member", guest: "Guest" } satisfies Record<RoomRole, string>,
   authorRoles: { owner: "Owner", member: "Member", guest: "Guest", agent: "Agent", "member's agent": "Member's agent" } satisfies Record<RoomAuthorRole, string>,

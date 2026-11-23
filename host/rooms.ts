@@ -6,7 +6,18 @@ import { replyOf } from "../shared/last-words.ts";
 import { harnessIds, type CanvasItem, type Conversation, type HarnessId, type Launch } from "../shared/model.ts";
 import type { RoomUsage } from "../shared/room-usage.ts";
 import { agentsTaggedIn, mentionsIn, type RoomMention, type TaggableAgent } from "../shared/room-mentions.ts";
-import { ALL_OF_CLAUDE_SETUP, CLAUDE_SETUP_PARTS, claudeSetupIn, isVariableName, narrows, narrowsClaudeSetup, profileVariablesInRoom, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
+import {
+  ALL_OF_CLAUDE_SETUP,
+  CLAUDE_SETUP_PARTS,
+  claudeSetupIn,
+  environmentInRoom,
+  isVariableName,
+  narrows,
+  narrowsClaudeSetup,
+  profileVariablesInRoom,
+  type ClaudeSetup,
+  type VariablesChosen,
+} from "../shared/room-agent-setup.ts";
 import { AGENT_GONE, nameRefused, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import {
   allowedByPreset,
@@ -58,6 +69,20 @@ import {
   type RoomThread,
   type RoomTimeline,
 } from "../shared/rooms.ts";
+import {
+  narrowsSandbox,
+  NO_SANDBOX,
+  roomSandboxIn,
+  runsInSandbox,
+  signInElsewhere,
+  isHeldChangeAnswer,
+  type HeldChangeAnswer,
+  type RoomSandbox,
+  type SandboxAvailability,
+  type SandboxBlocker,
+  type SandboxCheck,
+} from "../shared/sandbox.ts";
+import { profileEnvironment } from "./acp/harnesses.ts";
 import { shownAsWritten } from "../shared/written-text.ts";
 import { firstGraphemes } from "../shared/text-cut.ts";
 import type { RoomRules, TurnListener, WaitingPermission } from "./conversations.ts";
@@ -193,6 +218,25 @@ function realPlaceOf(path: string): string | null {
   return realFolder === null ? null : join(realFolder, basename(path));
 }
 
+/** What a room's settings need of the sandboxes. */
+export interface RoomSandboxControl {
+  availability(): SandboxAvailability;
+  /** Sets up what every sandbox needs, so the room's first turn need not wait for it. */
+  prepare(): void;
+  answerHeldChange(roomId: string, changeId: string, answer: HeldChangeAnswer): Promise<void>;
+  roomGone(roomId: string): Promise<void>;
+  /** Why the workspace can't be shown to a sandbox, null where it can. */
+  workspaceRefusal(workspace: string): Promise<SandboxBlocker | null>;
+}
+
+const NO_SANDBOX_CONTROL: RoomSandboxControl = {
+  availability: () => ({ available: false, why: "turned-off" }),
+  prepare: () => {},
+  answerHeldChange: async () => {},
+  roomGone: async () => {},
+  workspaceRefusal: async () => null,
+};
+
 /**
  * The rooms of this machine: their messages go to every page that shows the room and cost no tokens, until one tags an
  * agent or follows up in its thread. Then the agent's conversation in the room is sent what it has not seen of the room,
@@ -209,6 +253,7 @@ export class RoomService implements RoomRules, TurnListener {
   private readonly allowedForTurn = new Map<string, Set<string>>();
   private outOfEveryRoom: (personIds: string[]) => void = () => {};
   private postListener: PostListener = () => {};
+  private sandboxes = NO_SANDBOX_CONTROL;
 
   constructor(
     private readonly store: Store,
@@ -227,6 +272,10 @@ export class RoomService implements RoomRules, TurnListener {
 
   list(): Room[] {
     return this.store.listRooms();
+  }
+
+  keepsSandboxesWith(sandboxes: RoomSandboxControl) {
+    this.sandboxes = sandboxes;
   }
 
   /** Told of the people a change took out of the last room they were in. */
@@ -257,6 +306,7 @@ export class RoomService implements RoomRules, TurnListener {
       claudeSetup: ALL_OF_CLAUDE_SETUP,
       agentsReadGuests: true,
       membersBringAgents: true,
+      sandbox: NO_SANDBOX,
       createdAt: Date.now(),
     };
     this.store.insertRoom(room);
@@ -298,6 +348,7 @@ export class RoomService implements RoomRules, TurnListener {
     if (!this.store.findWorkspace(workspaceId)) throw new HostProblemError({ code: "workspace-gone" });
     if (workspaceId === room.workspaceId) return;
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.deleteWithAllItHolds(conversationId));
+    this.sandboxLeaves(room);
     this.store.setRoomWorkspace(roomId, workspaceId);
     this.publish(roomId);
     this.waitingChanged(roomId);
@@ -387,6 +438,65 @@ export class RoomService implements RoomRules, TurnListener {
     });
   }
 
+  /**
+   * The room's agents run in a sandbox of their own from their next start on, or on this computer again: each starts
+   * afresh, at once where the change leaves it with less. A sandbox is turned on only where nothing stands in its way.
+   */
+  async setSandbox(roomId: string, given: RoomSandbox) {
+    const room = this.existingRoom(roomId);
+    const sandbox = roomSandboxIn(given);
+    if (sandbox.on === room.sandbox.on && sandbox.workFreely === room.sandbox.workFreely) return;
+    if (sandbox.on && !room.sandbox.on) await this.assertSandboxCanRun(roomId);
+    const now = this.existingRoom(roomId);
+    if (!sandbox.on) this.sandboxLeaves(now);
+    this.store.setRoomSandbox(roomId, sandbox);
+    this.publish(roomId);
+    const stopsTurn = narrowsSandbox(now.sandbox, sandbox);
+    now.agents.filter(({ brought }) => !brought).forEach((agent) => this.startAfresh(agent, stopsTurn));
+    if (sandbox.on) this.sandboxes.prepare();
+  }
+
+  /** A sandbox leaving its workspace leaves the repository's hooks off there a while yet. */
+  private sandboxLeaves(room: Room) {
+    if (room.sandbox.on) this.store.setSandboxLastOnAt(room.workspaceId, Date.now());
+  }
+
+  private async assertSandboxCanRun(roomId: string) {
+    const { availability, blockers } = await this.sandboxCheck(roomId);
+    if (!availability.available) throw new HostProblemError({ code: "sandbox-not-ready", why: { kind: "unavailable", why: availability.why } });
+    if (blockers[0]) throw new HostProblemError({ code: "sandbox-not-ready", why: { kind: "blocked", blocker: blockers[0] } });
+  }
+
+  async sandboxCheck(roomId: string): Promise<SandboxCheck> {
+    const room = this.existingRoom(roomId);
+    const workspace = this.store.findWorkspace(room.workspaceId);
+    const workspaceRefused = workspace ? await this.sandboxes.workspaceRefusal(workspace.path) : null;
+    const agentsRefused = room.agents.flatMap((agent) => this.sandboxBlockerOf(agent) ?? []);
+    return { availability: this.sandboxes.availability(), blockers: [...agentsRefused, ...(workspaceRefused ? [workspaceRefused] : [])] };
+  }
+
+  /** An agent someone brought runs on their own computer, so no sandbox here is its business; in one, no agent gets this computer's whole environment. */
+  private sandboxBlockerOf({ profileId, brought, variables }: RoomAgent): SandboxBlocker | null {
+    const profile = this.store.findProfile(profileId);
+    if (brought || !profile) return null;
+    if (!runsInSandbox(profile.harness)) return { kind: "agent-kind-coming", agent: profile.name, harness: profile.harness };
+    const environment = (() => {
+      try {
+        return profileEnvironment(profile, (host, set) => environmentInRoom(profile.harness, host, set, { variables, wholeHostEnvironment: false }));
+      } catch {
+        return {};
+      }
+    })();
+    const how = signInElsewhere(environment);
+    return how ? { kind: "agent-signs-in-elsewhere", agent: profile.name, how } : null;
+  }
+
+  async answerHeldChange(roomId: string, changeId: string, answer: HeldChangeAnswer) {
+    this.existingRoom(roomId);
+    if (!isHeldChangeAnswer(answer)) throw new Error("A held change is allowed or discarded.");
+    await this.sandboxes.answerHeldChange(roomId, changeId, answer);
+  }
+
   private startAfresh({ conversationId }: RoomAgent, stopsTurn: boolean) {
     if (conversationId) this.sessions.startAfreshInRoom(conversationId, { stopsTurn });
   }
@@ -421,6 +531,8 @@ export class RoomService implements RoomRules, TurnListener {
   delete(roomId: string) {
     const room = this.existingRoom(roomId);
     room.agents.forEach(({ conversationId }) => conversationId && this.sessions.deleteWithAllItHolds(conversationId));
+    void this.sandboxes.roomGone(roomId);
+    this.sandboxLeaves(room);
     this.store.deleteRoom(roomId);
     this.hub.broadcast({ type: "room.deleted", roomId });
     if (room.people.length === 0) return;

@@ -822,6 +822,8 @@ export function App() {
             ownerPicture={state.avatar}
             approvals={state.roomApprovals.filter(({ roomId }) => roomId === shownRoom.id)}
             tasks={state.roomTasksWaiting.filter(({ roomId }) => roomId === shownRoom.id)}
+            heldChanges={state.heldChanges.filter(({ roomId }) => roomId === shownRoom.id)}
+            holdsTooMany={state.roomsHoldingTooMany.includes(shownRoom.id)}
             presence={state.roomPresence?.roomId === shownRoom.id ? state.roomPresence : null}
             muted={isMuted(state.roomReadings, shownRoom.id)}
             you={state.you}
@@ -1041,6 +1043,7 @@ export function App() {
           ownerId={state.ownerId}
           invites={state.roomInvites}
           roomConversations={state.roomConversations}
+          sandboxSetup={state.sandboxSetup}
           onInvite={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: settingsRoom.id } })}
           onClose={closeOverlay}
         />

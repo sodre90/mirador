@@ -36,6 +36,7 @@ import {
   type RoomWriter,
   type WorkPending,
 } from "../shared/rooms.ts";
+import type { HeldChange } from "../shared/sandbox.ts";
 import { placedBelowOnItsSide, useClosing, useKeptInWindow } from "./BarMenu.tsx";
 import { CanvasPanel, CanvasShown, type WorkspaceApps } from "./Canvas.tsx";
 import { agentMarks, MessageWriters, pendingPermissionNeeded, PersonAvatar, PersonName, TimelineOfEvents, Timestamp, usePersonName, usePersonNames } from "./Chat.tsx";
@@ -53,6 +54,7 @@ import { ConversationWithSide } from "./SideChat.tsx";
 import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./state.ts";
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
+import { HeldChangeCard } from "./RoomSandbox.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -700,6 +702,8 @@ export function RoomView({
   ownerPicture,
   approvals,
   tasks,
+  heldChanges,
+  holdsTooMany,
   presence,
   muted,
   you,
@@ -718,6 +722,10 @@ export function RoomView({
   approvals: RoomApproval[];
   /** The tasks of people other than the owner that wait for an approver, oldest first. */
   tasks: RoomTaskApproval[];
+  /** The room's agent config file changes held for the owner, oldest first. */
+  heldChanges: HeldChange[];
+  /** Whether its sandbox stopped as it holds as many changes as a room may. */
+  holdsTooMany: boolean;
   /** Who is in the room now and who of them writes, once the host said. */
   presence: RoomPresence | null;
   /** Whether the room notifies you. */
@@ -799,6 +807,7 @@ export function RoomView({
         <WritingLine writing={writing} threadId={null} you={you} />
         <div ref={timelineEnd} />
       </div>
+      {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} />}
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}

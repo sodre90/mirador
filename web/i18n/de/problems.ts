@@ -2,6 +2,9 @@ import type { Messages } from "../en/index.ts";
 
 export const problems: Messages["problems"] = {
   fixed: {
+    "sandbox-held-files-unsettled": "Der Agent eines Raums mit Sandbox hat in diesem Ordner eine Agenten-Konfigurationsdatei geändert, die Mirador nicht zurücksetzen konnte, daher ist dieser Agent hier nicht gestartet.",
+    "sandboxed-room-side-chat": "Nebenchats laufen nicht in einem Raum mit Sandbox: Sie liefen auf diesem Computer.",
+    "sandboxed-room-command": "!-Befehle laufen nicht in einem Raum mit Sandbox: Sie liefen auf diesem Computer, im Ordner, den seine Agenten ändern.",
     "usage-limit-reached": "Claudes Nutzungslimit ist erreicht.",
     "conversation-has-no-profile": "Diese Unterhaltung hat kein Profil, oder ihr Profil wurde gelöscht. Wähle oben in der Unterhaltung ein Profil.",
     "workspace-gone": "Der Arbeitsbereich existiert nicht mehr.",
@@ -427,5 +430,39 @@ export const problems: Messages["problems"] = {
     timedOut: (seconds) => `brach nach ${seconds} s wegen Zeitüberschreitung ab`,
     exited: (how) => `endete mit ${how}`,
     couldNotRun: (cause) => `ließ sich nicht ausführen: ${cause}`,
+  },
+  sandboxNotReady: (why: string) => `Die Sandbox des Raums ist nicht bereit, deshalb ist sein Agent nicht gestartet. ${why}`,
+  sandboxUnavailable: {
+    "not-a-mac": "Sandboxes laufen vorerst nur auf einem Mac.",
+    "not-apple-silicon": "Sandboxes brauchen einen Mac mit Apple Silicon.",
+    "macos-too-old": "Sandboxes brauchen macOS 26 oder neuer.",
+    "no-container-tool": "Sandboxes brauchen Apples container-Tool, von github.com/apple/container.",
+    "turned-off": "Sandboxes sind in diesem Mirador ausgeschaltet.",
+  },
+  sandboxAgentKindComing: (agent: string) => `${agent} ist kein Claude-Code-Agent: Sandboxes führen vorerst nur Claude-Code-Agenten aus, andere Arten kommen noch.`,
+  sandboxAgentSignsInElsewhere: {
+    subscription: (agent: string) => `${agent} meldet sich mit einem Claude-Abo an, das in die Sandbox müsste: Gib seinem Profil stattdessen einen API-Key.`,
+    bedrock: (agent: string) => `${agent} nutzt Amazon Bedrock, das Sandboxes noch nicht unterstützen.`,
+    vertex: (agent: string) => `${agent} nutzt Google Vertex AI, das Sandboxes noch nicht unterstützen.`,
+    foundry: (agent: string) => `${agent} nutzt Microsoft Foundry, das Sandboxes noch nicht unterstützen.`,
+  },
+  sandboxWorkspace: {
+    "workspace-not-a-repository": "Der Arbeitsbereich des Raums ist kein Git-Repository: Eine Sandbox braucht eines, da ein Repository, das die Agenten dort anlegen, Programme auf diesem Mac ausführen könnte.",
+    "workspace-is-worktree": "Der Arbeitsbereich des Raums ist ein Git-Worktree, dessen Repository außerhalb liegt: Eine Sandbox braucht einen Arbeitsbereich mit eigenem .git-Ordner.",
+    "workspace-has-commondir": "Das Repository des Raums holt seine Konfiguration aus einem anderen Ordner (.git/commondir), den eine Sandbox nicht schreibgeschützt halten kann.",
+    "workspace-is-home": "Der Arbeitsbereich des Raums ist dein Home-Ordner: Eine Sandbox sähe alles darin.",
+    "workspace-holds-mirador-data": "Der Arbeitsbereich des Raums enthält den Datenordner von Mirador oder liegt darin: Eine Sandbox darf ihn nicht sehen.",
+    "workspace-is-mirador": "Der Arbeitsbereich des Raums enthält den Code von Mirador selbst oder liegt darin: Eine Sandbox darf das laufende Mirador nicht ändern.",
+  },
+  sandboxWorktreePointsElsewhere: (worktree: string) => `Der Worktree-Ordner .git/${worktree} des Repositorys holt seine Konfiguration nicht aus diesem Repository.`,
+  sandboxGitPartIsLink: (part: string) => `${part} des Repositorys ist ein Link, den eine Sandbox nicht schreibgeschützt halten kann.`,
+  sandboxConfigIncludesWorkspaceFile: (file: string) => `Die Git-Konfiguration des Repositorys bindet ${file} ein, eine Datei des Arbeitsbereichs, die die Sandbox ändern könnte: Entferne diese Einbindung, um eine Sandbox zu nutzen.`,
+  sandboxTooManyHeldChanges: (most: number) => `Seine Agenten haben mehr als ${most} zurückgehaltene Dateien geändert, die auf deine Antwort warten: Erlaube oder verwirf zuerst einige.`,
+  sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,
+  sandboxCouldNotStart: (cause: string) => `Ihre VM konnte nicht starten: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `Ihre VM war nicht innerhalb von ${seconds} s bereit.`,
+  sandboxNotReadyFixed: {
+    "no-claude-code-version": "Mirador konnte nicht feststellen, welche Version von Claude Code hinein soll.",
+    "versions-differ": "Die Agenten des Raums nutzen verschiedene Versionen von Claude Code, und eine Sandbox führt nur eine aus.",
   },
 };

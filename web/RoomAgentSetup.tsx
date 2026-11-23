@@ -21,11 +21,11 @@ const CLEAN_CLAUDE_SETUP = Object.fromEntries(CLAUDE_SETUP_PARTS.map((part) => [
 
 const isClean = (setup: ClaudeSetup) => CLAUDE_SETUP_PARTS.every((part) => !setup[part]);
 
-const workingThere = (agent: RoomAgent, roomConversations: Conversation[]) => roomConversations.some(({ id, acpSessionId }) => id === agent.conversationId && acpSessionId !== null);
+export const workingThere = (agent: RoomAgent, roomConversations: Conversation[]) => roomConversations.some(({ id, acpSessionId }) => id === agent.conversationId && acpSessionId !== null);
 
 const choiceChanged = (before: VariablesChosen, after: VariablesChosen) => Object.entries(after).find(([name, given]) => !Object.hasOwn(before, name) || before[name] !== given);
 
-const nameOf = (profiles: Profile[], profileId: string) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone;
+export const nameOf = (profiles: Profile[], profileId: string) => profiles.find(({ id }) => id === profileId)?.name ?? words.agentGone;
 
 /** A marker on an agent chip whose room sessions the host can't hold to asking; the details wait under "What does this mean?". */
 export function UnconfinedMark({ harness }: { harness: HarnessId }) {
@@ -51,7 +51,7 @@ export function UnconfinedLine({ harness }: { harness: HarnessId }) {
  * A change that starts agents at work in the room afresh waits for the owner to confirm it, told what it costs, and
  * whether it stops their turns under way because it leaves them with less; one that costs nothing is sent at once.
  */
-function useChangeStartingAfresh<T>(kept: T, send: (value: T) => void) {
+export function useChangeStartingAfresh<T>(kept: T, send: (value: T) => void) {
   const [shown, choose] = useSentChoice(kept, send);
   const [pending, setPending] = useState<{ value: T; narrows: boolean } | null>(null);
   return {
@@ -66,7 +66,7 @@ function useChangeStartingAfresh<T>(kept: T, send: (value: T) => void) {
   };
 }
 
-function StartsAfreshWarning({ agents, stopsTurn, onConfirm, onKeep }: { agents: string[]; stopsTurn: boolean; onConfirm: () => void; onKeep: () => void }) {
+export function StartsAfreshWarning({ agents, stopsTurn, onConfirm, onKeep }: { agents: string[]; stopsTurn: boolean; onConfirm: () => void; onKeep: () => void }) {
   return (
     <div className="room-starts-afresh" role="alert">
       <span>{stopsTurn ? words.stopsAndStartsAfresh(agents) : words.startsAfresh(agents)}</span>
@@ -116,6 +116,7 @@ export function AgentValues({ room, agent, profile, roomConversations }: { room:
         <input type="checkbox" role="switch" checked={shown.wholeHostEnvironment} disabled={pending !== null} onChange={(event) => chooseWholeHostEnvironment(event.target.checked)} />
         {words.wholeHostEnvironment}
       </label>
+      {room.sandbox.on && <p className="hint room-values-sandboxed">{words.sandbox.wholeEnvironmentIgnored}</p>}
       {pending && <StartsAfreshWarning agents={startsAfresh} stopsTurn={pending.narrows} onConfirm={confirm} onKeep={keep} />}
       <p className="hint room-values-warning">{words.wholeHostEnvironmentHint}</p>
       <p className="hint room-values-warning">{words.valuesReadable}</p>

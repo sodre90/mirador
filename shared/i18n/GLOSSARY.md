@@ -78,6 +78,9 @@ These terms stay the same everywhere:
 | bring (an agent of your own into a room of someone else's machine) | behoz | traer | 带入 | mitbringen |
 | take out (an agent someone brought, out of the room) | kivisz | sacar | 带出 | herausnehmen |
 | member's agent (the role of an agent a member brought) | tag ágense | agente de un miembro | 成员的 Agent | Agent eines Mitglieds |
+| sandbox (a light VM a room's agents run in) | sandbox | sandbox | 沙箱 | Sandbox (die) |
+| work freely (in a sandbox, without asking) | szabadon dolgozik | trabajar libremente | 自由工作 | frei arbeiten |
+| held (an agent config change, put back until the owner allows it) | visszatartott | retenido | 暂扣 | zurückgehalten |
 
 ## Hungarian
 

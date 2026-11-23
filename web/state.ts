@@ -21,6 +21,7 @@ import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type 
 import type { RoomReading } from "../shared/room-reading.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
+import { SETUP_NOT_STARTED, type HeldChange, type SandboxSetup } from "../shared/sandbox.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -92,6 +93,12 @@ export interface AppState {
   roomTasksWaiting: RoomTaskApproval[];
   /** The room invites nobody has used yet, soonest to expire first; those of a deleted room went with it. */
   roomInvites: RoomInvite[];
+  /** Where first use of room sandboxes stands on this computer. */
+  sandboxSetup: SandboxSetup;
+  /** The agent config file changes sandboxed agents made, held for the owner's answer. */
+  heldChanges: HeldChange[];
+  /** The rooms whose sandbox stopped as they hold as many changes as a room may. */
+  roomsHoldingTooMany: string[];
   /** The agents you brought into rooms of other machines, and the tasks of others that wait for your OK. */
   broughtAgents: BroughtAgentHere[];
   broughtTasks: BroughtTaskWaiting[];
@@ -226,6 +233,9 @@ export const initialState: AppState = {
   roomApprovals: [],
   roomTasksWaiting: [],
   roomInvites: [],
+  sandboxSetup: SETUP_NOT_STARTED,
+  heldChanges: [],
+  roomsHoldingTooMany: [],
   broughtAgents: [],
   broughtTasks: [],
   roomsWithPeopleHere: [],
@@ -422,6 +432,9 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomApprovals: message.roomApprovals,
         roomTasksWaiting: message.roomTasksWaiting,
         roomInvites: message.roomInvites,
+        sandboxSetup: message.sandboxSetup,
+        heldChanges: message.heldChanges,
+        roomsHoldingTooMany: message.roomsHoldingTooMany,
         broughtAgents: message.broughtAgents,
         broughtTasks: message.broughtTasks,
         profiles: message.profiles,
@@ -704,6 +717,8 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomApprovals: state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId),
         roomTasksWaiting: state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId),
         roomInvites: state.roomInvites.filter(({ roomId }) => roomId !== message.roomId),
+        heldChanges: state.heldChanges.filter(({ roomId }) => roomId !== message.roomId),
+        roomsHoldingTooMany: state.roomsHoldingTooMany.filter((roomId) => roomId !== message.roomId),
       };
       return state.selectedRoomId === message.roomId ? leavingRoom(next) : next;
     }
@@ -732,6 +747,17 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         roomApprovals: [...state.roomApprovals.filter(({ roomId }) => roomId !== message.roomId), ...message.approvals],
         roomTasksWaiting: [...state.roomTasksWaiting.filter(({ roomId }) => roomId !== message.roomId), ...message.tasks],
       };
+    case "sandbox.setup":
+      return { ...state, sandboxSetup: message.setup };
+    case "room.held-changes":
+      return {
+        ...state,
+        heldChanges: [...state.heldChanges.filter(({ roomId }) => roomId !== message.roomId), ...message.changes],
+        roomsHoldingTooMany: [...state.roomsHoldingTooMany.filter((roomId) => roomId !== message.roomId), ...(message.full ? [message.roomId] : [])],
+      };
+    case "room.sandbox-checked":
+    case "room.held-change-text":
+      return state;
     case "room.presence": {
       const { roomId, here, writing } = message;
       return state.selectedRoomId === roomId ? { ...state, roomPresence: { roomId, here, writing } } : state;

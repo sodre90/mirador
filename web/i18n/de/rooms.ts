@@ -3,6 +3,8 @@ import type { Messages } from "../en/index.ts";
 const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
 
+const agentsWant = (agents: string[]) => (agents.length === 0 ? "Ein Agent des Raums will" : agents.length === 1 ? `${agents[0]} will` : `${agents.join(" oder ")} will`);
+
 export const rooms: Messages["rooms"] = {
   rooms: "Räume",
   newRoom: "Neuer Raum",
@@ -161,6 +163,45 @@ export const rooms: Messages["rooms"] = {
       ? `${agents[0]} bricht die laufende Runde ab, fängt neu an und liest den Raum noch einmal, einmalig.`
       : `${agents.join(", ")} brechen die laufenden Runden ab, fangen neu an und lesen den Raum noch einmal, einmalig.`,
   applyChange: "Ändern",
+  sandbox: {
+    legend: "Sandbox",
+    turnOn: "Agenten in einer Sandbox ausführen",
+    network: "Netzwerk: nur das Modell und Mirador",
+    workFreely: "Agenten arbeiten darin frei",
+    presetApplies: "Die Berechtigungsvorgabe des Raums gilt weiter",
+    checking: "Prüfe, ob dieser Raum eine Sandbox haben kann…",
+    turnsFailUntil: "Die Runden der Agenten schlagen fehl, bis das behoben ist:",
+    setup: {
+      "not-started": "Sie wird bei der ersten Nutzung auf diesem Mac eingerichtet: Apples container-Dienst, dann das Image der Agenten.",
+      "starting-service": "Apples container-Dienst startet; beim ersten Mal lädt er einen Linux-Kernel herunter…",
+      "building-image": "Das Image der Agenten wird auf diesem Mac gebaut…",
+      ready: "Auf diesem Mac eingerichtet.",
+      failed: "Das Einrichten ist fehlgeschlagen.",
+    },
+    buildingStep: (at: number, of: number) => `Das Image der Agenten wird auf diesem Mac gebaut: Schritt ${at} von ${of}…`,
+    setupFailed: (problem: string) => `Das Einrichten ist fehlgeschlagen: ${problem}`,
+    wholeEnvironmentIgnored: "Wird ignoriert, solange der Raum eine Sandbox hat: In seine VM kommen nur die hier gewählten Werte.",
+    meaning: [
+      "Die Claude-Code-Agenten des Raums laufen in einer eigenen leichten VM auf diesem Mac, erstellt mit Apples container-Tool. Sie sieht den Arbeitsbereich und einen Ordner des Raums für die Claude-Code-Einstellungen und Sitzungen der Agenten, sonst nichts von diesem Mac. Ihr Netzwerk erreicht nur das Modell, über Mirador, das den Schlüssel des Profils hinzufügt, sodass er nie in die VM gelangt, und Miradors Canvas.",
+      "Arbeiten sie frei, fragen die Agenten nach nichts, da die VM sie einschließt. Sonst gilt die Berechtigungsvorgabe des Raums wie auf diesem Mac.",
+      "Die Dateien, aus denen Agenten ihre Einstellungen, Anweisungen und MCP-Server laden, werden zurückgehalten, ebenso die Dateien, die von selbst laufen: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml und .envrc. Die beim Start der VM vorhandenen sind darin schreibgeschützt; eine neue wird sofort zurückgesetzt, und du erlaubst oder verwirfst sie im Raum.",
+      "Jede andere Datei, die die Agenten im Arbeitsbereich ändern, kann laufen, wenn du sie selbst ausführst: Tests, Skripte, package.json oder ein Commit aus deinem Terminal, der die Hooks des Repositorys ausführt. Sieh dir an, was sie geändert haben, bevor du dort etwas ausführst.",
+      "Konfiguration und Hooks des Repositorys sind in der VM schreibgeschützt. Mirador führt Git im Arbeitsbereich ohne seine Hooks und fsmonitor aus, und solange der Raum eine Sandbox hat und 7 Tage danach überspringen auch seine Commits und Merges dort die Hooks des Repositorys.",
+      "Sie ein- oder auszuschalten oder zu ändern, wie die Agenten darin arbeiten, lässt sie neu anfangen.",
+    ],
+  },
+  held: {
+    label: "Für dich zurückgehaltene Änderung an Agent-Einstellungen",
+    wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} ${path} ändern`,
+    wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} ${path} hinzufügen`,
+    wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} ${path} löschen`,
+    keptAsItWas: "Die Datei bleibt, wie sie war, bis du die Änderung erlaubst.",
+    unshown: "Sie ist zu lang oder kein Text, um sie hier zu zeigen.",
+    loading: "Die Änderung wird geladen…",
+    tooMany: (most: number) => `Die Sandbox wurde gestoppt: Ihre Agenten haben mehr als ${most} zurückgehaltene Dateien geändert. Erlaube oder verwirf einige, damit sie weiterarbeiten können.`,
+    allow: "Erlauben",
+    discard: "Verwerfen",
+  },
   peoplesTasksHint: "Sonst erreicht die Markierung oder Nachfrage eines Mitglieds keinen Agenten, bis du sie erlaubst.",
   roles: { member: "Mitglied", guest: "Gast" },
   authorRoles: { owner: "Besitzer", member: "Mitglied", guest: "Gast", agent: "Agent", "member's agent": "Agent eines Mitglieds" },

@@ -109,6 +109,7 @@ export const canvas: Messages["canvas"] = {
     showMore: (more: string, notShown: string) => `További ${more} megjelenítése (${notShown} rejtve)`,
     showAs: "Megjelenítés",
     refresh: "Frissítés",
+    hooksOffWhileSandboxed: "A repó hookjai itt nem futnak, amíg sandboxolt.",
     commitDialog: {
       open: "Commit…",
       title: "Változások commitolása",

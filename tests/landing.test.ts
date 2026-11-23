@@ -86,14 +86,31 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     const { project, worktree } = projectWithAWorktree();
     commitIn(worktree, "mine", "mine from the conversation", "Change mine");
 
-    expect(await landableOnto(project, worktree)).toEqual({ branch: "main", ahead: 1, behind: 0 });
-    const landed = await landOnto(project, worktree, { mayRebase: false });
+    expect(await landableOnto(project, worktree, false)).toEqual({ branch: "main", ahead: 1, behind: 0, hooksOff: false });
+    const landed = await landOnto(project, worktree, { mayRebase: false, ownersHooks: true });
 
     expect(landed).toMatchObject({ branch: "main", subjects: ["Change mine"], rebased: false });
     expect(headOf(project)).toBe(headOf(worktree));
     expect(read(project, "mine")).toBe("mine from the conversation");
     expect(statusOf(project)).toBe(ANOTHER_SESSIONS_EDITS);
-    expect(await landableOnto(project, worktree)).toEqual({ branch: "main", ahead: 0, behind: 0 });
+    expect(await landableOnto(project, worktree, false)).toEqual({ branch: "main", ahead: 0, behind: 0, hooksOff: false });
+  });
+
+  test("runs the repository's hooks only where the call says so: not while a sandboxed room works there, or did lately", async () => {
+    const { project, worktree } = projectWithAWorktree();
+    const ran = join(project, "..", "hook-ran");
+    writeFileSync(join(project, ".git/hooks/post-merge"), `#!/bin/sh\ntouch '${ran}'\n`, { mode: 0o755 });
+    commitIn(worktree, "mine", "mine from the conversation", "Change mine");
+    mainMovesOn(project, "sub/inside", "changed on main");
+    rmSync(ran, { force: true });
+
+    expect(await landableOnto(project, worktree, true)).toMatchObject({ hooksOff: true });
+    await landOnto(project, worktree, { mayRebase: true, ownersHooks: false });
+    expect(existsSync(ran)).toBe(false);
+
+    commitIn(worktree, "mine", "mine again", "Change mine again");
+    await landOnto(project, worktree, { mayRebase: true, ownersHooks: true });
+    expect(existsSync(ran)).toBe(true);
   });
 
   test("when main moved on, the commits are rebased onto it first and the worktree's own edit stays", async () => {
@@ -102,8 +119,8 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     write(worktree, "shared", "being edited in the worktree");
     mainMovesOn(project, "sub/inside", "changed on main");
 
-    expect(await landableOnto(project, worktree)).toEqual({ branch: "main", ahead: 1, behind: 1 });
-    const landed = await landOnto(project, worktree, { mayRebase: true });
+    expect(await landableOnto(project, worktree, false)).toEqual({ branch: "main", ahead: 1, behind: 1, hooksOff: false });
+    const landed = await landOnto(project, worktree, { mayRebase: true, ownersHooks: true });
 
     expect(landed).toMatchObject({ subjects: ["Change mine"], rebased: true });
     expect(headOf(project)).toBe(headOf(worktree));
@@ -120,7 +137,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     mainMovesOn(project, "sub/inside", "changed on main");
     const before = { project: headOf(project), worktree: headOf(worktree) };
 
-    await expect(landOnto(project, worktree, { mayRebase: false })).rejects.toMatchObject({ problem: { code: "landing-rebase-while-working", branch: "main" } });
+    await expect(landOnto(project, worktree, { mayRebase: false, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-rebase-while-working", branch: "main" } });
     expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
   });
 
@@ -131,7 +148,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     mainMovesOn(project, "shared", "main's take");
     const before = { project: headOf(project), worktree: headOf(worktree) };
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-conflicts", paths: ["shared"] } });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-conflicts", paths: ["shared"] } });
 
     expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
     expect(statusOf(worktree)).toBe(" M mine");
@@ -146,7 +163,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     mainMovesOn(project, "sub/inside", "changed on main");
     const before = headOf(worktree);
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-worktree-edits-clash", paths: ["sub/inside"] } });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-worktree-edits-clash", paths: ["sub/inside"] } });
     expect(headOf(worktree)).toBe(before);
     expect(read(worktree, "sub/inside")).toBe("being edited in the worktree");
   });
@@ -157,7 +174,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     mainMovesOn(project, "sub/inside", "changed on main");
     const before = { project: headOf(project), worktree: headOf(worktree) };
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({
       problem: { code: "landing-overlaps-uncommitted", branch: "main", paths: ["edited-elsewhere"] },
     });
     expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
@@ -166,12 +183,12 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
 
   test("a project folder with no branch checked out, or a worktree with nothing new, has nothing to land on", async () => {
     const { project, worktree } = projectWithAWorktree();
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "nothing-to-land", branch: "main" } });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "nothing-to-land", branch: "main" } });
 
     commitIn(worktree, "mine", "mine from the conversation", "Change mine");
     git(project, "checkout", "--quiet", "--detach");
-    expect(await landableOnto(project, worktree)).toEqual({ branch: null, ahead: 0, behind: 0 });
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-needs-branch", directory: project } });
+    expect(await landableOnto(project, worktree, false)).toEqual({ branch: null, ahead: 0, behind: 0, hooksOff: false });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-needs-branch", directory: project } });
   });
 
   test("a rebase the agent left half done is neither landed nor thrown away", async () => {
@@ -182,7 +199,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     expect(agentsRebase.exitCode).not.toBe(0);
     const projectHead = headOf(project);
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: worktree } });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: worktree } });
 
     expect(existsSync(git(worktree, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge"))).toBe(true);
     expect(headOf(project)).toBe(projectHead);
@@ -200,7 +217,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     git(project, "merge", "--no-ff", "--no-commit", "--quiet", "side");
     const before = { project: headOf(project), worktree: headOf(worktree) };
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: project } });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: project } });
 
     expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
     expect(existsSync(git(project, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD"))).toBe(true);
@@ -214,7 +231,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     git(project, "revert", "--no-commit", "HEAD");
     const before = { project: headOf(project), worktree: headOf(worktree) };
 
-    await expect(landOnto(project, worktree, { mayRebase: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: project } });
+    await expect(landOnto(project, worktree, { mayRebase: true, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "landing-mid-operation", directory: project } });
 
     expect({ project: headOf(project), worktree: headOf(worktree) }).toEqual(before);
   });
@@ -229,7 +246,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     git(worktree, "commit", "--quiet", "-m", "Add .env");
     const projectHead = headOf(project);
 
-    await expect(landOnto(project, worktree, { mayRebase: false })).rejects.toMatchObject({ problem: { code: "git-failed" } });
+    await expect(landOnto(project, worktree, { mayRebase: false, ownersHooks: true })).rejects.toMatchObject({ problem: { code: "git-failed" } });
 
     expect(read(project, ".env")).toBe("the owner's secrets");
     expect(headOf(project)).toBe(projectHead);
@@ -243,7 +260,7 @@ describe.skipIf(process.platform === "win32")("landing a worktree's commits", ()
     write(project, "node_modules/package", "installed");
     commitIn(worktree, "mine", "mine from the conversation", "Change mine");
 
-    await landOnto(project, worktree, { mayRebase: false });
+    await landOnto(project, worktree, { mayRebase: false, ownersHooks: true });
 
     expect(read(project, "mine")).toBe("mine from the conversation");
     expect(read(project, "node_modules/package")).toBe("installed");

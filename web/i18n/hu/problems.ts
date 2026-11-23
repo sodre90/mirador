@@ -2,6 +2,9 @@ import type { Messages } from "../en/index.ts";
 
 export const problems: Messages["problems"] = {
   fixed: {
+    "sandbox-held-files-unsettled": "Egy sandboxolt szoba ágense módosított ebben a mappában egy ágensbeállítás-fájlt, amelyet a Mirador nem tudott visszaállítani, ezért ez az ágens itt nem indult el.",
+    "sandboxed-room-side-chat": "Sandboxolt szobában nem fut mellékszál: ezen a gépen futna.",
+    "sandboxed-room-command": "Sandboxolt szobában nem futnak ! parancsok: ezen a gépen futnának, abban a mappában, amelyet az ágensei módosítanak.",
     "usage-limit-reached": "Elérted a Claude használati korlátját.",
     "conversation-has-no-profile": "Ennek a beszélgetésnek nincs profilja, vagy a profilját törölték. Válassz profilt a beszélgetés tetején.",
     "workspace-gone": "A munkaterület már nem létezik.",
@@ -422,5 +425,39 @@ export const problems: Messages["problems"] = {
     timedOut: (seconds) => `${seconds} másodperc alatt sem végzett`,
     exited: (how) => `kilépett (${how})`,
     couldNotRun: (cause) => `nem futott le: ${cause}`,
+  },
+  sandboxNotReady: (why: string) => `A szoba sandboxa nem áll készen, ezért az ágense nem indult el. ${why}`,
+  sandboxUnavailable: {
+    "not-a-mac": "Sandbox egyelőre csak Macen fut.",
+    "not-apple-silicon": "A sandboxhoz Apple chipes Mac kell.",
+    "macos-too-old": "A sandboxhoz macOS 26 vagy újabb kell.",
+    "no-container-tool": "A sandboxhoz az Apple container eszköze kell: github.com/apple/container.",
+    "turned-off": "Ezen a Miradoron a sandboxok ki vannak kapcsolva.",
+  },
+  sandboxAgentKindComing: (agent: string) => `${agent} nem Claude Code-ágens: a sandbox egyelőre csak Claude Code-ágenseket futtat, a többi fajta később jön.`,
+  sandboxAgentSignsInElsewhere: {
+    subscription: (agent: string) => `${agent} Claude-előfizetéssel jelentkezik be, amelyet be kellene vinni a sandboxba: adj inkább API-kulcsot a profiljának.`,
+    bedrock: (agent: string) => `${agent} az Amazon Bedrockot használja, amelyet a sandbox még nem támogat.`,
+    vertex: (agent: string) => `${agent} a Google Vertex AI-t használja, amelyet a sandbox még nem támogat.`,
+    foundry: (agent: string) => `${agent} a Microsoft Foundryt használja, amelyet a sandbox még nem támogat.`,
+  },
+  sandboxWorkspace: {
+    "workspace-not-a-repository": "A szoba munkaterülete nem git-repó: a sandboxhoz kell egy, mert egy ott az ágensek által létrehozott repó programokat futtathatna ezen a Macen.",
+    "workspace-is-worktree": "A szoba munkaterülete egy git worktree, amelynek a repója rajta kívül van: a sandboxhoz saját .git mappás munkaterület kell.",
+    "workspace-has-commondir": "A szoba repója egy másik mappából veszi a beállításait (.git/commondir), amelyet a sandbox nem tud csak olvashatóvá tenni.",
+    "workspace-is-home": "A szoba munkaterülete a saját mappád: a sandbox az egészét látná.",
+    "workspace-holds-mirador-data": "A szoba munkaterülete tartalmazza a Mirador adatmappáját, vagy benne van: a sandbox nem láthatja.",
+    "workspace-is-mirador": "A szoba munkaterülete tartalmazza a Mirador saját kódját, vagy benne van: a sandbox nem módosíthatja a futó Miradort.",
+  },
+  sandboxWorktreePointsElsewhere: (worktree: string) => `A repó .git/${worktree} worktree-mappája nem ebből a repóból veszi a beállításait.`,
+  sandboxGitPartIsLink: (part: string) => `A repó ${part} része egy link, amelyet a sandbox nem tud csak olvashatóvá tenni.`,
+  sandboxConfigIncludesWorkspaceFile: (file: string) => `A repó git-beállításai behúzzák a(z) ${file} fájlt, amelyet a sandbox módosíthatna: a sandboxhoz vedd ki ezt a behúzást.`,
+  sandboxTooManyHeldChanges: (most: number) => `Az ágensei több mint ${most} visszatartott fájlt módosítottak, amelyek a válaszodra várnak: előbb engedélyezz vagy vess el néhányat.`,
+  sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,
+  sandboxCouldNotStart: (cause: string) => `A virtuális gépe nem tudott elindulni: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `A virtuális gépe nem állt készen ${seconds} mp alatt.`,
+  sandboxNotReadyFixed: {
+    "no-claude-code-version": "A Mirador nem tudta megállapítani, a Claude Code melyik verzióját tegye bele.",
+    "versions-differ": "A szoba ágensei a Claude Code különböző verzióit használják, a sandbox pedig egyet futtat.",
   },
 };

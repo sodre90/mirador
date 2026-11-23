@@ -104,6 +104,7 @@ export function CommitChangesDialog({ conversationId, onClose, onCommitted }: { 
       <h2>{words.title}</h2>
       {committable === null && !problem && <p className="hint">{words.loading}</p>}
       {committable && <p className="hint">{committable.branch === null ? words.detachedHead : words.onBranch(committable.branch)}</p>}
+      {committable?.hooksOff && <p className="hint commit-hooks-off">{t.canvas.changes.hooksOffWhileSandboxed}</p>}
       {nothingUncommitted && <p className="commit-none">{words.nothingUncommitted}</p>}
       {committable && !nothingUncommitted && (
         <>

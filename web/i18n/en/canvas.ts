@@ -111,6 +111,7 @@ export const canvas = {
     showMore: (more: string, notShown: string) => `Show ${more} more (${notShown} not shown)`,
     showAs: "Show as",
     refresh: "Refresh",
+    hooksOffWhileSandboxed: "Hooks of this repository don't run here while it is sandboxed.",
     commitDialog: {
       open: "Commit…",
       title: "Commit changes",

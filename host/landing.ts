@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import type { Landable, Landed } from "../shared/changes.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
-import { git, mustGit } from "./git-command.ts";
+import { git, mustGit, type GitCall } from "./git-command.ts";
 
 const pathsIn = (nulSeparated: string) => nulSeparated.split("\0").filter(Boolean);
 
@@ -14,11 +14,11 @@ async function checkedOutBranch(checkout: string) {
 
 const commitOf = async (folder: string, revision: string) => (await mustGit(folder, ["rev-parse", "--verify", "--quiet", `${revision}^{commit}`])).trim();
 
-const changedBetween = async (folder: string, from: string, to: string) => pathsIn(await mustGit(folder, ["diff", "--name-only", "--no-renames", "-z", from, to]));
+const changedBetween = async (folder: string, from: string, to: string) => pathsIn(await mustGit(folder, ["diff", "--ignore-submodules=dirty", "--name-only", "--no-renames", "-z", from, to]));
 
 /** Changed, staged or new files, as git status names them: two status letters and a space before each path. */
 async function uncommittedPaths(folder: string) {
-  const status = await mustGit(folder, ["status", "--porcelain", "-z", "--no-renames", "--untracked-files=all"]);
+  const status = await mustGit(folder, ["status", "--ignore-submodules=dirty", "--porcelain", "-z", "--no-renames", "--untracked-files=all"]);
   return pathsIn(status).map((entry) => entry.slice(3));
 }
 
@@ -41,27 +41,28 @@ async function refuseHalfDoneOperations(...folders: string[]) {
 }
 
 /** How the worktree's commits stand against the branch the project folder has checked out. */
-export async function landableOnto(projectFolder: string, worktree: string): Promise<Landable> {
+export async function landableOnto(projectFolder: string, worktree: string, hooksOff: boolean): Promise<Landable> {
   const branch = await checkedOutBranch(await topLevelOf(projectFolder));
-  if (branch === null) return { branch, ahead: 0, behind: 0 };
+  if (branch === null) return { branch, ahead: 0, behind: 0, hooksOff };
   const [behind, ahead] = (await mustGit(worktree, ["rev-list", "--left-right", "--count", `refs/heads/${branch}...HEAD`])).trim().split(/\s+/).map(Number);
-  return { branch, ahead: ahead ?? 0, behind: behind ?? 0 };
+  return { branch, ahead: ahead ?? 0, behind: behind ?? 0, hooksOff };
 }
 
-async function rebaseOnto(worktree: string, target: string, branch: string) {
-  const rebased = await git(worktree, ["rebase", "--autostash", "--quiet", target]);
+async function rebaseOnto(worktree: string, target: string, branch: string, call: GitCall) {
+  const rebased = await git(worktree, ["rebase", "--autostash", "--quiet", target], "", call);
   if (rebased.exitCode === 0) return;
-  const conflicted = pathsIn((await git(worktree, ["diff", "--name-only", "--diff-filter=U", "-z"])).stdout);
-  await git(worktree, ["rebase", "--abort"]);
+  const conflicted = pathsIn((await git(worktree, ["diff", "--ignore-submodules=dirty", "--name-only", "--diff-filter=U", "-z"])).stdout);
+  await git(worktree, ["rebase", "--abort"], "", call);
   throw new HostProblemError({ code: "landing-conflicts", branch, paths: conflicted });
 }
 
 /**
  * Brings the worktree's commits onto the branch the project folder has checked out, by a fast-forward of that folder, so
  * its branch, index and files move together. When the branch moved on meanwhile, the commits are rebased onto it first,
- * the worktree's uncommitted edits set aside and put back. Every refusal comes before anything changes.
+ * the worktree's uncommitted edits set aside and put back. Every refusal comes before anything changes. Landing is the
+ * owner's own act, so their hooks run as their own git would run them, where the call says so.
  */
-export async function landOnto(projectFolder: string, worktree: string, { mayRebase }: { mayRebase: boolean }): Promise<Landed> {
+export async function landOnto(projectFolder: string, worktree: string, { mayRebase, ownersHooks }: { mayRebase: boolean } & GitCall): Promise<Landed> {
   const checkout = await topLevelOf(projectFolder);
   await refuseHalfDoneOperations(checkout, worktree);
   const branch = await checkedOutBranch(checkout);
@@ -76,10 +77,10 @@ export async function landOnto(projectFolder: string, worktree: string, { mayReb
     if (!mayRebase) throw new HostProblemError({ code: "landing-rebase-while-working", branch });
     const clashing = sharedPaths(await changedBetween(worktree, base, target), await uncommittedPaths(worktree));
     if (clashing.length > 0) throw new HostProblemError({ code: "landing-worktree-edits-clash", branch, paths: clashing });
-    await rebaseOnto(worktree, target, branch);
+    await rebaseOnto(worktree, target, branch, { ownersHooks });
   }
   const landing = await commitOf(worktree, "HEAD");
-  await mustGit(checkout, ["merge", "--ff-only", "--no-overwrite-ignore", "--quiet", landing]);
+  await mustGit(checkout, ["merge", "--ff-only", "--no-overwrite-ignore", "--quiet", landing], undefined, { ownersHooks });
   const subjects = (await mustGit(checkout, ["log", "--format=%s", "--reverse", `${target}..${landing}`])).split("\n").filter(Boolean);
   const revision = (await mustGit(checkout, ["rev-parse", "--short", landing])).trim();
   return { branch, revision, subjects, rebased };

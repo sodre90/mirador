@@ -9,6 +9,7 @@ import { HostProblemError } from "../shared/host-problems.ts";
 import type { ClientMessage, ServerMessage } from "../shared/protocol.ts";
 import { WRITING_SHOWN_MS, type Room, type RoomPresence } from "../shared/rooms.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 
 /** Timers that run only as the test moves time on, and tell how many still wait. */
 function fakeTimers() {
@@ -47,6 +48,7 @@ const room = (id: string, name: string, people: Room["people"]): Room => ({
   claudeSetup: ALL_OF_CLAUDE_SETUP,
   agentsReadGuests: true,
   membersBringAgents: true,
+  sandbox: NO_SANDBOX,
   createdAt: 1,
 });
 

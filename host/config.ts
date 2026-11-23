@@ -65,6 +65,8 @@ export interface HostConfig {
   developmentMode: boolean;
   /** Runs the statusline command from the user's Claude Code settings; test hosts turn it off with MIRADOR_STATUSLINE=off. */
   runsUserStatusLine: boolean;
+  /** The `container` program rooms' sandboxes run in, else the one installed; MIRADOR_SANDBOX=off, as test hosts have it unless a spec gives one, runs none. */
+  sandboxContainer: string | undefined;
   /** Test hosts turn it off with MIRADOR_NEWER_VERSION_CHECK=off, so they neither fetch the checkout they run from nor ask GitHub. */
   checksForNewerVersion: boolean;
   /** Test hosts turn it off with MIRADOR_PLUGIN_UPDATE_CHECK=off, so they fetch no plugin's repo unless a spec asks. */
@@ -251,6 +253,7 @@ export function loadConfig(env = process.env): HostConfig {
     roomAgentIdleMs: Number(env.MIRADOR_ROOM_AGENT_IDLE_MS) || ROOM_AGENT_IDLE_MS,
     developmentMode: env.MIRADOR_DEV === "1",
     runsUserStatusLine: env.MIRADOR_STATUSLINE !== "off",
+    sandboxContainer: env.MIRADOR_SANDBOX,
     checksForNewerVersion: env.MIRADOR_NEWER_VERSION_CHECK !== "off",
     checksForPluginUpdates: env.MIRADOR_PLUGIN_UPDATE_CHECK !== "off",
     watchesSource: env.MIRADOR_SOURCE_WATCH !== "off",

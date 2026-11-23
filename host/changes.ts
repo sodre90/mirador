@@ -31,6 +31,7 @@ import {
   type TreeChange,
 } from "./working-tree.ts";
 import { hiddenBecause, HostProblemError } from "../shared/host-problems.ts";
+import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
 
 const FILE_CHANGING_KINDS: ToolKind[] = ["edit", "delete", "move"];
 
@@ -330,7 +331,7 @@ export class Changes {
         return { path, status, added, removed, byAgent: listed?.byAgent ?? false, ...(listed?.othersMayHaveWritten && { othersMayHaveWritten: true }) };
       })
       .sort(byPath);
-    return { ofConversation: files.filter(({ path }) => ofSession.has(path)), others: files.filter(({ path }) => !ofSession.has(path)), branch };
+    return { ofConversation: files.filter(({ path }) => ofSession.has(path)), others: files.filter(({ path }) => !ofSession.has(path)), branch, hooksOff: this.hooksOff(conversationId) };
   }
 
   /** Commits the chosen uncommitted files, as they are now, with the user's message and as the user. */
@@ -341,7 +342,12 @@ export class Changes {
     const uncommittedPaths = new Set([...ofConversation, ...others].map(({ path }) => path));
     const unchanged = paths.find((path) => !uncommittedPaths.has(path));
     if (unchanged !== undefined) throw new HostProblemError({ code: "not-an-uncommitted-change", path: unchanged });
-    return commitFiles(this.workspaceOf(conversationId).path, paths, message);
+    return commitFiles(this.workspaceOf(conversationId).path, paths, message, { ownersHooks: !this.hooksOff(conversationId) });
+  }
+
+  private hooksOff(conversationId: string) {
+    const workspaceId = this.store.findConversation(conversationId)?.workspaceId;
+    return workspaceId === undefined || repositoryHooksOff(this.store, workspaceId);
   }
 
   async files(conversationId: string): Promise<ProjectFiles> {

@@ -1,5 +1,8 @@
 export const problems = {
   fixed: {
+    "sandbox-held-files-unsettled": "A sandboxed room's agent changed an agent config file in this folder that Mirador could not put back, so this agent did not start here.",
+    "sandboxed-room-side-chat": "Side chats don't run in a sandboxed room: they would run on this computer.",
+    "sandboxed-room-command": "! commands don't run in a sandboxed room: they would run on this computer, in the folder its agents change.",
     "usage-limit-reached": "Claude's usage limit is reached.",
     "conversation-has-no-profile": "This conversation has no profile, or its profile was deleted. Pick a profile at the top of the conversation.",
     "workspace-gone": "The workspace no longer exists.",
@@ -419,5 +422,39 @@ export const problems = {
     timedOut: (seconds: number) => `timed out after ${seconds} s`,
     exited: (how: string) => `exited with ${how}`,
     couldNotRun: (cause: string) => cause,
+  },
+  sandboxNotReady: (why: string) => `The room's sandbox is not ready, so its agent did not start. ${why}`,
+  sandboxUnavailable: {
+    "not-a-mac": "Sandboxes run only on a Mac for now.",
+    "not-apple-silicon": "Sandboxes need a Mac with Apple silicon.",
+    "macos-too-old": "Sandboxes need macOS 26 or later.",
+    "no-container-tool": "Sandboxes need Apple's container tool, from github.com/apple/container.",
+    "turned-off": "Sandboxes are turned off on this Mirador.",
+  },
+  sandboxAgentKindComing: (agent: string) => `${agent} isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming.`,
+  sandboxAgentSignsInElsewhere: {
+    subscription: (agent: string) => `${agent} signs in with a Claude subscription, which would have to go into the sandbox: give its profile an API key instead.`,
+    bedrock: (agent: string) => `${agent} uses Amazon Bedrock, which sandboxes don't support yet.`,
+    vertex: (agent: string) => `${agent} uses Google Vertex AI, which sandboxes don't support yet.`,
+    foundry: (agent: string) => `${agent} uses Microsoft Foundry, which sandboxes don't support yet.`,
+  },
+  sandboxWorkspace: {
+    "workspace-not-a-repository": "The room's workspace isn't a git repository: a sandbox needs one, as a repository the agents made there could run programs on this Mac.",
+    "workspace-is-worktree": "The room's workspace is a git worktree, whose repository lies outside it: a sandbox needs a workspace with its own .git folder.",
+    "workspace-has-commondir": "The room's repository takes its config from another folder (.git/commondir), which a sandbox can't keep read-only.",
+    "workspace-is-home": "The room's workspace is your home folder: a sandbox would see all of it.",
+    "workspace-holds-mirador-data": "The room's workspace holds Mirador's data folder, or lies inside it: a sandbox must not see it.",
+    "workspace-is-mirador": "The room's workspace holds Mirador's own code, or lies inside it: a sandbox must not change the Mirador you run.",
+  },
+  sandboxWorktreePointsElsewhere: (worktree: string) => `The repository's worktree folder .git/${worktree} takes its config from somewhere other than this repository.`,
+  sandboxGitPartIsLink: (part: string) => `The repository's ${part} is a link, which a sandbox can't keep read-only.`,
+  sandboxConfigIncludesWorkspaceFile: (file: string) => `The repository's git config includes ${file}, a file of the workspace the sandbox could change: take that include out to use a sandbox.`,
+  sandboxTooManyHeldChanges: (most: number) => `Its agents changed more than ${most} held files, which wait for your answer: allow or discard some first.`,
+  sandboxSetupFailed: (cause: string) => `Setting up sandboxes failed: ${cause}`,
+  sandboxCouldNotStart: (cause: string) => `Its VM could not start: ${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `Its VM did not get ready within ${seconds} s.`,
+  sandboxNotReadyFixed: {
+    "no-claude-code-version": "Mirador could not tell which version of Claude Code to put in it.",
+    "versions-differ": "The room's agents use different versions of Claude Code, and a sandbox runs one.",
   },
 };

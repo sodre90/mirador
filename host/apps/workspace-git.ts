@@ -1,7 +1,7 @@
 import { existsSync, watch, type FSWatcher } from "node:fs";
 import { posix, resolve } from "node:path";
 import type { AppGitRefs } from "../../shared/apps.ts";
-import { environmentWithoutPrompts } from "../git-environment.ts";
+import { GIT_WITHOUT_REPOSITORY_PROGRAMS, gitEnvironmentFor } from "../git-environment.ts";
 import { toPosix } from "../paths.ts";
 import { AppProblem } from "./plugins.ts";
 
@@ -30,7 +30,7 @@ export class WorkspaceGitRefused extends AppProblem {
 
 /** Read-only git in the workspace: no optional locks, so it never rewrites the user's index, and no prompt nobody would answer. */
 const spawnGit = (directory: string, args: string[], input = "") =>
-  Bun.spawn(["git", "--no-optional-locks", "-C", directory, ...args], { env: environmentWithoutPrompts(), stdin: new Blob([input]), stdout: "pipe", stderr: "pipe" });
+  Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "--no-optional-locks", "-C", directory, ...args], { env: gitEnvironmentFor(directory), stdin: new Blob([input]), stdout: "pipe", stderr: "pipe" });
 
 async function git(directory: string, args: string[], input = "") {
   const child = spawnGit(directory, args, input);
@@ -122,7 +122,7 @@ export async function workspaceFileAt(workspacePath: string, ref: unknown, path:
 export async function workspaceChangedSince(workspacePath: string, ref: unknown): Promise<string[]> {
   refuseUnviewableRef(ref);
   const commit = await commitOf(workspacePath, ref);
-  const diff = await git(workspacePath, ["diff", "--name-only", "-z", "--relative", "--no-ext-diff", "--no-textconv", "--diff-filter=d", "--end-of-options", commit, "--"]);
+  const diff = await git(workspacePath, ["diff", "--ignore-submodules=dirty", "--name-only", "-z", "--relative", "--no-ext-diff", "--no-textconv", "--diff-filter=d", "--end-of-options", commit, "--"]);
   if (diff.exitCode !== 0) throw new AppProblem(diff.stderr || `git couldn't compare the workspace with ${ref}.`);
   const others = await git(workspacePath, ["ls-files", "--others", "--exclude-standard", "-z"]);
   if (others.exitCode !== 0) throw new AppProblem(others.stderr || "git couldn't list the untracked files.");

@@ -2,6 +2,9 @@ import type { Messages } from "../en/index.ts";
 
 export const problems: Messages["problems"] = {
   fixed: {
+    "sandbox-held-files-unsettled": "一个沙箱房间的 Agent 改动了此文件夹中的一个 Agent 配置文件，Mirador 无法将其恢复，因此这个 Agent 没有在这里启动。",
+    "sandboxed-room-side-chat": "沙箱房间中不能使用旁聊：它会在这台电脑上运行。",
+    "sandboxed-room-command": "沙箱房间中不能运行 ! 命令：它会在这台电脑上、在其 Agent 改动的文件夹中运行。",
     "usage-limit-reached": "已达到 Claude 的用量上限。",
     "conversation-has-no-profile": "此对话没有配置，或其配置已被删除。请在对话顶部选择一个配置。",
     "workspace-gone": "该工作区已不存在。",
@@ -391,5 +394,39 @@ export const problems: Messages["problems"] = {
     timedOut: (seconds) => `在 ${seconds} 秒后超时`,
     exited: (how) => `已退出（${how}）`,
     couldNotRun: (cause) => `无法运行：${cause}`,
+  },
+  sandboxNotReady: (why: string) => `房间的沙箱尚未就绪，所以它的 Agent 没有启动。${why}`,
+  sandboxUnavailable: {
+    "not-a-mac": "沙箱目前只能在 Mac 上运行。",
+    "not-apple-silicon": "沙箱需要搭载 Apple 芯片的 Mac。",
+    "macos-too-old": "沙箱需要 macOS 26 或更高版本。",
+    "no-container-tool": "沙箱需要 Apple 的 container 工具，见 github.com/apple/container。",
+    "turned-off": "这个 Mirador 关闭了沙箱。",
+  },
+  sandboxAgentKindComing: (agent: string) => `${agent} 不是 Claude Code Agent：沙箱目前只运行 Claude Code Agent，其他类型即将支持。`,
+  sandboxAgentSignsInElsewhere: {
+    subscription: (agent: string) => `${agent} 通过 Claude 订阅登录，这需要把登录信息放进沙箱：请改为给它的配置一个 API 密钥。`,
+    bedrock: (agent: string) => `${agent} 使用 Amazon Bedrock，沙箱尚不支持。`,
+    vertex: (agent: string) => `${agent} 使用 Google Vertex AI，沙箱尚不支持。`,
+    foundry: (agent: string) => `${agent} 使用 Microsoft Foundry，沙箱尚不支持。`,
+  },
+  sandboxWorkspace: {
+    "workspace-not-a-repository": "房间的工作区不是 git 仓库：沙箱需要一个，因为 Agent 在其中创建的仓库可能会在这台 Mac 上运行程序。",
+    "workspace-is-worktree": "房间的工作区是一个 git 工作树，它的仓库在工作区之外：沙箱需要一个有自己 .git 文件夹的工作区。",
+    "workspace-has-commondir": "房间的仓库从另一个文件夹（.git/commondir）读取配置，沙箱无法让它保持只读。",
+    "workspace-is-home": "房间的工作区是你的主文件夹：沙箱会看到其中的一切。",
+    "workspace-holds-mirador-data": "房间的工作区包含 Mirador 的数据文件夹，或位于其中：沙箱不能看到它。",
+    "workspace-is-mirador": "房间的工作区包含 Mirador 自己的代码，或位于其中：沙箱不能改动你正在运行的 Mirador。",
+  },
+  sandboxWorktreePointsElsewhere: (worktree: string) => `仓库的工作树文件夹 .git/${worktree} 从本仓库以外的地方读取配置。`,
+  sandboxGitPartIsLink: (part: string) => `仓库的 ${part} 是一个链接，沙箱无法让它保持只读。`,
+  sandboxConfigIncludesWorkspaceFile: (file: string) => `仓库的 git 配置包含了 ${file}，这是沙箱可以改动的工作区文件：要使用沙箱，请去掉这个包含。`,
+  sandboxTooManyHeldChanges: (most: number) => `它的 Agent 改动了超过 ${most} 个暂扣的文件，正等待你的答复：请先允许或丢弃其中一些。`,
+  sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,
+  sandboxCouldNotStart: (cause: string) => `它的虚拟机无法启动：${cause}`,
+  sandboxNotReadyInTime: (seconds: number) => `它的虚拟机没有在 ${seconds} 秒内就绪。`,
+  sandboxNotReadyFixed: {
+    "no-claude-code-version": "Mirador 无法确定要放入哪个版本的 Claude Code。",
+    "versions-differ": "房间的 Agent 使用不同版本的 Claude Code，而一个沙箱只运行一个版本。",
   },
 };

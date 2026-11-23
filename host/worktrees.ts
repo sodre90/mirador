@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { HostProblemError } from "../shared/host-problems.ts";
 import type { Landable, Landed } from "../shared/changes.ts";
 import type { Conversation, ConversationWorktree, Workspace } from "../shared/model.ts";
-import { git, mustGit } from "./git-command.ts";
+import { git, mustGit, type GitCall } from "./git-command.ts";
 import { landableOnto, landOnto } from "./landing.ts";
 
 const SHORT_ID_LENGTH = 8;
@@ -81,12 +81,12 @@ export class Worktrees {
   }
 
   /** On a new branch from what the workspace has checked out; a worktree whose folder was deleted comes back on the branch it had. */
-  make(workspace: Workspace, worktree: ConversationWorktree): Promise<void> {
+  make(workspace: Workspace, worktree: ConversationWorktree, { ownersHooks }: GitCall): Promise<void> {
     return this.queue(workspace.path, async () => {
       if (!(await this.isCheckout(worktree.root))) await rm(worktree.root, { recursive: true, force: true });
       await git(workspace.path, ["worktree", "prune"]);
       const hasBranch = (await git(workspace.path, ["rev-parse", "--verify", "--quiet", `refs/heads/${worktree.branch}`])).exitCode === 0;
-      await mustGit(workspace.path, ["worktree", "add", "--quiet", ...(hasBranch ? [worktree.root, worktree.branch] : ["-b", worktree.branch, worktree.root, "HEAD"])]);
+      await mustGit(workspace.path, ["worktree", "add", "--quiet", ...(hasBranch ? [worktree.root, worktree.branch] : ["-b", worktree.branch, worktree.root, "HEAD"])], undefined, { ownersHooks });
       await mkdir(worktree.folder, { recursive: true });
     });
   }
@@ -94,7 +94,7 @@ export class Worktrees {
   /** The files that deleting the worktree would lose: changed or new, and not committed. Untracked files are capped so unignored installs don't inflate the count to tens of thousands. */
   async uncommittedFiles(worktree: ConversationWorktree) {
     if (!existsSync(worktree.root)) return 0;
-    const status = await git(worktree.root, ["status", "--porcelain", "-z", "--no-renames", "--untracked-files=all"]);
+    const status = await git(worktree.root, ["status", "--ignore-submodules=dirty", "--porcelain", "-z", "--no-renames", "--untracked-files=all"]);
     if (status.exitCode !== 0) return 0;
     const entries = status.stdout.split("\0").filter(Boolean);
     const trackedChanges = entries.filter((entry) => !entry.startsWith("??")).length;
@@ -102,12 +102,12 @@ export class Worktrees {
     return trackedChanges + Math.min(untracked, 1000);
   }
 
-  landable(workspace: Workspace, worktree: ConversationWorktree): Promise<Landable> {
-    return landableOnto(workspace.path, worktree.root);
+  landable(workspace: Workspace, worktree: ConversationWorktree, hooksOff: boolean): Promise<Landable> {
+    return landableOnto(workspace.path, worktree.root, hooksOff);
   }
 
   /** One landing at a time per project folder, so a second one finds the branch the first moved and rebases onto it. */
-  land(workspace: Workspace, worktree: ConversationWorktree, options: { mayRebase: boolean }): Promise<Landed> {
+  land(workspace: Workspace, worktree: ConversationWorktree, options: { mayRebase: boolean } & GitCall): Promise<Landed> {
     return this.queue(workspace.path, () => landOnto(workspace.path, worktree.root, options));
   }
 

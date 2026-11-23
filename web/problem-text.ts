@@ -1,4 +1,5 @@
 import type { AgentGone, HostProblem, PrelaunchFailure } from "../shared/host-problems.ts";
+import type { SandboxBlocker, SandboxNotReadyWhy, SandboxUnavailable } from "../shared/sandbox.ts";
 import type { problems } from "./i18n/en/problems.ts";
 
 export type ProblemWords = typeof problems;
@@ -31,6 +32,44 @@ function prelaunchText(failure: PrelaunchFailure, { prelaunch: words }: ProblemW
       return words.exited(failure.how);
     case "could-not-run":
       return words.couldNotRun(failure.cause);
+  }
+}
+
+export const sandboxUnavailableText = (why: SandboxUnavailable, words: ProblemWords) => words.sandboxUnavailable[why];
+
+export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords) {
+  switch (blocker.kind) {
+    case "agent-kind-coming":
+      return words.sandboxAgentKindComing(blocker.agent);
+    case "agent-signs-in-elsewhere":
+      return words.sandboxAgentSignsInElsewhere[blocker.how](blocker.agent);
+    case "worktree-points-elsewhere":
+      return words.sandboxWorktreePointsElsewhere(blocker.worktree);
+    case "git-part-is-link":
+      return words.sandboxGitPartIsLink(blocker.part);
+    case "config-includes-workspace-file":
+      return words.sandboxConfigIncludesWorkspaceFile(blocker.file);
+    default:
+      return words.sandboxWorkspace[blocker.kind];
+  }
+}
+
+function sandboxNotReadyText(why: SandboxNotReadyWhy, words: ProblemWords) {
+  switch (why.kind) {
+    case "unavailable":
+      return sandboxUnavailableText(why.why, words);
+    case "blocked":
+      return sandboxBlockerText(why.blocker, words);
+    case "setup-failed":
+      return words.sandboxSetupFailed(why.cause);
+    case "could-not-start":
+      return words.sandboxCouldNotStart(why.cause);
+    case "not-ready-in-time":
+      return words.sandboxNotReadyInTime(why.seconds);
+    case "too-many-held-changes":
+      return words.sandboxTooManyHeldChanges(why.most);
+    default:
+      return words.sandboxNotReadyFixed[why.kind];
   }
 }
 
@@ -428,6 +467,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
         : words.prelaunchFailed(problem.agent, prelaunchText(problem.failure, words), problem.output);
     case "profile-test-unanswered":
       return words.profileTestUnanswered(problem.seconds);
+    case "sandbox-not-ready":
+      return words.sandboxNotReady(sandboxNotReadyText(problem.why, words));
     default:
       return words.fixed[problem.code];
   }

@@ -1,4 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
+import { textOfRegularFile } from "./capped-file.ts";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { TerminalActivity } from "../shared/model.ts";
@@ -29,9 +30,11 @@ function isRunning(pid: number) {
   }
 }
 
+const REGISTRATION_MOST_BYTES = 64 * 1024;
+
 async function readRegistration(path: string): Promise<RegisteredSession | null> {
   try {
-    const session = JSON.parse(await readFile(path, "utf8"));
+    const session = JSON.parse((await textOfRegularFile(path, REGISTRATION_MOST_BYTES)) ?? "null");
     return typeof session.pid === "number" && typeof session.sessionId === "string" ? session : null;
   } catch {
     return null;

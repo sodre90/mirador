@@ -1,3 +1,4 @@
+import { GIT_WITHOUT_REPOSITORY_PROGRAMS, gitEnvironmentFor } from "./git-environment.ts";
 import type { Dirent } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { isAbsolute, join, posix, resolve } from "node:path";
@@ -52,7 +53,7 @@ function workspaceFiles(workspaceDirectory: string) {
 }
 
 async function gitFiles(directory: string) {
-  const git = Bun.spawn(["git", "-C", directory, "ls-files", "--cached", "--others", "--exclude-standard", "-z"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+  const git = Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "-C", directory, "ls-files", "--cached", "--others", "--exclude-standard", "-z"], { env: gitEnvironmentFor(directory), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
   const [output, exitCode] = await Promise.all([new Response(git.stdout).text(), git.exited]);
   return exitCode === 0 ? output.split("\0").filter(Boolean) : null;
 }

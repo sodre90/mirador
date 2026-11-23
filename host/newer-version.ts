@@ -2,14 +2,14 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isNewerVersion, releasePage, type NewerVersion } from "../shared/newer-version.ts";
 import { MIRADOR_VERSION } from "../shared/version.ts";
-import { environmentWithoutPrompts } from "./git-environment.ts";
+import { environmentWithoutPrompts, GIT_WITH_OWNERS_HOOKS, GIT_WITHOUT_REPOSITORY_PROGRAMS } from "./git-environment.ts";
 import { Lookout } from "./lookout.ts";
 import { HostProblemError } from "../shared/host-problems.ts";
 
 const GIVE_UP_AFTER_MILLISECONDS = 60_000;
 
 async function git(directory: string, args: string[]) {
-  const child = Bun.spawn(["git", "-C", directory, ...args], {
+  const child = Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "-C", directory, ...args], {
     env: environmentWithoutPrompts(),
     stdin: "ignore",
     stdout: "pipe",
@@ -41,7 +41,7 @@ export async function newerCommits(checkout: string, fetching: boolean): Promise
  */
 export async function pullCheckout(checkout: string): Promise<string | null> {
   try {
-    const child = Bun.spawn(["git", "-C", checkout, "pull", "--ff-only", "--quiet"], {
+    const child = Bun.spawn(["git", ...GIT_WITH_OWNERS_HOOKS, "-C", checkout, "pull", "--ff-only", "--quiet"], {
       env: environmentWithoutPrompts(),
       stdin: "ignore",
       stdout: "ignore",

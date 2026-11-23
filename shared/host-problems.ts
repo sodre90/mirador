@@ -1,5 +1,6 @@
 import { problems as englishWords } from "../web/i18n/en/problems.ts";
 import { goneText, problemText, type ProblemWords } from "../web/problem-text.ts";
+import type { SandboxNotReadyWhy } from "./sandbox.ts";
 
 /** Why an agent process went away, as the host saw it. */
 export type AgentGone =
@@ -216,7 +217,8 @@ export type HostProblem =
   | { code: "agent-gone"; agent: string; gone: AgentGone }
   /** `mixedIn` names the agent log when another start of the profile ran its pre-launch command meanwhile, so the output isn't quoted. */
   | { code: "prelaunch-failed"; agent: string; failure: PrelaunchFailure; output: string; mixedIn: string | null }
-  | { code: "profile-test-unanswered"; seconds: number };
+  | { code: "profile-test-unanswered"; seconds: number }
+  | { code: "sandbox-not-ready"; why: SandboxNotReadyWhy };
 
 /** Why the agent process went away, in English. */
 export const englishAgentGone = (gone: AgentGone) => goneText(gone, englishWords);

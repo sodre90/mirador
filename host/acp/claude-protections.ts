@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { textOfRegularFile } from "../capped-file.ts";
 import { join } from "node:path";
 
 /** Claude Code's sources of settings that a room's owner can leave out: the owner's own, and the workspace's shared and local ones. */
@@ -55,9 +55,12 @@ export function protectionsKept(leftOut: SettingSource[], settingsOf: Partial<Re
 const settingsFileOf = (source: SettingSource, configDir: string, workspace: string) =>
   ({ user: join(configDir, "settings.json"), project: join(workspace, ".claude", "settings.json"), local: join(workspace, ".claude", "settings.local.json") })[source];
 
+const SETTINGS_MOST_BYTES = 1024 * 1024;
+
 async function settingsFile(path: string): Promise<unknown> {
   try {
-    return JSON.parse(await readFile(path, "utf8"));
+    const text = await textOfRegularFile(path, SETTINGS_MOST_BYTES);
+    return text === null ? undefined : JSON.parse(text);
   } catch {
     return undefined;
   }

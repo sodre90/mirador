@@ -1,3 +1,4 @@
+import { GIT_WITHOUT_REPOSITORY_PROGRAMS, gitEnvironmentFor } from "./git-environment.ts";
 import { realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -147,7 +148,7 @@ export async function runStatusLineCommand(
 
 export async function currentGitBranch(directory: string): Promise<string | null> {
   try {
-    const git = Bun.spawn(["git", "-C", directory, "branch", "--show-current"], { stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    const git = Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "-C", directory, "branch", "--show-current"], { env: gitEnvironmentFor(directory), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
     const timer = setTimeout(() => git.kill(), GIT_TIMEOUT_MS);
     const [branch, exitCode] = await Promise.all([new Response(git.stdout).text(), git.exited]);
     clearTimeout(timer);
@@ -188,7 +189,7 @@ export class StatuslineService {
     const runsClaudeCode = conversation.harness === "claude";
     const [gitBranch, command, promptCache] = await Promise.all([
       currentGitBranch(directory),
-      configDir && this.runsUserCommands && runsClaudeCode ? statusLineCommandIn(configDir) : null,
+      configDir && this.runsUserCommands && runsClaudeCode && !this.inSandboxedRoom(conversation) ? statusLineCommandIn(configDir) : null,
       configDir && runsClaudeCode && conversation.acpSessionId ? claudeTranscriptEnd(configDir, conversation.acpSessionId).then(promptCacheOf) : null,
     ]);
     if (!command || !configDir || !environment || !runCommand) return { gitBranch, command, output: null, error: null, quotas, pluginChips, contextHints, promptCache };
@@ -202,6 +203,11 @@ export class StatuslineService {
     return "output" in result
       ? { gitBranch, command, output: result.output, error: null, quotas, pluginChips, contextHints, promptCache }
       : { gitBranch, command, output: null, error: result.error, errorAbout: result.errorAbout, quotas, pluginChips, contextHints, promptCache };
+  }
+
+  /** The owner's statusline command would run on this computer in a workspace that a sandboxed room's agents write. */
+  private inSandboxedRoom({ roomId }: Conversation) {
+    return roomId !== undefined && this.store.findRoom(roomId)?.sandbox.on === true;
   }
 
   /** A profile whose environment does not parse cannot run anything; its conversation says why elsewhere. */

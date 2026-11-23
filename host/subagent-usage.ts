@@ -1,10 +1,22 @@
 import { stat } from "node:fs/promises";
 import { join } from "node:path";
+import { tailOfRegularFile, textOfRegularFile } from "./capped-file.ts";
 import { subagentUsageFrom, type SubagentUsage } from "../shared/subagent-usage.ts";
 
 const MAX_TRACKED_TRANSCRIPTS = 5_000;
 const MAX_TRACKED_READINGS = 1_000;
 const MAX_TRACKED_SESSIONS = 500;
+const META_MOST_BYTES = 64 * 1024;
+const SUBAGENT_TRANSCRIPT_MOST_BYTES = 32 * 1024 * 1024;
+
+const toolUseIdIn = (meta: string | null) => {
+  try {
+    const toolUseId = meta === null ? undefined : JSON.parse(meta)?.toolUseId;
+    return typeof toolUseId === "string" ? toolUseId : undefined;
+  } catch {
+    return undefined;
+  }
+};
 
 type CacheCapacities = { transcripts: number; readings: number; sessions: number };
 type SessionSubagents = { directory: string; modifiedAt: number; transcripts: Map<string, string> };
@@ -23,7 +35,7 @@ export async function findSubagentsDirectory(configDir: string, sessionId: strin
 
 async function subagentTranscriptsByToolCall(directory: string): Promise<Map<string, string>> {
   const metaFiles = await Array.fromAsync(new Bun.Glob("agent-*.meta.json").scan({ cwd: directory, absolute: true }));
-  const metas = await Promise.all(metaFiles.map(async (path) => ({ path, toolUseId: (await Bun.file(path).json().catch(() => null))?.toolUseId })));
+  const metas = await Promise.all(metaFiles.map(async (path) => ({ path, toolUseId: toolUseIdIn(await textOfRegularFile(path, META_MOST_BYTES)) })));
   return new Map(metas.flatMap(({ path, toolUseId }): [string, string][] => (toolUseId ? [[toolUseId, path.replace(/\.meta\.json$/, ".jsonl")]] : [])));
 }
 
@@ -65,7 +77,7 @@ export class SubagentUsageReader {
       const { mtimeMs: modifiedAt, size } = await stat(transcript);
       const reading = this.readings.get(transcript);
       if (reading?.modifiedAt === modifiedAt && reading.size === size) return reading.usage;
-      const usage = subagentUsageFrom(await Bun.file(transcript).text());
+      const usage = subagentUsageFrom((await tailOfRegularFile(transcript, SUBAGENT_TRANSCRIPT_MOST_BYTES)) ?? "");
       rememberNewest(this.readings, transcript, { modifiedAt, size, usage }, this.capacities.readings);
       return usage;
     } catch {

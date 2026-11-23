@@ -12,6 +12,7 @@ import type { Conversation, Profile } from "../shared/model.ts";
 import { parseEnvironment } from "../shared/profile-environment.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 
 const scratch = mkdtempSync(join(tmpdir(), "room-agent-idle-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
@@ -25,7 +26,7 @@ function roomAndOwnersConversations() {
   const store = new Store(":memory:");
   store.saveProfile(profile);
   store.insertWorkspace({ id: "w1", name: "p", path: join(scratch, "project"), defaultLaunch: launch, createdAt: 1 });
-  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, createdAt: 1 });
+  store.insertRoom({ id: "r1", name: "Launch", workspaceId: "w1", agents: [], people: [], permissions: DEFAULT_PERMISSION_PRESET, peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 });
   const config = loadConfig({ MIRADOR_DATA_DIR: join(scratch, `data-${crypto.randomUUID()}`), MIRADOR_ROOM_AGENT_IDLE_MS: String(IDLE_MS) });
   const conversations = new ConversationService(store, new Hub(), config, {} as never, {} as never, {} as never, new SystemNotifications(store, new Hub()));
   const inside = conversations as unknown as {

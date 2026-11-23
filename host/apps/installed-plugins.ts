@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename, delimiter, dirname, join, resolve, sep } from "node:path";
 import { MAX_PLUGIN_ICON_BYTES, isPluginIcon, isPluginVersion, isTagline, type PluginKind, type PluginLook, type PluginManifest, type PluginManifestPicture, type PluginNews, type PluginInfo, type PluginOffer, type PluginSource, type PluginTool, type PluginUpdate, type TakenBackBecause } from "../../shared/apps.ts";
 import { isNewerVersion } from "../../shared/newer-version.ts";
-import { environmentWithoutPrompts } from "../git-environment.ts";
+import { environmentWithoutPrompts, GIT_WITHOUT_REPOSITORY_PROGRAMS } from "../git-environment.ts";
 import { localImage } from "../local-images.ts";
 import { renameWhenFree } from "../rename-when-free.ts";
 import { parkedFolderOf, swapPlugin } from "./plugin-swaps.ts";
@@ -26,7 +26,7 @@ const lastPart = (output: string) => (output.length > OUTPUT_SHOWN_CHARACTERS ? 
 /** Its output, or null when git fails or isn't installed. */
 export async function gitOutput(folder: string, args: string[]): Promise<string | null> {
   try {
-    const child = Bun.spawn(["git", "-C", folder, ...args], { env: environmentWithoutPrompts(), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
+    const child = Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "-C", folder, ...args], { env: environmentWithoutPrompts(), stdin: "ignore", stdout: "pipe", stderr: "ignore" });
     const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
     return exitCode === 0 ? output.trim() : null;
   } catch {
@@ -87,7 +87,7 @@ const newestFirst = (one: string, other: string) => (isNewerVersion(one, other) 
 
 /** Every release the repo has tagged, newest first. */
 async function releasesOf(url: string): Promise<string[]> {
-  const listed = await run(["git", "ls-remote", "--tags", "--refs", "--", url, `${RELEASE_TAG_PREFIX}*`], process.cwd(), environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
+  const listed = await run(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "ls-remote", "--tags", "--refs", "--", url, `${RELEASE_TAG_PREFIX}*`], process.cwd(), environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
   if (!listed.ok) throw new HostProblemError({ code: "git-ls-remote-failed", output: listed.output });
   return listed.output
     .split("\n")
@@ -113,7 +113,7 @@ async function refuseUnlessFetchedAtPin(folder: string, pin: PluginPin) {
 /** Every release in one fetch, a tag the repo moved since included, so reading the newer ones' plugin.json fetches nothing more. */
 async function fetchReleases(folder: string) {
   const releases = `+refs/tags/${RELEASE_TAG_PREFIX}*:${FETCHED_RELEASES}${RELEASE_TAG_PREFIX}*`;
-  const fetched = await run(["git", "fetch", "--quiet", "--no-tags", "--prune", "origin", releases], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
+  const fetched = await run(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "fetch", "--quiet", "--no-tags", "--prune", "origin", releases], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
   if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
 }
 
@@ -551,7 +551,7 @@ export class InstalledPlugins {
 
   /** What the ref brings that the checkout doesn't have: its commits, newest first, and the plugin API its plugin.json names when this Mirador's is older. */
   private async fetchedNews(folder: string, ref: string) {
-    const fetched = await run(["git", "fetch", "--quiet", "--no-tags", "origin", ref], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
+    const fetched = await run(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "fetch", "--quiet", "--no-tags", "origin", ref], folder, environmentWithoutPrompts(), GIT_GIVES_UP_AFTER_MS);
     if (!fetched.ok) throw new HostProblemError({ code: "git-fetch-failed", output: fetched.output });
     const [log, manifest] = await Promise.all([gitOutput(folder, ["log", "--format=%h%x09%s", "HEAD..FETCH_HEAD"]), gitOutput(folder, ["show", "FETCH_HEAD:plugin.json"])]);
     return { commits: commitsOfLog(log ?? ""), needsApi: newerApiOf(parsedOrNull(manifest)) };
@@ -642,7 +642,7 @@ export class InstalledPlugins {
     const staged = join(this.staging, crypto.randomUUID());
     try {
       const cloned = await run(
-        ["git", "clone", "--quiet", WITH_FILES_AS_COMMITTED, ...(branchOrTag ? [`--branch=${branchOrTag}`] : []), "--", url, staged],
+        ["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "clone", "--quiet", WITH_FILES_AS_COMMITTED, ...(branchOrTag ? [`--branch=${branchOrTag}`] : []), "--", url, staged],
         this.staging,
         environmentWithoutPrompts(),
         GIT_GIVES_UP_AFTER_MS,

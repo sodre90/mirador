@@ -10552,6 +10552,72 @@ select.room-agent-choice-select:focus-visible {
   flex-basis: 100%;
 }
 
+.room-sandbox legend {
+  margin-bottom: 4px;
+}
+
+.room-sandbox-work {
+  display: grid;
+  gap: 4px;
+  padding-left: 22px;
+}
+
+.room-sandbox-reasons {
+  color: var(--warn-on-soft);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-sandbox-reasons p,
+.room-sandbox-reasons ul {
+  margin: 0;
+}
+
+.room-sandbox-reasons ul {
+  padding-left: 18px;
+}
+
+.room-sandbox-setup {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  color: var(--muted);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.room-sandbox-setup progress {
+  width: 100%;
+}
+
+.room-held {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0 16px 8px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  border-radius: 8px;
+  background: var(--warn-soft);
+  font-size: calc(13px * var(--font-scale));
+}
+
+.room-held-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+}
+
+.room-held-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.room-held-kept,
+.room-held-unshown {
+  margin: 0;
+  color: var(--muted);
+}
+
 .agent-search {
   position: relative;
   display: flex;

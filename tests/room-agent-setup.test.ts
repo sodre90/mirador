@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { claudeRoomSessionMeta, profileEnvironment, settingSourcesLeftOut } from "../host/acp/harnesses.ts";
 import type { Profile } from "../shared/model.ts";
 import { parseEnvironment } from "../shared/profile-environment.ts";
+import { NO_SANDBOX, type RoomSandbox } from "../shared/sandbox.ts";
 import {
   ALL_OF_CLAUDE_SETUP,
   claudeSetupIn,
@@ -248,9 +249,9 @@ describe("a room's agent's process environment", () => {
     }
   });
 
-  test("a session is told apart by what it was started under: the values given, all of the host's environment, and, for Claude Code, its setup", () => {
-    const fingerprint = (harness: Profile["harness"], text: string, choices: EnvironmentChoices = NOTHING_CHOSEN, setup: ClaudeSetup = ALL_OF_CLAUDE_SETUP) =>
-      roomSetupFingerprint(harness, text, choices, setup);
+  test("a session is told apart by what it was started under: the values given, all of the host's environment, for Claude Code its setup, and its sandbox", () => {
+    const fingerprint = (harness: Profile["harness"], text: string, choices: EnvironmentChoices = NOTHING_CHOSEN, setup: ClaudeSetup = ALL_OF_CLAUDE_SETUP, sandbox: RoomSandbox = NO_SANDBOX) =>
+      roomSetupFingerprint(harness, text, choices, setup, sandbox);
     const base = fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x");
     expect(fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x", { variables: { ANTHROPIC_API_KEY: true }, wholeHostEnvironment: false })).toBe(base);
     expect(fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x", { variables: { DEPLOY_TOKEN: true }, wholeHostEnvironment: false })).not.toBe(base);
@@ -258,6 +259,10 @@ describe("a room's agent's process environment", () => {
     expect(fingerprint("claude", "ANTHROPIC_API_KEY=k\nDEPLOY_TOKEN=x", NOTHING_CHOSEN, CLEAN)).not.toBe(base);
     expect(fingerprint("codex", "X=1", NOTHING_CHOSEN, CLEAN)).toBe(fingerprint("codex", "X=1"));
     expect(fingerprint("codex", "not an environment line")).toBe(fingerprint("codex", ""));
+    expect(fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: false, workFreely: false })).toBe(fingerprint("claude", "ANTHROPIC_API_KEY=k"));
+    const sandboxed = fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: true, workFreely: true });
+    expect(sandboxed).not.toBe(fingerprint("claude", "ANTHROPIC_API_KEY=k"));
+    expect(fingerprint("claude", "ANTHROPIC_API_KEY=k", NOTHING_CHOSEN, ALL_OF_CLAUDE_SETUP, { on: true, workFreely: false })).not.toBe(sandboxed);
   });
 });
 

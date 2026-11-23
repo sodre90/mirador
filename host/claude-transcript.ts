@@ -1,35 +1,43 @@
 import { join } from "node:path";
+import { tailOfRegularFile } from "./capped-file.ts";
 import type { SessionConfigOption } from "@agentclientprotocol/sdk/unstable";
 import { resolveModelPreference } from "@agentclientprotocol/claude-agent-acp/dist/session-model.js";
 import { isRealModel } from "../shared/claude-models.ts";
 import { flatSelectOptions } from "../shared/config-options.ts";
 import type { PromptCache } from "../shared/model.ts";
 
+/** The most of a session's transcript read, from its end: what any look back at its records needs, and a bound on it. */
+const TRANSCRIPT_MOST_BYTES = 32 * 1024 * 1024;
+const TRANSCRIPT_END_BYTES = 512 * 1024;
+
 /**
- * A session's transcript, wherever Claude Code keeps it: under a directory named after the project path, which it
- * shortens for long paths. Empty if there is none.
+ * Where a session's transcript is, wherever Claude Code keeps it: under a directory named after the project path,
+ * which it shortens for long paths. Null if there is none.
  */
-export async function claudeTranscript(configDir: string, sessionId: string): Promise<string> {
+export async function claudeTranscriptFile(configDir: string, sessionId: string): Promise<string | null> {
   try {
     const [path] = await Array.fromAsync(new Bun.Glob(`*/${sessionId}.jsonl`).scan({ cwd: join(configDir, "projects"), absolute: true }));
-    return path ? await Bun.file(path).text() : "";
+    return path ?? null;
   } catch {
-    return "";
+    return null;
   }
 }
 
-const TRANSCRIPT_END_BYTES = 512 * 1024;
+/** A session's transcript, as much as a look back at its records needs, its first line cut where it is longer; empty if there is none. */
+export async function claudeTranscript(configDir: string, sessionId: string): Promise<string> {
+  const path = await claudeTranscriptFile(configDir, sessionId);
+  return (path && (await tailOfRegularFile(path, TRANSCRIPT_MOST_BYTES))) ?? "";
+}
 
 /** The end of a session's transcript, which holds its latest records, however long the session grew; its first line may be cut. */
 export async function claudeTranscriptEnd(configDir: string, sessionId: string): Promise<string> {
-  try {
-    const [path] = await Array.fromAsync(new Bun.Glob(`*/${sessionId}.jsonl`).scan({ cwd: join(configDir, "projects"), absolute: true }));
-    if (!path) return "";
-    const file = Bun.file(path);
-    return await file.slice(Math.max(0, file.size - TRANSCRIPT_END_BYTES)).text();
-  } catch {
-    return "";
-  }
+  const path = await claudeTranscriptFile(configDir, sessionId);
+  return (path && (await tailOfRegularFile(path, TRANSCRIPT_END_BYTES))) ?? "";
+}
+
+/** The end of the transcript at a path already found, which a look many times a second can afford. */
+export async function claudeTranscriptEndAt(path: string): Promise<string> {
+  return (await tailOfRegularFile(path, TRANSCRIPT_END_BYTES)) ?? "";
 }
 
 const records = (transcript: string) =>

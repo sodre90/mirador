@@ -4,6 +4,7 @@ import { personGoesBy } from "../shared/people.ts";
 import { PERMISSION_PRESETS } from "../shared/room-permissions.ts";
 import { ROOM_USAGE_PERIODS, sinceOf, type RoomUsage, type RoomUsagePeriod, type Spend } from "../shared/room-usage.ts";
 import { broughtAgentName, ROOM_ROLES, type Room, type RoomAgent, type RoomInvite, type RoomRole } from "../shared/rooms.ts";
+import type { SandboxSetup } from "../shared/sandbox.ts";
 import { agentMarks } from "./Chat.tsx";
 import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
@@ -14,6 +15,7 @@ import type { RoomSettingsTab } from "./i18n/en/rooms.ts";
 import { Modal } from "./Palette.tsx";
 import { AgentSearch, ModelChoice } from "./RoomAgents.tsx";
 import { AgentSetupMeaning, AgentValues, ClaudeSetupField, UnconfinedLine } from "./RoomAgentSetup.tsx";
+import { SandboxField, SandboxMeaning } from "./RoomSandbox.tsx";
 import { useSentChoice } from "./sent-choice.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { compactTokenCount, formatCost } from "./usage.ts";
@@ -292,7 +294,8 @@ function BroughtAgents({ room, people }: { room: Room; people: Person[] }) {
   );
 }
 
-function PermissionsTab({ room }: { room: Room }) {
+/** What the room's agents may do without asking, then whether they run in a sandbox of their own. */
+function PermissionsTab({ room, profiles, roomConversations, sandboxSetup }: { room: Room; profiles: Profile[]; roomConversations: Conversation[]; sandboxSetup: SandboxSetup }) {
   const [permissions, choose] = useSentChoice(room.permissions, (permissions) => connection.send({ type: "room.set-permissions", roomId: room.id, permissions }));
   return (
     <>
@@ -308,6 +311,10 @@ function PermissionsTab({ room }: { room: Room }) {
       <WhatItMeans>
         <p>{words.permissionsHint}</p>
         <p>{words.peopleReach[room.permissions]}</p>
+      </WhatItMeans>
+      <SandboxField room={room} profiles={profiles} roomConversations={roomConversations} setup={sandboxSetup} />
+      <WhatItMeans>
+        <SandboxMeaning />
       </WhatItMeans>
     </>
   );
@@ -424,6 +431,7 @@ export function RoomSettingsDialog({
   ownerId,
   invites,
   roomConversations,
+  sandboxSetup,
   onInvite,
   onClose,
 }: {
@@ -435,6 +443,7 @@ export function RoomSettingsDialog({
   ownerId: string | null;
   invites: RoomInvite[];
   roomConversations: Conversation[];
+  sandboxSetup: SandboxSetup;
   onInvite: () => void;
   onClose: () => void;
 }) {
@@ -453,7 +462,7 @@ export function RoomSettingsDialog({
       <div className="room-tab-panel" id="room-tab-panel" role="tabpanel" aria-labelledby={`room-tab-${shownTab}`}>
         {shownTab === "people" && <PeopleTab room={room} people={people} ownerId={ownerId} invites={invites} onInvite={onInvite} />}
         {shownTab === "agents" && <AgentsTab room={room} profiles={profiles} people={people} roomConversations={roomConversations} />}
-        {shownTab === "permissions" && <PermissionsTab room={room} />}
+        {shownTab === "permissions" && <PermissionsTab room={room} profiles={profiles} roomConversations={roomConversations} sandboxSetup={sandboxSetup} />}
         {shownTab === "usage" && <UsageTab room={room} profiles={profiles} people={people} ownerId={ownerId} />}
       </div>
       <div className="form-actions">

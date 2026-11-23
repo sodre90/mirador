@@ -111,6 +111,7 @@ export const canvas: Messages["canvas"] = {
     showMore: (more: string, notShown: string) => `Mostrar ${more} más (${notShown} sin mostrar)`,
     showAs: "Mostrar como",
     refresh: "Actualizar",
+    hooksOffWhileSandboxed: "Los hooks de este repositorio no se ejecutan aquí mientras tenga sandbox.",
     commitDialog: {
       open: "Commit…",
       title: "Hacer commit de los cambios",

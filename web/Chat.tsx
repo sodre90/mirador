@@ -253,7 +253,7 @@ function ChatHeader({
   );
 }
 
-function DiffView({ path, oldText, newText }: { path: string; oldText?: string | null; newText: string }) {
+export function DiffView({ path, oldText, newText }: { path: string; oldText?: string | null; newText: string }) {
   const lines = useMemo(() => lineDiff(oldText, newText), [oldText, newText]);
   const wordChanges = useMemo(() => rowWordChanges(lines), [lines]);
   return (

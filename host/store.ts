@@ -38,6 +38,7 @@ import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
+import { roomSandboxIn, type RoomSandbox } from "../shared/sandbox.ts";
 import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
@@ -304,6 +305,7 @@ const addedColumns = [
   { table: "room_messages", column: "mentions", definition: "TEXT" },
   { table: "rooms", column: "claude_setup", definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: "rooms", column: "agents_read_guests", definition: "INTEGER NOT NULL DEFAULT 1" },
+  { table: "rooms", column: "sandbox", definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: "room_agents", column: "variables", definition: "TEXT NOT NULL DEFAULT '{}'" },
   { table: "room_agents", column: "whole_host_environment", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "conversations", column: "room_setup", definition: "TEXT" },
@@ -314,6 +316,7 @@ const addedColumns = [
   { table: "room_agents", column: "brought_harness", definition: "TEXT" },
   { table: "room_agents", column: "brought_here", definition: "INTEGER NOT NULL DEFAULT 0" },
   { table: "room_messages", column: "brought_by", definition: "TEXT" },
+  { table: "workspaces", column: "sandbox_last_on_at", definition: "INTEGER" },
 ];
 
 /** A turn that ended while nobody looked at its conversation, or the owner's Unread mark, until someone opens it. */
@@ -530,6 +533,7 @@ interface RoomRow {
   claude_setup: string;
   agents_read_guests: number;
   members_bring_agents: number;
+  sandbox: string;
   created_at: number;
 }
 
@@ -765,6 +769,15 @@ export class Store {
 
   listWorkspaces(): Workspace[] {
     return this.db.query("SELECT * FROM workspaces ORDER BY position, created_at").all().map((row) => toWorkspace(row as WorkspaceRow));
+  }
+
+  /** When a room of the workspace last had its sandbox on, before it was turned off, the room deleted or moved elsewhere. */
+  sandboxLastOnAt(workspaceId: string): number | null {
+    return (this.db.query("SELECT sandbox_last_on_at AS at FROM workspaces WHERE id = ?").get(workspaceId) as { at: number | null } | null)?.at ?? null;
+  }
+
+  setSandboxLastOnAt(workspaceId: string, at: number) {
+    this.db.query("UPDATE workspaces SET sandbox_last_on_at = ? WHERE id = ?").run(at, workspaceId);
   }
 
   findWorkspace(id: string): Workspace | undefined {
@@ -1230,8 +1243,8 @@ export class Store {
 
   insertRoom(room: Room) {
     this.db
-      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.membersBringAgents ? 1 : 0, room.createdAt);
+      .query("INSERT INTO rooms (id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run(room.id, room.name, room.workspaceId, room.permissions, room.peoplesTasksWait ? 1 : 0, JSON.stringify(room.claudeSetup), room.agentsReadGuests ? 1 : 0, room.membersBringAgents ? 1 : 0, JSON.stringify(room.sandbox), room.createdAt);
     this.setRoomAgents(room.id, room.agents.map(({ profileId }) => profileId));
     room.agents.forEach(({ profileId, model, effort }) => this.setRoomAgentModel(room.id, profileId, { model, effort }));
     room.people.forEach(({ personId, role }) => this.setRoomPersonRole(room.id, personId, role));
@@ -1247,7 +1260,7 @@ export class Store {
     return row ? this.toRoom(row) : undefined;
   }
 
-  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, created_at }: RoomRow): Room {
+  private toRoom({ id, name, workspace_id, permissions, peoples_tasks_wait, claude_setup, agents_read_guests, members_bring_agents, sandbox, created_at }: RoomRow): Room {
     const agents = this.db
       .query("SELECT profile_id, conversation_id, answering, model, effort, variables, whole_host_environment, brought_by, brought_name, brought_harness, brought_here FROM room_agents WHERE room_id = ? ORDER BY rowid")
       .all(id) as RoomAgentRow[];
@@ -1272,6 +1285,7 @@ export class Store {
       claudeSetup: claudeSetupIn(JSON.parse(claude_setup)),
       agentsReadGuests: agents_read_guests === 1,
       membersBringAgents: members_bring_agents === 1,
+      sandbox: roomSandboxIn(JSON.parse(sandbox)),
       createdAt: created_at,
     };
   }
@@ -1360,6 +1374,10 @@ export class Store {
 
   setRoomPeoplesTasksWait(id: string, wait: boolean) {
     this.db.query("UPDATE rooms SET peoples_tasks_wait = ? WHERE id = ?").run(wait ? 1 : 0, id);
+  }
+
+  setRoomSandbox(id: string, sandbox: RoomSandbox) {
+    this.db.query("UPDATE rooms SET sandbox = ? WHERE id = ?").run(JSON.stringify(sandbox), id);
   }
 
   setRoomClaudeSetup(id: string, setup: ClaudeSetup) {

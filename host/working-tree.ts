@@ -1,3 +1,4 @@
+import { GIT_WITHOUT_REPOSITORY_PROGRAMS, gitEnvironmentFor } from "./git-environment.ts";
 import { lstat, readdir, stat } from "node:fs/promises";
 import { join, posix } from "node:path";
 import type { ChangeStatus } from "../shared/changes.ts";
@@ -58,7 +59,7 @@ const lineCount = (text: string) => (text === "" ? 0 : text.split("\n").length -
 
 /** Read-only git: no optional locks, so it never rewrites the user's index while they or the agent use the repository. */
 async function git(directory: string, args: string[], input = "") {
-  const child = Bun.spawn(["git", "--no-optional-locks", "-C", directory, ...args], { stdin: new Blob([input]), stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "--no-optional-locks", "-C", directory, ...args], { env: gitEnvironmentFor(directory), stdin: new Blob([input]), stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited]);
   return { stdout, stderr: stderr.trim(), exitCode };
 }
@@ -84,7 +85,7 @@ export async function headOrEmptyTree(directory: string) {
 export async function uncommittedChanges(directory: string): Promise<TreeChange[] | null> {
   if (!(await isRepository(directory))) return null;
   const head = await headOrEmptyTree(directory);
-  const diff = (format: string) => mustGit(directory, ["diff", "--relative", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", format, head]);
+  const diff = (format: string) => mustGit(directory, ["diff", "--ignore-submodules=dirty", "--relative", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", format, head]);
   const [raw, numstat, untracked] = await Promise.all([diff("--raw"), diff("--numstat"), mustGit(directory, ["ls-files", "--others", "--exclude-standard", "-z"])]);
   const added = await inLimitedParallel(untracked.split("\0").filter(Boolean), (path) => untrackedChange(directory, path));
   return [...treeChangesIn(raw, numstat), ...added];
@@ -292,7 +293,7 @@ const emptyTree = async (directory: string) => (await mustGit(directory, ["hash-
 
 /** How `paths` differ in the working tree from `revision`, with line counts. */
 async function changesAgainst(directory: string, revision: string, paths: string[]): Promise<TreeChange[]> {
-  const diff = (format: string) => mustGit(directory, ["diff", "--relative", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", format, revision, "--", ...paths.map((path) => `:(literal)${path}`)]);
+  const diff = (format: string) => mustGit(directory, ["diff", "--ignore-submodules=dirty", "--relative", "--no-renames", "--no-ext-diff", "--no-textconv", "-z", format, revision, "--", ...paths.map((path) => `:(literal)${path}`)]);
   const [raw, numstat] = await Promise.all([diff("--raw"), diff("--numstat")]);
   return treeChangesIn(raw, numstat);
 }

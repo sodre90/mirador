@@ -48,6 +48,7 @@ import {
   type RoomTaskApproval,
 } from "../shared/rooms.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../shared/room-agent-setup.ts";
+import { NO_SANDBOX } from "../shared/sandbox.ts";
 
 const OWNER = "owner";
 const profile = (id: string, name: string): Profile => ({
@@ -992,7 +993,7 @@ describe("a page that shows a room", () => {
   const builderInRoom = { ...conversationIn("r1", "w1", { harness: "opencode", profileId: "p1" }, "Launch: Builder"), position: 0 };
   const page = (id: string, conversationId: string, kind: CanvasItem["kind"] = "show") => ({ id, conversationId, kind, title: id, html: "", status: "shown", createdAt: 1 }) as CanvasItem;
   const serverSent = (state: AppState, message: ServerMessage) => reducer(state, { type: "server", message });
-  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, createdAt: 1 };
+  const launch: Room = { id: "r1", name: "Launch", workspaceId: "w1", agents: [{ profileId: "p1", conversationId: builderInRoom.id, answering: null, model: null, effort: null, variables: {}, wholeHostEnvironment: false }], permissions: "read-freely", people: [], peoplesTasksWait: true, claudeSetup: ALL_OF_CLAUDE_SETUP, agentsReadGuests: true, membersBringAgents: true, sandbox: NO_SANDBOX, createdAt: 1 };
   const showingRoom = (messages: RoomMessage[], rooms = [launch]) =>
     serverSent(reducer({ ...initialState, rooms, roomConversations: [builderInRoom] }, { type: "select-room", roomId: "r1" }), {
       type: "room.timeline",

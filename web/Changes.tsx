@@ -473,6 +473,7 @@ export function ChangesView({ conversationId, refreshPoint, homeDir }: { convers
           />
         )}
       </div>
+      {landable?.hooksOff && landable.branch !== null && landable.ahead > 0 && <p className="hint merge-hooks-off">{words.hooksOffWhileSandboxed}</p>}
       {committing && (
         <CommitChangesDialog
           conversationId={conversationId}

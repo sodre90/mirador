@@ -110,6 +110,18 @@ export interface HarnessSpec {
    * need not wait.
    */
   startsOneAtATime: boolean;
+  /**
+   * Where the agent starts is only known as it starts, as for a room's agent, which starts in its room's sandbox while
+   * the room has one: in place of `command` and `environment`. A launch that throws is a start that failed.
+   */
+  launching?: () => Promise<AgentLaunch>;
+}
+
+/** What starts an agent process, and what is told once that process has gone, or never started after all. */
+export interface AgentLaunch {
+  command: string[];
+  environment: Record<string, string>;
+  gone?: () => void;
 }
 
 export interface HarnessListener {
@@ -285,8 +297,15 @@ export class HarnessProcess {
 
   private async launch(ownStart: number) {
     this.endIfStoppedBeforeSpawning(ownStart);
-    const [command, ...args] = this.spec.command;
-    const child = spawnAgent(command!, args, this.spec.environment);
+    const launched: AgentLaunch = this.spec.launching ? await this.spec.launching() : this.spec;
+    try {
+      this.endIfStoppedBeforeSpawning(ownStart);
+    } catch (error) {
+      launched.gone?.();
+      throw error;
+    }
+    const [command, ...args] = launched.command;
+    const child = this.spawnedOrGone(launched, () => spawnAgent(command!, args, launched.environment));
     this.child = child;
     let exitedBecause = (_reason: AgentGone) => {};
     this.exited = new Promise((resolve) => (exitedBecause = resolve));
@@ -294,6 +313,7 @@ export class HarnessProcess {
     const goneBecause = (reason: AgentGone) => {
       if (gone) return;
       gone = true;
+      launched.gone?.();
       if (this.startsSoFar === ownStart) {
         this.connection = undefined;
         this.initialized = undefined;
@@ -335,6 +355,15 @@ export class HarnessProcess {
       setTimeout(() => connection.close(), LAST_OUTPUT_AFTER_EXIT_MS).unref();
     });
     return this.initialize();
+  }
+
+  private spawnedOrGone(launched: AgentLaunch, spawn: () => ChildProcess) {
+    try {
+      return spawn();
+    } catch (error) {
+      launched.gone?.();
+      throw error;
+    }
   }
 
   /**

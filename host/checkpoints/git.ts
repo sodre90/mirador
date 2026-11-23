@@ -1,3 +1,4 @@
+import { GIT_WITHOUT_REPOSITORY_PROGRAMS, ownCommonFolderOf } from "../git-environment.ts";
 import { mkdir, readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type { Workspace } from "../../shared/model.ts";
@@ -13,7 +14,7 @@ const WITHOUT_AUTOCRLF = ["-c", "core.autocrlf=false"];
  */
 export const WITHOUT_SAFECRLF = ["-c", "core.safecrlf=false"];
 
-const SUBMODULE_MODE = "160000";
+export const SUBMODULE_MODE = "160000";
 export const SYMLINK_MODE = "120000";
 export const EXECUTABLE_MODE = "100755";
 /** The mode git gives the side of a change that has no file; given to update-index, it takes the path out. */
@@ -85,8 +86,8 @@ export class CheckpointGit {
   private async runForBytes(workspace: Workspace, args: string[], { input, index, ownIndex, pathspecMagic }: GitOptions = {}) {
     await mkdir(join(this.dataDir, "checkpoints"), { recursive: true });
     const conversion = index === undefined ? WITHOUT_AUTOCRLF : [];
-    const child = Bun.spawn(["git", "-C", workspace.path, ...IDENTITY, ...conversion, ...args], {
-      env: { ...process.env, GIT_INDEX_FILE: index ?? ownIndex ?? this.fileOf(workspace, ".index"), GIT_LITERAL_PATHSPECS: pathspecMagic ? "0" : "1" },
+    const child = Bun.spawn(["git", ...GIT_WITHOUT_REPOSITORY_PROGRAMS, "-C", workspace.path, ...IDENTITY, ...conversion, ...args], {
+      env: { ...process.env, ...ownCommonFolderOf(workspace.path), GIT_INDEX_FILE: index ?? ownIndex ?? this.fileOf(workspace, ".index"), GIT_LITERAL_PATHSPECS: pathspecMagic ? "0" : "1" },
       stdin: input === undefined ? "ignore" : new Blob([input]),
       stdout: "pipe",
       stderr: "pipe",

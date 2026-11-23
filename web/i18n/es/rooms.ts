@@ -3,6 +3,8 @@ import type { Messages } from "../en/index.ts";
 const counted = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 const listed = (...parts: (string | false)[]) => parts.filter(Boolean).join(", ");
 
+const agentsWant = (agents: string[]) => (agents.length === 0 ? "Un agente de la sala quiere" : agents.length === 1 ? `${agents[0]} quiere` : `${agents.join(" o ")} quiere`);
+
 export const rooms: Messages["rooms"] = {
   rooms: "Salas",
   newRoom: "Nueva sala",
@@ -161,6 +163,45 @@ export const rooms: Messages["rooms"] = {
       ? `${agents[0]} detiene el turno en curso, empieza de nuevo y vuelve a leer la sala, una vez.`
       : `${agents.join(", ")} detienen los turnos en curso, empiezan de nuevo y vuelven a leer la sala, una vez.`,
   applyChange: "Cambiar",
+  sandbox: {
+    legend: "Sandbox",
+    turnOn: "Ejecutar los agentes en un sandbox",
+    network: "Red: solo el modelo y Mirador",
+    workFreely: "Los agentes trabajan libremente dentro",
+    presetApplies: "El permiso predefinido de la sala sigue aplicándose",
+    checking: "Comprobando si esta sala puede tener un sandbox…",
+    turnsFailUntil: "Los turnos de los agentes fallan hasta que esto se arregle:",
+    setup: {
+      "not-started": "Se prepara en este Mac la primera vez que se usa: el servicio container de Apple y luego la imagen de los agentes.",
+      "starting-service": "Iniciando el servicio container de Apple; la primera vez descarga un kernel de Linux…",
+      "building-image": "Construyendo la imagen de los agentes en este Mac…",
+      ready: "Preparado en este Mac.",
+      failed: "No se pudo preparar.",
+    },
+    buildingStep: (at: number, of: number) => `Construyendo la imagen de los agentes en este Mac: paso ${at} de ${of}…`,
+    setupFailed: (problem: string) => `No se pudo preparar: ${problem}`,
+    wholeEnvironmentIgnored: "Se ignora mientras la sala tenga sandbox: en su máquina virtual solo entran los valores elegidos aquí.",
+    meaning: [
+      "Los agentes de Claude Code de la sala se ejecutan en una máquina virtual ligera propia en este Mac, creada con la herramienta container de Apple. Ve el espacio de trabajo y una carpeta de la sala para la configuración y las sesiones de Claude Code de los agentes, y nada más de este Mac. Su red solo llega al modelo, a través de Mirador, que añade la clave del perfil para que la clave nunca entre en la máquina virtual, y al lienzo de Mirador.",
+      "Trabajando libremente, los agentes no piden nada, porque la máquina virtual los mantiene dentro. Si no, se aplica el permiso predefinido de la sala, igual que en este Mac.",
+      "Los archivos de los que los agentes cargan su configuración, instrucciones y servidores MCP quedan retenidos, y también los que se ejecutan solos: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml y .envrc. Los que ya están cuando arranca la máquina virtual son de solo lectura en ella; uno nuevo se deshace al instante, y tú lo apruebas o lo descartas en la sala.",
+      "Cualquier otro archivo que los agentes cambien en el espacio de trabajo puede ejecutarse cuando lo ejecutes tú: pruebas, scripts, package.json o un commit desde tu terminal, que ejecuta los hooks del repositorio. Revisa lo que cambiaron antes de ejecutar nada allí.",
+      "La configuración y los hooks del repositorio son de solo lectura en la máquina virtual. Mirador ejecuta git en el espacio de trabajo sin sus hooks ni fsmonitor, y mientras la sala tenga sandbox, y durante 7 días después, sus commits y fusiones allí también omiten los hooks del repositorio.",
+      "Activarlo o desactivarlo, o cambiar cómo trabajan los agentes en él, hace que empiecen de nuevo.",
+    ],
+  },
+  held: {
+    label: "Cambio de configuración de agente retenido para ti",
+    wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} cambiar ${path}`,
+    wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} agregar ${path}`,
+    wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} eliminar ${path}`,
+    keptAsItWas: "El archivo sigue como estaba hasta que apruebes el cambio.",
+    unshown: "Es demasiado largo, o no es texto, para mostrarlo aquí.",
+    loading: "Cargando el cambio…",
+    tooMany: (most: number) => `El sandbox se detuvo: sus agentes cambiaron más de ${most} archivos retenidos. Aprueba o descarta algunos para que vuelvan a trabajar.`,
+    allow: "Aprobar",
+    discard: "Descartar",
+  },
   peoplesTasksHint: "Si no, la etiqueta o el seguimiento de un miembro no llega a ningún agente hasta que lo permitas.",
   roles: { member: "Miembro", guest: "Invitado" },
   authorRoles: { owner: "Propietario", member: "Miembro", guest: "Invitado", agent: "Agente", "member's agent": "Agente de un miembro" },

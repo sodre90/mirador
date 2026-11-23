@@ -283,7 +283,7 @@ export class Checkpoints {
   private async editedSinceHead(workspace: Workspace, { head, usersIndex }: Location, converted: string, paths: string[]) {
     const headTree = await this.treeOf(workspace, head);
     const [changed, added] = await Promise.all([
-      this.git.mustRun(workspace, ["diff", "--name-only", "-z", "--relative", "--no-renames", headTree], { index: usersIndex }),
+      this.git.mustRun(workspace, ["diff", "--ignore-submodules=dirty", "--name-only", "-z", "--relative", "--no-renames", headTree], { index: usersIndex }),
       this.git.mustRun(workspace, ["diff-tree", "-r", "-z", "--name-only", "--relative", "--no-renames", "--diff-filter=A", headTree, converted]),
     ]);
     const edited = new Set([...changed.stdout.split("\0"), ...added.stdout.split("\0")]);
@@ -331,7 +331,7 @@ export class Checkpoints {
   }
 
   private async stagedOtherwise(workspace: Workspace, index: string, paths: string[]) {
-    const differing = new Set((await this.git.mustRun(workspace, ["diff", "--name-only", "-z", "--relative"], { index })).stdout.split("\0"));
+    const differing = new Set((await this.git.mustRun(workspace, ["diff", "--ignore-submodules=dirty", "--name-only", "-z", "--relative"], { index })).stdout.split("\0"));
     return paths.filter((path) => differing.has(path));
   }
 

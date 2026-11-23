@@ -107,6 +107,7 @@ export const canvas: Messages["canvas"] = {
     showMore: (more: string, notShown: string) => `再显示 ${more} 个（${notShown} 个未显示）`,
     showAs: "显示为",
     refresh: "刷新",
+    hooksOffWhileSandboxed: "此仓库开着沙箱期间，它的 Hook 不会在这里运行。",
     commitDialog: {
       open: "提交…",
       title: "提交更改",

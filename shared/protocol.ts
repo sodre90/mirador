@@ -1,6 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { ClaudeSetup } from "./room-agent-setup.ts";
+import type { HeldChange, HeldChangeAnswer, HeldChangeText, RoomSandbox, SandboxCheck, SandboxSetup } from "./sandbox.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type { BroughtAnswerEnd, Room, RoomAgentModel, RoomApproval, RoomAuthorRole, RoomInvite, RoomMessage, RoomPresence, RoomRole, RoomTaskApproval, RoomThread, RoomTimeline } from "./rooms.ts";
@@ -443,6 +444,14 @@ export type ClientMessage =
   | { type: "room.set-agent-variable"; roomId: string; profileId: string; name: string; given: boolean }
   /** Whether the agent gets all of this computer's environment; already there, it starts afresh and reads the room again, once. */
   | { type: "room.set-agent-host-environment"; roomId: string; profileId: string; given: boolean }
+  /** Whether the room's agents run in a sandbox, and work freely there; those already there start afresh. Turning it on where something stands in its way fails with why. */
+  | { type: "room.set-sandbox"; roomId: string; sandbox: RoomSandbox }
+  /** Whether this computer and the room can have a sandbox; the host answers `room.sandbox-checked`. */
+  | { type: "room.check-sandbox"; requestId: string; roomId: string }
+  /** Writes an agent config file as a sandboxed agent proposed it, or drops what it proposed. */
+  | { type: "room.answer-held-change"; roomId: string; changeId: string; answer: HeldChangeAnswer }
+  /** A held change's text before and as proposed; the host answers `room.held-change-text`. */
+  | { type: "room.held-change-text"; requestId: string; roomId: string; changeId: string }
   /** Whether the room's agents read what guests write there, from their next catch-up on. */
   | { type: "room.set-agents-read-guests"; roomId: string; read: boolean }
   /** Deletes the room with its agents' conversations in it. */
@@ -487,6 +496,12 @@ export type ServerMessage =
       roomApprovals: RoomApproval[];
       /** The tasks of people other than the owner that wait for an approver, oldest first. */
       roomTasksWaiting: RoomTaskApproval[];
+      /** Where setting up sandboxes stands on this computer. */
+      sandboxSetup: SandboxSetup;
+      /** The agent config files sandboxed agents changed, put back and held for the owner's OK, oldest first. */
+      heldChanges: HeldChange[];
+      /** The rooms whose sandbox stopped as they hold as many changes as a room may. */
+      roomsHoldingTooMany: string[];
       /** The room invites nobody has used yet, soonest to expire first. */
       roomInvites: RoomInvite[];
       /** The agents this computer's owner brought into rooms of other machines, and the tasks others gave them that wait for their OK. */
@@ -644,6 +659,14 @@ export type ServerMessage =
   | { type: "room.message"; message: RoomMessage; threads: RoomThread[] }
   /** All the room's agents wait on, and the people's tasks that wait for an approver, oldest first, each time one starts or stops waiting. */
   | { type: "room.approvals"; roomId: string; approvals: RoomApproval[]; tasks: RoomTaskApproval[] }
+  /** What stands in the way of the room's sandbox, if anything, to the page that asked. */
+  | ({ type: "room.sandbox-checked"; requestId: string; roomId: string } & SandboxCheck)
+  /** Where setting up sandboxes stands, each time it moves on. */
+  | { type: "sandbox.setup"; setup: SandboxSetup }
+  /** The room's held agent config files, each time one comes or is answered. */
+  | { type: "room.held-changes"; roomId: string; changes: HeldChange[]; full: boolean }
+  /** A held change's text, to the page that asked; null once it is no longer held. */
+  | { type: "room.held-change-text"; requestId: string; text: HeldChangeText | null }
   /** Who is in a subscribed room now and who of them writes there, after `room.timeline` and each time it changes. */
   | ({ type: "room.presence"; roomId: string } & RoomPresence)
   | { type: "room.usage.got"; requestId: string; usage: RoomUsage }

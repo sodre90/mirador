@@ -65,6 +65,13 @@ import { KeepAwakeHold } from "./keep-awake.ts";
 import { keepDataFolderToHostAccount } from "./windows-folder-access.ts";
 import { stopIgnoringCtrlC } from "./windows-processes.ts";
 import { askFormOnCanvas } from "./acp/elicitation.ts";
+import { findClaudeProgram, versionOf } from "./acp/claude-program.ts";
+import { conversationCanvasToken } from "./canvas-token.ts";
+import { currentPath } from "./current-path.ts";
+import { homedir } from "node:os";
+import { AppleContainer } from "./sandbox/apple-container.ts";
+import { claudeCodeVersionIn } from "./sandbox/image.ts";
+import { RoomSandboxes } from "./sandbox/room-sandboxes.ts";
 
 if (process.platform === "win32") stopIgnoringCtrlC();
 const config = loadConfig();
@@ -193,6 +200,35 @@ const mcp = new CanvasMcpEndpoints({
   rooms,
   antigravityAskWaitMs: config.antigravityAskWaitMs,
 });
+const sandboxes = new RoomSandboxes(AppleContainer.here(config.sandboxContainer, currentPath() ?? ""), {
+  dataDir: config.dataDir,
+  places: { home: homedir(), dataDir: config.dataDir, checkout: sourceDir },
+  workspaceOf: (roomId) => {
+    const room = store.findRoom(roomId);
+    return (room && store.findWorkspace(room.workspaceId)?.path) ?? null;
+  },
+  canvasOf: (roomId) => ({
+    isRoomsConversation: (conversationId) => store.findConversation(conversationId)?.roomId === roomId,
+    tokenOf: (conversationId) => conversationCanvasToken(config.mcpToken, conversationId),
+    handle: (conversationId, request) => mcp.handle(conversationId, request),
+  }),
+  agentsAtWork: (roomId) => (store.findRoom(roomId)?.agents ?? []).filter(({ answering }) => answering !== null).map(({ profileId }) => profileId),
+  setupChanged: (setup) => hub.broadcast({ type: "sandbox.setup", setup }),
+  heldChanged: (roomId, changes, full) => hub.broadcast({ type: "room.held-changes", roomId, changes, full }),
+});
+const claudeCodeVersionHere = async () => {
+  const program = findClaudeProgram(store.claudeProgramSetting());
+  return program && claudeCodeVersionIn(await versionOf(program));
+};
+conversations.startsSandboxedAgentsIn(sandboxes);
+rooms.keepsSandboxesWith({
+  availability: () => sandboxes.availability(),
+  prepare: () => void claudeCodeVersionHere().then((version) => version && sandboxes.prepareInBackground(version)),
+  answerHeldChange: (roomId, changeId, answer) => sandboxes.answerHeldChange(roomId, changeId, answer),
+  workspaceRefusal: (workspace) => sandboxes.workspaceRefusal(workspace),
+  roomGone: (roomId) => sandboxes.roomGone(roomId),
+});
+void sandboxes.reapLeftovers().catch((error: unknown) => console.error("removing the sandboxes a previous run left failed:", error));
 const appViewCode = (pathname: string) => apps.viewCode(pathname) ?? canvasPlugins.viewCode(pathname);
 const appMediaFile = (pathname: string) => apps.mediaFile(pathname);
 const assetsServer = serveCanvasAssets(config.canvasAssetsPort, { knownOrigins: canvasAssetsOrigins, appViewCode, appMediaFile });
@@ -298,7 +334,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, roomQuestions, roomReading, broughtAgents });
+const server = startServer({ config, store, hub, conversations, sandboxes, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, roomQuestions, roomReading, broughtAgents });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);
@@ -351,8 +387,9 @@ async function stopServices() {
   keepAwake.stop();
   clearInterval(forgettingDeletedCanvases);
   apps.stop();
+  const sandboxesStopped = childrenExited.then(() => sandboxes.stopAll());
   // An agent's exit is handled before its stop resolves, and that handling still reads and writes the store.
-  await Promise.all([childrenExited, voiceEngineStopped]);
+  await Promise.all([childrenExited, voiceEngineStopped, sandboxesStopped]);
   store.close();
 }
 

@@ -84,6 +84,8 @@ export function RoomsOnlyApp({ state, dispatch, outOfRooms, banner }: { state: A
             ownerPicture={null}
             approvals={[]}
             tasks={[]}
+            heldChanges={[]}
+            holdsTooMany={false}
             presence={state.roomPresence?.roomId === room.id ? state.roomPresence : null}
             muted={isMuted(state.roomReadings, room.id)}
             you={state.you}

@@ -61,7 +61,7 @@ test("a worktree is planned in Mirador's data folder, under the workspace's name
 test("a workspace that is a folder inside its repository works in that folder of the worktree", async () => {
   const workspace = workspaceAt(join(projectDir, "packages", "app"));
   const worktree = await worktrees.plan(workspace);
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
 
   expect(worktree.folder).toBe(join(worktree.root, "packages", "app"));
   expect(await readFile(join(worktree.folder, "index.ts"), "utf8")).toBe("export {};\n");
@@ -75,7 +75,7 @@ test("a workspace folder inside a repository with no tracked files is created an
   const workspace = workspaceAt(emptySubdir);
   const worktree = await worktrees.plan(workspace);
   expect(await worktrees.isMade(worktree)).toBe(false);
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
   expect(await worktrees.isMade(worktree)).toBe(true);
   expect(existsSync(worktree.folder)).toBe(true);
 });
@@ -96,7 +96,7 @@ test("a made worktree holds what is committed, on its new branch, and leaves the
   const workspace = workspaceAt(projectDir);
   const worktree = await worktrees.plan(workspace);
 
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
 
   expect(await worktrees.isMade(worktree)).toBe(true);
   expect(await readFile(join(worktree.folder, "kept.txt"), "utf8")).toBe("one\n");
@@ -109,7 +109,7 @@ test("uncommitted files are counted: changed and new ones, not ignored ones", as
   const workspace = workspaceAt(projectDir);
   const worktree = await worktrees.plan(workspace);
   expect(await worktrees.uncommittedFiles(worktree)).toBe(0);
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
   expect(await worktrees.uncommittedFiles(worktree)).toBe(0);
 
   await writeFile(join(worktree.root, "kept.txt"), "changed\n");
@@ -125,7 +125,7 @@ test("uncommitted files are counted: changed and new ones, not ignored ones", as
 test("removing a worktree deletes its folder with uncommitted files, and its branch when that holds no commits of its own", async () => {
   const workspace = workspaceAt(projectDir);
   const worktree = await worktrees.plan(workspace);
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
   await writeFile(join(worktree.root, "scratch.txt"), "never committed\n");
 
   await worktrees.remove(workspace, worktree);
@@ -138,7 +138,7 @@ test("removing a worktree deletes its folder with uncommitted files, and its bra
 test("a removed worktree's branch stays when it holds commits the workspace's branch lacks", async () => {
   const workspace = workspaceAt(projectDir);
   const worktree = await worktrees.plan(workspace);
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
   await writeFile(join(worktree.root, "feature.txt"), "work\n");
   await git(worktree.root, ["add", "-A"]);
   await git(worktree.root, ["commit", "-qm", "feature"]);
@@ -156,7 +156,7 @@ test("a worktree a kill left half-made is not made until it is made again from s
   await mkdir(worktree.root, { recursive: true });
   expect(await worktrees.isMade(worktree)).toBe(false);
 
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
 
   expect(await worktrees.isMade(worktree)).toBe(true);
   expect(await readFile(join(worktree.folder, "kept.txt"), "utf8")).toBe("one\n");
@@ -165,14 +165,14 @@ test("a worktree a kill left half-made is not made until it is made again from s
 test("a worktree whose folder was deleted by hand is made again on the branch it had, with its commits", async () => {
   const workspace = workspaceAt(projectDir);
   const worktree = await worktrees.plan(workspace);
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
   await writeFile(join(worktree.root, "feature.txt"), "work\n");
   await git(worktree.root, ["add", "-A"]);
   await git(worktree.root, ["commit", "-qm", "feature"]);
   await rm(worktree.root, { recursive: true, force: true });
   expect(await worktrees.isMade(worktree)).toBe(false);
 
-  await worktrees.make(workspace, worktree);
+  await worktrees.make(workspace, worktree, { ownersHooks: true });
 
   expect(await readFile(join(worktree.root, "feature.txt"), "utf8")).toBe("work\n");
   expect((await git(worktree.root, ["symbolic-ref", "--short", "HEAD"])).stdout).toBe(worktree.branch);
