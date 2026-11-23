@@ -70,7 +70,7 @@ import { currentActivity, isAgentsNextStep, OpenToolCalls } from "./activity.ts"
 import { editDiffsOf } from "./edit-diff.ts";
 import { askedPermissionOf, pendingAsk, pendingPermission } from "./pending-requests.ts";
 import { askingDefaultModeOf, askingModeOf, presetModeOf, type AskedPermission } from "../shared/room-permissions.ts";
-import { PROFILES_MODEL, type Room, type RoomAgentModel } from "../shared/rooms.ts";
+import { END_OF_OTHERS_WORDS, PROFILES_MODEL, type Room, type RoomAgentModel } from "../shared/rooms.ts";
 import { newestWaitingAsk } from "../shared/ask.ts";
 import { launchEditor } from "./editor.ts";
 import { openAsText, openWithSystemDefault } from "./system-open.ts";
@@ -439,6 +439,14 @@ const SESSION_STATE_UPDATES = new Set<acp.SessionUpdate["sessionUpdate"]>(["avai
 
 /** Antigravity sends the whole history again on session/resume, as on session/load, so its sessions reopen by a load whose replay is left out. */
 const replaysHistoryOnResume = (harness: HarnessId) => harness === "antigravity";
+
+/**
+ * Claude Code reads the files named with an @ in the last block of a prompt, wherever they lie, into it without asking:
+ * seen in 2.1.330, documented nowhere, and held to by e2e/room-file-mentions.spec.ts.
+ */
+const readsFilesNamedInLastBlock = (harness: HarnessId) => harness === "claude";
+
+const carriesOthersWords = ({ roomId, broughtIntoRoom }: Pick<Conversation, "roomId" | "broughtIntoRoom">) => roomId !== undefined || broughtIntoRoom === true;
 
 /**
  * Agents that read their settings, MCP servers among them, anew for each session they open, so a /reload reopens only the
@@ -3985,7 +3993,9 @@ export class ConversationService {
 
   private async promptContent(conversationId: string, text: string, imageIds: string[]): Promise<acp.ContentBlock[]> {
     const images = await Promise.all(imageIds.map((imageId) => this.images.contentBlock(conversationId, imageId)));
-    return [{ type: "text", text }, ...images];
+    const conversation = this.get(conversationId);
+    const endsInMiradorsWords = carriesOthersWords(conversation) && readsFilesNamedInLastBlock(conversation.harness);
+    return [{ type: "text", text }, ...images, ...(endsInMiradorsWords ? [{ type: "text" as const, text: END_OF_OTHERS_WORDS }] : [])];
   }
 
   private async handlePermissionRequest(

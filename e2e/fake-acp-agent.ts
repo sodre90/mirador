@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 import { Readable, Writable } from "node:stream";
 import * as acp from "@agentclientprotocol/sdk/unstable";
 import { isSideChatBrief } from "../shared/side-chats.ts";
-import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
+import { END_OF_OTHERS_WORDS, ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
 
 /**
  * An agent that takes every prompt and never finishes it, ignoring `session/cancel`, the way a model request against a
@@ -679,7 +679,7 @@ acp
   )
   .onRequest(acp.methods.agent.session.prompt, (ctx) => {
     const textOf = (blocks: acp.ContentBlock[]) => blocks.map((block) => (block.type === "text" ? block.text : "")).join("");
-    const prompt = ctx.params.prompt.filter((block) => !(block.type === "text" && isSideChatBrief(block.text)));
+    const prompt = ctx.params.prompt.filter((block) => !(block.type === "text" && (isSideChatBrief(block.text) || block.text === END_OF_OTHERS_WORDS)));
     const text = textOf(prompt);
     trace(`prompt in ${ctx.params.sessionId}: ${text.split("\n")[0]!.slice(0, 80)}`);
     appendFileSync(promptsFile!, `${textOf(ctx.params.prompt)}\n`);

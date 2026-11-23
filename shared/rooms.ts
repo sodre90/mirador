@@ -614,6 +614,9 @@ export function broughtTaskPrompt({ roomName, machineName, by, text }: { roomNam
   ].join("\n");
 }
 
+/** What Mirador ends a prompt of others' words with, in a block of its own, for an agent that would otherwise act on the last of theirs. */
+export const END_OF_OTHERS_WORDS = "End of the message.";
+
 export const ROOM_HISTORY_COUNT = 20;
 export const ROOM_HISTORY_MOST = 50;
 /** Long answers add up: the read-back holds the latest messages that fit in this many characters, at least one. */
