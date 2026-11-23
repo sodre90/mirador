@@ -41,6 +41,15 @@ test.afterAll(async () => {
   await host.cleanUp();
 });
 
+/** The file's text once its folder stands as a folder again, null while a put-back has either gone for a moment. */
+const settledFolderFile = (folder: string, name: string) => {
+  try {
+    return lstatSync(folder).isDirectory() ? readFileSync(join(folder, name), "utf8") : null;
+  } catch {
+    return null;
+  }
+};
+
 const roomComposer = (page: Page) => page.getByRole("textbox", { name: "Write in Boxed, @ tags an agent…" });
 
 /** Each of these, as a client in the VM tries to open a connection to it: "reached", or how it failed. */
@@ -214,7 +223,7 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
     try {
       asAgent(vm!, "sh", "-c", swaps);
     } catch {}
-    await expect.poll(() => lstatSync(at(".claude")).isDirectory() && readFileSync(at(".claude/settings.json"), "utf8"), { timeout: 30_000 }).toBe(`{"allowed":true}\n`);
+    await expect.poll(() => settledFolderFile(at(".claude"), "settings.json"), { timeout: 30_000 }).toBe(`{"allowed":true}\n`);
     expect(readFileSync(join(sentinel, "settings.json"), "utf8")).toBe("the Mac's own file\n");
     let vmRuns = true;
     try {
