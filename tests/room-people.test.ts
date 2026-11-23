@@ -366,10 +366,10 @@ function seed() {
   writeFileSync(join(projectDir, "README.md"), "# project\n");
   writeFileSync(promptsFile, "");
   mkdirSync(fakePrograms, { recursive: true });
-  writeFileSync(join(fakePrograms, "opencode"), `#!/bin/sh\nFAKE_ACP_COMMANDS='${JSON.stringify(OWNERS_COMMANDS)}' exec bun '${join(repoRoot, "e2e", "fake-acp-agent.ts")}' "$@"\n`);
+  writeFileSync(join(fakePrograms, "opencode"), `#!/bin/sh\nexec bun '${join(repoRoot, "e2e", "fake-acp-agent.ts")}' "$@"\n`);
   chmodSync(join(fakePrograms, "opencode"), 0o755);
   const store = new Store(join(dataDir, "state.sqlite"));
-  profile = { id: crypto.randomUUID(), name: "Builder", harness: "opencode", environment: `OPENCODE_FAKE_ACP_PROMPTS=${promptsFile}\nROOM_ONLY_SECRET_NAME=room-only`, prelaunch: `echo ${PRELAUNCH_SECRET}`, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [PLUGIN_OFF_SECRET], createdAt: Date.now() };
+  profile = { id: crypto.randomUUID(), name: "Builder", harness: "opencode", environment: `OPENCODE_FAKE_ACP_PROMPTS=${promptsFile}\nOPENCODE_FAKE_ACP_COMMANDS='${JSON.stringify(OWNERS_COMMANDS)}'\nROOM_ONLY_SECRET_NAME=room-only`, prelaunch: `echo ${PRELAUNCH_SECRET}`, model: null, mode: null, effort: null, bypassPermissions: false, askMode: "wait", color: null, pluginsOff: [PLUGIN_OFF_SECRET], createdAt: Date.now() };
   store.saveProfile(profile);
   workspace = store.insertWorkspace({ id: crypto.randomUUID(), name: "project", path: projectDir, defaultLaunch: { harness: "opencode", profileId: profile.id }, createdAt: Date.now() });
   mkdirSync(otherProjectDir, { recursive: true });
