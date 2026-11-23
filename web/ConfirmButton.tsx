@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useClosesWhileFocused } from "./desktop-close.ts";
+import { t } from "./i18n/index.ts";
 
 const DISARM_AFTER_MS = 4_000;
 
@@ -90,7 +91,7 @@ export function ConfirmButton({
       type="button"
       role={role}
       className={armed ? `${className} armed` : className}
-      aria-label={armed ? `Confirm: ${label}` : label}
+      aria-label={armed ? t.shell.confirmLabel(label) : label}
       data-hint={armed ? armedHint : hint}
       onClick={(event) => {
         event.stopPropagation();

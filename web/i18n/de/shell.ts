@@ -4,6 +4,7 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 
 export const shell: Messages["shell"] = {
   close: "Schließen",
+  confirmLabel: (label) => `Bestätigen: ${label}`,
   pageBroke: { title: "Auf dieser Seite ist etwas schiefgelaufen", detail: "Der Fehler steht im Host-Log.", reload: "Neu laden" },
   sidebar: {
     hideSidebar: "Seitenleiste ausblenden",

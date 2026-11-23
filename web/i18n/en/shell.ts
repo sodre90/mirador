@@ -7,6 +7,7 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 
 export const shell = {
   close: "Close",
+  confirmLabel: (label: string) => `Confirm: ${label}`,
   pageBroke: { title: "Something went wrong on this page", detail: "Its error is in the host log.", reload: "Reload" },
   sidebar: {
     hideSidebar: "Hide the sidebar",

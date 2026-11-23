@@ -2,6 +2,7 @@ import type { Messages } from "../en/index.ts";
 
 export const shell: Messages["shell"] = {
   close: "关闭",
+  confirmLabel: (label) => `确认：${label}`,
   pageBroke: { title: "此页面出错了", detail: "错误已记录在 host 日志中。", reload: "重新加载" },
   sidebar: {
     hideSidebar: "隐藏侧边栏",

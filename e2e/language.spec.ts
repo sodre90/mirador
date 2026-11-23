@@ -81,6 +81,11 @@ test("in Hungarian, the sidebar, the palette and the chat's header, message box 
   const header = page.locator(".chat-header:visible");
   await expect(header.locator("h2")).toHaveText("Új beszélgetés");
   await expect(sidebar.locator(".conversation-title").first()).toHaveText("Új beszélgetés");
+  const row = sidebar.locator(".workspace li.selected");
+  await row.getByRole("button", { name: "Beszélgetés törlése", exact: true }).click();
+  await expect(row.getByRole("button", { name: "Megerősítés: Beszélgetés törlése", exact: true })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(row.getByRole("button", { name: "Beszélgetés törlése", exact: true })).toBeVisible();
   const windowBar = page.locator(".layout-toggles:visible");
   await expect(windowBar.getByRole("button", { name: "Vászon elrejtése" }).or(windowBar.getByRole("button", { name: "Vászon mutatása" }))).toBeVisible();
   await header.locator(".conversation-settings-toggle").click();
