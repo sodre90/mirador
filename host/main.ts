@@ -75,6 +75,7 @@ import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
 import { belongsToSandbox, Sandboxes } from "./sandbox/sandboxes.ts";
 import type { SandboxControl } from "./sandbox/sandbox-control.ts";
 import { WorkspaceSandboxes } from "./workspace-sandbox.ts";
+import { SandboxFolderService } from "./sandbox-folders.ts";
 
 if (process.platform === "win32") stopIgnoringCtrlC();
 const config = loadConfig();
@@ -228,7 +229,10 @@ const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxCont
   },
   setupChanged: (setup) => hub.broadcast({ type: "sandbox.setup", setup }),
   heldChanged: (owner, changes, full) => hub.broadcast({ type: "sandbox.held-changes", owner, changes, full }),
+  foldersOf: (owner) => store.sandboxFoldersOf(owner),
+  foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
 });
+const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandboxes);
 const claudeCodeVersionHere = async () => {
   const program = findClaudeProgram(store.claudeProgramSetting());
   return program && claudeCodeVersionIn(await versionOf(program));
@@ -239,7 +243,10 @@ const sandboxControl: SandboxControl = {
   prepare: () => void claudeCodeVersionHere().then((version) => version && sandboxes.prepareInBackground(version)),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
   workspaceRefusal: (workspace) => sandboxes.workspaceRefusal(workspace),
-  ownerGone: (owner) => sandboxes.ownerGone(owner),
+  ownerGone: (owner) => {
+    sandboxFolders.ownerGone(owner);
+    return sandboxes.ownerGone(owner);
+  },
 };
 rooms.keepsSandboxesWith(sandboxControl);
 const terminals = new TerminalService(hub, store);
@@ -350,7 +357,7 @@ voiceEngineInstaller.load().catch((error) => console.error(`reading how voice is
 const voice = new Voice(() => store.voiceSettings(), (profileId) => store.findProfile(profileId), voiceEngine.use);
 const keepAwake = new KeepAwakeHold(store.keepAwake());
 hub.whenRunningTurnsCounted((count) => keepAwake.setRunningTurns(count));
-const server = startServer({ config, store, hub, conversations, sandboxes, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, roomQuestions, roomReading, broughtAgents });
+const server = startServer({ config, store, hub, conversations, sandboxes, canvas, mcp, apps, plugins, canvasPlugins, pluginSettings, pluginLooks, catalog, profiles, statusline, terminals, images, droppedFiles, voice, voiceEngine, restart, desktopApp, newerVersion, pullNewerVersion: () => pullCheckout(sourceDir), pluginUpdates, readyPluginUpdates, revokedPluginsRunning, devices, ownerKey: ownersKey, joinRequests, signInCodes, search, relays, watch, tunnels, certificate, keepAwake, p2p, pushes, notifications, rooms, workspaceSandboxes, sandboxFolders, roomQuestions, roomReading, broughtAgents });
 const sourceWatcher = new SourceWatcher(sourceDir, {
   uiEdited: (edited) => {
     console.log(`${edited} changed, so the page is built again`);

@@ -34,6 +34,8 @@ function hostFor(workspace: string) {
     atWork: () => ({ agents: ["builder"], conversationIds: [] }),
     setupChanged: (setup) => setups.push(setup),
     heldChanged: () => {},
+    foldersOf: () => [],
+    foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: join(scratch, "mirador-data"), checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   return { host, setups };

@@ -650,7 +650,8 @@ export type BusyWith =
   | "loading-history"
   | "reading-terminal-turns"
   | "making-worktree"
-  | "setting-up-worktree";
+  | "setting-up-worktree"
+  | "waiting-for-sandbox-folders";
 
 export const busyTexts: Record<BusyWith, string> = {
   "switching-profile": "Switching profile…",
@@ -661,6 +662,7 @@ export const busyTexts: Record<BusyWith, string> = {
   "reading-terminal-turns": "Reading the turns taken in the terminal…",
   "making-worktree": "Making the worktree…",
   "setting-up-worktree": "Setting up the worktree…",
+  "waiting-for-sandbox-folders": "Waiting for the sandbox to restart with its folders…",
 };
 
 /** The title a conversation has until its first message, the agent or the user names it. */

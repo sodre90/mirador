@@ -95,6 +95,8 @@ function sandboxedWorkspace(sandbox: SandboxSetting = SANDBOX_ON) {
     atWork: () => ({ agents: [], conversationIds: [] }),
     setupChanged: () => {},
     heldChanged: () => {},
+    foldersOf: () => [],
+    foldersStarted: () => {},
     places: { home: "/nonexistent-home", dataDir: config.dataDir, checkout: "/nonexistent-checkout", computersOwn: [] },
   };
   const sandboxes = new Sandboxes(launcher, host, 60_000);

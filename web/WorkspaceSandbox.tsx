@@ -1,6 +1,6 @@
 import { useEffect, useState, type Dispatch } from "react";
 import type { Conversation, Profile, Workspace } from "../shared/model.ts";
-import { holdsTooMany, ofSandbox, workspaceSandbox, type HeldChange, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
+import { holdsTooMany, ofSandbox, workspaceSandbox, type HeldChange, type SandboxFolders, type SandboxSetup, type WorkspaceSandboxCheck } from "../shared/sandbox.ts";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { LineIcon } from "./LineIcon.tsx";
@@ -8,6 +8,7 @@ import { Modal } from "./Palette.tsx";
 import { sandboxBlockerText } from "./problem-text.ts";
 import { WhatItMeans } from "./RoomSettings.tsx";
 import { HeldChangeCard, SandboxSwitch, type SandboxSwitchWords } from "./Sandbox.tsx";
+import { SandboxFolderList } from "./SandboxFolders.tsx";
 import type { AppAction, AppState } from "./state.ts";
 
 const words = t.shell.workspaceSandbox;
@@ -50,8 +51,8 @@ const profileName = (profiles: Profile[]) => (profileId: string) => profiles.fin
 
 /**
  * The workspace's sandbox, on its own: the switch with what keeps it off, the profile its new conversations start on
- * where that can't run in it, its conversations in worktrees, which can't go on there, the changes it holds for the
- * owner's OK, and the long story folded away.
+ * where that can't run in it, its conversations in worktrees, which can't go on there, the folders of this computer it
+ * sees, the changes it holds for the owner's OK, and the long story folded away.
  */
 export function WorkspaceSandboxDialog({
   workspace,
@@ -60,6 +61,8 @@ export function WorkspaceSandboxDialog({
   setup,
   heldChanges,
   holdsTooMany,
+  sandboxFolders,
+  homeDir,
   onClose,
 }: {
   workspace: Workspace;
@@ -68,6 +71,8 @@ export function WorkspaceSandboxDialog({
   setup: SandboxSetup;
   heldChanges: HeldChange[];
   holdsTooMany: boolean;
+  sandboxFolders: SandboxFolders;
+  homeDir: string;
   onClose: () => void;
 }) {
   const check = useWorkspaceSandboxCheck(workspace, profiles);
@@ -94,6 +99,7 @@ export function WorkspaceSandboxDialog({
         startsAfresh={startsAfresh}
         startsAfreshText={(conversationIds, stopsTurn) => (stopsTurn ? words.stopsAndStartsAfresh(conversationIds.length) : words.startsAfresh(conversationIds.length))}
         send={(sandbox) => connection.send({ type: "workspace.set-sandbox", workspaceId: workspace.id, sandbox })}
+        folders={<SandboxFolderList folders={sandboxFolders} homeDir={homeDir} />}
       />
       {check?.startsOn && <p className="workspace-sandbox-warning workspace-sandbox-starts-on">{words.startsOnRefused(sandboxBlockerText(check.startsOn, t.problems))}</p>}
       {inWorktrees > 0 && <p className="workspace-sandbox-warning workspace-sandbox-in-worktrees">{words.inWorktrees(inWorktrees)}</p>}

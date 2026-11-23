@@ -124,7 +124,7 @@ export const shell: Messages["shell"] = {
     heldWaits: "需要你：沙箱暂扣了一项 Agent 配置更改，等你批准。点击查看。",
     anAgentHere: "这个工作区的一个 Agent",
     meaning: [
-      "这个工作区中对话的 Claude Code Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到项目文件夹和工作区的一个文件夹（存放 Agent 的 Claude Code 设置和会话），看不到这台电脑的其他内容：既看不到你自己的 Claude Code 设置，也看不到其他工作区。它的网络只能通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；此外只能访问 Mirador 的画布。",
+      "这个工作区中对话的 Claude Code Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到项目文件夹、工作区的一个文件夹（存放 Agent 的 Claude Code 设置和会话），以及你从这台电脑添加的文件夹（只读），看不到这台电脑的其他内容：既看不到你自己的 Claude Code 设置，也看不到其他工作区。它的网络只能通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；此外只能访问 Mirador 的画布。",
       "在画布上，Agent 可以向你展示页面、向你提问，但用不了 Mirador 的其他工具，因为那些工具会在这台电脑上执行操作。",
       "目前只有配置用 API 密钥登录的 Claude Code Agent 能在其中运行。使用其他配置的对话不会启动：请为它选择一个可以运行的配置，或者关闭沙箱。",
       "自由工作时，Agent 什么都不用请求批准，因为沙箱把它们关在里面；YOLO 也只在沙箱运行时生效。否则每个对话都按其配置的模式请求批准。",

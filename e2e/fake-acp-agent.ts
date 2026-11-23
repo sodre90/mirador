@@ -32,7 +32,8 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * `STOPPED REPLY ` streams half of a reply and `STOPPED BEFORE ` streams none of it: either ends its turn as cancelled
  * once `session/cancel` arrives, and a moment after the stop streams the reply's rest under the id it streamed under
  * before, together with a subagent's report — the late chunks claude-agent-acp sends for a turn its cancel cut short.
- * `FOLDER` says the folder the session was started in.
+ * `FOLDER` says the folder the session was started in, and `ADDED FOLDERS` the folders it was given beside it as it
+ * started or resumed (`additionalDirectories`), which it takes where it resumes sessions.
  * `STOPPED BESIDE SUBAGENT ` does as `STOPPED BEFORE ` while a background subagent's command is still running at the stop.
  * `STOPPED QUIET ` streams nothing, ends as cancelled on the stop and sends nothing after it, as a stop that interrupted
  * the request leaves things. `FINISHED ON STOP ` begins a reply, and once `session/cancel` arrives finishes it and
@@ -74,7 +75,7 @@ import { ROOM_MESSAGES_HEADING } from "../shared/rooms.ts";
  * names a file it writes its pid to. `FAKE_ACP_STEERS=1` offers claude-agent-acp's `_session/steering`: a message
  * steered into a `REPLY STEERED ` or `ENDS UNREAD ` turn joins it, any other is refused as needing a prompt of its own.
  * `FAKE_ACP_RESUMES=1` closes and resumes sessions, logging new, closed and resumed ones; a resumed session keeps the
- * canvas server the resume gave it.
+ * canvas server and the folders beside its own the resume gave it.
  * `FAKE_ACP_COMMANDS`, a JSON list of ACP available commands, is announced as each session starts, for its / menu.
  * Each of these may come named `OPENCODE_FAKE_ACP_…` instead, as a room's opencode agent gets them of its profile.
  * A side chat's brief, sent before its first question, is written to the prompts file but leaves the commands alone.
@@ -386,6 +387,7 @@ async function titleSession(client: acp.AgentContext, sessionId: string, title: 
 /** The turns waiting for the user's stop, by session. */
 const stopWaiters = new Map<string, () => void>();
 const sessionFolders = new Map<string, string>();
+const sessionAddedFolders = new Map<string, string[]>();
 let nextStoppedReply = 0;
 
 /** A turn the user stops: half a reply streamed, or none yet, ends as cancelled on the stop; the reply's rest and a subagent's report follow it, as claude-agent-acp's late chunks do. */
@@ -619,6 +621,7 @@ acp
           sessionCapabilities: {
             ...((offersModes || resumes) && { close: {} }),
             ...((resumeFails || resumes) && { resume: {} }),
+            ...(resumes && { additionalDirectories: {} }),
             ...(history && { list: {} }),
             ...(forks && { fork: {} }),
           },
@@ -631,6 +634,7 @@ acp
   .onRequest(acp.methods.agent.session.new, (ctx) => {
     const sessionId = `fake-session-${process.pid}-${++nextSession}`;
     sessionFolders.set(sessionId, ctx.params.cwd);
+    sessionAddedFolders.set(sessionId, ctx.params.additionalDirectories ?? []);
     keepCanvasServer(sessionId, ctx.params.mcpServers);
     trace(`new session ${sessionId}`);
     if (resumes) log(`new ${sessionId}`);
@@ -655,6 +659,7 @@ acp
   .onRequest(acp.methods.agent.session.resume, (ctx) => {
     if (!resumes) throw acp.RequestError.internalError(undefined, "No such session");
     sessionFolders.set(ctx.params.sessionId, ctx.params.cwd);
+    sessionAddedFolders.set(ctx.params.sessionId, ctx.params.additionalDirectories ?? []);
     keepCanvasServer(ctx.params.sessionId, ctx.params.mcpServers ?? []);
     log(`resumed ${ctx.params.sessionId}`);
     return {};
@@ -695,6 +700,7 @@ acp
     if (startsWith(prompt, "TITLE ")) return titleSession(ctx.client, ctx.params.sessionId, text.slice("TITLE ".length));
     if (startsWith(prompt, "CHOICES")) return sayChoices(ctx.client, ctx.params.sessionId);
     if (startsWith(prompt, "FOLDER")) return sayText(ctx.client, ctx.params.sessionId, `Working in ${sessionFolders.get(ctx.params.sessionId)}`);
+    if (startsWith(prompt, "ADDED FOLDERS")) return sayText(ctx.client, ctx.params.sessionId, `Added folders: ${sessionAddedFolders.get(ctx.params.sessionId)?.join(", ") || "none"}`);
     if (startsWith(prompt, "NOTICE")) return sendNotices(ctx.client, ctx.params.sessionId);
     if (startsWith(prompt, "ASYNC TASK DONE")) return startAsyncTask(ctx.client, ctx.params.sessionId, true);
     if (startsWith(prompt, "ASYNC TASK LONG")) return startAsyncTask(ctx.client, ctx.params.sessionId, true, false, LONG_TASK_DESCRIPTION);

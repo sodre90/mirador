@@ -109,6 +109,7 @@ import { showWithNotifySend } from "./notify-send.ts";
 import type { StatuslineService } from "./statusline.ts";
 import type { Sandboxes } from "./sandbox/sandboxes.ts";
 import type { WorkspaceSandboxes } from "./workspace-sandbox.ts";
+import type { SandboxFolderService } from "./sandbox-folders.ts";
 import type { Store } from "./store.ts";
 import type { TerminalService } from "./terminals.ts";
 import { VoiceUnavailable, type Voice } from "./voice/voice.ts";
@@ -170,6 +171,7 @@ export interface HostServices {
   notifications: SystemNotifications;
   rooms: RoomService;
   workspaceSandboxes: WorkspaceSandboxes;
+  sandboxFolders: SandboxFolderService;
   roomQuestions: RoomQuestions;
   roomReading: RoomReadingService;
   broughtAgents: BroughtAgents;
@@ -270,6 +272,7 @@ export function startServer(services: HostServices) {
     notifications,
     rooms,
     workspaceSandboxes,
+    sandboxFolders,
     roomQuestions,
     roomReading,
     broughtAgents,
@@ -2189,6 +2192,15 @@ export function startServer(services: HostServices) {
       case "sandbox.held-change-text":
         if (!isSandboxOwner(message.owner)) throw new Error("A held change belongs to a room's or a workspace's sandbox.");
         return reply({ type: "sandbox.held-change-text", requestId: message.requestId, text: sandboxes.heldChangeText(message.owner, message.changeId) });
+      case "sandbox.add-folder":
+        if (!isSandboxOwner(message.owner) || typeof message.path !== "string") throw new Error("A folder is added to a room's or a workspace's sandbox, by its path.");
+        return reply({ type: "sandbox.folder-added", requestId: message.requestId, refused: await sandboxFolders.add(message.owner, message.path) });
+      case "sandbox.remove-folder":
+        if (!isSandboxOwner(message.owner) || typeof message.path !== "string") throw new Error("A folder is taken out of a room's or a workspace's sandbox, by its path.");
+        return sandboxFolders.remove(message.owner, message.path);
+      case "sandbox.apply-folders-now":
+        if (!isSandboxOwner(message.owner)) throw new Error("A room's or a workspace's sandbox takes up its folders.");
+        return sandboxFolders.applyNow(message.owner);
       case "room.set-agent-variable":
         return rooms.chooseAgentVariable(message.roomId, message.profileId, message.name, message.given);
       case "room.set-agent-host-environment":
@@ -2320,6 +2332,7 @@ export function startServer(services: HostServices) {
       sandboxSetup: sandboxes.setup(),
       heldChanges: sandboxes.heldChanges(),
       sandboxesHoldingTooMany: sandboxes.holdingTooMany(),
+      sandboxFolders: sandboxFolders.all(),
       roomInvites: roomInvites.waiting(),
       roomJoiners: roomInvites.joiners(),
       broughtAgents: broughtAgents.list().agents,

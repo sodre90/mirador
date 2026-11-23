@@ -201,6 +201,7 @@ export const hints = {
   continueSession: "Continue a session that was started in a terminal, as a conversation in this workspace.",
   whereConversationsWork: "Choose whether new conversations work in the project folder or each in a git worktree of its own.",
   workspaceSandbox: "Choose whether this workspace's agents run in a sandbox, apart from the rest of this computer.",
+  applySandboxFoldersNow: "Stops the turns at work in the sandbox and restarts it with its folders now. The agents keep their context.",
   removeWorkspace:
     "Remove this workspace. Its conversations and its worktrees under Mirador's data folder go with it, but the project directory stays. A second click confirms.",
   addWorkspace: "Add a project directory. Its conversations run with it as the working directory.",

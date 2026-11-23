@@ -105,12 +105,12 @@ import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from
 import { HarnessProcess, type AgentLaunch, type ConfigValue } from "./acp/harness.ts";
 import { versionOf } from "./acp/claude-program.ts";
 import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
-import { NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents } from "./sandbox/sandboxes.ts";
+import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents } from "./sandbox/sandboxes.ts";
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
 import { claudeCodeVersionIn } from "./sandbox/image.ts";
 import { BUN_IN_VM } from "./sandbox/agent-environment.ts";
 import { modelRouteOf } from "./sandbox/model-proxy.ts";
-import { NO_SANDBOX, ownerKey, runsInSandbox, signInElsewhere } from "../shared/sandbox.ts";
+import { NO_SANDBOX, ownerKey, runsInSandbox, signInElsewhere, type SandboxOwner } from "../shared/sandbox.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
 import { ROOM_CANVAS_TOOLS } from "./canvas/tool-names.ts";
@@ -420,6 +420,16 @@ interface StoppedTurn {
   sessionId: string | null;
 }
 
+/** A change to the folders of a sandbox whose VM runs without it, waiting for no turn to run there to start the VM again. */
+interface FolderChange {
+  owner: SandboxOwner;
+  /** The turns held at their start meanwhile, by conversation, each with what lets it go on as it is stopped. */
+  held: Map<string, () => void>;
+  taken: Promise<void>;
+  take: () => void;
+  restarting: boolean;
+}
+
 /**
  * What of an agent's session/load is the session's state rather than its history: the history is in the transcript
  * already, and the mode it reports comes back with the session's configuration.
@@ -520,6 +530,8 @@ export class ConversationService {
   private sandboxes: SandboxedAgents = NO_SANDBOXES;
   /** The agent processes that run in their room's or workspace's sandbox, each by the start that put it there. */
   private readonly sandboxStarts = new WeakMap<HarnessProcess, object>();
+  /** Changes to the folders of sandboxes, by `ownerKey`, until their VM starts again with them. */
+  private readonly folderChanges = new Map<string, FolderChange>();
   /** The room agents' and sandboxed workspaces' own processes that started on this computer, as they had no sandbox then. */
   private readonly startedOnThisComputer = new WeakSet<HarnessProcess>();
   private hearWorktreeRemoval: (folderId: string) => void = () => {};
@@ -1289,6 +1301,111 @@ export class ConversationService {
     if (runtime && harness) void runtime.turnEnded?.then(() => this.releaseSessionStillOn(conversationId, runtime, harness, sessionId));
   }
 
+  /**
+   * The owner added a folder to the sandbox or took one out. Its VM can't take up a mount while it runs, so one running
+   * with other folders starts again once no turn runs in it: each conversation of it leaves its process, keeping its
+   * session, to resume it on the new VM. Turns meanwhile wait at their start. Settles once the change is taken up.
+   */
+  sandboxFoldersChanged(owner: SandboxOwner): Promise<void> {
+    const pending = this.folderChanges.get(ownerKey(owner));
+    if (pending?.restarting) return pending.taken;
+    if (!this.sandboxes.runsWithOtherFolders(owner)) {
+      if (pending) this.folderChangeTaken(pending);
+      return Promise.resolve();
+    }
+    const change = pending ?? this.newFolderChange(owner);
+    this.restartForFoldersOnceIdle(change);
+    return change.taken;
+  }
+
+  /** Whether the sandbox's VM waits for its agents to finish to start again with the folders the owner has given it. */
+  waitsForSandboxFolders(owner: SandboxOwner) {
+    return this.folderChanges.has(ownerKey(owner));
+  }
+
+  /** The turns at work in the sandbox stop, as under a change that leaves them with less, for its VM to start again with its folders now. */
+  applySandboxFoldersNow(owner: SandboxOwner) {
+    const change = this.folderChanges.get(ownerKey(owner));
+    if (change) this.turnsAtWorkIn(change).forEach((conversationId) => this.stopTurnUnderOldSetup(conversationId));
+  }
+
+  /** A deleted room's or workspace's change of folders is dropped, and the turns it held go on. */
+  sandboxFoldersGone(owner: SandboxOwner) {
+    const change = this.folderChanges.get(ownerKey(owner));
+    if (change) this.folderChangeTaken(change);
+  }
+
+  private newFolderChange(owner: SandboxOwner) {
+    let take = () => {};
+    const taken = new Promise<void>((resolve) => (take = resolve));
+    const change: FolderChange = { owner, held: new Map(), taken, take, restarting: false };
+    this.folderChanges.set(ownerKey(owner), change);
+    return change;
+  }
+
+  private folderChangeTaken(change: FolderChange) {
+    if (this.folderChanges.get(ownerKey(change.owner)) === change) this.folderChanges.delete(ownerKey(change.owner));
+    change.take();
+  }
+
+  /** The conversations whose agents run in the sandbox; an agent brought into someone else's room runs on this computer. */
+  private conversationsInSandbox(owner: SandboxOwner) {
+    return this.store.listConversations().filter((conversation) => !conversation.broughtIntoRoom && belongsToSandbox(conversation, owner));
+  }
+
+  private turnsAtWorkIn(change: FolderChange) {
+    return this.conversationsInSandbox(change.owner)
+      .map(({ id }) => id)
+      .filter((id) => this.runtimes.get(id)?.running && !change.held.has(id));
+  }
+
+  private restartForFoldersOnceIdle(change: FolderChange) {
+    if (this.stopping || change.restarting || this.turnsAtWorkIn(change).length > 0) return;
+    change.restarting = true;
+    void this.restartForFolders(change)
+      .catch((error: unknown) => console.error(`starting the sandbox of ${ownerKey(change.owner)} again with its folders failed:`, error))
+      .finally(() => this.folderChangeTaken(change));
+  }
+
+  /** Each conversation of the sandbox leaves its process in the VM, keeping its session, and the VM stops; the next turn starts it with its folders. */
+  private async restartForFolders({ owner }: FolderChange) {
+    const processes = this.conversationsInSandbox(owner).flatMap(({ id }) => this.ownProcessesOf(id));
+    await Promise.all(processes.map((harness) => this.killAgent(harness, { kind: "stopped" })));
+    await this.sandboxes.stop(owner);
+  }
+
+  /**
+   * A turn in a sandbox whose VM is to start again with other folders waits at its start until it has, or until the
+   * turn is stopped. It leaves its process at once, so stopping that process never waits for the turn.
+   */
+  private async waitForSandboxFolders(conversationId: string) {
+    const runtime = this.runtime(conversationId);
+    const conversation = this.get(conversationId);
+    const sandbox = conversation.broughtIntoRoom ? null : this.sandboxOf(conversation);
+    const change = sandbox && this.folderChanges.get(ownerKey(sandbox.owner));
+    if (!change || runtime.turn?.stoppedBeforePrompt) return;
+    const stopped = new Promise<void>((resolve) => change.held.set(conversationId, resolve));
+    runtime.harness = undefined;
+    runtime.sessionId = undefined;
+    this.forgetAsyncTasks(conversationId);
+    this.setBusy(conversationId, "waiting-for-sandbox-folders");
+    this.restartForFoldersOnceIdle(change);
+    await Promise.race([change.taken, stopped]);
+    change.held.delete(conversationId);
+    this.setStatus(conversationId, "starting");
+  }
+
+  private letHeldTurnGo(conversationId: string) {
+    this.folderChanges.forEach(({ held }) => held.get(conversationId)?.());
+  }
+
+  /** The turn that ends may be the last one a change of its sandbox's folders waited for. */
+  private takeUpFolderChangesAfterTurn(conversationId: string) {
+    const conversation = this.store.findConversation(conversationId);
+    if (!conversation) return;
+    [...this.folderChanges.values()].filter(({ owner }) => belongsToSandbox(conversation, owner)).forEach((change) => this.restartForFoldersOnceIdle(change));
+  }
+
   /** A session another start took the conversation off meanwhile is left to that start. */
   private async releaseSessionStillOn(conversationId: string, runtime: Runtime, harness: HarnessProcess, sessionId: string | null) {
     if (runtime.harness === harness) await this.releaseSession(conversationId, runtime, sessionId);
@@ -1935,6 +2052,7 @@ export class ConversationService {
     let endedOnItsOwn: acp.PromptResponse | undefined;
     let sessionOpened = false;
     try {
+      await this.waitForSandboxFolders(conversationId);
       const sessionId = await this.ensureSession(conversationId);
       sessionOpened = true;
       this.setStatus(conversationId, "running");
@@ -1992,6 +2110,7 @@ export class ConversationService {
     }
     if (!this.stopping) this.deliverOwedReply(conversationId);
     if (!this.stopping && turnSeq !== undefined) this.turnsHeard.turnEnded(conversationId, turnSeq);
+    this.takeUpFolderChangesAfterTurn(conversationId);
     this.sendNextQueuedMessage(conversationId);
     if (!this.nudgeAfterStall(conversationId, turn, endedOnItsOwn)) this.followUpOnCanvasUse(conversationId, turn, endedOnItsOwn);
     this.lookAtHeldFilesAgain(conversationId);
@@ -2585,6 +2704,7 @@ export class ConversationService {
     const conversation = this.get(conversationId);
     if (runtime.running && runtime.turn && !runtime.turn.promptSent) {
       runtime.turn.stoppedBeforePrompt = true;
+      this.letHeldTurnGo(conversationId);
       return;
     }
     if (runtime.running && conversation.acpSessionId) {
@@ -3126,6 +3246,8 @@ export class ConversationService {
     const claudeSetup = conversation.roomId ? (this.store.findRoom(conversation.roomId)?.claudeSetup ?? ALL_OF_CLAUDE_SETUP) : ALL_OF_CLAUDE_SETUP;
     const cwd = await recordedDirectory(this.workspaceOf(conversationId));
     if (!this.runsInSandbox(conversation)) await this.sandboxes.settleHeldFilesFor(cwd);
+    const sandboxFolders = this.sandboxFoldersOf(conversation);
+    const additionalDirectories = sandboxFolders.length > 0 && (await this.currentProcessOf(conversation)?.takesAdditionalDirectories()) ? sandboxFolders : [];
     return {
       cwd,
       mcpServers: [this.runsInSandbox(conversation) ? this.canvasServerFor(conversationId, sandboxCanvasAddress(conversationId)) : this.canvasServerFor(conversationId)],
@@ -3137,9 +3259,17 @@ export class ConversationService {
         inRoom: worksForARoom(conversation),
         claudeSetup,
         keptProtections: await this.claudeProtectionsKept(conversation, settingSourcesLeftOut(claudeSetup, withoutUserSettings), cwd),
+        sandboxFolders,
       }),
       ...(systemPrompt && { systemPrompt }),
+      ...(additionalDirectories.length > 0 && { additionalDirectories }),
     };
+  }
+
+  /** The folders of this computer the VM the conversation's agent runs in mounted beside its workspace. */
+  private sandboxFoldersOf(conversation: Conversation) {
+    const sandbox = this.runsInSandbox(conversation) ? this.sandboxOf(conversation) : null;
+    return sandbox ? this.sandboxes.mountedFolders(sandbox.owner) : [];
   }
 
   /** A room's Claude Code session keeps the deny and ask rules and the sandbox of the settings it leaves out. */

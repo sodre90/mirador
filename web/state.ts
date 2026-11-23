@@ -21,7 +21,7 @@ import { shownOnRoomCanvas, type Room, type RoomApproval, type RoomInvite, type 
 import type { RoomReading } from "../shared/room-reading.ts";
 import type { BroughtAgentHere, BroughtTaskWaiting } from "../shared/brought-agents.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
-import { roomSandbox, sameOwner, SETUP_NOT_STARTED, workspaceSandbox, type HeldChange, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
+import { roomSandbox, sameOwner, SETUP_NOT_STARTED, workspaceSandbox, type HeldChange, type SandboxFolders, type SandboxOwner, type SandboxSetup } from "../shared/sandbox.ts";
 
 export interface OpenConversation {
   conversationId: string;
@@ -104,6 +104,8 @@ export interface AppState {
   heldChanges: HeldChange[];
   /** The rooms and workspaces whose sandbox stopped as they hold as many changes as one may. */
   sandboxesHoldingTooMany: SandboxOwner[];
+  /** The folders of this computer each room or workspace gave its sandbox. */
+  sandboxFolders: SandboxFolders[];
   /** The agents you brought into rooms of other machines, and the tasks of others that wait for your OK. */
   broughtAgents: BroughtAgentHere[];
   broughtTasks: BroughtTaskWaiting[];
@@ -246,6 +248,7 @@ export const initialState: AppState = {
   sandboxSetup: SETUP_NOT_STARTED,
   heldChanges: [],
   sandboxesHoldingTooMany: [],
+  sandboxFolders: [],
   broughtAgents: [],
   broughtTasks: [],
   roomsWithPeopleHere: [],
@@ -458,6 +461,7 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
         sandboxSetup: message.sandboxSetup,
         heldChanges: message.heldChanges,
         sandboxesHoldingTooMany: message.sandboxesHoldingTooMany,
+        sandboxFolders: message.sandboxFolders,
         broughtAgents: message.broughtAgents,
         broughtTasks: message.broughtTasks,
         profiles: message.profiles,
@@ -779,9 +783,12 @@ function applyServerMessage(state: AppState, message: ServerMessage): AppState {
       return { ...state, sandboxSetup: message.setup };
     case "sandbox.held-changes":
       return { ...state, ...withHeldChangesOf(state, message.owner, message.changes, message.full) };
+    case "sandbox.folders":
+      return { ...state, sandboxFolders: [...state.sandboxFolders.filter(({ owner }) => !sameOwner(owner, message.folders.owner)), message.folders] };
     case "room.sandbox-checked":
     case "workspace.sandbox-checked":
     case "sandbox.held-change-text":
+    case "sandbox.folder-added":
       return state;
     case "room.presence": {
       const { roomId, here, writing } = message;

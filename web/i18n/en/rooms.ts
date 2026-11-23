@@ -3,7 +3,7 @@ import type { RoomUsagePeriod } from "../../../shared/room-usage.ts";
 import type { RoomInviteConnect } from "../../../shared/machines.ts";
 import type { RoomAuthorRole, RoomInviteLetsIn, RoomRole } from "../../../shared/rooms.ts";
 import type { ClaudeSetupPart } from "../../../shared/room-agent-setup.ts";
-import type { SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
+import type { SandboxFolderRefusal, SandboxFolderState, SandboxKind, SandboxSetupStage } from "../../../shared/sandbox.ts";
 import type { OthersTasks } from "../../../shared/brought-agents.ts";
 
 /** The parts of a room's settings, each on a tab of its own. */
@@ -223,13 +223,46 @@ export const rooms = {
     setupFailed: (problem: string) => `Setting it up failed: ${problem}`,
     wholeEnvironmentIgnored: "Ignored while the room is sandboxed: only the values chosen here go into its sandbox.",
     meaning: [
-      "The room's Claude Code agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace and a folder of the room's for the agents' Claude Code settings and sessions, and nothing else of this computer. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "The room's Claude Code agents run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the workspace, a folder of the room's for the agents' Claude Code settings and sessions, and the folders from this computer you add, read only; nothing else of this computer. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
       "Working freely, the agents ask for nothing, as the sandbox keeps them in. Otherwise the room's permission preset applies as it does on this computer.",
       "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the room.",
       "Any other file the agents change in the workspace may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
       "The repository's config and hooks are read-only in the sandbox, but not those of a repository inside the workspace. Mirador runs git on the workspace without hooks and fsmonitor, and while the room is sandboxed, and for 7 days after, its commits, lands and new worktrees in the workspace, or in any folder inside it, skip the repositories' hooks too.",
       "Turning it on or off, or changing how the agents work in it, starts them afresh.",
     ],
+    folders: {
+      legend: "Folders from this computer",
+      lead: "The agents see each one at the same path, read only. Adding or removing one restarts the sandbox once they finish their turns, and they keep their context.",
+      readOnly: "Read only",
+      states: {
+        "in-sandbox": "In the sandbox",
+        waiting: "Waiting for the agents to finish",
+        missing: "Missing: it is no longer on this computer",
+      } satisfies Record<Exclude<SandboxFolderState["kind"], "refused">, string>,
+      leftOut: (reason: string) => `Left out: ${reason}`,
+      removeFolder: (path: string) => `Remove ${path}`,
+      add: "Add a folder",
+      addLabel: "Folder to add",
+      addButton: "Add",
+      waiting: "The sandbox restarts with its folders once the agents finish their turns.",
+      applyNow: "Apply now",
+      refused: {
+        "not-a-folder": "There is no folder there.",
+        "already-added": "That folder is in the sandbox already.",
+        "path-has-colon": "Its path has a colon, which a sandbox can't take.",
+        "outside-home": "Only folders inside your home folder can go into a sandbox.",
+        "is-home": "That is your home folder: the sandbox would see all of it.",
+        "in-library": "It is in your Library folder, which holds your apps' settings and data.",
+        "holds-mirador-data": "It holds Mirador's data folder, or lies inside it.",
+        "is-mirador": "It holds Mirador's own code, or lies inside it.",
+        "holds-sandbox-files": "It holds what Mirador gives the sandbox of its own, or lies inside it.",
+        "overlaps-workspace": "It is the workspace, holds it or lies inside it: the sandbox sees the workspace already.",
+        "now-a-link": "It is a link now, which leads somewhere else than the folder added.",
+      } satisfies Record<Exclude<SandboxFolderRefusal["kind"], "hidden-in-home" | "holds-computers-own" | "overlaps-folder">, string>,
+      hiddenInHome: (entry: string) => `It is or lies inside ${entry}, a hidden folder of your home, which holds settings and keys.`,
+      holdsComputersOwn: (folder: string) => `It is or holds ${folder}, which this computer runs programs from by itself.`,
+      overlapsFolder: (folder: string) => `It holds ${folder}, a folder in the sandbox already, or lies inside it.`,
+    },
   },
   held: {
     label: "Agent config change held for you",

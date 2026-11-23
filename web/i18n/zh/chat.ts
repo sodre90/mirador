@@ -80,6 +80,7 @@ export const chat: Messages["chat"] = {
     "reading-terminal-turns": "正在读取在终端中进行的轮次…",
     "making-worktree": "正在创建工作树…",
     "setting-up-worktree": "正在准备工作树…",
+    "waiting-for-sandbox-folders": "正在等待沙箱带着新的文件夹重新启动…",
   },
   notice: {
     lines: (count) => `${count} 行`,

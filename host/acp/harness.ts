@@ -190,6 +190,11 @@ export class HarnessProcess {
     return { close: Boolean(capabilities?.sessionCapabilities?.close), resume: Boolean(capabilities?.sessionCapabilities?.resume), load: Boolean(capabilities?.loadSession) };
   }
 
+  /** Whether the agent's sessions take folders of their own beside the one they work in, as `additionalDirectories`. */
+  async takesAdditionalDirectories() {
+    return Boolean((await this.initialized)?.agentCapabilities?.sessionCapabilities?.additionalDirectories);
+  }
+
   async listSessions(cwd: string) {
     return this.agent().request(acp.methods.agent.session.list, { cwd });
   }

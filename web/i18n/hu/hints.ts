@@ -212,6 +212,7 @@ export const hints: Messages["hints"] = {
   continueSession: "Egy terminálban indított munkamenet folytatása beszélgetésként ezen a munkaterületen.",
   whereConversationsWork: "Annak megadása, hogy az új beszélgetések a projektmappában vagy mindegyik saját git worktree-ben dolgozzon.",
   workspaceSandbox: "Annak megadása, hogy a munkaterület ágensei sandboxban fussanak-e, elkülönítve a gép többi részétől.",
+  applySandboxFoldersNow: "Leállítja a sandboxban futó köröket, és most újraindítja a sandboxot a mappáival. Az ágensek kontextusa megmarad.",
   removeWorkspace:
     "A munkaterület eltávolítása. A beszélgetései és a Mirador adatmappájában lévő worktree-jei vele mennek, de a projektkönyvtár megmarad. Egy második kattintás erősíti meg.",
   addWorkspace: "Projektkönyvtár hozzáadása. A beszélgetései ezzel mint munkakönyvtárral futnak.",

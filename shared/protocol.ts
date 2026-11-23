@@ -1,7 +1,7 @@
 import type { EditorSetting, EditorState } from "./editors.ts";
 import type { Reminder } from "./reminders.ts";
 import type { ClaudeSetup } from "./room-agent-setup.ts";
-import type { HeldChange, HeldChangeAnswer, HeldChangeText, SandboxCheck, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
+import type { HeldChange, HeldChangeAnswer, HeldChangeText, SandboxCheck, SandboxFolderRefusal, SandboxFolders, SandboxOwner, SandboxSetting, SandboxSetup, WorkspaceSandboxCheck } from "./sandbox.ts";
 import type { PermissionPreset, RoomApprovalAnswer } from "./room-permissions.ts";
 import type { RoomUsage } from "./room-usage.ts";
 import type {
@@ -145,6 +145,15 @@ export type ClientMessage =
   | { type: "sandbox.answer-held-change"; owner: SandboxOwner; changeId: string; answer: HeldChangeAnswer }
   /** A held change's text before and as proposed; the host answers `sandbox.held-change-text`. */
   | { type: "sandbox.held-change-text"; requestId: string; owner: SandboxOwner; changeId: string }
+  /**
+   * Gives a room's or workspace's sandbox a folder of this computer, read-only, at the same path; its VM takes it up once
+   * no turn runs in it. The host answers `sandbox.folder-added`.
+   */
+  | { type: "sandbox.add-folder"; requestId: string; owner: SandboxOwner; path: string }
+  /** Takes a folder out of the sandbox, once no turn runs in it. */
+  | { type: "sandbox.remove-folder"; owner: SandboxOwner; path: string }
+  /** Stops the turns at work in the sandbox, for its VM to take up its folders now. */
+  | { type: "sandbox.apply-folders-now"; owner: SandboxOwner }
   /** Adds the group first in the group named, or in none for null. */
   | { type: "workspace-group.create"; name: string; parentId: string | null }
   | { type: "workspace-group.rename"; groupId: string; name: string }
@@ -535,6 +544,8 @@ export type ServerMessage =
       heldChanges: HeldChange[];
       /** The rooms and workspaces whose sandbox stopped as they hold as many changes as one may. */
       sandboxesHoldingTooMany: SandboxOwner[];
+      /** The folders of this computer each room or workspace gave its sandbox; the owner's alone, never shown to anyone else. */
+      sandboxFolders: SandboxFolders[];
       /** The room invites with seats left, soonest to expire first. */
       roomInvites: RoomInvite[];
       /** Those who wait to join rooms, longest waiting first. */
@@ -708,6 +719,10 @@ export type ServerMessage =
   | { type: "sandbox.held-changes"; owner: SandboxOwner; changes: HeldChange[]; full: boolean }
   /** A held change's text, to the page that asked; null once it is no longer held. */
   | { type: "sandbox.held-change-text"; requestId: string; text: HeldChangeText | null }
+  /** To the page that asked, the folder added, or why it can't be. */
+  | { type: "sandbox.folder-added"; requestId: string; refused: SandboxFolderRefusal | null }
+  /** The folders of this computer a sandbox has, each time one is added, taken out or taken up by its VM. */
+  | { type: "sandbox.folders"; folders: SandboxFolders }
   /** Who is in a subscribed room now and who of them writes there, after `room.timeline` and each time it changes. */
   | ({ type: "room.presence"; roomId: string } & RoomPresence)
   | { type: "room.usage.got"; requestId: string; usage: RoomUsage }

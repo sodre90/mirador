@@ -221,6 +221,7 @@ export const hints: Messages["hints"] = {
   continueSession: "Setze eine Sitzung, die in einem Terminal gestartet wurde, als Unterhaltung in diesem Arbeitsbereich fort.",
   whereConversationsWork: "Wähle, ob neue Unterhaltungen im Projektordner oder jede in einem eigenen git-Worktree arbeiten.",
   workspaceSandbox: "Wähle, ob die Agenten dieses Arbeitsbereichs in einer Sandbox laufen, getrennt vom Rest dieses Rechners.",
+  applySandboxFoldersNow: "Stoppt die laufenden Runden in der Sandbox und startet sie jetzt mit ihren Ordnern neu. Die Agenten behalten ihren Kontext.",
   removeWorkspace:
     "Entferne diesen Arbeitsbereich. Seine Unterhaltungen und seine Worktrees im Datenordner von Mirador gehen mit, das Projektverzeichnis bleibt. Ein zweiter Klick bestätigt.",
   addWorkspace: "Füge ein Projektverzeichnis hinzu. Seine Unterhaltungen laufen mit ihm als Arbeitsverzeichnis.",

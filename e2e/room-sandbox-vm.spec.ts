@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
-import { networkInterfaces, release } from "node:os";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { homedir, networkInterfaces, release } from "node:os";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { addWorkspace, createProfile, createRoom, openRoomSettings, signIn } from "./helpers.ts";
@@ -26,6 +26,9 @@ const ourVms = () =>
     configuration.labels?.["mirador.host"] === hostLabel() ? [configuration.id] : [],
   );
 
+/** A folder of the owner's own home, as a sandbox may be given one: a test host's scratch lies outside it. */
+const folderOfThisMac = join(realpathSync(homedir()), `mirador-e2e-sandbox-folder-${process.pid}`);
+
 test.describe.configure({ mode: "serial" });
 test.skip(!optedIn || !containerProgram || !sandboxesRunHere, "Set MIRADOR_SANDBOX_VM_E2E=1 on macOS 26 on Apple silicon with Apple's container installed.");
 
@@ -39,6 +42,7 @@ test.afterAll(async () => {
   await host.stop();
   if (optedIn && containerProgram && sandboxesRunHere) expect(ourVms()).toEqual([]);
   await host.cleanUp();
+  rmSync(folderOfThisMac, { recursive: true, force: true });
 });
 
 /** The file's text once its folder stands as a folder again, null while a put-back has either gone for a moment. */
@@ -91,12 +95,38 @@ console.log(JSON.stringify({ claudeUids, privileges, commands: claudes.map(({ co
 
 const asAgent = (vm: string, ...command: string[]) => container("exec", "--user", "1000:1000", "-w", realpathSync(host.projectDir), vm, ...command);
 
+const answersAsAgent = (vm: string) => {
+  try {
+    asAgent(vm, "true");
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+/** Whether an agent's process runs in the VM: Mirador's claude-agent-acp, as a client starts it. */
+const AGENT_RUNS_SCRIPT = `
+const fs = require("fs");
+const read = (path) => { try { return fs.readFileSync(path, "latin1"); } catch { return ""; } };
+console.log(fs.readdirSync("/proc").some((pid) => /^\\d+$/.test(pid) && pid !== String(process.pid) && read("/proc/" + pid + "/cmdline").includes("claude-agent-acp/")));
+`;
+const agentRunsIn = (vm: string) => {
+  try {
+    return asAgent(vm, "node", "-e", AGENT_RUNS_SCRIPT).trim() === "true";
+  } catch {
+    return false;
+  }
+};
+
 function filesUnder(folder: string): string[] {
   return readdirSync(folder).flatMap((name) => {
     const path = join(folder, name);
     return statSync(path).isDirectory() ? filesUnder(path) : [path];
   });
 }
+
+/** The room's Claude Code session transcripts, each named by its session, in its Claude Code folder on this Mac. */
+const sessionTranscripts = () => filesUnder(join(host.dataDir, "sandbox")).filter((path) => /\/projects\/[^/]+\/[^/]+\.jsonl$/.test(path));
 
 test("a sandboxed room's Claude agent works in the workspace from its VM, reaches only the model and Mirador, and its config changes are held", async ({ page }) => {
   test.setTimeout(30 * 60_000);
@@ -203,6 +233,65 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
     const told = { mounts: mounts.length, ofWorkspace: ofWorkspace.map((line) => line.split(" ").slice(1, 4).join(" ")) };
     console.log(`sandbox VM e2e mounts: ${JSON.stringify(told)}`);
     test.info().annotations.push({ type: "mounts", description: JSON.stringify(told) });
+  });
+
+  await test.step("a folder of this Mac added to the room's sandbox restarts its idle VM, which mounts it read-only, and the agent resumes its session there, its context kept", async () => {
+    mkdirSync(folderOfThisMac, { recursive: true });
+    writeFileSync(join(folderOfThisMac, "from-the-mac.txt"), "written on this Mac\n");
+    const [transcript, ...others] = sessionTranscripts();
+    expect(others).toEqual([]);
+    const linesBefore = readFileSync(transcript!, "utf8").trim().split("\n").length;
+
+    const settings = await openRoomSettings(page, "Boxed", "Permissions");
+    const folders = settings.getByRole("region", { name: "Folders from this computer" });
+    await folders.getByRole("button", { name: "Add a folder" }).click();
+    await folders.getByRole("textbox", { name: "Folder to add" }).fill(folderOfThisMac);
+    const added = Date.now();
+    await folders.getByRole("button", { name: "Add", exact: true }).click();
+    await expect.poll(ourVms, { timeout: 120_000, intervals: [100] }).toEqual([]);
+    const stopped = Date.now();
+    await expect(folders.locator(`li[data-folder-path="${folderOfThisMac}"] .sandbox-folder-state`)).toHaveText("In the sandbox");
+    await settings.getByRole("button", { name: "Done" }).click();
+
+    const answers = page.locator(".room-timeline .room-entry .message.agent");
+    const answersBefore = await answers.count();
+    await roomComposer(page).fill("@Bu");
+    await page.getByRole("listbox", { name: "Agents and people of the room" }).getByRole("option", { name: "@Builder" }).click();
+    await roomComposer(page).fill(
+      `@Builder Use your Bash tool to run \`cat ${join(folderOfThisMac, "from-the-mac.txt")}\` and reply with what it printed. Then, without running anything for it, name the .txt file you wrote with printf in your first turn here.`,
+    );
+    await roomComposer(page).press("Enter");
+    const sent = Date.now();
+    await expect.poll(() => answersAsAgent(vm!), { timeout: 120_000, intervals: [100] }).toBe(true);
+    const vmUp = Date.now();
+    await expect.poll(() => agentRunsIn(vm!), { timeout: 120_000, intervals: [100] }).toBe(true);
+    const agentUp = Date.now();
+    await expect.poll(() => readFileSync(transcript!, "utf8").includes("from-the-mac.txt"), { timeout: 300_000, intervals: [100] }).toBe(true);
+    const resumed = Date.now();
+    const restartCycle = { stopMs: stopped - added, vmStartMs: vmUp - sent, agentStartMs: agentUp - vmUp, sessionResumeMs: resumed - agentUp };
+    const told = { ...restartCycle, totalMs: Object.values(restartCycle).reduce((sum, each) => sum + each, 0) };
+    console.log(`sandbox VM e2e restart cycle: ${JSON.stringify(told)}`);
+    test.info().annotations.push({ type: "restart cycle", description: JSON.stringify(told) });
+
+    const turnFailed = page.locator(".room-timeline").getByText("The turn failed.");
+    await expect(answers).toHaveCount(answersBefore + 1, { timeout: 10 * 60_000 });
+    await expect(answers.last()).toContainText("written on this Mac", { timeout: 10 * 60_000 });
+    await expect(answers.last(), "the agent remembers its first turn").toContainText("sandbox-note.txt");
+    await expect(turnFailed).toHaveCount(0);
+    expect(sessionTranscripts()).toEqual([transcript]);
+    const linesAfter = readFileSync(transcript!, "utf8").trim().split("\n").length;
+    expect(linesAfter).toBeGreaterThan(linesBefore);
+    const resumedSession = JSON.stringify({ transcript: transcript!.split("/").at(-1), linesBefore, linesAfter });
+    console.log(`sandbox VM e2e resumed session: ${resumedSession}`);
+    test.info().annotations.push({ type: "resumed session", description: resumedSession });
+
+    const mountOfFolder = asAgent(vm!, "cat", "/proc/mounts")
+      .split("\n")
+      .find((line) => line.split(" ")[1] === folderOfThisMac);
+    expect(mountOfFolder?.split(" ")[3]?.split(",")).toContain("ro");
+    expect(asAgent(vm!, "cat", join(folderOfThisMac, "from-the-mac.txt"))).toBe("written on this Mac\n");
+    expect(() => asAgent(vm!, "touch", join(folderOfThisMac, "from-the-vm.txt"))).toThrow();
+    expect(existsSync(join(folderOfThisMac, "from-the-vm.txt"))).toBe(false);
   });
 
   await test.step("an allowed file's folder swapped again and again for a link, to this Mac's files or the agents' own, is a folder again holding the allowed file, the Mac's files as they were", async () => {

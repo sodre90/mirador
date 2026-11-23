@@ -82,6 +82,7 @@ export const chat: Messages["chat"] = {
     "reading-terminal-turns": "Runden aus dem Terminal werden gelesen…",
     "making-worktree": "Worktree wird angelegt…",
     "setting-up-worktree": "Worktree wird eingerichtet…",
+    "waiting-for-sandbox-folders": "Warten, bis die Sandbox mit ihren Ordnern neu startet…",
   },
   notice: {
     lines: (count) => plural(count, "1 Zeile", `${count} Zeilen`),

@@ -15,6 +15,7 @@ export const snapshotMessage = (fields: Partial<Snapshot> = {}): Snapshot => ({
   sandboxSetup: SETUP_NOT_STARTED,
   heldChanges: [],
   sandboxesHoldingTooMany: [],
+  sandboxFolders: [],
   roomInvites: [],
   roomJoiners: [],
   broughtAgents: [],

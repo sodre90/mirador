@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Conversation, Profile } from "../shared/model.ts";
 import type { Room } from "../shared/rooms.ts";
 import {
@@ -9,6 +9,7 @@ import {
   type HeldChangeAnswer,
   type HeldChangeText,
   type SandboxCheck,
+  type SandboxFolders,
   type SandboxKind,
   type SandboxSetting,
   type SandboxSetup,
@@ -17,6 +18,7 @@ import { DiffView } from "./Chat.tsx";
 import { connection } from "./connection.ts";
 import { t } from "./i18n/index.ts";
 import { sandboxBlockerText, sandboxUnavailableText } from "./problem-text.ts";
+import { SandboxFolderList } from "./SandboxFolders.tsx";
 import { nameOf, roomStartsAfreshText, StartsAfreshWarning, useChangeStartingAfresh, workingThere } from "./RoomAgentSetup.tsx";
 
 const words = t.rooms.sandbox;
@@ -104,8 +106,9 @@ export interface SandboxSwitchWords {
 /**
  * A room's or workspace's sandbox switch, which this computer or the room or workspace can keep off with a reason said
  * under it, and the kind of sandbox this computer gives; once on, how the agents work inside and where setting it up on
- * this computer stands. A sandbox that shares this computer's kernel is said to before it is turned on, and taken only
- * once the owner allows it. A change that starts conversations at work afresh waits for the owner to confirm it.
+ * this computer stands, and the folders of this computer it sees. A sandbox that shares this computer's kernel is said
+ * to before it is turned on, and taken only once the owner allows it. A change that starts conversations at work
+ * afresh waits for the owner to confirm it.
  */
 export function SandboxSwitch({
   id,
@@ -116,6 +119,7 @@ export function SandboxSwitch({
   startsAfresh,
   startsAfreshText,
   send,
+  folders,
 }: {
   id: string;
   setting: SandboxSetting;
@@ -126,6 +130,7 @@ export function SandboxSwitch({
   startsAfresh: string[];
   startsAfreshText: (startsAfresh: string[], stopsTurn: boolean) => string;
   send: (sandbox: SandboxSetting) => void;
+  folders: ReactNode;
 }) {
   const { shown, change, pending, confirm, keep } = useChangeStartingAfresh(setting, send);
   const [askingToShareKernel, setAskingToShareKernel] = useState(false);
@@ -188,6 +193,7 @@ export function SandboxSwitch({
             </label>
           </div>
           {kind !== null && <SetupProgress setup={setup} kind={kind} />}
+          {folders}
         </>
       )}
       {pending && <StartsAfreshWarning text={startsAfreshText(startsAfresh, pending.narrows)} onConfirm={confirm} onKeep={keep} />}
@@ -198,7 +204,21 @@ export function SandboxSwitch({
 const roomSwitchWords: SandboxSwitchWords = { turnOn: words.turnOn, checking: words.checking, stillAsks: words.presetApplies };
 
 /** The room's sandbox switch; changing it starts the room's agents at work afresh. */
-export function SandboxField({ room, profiles, roomConversations, setup }: { room: Room; profiles: Profile[]; roomConversations: Conversation[]; setup: SandboxSetup }) {
+export function SandboxField({
+  room,
+  profiles,
+  roomConversations,
+  setup,
+  folders,
+  homeDir,
+}: {
+  room: Room;
+  profiles: Profile[];
+  roomConversations: Conversation[];
+  setup: SandboxSetup;
+  folders: SandboxFolders;
+  homeDir: string;
+}) {
   const check = useRoomSandboxCheck(room, profiles);
   const startsAfresh = room.agents.filter((agent) => !agent.brought && workingThere(agent, roomConversations)).map(({ profileId }) => nameOf(profiles, profileId));
   return (
@@ -211,6 +231,7 @@ export function SandboxField({ room, profiles, roomConversations, setup }: { roo
       startsAfresh={startsAfresh}
       startsAfreshText={roomStartsAfreshText}
       send={(sandbox) => connection.send({ type: "room.set-sandbox", roomId: room.id, sandbox })}
+      folders={<SandboxFolderList folders={folders} homeDir={homeDir} />}
     />
   );
 }

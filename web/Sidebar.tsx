@@ -17,6 +17,7 @@ import { joinedRoomsOf, knocksOf, RoomsSection } from "./RoomsSidebar.tsx";
 import { LineIcon } from "./LineIcon.tsx";
 import { connectedDevicesLabel, useConnectedDevicesInSidebar } from "./connected-devices.ts";
 import { connection } from "./connection.ts";
+import { useDirectoryCompletions } from "./directory-completions.ts";
 import { ConversationTitle } from "./ConversationTitle.tsx";
 import { DesktopMenu } from "./DesktopMenu.tsx";
 import { FavouriteStar, favouriteLabel, setFavourite } from "./FavouriteStar.tsx";
@@ -51,26 +52,6 @@ import { markInitials, workspaceMarkColor } from "../shared/marks.ts";
 import { groupsAround, sidebarItems, workspacesUnder, type SidebarGroupItem, type SidebarItem } from "../shared/sidebar-order.ts";
 import { forgetFoldsOfDeleted, setDelegationsOpen, setGroupFolded, setWorkspaceFolded, useFoldedGroups, useFoldedWorkspaces, useOpenedDelegations } from "./workspace-groups.ts";
 import { landingBefore, landingMoves, sidebarLandingAt, type SidebarLanding, type SidebarRow } from "../shared/workspace-drop.ts";
-
-function useDirectoryCompletions(prefix: string) {
-  const [completions, setCompletions] = useState({ directories: [] as string[], createsDirectory: false });
-  const latestRequest = useRef("");
-  useEffect(
-    () =>
-      connection.onMessage((message) => {
-        if (message.type === "fs.completions" && message.requestId === latestRequest.current) {
-          setCompletions({ directories: message.directories, createsDirectory: message.createsDirectory });
-        }
-      }),
-    [],
-  );
-  useEffect(() => {
-    const requestId = crypto.randomUUID();
-    latestRequest.current = requestId;
-    connection.send({ type: "fs.complete", requestId, prefix });
-  }, [prefix]);
-  return completions;
-}
 
 const words = t.shell.sidebar;
 const sandboxWords = t.shell.workspaceSandbox;

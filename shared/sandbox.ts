@@ -93,6 +93,50 @@ export type SandboxBlocker =
   /** A workspace's conversation that works in a worktree of its own, which lies outside the folder its sandbox sees. */
   | { kind: "conversation-in-worktree" };
 
+/**
+ * A folder of this computer the owner added to a room's or workspace's sandbox, which its VM shows at the same path,
+ * read-only unless `writable`; its path is the folder's own, without links.
+ */
+export interface SandboxFolder {
+  path: string;
+  writable: boolean;
+  addedAt: number;
+}
+
+/** Why a folder can't go into a sandbox: said as it is added, and again where its VM starts without it. */
+export type SandboxFolderRefusal =
+  | { kind: "not-a-folder" }
+  | { kind: "already-added" }
+  | { kind: "path-has-colon" }
+  | { kind: "outside-home" }
+  | { kind: "is-home" }
+  | { kind: "hidden-in-home"; entry: string }
+  | { kind: "in-library" }
+  | { kind: "holds-mirador-data" }
+  | { kind: "is-mirador" }
+  | { kind: "holds-computers-own"; folder: string }
+  | { kind: "holds-sandbox-files" }
+  | { kind: "overlaps-workspace" }
+  | { kind: "overlaps-folder"; folder: string }
+  | { kind: "now-a-link" };
+
+/**
+ * Where an added folder stands: in the sandbox, or to be once it starts; added while its VM runs without it, until its
+ * agents' turns end; or left out as its VM last started, gone or refused.
+ */
+export type SandboxFolderState = { kind: "in-sandbox" } | { kind: "waiting" } | { kind: "missing" } | { kind: "refused"; refusal: SandboxFolderRefusal };
+
+export interface ShownSandboxFolder extends SandboxFolder {
+  state: SandboxFolderState;
+}
+
+/** A sandbox's added folders, oldest first, and whether a change to them waits for its agents' turns to end. */
+export interface SandboxFolders {
+  owner: SandboxOwner;
+  folders: ShownSandboxFolder[];
+  waiting: boolean;
+}
+
 /** Why a room or workspace can't have its sandbox: this computer's reason, and each of a room's agents' and its workspace's. */
 export interface SandboxCheck {
   availability: SandboxAvailability;

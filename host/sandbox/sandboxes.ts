@@ -13,6 +13,9 @@ import {
   type HeldChange,
   type HeldChangeAnswer,
   type HeldChangeText,
+  type SandboxFolder,
+  type SandboxFolderRefusal,
+  type SandboxFolderState,
   type SandboxOwner,
   type SandboxSetting,
   type SandboxSetup,
@@ -20,6 +23,7 @@ import {
 import type { Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Store } from "../store.ts";
+import { addedFolderRefusal, foldersMounted, type FolderSurroundings, type FoldersMounted } from "./added-folders.ts";
 import { AGENT_USER, BUN_IN_VM, environmentInVm } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
 import { HeldFiles, type HeldSandbox } from "./held-files.ts";
@@ -91,6 +95,10 @@ export interface SandboxHost {
   setupChanged(setup: SandboxSetup): void;
   /** The sandbox's held changes, each time one comes or is answered, and whether it holds as many as it may. */
   heldChanged(owner: SandboxOwner, changes: HeldChange[], full: boolean): void;
+  /** The folders of this computer the owner added to the sandbox, oldest first. */
+  foldersOf(owner: SandboxOwner): SandboxFolder[];
+  /** The sandbox's VM started, with what of its added folders it mounted and what it left out. */
+  foldersStarted(owner: SandboxOwner): void;
 }
 
 /**
@@ -117,6 +125,8 @@ interface SandboxVm {
   workspace: string | null;
   /** The workspace's own path, without links, once the VM started on it. */
   realWorkspace?: string;
+  /** The folders the owner had added as the VM started. */
+  folders: SandboxFolder[];
   started: Promise<void>;
   running: boolean;
   /** The VM's stop, once asked for. */
@@ -137,6 +147,8 @@ const shortHash = (text: string, length = 10) => createHash("sha256").update(tex
 const atItsOwnPath = (path: string, readOnly: boolean): Mount => ({ source: path, target: path, readOnly });
 
 const overlap = (a: string, b: string) => [relative(a, b), relative(b, a)].some((inside) => inside === "" || (!inside.startsWith("..") && !isAbsolute(inside)));
+
+const sameFolders = (a: SandboxFolder[], b: SandboxFolder[]) => JSON.stringify(a.map(({ path, writable }) => [path, writable])) === JSON.stringify(b.map(({ path, writable }) => [path, writable]));
 
 /**
  * Lets the relays, which run as nobody from the start, another user of this computer to Mirador, connect to its
@@ -212,6 +224,46 @@ export class Sandboxes {
   /** The workspace's own path, as this host's sandboxes know it: whether it can be shown to one. */
   workspaceRefusal(workspace: string) {
     return sandboxRefusalOf(workspace, this.host.places);
+  }
+
+  /** Why the folder, given without links, can't be added to the sandbox beside its other added folders; null where it can. */
+  async folderRefusal(owner: SandboxOwner, folder: string): Promise<SandboxFolderRefusal | null> {
+    const others = this.host.foldersOf(owner).map(({ path }) => path);
+    return addedFolderRefusal(folder, await this.folderSurroundings(owner), others);
+  }
+
+  private async folderSurroundings(owner: SandboxOwner): Promise<FolderSurroundings> {
+    const workspace = this.host.workspaceOf(owner);
+    return {
+      places: this.host.places,
+      workspace: workspace && (await realpath(workspace).catch(() => null)),
+      sandboxOwn: [sandboxConfigFolder(this.host.dataDir, owner), agentPackages(), IN_VM_SCRIPTS, SCRIPTS_IN_VM, SOCKETS_IN_VM],
+      socketsParent: this.socketsParent,
+    };
+  }
+
+  /** Whether the sandbox's VM runs, or is starting, with other folders than the owner has added to it now. */
+  runsWithOtherFolders(owner: SandboxOwner) {
+    const vm = this.vms.get(ownerKey(owner));
+    return vm !== undefined && !vm.stopping && !sameFolders(vm.folders, this.host.foldersOf(owner));
+  }
+
+  /** What each VM of a sandbox mounted of its added folders and left out as it last started, by `ownerKey`, kept once it stops. */
+  private readonly folderStarts = new Map<string, FoldersMounted>();
+
+  /** The added folders the sandbox's running VM mounted; none where it doesn't run. */
+  mountedFolders(owner: SandboxOwner): string[] {
+    const key = ownerKey(owner);
+    return this.vms.get(key)?.running ? (this.folderStarts.get(key)?.mounted ?? []) : [];
+  }
+
+  /** Where an added folder stands: left out as the VM last started, waiting where it runs without it, or in the sandbox. */
+  folderStateOf(owner: SandboxOwner, path: string): SandboxFolderState {
+    const key = ownerKey(owner);
+    const started = this.folderStarts.get(key);
+    const leftOut = started?.leftOut.get(path);
+    if (leftOut) return leftOut;
+    return this.vms.get(key)?.running && !started?.mounted.includes(path) ? { kind: "waiting" } : { kind: "in-sandbox" };
   }
 
   /**
@@ -322,6 +374,7 @@ export class Sandboxes {
   async ownerGone(owner: SandboxOwner) {
     await this.stop(owner);
     this.stoppedHeld.delete(ownerKey(owner));
+    this.folderStarts.delete(ownerKey(owner));
     this.host.heldChanged(owner, [], false);
   }
 
@@ -381,13 +434,14 @@ export class Sandboxes {
 
   /**
    * The sandbox's VM, running: the one there is, or a new one where there is none, where the workspace it works in
-   * changed, or where it runs another image and no agent of it is at work.
+   * changed, or where it runs another image or started with other added folders and no agent of it is at work.
    */
   private async startedVm(owner: SandboxOwner, claudeCodeVersion: string): Promise<SandboxVm> {
     const image = await this.preparedImage(claudeCodeVersion);
     const key = ownerKey(owner);
     const existing = this.vms.get(key);
-    const outdated = existing && !existing.stopping && (existing.workspace !== this.host.workspaceOf(owner) || (existing.image !== image && existing.agents === 0));
+    const outdatedWhileIdle = (vm: SandboxVm) => vm.agents === 0 && (vm.image !== image || !sameFolders(vm.folders, this.host.foldersOf(owner)));
+    const outdated = existing && !existing.stopping && (existing.workspace !== this.host.workspaceOf(owner) || outdatedWhileIdle(existing));
     if (outdated) await this.stop(owner);
     if (existing && !existing.stopping) {
       if (existing.image !== image) throw new SandboxNotReady({ kind: "versions-differ" });
@@ -400,6 +454,7 @@ export class Sandboxes {
       name: `mirador-${this.hostLabel}-${shortHash(key, 8)}`,
       image,
       workspace: this.host.workspaceOf(owner),
+      folders: this.host.foldersOf(owner),
       started: Promise.resolve(),
       running: false,
       agents: 0,
@@ -430,6 +485,7 @@ export class Sandboxes {
     const heldReadOnly = await vm.held.start();
     const planned = await workspaceMounts(workspace, gitConfigCopies(this.host.dataDir, owner), this.host.places, heldReadOnly);
     if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
+    const folders = await foldersMounted(vm.folders, await this.folderSurroundings(owner));
     const configFolder = sandboxConfigFolder(this.host.dataDir, owner);
     await mkdir(configFolder, { recursive: true, mode: 0o700 });
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
@@ -445,6 +501,7 @@ export class Sandboxes {
       memory: VM_MEMORY,
       mounts: [
         ...planned.mounts,
+        ...folders.mounted.map((folder) => atItsOwnPath(folder, true)),
         atItsOwnPath(configFolder, false),
         atItsOwnPath(agentPackages(), true),
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
@@ -454,6 +511,8 @@ export class Sandboxes {
       entry: ["sh", `${SCRIPTS_IN_VM}/room-vm.sh`, this.launcher.firstProcessUser, `${CANVAS_RELAY_PORT}=${SOCKETS_IN_VM}/canvas.sock`, `${MODEL_RELAY_PORT}=${SOCKETS_IN_VM}/model.sock`],
     });
     vm.running = true;
+    this.folderStarts.set(key, folders);
+    this.host.foldersStarted(owner);
   }
 
   /** The runtime runs and the image of this Claude Code version is there: set up once for every sandbox, its progress told as it goes. */
@@ -488,7 +547,7 @@ export class Sandboxes {
 }
 
 /** What the conversations of sandboxed rooms and workspaces need of the sandboxes. */
-export type SandboxedAgents = Pick<Sandboxes, "launch" | "confirmedRunning" | "turnEnded" | "settleHeldFilesFor" | "stopSandboxesWorkingIn">;
+export type SandboxedAgents = Pick<Sandboxes, "launch" | "confirmedRunning" | "turnEnded" | "settleHeldFilesFor" | "stopSandboxesWorkingIn" | "stop" | "mountedFolders" | "runsWithOtherFolders">;
 
 /** Until the host gives its conversations the sandboxes, a sandboxed room's or workspace's agent never starts. */
 export const NO_SANDBOXES: SandboxedAgents = {
@@ -497,4 +556,7 @@ export const NO_SANDBOXES: SandboxedAgents = {
   turnEnded: async () => {},
   settleHeldFilesFor: async () => {},
   stopSandboxesWorkingIn: async () => {},
+  stop: async () => {},
+  mountedFolders: () => [],
+  runsWithOtherFolders: () => false,
 };

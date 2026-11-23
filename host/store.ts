@@ -39,7 +39,7 @@ import { pluginItemOfSavedWalkthrough, type SavedReview, type SavedTour } from "
 import { sidebarIds, sidebarItems } from "../shared/sidebar-order.ts";
 import { DEFAULT_PERMISSION_PRESET, type PermissionPreset } from "../shared/room-permissions.ts";
 import { claudeSetupIn, isVariableName, type ClaudeSetup, type VariablesChosen } from "../shared/room-agent-setup.ts";
-import { NO_SANDBOX, sandboxSettingIn, type SandboxSetting } from "../shared/sandbox.ts";
+import { NO_SANDBOX, roomSandbox, sandboxSettingIn, workspaceSandbox, type SandboxFolder, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
 import { writtenByAgent, type BroughtAgent, type BroughtAnswerEnd, type Room, type RoomAgent, type RoomAgentModel, type RoomAnswerEnd, type RoomAuthorRole, type RoomInvite, type RoomJoiner, type RoomMessage, type RoomPerson, type RoomRole, type RoomThread, type TaskHeld } from "../shared/rooms.ts";
 import type { BroughtAgentHere } from "../shared/brought-agents.ts";
 import type { RoomMention } from "../shared/room-mentions.ts";
@@ -186,6 +186,9 @@ const schema = `
     state TEXT NOT NULL, by_name TEXT NOT NULL, by_role TEXT NOT NULL, text TEXT NOT NULL, at INTEGER NOT NULL, answer TEXT, ended TEXT,
     answered_at INTEGER, UNIQUE (machine_id, task_id));
   CREATE TABLE IF NOT EXISTS sandbox_left_folders (path TEXT PRIMARY KEY, left_at INTEGER NOT NULL);
+  CREATE TABLE IF NOT EXISTS sandbox_folders (
+    owner_kind TEXT NOT NULL, owner_id TEXT NOT NULL, path TEXT NOT NULL, writable INTEGER NOT NULL DEFAULT 0, added_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_kind, owner_id, path));
 `;
 
 /** A conversation's terminal tab as the host left it, with what each of its terminals showed by then. */
@@ -811,6 +814,26 @@ export class Store {
     this.db.query("INSERT INTO sandbox_left_folders (path, left_at) VALUES (?, ?) ON CONFLICT (path) DO UPDATE SET left_at = MAX(left_at, excluded.left_at)").run(path, at);
   }
 
+  /** The folders of this computer the owner added to the room's or workspace's sandbox, oldest first. */
+  sandboxFoldersOf({ kind, id }: SandboxOwner): SandboxFolder[] {
+    const rows = this.db.query("SELECT path, writable, added_at FROM sandbox_folders WHERE owner_kind = ? AND owner_id = ? ORDER BY added_at, path").all(kind, id) as { path: string; writable: number; added_at: number }[];
+    return rows.map(({ path, writable, added_at }) => ({ path, writable: writable === 1, addedAt: added_at }));
+  }
+
+  /** The rooms and workspaces with folders added to their sandbox. */
+  ownersWithSandboxFolders(): SandboxOwner[] {
+    const rows = this.db.query("SELECT DISTINCT owner_kind, owner_id FROM sandbox_folders").all() as { owner_kind: string; owner_id: string }[];
+    return rows.flatMap(({ owner_kind, owner_id }) => (owner_kind === "room" ? [roomSandbox(owner_id)] : owner_kind === "workspace" ? [workspaceSandbox(owner_id)] : []));
+  }
+
+  addSandboxFolder({ kind, id }: SandboxOwner, { path, writable, addedAt }: SandboxFolder) {
+    this.db.query("INSERT INTO sandbox_folders (owner_kind, owner_id, path, writable, added_at) VALUES (?, ?, ?, ?, ?)").run(kind, id, path, writable ? 1 : 0, addedAt);
+  }
+
+  removeSandboxFolder({ kind, id }: SandboxOwner, path: string) {
+    this.db.query("DELETE FROM sandbox_folders WHERE owner_kind = ? AND owner_id = ? AND path = ?").run(kind, id, path);
+  }
+
   findWorkspace(id: string): Workspace | undefined {
     const row = this.db.query("SELECT * FROM workspaces WHERE id = ?").get(id) as any;
     return row ? toWorkspace(row) : undefined;
@@ -904,8 +927,13 @@ export class Store {
     this.db.query("UPDATE workspaces SET sandbox = ? WHERE id = ?").run(JSON.stringify(sandbox), workspaceId);
   }
 
+  /** The workspace goes with its rooms, and the folders added to its sandbox and theirs. */
   deleteWorkspace(id: string) {
-    this.db.query("DELETE FROM workspaces WHERE id = ?").run(id);
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM sandbox_folders WHERE owner_kind = 'room' AND owner_id IN (SELECT id FROM rooms WHERE workspace_id = ?)").run(id);
+      this.db.query("DELETE FROM sandbox_folders WHERE owner_kind = 'workspace' AND owner_id = ?").run(id);
+      this.db.query("DELETE FROM workspaces WHERE id = ?").run(id);
+    })();
   }
 
   /** What each conversation had open in each app, which Mirador opens again as it starts. */
@@ -1485,8 +1513,12 @@ export class Store {
     profileIds.forEach((profileId) => this.db.query("INSERT INTO room_agents (room_id, profile_id) VALUES (?, ?) ON CONFLICT DO NOTHING").run(roomId, profileId));
   }
 
+  /** The room goes with the folders added to its sandbox. */
   deleteRoom(id: string) {
-    this.db.query("DELETE FROM rooms WHERE id = ?").run(id);
+    this.db.transaction(() => {
+      this.db.query("DELETE FROM sandbox_folders WHERE owner_kind = 'room' AND owner_id = ?").run(id);
+      this.db.query("DELETE FROM rooms WHERE id = ?").run(id);
+    })();
   }
 
   setRoomAgentModel(roomId: string, profileId: string, { model, effort }: RoomAgentModel) {

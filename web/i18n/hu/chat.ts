@@ -80,6 +80,7 @@ export const chat: Messages["chat"] = {
     "reading-terminal-turns": "A terminálban lezajlott körök beolvasása…",
     "making-worktree": "A worktree létrehozása…",
     "setting-up-worktree": "A worktree beállítása…",
+    "waiting-for-sandbox-folders": "Várakozás, amíg a sandbox újraindul a mappáival…",
   },
   notice: {
     lines: (count) => `${count} sor`,

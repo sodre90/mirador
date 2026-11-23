@@ -34,12 +34,12 @@ const kindOf = async (path: string) => {
   return stats.isDirectory() ? "folder" : "file";
 };
 
-const isInside = (path: string, folder: string) => {
+export const isInside = (path: string, folder: string) => {
   const inside = relative(folder, path);
   return inside === "" || (!inside.startsWith("..") && !isAbsolute(inside));
 };
 
-const realOrAsIs = async (path: string) => (await realpath(path).catch(() => null)) ?? resolve(path);
+export const realOrAsIs = async (path: string) => (await realpath(path).catch(() => null)) ?? resolve(path);
 
 /** The git folders of the repository's submodules, at any depth, as `.git/modules` keeps them. */
 async function submoduleGitFolders(modules: string): Promise<string[]> {
@@ -117,7 +117,7 @@ async function includedWorkspaceFile(workspace: string, configFiles: string[]): 
  * Why Mirador's own places keep the workspace from a sandbox: the home folder, a folder holding or within Mirador's
  * data or checkout, or one that is or holds a folder this computer runs programs from by itself.
  */
-async function miradorsOwn(workspace: string, places: MiradorPlaces): Promise<SandboxBlocker | null> {
+export async function miradorsOwn(workspace: string, places: MiradorPlaces): Promise<SandboxBlocker | null> {
   const [home, dataDir, checkout] = await Promise.all([places.home, places.dataDir, places.checkout].map(realOrAsIs));
   if (workspace === home) return { kind: "workspace-is-home" };
   if (isInside(dataDir!, workspace) || isInside(workspace, dataDir!)) return { kind: "workspace-holds-mirador-data" };

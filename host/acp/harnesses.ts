@@ -6,6 +6,7 @@ import { harnessIds, harnessLabels, type CanvasUse, type HarnessId, type Profile
 import { canvasInstructions, canvasPluginInstructions, canvasUseGuidance, NO_CANVAS_PLUGINS, titleGuidance, type CanvasPluginGuidance } from "../canvas/guidance.ts";
 import { PRE_ALLOWED_CANVAS_TOOLS, ROOM_CANVAS_TOOLS } from "../canvas/tool-names.ts";
 import { jobWaitGuidance } from "../job-waits.ts";
+import { sandboxFoldersGuidance } from "../sandbox/folders-guidance.ts";
 import { applyEnvironment, parseEnvironment, type ProfileEnvironment } from "../../shared/profile-environment.ts";
 import { ALL_OF_CLAUDE_SETUP, type ClaudeSetup } from "../../shared/room-agent-setup.ts";
 import { claudeProgramMissing, findClaudeProgram } from "./claude-program.ts";
@@ -248,6 +249,7 @@ export function sessionMeta(
     inRoom = false,
     claudeSetup = ALL_OF_CLAUDE_SETUP,
     keptProtections = NO_PROTECTIONS,
+    sandboxFolders = [],
   }: {
     canvasAssetsOrigin: string;
     withoutUserSettings?: boolean;
@@ -256,12 +258,14 @@ export function sessionMeta(
     inRoom?: boolean;
     claudeSetup?: ClaudeSetup;
     keptProtections?: ClaudeProtections;
+    /** The folders of this computer the agent's sandbox mounted beside its workspace, read-only. */
+    sandboxFolders?: string[];
   },
 ) {
   if (harness === "claude")
     return inRoom
-      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections })
-      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction });
+      ? claudeRoomSessionMeta(canvasUse, { withoutUserSettings, idleCompaction, claudeSetup, keptProtections, sandboxFolders })
+      : claudeSessionMeta(canvasUse, { withoutUserSettings, canvasPlugins, idleCompaction, sandboxFolders });
   if (harness === "pi") return inRoom ? { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } : piSessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
   if (harness === "antigravity")
     return inRoom ? { antigravity: { systemPrompt: { append: roomCanvasPromptAppendix(canvasUse, canvasAssetsOrigin) } } } : antigravitySessionMeta(canvasUse, canvasAssetsOrigin, canvasPlugins);
@@ -310,9 +314,14 @@ const canvasPromptParts = (canvasUse: CanvasUse, canvasAssetsOrigin: string, can
  * AskUserQuestion is disabled so questions go through the visual `ask` tool instead. Idle compaction left on sends no
  * setting, so a user's own `idleCompaction: false` in their Claude Code settings still holds.
  */
-export function claudeSessionMeta(canvasUse: CanvasUse, { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true } = {}) {
+export function claudeSessionMeta(
+  canvasUse: CanvasUse,
+  { withoutUserSettings = false, canvasPlugins = NO_CANVAS_PLUGINS, idleCompaction = true, sandboxFolders = [] as string[] } = {},
+) {
   return {
-    systemPrompt: { append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), canvasPluginInstructions(canvasPlugins), jobWaitGuidance()].filter(Boolean).join("\n\n") },
+    systemPrompt: {
+      append: [...(canvasUse === "often" ? [canvasUseGuidance(canvasPlugins)] : []), canvasPluginInstructions(canvasPlugins), jobWaitGuidance(), sandboxFoldersGuidance(sandboxFolders)].filter(Boolean).join("\n\n"),
+    },
     claudeCode: {
       options: {
         ...(withoutUserSettings && { settingSources: ["project", "local"] }),
@@ -337,7 +346,13 @@ const ROOM_ASKS_BEFORE_EDITING = ["Edit(**/CLAUDE.md)", "Edit(**/CLAUDE.local.md
  */
 export function claudeRoomSessionMeta(
   canvasUse: CanvasUse,
-  { withoutUserSettings = false, idleCompaction = true, claudeSetup = ALL_OF_CLAUDE_SETUP, keptProtections = NO_PROTECTIONS }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections } = {},
+  {
+    withoutUserSettings = false,
+    idleCompaction = true,
+    claudeSetup = ALL_OF_CLAUDE_SETUP,
+    keptProtections = NO_PROTECTIONS,
+    sandboxFolders = [],
+  }: { withoutUserSettings?: boolean; idleCompaction?: boolean; claudeSetup?: ClaudeSetup; keptProtections?: ClaudeProtections; sandboxFolders?: string[] } = {},
 ) {
   const { env, disallowedTools } = claudeSessionMeta(canvasUse).claudeCode.options;
   const { deny, ask, sandbox } = keptProtections;
@@ -349,7 +364,7 @@ export function claudeRoomSessionMeta(
   };
   const loaded = settingSourcesLoaded(claudeSetup, withoutUserSettings);
   return {
-    systemPrompt: { append: canvasUse === "often" ? canvasUseGuidance() : "" },
+    systemPrompt: { append: [canvasUse === "often" ? canvasUseGuidance() : "", sandboxFoldersGuidance(sandboxFolders)].filter(Boolean).join("\n\n") },
     claudeCode: {
       options: {
         ...(loaded.length < SETTING_SOURCES.length && { settingSources: loaded }),

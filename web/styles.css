@@ -10812,6 +10812,104 @@ select.room-agent-choice-select:focus-visible {
   width: 100%;
 }
 
+.room-sandbox > .sandbox-folders {
+  padding-left: 26px;
+}
+
+.sandbox-folders {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.sandbox-folders-title {
+  margin: 0;
+  font-size: calc(13px * var(--font-scale));
+  font-weight: 600;
+}
+
+.sandbox-folders > p.hint {
+  margin: 0;
+}
+
+.sandbox-folder-rows {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sandbox-folder {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel-2);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.sandbox-folder-path {
+  flex: 1 1 12em;
+  min-width: 0;
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.sandbox-folder-access,
+.sandbox-folder-state {
+  color: var(--muted);
+}
+
+.sandbox-folder.state-in-sandbox .sandbox-folder-state {
+  color: var(--ok);
+}
+
+.sandbox-folder.state-waiting .sandbox-folder-state {
+  color: var(--warn-on-soft);
+}
+
+.sandbox-folder:is(.state-missing, .state-refused) .sandbox-folder-state {
+  color: var(--danger);
+}
+
+.sandbox-folders-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--warn-soft);
+  color: var(--warn-on-soft);
+  font-size: calc(12px * var(--font-scale));
+}
+
+.sandbox-folders-add {
+  align-self: flex-start;
+}
+
+.sandbox-folder-add-row {
+  display: flex;
+  gap: 6px;
+}
+
+.sandbox-folder-add-row input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+}
+
+.sandbox-folder-refusal {
+  margin: 0;
+  color: var(--danger);
+  font-size: calc(12px * var(--font-scale));
+}
+
 .room-held {
   display: flex;
   flex-direction: column;

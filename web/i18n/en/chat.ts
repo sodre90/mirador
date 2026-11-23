@@ -86,6 +86,7 @@ export const chat = {
     "reading-terminal-turns": "Reading the turns taken in the terminal…",
     "making-worktree": "Making the worktree…",
     "setting-up-worktree": "Setting up the worktree…",
+    "waiting-for-sandbox-folders": "Waiting for the sandbox to restart with its folders…",
   } satisfies Record<BusyWith, string>,
   notice: {
     lines: (count: number) => `${count} lines`,

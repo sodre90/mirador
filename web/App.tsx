@@ -75,6 +75,7 @@ import { useConversationsStartedFromTabs, useWorkspaceTabsSubscribed } from "./w
 import { landingBefore, landingBelowGroup, type SidebarLanding } from "../shared/workspace-drop.ts";
 import { holdsTooMany, ofSandbox, roomSandbox, workspaceSandbox } from "../shared/sandbox.ts";
 import { conversationSandboxOf, openWorkspaceSandbox, WorkspaceSandboxDialog } from "./WorkspaceSandbox.tsx";
+import { foldersOfSandbox } from "./SandboxFolders.tsx";
 
 const conversationFromHash = () => location.hash.match(/^#\/c\/(.+)$/)?.[1] ?? null;
 const roomFromHash = () => location.hash.match(/^#\/r\/(.+)$/)?.[1] ?? null;
@@ -1052,6 +1053,8 @@ export function App() {
           setup={state.sandboxSetup}
           heldChanges={state.heldChanges.filter(ofSandbox(workspaceSandbox(sandboxWorkspace.id)))}
           holdsTooMany={holdsTooMany(state.sandboxesHoldingTooMany, workspaceSandbox(sandboxWorkspace.id))}
+          sandboxFolders={foldersOfSandbox(state.sandboxFolders, workspaceSandbox(sandboxWorkspace.id))}
+          homeDir={state.homeDir}
           onClose={closeOverlay}
         />
       )}
@@ -1077,6 +1080,8 @@ export function App() {
           joiners={state.roomJoiners.filter(({ roomId }) => roomId === settingsRoom.id)}
           roomConversations={state.roomConversations}
           sandboxSetup={state.sandboxSetup}
+          sandboxFolders={foldersOfSandbox(state.sandboxFolders, roomSandbox(settingsRoom.id))}
+          homeDir={state.homeDir}
           onInvite={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: settingsRoom.id } })}
           onClose={closeOverlay}
         />

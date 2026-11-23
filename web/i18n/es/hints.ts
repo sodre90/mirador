@@ -221,6 +221,7 @@ export const hints: Messages["hints"] = {
   continueSession: "Continúa una sesión que se inició en una terminal, como una conversación en este espacio de trabajo.",
   whereConversationsWork: "Elige si las conversaciones nuevas trabajan en la carpeta del proyecto o cada una en su propio worktree de git.",
   workspaceSandbox: "Elige si los agentes de este espacio de trabajo se ejecutan en un sandbox, aparte del resto de este equipo.",
+  applySandboxFoldersNow: "Detiene los turnos en curso en el sandbox y lo reinicia ahora con sus carpetas. Los agentes conservan su contexto.",
   removeWorkspace:
     "Quita este espacio de trabajo. Se van con él sus conversaciones y sus worktrees en la carpeta de datos de Mirador, pero el directorio del proyecto se conserva. Un segundo clic lo confirma.",
   addWorkspace: "Agrega un directorio de proyecto. Sus conversaciones se ejecutan con él como directorio de trabajo.",
