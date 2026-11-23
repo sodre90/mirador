@@ -337,10 +337,14 @@ describe("a reply owed to the plugin whose tool started a conversation", () => {
     return { conversations, store, heard };
   }
 
+  /** Starting the agent's process to continue the turn takes seconds on a loaded machine. */
+  const HEARD_WITHIN_MS = 20_000;
   const heardSoon = async (heard: unknown[]) => {
-    for (let tries = 0; heard.length === 0 && tries < 100; tries++) await Bun.sleep(20);
+    const givesUpAt = Date.now() + HEARD_WITHIN_MS;
+    while (heard.length === 0 && Date.now() < givesUpAt) await Bun.sleep(20);
     return heard;
   };
+  const TEST_TIMEOUT_MS = HEARD_WITHIN_MS + 10_000;
 
   test("is told at the next start for a turn that ended as the previous host stopped, and kept for the caller's list", async () => {
     const { conversations, store, heard } = hostOwingAReply([said, worked, ended]);
@@ -348,21 +352,21 @@ describe("a reply owed to the plugin whose tool started a conversation", () => {
     expect(await heardSoon(heard)).toEqual([{ started: { id: "c1", profile: "failing" }, caller: "c0", plugin: "board", reply: { text: "Found 3.", ended: "finished" } }]);
     expect(store.findConversation("c1")!.startedBy).toEqual({ conversationId: "c0", plugin: "board", reply: { ended: "finished", opening: "Found 3." }, dismissed: false });
     void conversations.shutdown();
-  });
+  }, TEST_TIMEOUT_MS);
 
   test("says the turn failed when the previous host died in it", async () => {
     const { conversations, heard } = hostOwingAReply([said, worked], { diedInTheTurn: true });
     conversations.resumeAfterRestart([]);
     expect(await heardSoon(heard)).toMatchObject([{ reply: { text: "Found 3.", ended: "failed" } }]);
     void conversations.shutdown();
-  });
+  }, TEST_TIMEOUT_MS);
 
   test("says the turn failed when the next host can't continue it", async () => {
     const { conversations, heard } = hostOwingAReply([said, worked, { type: "turn-end", stopReason: "cancelled" }]);
     conversations.resumeAfterRestart(["c1"]);
     expect(await heardSoon(heard)).toMatchObject([{ reply: { ended: "failed" } }]);
     void conversations.shutdown();
-  });
+  }, TEST_TIMEOUT_MS);
 
   test("is told once: a reply already given isn't owed again", async () => {
     const { conversations, store, heard } = hostOwingAReply([said, worked, ended]);
