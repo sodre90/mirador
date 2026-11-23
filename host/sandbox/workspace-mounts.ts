@@ -1,7 +1,7 @@
 import { constants } from "node:fs";
-import { lstat, mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, open, readdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SandboxBlocker } from "../../shared/sandbox.ts";
 import { git } from "../git-command.ts";
 
@@ -81,36 +81,141 @@ async function worktreePointsElsewhere(folder: string, gitFolder: string) {
 
 const expandedHome = (path: string) => (path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path);
 
-/** The files a config file includes, by any condition, as git would find them. */
+/** A path as git names a file, its relative part kept as written: git hands it to the kernel as it is, `..` taken after any link. */
+const namedFrom = (folder: string, path: string) => (isAbsolute(path) ? path : `${folder}/${path}`);
+
+/** The files a config file includes, by any condition, as git names them; read from no repository, whose config, broken by a file it includes, would stop git before it reads this one. */
 async function includedBy(file: string): Promise<string[]> {
-  const { stdout } = await git(dirname(file), ["config", "--file", file, "--null", "--get-regexp", "^include(if\\..+)?\\.path$"]);
+  const { stdout } = await git("/", ["config", "--file", file, "--null", "--get-regexp", "^include(if\\..+)?\\.path$"]);
   return stdout
     .split("\0")
     .filter(Boolean)
-    .map((entry) => resolve(dirname(file), expandedHome(entry.slice(entry.indexOf("\n") + 1))));
+    .map((entry) => namedFrom(dirname(file), expandedHome(entry.slice(entry.indexOf("\n") + 1))));
 }
 
-/** The config files git reads in the workspace now, from the origins it tells of them, this computer's own included. */
+/** The config files git reads in the workspace now, as it names them in the origins it tells of, this computer's own included. */
 async function configFilesRead(workspace: string): Promise<string[]> {
   const { stdout } = await git(workspace, ["config", "--list", "--show-origin", "--null"]);
   const origins = stdout.split("\0").filter((field) => field.startsWith("file:"));
-  return [...new Set(origins.map((origin) => resolve(workspace, origin.slice("file:".length))))];
+  return [...new Set(origins.map((origin) => namedFrom(workspace, origin.slice("file:".length))))];
+}
+
+/** As many links as Linux follows on one path before it gives up; macOS follows fewer. */
+const MOST_LINKS_ON_A_PATH = 40;
+
+/** How deep git follows includes before it gives up. */
+const MOST_INCLUDE_DEPTH = 10;
+
+/**
+ * The kernel's walk to a path, entry by entry, each link followed from its own folder: the entries it passes, without
+ * links and as the disk spells them, the links on the way, and where it ends, the first entry that isn't there if one
+ * isn't, or a file that has more of the path after it.
+ */
+interface Walk {
+  passed: string[];
+  links: string[];
+  ends: string;
+  missing: boolean;
+}
+
+async function walkTo(path: string): Promise<Walk> {
+  const passed: string[] = [];
+  const links: string[] = [];
+  let at = "/";
+  let ahead = path.split("/");
+  while (ahead.length > 0) {
+    const [step, ...rest] = ahead as [string, ...string[]];
+    ahead = rest;
+    if (step === "" || step === ".") continue;
+    if (step === "..") {
+      at = dirname(at);
+      continue;
+    }
+    const next = join(at, step);
+    const kind = await kindOf(next);
+    if (kind === "missing" || (kind === "link" && links.length === MOST_LINKS_ON_A_PATH)) return { passed, links, ends: next, missing: true };
+    if (kind === "link") {
+      links.push(next);
+      const target = await readlink(next);
+      if (isAbsolute(target)) at = "/";
+      ahead = [...target.split("/"), ...ahead];
+      continue;
+    }
+    const real = await realpath(next).catch(() => null);
+    const pathGoesOn = ahead.some((later) => later !== "");
+    if (!real || (kind === "file" && pathGoesOn)) return { passed, links, ends: next, missing: true };
+    passed.push(real);
+    at = real;
+  }
+  return { passed, links, ends: at, missing: false };
+}
+
+/** What of the workspace git's walks to the config files it reads take: the files there, to be kept read-only, and the folders on the way, so none can be moved aside. */
+interface IncludedParts {
+  files: string[];
+  folders: string[];
+}
+
+type Included = IncludedParts | { refused: SandboxBlocker };
+
+const NOTHING_INCLUDED: IncludedParts = { files: [], folders: [] };
+
+function together(each: Included[]): Included {
+  const refused = each.find((included) => "refused" in included);
+  if (refused) return refused;
+  const parts = each as IncludedParts[];
+  return { files: [...new Set(parts.flatMap(({ files }) => files))], folders: [...new Set(parts.flatMap(({ folders }) => folders))] };
+}
+
+const shownFrom = (workspace: string, path: string) => (isInside(path, workspace) ? relative(workspace, path).split(sep).join("/") : path);
+
+const isRegularFile = async (path: string) => (await lstat(path).catch(() => null))?.isFile() === true;
+
+/**
+ * What git's walk to a config file, as git names it, takes of the workspace; or why the VM could make that file or
+ * change it, as it could where a link is on a way that passes the workspace, a file of it isn't there, or isn't a
+ * regular file. Nothing where the walk keeps out of the workspace.
+ */
+async function partsOnTheWayTo(workspace: string, named: string): Promise<Included> {
+  const walk = await walkTo(named);
+  const ofWorkspace = (path: string) => path !== workspace && isInside(path, workspace);
+  if (![...walk.passed, ...walk.links, walk.ends].some(ofWorkspace)) return NOTHING_INCLUDED;
+  const file = shownFrom(workspace, resolve(named));
+  if (walk.links[0]) return { refused: { kind: "config-read-through-link", file, link: shownFrom(workspace, walk.links[0]) } };
+  const folders = walk.passed.filter((path) => path !== walk.ends && ofWorkspace(path));
+  if (walk.missing) return ofWorkspace(walk.ends) ? { refused: { kind: "config-includes-missing-file", file } } : { files: [], folders };
+  if (!ofWorkspace(walk.ends)) return { files: [], folders };
+  return (await isRegularFile(walk.ends)) ? { files: [walk.ends], folders } : { refused: { kind: "config-includes-not-a-file", file } };
+}
+
+/** What of the workspace the walks to the files these config files include take, at any depth and by any condition. */
+async function partsIncludedBy(workspace: string, configFiles: string[], seen: Set<string>, depth = 0): Promise<Included> {
+  const unread = configFiles.filter((file) => !seen.has(file));
+  if (unread.length === 0 || depth > MOST_INCLUDE_DEPTH) return NOTHING_INCLUDED;
+  unread.forEach((file) => seen.add(file));
+  const included = [...new Set((await Promise.all(unread.map(includedBy))).flat())];
+  const walked = await Promise.all(included.map((named) => partsOnTheWayTo(workspace, named)));
+  return together([...walked, await partsIncludedBy(workspace, included, seen, depth + 1)]);
+}
+
+/** The repository's own config files, which Mirador copies for the VM: its git folders' and its worktrees' per-worktree config. */
+async function ownConfigFiles(gitFolder: string): Promise<string[]> {
+  const gitFolders = [gitFolder, ...(await submoduleGitFolders(join(gitFolder, "modules")))];
+  const worktrees = await worktreeFolders(gitFolder);
+  return [...gitFolders.flatMap((folder) => [join(folder, "config"), join(folder, "config.worktree")]), ...worktrees.map((folder) => join(folder, "config.worktree"))];
 }
 
 /**
- * A file of the workspace that a config file git reads includes, at any depth and by any condition: one the VM could
- * write, and so make config of its own. Null where there is none.
+ * What of the workspace the config files git reads there take, the repository's own aside: the files of it that they
+ * are, or that they include at any depth and by any condition, which the VM could otherwise write and so make config
+ * of its own, and the folders git's walk to each passes.
  */
-async function includedWorkspaceFile(workspace: string, configFiles: string[]): Promise<string | null> {
-  const seen = new Set<string>();
-  let reading = configFiles;
-  for (let depth = 0; depth <= 10 && reading.length > 0; depth++) {
-    const included = (await Promise.all(reading.filter((file) => !seen.has(file)).map(includedBy))).flat();
-    reading.forEach((file) => seen.add(file));
-    for (const file of included) if (isInside(file, workspace) || isInside(await realOrAsIs(file), workspace)) return relative(workspace, file).split(sep).join("/");
-    reading = included;
-  }
-  return null;
+async function includedWorkspaceParts(workspace: string, gitFolder: string): Promise<Included> {
+  const own = await ownConfigFiles(gitFolder);
+  const present = (await Promise.all(own.map(async (file) => ((await kindOf(file)) === "file" ? [file] : [])))).flat();
+  const read = await configFilesRead(workspace);
+  const readElsewhere = await Promise.all(read.filter((file) => !own.includes(file)).map((file) => partsOnTheWayTo(workspace, file)));
+  return together([...readElsewhere, await partsIncludedBy(workspace, [...new Set([...present, ...read])], new Set())]);
 }
 
 /**
@@ -135,7 +240,7 @@ async function linkedGitPart(workspace: string, gitFolders: string[]): Promise<s
   return linked ? relative(workspace, linked).split(sep).join("/") : null;
 }
 
-async function gitConfigRefusal(workspace: string, gitFolder: string): Promise<SandboxBlocker | null> {
+async function gitFolderRefusal(workspace: string, gitFolder: string): Promise<SandboxBlocker | null> {
   const gitFolders = [gitFolder, ...(await submoduleGitFolders(join(gitFolder, "modules")))];
   const linked = await linkedGitPart(workspace, gitFolders);
   if (linked) return { kind: "part-is-link", part: linked };
@@ -143,22 +248,32 @@ async function gitConfigRefusal(workspace: string, gitFolder: string): Promise<S
   if (pointsElsewhere.some(Boolean)) return { kind: "workspace-has-commondir" };
   const worktrees = await worktreeFolders(gitFolder);
   for (const folder of worktrees) if (await worktreePointsElsewhere(folder, gitFolder)) return { kind: "worktree-points-elsewhere", worktree: relative(gitFolder, folder).split(sep).join("/") };
-  const ownConfigs = [...gitFolders.flatMap((folder) => [join(folder, "config"), join(folder, "config.worktree")]), ...worktrees.map((folder) => join(folder, "config.worktree"))];
-  const present = (await Promise.all(ownConfigs.map(async (file) => ((await kindOf(file)) === "file" ? [file] : [])))).flat();
-  const included = await includedWorkspaceFile(workspace, [...new Set([...present, ...(await configFilesRead(workspace))])]);
-  return included ? { kind: "config-includes-workspace-file", file: included } : null;
+  return null;
 }
 
-/** Why the workspace can't be shown to a sandbox, looked at without changing anything; null where it can. */
-export async function sandboxRefusalOf(givenWorkspace: string, places: MiradorPlaces): Promise<SandboxBlocker | null> {
-  const workspace = await realOrAsIs(givenWorkspace);
+async function workspaceRefusal(workspace: string, places: MiradorPlaces): Promise<SandboxBlocker | null> {
   const own = await miradorsOwn(workspace, places);
   if (own) return own;
   const gitFolder = join(workspace, ".git");
   const gitKind = await kindOf(gitFolder);
   if (gitKind === "file" || gitKind === "link") return { kind: "workspace-is-worktree" };
   if (gitKind === "missing") return { kind: "workspace-not-a-repository" };
-  return gitConfigRefusal(workspace, gitFolder);
+  return gitFolderRefusal(workspace, gitFolder);
+}
+
+/** The workspace, without links, with what of it git's config takes; or why it can't be shown to a sandbox. Looked at without changing anything. */
+async function inspected(givenWorkspace: string, places: MiradorPlaces): Promise<{ workspace: string; included: IncludedParts } | { refused: SandboxBlocker }> {
+  const workspace = await realOrAsIs(givenWorkspace);
+  const refused = await workspaceRefusal(workspace, places);
+  if (refused) return { refused };
+  const included = await includedWorkspaceParts(workspace, join(workspace, ".git"));
+  return "refused" in included ? included : { workspace, included };
+}
+
+/** Why the workspace can't be shown to a sandbox, looked at without changing anything; null where it can. */
+export async function sandboxRefusalOf(givenWorkspace: string, places: MiradorPlaces): Promise<SandboxBlocker | null> {
+  const found = await inspected(givenWorkspace, places);
+  return "refused" in found ? found.refused : null;
 }
 
 /** The file's bytes into `copy`, never through a link, and only from a regular file: no link swapped in meanwhile, nor a pipe that would never end. */
@@ -191,14 +306,18 @@ async function readOnlyPartsOf(gitFolder: string, copies: string, isTopRepositor
   const configs = await Promise.all(
     ["config", "config.worktree"].map(async (name) => {
       const original = join(gitFolder, name);
-      if ((await kindOf(original)) !== "file") return [];
-      const copy = join(copies, crypto.randomUUID(), name);
-      await mkdir(dirname(copy), { recursive: true, mode: 0o700 });
-      await copyRegularFile(original, copy);
-      return [{ source: copy, target: original, readOnly: true }];
+      return (await kindOf(original)) === "file" ? [await readOnlyCopyOf(original, copies)] : [];
     }),
   );
   return [...folders.map((name) => atItsOwnPath(join(gitFolder, name), true)), ...configs.flat()];
+}
+
+/** A copy of the file taken now, under its own name in a folder of its own in `copies`, which the VM reads where the file is. */
+async function readOnlyCopyOf(original: string, copies: string): Promise<Mount> {
+  const copy = join(copies, crypto.randomUUID(), basename(original));
+  await mkdir(dirname(copy), { recursive: true, mode: 0o700 });
+  await copyRegularFile(original, copy);
+  return { source: copy, target: original, readOnly: true };
 }
 
 /** The outermost of the read-only mounts, each once: one inside another is read-only already. */
@@ -208,16 +327,18 @@ function outermostOf(mounts: Mount[]) {
 }
 
 /**
- * Each folder between the workspace and a read-only mount, mounted at its own path too: a mount can't be moved, so no
- * folder holding a read-only part can be moved aside, with that part, and made anew without it.
+ * Each folder between the workspace and a read-only mount, and each on git's way to a config file of the workspace,
+ * mounted at its own path too: a mount can't be moved, so no folder holding a read-only part, or leading git to one,
+ * can be moved aside, with that part, and made anew without it.
  */
-function foldersHolding(workspace: string, readOnly: Mount[]): Mount[] {
-  const folders = readOnly.flatMap(({ target }) => {
-    const holding: string[] = [];
-    for (let folder = dirname(target); folder !== workspace && folder.startsWith(`${workspace}${sep}`); folder = dirname(folder)) holding.push(folder);
-    return holding;
+function foldersHolding(workspace: string, readOnly: Mount[], onGitsWay: string[]): Mount[] {
+  const holding = readOnly.flatMap(({ target }) => {
+    const folders: string[] = [];
+    for (let folder = dirname(target); folder !== workspace && folder.startsWith(`${workspace}${sep}`); folder = dirname(folder)) folders.push(folder);
+    return folders;
   });
-  return [...new Set(folders)].map((folder) => atItsOwnPath(folder, false));
+  const notReadOnlyAlready = onGitsWay.filter((folder) => !readOnly.some(({ target }) => isInside(folder, target)));
+  return [...new Set([...holding, ...notReadOnlyAlready])].map((folder) => atItsOwnPath(folder, false));
 }
 
 /** The hooks folder git takes from this computer's config or the repository's, a relative one taken from the workspace, as `-c` names none. */
@@ -243,23 +364,25 @@ async function configuredHooksInside(workspace: string): Promise<Mount[]> {
 
 /**
  * The workspace at its own path, with what of it would run on this computer read-only: the config, hooks and worktrees'
- * folders of the repository, its submodules' config and hooks, the config as copies kept in `copies`, the held files
- * and folders there are, and every folder holding them mounted too, so that none can be moved aside. A workspace with
- * no repository of its own is not shown to a sandbox: the agents could make one there, with a config of their own that
- * Mirador's git would read. Nor is a git worktree, whose repository lies elsewhere, nor a git folder that takes
- * another's config with `commondir` or includes a file of the workspace.
+ * folders of the repository, its submodules' config and hooks, the files of the workspace their config includes, the
+ * config files as copies kept in `copies`, the held files and folders there are, and every folder holding them, or on
+ * git's way to them, mounted too, so that none can be moved aside. A workspace with no repository of its own is not
+ * shown to a sandbox: the agents could make one there, with a config of their own that Mirador's git would read. Nor
+ * is a git worktree, whose repository lies elsewhere, nor a git folder that takes another's config with `commondir`, nor
+ * a config that includes a file of the workspace the VM could make, or reaches one through a link.
  */
 export async function workspaceMounts(givenWorkspace: string, copies: string, places: MiradorPlaces, heldReadOnly: string[] = []): Promise<WorkspaceMounts> {
-  const refused = await sandboxRefusalOf(givenWorkspace, places);
-  if (refused) return { refused };
-  const workspace = await realOrAsIs(givenWorkspace);
+  const found = await inspected(givenWorkspace, places);
+  if ("refused" in found) return found;
+  const { workspace, included } = found;
   const gitFolder = join(workspace, ".git");
   const gitFolders = [gitFolder, ...(await submoduleGitFolders(join(gitFolder, "modules")))];
   await rm(copies, { recursive: true, force: true });
   const gitParts = (await Promise.all(gitFolders.map((folder) => readOnlyPartsOf(folder, copies, folder === gitFolder)))).flat();
+  const includedFiles = await Promise.all(included.files.map((file) => readOnlyCopyOf(file, copies)));
   const held = heldReadOnly.map((path) => atItsOwnPath(join(workspace, path), true));
-  const readOnly = outermostOf([...gitParts, ...(await configuredHooksInside(workspace)), ...held]);
-  const parentsFirst = [atItsOwnPath(workspace, false), ...foldersHolding(workspace, readOnly), ...readOnly].toSorted((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0));
+  const readOnly = outermostOf([...gitParts, ...includedFiles, ...(await configuredHooksInside(workspace)), ...held]);
+  const parentsFirst = [atItsOwnPath(workspace, false), ...foldersHolding(workspace, readOnly, included.folders), ...readOnly].toSorted((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0));
   const reachingOut = await mountReachingOut(workspace, copies, parentsFirst);
   return reachingOut ? { refused: { kind: "part-is-link", part: reachingOut } } : { mounts: parentsFirst };
 }

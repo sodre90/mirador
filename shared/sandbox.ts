@@ -85,7 +85,10 @@ export type SandboxBlocker =
   | { kind: "workspace-has-commondir" }
   | { kind: "worktree-points-elsewhere"; worktree: string }
   | { kind: "part-is-link"; part: string }
-  | { kind: "config-includes-workspace-file"; file: string }
+  /** A config file git reads, or one it includes, that a link leads to, on a way that passes the workspace. */
+  | { kind: "config-read-through-link"; file: string; link: string }
+  | { kind: "config-includes-missing-file"; file: string }
+  | { kind: "config-includes-not-a-file"; file: string }
   | { kind: "workspace-is-home" }
   | { kind: "workspace-holds-mirador-data" }
   | { kind: "workspace-is-mirador" }

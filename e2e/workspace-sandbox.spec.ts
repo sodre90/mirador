@@ -45,7 +45,10 @@ test.beforeAll(async ({ browser }) => {
   writeFakeContainer();
   mkdirSync(host.projectDir, { recursive: true });
   execFileSync("git", ["init", "-q", host.projectDir]);
-  execFileSync("git", ["-C", host.projectDir, "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "commit", "-q", "--allow-empty", "-m", "first"]);
+  writeFileSync(inProject(".gitconfig"), "[mirador]\n\tteam = shared\n");
+  execFileSync("git", ["-C", host.projectDir, "config", "include.path", "../.gitconfig"]);
+  execFileSync("git", ["-C", host.projectDir, "add", ".gitconfig"]);
+  execFileSync("git", ["-C", host.projectDir, "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "commit", "-q", "-m", "first"]);
   makeWorktree();
   await host.start();
   const page = await browser.newPage();
@@ -119,6 +122,26 @@ test("the workspace's sandbox switch stays off, with the reason under it, where 
   expect(containerCalls().filter(([command]) => command !== "system")).toEqual([]);
 });
 
+test("the switch stays off where the workspace's git config includes a file of it that isn't there, saying so, and can be turned on once it is", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const including = join(host.root, "including");
+  execFileSync("git", ["init", "-q", including]);
+  execFileSync("git", ["-C", including, "config", "include.path", "../.gitconfig.local"]);
+  await signIn(page, host);
+  await addWorkspaceFromSidebar(page, including);
+  const dialog = await openSandboxOf(page, workspaceCard(page, including), "including");
+  await expect(reasons(dialog)).toHaveText("Git's config includes .gitconfig.local, which isn't there, so the sandbox could make it: make that file, or take the include out, to use a sandbox.");
+  await expect(sandboxSwitch(dialog)).toBeDisabled();
+  await keepScreenshot(dialog, "include-missing");
+  await dialog.getByRole("button", { name: "Done" }).click();
+
+  writeFileSync(join(including, ".gitconfig.local"), "[mirador]\n\tlocal = yes\n");
+  const again = await openSandboxOf(page, workspaceCard(page, including), "including");
+  await expect(reasons(again)).toHaveCount(0);
+  await expect(sandboxSwitch(again)).toBeEnabled();
+  await again.getByRole("button", { name: "Done" }).click();
+});
+
 test("turned on, the workspace's sandbox is set up with its progress shown, marked in the sidebar and the conversation, and its agent works in a VM of its own without the key", async ({ page }) => {
   test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
   await signIn(page, host);
@@ -182,6 +205,13 @@ test("turned on, the workspace's sandbox is set up with its progress shown, mark
   expect(run.filter((argument) => argument.startsWith("mirador.owner="))).toEqual([expect.stringMatching(/^mirador\.owner=workspace:/)]);
   expect(JSON.stringify(run)).not.toContain(realpathSync(worktree()));
   expect(JSON.stringify(calls)).not.toContain(KEY);
+
+  await test.step("the project's .gitconfig, which its git config includes, is read-only in the VM, from a copy", () => {
+    const includedMount = run.find((argument) => argument.endsWith(`:${realpathSync(inProject(".gitconfig"))}:ro`));
+    const copy = includedMount!.split(":")[0]!;
+    expect(copy.startsWith(`${join(host.dataDir, "sandbox", "workspaces")}/`)).toBe(true);
+    expect(readFileSync(copy, "utf8")).toBe("[mirador]\n\tteam = shared\n");
+  });
 
   await test.step("the conversation's mark opens the workspace's sandbox", async () => {
     await headerMark.click();

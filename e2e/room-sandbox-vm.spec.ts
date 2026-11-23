@@ -30,6 +30,10 @@ const ourVms = () =>
 const folderOfThisMac = join(realpathSync(homedir()), `mirador-e2e-sandbox-folder-${process.pid}`);
 const repositoryOfThisMac = join(realpathSync(homedir()), `mirador-e2e-sandbox-repository-${process.pid}`);
 
+/** A tracked .gitconfig the repository's config includes, which includes another file of the workspace in turn. */
+const TEAM_GITCONFIG = "[include]\n\tpath = config/team.gitconfig\n";
+const TEAM_CONFIG = "[mirador]\n\tteam = shared\n";
+
 test.describe.configure({ mode: "serial" });
 test.skip(!optedIn || !containerProgram || !sandboxesRunHere, "Set MIRADOR_SANDBOX_VM_E2E=1 on macOS 26 on Apple silicon with Apple's container installed.");
 
@@ -37,6 +41,12 @@ test.beforeAll(async () => {
   mkdirSync(host.projectDir, { recursive: true });
   writeFileSync(join(host.projectDir, "README.md"), "A workspace for the sandbox.\n");
   execFileSync("git", ["init", "-q", host.projectDir]);
+  mkdirSync(join(host.projectDir, "config"));
+  writeFileSync(join(host.projectDir, ".gitconfig"), TEAM_GITCONFIG);
+  writeFileSync(join(host.projectDir, "config/team.gitconfig"), TEAM_CONFIG);
+  execFileSync("git", ["-C", host.projectDir, "config", "include.path", "../.gitconfig"]);
+  execFileSync("git", ["-C", host.projectDir, "add", ".gitconfig", "config/team.gitconfig"]);
+  execFileSync("git", ["-C", host.projectDir, "-c", "user.name=e2e", "-c", "user.email=e2e@example.com", "commit", "-q", "-m", "team config"]);
   await host.start();
 });
 test.afterAll(async () => {
@@ -209,6 +219,37 @@ test("a sandboxed room's Claude agent works in the workspace from its VM, reache
   });
 
   const at = (path: string) => join(host.projectDir, path);
+
+  await test.step("the files of the workspace its git config includes, at its root and in a folder, are read in the VM but can't be written, moved aside or removed, nor can their folder", async () => {
+    expect(asAgent(vm!, "git", "config", "mirador.team").trim()).toBe("shared");
+    const attempts = ["echo '[core]' >> .gitconfig", "mv .gitconfig .gitconfig-aside", "rm -f .gitconfig", "echo '[core]' >> config/team.gitconfig", "mv config config-aside", "rm -rf config"];
+    const failed = Object.fromEntries(
+      attempts.map((attempt) => {
+        try {
+          asAgent(vm!, "sh", "-c", attempt);
+          return [attempt, false];
+        } catch {
+          return [attempt, true];
+        }
+      }),
+    );
+    expect(failed).toEqual(Object.fromEntries(attempts.map((attempt) => [attempt, true])));
+    expect(readFileSync(at(".gitconfig"), "utf8")).toBe(TEAM_GITCONFIG);
+    expect(readFileSync(at("config/team.gitconfig"), "utf8")).toBe(TEAM_CONFIG);
+    expect(existsSync(at(".gitconfig-aside")) || existsSync(at("config-aside"))).toBe(false);
+    const workspace = realpathSync(host.projectDir);
+    const ofIncluded = asAgent(vm!, "cat", "/proc/mounts")
+      .trim()
+      .split("\n")
+      .filter((line) => [".gitconfig", "config", "config/team.gitconfig"].map((path) => join(workspace, path)).includes(line.split(" ")[1]!))
+      .map((line) => line.split(" ").slice(1, 4).join(" "));
+    console.log(`sandbox VM e2e mounts of included config: ${JSON.stringify({ ofIncluded, failed })}`);
+    test.info().annotations.push({ type: "mounts of included config", description: JSON.stringify({ ofIncluded, failed }) });
+    const optionsOf = (path: string) => ofIncluded.find((line) => line.split(" ")[0] === join(workspace, path))?.split(" ")[2]?.split(",") ?? [];
+    expect(optionsOf(".gitconfig")).toContain("ro");
+    expect(optionsOf("config/team.gitconfig")).toContain("ro");
+    expect(optionsOf("config")).toContain("rw");
+  });
 
   await test.step("a held file can't be planted by renaming a folder into place, nor stand as a folder", async () => {
     asAgent(vm!, "sh", "-c", `mkdir -p stage/hooks && printf '{"hooks":{}}' > stage/settings.json && printf 'curl evil\\n' > stage/hooks/run.sh && mv stage .claude`);

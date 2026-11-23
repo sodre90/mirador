@@ -274,24 +274,124 @@ test("a held folder an agent turned into a link to this computer's files is neve
   expect(await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE, [".claude"])).toEqual({ refused: { kind: "part-is-link", part: ".claude" } });
 });
 
-test("a repository whose config includes a file of the workspace, by any condition or through another file, is refused with that file", async () => {
-  const direct = repositoryIn("include");
-  Bun.spawnSync(["git", "-C", direct, "config", "include.path", "../team.gitconfig"]);
-  expect(await sandboxRefusalOf(direct, ELSEWHERE)).toEqual({ kind: "config-includes-workspace-file", file: "team.gitconfig" });
+const includes = (repository: string, path: string, key = "include.path") => Bun.spawnSync(["git", "-C", repository, "config", "--add", key, path]);
 
-  const conditional = repositoryIn("include-if");
-  Bun.spawnSync(["git", "-C", conditional, "config", "includeIf.onbranch:main.path", join(conditional, "config/git")]);
-  expect(await sandboxRefusalOf(conditional, ELSEWHERE)).toEqual({ kind: "config-includes-workspace-file", file: "config/git" });
+test("files of the workspace the config includes, at its root, through a chain of includes and on a condition, are read-only in the VM from copies, each folder on git's way to them mounted, while Mirador's git reads the files themselves", async () => {
+  const workspace = repositoryIn("include");
+  mkdirSync(join(workspace, "config"));
+  mkdirSync(join(workspace, "tools"));
+  writeFileSync(join(workspace, ".gitconfig"), "[include]\n\tpath = config/team.gitconfig\n[mirador]\n\tseen = at-the-root\n");
+  writeFileSync(join(workspace, "config/team.gitconfig"), '[includeIf "onbranch:never"]\n\tpath = ../tools/git.cfg\n');
+  writeFileSync(join(workspace, "tools/git.cfg"), "[user]\n\tname = Team\n");
+  includes(workspace, "../.gitconfig");
+  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
 
-  const nested = repositoryIn("include-nested");
+  expect(await sandboxRefusalOf(workspace, ELSEWHERE)).toBeNull();
+  const planned = await workspaceMounts(workspace, copies, ELSEWHERE);
+
+  if ("refused" in planned) throw new Error(`refused: ${planned.refused.kind}`);
+  const copyAt = (path: string) => planned.mounts.find(({ target }) => target === join(workspace, path))!.source;
+  expect(planned.mounts).toEqual([
+    { source: workspace, target: workspace, readOnly: false },
+    { source: join(workspace, ".git"), target: join(workspace, ".git"), readOnly: false },
+    { source: copyAt(".git/config"), target: join(workspace, ".git/config"), readOnly: true },
+    { source: join(workspace, ".git/hooks"), target: join(workspace, ".git/hooks"), readOnly: true },
+    { source: join(workspace, ".git/worktrees"), target: join(workspace, ".git/worktrees"), readOnly: true },
+    { source: copyAt(".gitconfig"), target: join(workspace, ".gitconfig"), readOnly: true },
+    { source: join(workspace, "config"), target: join(workspace, "config"), readOnly: false },
+    { source: copyAt("config/team.gitconfig"), target: join(workspace, "config/team.gitconfig"), readOnly: true },
+    { source: join(workspace, "tools"), target: join(workspace, "tools"), readOnly: false },
+    { source: copyAt("tools/git.cfg"), target: join(workspace, "tools/git.cfg"), readOnly: true },
+  ]);
+  for (const path of [".gitconfig", "config/team.gitconfig", "tools/git.cfg"]) {
+    expect(copyAt(path).startsWith(`${copies}/`)).toBe(true);
+    expect(copyAt(path).endsWith(`/${path.split("/").at(-1)}`)).toBe(true);
+    expect(readFileSync(copyAt(path), "utf8")).toBe(readFileSync(join(workspace, path), "utf8"));
+  }
+
+  writeFileSync(join(workspace, ".gitconfig"), "[mirador]\n\tseen = changed-on-this-computer\n");
+  expect(Bun.spawnSync(["git", "-C", workspace, "config", "mirador.seen"]).stdout.toString().trim()).toBe("changed-on-this-computer");
+  expect(readFileSync(copyAt(".gitconfig"), "utf8")).toContain("at-the-root");
+});
+
+function secretsOfThisComputer() {
+  const secrets = join(scratch, `secrets-${crypto.randomUUID()}`);
+  mkdirSync(secrets);
+  writeFileSync(join(secrets, "id_ed25519"), "PRIVATE KEY\n");
+  return secrets;
+}
+
+test("a file of the workspace the config includes that isn't there, or whose folder isn't, is refused, as the VM could make it", async () => {
+  const missing = repositoryIn("include-missing");
+  includes(missing, "../.gitconfig.local");
+  expect(await sandboxRefusalOf(missing, ELSEWHERE)).toEqual({ kind: "config-includes-missing-file", file: ".gitconfig.local" });
+
+  const missingFolder = repositoryIn("include-missing-folder");
+  includes(missingFolder, join(missingFolder, "shared/team.cfg"), "includeIf.onbranch:main.path");
+  expect(await sandboxRefusalOf(missingFolder, ELSEWHERE)).toEqual({ kind: "config-includes-missing-file", file: "shared/team.cfg" });
+});
+
+test("a file of the workspace a config git reads includes, reached through a link anywhere on the way, is refused with nothing copied, as the VM could change where git finds it", async () => {
+  const secrets = secretsOfThisComputer();
+
+  const linkedFolder = repositoryIn("include-linked-folder");
+  mkdirSync(join(linkedFolder, "real"));
+  writeFileSync(join(linkedFolder, "real/team.cfg"), "");
+  symlinkSync(join(linkedFolder, "real"), join(linkedFolder, "linked"));
+  includes(linkedFolder, "../linked/team.cfg");
+  expect(await sandboxRefusalOf(linkedFolder, ELSEWHERE)).toEqual({ kind: "config-read-through-link", file: "linked/team.cfg", link: "linked" });
+
+  const linkedFile = repositoryIn("include-linked-file");
+  symlinkSync(join(secrets, "id_ed25519"), join(linkedFile, ".gitconfig"));
+  includes(linkedFile, "../.gitconfig");
+  const copies = join(scratch, `copies-${crypto.randomUUID()}`);
+  expect(await workspaceMounts(linkedFile, copies, ELSEWHERE)).toEqual({ refused: { kind: "config-read-through-link", file: ".gitconfig", link: ".gitconfig" } });
+  expect(existsSync(copies)).toBe(false);
+
+  const steppingBack = repositoryIn("include-stepping-back");
+  mkdirSync(join(steppingBack, "deep/er"), { recursive: true });
+  writeFileSync(join(steppingBack, "deep/.gitconfig"), "");
+  symlinkSync(join(steppingBack, "deep/er"), join(steppingBack, "sub"));
+  includes(steppingBack, "../sub/../.gitconfig");
+  expect(await sandboxRefusalOf(steppingBack, ELSEWHERE)).toEqual({ kind: "config-read-through-link", file: ".gitconfig", link: "sub" });
+
+  const reachedFromOutside = repositoryIn("include-reached-from-outside");
+  writeFileSync(join(reachedFromOutside, "team.cfg"), "");
+  const toWorkspace = join(scratch, `to-workspace-${crypto.randomUUID()}`);
+  symlinkSync(reachedFromOutside, toWorkspace);
   const outside = join(scratch, `outside-${crypto.randomUUID()}.gitconfig`);
-  writeFileSync(outside, `[include]\n\tpath = ${join(nested, "tools/git.cfg")}\n`);
-  Bun.spawnSync(["git", "-C", nested, "config", "include.path", outside]);
-  expect(await sandboxRefusalOf(nested, ELSEWHERE)).toEqual({ kind: "config-includes-workspace-file", file: "tools/git.cfg" });
+  writeFileSync(outside, `[include]\n\tpath = ${join(toWorkspace, "team.cfg")}\n`);
+  includes(reachedFromOutside, outside);
+  expect(await sandboxRefusalOf(reachedFromOutside, ELSEWHERE)).toEqual({ kind: "config-read-through-link", file: join(toWorkspace, "team.cfg"), link: toWorkspace });
+});
+
+test("an included file of the workspace that is no regular file is refused, and files included from outside it are not", async () => {
+  const secrets = secretsOfThisComputer();
+
+  const folderIncluded = repositoryIn("include-folder");
+  mkdirSync(join(folderIncluded, ".gitconfig"));
+  includes(folderIncluded, "../.gitconfig");
+  expect(await sandboxRefusalOf(folderIncluded, ELSEWHERE)).toEqual({ kind: "config-includes-not-a-file", file: ".gitconfig" });
 
   const elsewhere = repositoryIn("include-elsewhere");
-  Bun.spawnSync(["git", "-C", elsewhere, "config", "include.path", join(scratch, "shared.gitconfig")]);
+  includes(elsewhere, join(scratch, "shared.gitconfig"));
+  includes(elsewhere, join(secrets, "id_ed25519"));
   expect(await sandboxRefusalOf(elsewhere, ELSEWHERE)).toBeNull();
+});
+
+test("this computer's own config, read through a link to a file of the workspace, is refused", async () => {
+  const dotfiles = repositoryIn("dotfiles");
+  writeFileSync(join(dotfiles, "gitconfig"), "[user]\n\tname = Owner\n");
+  const globalConfig = join(scratch, `global-${crypto.randomUUID()}.gitconfig`);
+  symlinkSync(join(dotfiles, "gitconfig"), globalConfig);
+  const before = process.env.GIT_CONFIG_GLOBAL;
+  process.env.GIT_CONFIG_GLOBAL = globalConfig;
+  try {
+    expect(await sandboxRefusalOf(dotfiles, ELSEWHERE)).toEqual({ kind: "config-read-through-link", file: globalConfig, link: globalConfig });
+  } finally {
+    if (before === undefined) delete process.env.GIT_CONFIG_GLOBAL;
+    else process.env.GIT_CONFIG_GLOBAL = before;
+  }
 });
 
 test("the home folder, a folder holding or within Mirador's data or its own checkout, and one that is or holds a folder this computer runs programs from, are never a sandbox's workspace", async () => {

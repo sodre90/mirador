@@ -154,6 +154,12 @@ describe("a folder added read and write", () => {
     expect(await writableRefusalOf(folderIn(repository, "src"), surroundings)).toEqual({ kind: "needs-repository" });
     expect(await writableRefusalOf(worktree, surroundings)).toEqual({ kind: "needs-repository" });
     expect(await writableRefusalOf(borrowing, surroundings)).toEqual({ kind: "repository-refused", blocker: { kind: "workspace-has-commondir" } });
+    const includingMissing = repositoryIn(home, "including-missing");
+    Bun.spawnSync(["git", "-C", includingMissing, "config", "include.path", "../team/git.cfg"]);
+    expect(await writableRefusalOf(includingMissing, surroundings)).toEqual({ kind: "repository-refused", blocker: { kind: "config-includes-missing-file", file: "team/git.cfg" } });
+    mkdirSync(join(includingMissing, "team"));
+    writeFileSync(join(includingMissing, "team/git.cfg"), "");
+    expect(await writableRefusalOf(includingMissing, surroundings)).toBeNull();
     expect(await Promise.all([notes, join(repository, "src"), worktree, borrowing].map((folder) => refusalOf(folder, surroundings)))).toEqual([null, null, null, null]);
   });
 
@@ -311,6 +317,8 @@ describe("the sandbox's VM", () => {
     const { home, workspace, dataDir, cli, sandboxes, launch, setFolders, mounts } = sandboxWithFolders();
     const library = repositoryIn(home, "library");
     writeFileSync(join(library, "AGENTS.md"), "Be kind.\n");
+    writeFileSync(join(library, ".gitconfig"), "[user]\n\tname = Team\n");
+    Bun.spawnSync(["git", "-C", library, "config", "include.path", "../.gitconfig"]);
     setFolders(readAndWrite(library));
 
     await launch();
@@ -323,6 +331,9 @@ describe("the sandbox's VM", () => {
     expect(copyOf(library)?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
     expect(copyOf(workspace)?.startsWith(`${join(dataDir, "sandbox", "room-1", "git-config")}/`)).toBe(true);
     expect(readFileSync(copyOf(library)!, "utf8")).toBe(readFileSync(join(library, ".git", "config"), "utf8"));
+    const includedCopy = run.find((mount) => mount.endsWith(`:${library}/.gitconfig:ro`))?.split(":")[0];
+    expect(includedCopy?.startsWith(`${join(dataDir, "sandbox", "room-1", "folder-git-config")}/`)).toBe(true);
+    expect(readFileSync(includedCopy!, "utf8")).toBe("[user]\n\tname = Team\n");
     expect(sandboxes.mountedFolders(ROOM)).toEqual([readAndWrite(library)]);
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(library))).toEqual({ kind: "in-sandbox" });
     expect(sandboxes.folderStateOf(ROOM, readOnly(library))).toEqual({ kind: "waiting" });
@@ -370,19 +381,22 @@ describe("the sandbox's VM", () => {
     const piped = repositoryIn(home, "piped");
     Bun.spawnSync(["mkfifo", join(piped, "CLAUDE.md")]);
     const shared = repositoryIn(home, "shared");
+    const includingMissing = repositoryIn(home, "including-missing");
+    Bun.spawnSync(["git", "-C", includingMissing, "config", "include.path", "../.gitconfig"]);
     const library = repositoryIn(home, "library");
-    setFolders(readAndWrite(notes), readAndWrite(piped), readAndWrite(shared), readAndWrite(library));
+    setFolders(readAndWrite(notes), readAndWrite(piped), readAndWrite(shared), readAndWrite(includingMissing), readAndWrite(library));
     setOthers({ workspaces: [], writableFolders: [shared], writableFoldersOn: [] });
 
     await launch();
 
     const run = mounts(cli.callsOf("run")[0]!);
-    expect([notes, piped, shared].filter((folder) => run.some((mount) => mount.includes(folder)))).toEqual([]);
+    expect([notes, piped, shared, includingMissing].filter((folder) => run.some((mount) => mount.includes(folder)))).toEqual([]);
     expect(run).toContain(`${library}:${library}`);
     expect(sandboxes.mountedFolders(ROOM)).toEqual([readAndWrite(library)]);
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(notes))).toEqual({ kind: "refused", refusal: { kind: "needs-repository" } });
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(piped))).toEqual({ kind: "refused", refusal: { kind: "held-files-refused" } });
     expect(sandboxes.folderStateOf(ROOM, readAndWrite(shared))).toEqual({ kind: "refused", refusal: { kind: "overlaps-sandbox-folder", folder: shared } });
+    expect(sandboxes.folderStateOf(ROOM, readAndWrite(includingMissing))).toEqual({ kind: "refused", refusal: { kind: "repository-refused", blocker: { kind: "config-includes-missing-file", file: ".gitconfig" } } });
     await sandboxes.stopSandboxesWorkingIn(piped);
     expect(sandboxes.confirmedRunning(ROOM)).toBe(true);
     await sandboxes.stopAll();

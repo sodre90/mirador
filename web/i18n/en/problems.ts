@@ -465,7 +465,9 @@ export const problems = {
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `The repository's worktree folder .git/${worktree} takes its config from somewhere other than this repository.`,
   sandboxPartIsLink: (part: string) => `The repository's ${part} is a link, which a sandbox can't keep read-only.`,
-  sandboxConfigIncludesWorkspaceFile: (file: string) => `The repository's git config includes ${file}, a file of the workspace the sandbox could change: take that include out to use a sandbox.`,
+  sandboxConfigReadThroughLink: (file: string, link: string) => `Git reads config from ${file} through the link ${link}, so a sandbox can't keep it read-only.`,
+  sandboxConfigIncludesMissingFile: (file: string) => `Git's config includes ${file}, which isn't there, so the sandbox could make it: make that file, or take the include out, to use a sandbox.`,
+  sandboxConfigIncludesNotAFile: (file: string) => `Git's config includes ${file}, which isn't a regular file, so a sandbox can't keep it read-only: take the include out to use a sandbox.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `The workspace is or holds ${folder}, which this computer runs programs from by itself: a sandbox could change them.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Another sandbox that is on has ${folder} read and write, which is the workspace, holds it or lies inside it: only one sandbox may write there.`,

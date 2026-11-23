@@ -466,7 +466,9 @@ export const problems: Messages["problems"] = {
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `A repó .git/${worktree} worktree-mappája nem ebből a repóból veszi a beállításait.`,
   sandboxPartIsLink: (part: string) => `A repó ${part} része egy link, amelyet a sandbox nem tud csak olvashatóvá tenni.`,
-  sandboxConfigIncludesWorkspaceFile: (file: string) => `A repó git-beállításai behúzzák a(z) ${file} fájlt, amelyet a sandbox módosíthatna: a sandboxhoz vedd ki ezt a behúzást.`,
+  sandboxConfigReadThroughLink: (file: string, link: string) => `A git a(z) ${link} linken át olvassa a(z) ${file} beállításait, így a sandbox nem tudja csak olvashatóvá tenni.`,
+  sandboxConfigIncludesMissingFile: (file: string) => `A git-beállítások behúzzák a(z) ${file} fájlt, amely nincs meg, így a sandbox létrehozhatná: a sandboxhoz hozd létre a fájlt, vagy vedd ki a behúzást.`,
+  sandboxConfigIncludesNotAFile: (file: string) => `A git-beállítások behúzzák a(z) ${file} elemet, amely nem közönséges fájl, így a sandbox nem tudja csak olvashatóvá tenni: a sandboxhoz vedd ki a behúzást.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `A munkaterület maga a(z) ${folder}, vagy tartalmazza azt: ebből a gép magától futtat programokat, amelyeket egy sandbox megváltoztathatna.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Egy másik, bekapcsolt sandbox olvashatóan és írhatóan kapta meg ezt a mappát, amely a munkaterület, tartalmazza, vagy benne van; csak egy sandbox írhat oda: ${folder}`,

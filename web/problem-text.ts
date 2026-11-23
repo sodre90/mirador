@@ -47,8 +47,12 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxWorktreePointsElsewhere(blocker.worktree);
     case "part-is-link":
       return words.sandboxPartIsLink(blocker.part);
-    case "config-includes-workspace-file":
-      return words.sandboxConfigIncludesWorkspaceFile(blocker.file);
+    case "config-read-through-link":
+      return words.sandboxConfigReadThroughLink(blocker.file, blocker.link);
+    case "config-includes-missing-file":
+      return words.sandboxConfigIncludesMissingFile(blocker.file);
+    case "config-includes-not-a-file":
+      return words.sandboxConfigIncludesNotAFile(blocker.file);
     case "workspace-holds-computers-own":
       return words.sandboxWorkspaceHoldsComputersOwn(blocker.folder);
     case "workspace-overlaps-sandbox-folder":

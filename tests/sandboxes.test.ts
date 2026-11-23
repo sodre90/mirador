@@ -360,8 +360,8 @@ describe("a room's sandbox that is not ready fails the agent's start, and starts
     await failingStart({ kind: "blocked", blocker: { kind: "workspace-has-commondir" } }, (_, workspace) => writeFileSync(join(workspace, ".git/commondir"), "/elsewhere/.git\n"));
   });
 
-  test("in a repository whose config includes a file of the workspace", async () => {
-    await failingStart({ kind: "blocked", blocker: { kind: "config-includes-workspace-file", file: "team.gitconfig" } }, (_, workspace) => {
+  test("in a repository whose config includes a file of the workspace that isn't there, which the VM could make", async () => {
+    await failingStart({ kind: "blocked", blocker: { kind: "config-includes-missing-file", file: "team.gitconfig" } }, (_, workspace) => {
       Bun.spawnSync(["git", "-C", workspace, "config", "include.path", "../team.gitconfig"]);
     });
   });

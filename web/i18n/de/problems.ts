@@ -471,7 +471,9 @@ export const problems: Messages["problems"] = {
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `Der Worktree-Ordner .git/${worktree} des Repositorys holt seine Konfiguration nicht aus diesem Repository.`,
   sandboxPartIsLink: (part: string) => `${part} des Repositorys ist ein Link, den eine Sandbox nicht schreibgeschützt halten kann.`,
-  sandboxConfigIncludesWorkspaceFile: (file: string) => `Die Git-Konfiguration des Repositorys bindet ${file} ein, eine Datei des Arbeitsbereichs, die die Sandbox ändern könnte: Entferne diese Einbindung, um eine Sandbox zu nutzen.`,
+  sandboxConfigReadThroughLink: (file: string, link: string) => `Git liest Konfiguration aus ${file} über den Link ${link}, daher kann eine Sandbox die Datei nicht schreibgeschützt halten.`,
+  sandboxConfigIncludesMissingFile: (file: string) => `Die Git-Konfiguration bindet ${file} ein, das es nicht gibt, daher könnte die Sandbox es anlegen: Lege die Datei an oder entferne die Einbindung, um eine Sandbox zu nutzen.`,
+  sandboxConfigIncludesNotAFile: (file: string) => `Die Git-Konfiguration bindet ${file} ein, das keine reguläre Datei ist, daher kann eine Sandbox es nicht schreibgeschützt halten: Entferne die Einbindung, um eine Sandbox zu nutzen.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `Der Arbeitsbereich ist oder enthält ${folder}, aus dem dieser Rechner von selbst Programme startet: Eine Sandbox könnte sie ändern.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Eine andere eingeschaltete Sandbox hat ${folder} les- und schreibbar, also den Arbeitsbereich, einen Ordner darüber oder darin: Nur eine Sandbox darf dort schreiben.`,

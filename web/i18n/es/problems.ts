@@ -466,7 +466,9 @@ export const problems: Messages["problems"] = {
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `La carpeta de worktree .git/${worktree} del repositorio toma su configuración de otro sitio que no es este repositorio.`,
   sandboxPartIsLink: (part: string) => `${part} del repositorio es un enlace, que un sandbox no puede dejar de solo lectura.`,
-  sandboxConfigIncludesWorkspaceFile: (file: string) => `La configuración de git del repositorio incluye ${file}, un archivo del espacio de trabajo que el sandbox podría cambiar: quita esa inclusión para usar un sandbox.`,
+  sandboxConfigReadThroughLink: (file: string, link: string) => `Git lee configuración de ${file} a través del enlace ${link}, así que un sandbox no puede dejarlo de solo lectura.`,
+  sandboxConfigIncludesMissingFile: (file: string) => `La configuración de git incluye ${file}, que no existe, así que el sandbox podría crearlo: crea ese archivo, o quita la inclusión, para usar un sandbox.`,
+  sandboxConfigIncludesNotAFile: (file: string) => `La configuración de git incluye ${file}, que no es un archivo normal, así que un sandbox no puede dejarlo de solo lectura: quita la inclusión para usar un sandbox.`,
   sandboxWorkspaceHoldsComputersOwn: (folder: string) =>
     `El espacio de trabajo es o contiene ${folder}, desde donde este equipo ejecuta programas por sí solo: un sandbox podría cambiarlos.`,
   sandboxWorkspaceOverlapsSandboxFolder: (folder: string) => `Otro sandbox encendido tiene ${folder} en lectura y escritura, que es el espacio de trabajo, lo contiene o está dentro de él: solo un sandbox puede escribir ahí.`,
