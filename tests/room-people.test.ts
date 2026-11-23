@@ -679,8 +679,10 @@ describe("a person other than the owner", () => {
     }
     expect((await owner.settledSince(ownerMark)).some(isType("room.approvals", ({ approvals }) => approvals.length === 0))).toBe(false);
     const answered = owner.mark;
+    const miaAnswered = miaPage.mark;
     owner.send({ type: "room.approve", conversationId, permissionId: request.permissionId, answer: "deny" });
     await owner.waitFor(isType("room.approvals", ({ approvals }) => approvals.length === 0), answered);
+    await miaPage.waitFor(roomMessageSaying("Run ls: reject"), miaAnswered);
   }, 40_000);
 
   test("is refused every message type but their own few, whatever it names", async () => {
