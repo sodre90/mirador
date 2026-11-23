@@ -12,6 +12,7 @@ import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
 import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
 import { pastelVariables } from "./pastels.ts";
+import { giveThemeToMachine } from "./theme.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 import { mostUrgentTone } from "./waiting.ts";
 
@@ -231,6 +232,11 @@ function MachineFrame({
   }, [opening]);
   useEffect(() => tellTheMachineItIsShown(frame.current, shown), [shown]);
   useEffect(() => {
+    const chosen = new MutationObserver(() => giveThemeToMachine(frame.current));
+    chosen.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => chosen.disconnect();
+  }, []);
+  useEffect(() => {
     if (machine.asPerson) return;
     const rememberPlace = (event: MessageEvent) => {
       const sent = placeIn(event.data);
@@ -247,7 +253,10 @@ function MachineFrame({
       title={machine.name}
       src={address}
       {...frameTrust(machine)}
-      onLoad={() => tellTheMachineItIsShown(frame.current, shown)}
+      onLoad={() => {
+        tellTheMachineItIsShown(frame.current, shown);
+        giveThemeToMachine(frame.current);
+      }}
     />
   );
 }

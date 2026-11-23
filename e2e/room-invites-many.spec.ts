@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { addWorkspace, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
+import { addWorkspace, chooseInSettings, createProfile, createRoom, inviteIntoRoom, joinRoom, nameMachine, openRoomSettings, openSettings, reachedAtOwnPort, roomCard, signIn } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room, which other machines reach at its address. */
@@ -98,9 +98,14 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await settings.getByRole("button", { name: "Done" }).click();
   });
 
-  await test.step("the one let in has their Mirador open the room on the owner's machine", async () => {
+  await test.step("the one let in has their Mirador open the room on the owner's machine, in the theme they chose", async () => {
     const frame = dora.frameLocator('iframe[title="Ann\'s machine"]');
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    const rail = dora.getByRole("navigation", { name: "Machines" });
+    await rail.getByRole("button", { name: "This computer" }).click();
+    await chooseInSettings(dora, "Theme", "Dark");
+    await rail.getByRole("button", { name: "Ann's machine" }).click();
+    await expect(frame.locator("html")).toHaveAttribute("data-theme", "dark");
     await dora.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
     await expect(knockCard(dora)).toHaveCount(0);
     await expect(roomCard(dora, "Garden")).toHaveClass(/joined-room/);

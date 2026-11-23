@@ -8,6 +8,7 @@ export type Theme = "light" | "dark" | "system";
 export const themeLabels: Record<Theme, string> = t.labels.theme;
 
 const STORAGE_KEY = "mirador-theme";
+const RAIL_THEME_MESSAGE = "mirador:rail-theme";
 
 export function storedTheme(): Theme {
   try {
@@ -21,6 +22,22 @@ export function storedTheme(): Theme {
 /** The stylesheet reads the theme from the root element. */
 export function applyTheme(theme: Theme) {
   document.documentElement.dataset.theme = theme;
+}
+
+const isTheme = (value: unknown): value is Theme => value === "light" || value === "dark" || value === "system";
+
+/** The rail gives a machine's page the theme chosen on this computer, which a page of someone else's machine can't keep for itself. */
+export function giveThemeToMachine(frame: HTMLIFrameElement | null) {
+  frame?.contentWindow?.postMessage({ type: RAIL_THEME_MESSAGE, theme: document.documentElement.dataset.theme }, "*");
+}
+
+/** A machine's page in another computer's rail shows the theme of that computer. */
+export function takeThemeFromTheRail() {
+  if (window.parent === window) return;
+  window.addEventListener("message", ({ source, data }: MessageEvent) => {
+    const { type, theme } = (typeof data === "object" && data !== null ? data : {}) as { type?: unknown; theme?: unknown };
+    if (source === window.parent && type === RAIL_THEME_MESSAGE && isTheme(theme)) applyTheme(theme);
+  });
 }
 
 /** The macOS app gives its window the chosen theme, once it has handed this page its nonce and on every choice after. */
