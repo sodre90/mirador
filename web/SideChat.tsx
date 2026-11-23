@@ -247,10 +247,12 @@ const TOOLBAR_GAP = 8;
  */
 export function timelineSelection(): TimelineSelection | null {
   const current = window.getSelection();
-  const text = current?.toString().trim() ?? "";
-  const range = current && current.rangeCount > 0 ? current.getRangeAt(0) : null;
-  const timeline = range ? elementOf(range.commonAncestorContainer)?.closest(".timeline") : null;
-  if (!text || !range || !timeline || timeline.closest(".side-chat") || !isShown(timeline)) return null;
+  // Reading the text of a selection lays the page out, also when nothing is selected, and this runs on every scroll.
+  if (!current || current.isCollapsed) return null;
+  const text = current.toString().trim();
+  const range = current.getRangeAt(0);
+  const timeline = elementOf(range.commonAncestorContainer)?.closest(".timeline");
+  if (!text || !timeline || timeline.closest(".side-chat") || !isShown(timeline)) return null;
   const box = range.getBoundingClientRect();
   const view = timeline.getBoundingClientRect();
   if (box.bottom < view.top || box.top > view.bottom) return null;

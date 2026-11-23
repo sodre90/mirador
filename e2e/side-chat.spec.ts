@@ -77,6 +77,35 @@ async function selectInConversation(words: string) {
   }, words);
 }
 
+/** How many times the page reads the text of a selection while `act` runs, two frames after it included. */
+async function selectionTextReadsDuring(act: () => Promise<void>) {
+  await page.evaluate(() => {
+    const counted = window as typeof window & { selectionTextReads?: number };
+    if (counted.selectionTextReads === undefined) {
+      const { toString } = Selection.prototype;
+      Selection.prototype.toString = function () {
+        counted.selectionTextReads!++;
+        return toString.call(this);
+      };
+    }
+    counted.selectionTextReads = 0;
+  });
+  await act();
+  return page.evaluate(async () => {
+    const nextFrame = () => new Promise((painted) => requestAnimationFrame(painted));
+    await nextFrame();
+    await nextFrame();
+    return (window as typeof window & { selectionTextReads?: number }).selectionTextReads!;
+  });
+}
+
+const scrollConversation = () =>
+  mainChat()
+    .locator(".timeline")
+    .evaluate((timeline) => {
+      timeline.dispatchEvent(new Event("scroll"));
+    });
+
 test("/btw asks beside the conversation in a copy of its session, in plan mode, with what it asks to do turned down", async () => {
   const mainId = await startOn("Forks");
   await sendMessage(page, "SAY the build retries twice");
@@ -140,6 +169,15 @@ test("text selected in the conversation is quoted into a new side chat, or into 
   const mainId = await startOn("Forks");
   await sendMessage(page, "SAY the cache key includes the lockfile hash");
   await waitForTurnToEnd(page);
+
+  await test.step("scrolling reads a selection's text only while there is one: reading it lays the whole page out", async () => {
+    await page.evaluate(() => getSelection()!.removeAllRanges());
+    expect(await selectionTextReadsDuring(scrollConversation)).toBe(0);
+    await mainChat().locator(".chat-header h2").click();
+    expect(await selectionTextReadsDuring(scrollConversation), "a click leaves an empty selection").toBe(0);
+    await selectInConversation("lockfile hash");
+    expect(await selectionTextReadsDuring(scrollConversation)).toBeGreaterThan(0);
+  });
 
   await selectInConversation("lockfile hash");
   await page.locator(".selection-actions").getByRole("button", { name: "Quote in reply" }).click();
