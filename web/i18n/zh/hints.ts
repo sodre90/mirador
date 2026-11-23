@@ -80,6 +80,8 @@ export const hints: Messages["hints"] = {
   inviteJoins:
     "装有 Mirador 应用的手机在可用时通过点对点加入：大多数网络下都行，无需 VPN。浏览器或另一台电脑通过这台机器的地址加入。二维码和链接会随选择而变化。",
   removeMachineArmed: "再次点击，将从列表中移除这台机器。它会继续运行，这台电脑仍留在它的设备中，直到你在那里撤销。",
+  removeSomeoneElsesMachineArmed: "再次点击，将从列表中移除这台机器。你仍在那边的房间里，直到它的所有者将你移出。",
+  removeMachineNotJoinedArmed: "再次点击，将从列表中移除这台机器。以后可以重新添加。",
   thisComputer: "这台电脑自己的工作区和对话",
   manageMachines: "添加或移除机器",
   machineColor: "给这台机器设置一个颜色，以便在机器栏中区分。保存在这台电脑上。",

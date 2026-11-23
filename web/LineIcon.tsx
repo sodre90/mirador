@@ -56,6 +56,13 @@ const lineIconShapes = {
       <circle cx="5.5" cy="11.5" r="1.5" />
     </>
   ),
+  open: (
+    <>
+      <path d="M6.5 3.5H3.5A1 1 0 0 0 2.5 4.5v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1v-3" />
+      <path d="M9.5 2.5h4v4" />
+      <path d="M13.5 2.5 7.5 8.5" />
+    </>
+  ),
   shield: <path d="M8 1.75 3 3.75v4c0 3 2.2 5.2 5 6.5 2.8-1.3 5-3.5 5-6.5v-4z" />,
   eyeOff: (
     <>

@@ -4885,11 +4885,24 @@ button.jump-to-latest svg {
   padding-left: 10px;
 }
 
+.context-menu button.danger {
+  color: var(--danger);
+}
+
+.context-menu button.armed,
+.context-menu button.armed:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+}
+
 .context-menu .line-icon {
   flex: none;
   width: calc(15px * var(--font-scale));
   height: calc(15px * var(--font-scale));
   color: var(--muted);
+}
+
+.context-menu button.danger .line-icon {
+  color: inherit;
 }
 
 .bar-menu [role="menu"] button:has(kbd) {
@@ -9389,6 +9402,10 @@ button.device-revoke:hover:not(:disabled) {
 
 .join-machine > .primary {
   margin-top: 8px;
+}
+
+.join-machine > .danger {
+  margin-top: 24px;
 }
 
 .join-asked .join-number {

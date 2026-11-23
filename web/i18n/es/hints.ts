@@ -86,6 +86,8 @@ export const hints: Messages["hints"] = {
     "Un teléfono con la aplicación Mirador se une de igual a igual donde eso funciona: desde la mayoría de las redes, sin VPN. Un navegador u otro equipo se une en la dirección de esta máquina. El código QR y el enlace cambian con la elección.",
   removeMachineArmed:
     "Haz clic de nuevo para quitar esta máquina de la lista. Sigue funcionando, y este equipo permanece entre sus dispositivos hasta que lo revoques allí.",
+  removeSomeoneElsesMachineArmed: "Haz clic de nuevo para quitar esta máquina de la lista. Sigues en tus salas de allí hasta que su propietario te saque de ellas.",
+  removeMachineNotJoinedArmed: "Haz clic de nuevo para quitar esta máquina de la lista. Puedes agregarla de nuevo más tarde.",
   thisComputer: "Los espacios de trabajo y conversaciones de este equipo",
   manageMachines: "Agregar o quitar máquinas",
   machineColor: "Dale un color a esta máquina para distinguirla en la barra de máquinas. Se guarda en este equipo.",

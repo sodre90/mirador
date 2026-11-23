@@ -325,6 +325,7 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await row.getByRole("button", { name: "Open", exact: true }).click();
     await expect(join.locator(".join-room-invite")).toHaveText("You were invited into a room there. Paste the invite here.");
     await expect(join.getByRole("button", { name: "Ask to join" })).toHaveCount(0);
+    await expect(join.getByRole("button", { name: "Remove Ann's machine" })).toHaveCount(0);
 
     await join.getByLabel("Paste the invite").fill(comingBack);
     await join.getByRole("button", { name: "Join", exact: true }).click();
@@ -403,6 +404,18 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await joinPanel.getByLabel("Paste the invite").fill(lettingBackIn);
     await joinPanel.getByRole("button", { name: "Join", exact: true }).click();
     await expect(joinPanel.locator(".join-problem")).toHaveText("This invite code is wrong, used or expired. Ask for a new one.");
+  });
+
+  await test.step("signed out of the rooms there, the person removes the machine right in its place, once asked again", async () => {
+    await joinPanel.getByRole("button", { name: "Remove Ann's machine", exact: true }).click();
+    const asked = joinPanel.getByRole("button", { name: "Confirm: Remove Ann's machine" });
+    await expect(asked).toHaveText("Remove?");
+    await expect(asked).toHaveAttribute("data-hint", "Click again to remove this machine from the list. You can add it again later.");
+    await asked.click();
+    await expect(joinPanel).toHaveCount(0);
+    await expect(visitor.getByRole("navigation", { name: "Machines" })).toHaveCount(0);
+    await visitor.locator(".sidebar").getByRole("button", { name: "Machines…" }).click();
+    await expect(visitor.getByRole("dialog", { name: "Machines" }).locator(".machine-none")).toHaveText("No machines yet.");
   });
   await visitor.close();
 });

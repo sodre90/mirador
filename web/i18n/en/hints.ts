@@ -79,6 +79,8 @@ export const hints = {
   inviteJoins:
     "A phone with the Mirador app joins peer to peer where that works: from most networks, with no VPN. A browser or another computer joins at this machine's address. The QR code and the link change with the choice.",
   removeMachineArmed: "Click again to remove this machine from the list. It keeps running, and this computer stays among its devices until you revoke it there.",
+  removeSomeoneElsesMachineArmed: "Click again to remove this machine from the list. You stay in your rooms there until its owner takes you out of them.",
+  removeMachineNotJoinedArmed: "Click again to remove this machine from the list. You can add it again later.",
   thisComputer: "This computer's own workspaces and conversations",
   manageMachines: "Add or remove machines",
   machineColor: "Give this machine a colour, to tell it apart in the rail. Kept on this computer.",

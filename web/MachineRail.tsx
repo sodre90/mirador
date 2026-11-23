@@ -5,12 +5,14 @@ import { machineAddress, SOMEONE_ELSES_MACHINE_SANDBOX, type MachineToJoin } fro
 import type { Machine, MachineSeen, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
+import { ConfirmButton } from "./ConfirmButton.tsx";
 import { ContextMenu } from "./ContextMenu.tsx";
 import { hints } from "./hints.ts";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
 import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
+import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 import { pastelVariables } from "./pastels.ts";
 import { giveThemeToMachine } from "./theme.ts";
@@ -129,19 +131,57 @@ const toJoinHint = (machine: MachineToJoin, machines: Machine[]) =>
 /** What the host keeps of a machine shown elsewhere, without where this computer saw it. */
 export const seenPart = ({ name, origin, hostId }: MachineSeen): MachineSeen => ({ name, origin, hostId });
 
-function MachineToJoinButton({ machine, hint, onAdd }: { machine: MachineToJoin; hint: string; onAdd: (machine: MachineToJoin) => void }) {
+function useMenuAtPointer() {
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const openMenu = (event: MouseEvent) => {
     event.preventDefault();
     setMenuAt({ x: event.clientX, y: event.clientY });
   };
+  return { menuAt, openMenu, closeMenu: () => setMenuAt(null) };
+}
+
+function MachineButton({ machine, status, shown, onShow }: { machine: Machine; status: MachineStatus | undefined; shown: boolean; onShow: () => void }) {
+  const { menuAt, openMenu, closeMenu } = useMenuAtPointer();
+  const away = !machine.joined || status?.reachable === false;
+  return (
+    <>
+      <button
+        type="button"
+        className={`rail-machine ${shown ? "shown" : ""} ${away ? "away" : ""} ${machine.asPerson ? "someone-elses" : ""}`}
+        {...colorAttributes(machine.color)}
+        aria-label={machine.name}
+        aria-current={shown}
+        data-hint={machineHint(machine, status)}
+        onClick={onShow}
+        onContextMenu={openMenu}
+      >
+        {markInitials(machine.name)}
+        <WaitingBadge waiting={status?.waiting ?? []} />
+      </button>
+      {menuAt && (
+        <ContextMenu
+          name={machine.name}
+          at={menuAt}
+          entries={[
+            { label: words.open, icon: "open", onChoose: onShow },
+            { label: words.remove, icon: "trash", asked: machineRemovalAsked(machine), onChoose: () => removeMachine(machine.id) },
+          ]}
+          onClose={closeMenu}
+        />
+      )}
+    </>
+  );
+}
+
+function MachineToJoinButton({ machine, hint, onAdd }: { machine: MachineToJoin; hint: string; onAdd: (machine: MachineToJoin) => void }) {
+  const { menuAt, openMenu, closeMenu } = useMenuAtPointer();
   const hide = () => connection.send({ type: "machine.hide", machine: seenPart(machine) });
   return (
     <>
       <button type="button" className="rail-machine away" aria-label={machine.name} data-hint={hint} onClick={() => onAdd(machine)} onContextMenu={openMenu}>
         {markInitials(machine.name)}
       </button>
-      {menuAt && <ContextMenu name={machine.name} at={menuAt} entries={[{ label: words.hideFromRail, icon: "eyeOff", onChoose: hide }]} onClose={() => setMenuAt(null)} />}
+      {menuAt && <ContextMenu name={machine.name} at={menuAt} entries={[{ label: words.hideFromRail, icon: "eyeOff", onChoose: hide }]} onClose={closeMenu} />}
     </>
   );
 }
@@ -180,25 +220,15 @@ export function MachineRail({
         ⌂
         <WaitingBadge waiting={waitingHere} />
       </button>
-      {machines.map((machine) => {
-        const status = statuses.find(({ machineId }) => machineId === machine.id);
-        const away = !machine.joined || status?.reachable === false;
-        return (
-          <button
-            key={machine.id}
-            type="button"
-            className={`rail-machine ${machine.id === shownId ? "shown" : ""} ${away ? "away" : ""} ${machine.asPerson ? "someone-elses" : ""}`}
-            {...colorAttributes(machine.color)}
-            aria-label={machine.name}
-            aria-current={machine.id === shownId}
-            data-hint={machineHint(machine, status)}
-            onClick={() => onShow(machine.id)}
-          >
-            {markInitials(machine.name)}
-            <WaitingBadge waiting={status?.waiting ?? []} />
-          </button>
-        );
-      })}
+      {machines.map((machine) => (
+        <MachineButton
+          key={machine.id}
+          machine={machine}
+          status={statuses.find(({ machineId }) => machineId === machine.id)}
+          shown={machine.id === shownId}
+          onShow={() => onShow(machine.id)}
+        />
+      ))}
       {toJoin.map((machine) => (
         <MachineToJoinButton key={machine.origin} machine={machine} hint={toJoinHint(machine, machines)} onAdd={onAdd} />
       ))}
@@ -371,6 +401,11 @@ function JoinMachinePanel({ machine, person }: { machine: Machine; person: Joini
         </>
       )}
       {problem && <p className="join-problem">{problem}</p>}
+      {machine.outOfRooms && (
+        <ConfirmButton className="danger" {...machineRemovalAsked(machine)} onConfirm={() => removeMachine(machine.id)}>
+          {words.removeLabel(machine.name)}
+        </ConfirmButton>
+      )}
     </section>
   );
 }

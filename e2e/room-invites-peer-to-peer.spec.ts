@@ -222,7 +222,9 @@ test("a room invite's one link, made before the owner's machine restarted and pa
     await expect(row.locator(".machine-origin")).toHaveText("peer to peer");
     const [dial] = visitorsDials();
     await row.getByRole("button", { name: "Remove Ann's Mac" }).click();
-    await row.getByRole("button", { name: "Confirm: Remove Ann's Mac" }).click();
+    const asked = row.getByRole("button", { name: "Confirm: Remove Ann's Mac" });
+    await expect(asked).toHaveAttribute("data-hint", "Click again to remove this machine from the list. You stay in your rooms there until its owner takes you out of them.");
+    await asked.click();
     await expect(row).toHaveCount(0);
     await expect.poll(() => isRunning(dial!)).toBe(false);
     expect(readdirSync(join(visitors.dataDir, "machine-tunnels"))).toEqual([]);

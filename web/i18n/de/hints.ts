@@ -86,6 +86,8 @@ export const hints: Messages["hints"] = {
     "Ein Handy mit der Mirador-App tritt über Peer-to-Peer bei, wo das funktioniert: aus den meisten Netzwerken, ohne VPN. Ein Browser oder ein anderer Computer tritt unter der Adresse dieses Rechners bei. QR-Code und Link ändern sich mit der Auswahl.",
   removeMachineArmed:
     "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Er läuft weiter, und dieser Computer bleibt unter seinen Geräten, bis du ihn dort widerrufst.",
+  removeSomeoneElsesMachineArmed: "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Du bleibst in deinen Räumen dort, bis sein Besitzer dich daraus entfernt.",
+  removeMachineNotJoinedArmed: "Klicke erneut, um diesen Rechner aus der Liste zu entfernen. Du kannst ihn später wieder hinzufügen.",
   thisComputer: "Die eigenen Arbeitsbereiche und Unterhaltungen dieses Computers",
   manageMachines: "Rechner hinzufügen oder entfernen",
   machineColor: "Gib diesem Rechner eine Farbe, um ihn in der Rechnerleiste zu unterscheiden. Wird auf diesem Computer gespeichert.",

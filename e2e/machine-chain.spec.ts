@@ -154,5 +154,46 @@ test("a machine the laptop has joined shows in the desk's own rail, to join from
     await expect(workspaceCard(page.frameLocator('iframe[title="Home server on the LAN"]'), serverOnly)).toBeVisible();
     await expect(rail.getByRole("button")).toHaveText(["⌂", "HS", "LA", "+"]);
   });
+
+  const laptopButton = rail.getByRole("button", { name: "Laptop" });
+  const laptopMenu = page.getByRole("menu", { name: "Laptop" });
+  await test.step("a right-click on one of the desk's machines opens it, and a press in the page it shows closes the menu", async () => {
+    await laptopButton.click({ button: "right" });
+    await laptopMenu.getByRole("menuitem", { name: "Open" }).click();
+    await expect(laptopMenu).toHaveCount(0);
+    await expect(laptopButton).toHaveAttribute("aria-current", "true");
+    await expect(laptopFrame.getByRole("button", { name: "Settings…" })).toBeVisible();
+
+    await laptopButton.click({ button: "right" });
+    await expect(laptopMenu).toBeVisible();
+    await laptopFrame.locator(".layout").click();
+    await expect(laptopMenu).toHaveCount(0);
+  });
+
+  await test.step("the right-click menu removes a machine once asked again, and says what stays there", async () => {
+    await rail.getByRole("button", { name: "Home server on the LAN" }).click({ button: "right" });
+    const menu = page.getByRole("menu", { name: "Home server on the LAN" });
+    await menu.getByRole("menuitem", { name: "Remove Home server on the LAN", exact: true }).click();
+    const asked = menu.getByRole("menuitem", { name: "Confirm: Remove Home server on the LAN" });
+    await expect(asked).toHaveText("Remove?");
+    await expect(asked).toHaveAttribute(
+      "data-hint",
+      "Click again to remove this machine from the list. It keeps running, and this computer stays among its devices until you revoke it there.",
+    );
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "HS", "LA", "+"]);
+    await asked.click();
+    await expect(menu).toHaveCount(0);
+    await expect(rail.getByRole("button")).toHaveText(["⌂", "LA", "+"]);
+    await expect(laptopButton).toHaveAttribute("aria-current", "true");
+  });
+
+  await test.step("the machine shown, removed in its menu, leaves this computer shown, and its last machine takes the rail with it", async () => {
+    await laptopButton.click({ button: "right" });
+    await laptopMenu.getByRole("menuitem", { name: "Remove Laptop", exact: true }).click();
+    await laptopMenu.getByRole("menuitem", { name: "Confirm: Remove Laptop" }).click();
+    await expect(rail).toHaveCount(0);
+    await expect(page.locator('iframe[title="Laptop"]')).toHaveCount(0);
+    await expect(page.locator(".sidebar").getByRole("button", { name: "Machines…" })).toBeVisible();
+  });
   await Promise.all([serverPage.close(), laptopPage.close()]);
 });

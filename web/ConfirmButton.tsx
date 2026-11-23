@@ -12,6 +12,7 @@ type ArmedBy = "click" | "request";
  */
 export function ConfirmButton({
   className,
+  role,
   label,
   hint,
   armedText,
@@ -23,9 +24,10 @@ export function ConfirmButton({
   children,
 }: {
   className: string;
+  role?: "menuitem";
   label: string;
   hint?: string;
-  armedText: string;
+  armedText: ReactNode;
   armedHint: string;
   onConfirm: () => void;
   /**
@@ -86,6 +88,7 @@ export function ConfirmButton({
     <button
       ref={button}
       type="button"
+      role={role}
       className={armed ? `${className} armed` : className}
       aria-label={armed ? `Confirm: ${label}` : label}
       data-hint={armed ? armedHint : hint}

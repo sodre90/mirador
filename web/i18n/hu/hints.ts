@@ -81,6 +81,8 @@ export const hints: Messages["hints"] = {
   inviteJoins:
     "Egy telefon a Mirador alkalmazással egyenrangú (peer to peer) kapcsolattal csatlakozik, ahol az működik: a legtöbb hálózatról, VPN nélkül. Böngésző vagy másik számítógép ennek a gépnek a címén csatlakozik. A QR-kód és a link a választással együtt változik.",
   removeMachineArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Tovább fut, és ez a számítógép a készülékei között marad, amíg ott vissza nem vonod.",
+  removeSomeoneElsesMachineArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Az ottani szobáidban benne maradsz, amíg a tulajdonosa ki nem vesz belőlük.",
+  removeMachineNotJoinedArmed: "Kattints újra, hogy eltávolítsd ezt a gépet a listáról. Később újra hozzáadhatod.",
   thisComputer: "Ennek a számítógépnek a saját munkaterületei és beszélgetései",
   manageMachines: "Gépek hozzáadása vagy eltávolítása",
   machineColor: "Adj színt ennek a gépnek, hogy megkülönböztesd a sávban. Ez a számítógép jegyzi meg.",

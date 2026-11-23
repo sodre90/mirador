@@ -8,6 +8,7 @@ import { ConfirmButton } from "./ConfirmButton.tsx";
 import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
+import { machineRemovalAsked, removeMachine } from "./machine-removal.ts";
 import { colorAttributes, reachedAt, seenPart } from "./MachineRail.tsx";
 import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 
@@ -120,13 +121,7 @@ function MachineRow({ machine, onOpen }: { machine: Machine; onOpen: (machine: M
       <button type="button" onClick={() => onOpen(machine)}>
         {words.open}
       </button>
-      <ConfirmButton
-        className="danger"
-        label={words.removeLabel(machine.name)}
-        armedText={words.removeArmed}
-        armedHint={hints.removeMachineArmed}
-        onConfirm={() => connection.send({ type: "machine.remove", machineId: machine.id })}
-      >
+      <ConfirmButton className="danger" {...machineRemovalAsked(machine)} onConfirm={() => removeMachine(machine.id)}>
         {words.remove}
       </ConfirmButton>
       {pickingColor && <ColorSwatches label={words.colourOf(machine.name)} chosen={machine.color} onChoose={choose} />}
