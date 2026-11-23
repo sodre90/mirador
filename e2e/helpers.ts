@@ -622,7 +622,10 @@ export async function inviteIntoRoom(
   if (role) await dialog.getByLabel(role === "Member" ? "Member: can ask the agents" : "Guest: can chat").check();
   if (howMany) await dialog.getByLabel("How many people").selectOption({ label: howMany });
   if (letThemIn) await dialog.getByLabel("Let them in").selectOption({ label: letThemIn });
-  if (connect) await dialog.getByLabel(connect).check();
+  if (connect) {
+    await dialog.locator(".room-invite-connect > summary").click();
+    await dialog.getByLabel(connect).check();
+  }
   const text = await copiedInvite(dialog);
   await dialog.getByRole("button", { name: "Done" }).click();
   return text;

@@ -52,6 +52,7 @@ export const rooms = {
   joinsAs: "They join as",
   roleChoices: { member: "Member: can ask the agents", guest: "Guest: can chat" } satisfies Record<RoomRole, string>,
   connect: "Connect",
+  connectsBy: (way: string) => `Connect: ${way}`,
   connectChoices: {
     "peer-to-peer": "Directly, peer to peer",
     address: (host: string) => `At this machine's address (${host})`,

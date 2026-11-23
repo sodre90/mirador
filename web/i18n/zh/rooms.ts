@@ -42,6 +42,7 @@ export const rooms: Messages["rooms"] = {
   joinsAs: "对方加入的身份",
   roleChoices: { member: "成员：可以让 Agent 做事", guest: "访客：可以聊天" },
   connect: "连接方式",
+  connectsBy: (way) => `连接方式：${way}`,
   connectChoices: {
     "peer-to-peer": "直接点对点连接",
     address: (host) => `通过这台机器的地址（${host}）`,

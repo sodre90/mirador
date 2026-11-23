@@ -43,6 +43,7 @@ export const rooms: Messages["rooms"] = {
   joinsAs: "Entra como",
   roleChoices: { member: "Miembro: puede pedir tareas a los agentes", guest: "Invitado: puede chatear" },
   connect: "Conexión",
+  connectsBy: (way) => `Conexión: ${way}`,
   connectChoices: {
     "peer-to-peer": "Directa, peer to peer",
     address: (host) => `En la dirección de esta máquina (${host})`,

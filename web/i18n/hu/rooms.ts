@@ -42,6 +42,7 @@ export const rooms: Messages["rooms"] = {
   joinsAs: "Így csatlakozik",
   roleChoices: { member: "Tag: megkérheti az ágenseket", guest: "Vendég: beszélgethet" },
   connect: "Kapcsolódás",
+  connectsBy: (way) => `Kapcsolódás: ${way}`,
   connectChoices: {
     "peer-to-peer": "Közvetlenül, peer to peer",
     address: (host) => `A gép címén (${host})`,

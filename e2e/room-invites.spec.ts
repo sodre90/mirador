@@ -61,6 +61,10 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await page.locator(".room-header").getByRole("button", { name: "Invite someone" }).click();
     const dialog = page.getByRole("dialog", { name: "Invite someone to Garden" });
     await expect(dialog.getByLabel("Member: can ask the agents")).toBeChecked();
+    const connect = dialog.locator(".room-invite-connect > summary");
+    await expect(connect).toHaveText(`Connect: At this machine's address (127.0.0.1:${owners.port})`);
+    await expect(dialog.getByLabel("Directly, peer to peer")).toBeHidden();
+    await connect.click();
     await expect(dialog.getByLabel("Directly, peer to peer")).toBeDisabled();
     await expect(dialog.locator(".room-invite-no-peer-to-peer")).toHaveText("Peer to peer is off on this machine.");
     await expect(dialog.getByLabel(`At this machine's address (127.0.0.1:${owners.port})`)).toBeChecked();

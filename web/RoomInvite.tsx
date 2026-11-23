@@ -52,6 +52,10 @@ export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devic
   const [making, setMaking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const noPeerToPeer = whyNoPeerToPeer(peerToPeer);
+  const connectLabels: Record<RoomInviteConnect, string> = {
+    "peer-to-peer": words.connectChoices["peer-to-peer"],
+    address: words.connectChoices.address(publicOrigin ? new URL(publicOrigin).host : ""),
+  };
   const choose = (change: () => void) => {
     change();
     setMade(null);
@@ -91,44 +95,47 @@ export function RoomInviteDialog({ room, devices, onClose }: { room: Room; devic
             {words.roleChoices[each]}
           </label>
         ))}
-        <div className="room-invite-seats">
-          <label>
-            {words.howMany}
-            <select value={seats} onChange={(event) => choose(() => setSeats(Number(event.target.value) as RoomInviteSeats))}>
-              {ROOM_INVITE_SEATS.map((each) => (
-                <option key={each} value={each}>
-                  {words.seatChoices(each)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {words.letThemIn}
-            <select value={letsIn} onChange={(event) => choose(() => setLetsIn(event.target.value as RoomInviteLetsIn))}>
-              {ROOM_INVITE_LETS_IN.map((each) => (
-                <option key={each} value={each}>
-                  {words.letsInChoices[each]}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
       </fieldset>
-      <fieldset className="room-field">
-        <legend>{words.connect}</legend>
-        <label className="room-agent-choice">
-          <input type="radio" name="room-invite-connect" disabled={!works["peer-to-peer"]} checked={connect === "peer-to-peer"} onChange={() => choose(() => setConnect("peer-to-peer"))} />
-          {words.connectChoices["peer-to-peer"]}
+      <div className="room-invite-seats">
+        <label>
+          {words.howMany}
+          <select value={seats} onChange={(event) => choose(() => setSeats(Number(event.target.value) as RoomInviteSeats))}>
+            {ROOM_INVITE_SEATS.map((each) => (
+              <option key={each} value={each}>
+                {words.seatChoices(each)}
+              </option>
+            ))}
+          </select>
         </label>
-        {publicOrigin && (
+        <label>
+          {words.letThemIn}
+          <select value={letsIn} onChange={(event) => choose(() => setLetsIn(event.target.value as RoomInviteLetsIn))}>
+            {ROOM_INVITE_LETS_IN.map((each) => (
+              <option key={each} value={each}>
+                {words.letsInChoices[each]}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <details className="room-more-options room-invite-connect" open={!connect}>
+        <summary>{connect ? words.connectsBy(connectLabels[connect]) : words.connect}</summary>
+        <fieldset className="room-field">
+          <legend>{words.connect}</legend>
           <label className="room-agent-choice">
-            <input type="radio" name="room-invite-connect" checked={connect === "address"} onChange={() => choose(() => setConnect("address"))} />
-            {words.connectChoices.address(new URL(publicOrigin).host)}
+            <input type="radio" name="room-invite-connect" disabled={!works["peer-to-peer"]} checked={connect === "peer-to-peer"} onChange={() => choose(() => setConnect("peer-to-peer"))} />
+            {connectLabels["peer-to-peer"]}
           </label>
-        )}
-        {noPeerToPeer && <span className="hint room-invite-no-peer-to-peer">{noPeerToPeer}</span>}
-        {!connect && <span className="warning">{words.noWayToConnect}</span>}
-      </fieldset>
+          {publicOrigin && (
+            <label className="room-agent-choice">
+              <input type="radio" name="room-invite-connect" checked={connect === "address"} onChange={() => choose(() => setConnect("address"))} />
+              {connectLabels.address}
+            </label>
+          )}
+          {noPeerToPeer && <span className="hint room-invite-no-peer-to-peer">{noPeerToPeer}</span>}
+          {!connect && <span className="warning">{words.noWayToConnect}</span>}
+        </fieldset>
+      </details>
       <div className="room-invite-copy">
         <button type="button" className="primary" disabled={!connect || making} onClick={() => void copyInvite()}>
           {made?.copied ? words.inviteCopied : words.copyInvite}
