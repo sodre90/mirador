@@ -582,9 +582,11 @@ export async function createRoom(scope: Page | FrameLocator, name: string, agent
     await search.press("Enter");
   }
   await expect(dialog.getByRole("list", { name: "Agents" }).locator(".room-agent-chip-name")).toHaveText(agents);
-  if (workspace || preset) await dialog.getByText("More options").click();
   if (workspace) await dialog.getByRole("combobox", { name: /^Workspace/ }).selectOption({ label: workspace });
-  if (preset) await dialog.getByLabel(preset).check();
+  if (preset) {
+    await dialog.getByText("More options").click();
+    await dialog.getByLabel(preset).check();
+  }
   await dialog.getByRole("button", { name: "Create room" }).click();
   await expect(scope.getByRole("heading", { name: `# ${name}` })).toBeVisible();
 }

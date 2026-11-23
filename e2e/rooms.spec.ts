@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
-import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, literally, openRoomSettings, removeWorkspace, roomCard, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
+import { addWorkspace, addWorkspaceFromSidebar, createProfile, createRoom, literally, openNewRoom, openRoomSettings, removeWorkspace, roomCard, signIn, signInWithWorkspace, workspaceCard } from "./helpers.ts";
 import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
@@ -152,6 +152,14 @@ test("a workspace a room works in stays until the room moves to another, where i
   await addWorkspaceFromSidebar(page, elsewhere);
   const profiles = await createProfile(page, "Mover", `OPENCODE_FAKE_ACP_PROMPTS=${moverPrompts}`, "", "opencode");
   await profiles.getByRole("button", { name: "Close" }).click();
+  await test.step("New room shows the workspace under the name before More options opens", async () => {
+    const dialog = await openNewRoom(page);
+    await expect(dialog.getByRole("combobox", { name: /^Workspace/ })).toBeVisible();
+    await expect(dialog.getByRole("radio", { name: "Ask for everything" })).toBeHidden();
+    await expect(dialog.locator("form > .room-field").nth(1)).toContainText("Workspace");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+  });
+
   await createRoom(page, "Moving", ["Mover"], { workspace: "elsewhere" });
   const composer = page.getByRole("textbox", { name: "Write in Moving, @ tags an agent…" });
   const tagMover = async (rest: string) => {

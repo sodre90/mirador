@@ -49,7 +49,7 @@ function AgentChip({ profile, agent, onChange, onRemove }: { profile: Profile; a
   );
 }
 
-/** A new room: its name and agents, each on the model chosen for it; where it works and what its agents may do wait under "More options". */
+/** A new room: its name, its workspace and its agents, each on the model chosen for it; what they may do waits under "More options". */
 export function NewRoomDialog({
   workspaces,
   profiles,
@@ -97,6 +97,16 @@ export function NewRoomDialog({
           {words.name}
           <input autoFocus {...NAME_FIELD_ATTRIBUTES} value={name} onChange={(event) => setName(event.target.value)} />
         </label>
+        <label className="room-field">
+          {words.workspace}
+          <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
+            {workspaces.map((workspace) => (
+              <option key={workspace.id} value={workspace.id}>
+                {workspace.name}
+              </option>
+            ))}
+          </select>
+        </label>
         <div className="room-field room-agents-field" role="group" aria-label={words.agents}>
           <span>{words.agents}</span>
           {profiles.length === 0 ? (
@@ -133,16 +143,6 @@ export function NewRoomDialog({
         </div>
         <details className="room-more-options">
           <summary>{words.moreOptions}</summary>
-          <label className="room-field">
-            {words.workspace}
-            <select value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)}>
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.id}>
-                  {workspace.name}
-                </option>
-              ))}
-            </select>
-          </label>
           <fieldset className="room-field room-permissions-field">
             <legend>{words.permissions}</legend>
             {PERMISSION_PRESETS.map((preset) => (
