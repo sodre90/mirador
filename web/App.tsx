@@ -731,6 +731,7 @@ export function App() {
   const reminderConversation = overlay?.kind === "reminder" ? state.conversations.find(({ id }) => id === overlay.conversationId) : undefined;
   const sessionsWorkspace = overlay?.kind === "sessions" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
   const settingsRoom = overlay?.kind === "room" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
+  const owner = state.people.find(({ id }) => id === state.ownerId);
   const invitedRoom = overlay?.kind === "room-invite" ? state.rooms.find(({ id }) => id === overlay.roomId) : undefined;
   const bringingInto = overlay?.kind === "bring-agent" ? joinedRoomsOf(state.machines, state.machineStatuses).find(({ machine, room }) => machine.id === overlay.machineId && room.id === overlay.roomId) : undefined;
   const worktreesWorkspace = overlay?.kind === "worktrees" ? state.workspaces.find(({ id }) => id === overlay.workspaceId) : undefined;
@@ -926,6 +927,7 @@ export function App() {
       {railShown && (
         <MachineFrames
           machines={state.machines}
+          person={owner}
           shownId={shownMachine?.id ?? null}
           visited={machines.visited}
           opening={machines.opening}
@@ -997,6 +999,7 @@ export function App() {
         <MachinesDialog
           machines={state.machines}
           hidden={seenMachines.filter((machine) => isHidden(machine, state.hiddenMachines))}
+          person={owner}
           onOpen={(machine) => {
             closeOverlay();
             showMachine(machine);
@@ -1093,7 +1096,7 @@ export function App() {
       {invitedRoom && <RoomInviteDialog key={invitedRoom.id} room={invitedRoom} devices={state.devices} onClose={closeOverlay} />}
       {bringingInto && <BringAgentDialog machine={bringingInto.machine} room={bringingInto.room} profiles={state.profiles} workspaces={state.workspaces} onClose={closeOverlay} />}
       {overlay?.kind === "join-room" && (
-        <JoinRoomDialog machines={state.machines} person={state.people.find(({ id }) => id === state.ownerId)} onJoined={joinedRoom} onClose={closeOverlay} />
+        <JoinRoomDialog machines={state.machines} person={owner} onJoined={joinedRoom} onClose={closeOverlay} />
       )}
     </div>
   );

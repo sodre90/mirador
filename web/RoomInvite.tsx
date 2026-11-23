@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { inviteConnectFor, machineAddress, type RoomInviteConnect } from "../shared/machines.ts";
-import type { Machine, Person } from "../shared/model.ts";
-import { LONGEST_PERSON_NAME, nameRefused, personName } from "../shared/people.ts";
+import type { Machine } from "../shared/model.ts";
 import type { PeerToPeerStatus } from "../shared/protocol.ts";
 import { defaultLetsIn, ROOM_INVITE_LETS_IN, ROOM_INVITE_SEATS, ROOM_ROLES, type Room, type RoomInviteLetsIn, type RoomInviteSeats, type RoomRole } from "../shared/rooms.ts";
 import { tunnelOrigin } from "../shared/tunnel.ts";
@@ -9,9 +8,8 @@ import { connection } from "./connection.ts";
 import { timeOf } from "./Devices.tsx";
 import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
+import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 import { Modal } from "./Palette.tsx";
-import { problemText } from "./problem-text.ts";
-import { saveSetting } from "./saved-setting.ts";
 import type { DevicesListed } from "./state.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
 
@@ -176,8 +174,7 @@ function machineOfInvite(machines: Machine[], text: string) {
 
 /**
  * Joins someone else's room with the invite they sent: a machine this computer has not added yet is added with it, as
- * under Machines; one it has, of another room there, is joined again with the new invite. The room shows the name of
- * the joiner's profile beside what they write, so while they have none, it is asked for here and kept before joining.
+ * under Machines; one it has, of another room there, is joined again with the new invite.
  */
 export function JoinRoomDialog({
   machines,
@@ -186,32 +183,25 @@ export function JoinRoomDialog({
   onClose,
 }: {
   machines: Machine[];
-  /** This machine's owner, whose name the room shows beside what they write; none until the host's snapshot. */
-  person: Pick<Person, "name" | "color"> | undefined;
+  person: JoiningPerson;
   onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void;
   onClose: () => void;
 }) {
   const [text, setText] = useState("");
-  const [name, setName] = useState("");
   const [joining, setJoining] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const needsName = !person?.name;
-  const named = personName(name);
+  const nameToJoin = useNameToJoinWith(person, true);
   const join = async (event: FormEvent) => {
     event.preventDefault();
     const invite = text.trim();
     const { parsed, known } = machineOfInvite(machines, invite);
     if (!parsed) return setProblem(words.notAnInvite);
-    if (needsName && named === "") return;
-    const refused = needsName && nameRefused(named);
-    if (refused) return setProblem(problemText({ code: refused }, t.problems));
+    if (nameToJoin.missing) return;
     setJoining(true);
     setProblem(null);
     try {
-      if (needsName) {
-        const refusal = await saveSetting((requestId) => ({ type: "person.set-own-profile", requestId, name: named, color: person?.color ?? null }));
-        if (refusal) return setProblem(refusal);
-      }
+      const refusal = await nameToJoin.keep();
+      if (refusal) return setProblem(refusal);
       const answer = known
         ? await connection.sendAndAwait(
             (requestId) => ({ type: "machine.join", requestId, machineId: known.id, invite }),
@@ -245,27 +235,21 @@ export function JoinRoomDialog({
             }}
           />
         </label>
-        {needsName && (
-          <label className="room-field">
-            {words.yourName}
-            <input
-              {...NAME_FIELD_ATTRIBUTES}
-              value={name}
-              maxLength={LONGEST_PERSON_NAME}
-              onChange={(event) => {
-                setName(event.target.value);
-                setProblem(null);
-              }}
-            />
-            <span className="hint">{words.yourNameHint}</span>
-          </label>
+        {nameToJoin.asked && (
+          <NameToJoinWith
+            typed={nameToJoin.typed}
+            onChange={(typed) => {
+              nameToJoin.setTyped(typed);
+              setProblem(null);
+            }}
+          />
         )}
         {problem && <p className="warning join-room-problem">{problem}</p>}
         <div className="form-actions">
           <button type="button" className="link" onClick={onClose}>
             {words.cancel}
           </button>
-          <button type="submit" className="primary" disabled={joining || text.trim() === "" || (needsName && named === "")}>
+          <button type="submit" className="primary" disabled={joining || text.trim() === "" || nameToJoin.missing}>
             {joining ? words.joining : words.join}
           </button>
         </div>

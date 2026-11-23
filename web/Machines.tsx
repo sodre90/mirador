@@ -9,6 +9,7 @@ import { connection } from "./connection.ts";
 import { hints } from "./hints.ts";
 import { t } from "./i18n/index.ts";
 import { colorAttributes, reachedAt, seenPart } from "./MachineRail.tsx";
+import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 
 /** Where this host cannot show the machine (a page opened from another device), a tab of its own, used again next time. */
 export function openMachine(origin: string, conversationId: string | null = null) {
@@ -22,19 +23,24 @@ const words = t.shell.machines;
  * once, while the machines of one's own stay listed here, to open or colour.
  * A link that reaches the machine peer to peer names the machine, so its name may stay empty.
  */
-function AddMachine({ machines, onJoined }: { machines: Machine[]; onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void }) {
+function AddMachine({ machines, person, onJoined }: { machines: Machine[]; person: JoiningPerson; onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void }) {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [adding, setAdding] = useState(false);
+  const [nameRefusal, setNameRefusal] = useState<string | null>(null);
   const parsed = machineAddress(address);
   const origins = parsed ? [parsed.origin, ...(parsed.tunnel ? [tunnelOrigin(parsed.tunnel)] : [])] : [];
   const known = machines.some(({ origin }) => origins.includes(origin));
+  const nameToJoin = useNameToJoinWith(person, parsed?.forRoom === true);
 
   const add = async (event: FormEvent) => {
     event.preventDefault();
-    if (!parsed || known || adding) return;
+    if (!parsed || known || adding || nameToJoin.missing) return;
     setAdding(true);
     try {
+      const refusal = await nameToJoin.keep();
+      setNameRefusal(refusal);
+      if (refusal) return;
       const added = await connection.sendAndAwait(
         (requestId) => ({ type: "machine.add", requestId, name, address }),
         (message, requestId) => (message.type === "machine.added" && message.requestId === requestId ? message : undefined),
@@ -67,9 +73,23 @@ function AddMachine({ machines, onJoined }: { machines: Machine[]; onJoined: (ma
           spellCheck={false}
         />
       </label>
-      <button type="submit" className="primary" disabled={!parsed || known || adding}>
+      <button type="submit" className="primary" disabled={!parsed || known || adding || nameToJoin.missing}>
         {adding && parsed?.joinCode ? words.joining : parsed?.joinCode ? words.addAndJoin : words.add}
       </button>
+      {nameToJoin.asked && (
+        <NameToJoinWith
+          typed={nameToJoin.typed}
+          onChange={(typed) => {
+            nameToJoin.setTyped(typed);
+            setNameRefusal(null);
+          }}
+        />
+      )}
+      {nameRefusal && (
+        <p className="hint name-to-join-refused" role="alert">
+          {nameRefusal}
+        </p>
+      )}
       {known && <p className="hint">{words.alreadyListed}</p>}
     </form>
   );
@@ -145,12 +165,14 @@ function HiddenMachines({ hidden, machines }: { hidden: MachineToJoin[]; machine
 export function MachinesDialog({
   machines,
   hidden,
+  person,
   onOpen,
   onJoined,
   onClose,
 }: {
   machines: Machine[];
   hidden: MachineToJoin[];
+  person: JoiningPerson;
   onOpen: (machine: Machine) => void;
   onJoined: (machineId: string, roomId: string | null, waiting: boolean) => void;
   onClose: () => void;
@@ -181,7 +203,7 @@ export function MachinesDialog({
           {machines.length === 0 && <li className="machine-none">{words.noneYet}</li>}
         </ul>
         <HiddenMachines hidden={hidden} machines={machines} />
-        <AddMachine machines={machines} onJoined={onJoined} />
+        <AddMachine machines={machines} person={person} onJoined={onJoined} />
       </div>
     </div>
   );

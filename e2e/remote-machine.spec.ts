@@ -414,6 +414,7 @@ test("a computer whose data folder can't hold a dial's sockets says so when a ma
     await page.getByRole("button", { name: "Machines…" }).click();
     const machines = page.getByRole("dialog", { name: "Machines" });
     await machines.getByLabel("Address or invite link").fill(studioRoomInvite);
+    await machines.getByLabel("Your name").fill("Ann");
     await machines.getByRole("button", { name: "Add and join" }).click();
     await expect(page.locator(".notice")).toHaveText(
       `Peer to peer can't work from this computer's Mirador data folder, as its path has a character the sockets it needs can't be named with, such as a colon, a space or a letter outside ASCII: ${join(spaced.dataDir, "machine-tunnels")}. Start Mirador with a data folder of plain letters, set in MIRADOR_DATA_DIR.`,

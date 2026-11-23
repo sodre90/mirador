@@ -2869,7 +2869,8 @@ input.picker-search {
 }
 
 .profile-picture-refused,
-.own-profile-refused {
+.own-profile-refused,
+.name-to-join-refused {
   flex-basis: 100%;
   color: var(--danger);
 }
@@ -9360,6 +9361,10 @@ button.device-revoke:hover:not(:disabled) {
 .add-machine label {
   display: grid;
   gap: 4px;
+}
+
+.add-machine .name-to-join {
+  grid-column: 1 / 3;
 }
 
 .add-machine .hint {

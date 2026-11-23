@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type MouseEvent } from "react";
 import { markInitials } from "../shared/marks.ts";
 import { spacedNumber } from "../shared/join-requests.ts";
-import { SOMEONE_ELSES_MACHINE_SANDBOX, type MachineToJoin } from "../shared/machines.ts";
+import { machineAddress, SOMEONE_ELSES_MACHINE_SANDBOX, type MachineToJoin } from "../shared/machines.ts";
 import type { Machine, MachineSeen, MachineStatus, Pastel, WaitingFor } from "../shared/model.ts";
 import type { ClientMessage } from "../shared/protocol.ts";
 import { connection } from "./connection.ts";
@@ -11,6 +11,7 @@ import { replyProblemText } from "./host-error.ts";
 import { t } from "./i18n/index.ts";
 import { useMachineColorStyle } from "./machine-colors.ts";
 import { placeIn, tellTheMachineItIsShown } from "./machine-place.ts";
+import { NameToJoinWith, useNameToJoinWith, type JoiningPerson } from "./name-to-join.tsx";
 import { pastelVariables } from "./pastels.ts";
 import { giveThemeToMachine } from "./theme.ts";
 import { NAME_FIELD_ATTRIBUTES } from "./typing-aids.ts";
@@ -268,11 +269,12 @@ function MachineFrame({
  * a room invite before, or whose owner signed this computer out of their rooms there takes an invite alone. A machine
  * reached peer to peer takes the invite's whole link, as only the link carries the way through its tunnel.
  */
-function JoinMachinePanel({ machine }: { machine: Machine }) {
+function JoinMachinePanel({ machine, person }: { machine: Machine; person: JoiningPerson }) {
   const [text, setText] = useState("");
   const [problem, setProblem] = useState<string | null>(null);
   const [joining, setJoining] = useState(false);
   const [askedNumber, setAskedNumber] = useState<string | null>(null);
+  const nameToJoin = useNameToJoinWith(person, machine.asPerson || machineAddress(text)?.forRoom === true);
 
   /** Follows the host's answers until the last, as asking to join waits there until someone approves it. */
   const tryToJoin = (send: (requestId: string) => ClientMessage) => {
@@ -285,12 +287,23 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
       setJoining(false);
       setAskedNumber(null);
     });
-    if (!connection.send(send(requestId))) return stopListening();
+    if (!connection.send(send(requestId))) {
+      stopListening();
+      return setJoining(false);
+    }
     setProblem(null);
     setJoining(true);
   };
-  const join = (event: FormEvent) => {
+  const join = async (event: FormEvent) => {
     event.preventDefault();
+    if (joining || nameToJoin.missing) return;
+    setJoining(true);
+    setProblem(null);
+    const refusal = await nameToJoin.keep();
+    if (refusal) {
+      setProblem(refusal);
+      return setJoining(false);
+    }
     tryToJoin((requestId) => ({ type: "machine.join", requestId, machineId: machine.id, invite: text }));
   };
   const askToJoin = () => tryToJoin((requestId) => ({ type: "machine.ask-to-join", requestId, machineId: machine.id }));
@@ -331,7 +344,7 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
               </p>
             </>
           )}
-          <form onSubmit={join}>
+          <form onSubmit={(event) => void join(event)}>
             <label>
               {machine.asPerson ? t.rooms.pasteInvite : machine.peerToPeer ? words.inviteLink : words.inviteCode}
               <input
@@ -342,7 +355,16 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
                 {...NAME_FIELD_ATTRIBUTES}
               />
             </label>
-            <button type="submit" className="primary" disabled={joining || !text.trim()}>
+            {nameToJoin.asked && (
+              <NameToJoinWith
+                typed={nameToJoin.typed}
+                onChange={(typed) => {
+                  nameToJoin.setTyped(typed);
+                  setProblem(null);
+                }}
+              />
+            )}
+            <button type="submit" className="primary" disabled={joining || !text.trim() || nameToJoin.missing}>
               {joining ? words.joining : words.joinButton}
             </button>
           </form>
@@ -356,6 +378,7 @@ function JoinMachinePanel({ machine }: { machine: Machine }) {
 /** Each machine's own Mirador, as its host serves it; shown again within HIDDEN_MACHINE_STAYS_LOADED_MS, it is still loaded and back at once. */
 export function MachineFrames({
   machines,
+  person,
   shownId,
   visited,
   opening,
@@ -363,6 +386,7 @@ export function MachineFrames({
   onPlace,
 }: {
   machines: Machine[];
+  person: JoiningPerson;
   shownId: string | null;
   visited: Set<string>;
   opening: PlaceToOpen | null;
@@ -384,7 +408,7 @@ export function MachineFrames({
           onPlace={onPlace}
         />
       ) : (
-        machine.id === shownId && <JoinMachinePanel key={machine.id} machine={machine} />
+        machine.id === shownId && <JoinMachinePanel key={machine.id} machine={machine} person={person} />
       ),
     );
 }
