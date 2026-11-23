@@ -14,6 +14,7 @@ import {
   canvasItemsOfAnswers,
   eventsAnswering,
   firstReachingTheAgent,
+  messagesOfThread,
   reachedAmong,
   ROOM_MESSAGE_MOST_CHARACTERS,
   roomMessageLength,
@@ -82,8 +83,6 @@ interface RoomAgentShown {
 type RoomAgentToTag = RoomAgentShown & { harness: HarnessId };
 
 const isTaggable = (agent: RoomAgentShown): agent is RoomAgentToTag => agent.harness !== undefined;
-
-const isBusy = (conversation: Conversation | undefined) => conversation?.status === "running" || conversation?.status === "starting";
 
 const agentNames = (profileIds: string[], agentsById: Map<string, RoomAgentShown>) => profileIds.map((profileId) => agentsById.get(profileId)?.name ?? words.agentGone).join(", ");
 
@@ -448,6 +447,10 @@ const waitsInThread = (approvals: RoomApproval[], threadId: string) => approvals
 /** A guest writes in the room, but tags none of its agents and follows up in none of their threads; the owner is no guest anywhere. */
 const isGuestIn = (room: Room, you: string | null) => room.people.some(({ personId, role }) => personId === you && role === "guest");
 
+/** With the agent's conversation here, its events tell its answers; without one, as on a person's page or for an agent someone brought, the room's answer messages do. */
+const threadMessagesShown = (timeline: RoomTimeline, thread: RoomThread, agent: RoomAgentShown) =>
+  agent.conversation ? askedInThread(timeline, thread) : messagesOfThread(timeline, thread);
+
 function ThreadColumn({
   thread,
   timeline,
@@ -477,21 +480,9 @@ function ThreadColumn({
   writing: RoomWriter[];
   onClose: () => void;
 }) {
-  const asked = askedInThread(timeline, thread);
+  const shownHere = threadMessagesShown(timeline, thread, agent);
   const firstReached = firstReachingTheAgent(timeline, thread, agent.answering);
-  const pendingHere = pending.filter((each) => each.thread.id === thread.id);
-  const workingOn = pendingHere.length > 0;
-  const workingLine = pendingHere.every(({ message }) => taskWaits(message))
-    ? words.taskWaits(agent.name)
-    : waitsInThread(approvals, thread.id)
-      ? words.waitingForApproval(agent.name)
-      : agent.brought
-        ? agent.answering === null
-          ? words.notStartedYet(agent.name)
-          : words.working(agent.name)
-        : isBusy(agent.conversation)
-          ? words.working(agent.name)
-          : words.waiting(agent.name);
+  const workingLine = workUnderWay(pending, agentsById, approvals).find((work) => work.thread.id === thread.id)?.text;
   const closeOnEscape = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
@@ -509,13 +500,13 @@ function ThreadColumn({
       </header>
       <div className="timeline">
         {agent.conversation && opened?.loaded && firstReached && <HistoryReachingBack opened={opened} messageId={firstReached.id} />}
-        {asked.map((message) => (
+        {shownHere.map((message) => (
           <div key={message.id} className="room-thread-turn">
             <RoomEntry message={message} agentsById={agentsById} />
             {agent.conversation && opened?.loaded && <TimelineOfEvents conversation={agent.conversation} events={eventsAnswering(opened.events, message.id)} agentName={agent.name} />}
           </div>
         ))}
-        {workingOn && <div className="working">{workingLine}</div>}
+        {workingLine && <div className="working">{workingLine}</div>}
         <WritingLine writing={writing} threadId={thread.id} you={you} />
       </div>
       <ApprovalStrip approvals={waitingForYou.filter(({ threadId }) => threadId === thread.id)} agentsById={agentsById} you={you} />

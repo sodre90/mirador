@@ -10,6 +10,7 @@ import { TestHost, writeBunProgram } from "./test-host.ts";
 
 const host = new TestHost({ fakePrograms: true });
 const builderPrompts = () => join(host.root, "builder-prompts");
+const builderMayAnswer = () => join(host.root, "builder-may-answer");
 
 test.beforeAll(async () => {
   writeBunProgram(host.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));
@@ -138,6 +139,18 @@ test("a person the owner lets into a room sees only that room on their own brows
     await strip.getByRole("button", { name: "Allow", exact: true }).click();
     await expect(roomMessages(miaPage).last()).toHaveText("Notes for Mia");
     await expect(roomMessages(page).last()).toHaveText("Notes for Mia");
+  });
+
+  await test.step("Mia's thread of a task says the agent is working while it is, as the room does, and shows its answer once it comes", async () => {
+    await tagBuilder(page, `WAIT ${builderMayAnswer()} SAY Checked for Mia`);
+    const working = miaPage.locator(".room-timeline > .room-thread-line", { hasText: "Builder is working…" });
+    await working.getByRole("button", { name: "Open thread" }).click();
+    const thread = miaPage.getByRole("complementary", { name: "Thread of Builder" });
+    await expect(thread.locator(".working")).toHaveText("Builder is working…");
+    writeFileSync(builderMayAnswer(), "");
+    await expect(thread.locator(".message.agent")).toHaveText(["Checked for Mia"]);
+    await expect(thread.locator(".working")).toHaveCount(0);
+    await thread.getByRole("button", { name: "Close thread" }).click();
   });
 
   const agentConversationId = ownerTraffic.received
