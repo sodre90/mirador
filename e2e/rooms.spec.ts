@@ -160,8 +160,28 @@ test("a workspace a room works in stays until the room moves to another, where i
     await composer.pressSequentially(rest);
     await composer.press("Enter");
   };
-  await tagMover("FOLDER");
-  await expect(roomEntries(page).locator(".message.agent")).toHaveText([workingIn(elsewhere)]);
+
+  await test.step("the empty room offers its agents to tag, says only tags reach them, and invites people", async () => {
+    const empty = page.getByRole("region", { name: "Nothing written yet" });
+    await expect(empty.locator("p")).toHaveText(["Tag an agent to give it a task.", "A message reaches an agent only when it tags it with @."]);
+    await expect(empty.getByRole("list", { name: "Tag an agent to give it a task." }).getByRole("button")).toHaveAccessibleName("@Mover");
+    await empty.getByRole("button", { name: "Invite people" }).click();
+    const invite = page.getByRole("dialog", { name: "Invite someone to Moving" });
+    await invite.getByRole("button", { name: "Done" }).click();
+    await expect(invite).toHaveCount(0);
+    await composer.fill("first ");
+    await empty.getByRole("button", { name: "@Mover" }).click();
+    await expect(composer).toHaveValue("first @Mover ");
+    await expect(composer).toBeFocused();
+    await composer.fill("");
+    await empty.getByRole("button", { name: "@Mover" }).click();
+    await expect(composer).toHaveValue("@Mover ");
+    await expect(composer).toBeFocused();
+    await composer.pressSequentially("FOLDER");
+    await composer.press("Enter");
+    await expect(roomEntries(page).locator(".message.agent")).toHaveText([workingIn(elsewhere)]);
+    await expect(empty).toHaveCount(0);
+  });
 
   await test.step("removing the room's workspace is refused, naming the room", async () => {
     await removeWorkspace(workspaceCard(page, elsewhere));

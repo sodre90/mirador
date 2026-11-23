@@ -10047,6 +10047,61 @@ button.link.more-rows {
   align-self: flex-start;
 }
 
+.room-empty {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 420px;
+  margin: auto 0;
+  padding: 16px;
+  color: var(--muted);
+  font-size: calc(13px * var(--font-scale));
+  text-align: center;
+}
+
+.room-empty h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: calc(15px * var(--font-scale));
+  font-weight: 600;
+}
+
+.room-empty p {
+  margin: 0;
+}
+
+.room-empty-agents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin: 0 0 4px;
+  padding: 0;
+  list-style: none;
+}
+
+.room-empty-agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 4px;
+  border-radius: 999px;
+  color: var(--text);
+}
+
+.room-empty-agent .avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: calc(10.5px * var(--font-scale));
+}
+
+.room-empty-invite {
+  margin-top: 4px;
+}
+
 .room-approval-head {
   display: flex;
   flex-wrap: wrap;

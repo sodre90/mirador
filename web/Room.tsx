@@ -1,11 +1,11 @@
 import { flushSync } from "react-dom";
-import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useId, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import type { AskItem, CanvasItem, Conversation, HarnessId, Person, Profile } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
 import { mentionAt, withMention } from "../shared/mentions.ts";
 import type { RoomApprovalAnswer } from "../shared/room-permissions.ts";
-import type { TaggablePerson } from "../shared/room-mentions.ts";
+import { withTagAtCaret, type TaggablePerson } from "../shared/room-mentions.ts";
 import type { RoomQuestionVotes } from "../shared/room-votes.ts";
 import {
   AGENT_TAGGED_TURNS_AFTER_A_PERSON,
@@ -78,6 +78,10 @@ interface RoomAgentShown {
   /** Chosen for the agent in this room; only the owner is told. */
   model: RoomAgentModel;
 }
+
+type RoomAgentToTag = RoomAgentShown & { harness: HarnessId };
+
+const isTaggable = (agent: RoomAgentShown): agent is RoomAgentToTag => agent.harness !== undefined;
 
 const isBusy = (conversation: Conversation | undefined) => conversation?.status === "running" || conversation?.status === "starting";
 
@@ -206,6 +210,11 @@ function useTagMenu({ taggable, text, caret, take }: { taggable: Taggable[]; tex
   return { onKeyDown, textareaAttributes: suggestionAttributes(TAG_MENU_ID, open, pickedIndex), menu };
 }
 
+interface RoomComposerHandle {
+  /** Tags the agent where the caret is and gives the composer the focus, to go on writing its task. */
+  tag: (agent: RoomAgentShown) => void;
+}
+
 /**
  * A message box for the room, whose @ tags its agents and people, or, without agents to tag, for a thread's follow-ups;
  * the room's people see that you write in it while you do.
@@ -216,12 +225,14 @@ function RoomComposer({
   people,
   onSend,
   tellWriting,
+  ref,
 }: {
   placeholder: string;
   agents: RoomAgentShown[];
   people: TaggablePerson[];
   onSend: (text: string, tags: string[]) => void;
   tellWriting: (writing: boolean) => void;
+  ref?: Ref<RoomComposerHandle>;
 }) {
   const [text, setText] = useState("");
   const [caret, setCaret] = useState(0);
@@ -230,17 +241,18 @@ function RoomComposer({
   const typingAidAttributes = useTypingAidAttributes();
   const [writingSignals] = useState(() => new WritingSignals(tellWriting));
   useEffect(() => () => writingSignals.stopped(), []);
-  const take = (taken: Taggable) => {
-    const next = withMention(text, caret, { path: nameToTag(taken), directory: false });
+  const write = (next: { text: string; caret: number }, taggedAgent: RoomAgentShown | null) => {
     writingSignals.typed(next.text);
     flushSync(() => {
       setText(next.text);
       setCaret(next.caret);
     });
-    if ("agent" in taken) setTagged((already) => [...already.filter(({ profileId }) => profileId !== taken.agent.profileId), taken.agent]);
+    if (taggedAgent) setTagged((already) => [...already.filter(({ profileId }) => profileId !== taggedAgent.profileId), taggedAgent]);
     textarea.current?.focus();
     textarea.current?.setSelectionRange(next.caret, next.caret);
   };
+  const take = (taken: Taggable) => write(withMention(text, caret, { path: nameToTag(taken), directory: false }), "agent" in taken ? taken.agent : null);
+  useImperativeHandle(ref, () => ({ tag: (agent) => write(withTagAtCaret(text, caret, agent.name), agent) }));
   const tagMenu = useTagMenu({ taggable: [...agents.map((agent) => ({ agent })), ...people.map((person) => ({ person }))], text, caret, take });
   const length = roomMessageLength(text);
   const tooLong = length > ROOM_MESSAGE_MOST_CHARACTERS;
@@ -651,6 +663,39 @@ function DoorBanner({ joiners, onShowAll }: { joiners: RoomJoiner[]; onShowAll: 
   );
 }
 
+/** What a room shows before anyone writes in it: the agents you can give a task, each a tag to put in the composer, and for its owner, a way to invite people. */
+function EmptyRoom({ tagsAgents, agentsToTag, onTag, onInvite }: { tagsAgents: boolean; agentsToTag: RoomAgentToTag[]; onTag: (agent: RoomAgentShown) => void; onInvite: (() => void) | null }) {
+  const tagToStartId = useId();
+  return (
+    <section className="room-empty" aria-label={words.emptyTitle}>
+      <h3>{words.emptyTitle}</h3>
+      {agentsToTag.length > 0 && (
+        <>
+          <p id={tagToStartId}>{words.tagToStart}</p>
+          <ul className="room-empty-agents" aria-labelledby={tagToStartId}>
+            {agentsToTag.map((agent) => (
+              <li key={agent.profileId}>
+                <button type="button" className="room-empty-agent" onClick={() => onTag(agent)}>
+                  <span className={`avatar agent-${agent.harness}`} aria-hidden="true">
+                    {agentMarks[agent.harness]}
+                  </span>
+                  @{agent.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p>{tagsAgents ? words.agentsHint : words.emptyForGuest}</p>
+      {onInvite && (
+        <button type="button" className="room-empty-invite" onClick={onInvite}>
+          {words.invitePeople}
+        </button>
+      )}
+    </section>
+  );
+}
+
 /**
  * "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which
  * model for the owner, who changes it there; the room's door banner opens it too.
@@ -809,8 +854,11 @@ export function RoomView({
   });
   const owns = you !== null && you === ownerId;
   const openSettings = (tab?: RoomSettingsTab) => dispatch({ type: "open-overlay", overlay: { kind: "room", roomId: room.id, tab } });
+  const invite = () => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } });
   const agentsById = new Map(agents.map((agent) => [agent.profileId, agent]));
   const tagsAgents = !isGuestIn(room, you);
+  const agentsToTag = tagsAgents ? agents.filter(isTaggable) : [];
+  const composer = useRef<RoomComposerHandle>(null);
   const peopleToTag = taggablePeople(room, ownerId, people, you);
   const waitingForYou = approvals.filter(({ approvers }) => you !== null && approvers.includes(you));
   const tasksWaitingForYou = tasks.filter(({ approvers }) => you !== null && approvers.includes(you));
@@ -857,7 +905,7 @@ export function RoomView({
           )}
           <MuteToggle roomId={room.id} muted={muted} />
           {owns && (
-            <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>
+            <button type="button" className="room-invite-button" onClick={invite}>
               {words.inviteSomeone}
             </button>
           )}
@@ -871,7 +919,7 @@ export function RoomView({
       {owns && <DoorBanner joiners={joiners} onShowAll={presence ? () => setPeopleShown(true) : null} />}
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}
-        {timeline && shown.length === 0 && <div className="notice-line">{tagsAgents ? words.empty : words.emptyForGuest}</div>}
+        {timeline && shown.length === 0 && <EmptyRoom tagsAgents={tagsAgents} agentsToTag={agentsToTag} onTag={(agent) => composer.current?.tag(agent)} onInvite={owns ? invite : null} />}
         {shown.map((message) => {
           const madeOnCanvas = canvasOfAnswers.get(message.id) ?? [];
           return (
@@ -890,8 +938,9 @@ export function RoomView({
       {owns && <HeldChangeCard changes={heldChanges} holdsTooMany={holdsTooMany} agentName={(profileId) => agentsById.get(profileId)?.name ?? words.agentGone} countOf={words.approvalPosition} />}
       <ApprovalStrip approvals={waitingForYou} tasks={tasksWaitingForYou} agentsById={agentsById} you={you} />
       <RoomComposer
+        ref={composer}
         placeholder={tagsAgents ? words.placeholder(room.name) : words.guestPlaceholder(room.name)}
-        agents={tagsAgents ? agents.filter(({ harness }) => harness) : []}
+        agents={agentsToTag}
         people={peopleToTag}
         onSend={(text, tags) => writeIn(room.id, text, tags, null)}
         tellWriting={tellWritingIn(room.id, null)}

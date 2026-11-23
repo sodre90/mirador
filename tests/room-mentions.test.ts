@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { MOST_PEOPLE_TAGGED, mentionsIn, textAroundMentions } from "../shared/room-mentions.ts";
+import { MOST_PEOPLE_TAGGED, mentionsIn, textAroundMentions, withTagAtCaret } from "../shared/room-mentions.ts";
 import { ROOM_MESSAGE_MOST_CHARACTERS } from "../shared/rooms.ts";
 import { pickOf } from "../shared/room-votes.ts";
 
@@ -65,4 +65,12 @@ test("what a confirmer confirms of a question is their own pick alone, none whil
     { personId: "stan", question: 0, option: 1 },
   ];
   expect([pickOf(ballots, 0, "mia"), pickOf(ballots, 0, "ann"), pickOf(ballots, 1, "mia"), pickOf(ballots, 0, null)]).toEqual([2, null, null, null]);
+});
+
+test("puts a tag in at the caret, a space apart from the word before it", () => {
+  expect(withTagAtCaret("", 0, "Builder")).toEqual({ text: "@Builder ", caret: 9 });
+  expect(withTagAtCaret("hi", 2, "Builder")).toEqual({ text: "hi @Builder ", caret: 12 });
+  expect(withTagAtCaret("hi ", 3, "Builder")).toEqual({ text: "hi @Builder ", caret: 12 });
+  expect(withTagAtCaret("go now", 0, "Builder")).toEqual({ text: "@Builder go now", caret: 9 });
+  expect(withTagAtCaret("a b", 1, "Builder")).toEqual({ text: "a @Builder b", caret: 11 });
 });

@@ -155,6 +155,10 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     await expect(frame.locator(".room-header .room-agents li")).toHaveText([/Builder/]);
     await expect(frame.locator(".room-agent-model")).toHaveCount(0);
     await expect(frame.getByRole("button", { name: "New room or join one" })).toHaveCount(0);
+    await expect(page.getByRole("region", { name: "Nothing written yet" }).getByRole("button", { name: "Invite people" })).toBeVisible();
+    const empty = frame.getByRole("region", { name: "Nothing written yet" });
+    await expect(empty.getByRole("list", { name: "Tag an agent to give it a task." }).getByRole("button")).toHaveAccessibleName("@Builder");
+    await expect(empty.getByRole("button", { name: "Invite people" })).toHaveCount(0);
   });
 
   await test.step("the person writes, and the owner reads it at once with their name and role", async () => {
@@ -375,6 +379,9 @@ test("a person joins a room from their own Mirador with an invite, works in it w
     const join = await joinRoom(visitor, intoShed);
     await expect(join).toHaveCount(0);
     await expect(frame.getByRole("heading", { name: "# Shed" })).toBeVisible();
+    const emptyForAGuest = frame.getByRole("region", { name: "Nothing written yet" });
+    await expect(emptyForAGuest.locator("p")).toHaveText(["As a guest you write along with everyone here. The members give the agents tasks."]);
+    await expect(emptyForAGuest.getByRole("button")).toHaveCount(0);
     await expect(roomsListed(frame)).toHaveText(["Garden", "Shed"]);
     await visitor.getByRole("navigation", { name: "Machines" }).getByRole("button", { name: "This computer" }).click();
     await expect(visitor.locator(".sidebar .rooms li.joined-room .room-card-name")).toHaveText(["Garden", "Shed"]);

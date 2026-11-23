@@ -93,3 +93,10 @@ export function textAroundMentions(text: string, mentions: RoomMention[]): TextA
   if (cutAt < text.length) pieces.push({ text: text.slice(cutAt) });
   return pieces;
 }
+
+/** The text with a tag of the name put in at the caret, a space apart from the word before it, and where the caret goes after the tag. */
+export function withTagAtCaret(text: string, caret: number, name: string) {
+  const before = text.slice(0, caret);
+  const tag = `${before === "" || /\s$/.test(before) ? "" : " "}@${name} `;
+  return { text: before + tag + text.slice(caret).replace(/^ /, ""), caret: before.length + tag.length };
+}
