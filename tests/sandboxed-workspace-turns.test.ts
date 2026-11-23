@@ -15,7 +15,7 @@ import { Store } from "../host/store.ts";
 import { SystemNotifications } from "../host/system-notifications.ts";
 import { WorkspaceSandboxes } from "../host/workspace-sandbox.ts";
 import { englishProblem, type HostProblem } from "../shared/host-problems.ts";
-import type { Conversation, Profile } from "../shared/model.ts";
+import type { Conversation, HarnessId, Profile } from "../shared/model.ts";
 import { ALL_OF_CLAUDE_SETUP } from "../shared/room-agent-setup.ts";
 import { DEFAULT_PERMISSION_PRESET } from "../shared/room-permissions.ts";
 import { NO_SANDBOX, roomSandbox, workspaceSandbox, type SandboxOwner, type SandboxSetting } from "../shared/sandbox.ts";
@@ -53,7 +53,7 @@ function repository() {
   return realpathSync(folder);
 }
 
-const profileOf = (id: string, name: string, harness: "claude" | "codex", environment: string): Profile => ({
+const profileOf = (id: string, name: string, harness: HarnessId, environment: string): Profile => ({
   id,
   name,
   harness,
@@ -206,12 +206,69 @@ test("a sandboxed workspace's conversation moved to a profile that can't run in 
 
   const refused = turnFailure(conversation.id)?.problem;
   expect(refused).toEqual({ code: "workspace-sandbox-not-ready", why: { kind: "blocked", blocker: { kind: "agent-signs-in-elsewhere", agent: "Subscriber", how: "subscription" } } });
-  expect(englishProblem(refused!)).toEndWith("Pick a Claude profile that signs in with an API key, or turn the sandbox off for this workspace.");
+  expect(englishProblem(refused!)).toEndWith("Pick a profile that can run there, or turn the sandbox off for this workspace.");
   const onCodex = conversations.create("w1", { harness: "codex", profileId: "coder" });
   await conversations.send(onCodex.id, "go");
   expect(turnFailure(onCodex.id)?.problem).toEqual({ code: "workspace-sandbox-not-ready", why: { kind: "blocked", blocker: { kind: "agent-kind-coming", agent: "Coder", harness: "codex" } } });
   expect(launcher.agents.filter(({ environment }) => environment.CLAUDE_CODE_EXECUTABLE === undefined && environment.CODEX_HOME !== undefined)).toEqual([]);
   expect(claude.ranHere()).toBe(false);
+  await conversations.shutdown();
+});
+
+/**
+ * pi as this computer runs it, as claudeCodeLeavingAMark is Claude Code, with an agent folder of its own: a models.json
+ * gateway provider whose key comes from the profile, an auth.json and an extension the VM must never see.
+ */
+function piLeavingAMark(settings: Record<string, unknown>) {
+  const mark = join(scratch, `pi-ran-on-this-computer-${crypto.randomUUID()}`);
+  const program = join(scratch, `pi-${crypto.randomUUID()}`);
+  writeFileSync(program, `#!/bin/sh\nif [ "$1" = "--version" ]; then echo "1.6.0"; exit 0; fi\ntouch "${mark}"\nexit 1\n`);
+  chmodSync(program, 0o755);
+  const agentFolder = join(scratch, `pi-agent-${crypto.randomUUID()}`);
+  mkdirSync(join(agentFolder, "extensions"), { recursive: true });
+  const provider = { baseUrl: "https://llm-gateway.example/v1", api: "openai-responses", apiKey: "${LLM_GATEWAY_KEY}", models: [{ id: "gpt-6.1" }] };
+  writeFileSync(join(agentFolder, "models.json"), JSON.stringify({ providers: { gateway: provider } }));
+  writeFileSync(join(agentFolder, "settings.json"), JSON.stringify({ packages: ["npm:pi-web-access"], ...settings }));
+  writeFileSync(join(agentFolder, "auth.json"), JSON.stringify({ anthropic: { type: "api_key", key: "sk-ant-in-auth-json-of-this-mac" } }));
+  writeFileSync(join(agentFolder, "extensions", "session.ts"), "export default () => {};\n");
+  return { program, agentFolder, ranHere: () => existsSync(mark) };
+}
+
+const GATEWAY_KEY = "gw-key-kept-on-this-mac-2468";
+
+test("a sandboxed workspace's pi conversation starts pi in the VM from its own image, on its models.json provider through the model proxy, its key and agent folder kept on this computer; one the proxy can't stand in for is refused saying why", async () => {
+  const { store, config, conversations, launcher, turnFailure } = sandboxedWorkspace();
+  const pi = piLeavingAMark({ defaultProvider: "gateway", defaultModel: "gpt-6.1" });
+  store.saveProfile(profileOf("pier", "Pier", "pi", `PI_CODING_AGENT_DIR=${pi.agentFolder}\nPI_ACP_PI_COMMAND=${pi.program}\nLLM_GATEWAY_KEY=${GATEWAY_KEY}\nOPENAI_API_KEY=sk-another-providers-key`));
+  const conversation = conversations.create("w1", { harness: "pi", profileId: "pier" });
+
+  await conversations.send(conversation.id, "go");
+
+  expect(launcher.prepared).toContainEqual({ harness: "pi", version: "1.6.0" });
+  const [agent] = launcher.agents.filter(({ environment }) => environment.MIRADOR_PI_MODELS !== undefined);
+  expect(agent).toBeDefined();
+  expect(agent!.command.slice(0, 2)).toEqual(["/usr/local/bin/bun", Bun.resolveSync("pi-acp/package.json", import.meta.dir).replace(/package\.json$/, "dist/index.js")]);
+  const { environment } = agent!;
+  expect(JSON.stringify(environment)).not.toContain(GATEWAY_KEY);
+  expect(JSON.stringify(environment)).not.toContain(pi.agentFolder);
+  expect(["LLM_GATEWAY_KEY", "OPENAI_API_KEY"].filter((name) => Object.hasOwn(environment, name))).toEqual([]);
+  expect(environment).toMatchObject({ PI_CODING_AGENT_DIR: sandboxConfigFolder(config.dataDir, workspaceSandbox("w1"), "pi"), PI_ACP_PI_COMMAND: "/mirador/sandbox/pi.sh", PI_OFFLINE: "1" });
+  expect(JSON.parse(environment.MIRADOR_PI_MODELS!)).toEqual({ providers: { gateway: { api: "openai-responses", models: [{ id: "gpt-6.1" }], baseUrl: "http://127.0.0.1:7702/p/pier", apiKey: "kept-by-mirador" } } });
+  expect(JSON.parse(environment.MIRADOR_PI_SETTINGS!)).toEqual({ defaultProvider: "gateway", defaultModel: "gpt-6.1" });
+  const [vm] = vmOf(launcher, workspaceSandbox("w1"));
+  expect(vm!.image).toBe("fake-image:pi-1.6.0");
+  expect(vm!.mounts.some(({ source }) => source.startsWith(pi.agentFolder))).toBe(false);
+  expect(vm!.mounts).toContainEqual({ source: environment.PI_CODING_AGENT_DIR, target: environment.PI_CODING_AGENT_DIR, readOnly: false });
+  expect(pi.ranHere()).toBe(false);
+
+  const lost = piLeavingAMark({ defaultProvider: "anthropic", defaultModel: "claude-opus-5" });
+  store.saveProfile(profileOf("lost", "Lost", "pi", `PI_CODING_AGENT_DIR=${lost.agentFolder}\nPI_ACP_PI_COMMAND=${lost.program}`));
+  const onBuiltIn = conversations.create("w1", { harness: "pi", profileId: "lost" });
+  await conversations.send(onBuiltIn.id, "go");
+  const refused = turnFailure(onBuiltIn.id)?.problem;
+  expect(refused).toEqual({ code: "workspace-sandbox-not-ready", why: { kind: "blocked", blocker: { kind: "pi-model-elsewhere", agent: "Lost", why: "built-in-provider" } } });
+  expect(englishProblem(refused!)).toContain("Lost uses a model pi knows by itself.");
+  expect(lost.ranHere()).toBe(false);
   await conversations.shutdown();
 });
 
@@ -436,10 +493,11 @@ test("one workspace's VM sees neither another workspace's nor a room's: its own 
     owner,
     allowsSharedKernel: false,
     profileId: "builder",
-    claudeCodeVersion: "2.1.330",
+    kind: { harness: "claude" as const, keyVariable: "ANTHROPIC_API_KEY" as const },
+    version: "2.1.330",
     workingDirectory,
     given: { ANTHROPIC_API_KEY: "sk-ant-kept-on-this-mac", PATH: "/usr/bin" },
-    route: { upstream: "https://api.anthropic.com", keyVariable: "ANTHROPIC_API_KEY" as const, key: "sk-ant-kept-on-this-mac", customHeaders: "" },
+    route: { upstream: "https://api.anthropic.com", api: "anthropic-messages" as const, key: "sk-ant-kept-on-this-mac", keyHeader: "x-api-key" as const, headers: [] },
     agent: ["/usr/local/bin/bun", "agent.js"],
   });
 
@@ -453,7 +511,7 @@ test("one workspace's VM sees neither another workspace's nor a room's: its own 
   const sources = vms.map(([vm]) => vm!.mounts.map(({ source }) => source));
   expect(sources[0]!.some((source) => source.startsWith(other))).toBe(false);
   expect(sources[1]!.some((source) => source.startsWith(project))).toBe(false);
-  const configFolders = owners.map((owner) => sandboxConfigFolder(config.dataDir, owner));
+  const configFolders = owners.map((owner) => sandboxConfigFolder(config.dataDir, owner, "claude"));
   expect(new Set(configFolders).size).toBe(3);
   sources.forEach((mounted, index) => expect(configFolders.filter((folder, each) => each !== index && mounted.includes(folder))).toEqual([]));
   const socketFolders = vms.map(([vm]) => vm!.mounts.filter(({ target }) => target.startsWith("/run/mirador/")).map(({ source }) => source));

@@ -1,4 +1,5 @@
 import type { SandboxAvailability, SandboxSetup } from "../shared/sandbox.ts";
+import type { AgentImage } from "../host/sandbox/image.ts";
 import { SandboxNotReady, type AgentInVm, type VmPlan, type VmLauncher } from "../host/sandbox/vm-launcher.ts";
 import { runHere } from "./in-vm-here.ts";
 
@@ -19,10 +20,13 @@ export class FakeVmLauncher implements VmLauncher {
     return this.available;
   }
 
-  async prepare(claudeCodeVersion: string, progress: (setup: SandboxSetup) => void) {
+  readonly prepared: AgentImage[] = [];
+
+  async prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void) {
+    this.prepared.push(agent);
     progress({ stage: "building-image" });
     if (this.prepareFails) throw new Error(this.prepareFails);
-    return `fake-image:${claudeCodeVersion}`;
+    return `fake-image:${agent.harness}-${agent.version}`;
   }
 
   async start(plan: VmPlan) {

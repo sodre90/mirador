@@ -2,7 +2,7 @@ import { HostProblemError } from "../../shared/host-problems.ts";
 import type { Profile } from "../../shared/model.ts";
 import { environmentInRoom, type EnvironmentChoices } from "../../shared/room-agent-setup.ts";
 import {
-  runsInSandbox,
+  modelKeyVariableOf,
   sharesKernel,
   signInElsewhere,
   type HeldChangeAnswer,
@@ -13,12 +13,15 @@ import {
   type SandboxSetting,
 } from "../../shared/sandbox.ts";
 import { profileEnvironment } from "../acp/harnesses.ts";
+import type { SandboxedKind } from "./agent-environment.ts";
+import { modelRouteOf, type ModelRoute } from "./model-proxy.ts";
+import { piSandboxSetupFor } from "./pi-setup.ts";
 
 /** What a room's or workspace's settings need of the sandboxes. */
 export interface SandboxControl {
   availability(): SandboxAvailability;
-  /** Sets up what every sandbox needs, so the first turn need not wait for it. */
-  prepare(): void;
+  /** Sets up what every sandbox needs, and the images of these profiles' agents, so the first turn need not wait for it. */
+  prepare(profiles: Profile[]): void;
   answerHeldChange(owner: SandboxOwner, changeId: string, answer: HeldChangeAnswer): Promise<void>;
   /** The room or workspace is deleted: its VM stops, and what it held goes unanswered. */
   ownerGone(owner: SandboxOwner): Promise<void>;
@@ -44,12 +47,35 @@ export function assertSandboxCanRun({ availability, blockers }: SandboxCheck, sa
   if (blockers[0]) throw new HostProblemError({ code: "sandbox-not-ready", why: { kind: "blocked", blocker: blockers[0] } });
 }
 
+/** How an agent reaches its model from its sandbox: the model proxy's route, and what its kind gets in the VM. */
+export interface ModelInSandbox {
+  route: ModelRoute;
+  kind: SandboxedKind;
+}
+
 /**
- * Why an agent of this profile can't run in a sandbox, given what of its environment it gets there: only Claude Code
- * runs in one, and only where the model proxy can add its key for it. Null where it can.
+ * How an agent of this profile, with this environment and what its room or workspace gives it, reaches its model from a
+ * sandbox; or why it can't run in one: only Claude Code and pi do, and only where the model proxy can add the key for them.
  */
+export function modelInSandbox(profile: Profile, choices: EnvironmentChoices, environment: Record<string, string>): ModelInSandbox | { blocker: SandboxBlocker } {
+  const { harness, name: agent } = profile;
+  if (harness === "claude") {
+    const how = signInElsewhere(environment);
+    const route = modelRouteOf(environment);
+    const keyVariable = modelKeyVariableOf(environment);
+    if (how || !route || !keyVariable) return { blocker: { kind: "agent-signs-in-elsewhere", agent, how: how ?? "subscription" } };
+    return { route, kind: { harness, keyVariable } };
+  }
+  if (harness === "pi") {
+    const setup = piSandboxSetupFor(profile, choices);
+    if ("elsewhere" in setup) return { blocker: { kind: "pi-model-elsewhere", agent, why: setup.elsewhere } };
+    return { route: setup.route, kind: { harness, model: setup.inVm, keyVariables: setup.keyVariables } };
+  }
+  return { blocker: { kind: "agent-kind-coming", agent, harness } };
+}
+
+/** Why an agent of this profile can't run in a sandbox, given what of its environment it gets there; null where it can. */
 export function profileSandboxBlocker(profile: Profile, choices: EnvironmentChoices): SandboxBlocker | null {
-  if (!runsInSandbox(profile.harness)) return { kind: "agent-kind-coming", agent: profile.name, harness: profile.harness };
   const environment = (() => {
     try {
       return profileEnvironment(profile, (host, set) => environmentInRoom(profile.harness, host, set, choices));
@@ -57,6 +83,6 @@ export function profileSandboxBlocker(profile: Profile, choices: EnvironmentChoi
       return {};
     }
   })();
-  const how = signInElsewhere(environment);
-  return how ? { kind: "agent-signs-in-elsewhere", agent: profile.name, how } : null;
+  const model = modelInSandbox(profile, choices, environment);
+  return "blocker" in model ? model.blocker : null;
 }

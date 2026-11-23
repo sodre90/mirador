@@ -110,7 +110,7 @@ test("the sandbox switch stays off, with the reason under it, where the computer
   await test.step("an agent of another kind", async () => {
     await createRoom(page, "Mixed", ["Builder", "Stub"]);
     const dialog = await openRoomSettings(page, "Mixed", "Permissions");
-    await expect(reasons(dialog)).toHaveText("Stub isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming.");
+    await expect(reasons(dialog)).toHaveText("Stub can't run in a sandbox yet: sandboxes run Claude Code and pi agents for now, other kinds are coming.");
     await expect(sandboxSwitch(dialog)).toBeDisabled();
     await dialog.getByRole("button", { name: "Done" }).click();
   });

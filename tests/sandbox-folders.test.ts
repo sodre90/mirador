@@ -250,10 +250,11 @@ describe("the sandbox's VM", () => {
         owner: ROOM,
         allowsSharedKernel: false,
         profileId: "builder",
-        claudeCodeVersion: "2.1.330",
+        kind: { harness: "claude", keyVariable: "ANTHROPIC_API_KEY" },
+        version: "2.1.330",
         workingDirectory: surroundings.workspace!,
         given: { ANTHROPIC_API_KEY: KEY },
-        route: { upstream: "https://api.anthropic.com", keyVariable: "ANTHROPIC_API_KEY", key: KEY, customHeaders: "" },
+        route: { upstream: "https://api.anthropic.com", api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
         agent: ["/usr/local/bin/bun", "agent.js"],
       });
     const setFolders = (...given: (string | MountedFolder)[]) => (folders = given.map((folder, index) => ({ ...(typeof folder === "string" ? { path: folder, writable: false } : folder), addedAt: index })));

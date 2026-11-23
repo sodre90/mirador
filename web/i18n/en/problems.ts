@@ -1,4 +1,4 @@
-import type { SandboxUnavailable } from "../../../shared/sandbox.ts";
+import type { PiModelElsewhere, SandboxUnavailable } from "../../../shared/sandbox.ts";
 
 export const problems = {
   fixed: {
@@ -448,7 +448,16 @@ export const problems = {
     "podman-not-rootless": "Sandboxes need Podman rootless, run as your own user: Mirador runs as root here.",
     "turned-off": "Sandboxes are turned off on this Mirador.",
   } satisfies Record<SandboxUnavailable, string>,
-  sandboxAgentKindComing: (agent: string) => `${agent} isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming.`,
+  sandboxAgentKindComing: (agent: string) => `${agent} can't run in a sandbox yet: sandboxes run Claude Code and pi agents for now, other kinds are coming.`,
+  sandboxPiModelElsewhere: {
+    "no-default-model": (agent: string) => `${agent}'s pi names no default model in its settings.json, so Mirador can't tell which model to reach for it.`,
+    "built-in-provider": (agent: string) => `${agent} uses a model pi knows by itself. A sandbox reaches only a model that pi's models.json sets up: add it there with its key.`,
+    "unsupported-provider": (agent: string) =>
+      `${agent} uses a model a sandbox can't reach: only one on Anthropic's Messages or OpenAI's Chat Completions or Responses API, at its provider's address, with no headers of its own.`,
+    "signs-in": (agent: string) => `${agent}'s pi signs in to its model provider, which would have to go into the sandbox: give the provider an API key instead.`,
+    "key-from-command": (agent: string) => `${agent}'s pi gets its key or a header from a command, which a sandbox can't run on this computer: give it in a value of the profile instead.`,
+    "no-key": (agent: string) => `${agent}'s pi has no key for its model, or a value its key or a header needs isn't set.`,
+  } satisfies Record<PiModelElsewhere, (agent: string) => string>,
   sandboxAgentSignsInElsewhere: {
     subscription: (agent: string) => `${agent} signs in with a Claude subscription, which would have to go into the sandbox: give its profile an API key instead.`,
     bedrock: (agent: string) => `${agent} uses Amazon Bedrock, which sandboxes don't support yet.`,
@@ -476,12 +485,12 @@ export const problems = {
   sandboxSetupFailed: (cause: string) => `Setting up sandboxes failed: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `It could not start: ${cause}`,
   sandboxNotReadyInTime: (seconds: number) => `It did not get ready within ${seconds} s.`,
+  sandboxNoAgentVersion: (program: string) => `Mirador could not tell which version of ${program} to put in it.`,
   sandboxNotReadyFixed: {
-    "no-claude-code-version": "Mirador could not tell which version of Claude Code to put in it.",
-    "versions-differ": "Its agents use different versions of Claude Code, and a sandbox runs one.",
+    "versions-differ": "Its agents need different images, of another kind of agent or another version, and a sandbox runs one at a time. This conversation can start once the sandbox's other agents have sat idle for 10 minutes.",
     "shared-kernel-not-allowed": "On this computer it would be a Podman container sharing this computer's kernel, which isn't allowed for it: allow it where its sandbox is turned on.",
   },
   workspaceSandboxNotReady: (why: string) => `This workspace's sandbox is not ready, so its agent did not start. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
-    `This workspace runs its agents in a sandbox, where this one can't run. ${why} Pick a Claude profile that signs in with an API key, or turn the sandbox off for this workspace.`,
+    `This workspace runs its agents in a sandbox, where this one can't run. ${why} Pick a profile that can run there, or turn the sandbox off for this workspace.`,
 };

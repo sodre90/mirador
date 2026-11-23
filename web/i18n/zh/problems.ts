@@ -417,7 +417,21 @@ export const problems: Messages["problems"] = {
     "podman-not-rootless": "沙箱需要 rootless 的 Podman，以你自己的用户运行：这里的 Mirador 以 root 身份运行。",
     "turned-off": "这个 Mirador 关闭了沙箱。",
   },
-  sandboxAgentKindComing: (agent: string) => `${agent} 不是 Claude Code Agent：沙箱目前只运行 Claude Code Agent，其他类型即将支持。`,
+  sandboxAgentKindComing: (agent: string) => `${agent} 还不能在沙箱中运行：沙箱目前只运行 Claude Code 和 pi Agent，其他类型即将支持。`,
+  sandboxPiModelElsewhere: {
+    "no-default-model": (agent: string) =>
+      `${agent} 的 pi 没有在 settings.json 中指定默认模型，所以 Mirador 不知道要为它访问哪个模型。`,
+    "built-in-provider": (agent: string) =>
+      `${agent} 使用的是 pi 自带的模型。沙箱只能访问 pi 的 models.json 中配置的模型：请在那里连同密钥一起添加它。`,
+    "unsupported-provider": (agent: string) =>
+      `${agent} 使用的模型沙箱无法访问：只支持 Anthropic 的 Messages API 或 OpenAI 的 Chat Completions、Responses API 上的模型，且使用其提供方的地址，没有自己的请求头。`,
+    "signs-in": (agent: string) =>
+      `${agent} 的 pi 通过登录访问模型提供方，这需要把登录信息放进沙箱：请改为给该提供方一个 API 密钥。`,
+    "key-from-command": (agent: string) =>
+      `${agent} 的 pi 从命令获取密钥或请求头，而沙箱无法在这台电脑上运行该命令：请改为在配置的一个值中提供它。`,
+    "no-key": (agent: string) =>
+      `${agent} 的 pi 没有模型的密钥，或者它的密钥或请求头需要的某个值没有设置。`,
+  },
   sandboxAgentSignsInElsewhere: {
     subscription: (agent: string) => `${agent} 通过 Claude 订阅登录，这需要把登录信息放进沙箱：请改为给它的配置一个 API 密钥。`,
     bedrock: (agent: string) => `${agent} 使用 Amazon Bedrock，沙箱尚不支持。`,
@@ -445,12 +459,12 @@ export const problems: Messages["problems"] = {
   sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,
   sandboxCouldNotStart: (cause: string) => `它无法启动：${cause}`,
   sandboxNotReadyInTime: (seconds: number) => `它没有在 ${seconds} 秒内就绪。`,
+  sandboxNoAgentVersion: (program: string) => `Mirador 无法确定要放入哪个版本的 ${program}。`,
   sandboxNotReadyFixed: {
-    "no-claude-code-version": "Mirador 无法确定要放入哪个版本的 Claude Code。",
-    "versions-differ": "它的 Agent 使用不同版本的 Claude Code，而一个沙箱只运行一个版本。",
+    "versions-differ": "它的 Agent 需要不同的镜像（另一种 Agent 或另一个版本），而一个沙箱一次只运行一个。等沙箱中的其他 Agent 闲置 10 分钟后，这个对话即可启动。",
     "shared-kernel-not-allowed": "在这台电脑上它会是一个与这台电脑共用内核的 Podman 容器，而它还没有被允许：请在开启它的沙箱的地方允许。",
   },
   workspaceSandboxNotReady: (why: string) => `这个工作区的沙箱还没有就绪，因此它的 Agent 没有启动。${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
-    `这个工作区在沙箱中运行它的 Agent，而这个 Agent 无法在其中运行。${why}请选择一个用 API 密钥登录的 Claude 配置，或为这个工作区关闭沙箱。`,
+    `这个工作区在沙箱中运行它的 Agent，而这个 Agent 无法在其中运行。${why}请选择一个可以在其中运行的配置，或为这个工作区关闭沙箱。`,
 };

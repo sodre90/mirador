@@ -1,5 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { createServer, request as httpRequest, type IncomingHttpHeaders } from "node:http";
+import type { AddressInfo } from "node:net";
 import { release } from "node:os";
 import { dirname, join } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
@@ -285,13 +287,13 @@ test("while the workspace is sandboxed, a Codex profile is refused with what to 
   await signIn(page, host);
   const card = projectCard(page);
   const refusedCodex =
-    "Coder isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming. Pick a Claude profile that signs in with an API key, or turn the sandbox off for this workspace.";
+    "Coder can't run in a sandbox yet: sandboxes run Claude Code and pi agents for now, other kinds are coming. Pick a profile that can run there, or turn the sandbox off for this workspace.";
   await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Coder · Codex" });
 
   await test.step("the sandbox's settings say new conversations start on a profile that can't run there", async () => {
     const dialog = await openSandboxOf(page, card, "project");
     await expect(dialog.locator(".workspace-sandbox-starts-on-why")).toHaveText(
-      "New conversations here start on a profile that can't run in the sandbox. Coder isn't a Claude Code agent: sandboxes run Claude Code agents only for now, other kinds are coming.",
+      "New conversations here start on a profile that can't run in the sandbox. Coder can't run in a sandbox yet: sandboxes run Claude Code and pi agents for now, other kinds are coming.",
     );
     await expect(startOnPicker(dialog).locator("option:not([disabled])")).toHaveText(["Builder · Claude Code"]);
     await keepScreenshot(dialog, "starts-on-refused");
@@ -366,7 +368,155 @@ test("where none of the profiles can run in the sandbox, its settings say so and
   await profiles.getByRole("button", { name: "Close" }).click();
 
   const dialog = await openSandboxOf(page, card, "project");
-  await expect(dialog.locator(".workspace-sandbox-no-profile-runs")).toHaveText("None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can.");
+  await expect(dialog.locator(".workspace-sandbox-no-profile-runs")).toHaveText(
+    "None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can, and so can a pi profile whose model pi's models.json sets up with a key.",
+  );
   await expect(startOnPicker(dialog)).toHaveCount(0);
   await dialog.getByRole("button", { name: "Done" }).click();
+});
+
+const PI_KEY = "sk-e2e-pi-gateway-key-4321";
+const PI_TEAM = "e2e-pi-team-header-9876";
+const piWorkspace = () => join(host.root, "pi-project");
+
+/** A pi agent folder made for the test, as the profile names it in PI_CODING_AGENT_DIR. */
+function piAgentFolder(name: string, models: unknown, settings: unknown) {
+  const folder = join(host.root, name);
+  mkdirSync(folder, { recursive: true });
+  writeFileSync(join(folder, "models.json"), JSON.stringify(models));
+  writeFileSync(join(folder, "settings.json"), JSON.stringify(settings));
+  return folder;
+}
+
+/** The pi the host asks for its version, which the sandbox's image installs from npm. */
+function piSayingItsVersion() {
+  const program = join(host.root, "fake-pi", "pi");
+  mkdirSync(dirname(program), { recursive: true });
+  writeFileSync(program, `#!/bin/sh\necho 1.6.0\n`);
+  chmodSync(program, 0o755);
+  return program;
+}
+
+/** A model provider on this computer that answers every request and keeps the path and headers of each. */
+async function modelProviderHere() {
+  const requests: { path: string; headers: IncomingHttpHeaders }[] = [];
+  const server = createServer((request, response) => {
+    requests.push({ path: request.url ?? "", headers: request.headers });
+    response.writeHead(200, { "content-type": "application/json" }).end(`{"answered":true}`);
+  });
+  await new Promise<void>((listening) => server.listen(0, "127.0.0.1", listening));
+  return { baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}/v1`, requests, close: () => server.close() };
+}
+
+/** What the model proxy answers a request the VM's model relay passes on, by the socket the VM was given. */
+const askedThroughModelSocket = (socket: string, path: string, headers: Record<string, string>) =>
+  new Promise<string>((answered, failed) => {
+    const asking = httpRequest({ socketPath: socket, path, method: "POST", headers: { host: "127.0.0.1:7702", "content-type": "application/json", ...headers } }, (response) => {
+      let body = "";
+      response.setEncoding("utf8");
+      response.on("data", (chunk: string) => (body += chunk));
+      response.on("end", () => answered(`${response.statusCode} ${body.trim()}`));
+    });
+    asking.on("error", failed);
+    asking.end("{}");
+  });
+
+test("a pi profile's agent runs in the sandbox on a pi image, reaching its model through Mirador, which adds its key and headers; one on a model pi knows by itself is refused saying why", async ({ page }) => {
+  test.skip(!sandboxesRunHere, "Sandboxes run on macOS 26 on Apple silicon only.");
+  const provider = await modelProviderHere();
+  try {
+    const piAgent = piAgentFolder(
+      "pi-agent",
+      {
+        providers: {
+          gateway: {
+            api: "openai-completions",
+            baseUrl: provider.baseUrl,
+            apiKey: "$PIPER_KEY",
+            headers: { "x-team": "${PIPER_TEAM}" },
+            models: [{ id: "e2e-model", name: "E2E model" }, { id: "elsewhere", baseUrl: "http://127.0.0.1:9/v1" }],
+          },
+        },
+      },
+      { defaultProvider: "gateway", defaultModel: "e2e-model", defaultThinkingLevel: "low", packages: ["npm:an-extension-of-this-computer"] },
+    );
+    const builtInAgent = piAgentFolder("pi-agent-built-in", {}, { defaultProvider: "anthropic", defaultModel: "claude-sonnet-4-5" });
+    const pi = piSayingItsVersion();
+    mkdirSync(piWorkspace(), { recursive: true });
+    execFileSync("git", ["init", "-q", piWorkspace()]);
+
+    await signIn(page, host);
+    for (const [name, folder, more] of [
+      ["Piper", piAgent, `\nPIPER_KEY=${PI_KEY}\nPIPER_TEAM=${PI_TEAM}`],
+      ["Builtin", builtInAgent, ""],
+    ]) {
+      const profiles = await createProfile(page, name!, `PI_CODING_AGENT_DIR=${folder}\nPI_ACP_PI_COMMAND=${pi}\nPI_OFFLINE=1${more}`, "", "pi");
+      await profiles.getByRole("button", { name: "Close" }).click();
+    }
+    await addWorkspaceFromSidebar(page, piWorkspace());
+    const card = workspaceCard(page, piWorkspace());
+    await card.getByLabel("Agent", { exact: true }).selectOption({ label: "Builtin · pi" });
+
+    await test.step("the sandbox's settings say why the pi profile on a model pi knows by itself can't run there, and offer the one that can", async () => {
+      const dialog = await openSandboxOf(page, card, "pi-project");
+      await expect(dialog.locator(".workspace-sandbox-starts-on-why")).toHaveText(
+        "New conversations here start on a profile that can't run in the sandbox. Builtin uses a model pi knows by itself. A sandbox reaches only a model that pi's models.json sets up: add it there with its key.",
+      );
+      await expect(startOnPicker(dialog).locator("option:not([disabled])")).toHaveText(["Piper · pi"]);
+      await keepScreenshot(dialog, "pi-starts-on-refused");
+      await startOnPicker(dialog).selectOption({ label: "Piper · pi" });
+      await expect(dialog.locator(".workspace-sandbox-starts-on")).toHaveCount(0);
+      await sandboxSwitch(dialog).check();
+      await expect(dialog.locator(".room-sandbox-setup")).toHaveText("Set up on this Mac.");
+      await dialog.getByRole("button", { name: "Done" }).click();
+    });
+
+    const previousUrl = page.url();
+    await card.getByRole("button", { name: "+ New conversation" }).click();
+    await expect(page).not.toHaveURL(previousUrl);
+    await expect(chatHeader(page).locator(".conversation-sandboxed")).toHaveText("Sandboxed");
+    const seen = join(host.root, "pi-seen");
+    const shown = ["MIRADOR_PI_MODELS", "MIRADOR_PI_SETTINGS", "PI_ACP_PI_COMMAND", "PI_CODING_AGENT_DIR", "PIPER_KEY", "PIPER_TEAM"].map((name) => `{{env:${name}}}`).join("\n");
+    await sendMessage(page, `WRITE ${JSON.stringify([{ edit: seen, content: shown }])}`);
+    await waitForTurnToEnd(page);
+    const [models, settings, piCommand, agentFolder, ...keys] = readFileSync(seen, "utf8").split("\n");
+    const { providers } = JSON.parse(models!) as { providers: Record<string, { baseUrl: string }> };
+    const relayed = /^http:\/\/127\.0\.0\.1:7702\/p\/[A-Za-z0-9-]+$/;
+
+    await test.step("pi in the VM gets the default model's provider with the relay for its address and a key that is none, the settings that choose its model, and none of the key's values", () => {
+      expect(providers).toEqual({ gateway: { api: "openai-completions", baseUrl: expect.stringMatching(relayed), apiKey: "kept-by-mirador", models: [{ id: "e2e-model", name: "E2E model" }] } });
+      expect(JSON.parse(settings!)).toEqual({ defaultProvider: "gateway", defaultModel: "e2e-model", defaultThinkingLevel: "low" });
+      expect(piCommand).toBe("/mirador/sandbox/pi.sh");
+      expect(agentFolder!.startsWith(join(host.dataDir, "sandbox"))).toBe(true);
+      expect(keys).toEqual(["", ""]);
+    });
+
+    const calls = containerCalls();
+    const run = calls.findLast(([command, ...rest]) => command === "run" && rest.some((argument) => argument.startsWith("mirador.owner=workspace:")) && JSON.stringify(rest).includes(realpathSync(piWorkspace())))!;
+
+    await test.step("the sandbox runs a pi image of the pi on this computer, with Mirador's scripts read-only and nothing of the profile's own pi folder", () => {
+      const builds = calls.filter(([command]) => command === "build");
+      const piBuild = builds.find((build) => build.includes("AGENT_PACKAGE=@earendil-works/pi-coding-agent@1.6.0"));
+      const tag = piBuild?.[piBuild.indexOf("-t") + 1];
+      expect(tag).toMatch(/^mirador-room-agent:pi-1\.6\.0-bun-/);
+      expect(run).toContain(tag);
+      expect(run.some((argument) => argument.endsWith(":/mirador/sandbox:ro"))).toBe(true);
+      expect(JSON.stringify(calls)).not.toContain(piAgent);
+      expect(JSON.stringify(calls)).not.toContain(PI_KEY);
+      expect(JSON.stringify(calls)).not.toContain(PI_TEAM);
+    });
+
+    await test.step("the model proxy passes the agent's requests on to its provider's path with the key and headers added, the VM's own key dropped, and refuses another API's path", async () => {
+      const socket = run.find((argument) => argument.endsWith(":/run/mirador/model.sock"))!.split(":")[0]!;
+      const routed = new URL(providers.gateway!.baseUrl).pathname;
+      const inVm = { authorization: "Bearer kept-by-mirador", "x-pi-session-id": "a-session" };
+      expect(await askedThroughModelSocket(socket, `${routed}/chat/completions`, inVm)).toBe(`200 {"answered":true}`);
+      expect(await askedThroughModelSocket(socket, `${routed}/v1/messages`, inVm)).toBe("404 not a path of the model API");
+      expect(provider.requests.map(({ path, headers }) => ({ path, authorization: headers.authorization, team: headers["x-team"], session: headers["x-pi-session-id"] }))).toEqual([
+        { path: "/v1/chat/completions", authorization: `Bearer ${PI_KEY}`, team: PI_TEAM, session: "a-session" },
+      ]);
+    });
+  } finally {
+    provider.close();
+  }
 });

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import type { SandboxSetup } from "../../shared/sandbox.ts";
+import type { SandboxedHarness, SandboxSetup } from "../../shared/sandbox.ts";
 import { lastLineOf, type ContainerCli } from "./container-cli.ts";
 
 export const RECIPE = join(import.meta.dir, "room-agent.Containerfile");
@@ -13,15 +13,33 @@ export const IMAGE_NAME = "mirador-room-agent";
 const SERVICE_START_TIMEOUT_MS = 10 * 60_000;
 const BUILD_TIMEOUT_MS = 30 * 60_000;
 
-/** `2.1.330 (Claude Code)` as Claude Code says its version; null for anything else. */
-export const claudeCodeVersionIn = (said: string | null) => /^\s*(\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?)\b/.exec(said ?? "")?.[1] ?? null;
+/** The agent an image is of: its kind and its version. */
+export interface AgentImage {
+  harness: SandboxedHarness;
+  version: string;
+}
 
-/** The image of one Claude Code version, Bun version and recipe: another of any of them is another image. */
-export async function imageTag(claudeCodeVersion: string, bunVersion = Bun.version) {
+/** Each kind's npm package, and the program it installs, which says its version once installed. */
+const AGENT_PACKAGES: Record<SandboxedHarness, { npmPackage: string; program: string }> = {
+  claude: { npmPackage: "@anthropic-ai/claude-code", program: "claude" },
+  pi: { npmPackage: "@earendil-works/pi-coding-agent", program: "pi" },
+};
+
+/** The images of an agent kind, whatever their version, as their tags begin. */
+export const imagesOfKind = (harness: SandboxedHarness) => `${IMAGE_NAME}:${harness}-`;
+
+/** The image of one agent kind and version, Bun version and recipe: another of any of them is another image. */
+export async function imageTag({ harness, version }: AgentImage, bunVersion = Bun.version) {
   const recipe = await readFile(RECIPE, "utf8");
   const recipeHash = createHash("sha256").update(recipe).digest("hex").slice(0, 10);
-  return `${IMAGE_NAME}:claude-${claudeCodeVersion}-bun-${bunVersion}-${recipeHash}`;
+  return `${imagesOfKind(harness)}${version}-bun-${bunVersion}-${recipeHash}`;
 }
+
+/** What the recipe builds the image of this agent with. */
+export const buildArguments = ({ harness, version }: AgentImage) => {
+  const { npmPackage, program } = AGENT_PACKAGES[harness];
+  return ["--build-arg", `BUN_VERSION=${Bun.version}`, "--build-arg", `AGENT_PACKAGE=${npmPackage}@${version}`, "--build-arg", `AGENT_PROGRAM=${program}`];
+};
 
 /** The step a build is on, as `container build --progress plain` says it, `#7 [3/6] RUN …`, or `podman build`, `STEP 3/6: RUN …`. */
 export function buildStepIn(line: string): SandboxSetup["step"] | null {
@@ -74,18 +92,18 @@ export async function builderRuns(cli: ContainerCli) {
 
 /**
  * Builds the image on this Mac from the recipe, with an empty folder as the build's context, then removes the builder
- * it started, the images the build pulled for its stages, and the images of other versions built before. A builder
- * that ran before is left as it was, and so is every image that was there before. The builder's own image stays:
- * `container` keeps it out of its image list, as its own.
+ * it started, the images the build pulled for its stages, and the images of the agent's other versions built before.
+ * A builder that ran before is left as it was, and so is every image that was there before, other agent kinds' too.
+ * The builder's own image stays: `container` keeps it out of its image list, as its own.
  */
-export async function buildImage(cli: ContainerCli, tag: string, claudeCodeVersion: string, progress: (setup: SandboxSetup) => void) {
+export async function buildImage(cli: ContainerCli, tag: string, agent: AgentImage, progress: (setup: SandboxSetup) => void) {
   progress({ stage: "building-image" });
   const builderRanBefore = await builderRuns(cli);
   const imagesBefore = await listImages(cli);
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
     if (!builderRanBefore) await mustRun(cli, ["builder", "start"], { timeoutMs: SERVICE_START_TIMEOUT_MS });
-    const build = ["build", "--platform", "linux/arm64", "--progress", "plain", "-f", RECIPE, "--build-arg", `CLAUDE_CODE_VERSION=${claudeCodeVersion}`, "--build-arg", `BUN_VERSION=${Bun.version}`, "-t", tag, emptyContext];
+    const build = ["build", "--platform", "linux/arm64", "--progress", "plain", "-f", RECIPE, ...buildArguments(agent), "-t", tag, emptyContext];
     await mustRun(cli, build, {
       timeoutMs: BUILD_TIMEOUT_MS,
       onLine: (line) => {
@@ -98,7 +116,7 @@ export async function buildImage(cli: ContainerCli, tag: string, claudeCodeVersi
     if (!builderRanBefore) await removeBuilder(cli);
     await removeImagesPulledFor(cli, tag, imagesBefore);
   }
-  await removeOtherVersions(cli, tag);
+  await removeOtherVersions(cli, tag, agent);
 }
 
 async function removeImagesPulledFor(cli: ContainerCli, built: string, imagesBefore: Set<string>) {
@@ -111,8 +129,8 @@ async function removeBuilder(cli: ContainerCli) {
   await cli.run(["builder", "delete"]);
 }
 
-async function removeOtherVersions(cli: ContainerCli, kept: string) {
-  const others = [...(await listImages(cli))].filter((name) => name.split("/").at(-1)!.startsWith(`${IMAGE_NAME}:`) && !name.endsWith(kept));
+async function removeOtherVersions(cli: ContainerCli, kept: string, { harness }: AgentImage) {
+  const others = [...(await listImages(cli))].filter((name) => name.split("/").at(-1)!.startsWith(imagesOfKind(harness)) && !name.endsWith(kept));
   if (others.length > 0) await cli.run(["image", "delete", ...others]);
 }
 

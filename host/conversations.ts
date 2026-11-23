@@ -105,14 +105,13 @@ import { NO_PROTECTIONS, protectionsKept, settingsFiles, type SettingSource } fr
 import { ALL_OF_CLAUDE_SETUP, environmentInRoom, NO_ENVIRONMENT_CHOICES, roomSetupFingerprint, type EnvironmentChoices } from "../shared/room-agent-setup.ts";
 import { canvasFollowUp, canvasUseOf, isCanvasFollowUp, type TurnToolCall } from "./canvas/reply-check.ts";
 import { HarnessProcess, type AgentLaunch, type ConfigValue } from "./acp/harness.ts";
-import { versionOf } from "./acp/claude-program.ts";
 import { repositoryHooksOff } from "./sandbox/hooks-off.ts";
 import { belongsToSandbox, NO_SANDBOXES, sandboxCanvasAddress, sandboxConfigFolder, sandboxOfConversation, type AgentInSandbox, type ConversationSandbox, type SandboxedAgents } from "./sandbox/sandboxes.ts";
 import { SandboxNotReady } from "./sandbox/vm-launcher.ts";
-import { claudeCodeVersionIn } from "./sandbox/image.ts";
+import { agentVersionIn } from "./sandbox/agent-version.ts";
 import { BUN_IN_VM } from "./sandbox/agent-environment.ts";
-import { modelRouteOf } from "./sandbox/model-proxy.ts";
-import { NO_SANDBOX, ownerKey, runsInSandbox, signInElsewhere, type SandboxOwner } from "../shared/sandbox.ts";
+import { modelInSandbox } from "./sandbox/sandbox-control.ts";
+import { NO_SANDBOX, ownerKey, type SandboxOwner } from "../shared/sandbox.ts";
 import { awaitsItsInput, ToolCallReportsHeard, withReportedToolCall } from "./acp/reported-tool-call.ts";
 import { canvasToolAskedFor, isPreAllowedCanvasTool } from "./canvas/permission.ts";
 import { ROOM_CANVAS_TOOLS } from "./canvas/tool-names.ts";
@@ -3344,7 +3343,7 @@ export class ConversationService {
   /** A sandbox's agents keep their Claude Code config in a folder of their room's or workspace's, which their VM is given. */
   private claudeConfigDirOf(conversation: Conversation) {
     const sandbox = this.sandboxOf(conversation);
-    if (sandbox) return sandboxConfigFolder(this.config.dataDir, sandbox.owner);
+    if (sandbox) return sandboxConfigFolder(this.config.dataDir, sandbox.owner, "claude");
     const profile = conversation.profileId === null ? undefined : this.store.findProfile(conversation.profileId);
     return claudeConfigDir(profileEnvironment(profile ?? null, profile && this.environmentGivenTo(conversation, profile)));
   }
@@ -3589,22 +3588,22 @@ export class ConversationService {
 
   /** A sandbox sees its workspace's folder alone, so a workspace's conversation that works in a worktree of its own can't start in it. */
   private async agentInSandbox({ owner, setting }: ConversationSandbox, launch: ProcessLaunch, profile: Profile, { command, environment }: AgentLaunch): Promise<AgentInSandbox> {
-    if (!runsInSandbox(profile.harness)) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "agent-kind-coming", agent: profile.name, harness: profile.harness } });
-    const route = modelRouteOf(environment);
-    const how = signInElsewhere(environment);
-    if (how || !route) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "agent-signs-in-elsewhere", agent: profile.name, how: how ?? "subscription" } });
+    const model = modelInSandbox(profile, launch.roomId ? this.environmentChoicesOf(launch.roomId, profile.id) : NO_ENVIRONMENT_CHOICES, environment);
+    if ("blocker" in model) throw new SandboxNotReady({ kind: "blocked", blocker: model.blocker });
     if (owner.kind === "workspace" && launch.id && this.get(launch.id).worktree) throw new SandboxNotReady({ kind: "blocked", blocker: { kind: "conversation-in-worktree" } });
-    const claudeCodeVersion = claudeCodeVersionIn(environment.CLAUDE_CODE_EXECUTABLE ? await versionOf(environment.CLAUDE_CODE_EXECUTABLE) : null);
-    if (!claudeCodeVersion) throw new SandboxNotReady({ kind: "no-claude-code-version" });
+    const { harness } = model.kind;
+    const version = await agentVersionIn(harness, environment);
+    if (!version) throw new SandboxNotReady({ kind: "no-agent-version", harness });
     const workspace = launch.id ? this.workspaceOf(launch.id) : this.existingWorkspace(this.store.findRoom(owner.id)?.workspaceId ?? "");
     return {
       owner,
       allowsSharedKernel: setting.allowsSharedKernel,
       profileId: profile.id,
-      claudeCodeVersion,
+      kind: model.kind,
+      version,
       workingDirectory: await recordedDirectory(workspace),
       given: environment,
-      route,
+      route: model.route,
       agent: [BUN_IN_VM, ...command.slice(1)],
     };
   }

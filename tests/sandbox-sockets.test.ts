@@ -8,6 +8,7 @@ import { modelRouteOf, startModelProxy, type ModelRoute, type RunningSocket } fr
 
 const scratch = mkdtempSync(join(tmpdir(), "sbx-sockets-"));
 const KEY = "sk-ant-the-profiles-own-key-5678";
+const GATEWAY_KEY = "gw-the-gateways-own-key-9012";
 const MODEL_PORT = 7702;
 const CANVAS_PORT = 7701;
 
@@ -48,8 +49,12 @@ beforeAll(async () => {
       return Response.json({ answered: true });
     },
   });
-  const route: ModelRoute = { upstream: `http://127.0.0.1:${upstream.port}/base`, keyVariable: "ANTHROPIC_API_KEY", key: KEY, customHeaders: "X-Team: blue\nbroken line" };
-  modelProxy = await startModelProxy(modelSocket, MODEL_PORT, (profileId) => (profileId === "builder" ? route : null));
+  const routes: Record<string, ModelRoute> = {
+    builder: modelRouteOf({ ANTHROPIC_API_KEY: KEY, ANTHROPIC_BASE_URL: `http://127.0.0.1:${upstream.port}/base`, ANTHROPIC_CUSTOM_HEADERS: "X-Team: blue\nbroken line" })!,
+    gateway: { upstream: `http://127.0.0.1:${upstream.port}/gw/v1/`, api: "openai-responses", key: GATEWAY_KEY, keyHeader: "authorization", headers: [["X-Gateway-Team", "green"]] },
+    chatter: { upstream: `http://127.0.0.1:${upstream.port}/v1`, api: "openai-completions", key: GATEWAY_KEY, keyHeader: "authorization", headers: [] },
+  };
+  modelProxy = await startModelProxy(modelSocket, MODEL_PORT, (profileId) => routes[profileId] ?? null);
   canvasSocket = await startCanvasSocket(canvasSocketPath, CANVAS_PORT, {
     belongs: (conversationId) => conversationId === "conversation-1" || conversationId === "conversation-2",
     tokenOf: (conversationId) => `token-of-${conversationId}`,
@@ -93,9 +98,10 @@ describe("a room's model proxy", () => {
   test("puts an auth token in the header Anthropic's API reads it from", () => {
     expect(modelRouteOf({ ANTHROPIC_AUTH_TOKEN: " token ", ANTHROPIC_BASE_URL: "https://gateway.example/anthropic" })).toEqual({
       upstream: "https://gateway.example/anthropic",
-      keyVariable: "ANTHROPIC_AUTH_TOKEN",
+      api: "anthropic-messages",
       key: "token",
-      customHeaders: "",
+      keyHeader: "authorization",
+      headers: [],
     });
     expect(modelRouteOf({ CLAUDE_CODE_USE_BEDROCK: "1" })).toBeNull();
   });
@@ -121,6 +127,31 @@ describe("a room's model proxy", () => {
       expect({ path, status: statusOf(await modelRequest(`GET ${path} HTTP/1.1`)) }).toEqual({ path, status: 404 });
     }
     expect(statusOf(await modelRequest("PUT /p/builder/v1/messages HTTP/1.1"))).toBe(405);
+    expect(heardUpstream).toEqual([]);
+  });
+
+  test("passes an OpenAI Responses request on under the gateway's /v1, with the key as a bearer token and the profile's headers, never the VM's", async () => {
+    heardUpstream.length = 0;
+    const answer = await rawRequest(
+      modelSocket,
+      `POST /p/gateway/responses HTTP/1.1\nHost: 127.0.0.1:${MODEL_PORT}\nAuthorization: Bearer kept-by-mirador\nx-api-key: kept-by-mirador\nX-Gateway-Team: forged\nx-pi-session-id: s-1\nContent-Type: application/json\nContent-Length: 2\nConnection: close\n\n{}`,
+    );
+    expect(statusOf(answer)).toBe(200);
+    expect(answer).not.toContain(GATEWAY_KEY);
+    expect(heardUpstream).toHaveLength(1);
+    expect(heardUpstream[0]).toMatchObject({ path: "/gw/v1/responses", body: "{}", headers: { authorization: `Bearer ${GATEWAY_KEY}`, "x-gateway-team": "green", "x-pi-session-id": "s-1" } });
+    expect(heardUpstream[0]!.headers["x-api-key"]).toBeUndefined();
+    expect(statusOf(await modelRequest("GET /p/gateway/models HTTP/1.1"))).toBe(200);
+    expect(statusOf(await modelRequest("POST /p/chatter/chat/completions HTTP/1.1", undefined, "Content-Length: 0\n"))).toBe(200);
+    expect(heardUpstream.map(({ path }) => path)).toEqual(["/gw/v1/responses", "/gw/v1/models", "/v1/chat/completions"]);
+  });
+
+  test("goes nowhere on an OpenAI route but its own API's paths: not Anthropic's, nor another OpenAI API's, nor anything else under the base URL", async () => {
+    heardUpstream.length = 0;
+    const refused = ["/p/gateway/v1/messages", "/p/gateway/chat/completions", "/p/gateway/v1/responses", "/p/gateway/responses/abc", "/p/gateway/files", "/p/gateway/models/gpt", "/p/gateway/", "/p/chatter/responses", "/p/chatter/v1/chat/completions", "/p/chatter/embeddings"];
+    for (const path of refused) {
+      expect({ path, status: statusOf(await modelRequest(`POST ${path} HTTP/1.1`, undefined, "Content-Length: 0\n")) }).toEqual({ path, status: 404 });
+    }
     expect(heardUpstream).toEqual([]);
   });
 });
@@ -160,7 +191,7 @@ describe("a room's canvas socket", () => {
 });
 
 describe("a room's model proxy holds only so much of this Mac", () => {
-  const routeTo = (port: number): ModelRoute => ({ upstream: `http://127.0.0.1:${port}`, keyVariable: "ANTHROPIC_API_KEY", key: KEY, customHeaders: "" });
+  const routeTo = (port: number): ModelRoute => ({ upstream: `http://127.0.0.1:${port}`, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] });
   const askedThrough = (socket: string) => rawRequest(socket, `POST /p/builder/v1/messages HTTP/1.1\nHost: 127.0.0.1:${MODEL_PORT}\nContent-Length: 2\nConnection: close\n\n{}`);
 
   test("takes so many requests at once, refuses more, and takes one again once an answer was read to its end", async () => {

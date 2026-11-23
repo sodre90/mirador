@@ -454,7 +454,21 @@ export const problems: Messages["problems"] = {
     "podman-not-rootless": "Sandboxes brauchen Podman rootless, unter deinem eigenen Benutzer: Mirador läuft hier als root.",
     "turned-off": "Sandboxes sind in diesem Mirador ausgeschaltet.",
   },
-  sandboxAgentKindComing: (agent: string) => `${agent} ist kein Claude-Code-Agent: Sandboxes führen vorerst nur Claude-Code-Agenten aus, andere Arten kommen noch.`,
+  sandboxAgentKindComing: (agent: string) => `${agent} kann noch nicht in einer Sandbox laufen: Sandboxes führen vorerst Claude-Code- und pi-Agenten aus, andere Arten kommen noch.`,
+  sandboxPiModelElsewhere: {
+    "no-default-model": (agent: string) =>
+      `Das pi von ${agent} nennt in seiner settings.json kein Standardmodell, daher weiß Mirador nicht, welches Modell es dafür erreichen soll.`,
+    "built-in-provider": (agent: string) =>
+      `${agent} nutzt ein Modell, das pi von sich aus kennt. Eine Sandbox erreicht nur ein Modell, das die models.json von pi einrichtet: Trag es dort mit seinem Schlüssel ein.`,
+    "unsupported-provider": (agent: string) =>
+      `${agent} nutzt ein Modell, das eine Sandbox nicht erreicht: nur eines über die Messages-API von Anthropic oder die Chat-Completions- oder Responses-API von OpenAI, unter der Adresse seines Anbieters, ohne eigene Header.`,
+    "signs-in": (agent: string) =>
+      `Das pi von ${agent} meldet sich bei seinem Modellanbieter an, und das müsste in die Sandbox: Gib dem Anbieter stattdessen einen API-Schlüssel.`,
+    "key-from-command": (agent: string) =>
+      `Das pi von ${agent} holt seinen Schlüssel oder einen Header aus einem Befehl, den eine Sandbox nicht auf diesem Rechner ausführen kann: Gib ihn stattdessen in einem Wert des Profils an.`,
+    "no-key": (agent: string) =>
+      `Das pi von ${agent} hat keinen Schlüssel für sein Modell, oder ein Wert, den sein Schlüssel oder ein Header braucht, ist nicht gesetzt.`,
+  },
   sandboxAgentSignsInElsewhere: {
     subscription: (agent: string) => `${agent} meldet sich mit einem Claude-Abo an, das in die Sandbox müsste: Gib seinem Profil stattdessen einen API-Key.`,
     bedrock: (agent: string) => `${agent} nutzt Amazon Bedrock, das Sandboxes noch nicht unterstützen.`,
@@ -482,12 +496,12 @@ export const problems: Messages["problems"] = {
   sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Sie konnte nicht starten: ${cause}`,
   sandboxNotReadyInTime: (seconds: number) => `Sie war nicht innerhalb von ${seconds} s bereit.`,
+  sandboxNoAgentVersion: (program: string) => `Mirador konnte nicht feststellen, welche Version von ${program} hinein soll.`,
   sandboxNotReadyFixed: {
-    "no-claude-code-version": "Mirador konnte nicht feststellen, welche Version von Claude Code hinein soll.",
-    "versions-differ": "Seine Agenten nutzen verschiedene Versionen von Claude Code, und eine Sandbox führt nur eine aus.",
+    "versions-differ": "Seine Agenten brauchen verschiedene Images, für eine andere Art von Agent oder eine andere Version, und eine Sandbox führt nur eines auf einmal aus. Diese Unterhaltung kann starten, sobald die anderen Agenten der Sandbox 10 Minuten untätig waren.",
     "shared-kernel-not-allowed": "Auf diesem Rechner wäre sie ein Podman-Container, der sich den Kernel des Rechners teilt, und das ist hier nicht erlaubt: Erlaube es dort, wo die Sandbox eingeschaltet wird.",
   },
   workspaceSandboxNotReady: (why: string) => `Die Sandbox dieses Arbeitsbereichs ist nicht bereit, daher ist sein Agent nicht gestartet. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
-    `Dieser Arbeitsbereich lässt seine Agenten in einer Sandbox laufen, in der dieser nicht laufen kann. ${why} Wähle ein Claude-Profil, das sich mit einem API-Schlüssel anmeldet, oder schalte die Sandbox für diesen Arbeitsbereich aus.`,
+    `Dieser Arbeitsbereich lässt seine Agenten in einer Sandbox laufen, in der dieser nicht laufen kann. ${why} Wähle ein Profil, das dort laufen kann, oder schalte die Sandbox für diesen Arbeitsbereich aus.`,
 };

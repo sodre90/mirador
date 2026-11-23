@@ -210,7 +210,7 @@ export const rooms: Messages["rooms"] = {
     setupFailed: (problem: string) => `设置失败：${problem}`,
     wholeEnvironmentIgnored: "房间开着沙箱时此项无效：只有这里选中的值会进入它的沙箱。",
     meaning: [
-      "房间的 Claude Code Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到工作区、房间的一个文件夹（存放 Agent 的 Claude Code 设置和会话），以及你从这台电脑添加的文件夹（只读或读写），看不到这台电脑的其他内容。它的网络只能通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；此外只能访问 Mirador 的画布。",
+      "房间的 Claude Code 和 pi Agent 在这台电脑上自己的沙箱里运行：在 Mac 上是一个轻量虚拟机，由 Apple 的 container 工具创建；在 Linux 上是一个 Podman 容器，它与这台电脑共用内核，因此对 Agent 的约束比虚拟机更弱，只有在你允许后才会使用。沙箱能看到工作区、房间的一个文件夹（存放 Agent 的设置和会话），以及你从这台电脑添加的文件夹（只读或读写），看不到这台电脑的其他内容。它的网络只能通过 Mirador 访问模型，Mirador 会加上配置的密钥，所以密钥从不进入沙箱；此外只能访问 Mirador 的画布。",
       "自由工作时，Agent 什么都不用请求批准，因为沙箱把它们关在里面。否则房间的权限预设照常适用，和在这台电脑上一样。",
       "Agent 读取设置、指令和 MCP 服务器的文件会被暂扣，会自行运行的文件也一样：.claude、.mcp.json、CLAUDE.md、AGENTS.md、.codex、opencode.json、.opencode、.pi、.husky、.githooks、.vscode、.pre-commit-config.yaml、lefthook.yml 和 .envrc。沙箱启动时已有的这些文件在其中是只读的；新出现的会立即被撤回，由你在房间里批准或丢弃。",
       "Agent 在工作区改动的其他任何文件，在你自己运行时都可能被执行：测试、脚本、package.json，或者在终端里提交（会运行仓库的 Hook）。在那里运行任何东西之前，请先看看它们改了什么。",

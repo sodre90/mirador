@@ -65,12 +65,11 @@ import { KeepAwakeHold } from "./keep-awake.ts";
 import { keepDataFolderToHostAccount } from "./windows-folder-access.ts";
 import { stopIgnoringCtrlC } from "./windows-processes.ts";
 import { askFormOnCanvas } from "./acp/elicitation.ts";
-import { findClaudeProgram, versionOf } from "./acp/claude-program.ts";
 import { conversationCanvasToken } from "./canvas-token.ts";
 import { currentPath } from "./current-path.ts";
 import { homedir } from "node:os";
 import { AppleContainer } from "./sandbox/apple-container.ts";
-import { claudeCodeVersionIn } from "./sandbox/image.ts";
+import { agentImagesOf } from "./sandbox/agent-version.ts";
 import { computersOwnOnLinux, Podman } from "./sandbox/podman.ts";
 import { belongsToSandbox, Sandboxes } from "./sandbox/sandboxes.ts";
 import type { SandboxControl } from "./sandbox/sandbox-control.ts";
@@ -236,14 +235,10 @@ const sandboxes = new Sandboxes(podman ?? AppleContainer.here(config.sandboxCont
   foldersStarted: (owner) => sandboxFolders.vmStarted(owner),
 });
 const sandboxFolders = new SandboxFolderService(store, hub, conversations, sandboxes);
-const claudeCodeVersionHere = async () => {
-  const program = findClaudeProgram(store.claudeProgramSetting());
-  return program && claudeCodeVersionIn(await versionOf(program));
-};
 conversations.startsSandboxedAgentsIn(sandboxes);
 const sandboxControl: SandboxControl = {
   availability: () => sandboxes.availability(),
-  prepare: () => void claudeCodeVersionHere().then((version) => version && sandboxes.prepareInBackground(version)),
+  prepare: (profiles) => void agentImagesOf(profiles, store.claudeProgramSetting()).then((images) => images.forEach((image) => sandboxes.prepareInBackground(image))),
   answerHeldChange: (owner, changeId, answer) => sandboxes.answerHeldChange(owner, changeId, answer),
   workspaceRefusal: (workspace, turningOn) => sandboxes.workspaceRefusal(workspace, turningOn),
   ownerGone: (owner) => {

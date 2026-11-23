@@ -1,4 +1,5 @@
 import type { AgentGone, HostProblem, PrelaunchFailure } from "../shared/host-problems.ts";
+import { harnessLabels } from "../shared/model.ts";
 import type { SandboxBlocker, SandboxNotReadyWhy, SandboxUnavailable } from "../shared/sandbox.ts";
 import type { problems } from "./i18n/en/problems.ts";
 
@@ -43,6 +44,8 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxAgentKindComing(blocker.agent);
     case "agent-signs-in-elsewhere":
       return words.sandboxAgentSignsInElsewhere[blocker.how](blocker.agent);
+    case "pi-model-elsewhere":
+      return words.sandboxPiModelElsewhere[blocker.why](blocker.agent);
     case "worktree-points-elsewhere":
       return words.sandboxWorktreePointsElsewhere(blocker.worktree);
     case "part-is-link":
@@ -76,12 +79,16 @@ function sandboxNotReadyText(why: SandboxNotReadyWhy, words: ProblemWords) {
       return words.sandboxNotReadyInTime(why.seconds);
     case "too-many-held-changes":
       return words.sandboxTooManyHeldChanges(why.most);
+    case "no-agent-version":
+      return words.sandboxNoAgentVersion(harnessLabels[why.harness]);
     default:
       return words.sandboxNotReadyFixed[why.kind];
   }
 }
 
-const refusesTheAgent = (why: SandboxNotReadyWhy) => why.kind === "blocked" && (why.blocker.kind === "agent-kind-coming" || why.blocker.kind === "agent-signs-in-elsewhere");
+const AGENT_REFUSALS: SandboxBlocker["kind"][] = ["agent-kind-coming", "agent-signs-in-elsewhere", "pi-model-elsewhere"];
+
+const refusesTheAgent = (why: SandboxNotReadyWhy) => why.kind === "blocked" && AGENT_REFUSALS.includes(why.blocker.kind);
 
 /** A sandboxed workspace's agent that can't run there is a matter of the profile picked, which the owner can change. */
 const workspaceSandboxNotReadyText = (why: SandboxNotReadyWhy, words: ProblemWords) =>

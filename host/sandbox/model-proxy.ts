@@ -1,27 +1,56 @@
 import { chmod, rm } from "node:fs/promises";
-import { modelKeyVariableOf, type ModelKeyVariable } from "../../shared/sandbox.ts";
+import { modelKeyVariableOf } from "../../shared/sandbox.ts";
 import { cameThroughRelay } from "./relayed-request.ts";
 
-/** Where one of the room's agents reaches its model: its profile's API and key, which stay on this computer. */
+/** The model APIs the proxy speaks: Anthropic's Messages, and OpenAI's Chat Completions and Responses, as their clients call them. */
+export type ModelApi = "anthropic-messages" | "openai-completions" | "openai-responses";
+
+/**
+ * Where one of the sandbox's agents reaches its model: its profile's API and key, which stay on this computer, the header
+ * that API reads the key from, and the headers its profile adds to each request.
+ */
 export interface ModelRoute {
   upstream: string;
-  keyVariable: ModelKeyVariable;
+  api: ModelApi;
   key: string;
-  /** ANTHROPIC_CUSTOM_HEADERS of its profile, as `Name: value` lines. */
-  customHeaders: string;
+  keyHeader: "x-api-key" | "authorization";
+  headers: [string, string][];
 }
 
 export const ANTHROPIC_API = "https://api.anthropic.com";
 
-/** Where an agent with this environment reaches its model: its own API, else Anthropic's, with its key; null where it has no key. */
+/** What of a route never enters the VM: its key, and the values of the headers the proxy adds. */
+export const secretsOf = ({ key, headers }: ModelRoute) => [key, ...headers.map(([, value]) => value)];
+
+/** ANTHROPIC_CUSTOM_HEADERS, as `Name: value` lines; a line with no name is skipped. */
+const customHeaderLines = (text: string) =>
+  text.split(/\r?\n/).flatMap((line) => {
+    const colon = line.indexOf(":");
+    return colon > 0 ? [[line.slice(0, colon).trim(), line.slice(colon + 1).trim()] as [string, string]] : [];
+  });
+
+/** Where a Claude agent with this environment reaches its model: its own API, else Anthropic's, with its key; null where it has no key. */
 export function modelRouteOf(environment: Record<string, string>): ModelRoute | null {
   const keyVariable = modelKeyVariableOf(environment);
   if (!keyVariable) return null;
-  return { upstream: environment.ANTHROPIC_BASE_URL?.trim() || ANTHROPIC_API, keyVariable, key: environment[keyVariable]!.trim(), customHeaders: environment.ANTHROPIC_CUSTOM_HEADERS ?? "" };
+  return {
+    upstream: environment.ANTHROPIC_BASE_URL?.trim() || ANTHROPIC_API,
+    api: "anthropic-messages",
+    key: environment[keyVariable]!.trim(),
+    keyHeader: keyVariable === "ANTHROPIC_API_KEY" ? "x-api-key" : "authorization",
+    headers: customHeaderLines(environment.ANTHROPIC_CUSTOM_HEADERS ?? ""),
+  };
 }
 
-/** The paths of Anthropic's API that Claude Code uses, under the base URL; the proxy goes nowhere else. */
-const MODEL_API_PATH = /^\/v1\/(?:messages(?:\/count_tokens)?|models(?:\/[A-Za-z0-9._:@-]+)?)$/;
+/**
+ * The paths each API's clients use under its base URL, as Claude Code and pi call them; the proxy goes nowhere else. An
+ * OpenAI base URL holds its `/v1` itself.
+ */
+const API_PATHS: Record<ModelApi, RegExp> = {
+  "anthropic-messages": /^\/v1\/(?:messages(?:\/count_tokens)?|models(?:\/[A-Za-z0-9._:@-]+)?)$/,
+  "openai-completions": /^\/(?:chat\/completions|models)$/,
+  "openai-responses": /^\/(?:responses|models)$/,
+};
 
 /** An agent's requests come under `/p/<profile id>`, which picks the route of that agent of the room. */
 const ROUTED_PATH = /^\/p\/([A-Za-z0-9-]{1,64})(\/.*)$/;
@@ -30,12 +59,6 @@ const ROUTED_PATH = /^\/p\/([A-Za-z0-9-]{1,64})(\/.*)$/;
 const DROPPED_HEADERS = ["host", "authorization", "x-api-key", "content-length", "connection", "keep-alive", "proxy-authorization", "proxy-connection", "te", "trailer", "transfer-encoding", "upgrade", "cookie"];
 
 const refused = (status: number, why: string) => new Response(`${why}\n`, { status });
-
-const customHeaderLines = (text: string) =>
-  text.split(/\r?\n/).flatMap((line) => {
-    const colon = line.indexOf(":");
-    return colon > 0 ? [[line.slice(0, colon).trim(), line.slice(colon + 1).trim()] as const] : [];
-  });
 
 /** The upstream URL of an API path, under the base URL's own path where it has one. */
 export function upstreamUrl(upstream: string, path: string, search: string) {
@@ -48,9 +71,8 @@ export function upstreamUrl(upstream: string, path: string, search: string) {
 function headersFor(request: Request, route: ModelRoute) {
   const headers = new Headers(request.headers);
   DROPPED_HEADERS.forEach((name) => headers.delete(name));
-  customHeaderLines(route.customHeaders).forEach(([name, value]) => headers.set(name, value));
-  if (route.keyVariable === "ANTHROPIC_API_KEY") headers.set("x-api-key", route.key);
-  else headers.set("authorization", `Bearer ${route.key}`);
+  route.headers.forEach(([name, value]) => headers.set(name, value));
+  headers.set(route.keyHeader, route.keyHeader === "authorization" ? `Bearer ${route.key}` : route.key);
   return headers;
 }
 
@@ -71,7 +93,7 @@ export async function proxiedModelRequest(request: Request, relayPort: number, r
   const { pathname, search } = new URL(request.url);
   const [, profileId, path] = ROUTED_PATH.exec(pathname) ?? [];
   const route = profileId ? routeOf(profileId) : null;
-  if (!route || !path || !MODEL_API_PATH.test(path)) return refused(404, "not a path of the model API");
+  if (!route || !path || !API_PATHS[route.api].test(path)) return refused(404, "not a path of the model API");
   try {
     const signal = AbortSignal.any([request.signal, AbortSignal.timeout(mostMs)]);
     const answer = await fetch(upstreamUrl(route.upstream, path, search), { method: request.method, headers: headersFor(request, route), body: request.body, redirect: "manual", signal });

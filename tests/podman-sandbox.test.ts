@@ -46,10 +46,11 @@ const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): Agen
   owner: roomSandbox("room-1"),
   allowsSharedKernel: true,
   profileId: "builder",
-  claudeCodeVersion: "2.1.330",
+  kind: { harness: "claude", keyVariable: "ANTHROPIC_API_KEY" },
+  version: "2.1.330",
   workingDirectory: workspace,
   given: { ANTHROPIC_API_KEY: KEY, DEPLOY_TARGET: "staging", XDG_RUNTIME_DIR: "/run/user/given" },
-  route: { upstream: ANTHROPIC_API, keyVariable: "ANTHROPIC_API_KEY", key: KEY, customHeaders: "" },
+  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
   agent: ["/usr/local/bin/bun", "/checkout/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js"],
   ...changes,
 });
@@ -230,7 +231,7 @@ describe("a room's sandbox on rootless Podman", () => {
   test("runs nothing where Podman can't run sandboxes, and tells why", async () => {
     const cli = new FakePodmanCli();
     const podman = new Podman(cli, { available: false, why: "podman-not-rootless" });
-    await expect(podman.prepare("2.1.330", () => {})).rejects.toMatchObject(notReady({ kind: "unavailable", why: "podman-not-rootless" }));
+    await expect(podman.prepare({ harness: "claude", version: "2.1.330" }, () => {})).rejects.toMatchObject(notReady({ kind: "unavailable", why: "podman-not-rootless" }));
     await podman.removeLeftovers("abc");
     expect(cli.calls).toEqual([]);
     expect(Podman.here("off", "/usr/bin").availability()).toEqual({ available: false, why: "turned-off" });

@@ -65,7 +65,8 @@ export class WorkspaceSandboxes {
     this.hub.broadcast({ type: "workspace.upserted", workspace: this.existingWorkspace(workspaceId) });
     this.conversations.startAfreshInWorkspace(workspaceId, { stopsTurn: narrowsSandbox(workspace.sandbox, sandbox) });
     if (turnsOn) this.ownConversationsOf(workspaceId).forEach(({ id }) => this.terminals.closeAgentPrograms(id));
-    if (sandbox.on) this.sandboxes.prepare();
+    const startsOn = this.startsOnProfile(workspaceId);
+    if (sandbox.on) this.sandboxes.prepare(startsOn ? [startsOn] : []);
   }
 
   private ownConversationsOf(workspaceId: string) {
@@ -79,8 +80,7 @@ export class WorkspaceSandboxes {
   async sandboxCheck(workspaceId: string): Promise<WorkspaceSandboxCheck> {
     const workspace = this.existingWorkspace(workspaceId);
     const refused = await this.sandboxes.workspaceRefusal(workspace.path, workspace.sandbox.on ? undefined : workspaceSandbox(workspaceId));
-    const { profileId } = workspace.defaultLaunch;
-    const startsOnProfile = profileId === null ? undefined : this.store.findProfile(profileId);
+    const startsOnProfile = this.startsOnProfile(workspaceId);
     return {
       availability: this.sandboxes.availability(),
       blockers: refused ? [refused] : [],
@@ -90,6 +90,12 @@ export class WorkspaceSandboxes {
         .filter((profile) => workspaceProfileBlocker(profile) === null)
         .map(({ id }) => id),
     };
+  }
+
+  /** The profile the workspace's new conversations start on, where it has one. */
+  private startsOnProfile(workspaceId: string) {
+    const { profileId } = this.existingWorkspace(workspaceId).defaultLaunch;
+    return profileId === null ? undefined : this.store.findProfile(profileId);
   }
 
   async answerHeldChange(workspaceId: string, changeId: string, answer: HeldChangeAnswer) {

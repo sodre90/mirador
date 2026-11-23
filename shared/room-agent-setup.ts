@@ -48,6 +48,9 @@ const chosenFor = (chosen: VariablesChosen, name: string): boolean | undefined =
 export const switchedOn = (value: string | undefined) => ["1", "true", "yes", "on"].includes((value ?? "").trim().toLowerCase());
 
 const MODEL_PROVIDERS = ["ANTHROPIC_", "OPENAI_", "AZURE_OPENAI_", "GEMINI_", "GOOGLE_GENERATIVE_AI_", "OPENROUTER_", "GROQ_", "MISTRAL_", "DEEPSEEK_", "XAI_", "CEREBRAS_", "OLLAMA_"];
+
+/** Whether a variable is one of a model provider's own, such as its key, as pi and opencode read them. */
+export const isModelProviderVariable = (name: string) => MODEL_PROVIDERS.some((prefix) => name.startsWith(prefix));
 const BEDROCK = ["AWS_REGION", "AWS_PROFILE", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "AWS_BEARER_TOKEN_BEDROCK"];
 const VERTEX = ["CLOUD_ML_REGION", "VERTEX_REGION_", "GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_CLOUD_PROJECT"];
 const CLAUDE_CODE_SETTINGS = ["ENABLE_TOOL_SEARCH", "DISABLE_", "MAX_THINKING_TOKENS", "MAX_MCP_OUTPUT_TOKENS", "MCP_TIMEOUT", "MCP_TOOL_TIMEOUT", "BASH_DEFAULT_TIMEOUT_MS", "BASH_MAX_TIMEOUT_MS", "BASH_MAX_OUTPUT_LENGTH", "USE_BUILTIN_RIPGREP"];

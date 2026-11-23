@@ -80,6 +80,7 @@ export type SandboxAvailability =
 export type SandboxBlocker =
   | { kind: "agent-kind-coming"; agent: string; harness: HarnessId }
   | { kind: "agent-signs-in-elsewhere"; agent: string; how: SignInElsewhere }
+  | { kind: "pi-model-elsewhere"; agent: string; why: PiModelElsewhere }
   | { kind: "workspace-not-a-repository" }
   | { kind: "workspace-is-worktree" }
   | { kind: "workspace-has-commondir" }
@@ -175,7 +176,7 @@ export type SandboxNotReadyWhy =
   | { kind: "blocked"; blocker: SandboxBlocker }
   | { kind: "setup-failed"; cause: string }
   | { kind: "could-not-start"; cause: string }
-  | { kind: "no-claude-code-version" }
+  | { kind: "no-agent-version"; harness: SandboxedHarness }
   | { kind: "versions-differ" }
   | { kind: "shared-kernel-not-allowed" }
   | { kind: "not-ready-in-time"; seconds: number }
@@ -189,8 +190,19 @@ export const MODEL_KEY_VARIABLES = ["ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"]
 
 export type ModelKeyVariable = (typeof MODEL_KEY_VARIABLES)[number];
 
-/** The agent kinds a sandbox runs in this version. */
-export const runsInSandbox = (harness: HarnessId) => harness === "claude";
+/** The agent kinds a sandbox runs in this version, each from an image of its own. */
+export const SANDBOXED_HARNESSES = ["claude", "pi"] as const satisfies readonly HarnessId[];
+
+export type SandboxedHarness = (typeof SANDBOXED_HARNESSES)[number];
+
+export const runsInSandbox = (harness: HarnessId): harness is SandboxedHarness => (SANDBOXED_HARNESSES as readonly HarnessId[]).includes(harness);
+
+/**
+ * Why the model proxy can't stand in for how a pi profile reaches its default model: it has none; it is one of pi's own
+ * providers rather than one of its models.json; its provider speaks an API the proxy doesn't, or gives a model an address
+ * or headers of its own; it signs in with OAuth; its key or a header comes from a command; or it has no key.
+ */
+export type PiModelElsewhere = "no-default-model" | "built-in-provider" | "unsupported-provider" | "signs-in" | "key-from-command" | "no-key";
 
 /** How a Claude agent with this environment signs in, when the model proxy can't add its key for it: null when it can. */
 export function signInElsewhere(environment: Record<string, string>): SignInElsewhere | null {

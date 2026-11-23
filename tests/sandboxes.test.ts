@@ -47,10 +47,11 @@ const agentIn = (workspace: string, changes: Partial<AgentInSandbox> = {}): Agen
   owner: ROOM,
   allowsSharedKernel: false,
   profileId: "builder",
-  claudeCodeVersion: "2.1.330",
+  kind: { harness: "claude", keyVariable: "ANTHROPIC_API_KEY" },
+  version: "2.1.330",
   workingDirectory: workspace,
   given: { ANTHROPIC_API_KEY: KEY, DEPLOY_TARGET: "staging", PATH: "/opt/mac/bin", ECHOED: `prefix ${KEY}` },
-  route: { upstream: ANTHROPIC_API, keyVariable: "ANTHROPIC_API_KEY", key: KEY, customHeaders: "" },
+  route: { upstream: ANTHROPIC_API, api: "anthropic-messages", key: KEY, keyHeader: "x-api-key", headers: [] },
   agent: ["/usr/local/bin/bun", "/checkout/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js"],
   ...changes,
 });
@@ -113,7 +114,7 @@ describe("a room's sandbox", () => {
     await sandboxes.stop(ROOM);
     expect(cli.callsOf("build")).toHaveLength(1);
 
-    (await sandboxes.launch(agentIn(workspace, { claudeCodeVersion: "2.1.331" }))).gone!();
+    (await sandboxes.launch(agentIn(workspace, { version: "2.1.331" }))).gone!();
     expect(cli.callsOf("build")).toHaveLength(2);
     expect([...cli.images].filter((name) => name.startsWith(`${IMAGE_NAME}:`)).map((name) => name.split("-bun-")[0])).toEqual([`${IMAGE_NAME}:claude-2.1.331`]);
     await sandboxes.stopAll();
@@ -125,9 +126,9 @@ describe("a room's sandbox", () => {
     const sandboxes = new Sandboxes(new AppleContainer(cli, AVAILABLE), hostFor(workspace).host, 60_000);
     const atWork = await sandboxes.launch(agentIn(workspace));
 
-    await expect(sandboxes.launch(agentIn(workspace, { profileId: "reviewer", claudeCodeVersion: "2.1.331" }))).rejects.toMatchObject(notReady({ kind: "versions-differ" }));
+    await expect(sandboxes.launch(agentIn(workspace, { profileId: "reviewer", version: "2.1.331" }))).rejects.toMatchObject(notReady({ kind: "versions-differ" }));
     atWork.gone!();
-    const onNewImage = await sandboxes.launch(agentIn(workspace, { claudeCodeVersion: "2.1.331" }));
+    const onNewImage = await sandboxes.launch(agentIn(workspace, { version: "2.1.331" }));
 
     const [first, second] = cli.callsOf("run");
     expect(first!.find((arg) => arg.startsWith(`${IMAGE_NAME}:`))).toContain("claude-2.1.330-");

@@ -1,6 +1,7 @@
 import { HostProblemError } from "../../shared/host-problems.ts";
 import type { SandboxAvailability, SandboxNotReadyWhy, SandboxSetup } from "../../shared/sandbox.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
+import type { AgentImage } from "./image.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
 /** Why a sandboxed agent can't run in its sandbox: the turn fails with it, and never runs on this computer instead. */
@@ -48,8 +49,8 @@ export interface VmLauncher {
   readonly firstProcessUser: "root" | "nobody";
   /** Whether VMs run here, and why not where they don't. */
   availability(): SandboxAvailability;
-  /** The runtime runs and the image of this Claude Code version is there, built where it was not, its progress told; the image. */
-  prepare(claudeCodeVersion: string, progress: (setup: SandboxSetup) => void): Promise<string>;
+  /** The runtime runs and the image of this agent kind and version is there, built where it was not, its progress told; the image. */
+  prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void): Promise<string>;
   /** Starts the VM, once its first process says it is ready; throws SandboxNotReady where it does not get there. */
   start(plan: VmPlan): Promise<void>;
   /** The process on this computer that runs the agent in its VM, its stdin, stdout and signals the agent's. */

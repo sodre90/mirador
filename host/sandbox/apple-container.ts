@@ -2,7 +2,7 @@ import type { SandboxAvailability, SandboxSetup } from "../../shared/sandbox.ts"
 import { appleContainerRuntime } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { buildImage, imageExists, imageTag, serviceRuns, startService } from "./image.ts";
+import { buildImage, imageExists, imageTag, serviceRuns, startService, type AgentImage } from "./image.ts";
 import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
@@ -99,11 +99,11 @@ export class AppleContainer implements VmLauncher {
     return this.available;
   }
 
-  async prepare(claudeCodeVersion: string, progress: (setup: SandboxSetup) => void) {
+  async prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void) {
     const cli = this.usable();
     await startService(cli, progress);
-    const tag = await imageTag(claudeCodeVersion);
-    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, claudeCodeVersion, progress);
+    const tag = await imageTag(agent);
+    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, agent, progress);
     return tag;
   }
 

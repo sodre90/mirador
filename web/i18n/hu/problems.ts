@@ -449,7 +449,21 @@ export const problems: Messages["problems"] = {
     "podman-not-rootless": "A sandboxhoz rootless Podman kell, a saját felhasználóddal futtatva: itt a Mirador rootként fut.",
     "turned-off": "Ezen a Miradoron a sandboxok ki vannak kapcsolva.",
   },
-  sandboxAgentKindComing: (agent: string) => `${agent} nem Claude Code-ágens: a sandbox egyelőre csak Claude Code-ágenseket futtat, a többi fajta később jön.`,
+  sandboxAgentKindComing: (agent: string) => `${agent} még nem futhat sandboxban: a sandbox egyelőre Claude Code- és pi-ágenseket futtat, a többi fajta később jön.`,
+  sandboxPiModelElsewhere: {
+    "no-default-model": (agent: string) =>
+      `${agent} nem nevez meg alapértelmezett modellt a pi settings.json fájljában, így a Mirador nem tudja, melyik modellt érje el neki.`,
+    "built-in-provider": (agent: string) =>
+      `${agent} olyan modellt használ, amelyet a pi magától ismer. A sandbox csak olyan modellt ér el, amelyet a pi models.json fájlja állít be: vedd fel oda a kulcsával együtt.`,
+    "unsupported-provider": (agent: string) =>
+      `${agent} olyan modellt használ, amelyet a sandbox nem ér el: csak az Anthropic Messages vagy az OpenAI Chat Completions, illetve Responses API-ján elérhetőt, a szolgáltatója címén, saját fejlécek nélkül.`,
+    "signs-in": (agent: string) =>
+      `${agent} bejelentkezéssel éri el a modell szolgáltatóját, amit be kellene vinni a sandboxba: adj inkább API-kulcsot a szolgáltatónak.`,
+    "key-from-command": (agent: string) =>
+      `${agent} kulcsa vagy egy fejléce parancsból jön, amelyet a sandbox nem futtathat ezen a gépen: add meg inkább a profil egy értékében.`,
+    "no-key": (agent: string) =>
+      `${agent} nem kap kulcsot a modelljéhez, vagy nincs beállítva egy érték, amely a kulcsához vagy egy fejlécéhez kell.`,
+  },
   sandboxAgentSignsInElsewhere: {
     subscription: (agent: string) => `${agent} Claude-előfizetéssel jelentkezik be, amelyet be kellene vinni a sandboxba: adj inkább API-kulcsot a profiljának.`,
     bedrock: (agent: string) => `${agent} az Amazon Bedrockot használja, amelyet a sandbox még nem támogat.`,
@@ -477,12 +491,12 @@ export const problems: Messages["problems"] = {
   sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `Nem tudott elindulni: ${cause}`,
   sandboxNotReadyInTime: (seconds: number) => `Nem állt készen ${seconds} mp alatt.`,
+  sandboxNoAgentVersion: (program: string) => `A Mirador nem tudta megállapítani, a ${program} melyik verzióját tegye bele.`,
   sandboxNotReadyFixed: {
-    "no-claude-code-version": "A Mirador nem tudta megállapítani, a Claude Code melyik verzióját tegye bele.",
-    "versions-differ": "Az ágensei a Claude Code különböző verzióit használják, a sandbox pedig egyet futtat.",
+    "versions-differ": "Az ágenseinek különböző image-ek kellenek, más ágensfajtához vagy más verzióhoz, a sandbox pedig egyszerre egyet futtat. Ez a beszélgetés akkor indulhat, ha a sandbox többi ágense már 10 perce tétlen.",
     "shared-kernel-not-allowed": "Ezen a gépen egy Podman-konténer lenne, amely osztozik a gép kernelén, és ezt nem engedélyezték neki: engedélyezd ott, ahol a sandboxát bekapcsoltad.",
   },
   workspaceSandboxNotReady: (why: string) => `A munkaterület sandboxa nem áll készen, ezért az ágense nem indult el. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
-    `Ez a munkaterület sandboxban futtatja az ágenseit, ahol ez nem tud futni. ${why} Válassz API-kulccsal belépő Claude-profilt, vagy kapcsold ki a sandboxot ennél a munkaterületnél.`,
+    `Ez a munkaterület sandboxban futtatja az ágenseit, ahol ez nem tud futni. ${why} Válassz olyan profilt, amely futhat benne, vagy kapcsold ki a sandboxot ennél a munkaterületnél.`,
 };

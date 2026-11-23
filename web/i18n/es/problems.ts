@@ -449,7 +449,21 @@ export const problems: Messages["problems"] = {
     "podman-not-rootless": "Los sandboxes necesitan Podman rootless, ejecutado con tu propio usuario: aquí Mirador se ejecuta como root.",
     "turned-off": "Los sandboxes están desactivados en este Mirador.",
   },
-  sandboxAgentKindComing: (agent: string) => `${agent} no es un agente de Claude Code: por ahora los sandboxes solo ejecutan agentes de Claude Code; los demás tipos llegarán.`,
+  sandboxAgentKindComing: (agent: string) => `${agent} aún no puede ejecutarse en un sandbox: por ahora los sandboxes ejecutan agentes de Claude Code y de pi; los demás tipos llegarán.`,
+  sandboxPiModelElsewhere: {
+    "no-default-model": (agent: string) =>
+      `El pi de ${agent} no indica ningún modelo predeterminado en su settings.json, así que Mirador no sabe a qué modelo llegar por él.`,
+    "built-in-provider": (agent: string) =>
+      `${agent} usa un modelo que pi conoce por sí mismo. Un sandbox solo llega a un modelo que configure el models.json de pi: añádelo allí con su clave.`,
+    "unsupported-provider": (agent: string) =>
+      `${agent} usa un modelo al que un sandbox no puede llegar: solo a uno de la API Messages de Anthropic o de las API Chat Completions o Responses de OpenAI, en la dirección de su proveedor, sin encabezados propios.`,
+    "signs-in": (agent: string) =>
+      `El pi de ${agent} inicia sesión en su proveedor de modelos, y eso tendría que entrar en el sandbox: dale al proveedor una clave de API.`,
+    "key-from-command": (agent: string) =>
+      `El pi de ${agent} obtiene su clave o un encabezado de un comando, que un sandbox no puede ejecutar en este equipo: dalo en un valor del perfil.`,
+    "no-key": (agent: string) =>
+      `El pi de ${agent} no tiene clave para su modelo, o falta un valor que necesitan su clave o un encabezado.`,
+  },
   sandboxAgentSignsInElsewhere: {
     subscription: (agent: string) => `${agent} inicia sesión con una suscripción de Claude, que tendría que entrar en el sandbox: dale a su perfil una clave de API.`,
     bedrock: (agent: string) => `${agent} usa Amazon Bedrock, que los sandboxes aún no admiten.`,
@@ -477,12 +491,12 @@ export const problems: Messages["problems"] = {
   sandboxSetupFailed: (cause: string) => `No se pudieron preparar los sandboxes: ${cause}`,
   sandboxCouldNotStart: (cause: string) => `No pudo iniciarse: ${cause}`,
   sandboxNotReadyInTime: (seconds: number) => `No estuvo listo en ${seconds} s.`,
+  sandboxNoAgentVersion: (program: string) => `Mirador no pudo saber qué versión de ${program} poner en él.`,
   sandboxNotReadyFixed: {
-    "no-claude-code-version": "Mirador no pudo saber qué versión de Claude Code poner en él.",
-    "versions-differ": "Sus agentes usan versiones distintas de Claude Code, y un sandbox ejecuta una sola.",
+    "versions-differ": "Sus agentes necesitan imágenes distintas, de otro tipo de agente o de otra versión, y un sandbox ejecuta una a la vez. Esta conversación podrá empezar cuando los demás agentes del sandbox lleven 10 minutos inactivos.",
     "shared-kernel-not-allowed": "En este equipo sería un contenedor de Podman que comparte el kernel del equipo, y no se le ha permitido: permítelo donde se activa su sandbox.",
   },
   workspaceSandboxNotReady: (why: string) => `El sandbox de este espacio de trabajo no está listo, así que su agente no se inició. ${why}`,
   workspaceSandboxRefusesAgent: (why: string) =>
-    `Este espacio de trabajo ejecuta sus agentes en un sandbox, donde este no puede ejecutarse. ${why} Elige un perfil de Claude que inicie sesión con una clave de API, o apaga el sandbox de este espacio de trabajo.`,
+    `Este espacio de trabajo ejecuta sus agentes en un sandbox, donde este no puede ejecutarse. ${why} Elige un perfil que pueda ejecutarse allí, o apaga el sandbox de este espacio de trabajo.`,
 };

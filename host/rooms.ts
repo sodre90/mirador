@@ -445,8 +445,9 @@ export class RoomService implements RoomRules, TurnListener {
     this.store.setRoomSandbox(roomId, sandbox);
     this.publish(roomId);
     const stopsTurn = narrowsSandbox(now.sandbox, sandbox);
-    now.agents.filter(({ brought }) => !brought).forEach((agent) => this.startAfresh(agent, stopsTurn));
-    if (sandbox.on) this.sandboxes.prepare();
+    const ownAgents = now.agents.filter(({ brought }) => !brought);
+    ownAgents.forEach((agent) => this.startAfresh(agent, stopsTurn));
+    if (sandbox.on) this.sandboxes.prepare(ownAgents.flatMap(({ profileId }) => this.store.findProfile(profileId) ?? []));
   }
 
   /** A sandbox leaving its workspace and its folders read and write leaves the repositories' hooks off in them a while yet. */

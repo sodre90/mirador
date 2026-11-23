@@ -6,7 +6,7 @@ import { AGENT_USER } from "./agent-environment.ts";
 import { askPodman, podmanAvailability, podmanProgram, podmanStorageIn, SELINUX_ENFORCE } from "./availability.ts";
 import { containerCli, lastLineOf, type ContainerCli } from "./container-cli.ts";
 import { environmentFlags, execProcessEnvironment, readByTool } from "./exec-environment.ts";
-import { baseImageOf, buildStepIn, IMAGE_NAME, imageTag, mustRun, RECIPE } from "./image.ts";
+import { baseImageOf, buildArguments, buildStepIn, imagesOfKind, imageTag, mustRun, RECIPE, type AgentImage } from "./image.ts";
 import { HOST_LABEL, SandboxNotReady, VM_READY_LINE, type AgentInVm, type VmPlan, type VmLauncher } from "./vm-launcher.ts";
 import type { Mount } from "./workspace-mounts.ts";
 
@@ -127,16 +127,17 @@ const imageExists = async (cli: ContainerCli, image: string) => (await cli.run([
 
 /**
  * Builds the image on this computer from the recipe, with an empty folder as the build's context and no layers kept
- * besides the image's own, then removes the image it builds on where the build pulled it, and the images of other
- * versions built before. Every other image is left as it was: other programs share Podman's images.
+ * besides the image's own, then removes the image it builds on where the build pulled it, and the images of the agent's
+ * other versions built before. Every other image is left as it was, other agent kinds' too: other programs share
+ * Podman's images.
  */
-async function buildImage(cli: ContainerCli, tag: string, claudeCodeVersion: string, progress: (setup: SandboxSetup) => void) {
+async function buildImage(cli: ContainerCli, tag: string, agent: AgentImage, progress: (setup: SandboxSetup) => void) {
   progress({ stage: "building-image" });
   const base = baseImageOf(await readFile(RECIPE, "utf8"));
   const baseWasThere = base !== null && (await imageExists(cli, base));
   const emptyContext = await mkdtemp(join(tmpdir(), "mirador-image-"));
   try {
-    const build = ["build", "--layers=false", "-f", RECIPE, "--build-arg", `CLAUDE_CODE_VERSION=${claudeCodeVersion}`, "--build-arg", `BUN_VERSION=${Bun.version}`, "-t", tag, emptyContext];
+    const build = ["build", "--layers=false", "-f", RECIPE, ...buildArguments(agent), "-t", tag, emptyContext];
     await mustRun(cli, build, {
       timeoutMs: BUILD_TIMEOUT_MS,
       onLine: (line) => {
@@ -148,12 +149,12 @@ async function buildImage(cli: ContainerCli, tag: string, claudeCodeVersion: str
     await rm(emptyContext, { recursive: true, force: true });
     if (base !== null && !baseWasThere) await cli.run(["image", "rm", base]);
   }
-  await removeOtherVersions(cli, tag);
+  await removeOtherVersions(cli, tag, agent);
 }
 
-async function removeOtherVersions(cli: ContainerCli, kept: string) {
+async function removeOtherVersions(cli: ContainerCli, kept: string, { harness }: AgentImage) {
   const listed = await cli.run(["images", "--format", "json"]);
-  const others = imageNamesIn(listed.stdout).filter((name) => name.split("/").at(-1)!.startsWith(`${IMAGE_NAME}:`) && !name.endsWith(`/${kept}`) && name !== kept);
+  const others = imageNamesIn(listed.stdout).filter((name) => name.split("/").at(-1)!.startsWith(imagesOfKind(harness)) && !name.endsWith(`/${kept}`) && name !== kept);
   if (others.length > 0) await cli.run(["image", "rm", ...others]);
 }
 
@@ -185,10 +186,10 @@ export class Podman implements VmLauncher {
     return this.available;
   }
 
-  async prepare(claudeCodeVersion: string, progress: (setup: SandboxSetup) => void) {
+  async prepare(agent: AgentImage, progress: (setup: SandboxSetup) => void) {
     const cli = this.usable();
-    const tag = await imageTag(claudeCodeVersion);
-    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, claudeCodeVersion, progress);
+    const tag = await imageTag(agent);
+    if (!(await imageExists(cli, tag))) await buildImage(cli, tag, agent, progress);
     return tag;
   }
 

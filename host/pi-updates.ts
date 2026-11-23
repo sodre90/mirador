@@ -15,7 +15,7 @@ const releaseVersionIn = (text: unknown) => {
 /** pi's own check for a newer pi stays off the network with either set, so Mirador's does too. */
 const keepsPiOffline = (environment: Record<string, string>) => Boolean(environment.PI_OFFLINE || environment.PI_SKIP_VERSION_CHECK);
 
-async function installedPiVersion(program: string, environment: Record<string, string>) {
+export async function installedPiVersion(program: string, environment: Record<string, string>) {
   const child = Bun.spawn([program, "--version"], { env: environment, stdin: "ignore", stdout: "pipe", stderr: "ignore", timeout: CHECK_TIMEOUT_MS });
   const [output, exitCode] = await Promise.all([new Response(child.stdout).text(), child.exited]);
   return exitCode === 0 ? releaseVersionIn(output) : null;

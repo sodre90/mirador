@@ -7,6 +7,7 @@ import {
   HELD_CHANGES_MOST,
   ownerKey,
   roomSandbox,
+  SANDBOXED_HARNESSES,
   SETUP_NOT_STARTED,
   sharesKernel,
   workspaceSandbox,
@@ -14,6 +15,7 @@ import {
   type HeldChangeAnswer,
   type HeldChangeText,
   type SandboxBlocker,
+  type SandboxedHarness,
   type SandboxFolder,
   type SandboxFolderRefusal,
   type SandboxFolderState,
@@ -25,11 +27,12 @@ import type { Conversation } from "../../shared/model.ts";
 import type { AgentLaunch } from "../acp/harness.ts";
 import type { Store } from "../store.ts";
 import { addedFolderRefusal, foldersMounted, repositoryRefusal, type FolderSurroundings, type FoldersMounted, type LeftOutFolder, type MountedFolder, type OtherSandboxes } from "./added-folders.ts";
-import { AGENT_USER, BUN_IN_VM, environmentInVm } from "./agent-environment.ts";
+import { AGENT_USER, BUN_IN_VM, environmentInVm, SCRIPTS_IN_VM, type SandboxedKind } from "./agent-environment.ts";
 import { startCanvasSocket, type SandboxCanvas } from "./canvas-socket.ts";
 import { HeldFiles, HeldFilesRefused, type HeldSandbox } from "./held-files.ts";
 import type { PlacesPutBack, PlacesRequest } from "./in-vm/held-places.ts";
-import { startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
+import type { AgentImage } from "./image.ts";
+import { secretsOf, startModelProxy, type ModelRoute, type RunningSocket } from "./model-proxy.ts";
 import { removeLeftSocketFolders, SOCKETS_FOLDER_PREFIX } from "./socket-folders.ts";
 import { HOST_LABEL, OWNER_LABEL, SandboxNotReady, type VmLauncher } from "./vm-launcher.ts";
 import { gitFoldersOf, realOrAsIs, sandboxRefusalOf, workspaceMounts, type MiradorPlaces, type Mount } from "./workspace-mounts.ts";
@@ -39,7 +42,6 @@ export const CANVAS_RELAY_PORT = 7701;
 export const MODEL_RELAY_PORT = 7702;
 
 const IN_VM_SCRIPTS = join(import.meta.dir, "in-vm");
-const SCRIPTS_IN_VM = "/mirador/sandbox";
 const SOCKETS_IN_VM = "/run/mirador";
 const PUT_BACK_WITHIN_MS = 30_000;
 
@@ -51,8 +53,10 @@ const messageOf = (error: unknown) => (error instanceof Error ? error.message : 
 /** A sandbox's own folder in Mirador's data: a room's by its id, as it always was, and a workspace's apart from them. */
 const sandboxFolder = (dataDir: string, { kind, id }: SandboxOwner) => (kind === "room" ? join(dataDir, "sandbox", id) : join(dataDir, "sandbox", "workspaces", id));
 
-/** Where a sandbox's agents keep their Claude Code config: in Mirador's data, and at the same path in the VM. */
-export const sandboxConfigFolder = (dataDir: string, owner: SandboxOwner) => join(sandboxFolder(dataDir, owner), "claude");
+/** Where a sandbox's agents of a kind keep their config and sessions: in Mirador's data, and at the same path in the VM. */
+export const sandboxConfigFolder = (dataDir: string, owner: SandboxOwner, harness: SandboxedHarness) => join(sandboxFolder(dataDir, owner), harness);
+
+const sandboxConfigFolders = (dataDir: string, owner: SandboxOwner) => SANDBOXED_HARNESSES.map((harness) => sandboxConfigFolder(dataDir, owner, harness));
 
 /** Where the copies of a sandboxed workspace's repository config, which its VM reads, are taken as the VM starts. */
 const gitConfigCopies = (dataDir: string, owner: SandboxOwner) => join(sandboxFolder(dataDir, owner), "git-config");
@@ -111,14 +115,16 @@ export interface SandboxHost {
 
 /**
  * What an agent's launch in the VM needs: the room or workspace it works for and whether that allows a sandbox that
- * shares this computer's kernel, its profile's Claude Code version, the folder it works in, what it is given, the model
- * API its requests go on to with the key, and its command in the VM.
+ * shares this computer's kernel, its profile's agent kind at its version, the folder it works in, what it is given, the
+ * model API its requests go on to with the key, and its command in the VM.
  */
 export interface AgentInSandbox {
   owner: SandboxOwner;
   allowsSharedKernel: boolean;
   profileId: string;
-  claudeCodeVersion: string;
+  kind: SandboxedKind;
+  /** The version of its kind's program on this computer, which its image installs. */
+  version: string;
   workingDirectory: string;
   given: Record<string, string>;
   route: ModelRoute;
@@ -271,7 +277,7 @@ export class Sandboxes {
     return {
       places: this.host.places,
       workspace: workspace && (await realpath(workspace).catch(() => null)),
-      sandboxOwn: [sandboxConfigFolder(this.host.dataDir, owner), agentPackages(), IN_VM_SCRIPTS, SCRIPTS_IN_VM, SOCKETS_IN_VM],
+      sandboxOwn: [...sandboxConfigFolders(this.host.dataDir, owner), agentPackages(), IN_VM_SCRIPTS, SCRIPTS_IN_VM, SOCKETS_IN_VM],
       socketsParent: this.socketsParent,
       otherSandboxes: { workspaces: await real(workspaces), writableFolders: await real(writableFolders), writableFoldersOn: await real(writableFoldersOn) },
     };
@@ -322,9 +328,9 @@ export class Sandboxes {
     await Promise.all(working.map(({ owner }) => this.stop(owner)));
   }
 
-  /** Sets up what every sandbox needs, as the owner turns one on, so the first turn need not wait for it. */
-  prepareInBackground(claudeCodeVersion: string) {
-    if (this.availability().available) void this.preparedImage(claudeCodeVersion).catch(() => {});
+  /** Sets up what every sandbox needs, and the image of this agent, as the owner turns one on, so the first turn need not wait for it. */
+  prepareInBackground(agent: AgentImage) {
+    if (this.availability().available) void this.preparedImage(agent).catch(() => {});
   }
 
   /** The VMs a previous run of this host left behind, from a crash, and the socket folders of any host gone since. */
@@ -342,9 +348,10 @@ export class Sandboxes {
     if (!available.available) throw new SandboxNotReady({ kind: "unavailable", why: available.why });
     if (sharesKernel(available.kind) && !agent.allowsSharedKernel) throw new SandboxNotReady({ kind: "shared-kernel-not-allowed" });
     if (this.holdsTooMany(agent.owner)) throw new SandboxNotReady({ kind: "too-many-held-changes", most: HELD_CHANGES_MOST });
-    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedVm(agent.owner, agent.claudeCodeVersion));
-    const configDir = sandboxConfigFolder(this.host.dataDir, agent.owner);
-    const environment = environmentInVm(agent.given, { configDir, modelBaseUrl: modelAddress(agent.profileId), keyVariable: agent.route.keyVariable });
+    const { harness } = agent.kind;
+    const vm = await this.oneLaunchAtATime(agent.owner, () => this.startedVm(agent.owner, { harness, version: agent.version }));
+    const places = { configFolder: sandboxConfigFolder(this.host.dataDir, agent.owner, harness), modelBaseUrl: modelAddress(agent.profileId) };
+    const environment = environmentInVm(agent.given, agent.kind, places, secretsOf(agent.route));
     const started = this.launcher.agentProcess({ vm: vm.name, user: AGENT_USER, workingDirectory: agent.workingDirectory, environment, command: agent.agent });
     vm.agents += 1;
     clearTimeout(vm.stopTimer);
@@ -502,8 +509,8 @@ export class Sandboxes {
    * The sandbox's VM, running: the one there is, or a new one where there is none, where the workspace it works in
    * changed, or where it runs another image or started with other added folders and no agent of it is at work.
    */
-  private async startedVm(owner: SandboxOwner, claudeCodeVersion: string): Promise<SandboxVm> {
-    const image = await this.preparedImage(claudeCodeVersion);
+  private async startedVm(owner: SandboxOwner, agent: AgentImage): Promise<SandboxVm> {
+    const image = await this.preparedImage(agent);
     const key = ownerKey(owner);
     const existing = this.vms.get(key);
     const outdatedWhileIdle = (vm: SandboxVm) => vm.agents === 0 && (vm.image !== image || !sameFolders(vm.folders, this.host.foldersOf(owner)));
@@ -553,8 +560,8 @@ export class Sandboxes {
     const planned = await workspaceMounts(workspace, gitConfigCopies(this.host.dataDir, owner), this.host.places, heldReadOnly);
     if ("refused" in planned) throw new SandboxNotReady({ kind: "blocked", blocker: planned.refused });
     const folders = await this.addedFoldersMounted(vm);
-    const configFolder = sandboxConfigFolder(this.host.dataDir, owner);
-    await mkdir(configFolder, { recursive: true, mode: 0o700 });
+    const configFolders = sandboxConfigFolders(this.host.dataDir, owner);
+    await Promise.all(configFolders.map((folder) => mkdir(folder, { recursive: true, mode: 0o700 })));
     // Unix socket paths hold about a hundred bytes on macOS, so each VM's sockets live in a short private folder.
     vm.socketsFolder = await mkdtemp(join(this.socketsParent, SOCKETS_FOLDER_PREFIX));
     const sockets = { canvas: join(vm.socketsFolder, "canvas.sock"), model: join(vm.socketsFolder, "model.sock") };
@@ -569,7 +576,7 @@ export class Sandboxes {
       mounts: [
         ...planned.mounts,
         ...folders.mounts,
-        atItsOwnPath(configFolder, false),
+        ...configFolders.map((folder) => atItsOwnPath(folder, false)),
         atItsOwnPath(agentPackages(), true),
         { source: IN_VM_SCRIPTS, target: SCRIPTS_IN_VM, readOnly: true },
         { source: sockets.canvas, target: `${SOCKETS_IN_VM}/canvas.sock`, readOnly: false },
@@ -619,27 +626,34 @@ export class Sandboxes {
     return planned;
   }
 
-  /** The runtime runs and the image of this Claude Code version is there: set up once for every sandbox, its progress told as it goes. */
-  private async preparedImage(claudeCodeVersion: string): Promise<string> {
-    if (this.setupState.stage === "ready" && this.ready?.claudeCodeVersion === claudeCodeVersion) return this.ready.image;
+  /**
+   * The runtime runs and the image of this agent kind and version is there: set up once for every sandbox, one image at
+   * a time, its progress told as it goes.
+   */
+  private async preparedImage(agent: AgentImage): Promise<string> {
+    const readyImage = () => {
+      const ready = this.ready.get(agent.harness);
+      return ready?.version === agent.version ? ready.image : null;
+    };
+    const image = readyImage();
+    if (this.setupState.stage === "ready" && image) return image;
     const previous = this.settingUp ?? Promise.resolve("");
-    const settingUp = previous
-      .catch(() => "")
-      .then(async () => (this.ready?.claudeCodeVersion === claudeCodeVersion ? this.ready.image : this.setUp(claudeCodeVersion)));
+    const settingUp = previous.catch(() => "").then(async () => readyImage() ?? this.setUp(agent));
     this.settingUp = settingUp;
     return settingUp;
   }
 
-  private ready?: { claudeCodeVersion: string; image: string };
+  /** Each agent kind's image as last set up: building another version of a kind removes the one before. */
+  private readonly ready = new Map<SandboxedHarness, { version: string; image: string }>();
 
-  private async setUp(claudeCodeVersion: string) {
+  private async setUp(agent: AgentImage) {
     const progress = (setup: SandboxSetup) => {
       this.setupState = setup;
       this.host.setupChanged(setup);
     };
     try {
-      const image = await this.launcher.prepare(claudeCodeVersion, progress);
-      this.ready = { claudeCodeVersion, image };
+      const image = await this.launcher.prepare(agent, progress);
+      this.ready.set(agent.harness, { version: agent.version, image });
       progress({ stage: "ready" });
       return image;
     } catch (error) {

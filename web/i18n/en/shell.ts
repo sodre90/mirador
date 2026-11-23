@@ -131,7 +131,7 @@ export const shell = {
     startsOnRefused: (why: string) => `New conversations here start on a profile that can't run in the sandbox. ${why}`,
     startOn: "Start new conversations on",
     pickProfile: "Pick a profile",
-    noProfileRuns: "None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can.",
+    noProfileRuns: "None of your profiles can run in the sandbox. A Claude Code profile that signs in with an API key can, and so can a pi profile whose model pi's models.json sets up with a key.",
     inWorktrees: (count: number) =>
       plural(
         count,
@@ -154,9 +154,9 @@ export const shell = {
     heldWaits: "Needs you: the sandbox holds an agent config change for your OK. Click to see it.",
     anAgentHere: "An agent of this workspace",
     meaning: [
-      "The Claude Code agents of this workspace's conversations run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the project folder, a folder of the workspace's for the agents' Claude Code settings and sessions, and the folders from this computer you add, read only or read and write; nothing else of this computer: not your own Claude Code settings, nor other workspaces. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
+      "The Claude Code and pi agents of this workspace's conversations run in a sandbox of their own on this computer: on a Mac a light VM, made with Apple's container tool; on Linux a Podman container, which shares the computer's kernel and so keeps the agents in less well than a VM, used only once you allow it. The sandbox sees the project folder, a folder of the workspace's for the agents' settings and sessions, and the folders from this computer you add, read only or read and write; nothing else of this computer: not your own Claude Code or pi settings, nor other workspaces. Its network reaches only the model, through Mirador, which adds the profile's key so the key never enters the sandbox, and Mirador's canvas.",
       "On the canvas the agents can show you pages and ask you questions, but they get none of Mirador's other tools, as those act on this computer.",
-      "Only Claude Code agents whose profile signs in with an API key run in it for now. A conversation on another profile doesn't start: pick a profile that can for it, or turn the sandbox off.",
+      "Only Claude Code agents whose profile signs in with an API key, and pi agents whose model pi's models.json sets up with a key, run in it for now. Mirador builds what each kind needs the first time one starts there. A conversation on another profile doesn't start: pick a profile that can for it, or turn the sandbox off.",
       "Working freely, the agents ask for nothing, as the sandbox keeps them in, and YOLO works only while the sandbox runs. Otherwise each conversation asks as its profile's permission mode says.",
       "The files agents load their settings, instructions and MCP servers from are held, and so are the files that run by themselves: .claude, .mcp.json, CLAUDE.md, AGENTS.md, .codex, opencode.json, .opencode, .pi, .husky, .githooks, .vscode, .pre-commit-config.yaml, lefthook.yml and .envrc. Those there as the sandbox starts are read-only in it; a new one is put back at once, and you allow or discard it in the conversation where it happened, or here.",
       "Any other file the agents change in the project folder may run when you run it yourself: tests, scripts, package.json, or a commit from your terminal, which runs the repository's hooks. Review what they changed before you run anything there.",
