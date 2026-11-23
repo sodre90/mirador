@@ -455,7 +455,7 @@ export const problems: Messages["problems"] = {
     "workspace-is-mirador": "Der Arbeitsbereich des Raums enthält den Code von Mirador selbst oder liegt darin: Eine Sandbox darf das laufende Mirador nicht ändern.",
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `Der Worktree-Ordner .git/${worktree} des Repositorys holt seine Konfiguration nicht aus diesem Repository.`,
-  sandboxGitPartIsLink: (part: string) => `${part} des Repositorys ist ein Link, den eine Sandbox nicht schreibgeschützt halten kann.`,
+  sandboxPartIsLink: (part: string) => `${part} des Repositorys ist ein Link, den eine Sandbox nicht schreibgeschützt halten kann.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `Die Git-Konfiguration des Repositorys bindet ${file} ein, eine Datei des Arbeitsbereichs, die die Sandbox ändern könnte: Entferne diese Einbindung, um eine Sandbox zu nutzen.`,
   sandboxTooManyHeldChanges: (most: number) => `Seine Agenten haben mehr als ${most} zurückgehaltene Dateien geändert, die auf deine Antwort warten: Erlaube oder verwirf zuerst einige.`,
   sandboxSetupFailed: (cause: string) => `Das Einrichten der Sandboxes ist fehlgeschlagen: ${cause}`,

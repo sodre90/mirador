@@ -419,7 +419,7 @@ export const problems: Messages["problems"] = {
     "workspace-is-mirador": "房间的工作区包含 Mirador 自己的代码，或位于其中：沙箱不能改动你正在运行的 Mirador。",
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `仓库的工作树文件夹 .git/${worktree} 从本仓库以外的地方读取配置。`,
-  sandboxGitPartIsLink: (part: string) => `仓库的 ${part} 是一个链接，沙箱无法让它保持只读。`,
+  sandboxPartIsLink: (part: string) => `仓库的 ${part} 是一个链接，沙箱无法让它保持只读。`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `仓库的 git 配置包含了 ${file}，这是沙箱可以改动的工作区文件：要使用沙箱，请去掉这个包含。`,
   sandboxTooManyHeldChanges: (most: number) => `它的 Agent 改动了超过 ${most} 个暂扣的文件，正等待你的答复：请先允许或丢弃其中一些。`,
   sandboxSetupFailed: (cause: string) => `设置沙箱失败：${cause}`,

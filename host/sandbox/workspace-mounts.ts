@@ -1,4 +1,5 @@
-import { copyFile, lstat, mkdir, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, readdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import type { SandboxBlocker } from "../../shared/sandbox.ts";
@@ -117,11 +118,20 @@ async function miradorsOwn(workspace: string, places: MiradorPlaces): Promise<Sa
   return null;
 }
 
+/** The first of the git folders' parts Mirador copies or mounts that is a link, from the workspace; null where none is. */
+async function linkedGitPart(workspace: string, gitFolders: string[]): Promise<string | null> {
+  const parts = gitFolders.flatMap((folder, index) => [...(index === 0 ? ["worktrees", "modules"] : []), "hooks", "config", "config.worktree", "commondir"].map((name) => join(folder, name)));
+  const kinds = await Promise.all(parts.map(kindOf));
+  const linked = parts.find((_, index) => kinds[index] === "link");
+  return linked ? relative(workspace, linked).split(sep).join("/") : null;
+}
+
 async function gitConfigRefusal(workspace: string, gitFolder: string): Promise<SandboxBlocker | null> {
   const gitFolders = [gitFolder, ...(await submoduleGitFolders(join(gitFolder, "modules")))];
+  const linked = await linkedGitPart(workspace, gitFolders);
+  if (linked) return { kind: "part-is-link", part: linked };
   const pointsElsewhere = await Promise.all(gitFolders.map(async (folder) => (await kindOf(join(folder, "commondir"))) !== "missing"));
   if (pointsElsewhere.some(Boolean)) return { kind: "workspace-has-commondir" };
-  for (const part of ["hooks", "worktrees"]) if ((await kindOf(join(gitFolder, part))) === "link") return { kind: "git-part-is-link", part: `.git/${part}` };
   const worktrees = await worktreeFolders(gitFolder);
   for (const folder of worktrees) if (await worktreePointsElsewhere(folder, gitFolder)) return { kind: "worktree-points-elsewhere", worktree: relative(gitFolder, folder).split(sep).join("/") };
   const ownConfigs = [...gitFolders.flatMap((folder) => [join(folder, "config"), join(folder, "config.worktree")]), ...worktrees.map((folder) => join(folder, "config.worktree"))];
@@ -142,6 +152,18 @@ export async function sandboxRefusalOf(givenWorkspace: string, places: MiradorPl
   return gitConfigRefusal(workspace, gitFolder);
 }
 
+/** The file's bytes into `copy`, never through a link, and only from a regular file: no link swapped in meanwhile, nor a pipe that would never end. */
+async function copyRegularFile(original: string, copy: string) {
+  const handle = await open(original, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
+  try {
+    const stats = await handle.stat();
+    if (!stats.isFile()) throw new Error(`${original} is not a regular file.`);
+    await writeFile(copy, await handle.readFile(), { mode: stats.mode & 0o777 });
+  } finally {
+    await handle.close();
+  }
+}
+
 /** Whether git reads the git folder's `config.worktree` too, which the VM could make where there is none yet. */
 async function readsWorktreeConfig(gitFolder: string) {
   const { stdout } = await git(gitFolder, ["config", "--file", join(gitFolder, "config"), "--bool", "--get", "extensions.worktreeConfig"]);
@@ -160,10 +182,10 @@ async function readOnlyPartsOf(gitFolder: string, copies: string, isTopRepositor
   const configs = await Promise.all(
     ["config", "config.worktree"].map(async (name) => {
       const original = join(gitFolder, name);
-      if ((await kindOf(original)) === "missing") return [];
+      if ((await kindOf(original)) !== "file") return [];
       const copy = join(copies, crypto.randomUUID(), name);
       await mkdir(dirname(copy), { recursive: true, mode: 0o700 });
-      await copyFile(original, copy);
+      await copyRegularFile(original, copy);
       return [{ source: copy, target: original, readOnly: true }];
     }),
   );
@@ -229,5 +251,23 @@ export async function workspaceMounts(givenWorkspace: string, copies: string, pl
   const held = heldReadOnly.map((path) => atItsOwnPath(join(workspace, path), true));
   const readOnly = outermostOf([...gitParts, ...(await configuredHooksInside(workspace)), ...held]);
   const parentsFirst = [atItsOwnPath(workspace, false), ...foldersHolding(workspace, readOnly), ...readOnly].toSorted((a, b) => (a.target < b.target ? -1 : a.target > b.target ? 1 : 0));
-  return { mounts: parentsFirst };
+  const reachingOut = await mountReachingOut(workspace, copies, parentsFirst);
+  return reachingOut ? { refused: { kind: "part-is-link", part: reachingOut } } : { mounts: parentsFirst };
+}
+
+/**
+ * A mount whose source, other than a copy Mirador took, is or passes through a link, or lies outside the workspace: a
+ * mount follows a link, so an agent that made one could have a folder or file of this computer shown to the VM. Null
+ * where every mount is the workspace's own; one not there mounts nothing.
+ */
+async function mountReachingOut(workspace: string, copies: string, mounts: Mount[]): Promise<string | null> {
+  const ownSources = mounts.filter(({ source }) => !isInside(source, copies));
+  const reachesOut = await Promise.all(
+    ownSources.map(async ({ source }) => {
+      const real = await realpath(source).catch(() => null);
+      return real === null ? (await kindOf(source)) === "link" : real !== source || !isInside(source, workspace);
+    }),
+  );
+  const reaching = ownSources.find((_, index) => reachesOut[index]);
+  return reaching ? relative(workspace, reaching.source).split(sep).join("/") : null;
 }

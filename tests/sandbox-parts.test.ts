@@ -192,7 +192,36 @@ test("a repository whose worktrees' folders point git elsewhere, or whose hooks 
   const linkedHooks = repositoryIn("linked-hooks");
   rmSync(join(linkedHooks, ".git/hooks"), { recursive: true, force: true });
   symlinkSync(join(linkedHooks, "hooks"), join(linkedHooks, ".git/hooks"));
-  expect(await sandboxRefusalOf(linkedHooks, ELSEWHERE)).toEqual({ kind: "git-part-is-link", part: ".git/hooks" });
+  expect(await sandboxRefusalOf(linkedHooks, ELSEWHERE)).toEqual({ kind: "part-is-link", part: ".git/hooks" });
+});
+
+test("a submodule's git folder an agent made with its config or hooks a link to this computer's files is refused, and nothing outside is copied or mounted", async () => {
+  const secrets = join(scratch, `secrets-${crypto.randomUUID()}`);
+  mkdirSync(secrets);
+  writeFileSync(join(secrets, "id_ed25519"), "PRIVATE KEY\n");
+  for (const [part, target] of [
+    ["config", join(secrets, "id_ed25519")],
+    ["hooks", secrets],
+  ] as const) {
+    const workspace = repositoryIn(`planted-${part}`);
+    const planted = join(workspace, ".git/modules/x");
+    mkdirSync(planted, { recursive: true });
+    writeFileSync(join(planted, "HEAD"), "ref: refs/heads/main\n");
+    symlinkSync(target, join(planted, part));
+    const copies = join(scratch, `copies-${crypto.randomUUID()}`);
+
+    expect(await workspaceMounts(workspace, copies, ELSEWHERE)).toEqual({ refused: { kind: "part-is-link", part: `.git/modules/x/${part}` } });
+    expect(existsSync(copies)).toBe(false);
+  }
+});
+
+test("a held folder an agent turned into a link to this computer's files is never mounted", async () => {
+  const secrets = join(scratch, `secrets-${crypto.randomUUID()}`);
+  mkdirSync(secrets);
+  const workspace = repositoryIn("held-link");
+  symlinkSync(secrets, join(workspace, ".claude"));
+
+  expect(await workspaceMounts(workspace, join(scratch, `copies-${crypto.randomUUID()}`), ELSEWHERE, [".claude"])).toEqual({ refused: { kind: "part-is-link", part: ".claude" } });
 });
 
 test("a repository whose config includes a file of the workspace, by any condition or through another file, is refused with that file", async () => {

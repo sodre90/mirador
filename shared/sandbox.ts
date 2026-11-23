@@ -34,7 +34,7 @@ export type SandboxBlocker =
   | { kind: "workspace-is-worktree" }
   | { kind: "workspace-has-commondir" }
   | { kind: "worktree-points-elsewhere"; worktree: string }
-  | { kind: "git-part-is-link"; part: string }
+  | { kind: "part-is-link"; part: string }
   | { kind: "config-includes-workspace-file"; file: string }
   | { kind: "workspace-is-home" }
   | { kind: "workspace-holds-mirador-data" }

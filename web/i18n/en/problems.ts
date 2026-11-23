@@ -447,7 +447,7 @@ export const problems = {
     "workspace-is-mirador": "The room's workspace holds Mirador's own code, or lies inside it: a sandbox must not change the Mirador you run.",
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `The repository's worktree folder .git/${worktree} takes its config from somewhere other than this repository.`,
-  sandboxGitPartIsLink: (part: string) => `The repository's ${part} is a link, which a sandbox can't keep read-only.`,
+  sandboxPartIsLink: (part: string) => `The repository's ${part} is a link, which a sandbox can't keep read-only.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `The repository's git config includes ${file}, a file of the workspace the sandbox could change: take that include out to use a sandbox.`,
   sandboxTooManyHeldChanges: (most: number) => `Its agents changed more than ${most} held files, which wait for your answer: allow or discard some first.`,
   sandboxSetupFailed: (cause: string) => `Setting up sandboxes failed: ${cause}`,

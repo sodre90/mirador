@@ -450,7 +450,7 @@ export const problems: Messages["problems"] = {
     "workspace-is-mirador": "El espacio de trabajo de la sala contiene el código de Mirador, o está dentro de él: un sandbox no debe cambiar el Mirador que usas.",
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `La carpeta de worktree .git/${worktree} del repositorio toma su configuración de otro sitio que no es este repositorio.`,
-  sandboxGitPartIsLink: (part: string) => `${part} del repositorio es un enlace, que un sandbox no puede dejar de solo lectura.`,
+  sandboxPartIsLink: (part: string) => `${part} del repositorio es un enlace, que un sandbox no puede dejar de solo lectura.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `La configuración de git del repositorio incluye ${file}, un archivo del espacio de trabajo que el sandbox podría cambiar: quita esa inclusión para usar un sandbox.`,
   sandboxTooManyHeldChanges: (most: number) => `Sus agentes cambiaron más de ${most} archivos retenidos, que esperan tu respuesta: permite o descarta algunos primero.`,
   sandboxSetupFailed: (cause: string) => `No se pudieron preparar los sandboxes: ${cause}`,

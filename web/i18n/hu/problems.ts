@@ -450,7 +450,7 @@ export const problems: Messages["problems"] = {
     "workspace-is-mirador": "A szoba munkaterülete tartalmazza a Mirador saját kódját, vagy benne van: a sandbox nem módosíthatja a futó Miradort.",
   },
   sandboxWorktreePointsElsewhere: (worktree: string) => `A repó .git/${worktree} worktree-mappája nem ebből a repóból veszi a beállításait.`,
-  sandboxGitPartIsLink: (part: string) => `A repó ${part} része egy link, amelyet a sandbox nem tud csak olvashatóvá tenni.`,
+  sandboxPartIsLink: (part: string) => `A repó ${part} része egy link, amelyet a sandbox nem tud csak olvashatóvá tenni.`,
   sandboxConfigIncludesWorkspaceFile: (file: string) => `A repó git-beállításai behúzzák a(z) ${file} fájlt, amelyet a sandbox módosíthatna: a sandboxhoz vedd ki ezt a behúzást.`,
   sandboxTooManyHeldChanges: (most: number) => `Az ágensei több mint ${most} visszatartott fájlt módosítottak, amelyek a válaszodra várnak: előbb engedélyezz vagy vess el néhányat.`,
   sandboxSetupFailed: (cause: string) => `A sandboxok beállítása nem sikerült: ${cause}`,

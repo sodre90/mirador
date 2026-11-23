@@ -45,8 +45,8 @@ export function sandboxBlockerText(blocker: SandboxBlocker, words: ProblemWords)
       return words.sandboxAgentSignsInElsewhere[blocker.how](blocker.agent);
     case "worktree-points-elsewhere":
       return words.sandboxWorktreePointsElsewhere(blocker.worktree);
-    case "git-part-is-link":
-      return words.sandboxGitPartIsLink(blocker.part);
+    case "part-is-link":
+      return words.sandboxPartIsLink(blocker.part);
     case "config-includes-workspace-file":
       return words.sandboxConfigIncludesWorkspaceFile(blocker.file);
     default:
