@@ -103,10 +103,11 @@ export const rooms: Messages["rooms"] = {
     "ask-everything": "Bei allem nachfragen",
     "read-freely": "Lesen im Arbeitsbereich ist frei, alles andere fragt nach",
     "work-freely": "Frei arbeiten im Arbeitsbereich",
+    "never-asks": "Nie nachfragen, überall auf diesem Computer",
   },
   presetsAsideInSandbox: "Agenten in der Sandbox arbeiten darin frei, egal was du hier wählst.",
   permissionsHint:
-    "Lesen außerhalb des Arbeitsbereichs, Lesen oder Suchen ohne genannte Datei und Miradors eigene Daten fragen immer nach. Gilt ab der nächsten Anfrage der Agenten, auch wenn ein Profil auf YOLO steht. Ein Agent, der seine Tools ohne Nachfrage ausführt, wie pi und standardmäßig opencode oder Codex beim Lesen, ist nicht daran gebunden.",
+    "Außer wenn die Agenten nie nachfragen, fragen Lesen außerhalb des Arbeitsbereichs, Lesen oder Suchen ohne genannte Datei und Miradors eigene Daten immer nach. Gilt ab der nächsten Anfrage der Agenten, auch wenn ein Profil auf YOLO steht. Ein Agent, der seine Tools ohne Nachfrage ausführt, wie pi und standardmäßig opencode oder Codex beim Lesen, ist nicht daran gebunden.",
   approvalsWaiting: "Anfragen, die auf Genehmigung warten",
   asks: (agent) => `${agent} fragt an`,
   approvalTask: (person, role, text) => `Aufgabe von ${person} (${role}): „${text}“`,
@@ -134,6 +135,7 @@ export const rooms: Messages["rooms"] = {
     "ask-everything": "Über die Agenten erreichen Personen hier, was du erlaubst: Lesen, Änderungen und Befehle fragen dich zuerst.",
     "read-freely": "Über die Agenten lesen Personen hier die Dateien des Arbeitsbereichs und erreichen, was du sonst erlaubst: Änderungen und Befehle fragen dich zuerst.",
     "work-freely": "Über die Agenten lesen und ändern Personen hier die Dateien des Arbeitsbereichs und erreichen, was du sonst erlaubst: Befehle fragen dich zuerst.",
+    "never-asks": "Über die Agenten können Personen hier auf diesem Computer alles tun, was du kannst: Nichts fragt dich zuerst, weder Befehle noch Dateien außerhalb des Arbeitsbereichs noch Miradors eigene Daten.",
   },
   peopleReachBeyond:
     "Alle im Raum lesen die Antworten der Agenten, was ein Agent liest, können also auch sie lesen. Manche Agenten gehen ohne Nachfrage weiter: Claude Code liest seinen Arbeitsbereich, Codex jede Datei auf diesem Computer, pi und opencode fragen womöglich gar nicht, und deine eigenen Agenteneinstellungen können Befehle erlauben.",

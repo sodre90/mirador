@@ -112,10 +112,11 @@ export const rooms = {
     "ask-everything": "Ask for everything",
     "read-freely": "Reading the workspace is free, the rest asks",
     "work-freely": "Work freely inside the workspace",
+    "never-asks": "Never ask, anywhere on this computer",
   } satisfies Record<PermissionPreset, string>,
   presetsAsideInSandbox: "Agents in the sandbox work freely there, whatever is chosen here.",
   permissionsHint:
-    "Reading outside the workspace, a read or search that names no file, and Mirador's own data always ask. Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default and Codex does when it reads, isn't held to it.",
+    "Reading outside the workspace, a read or search that names no file, and Mirador's own data always ask, except under “Never ask”. Applies from the agents' next request on, even where a profile is set to YOLO. An agent that runs its tools without asking, as pi and opencode do by default and Codex does when it reads, isn't held to it.",
   approvalsWaiting: "Requests waiting for approval",
   asks: (agent: string) => `${agent} asks`,
   approvalTask: (person: string, role: string, text: string) => `Task of ${person} (${role}): “${text}”`,
@@ -143,6 +144,7 @@ export const rooms = {
     "ask-everything": "Through the agents, people here reach what you allow: reading, edits and commands ask you first.",
     "read-freely": "Through the agents, people here read the workspace's files and reach what else you allow: edits and commands ask you first.",
     "work-freely": "Through the agents, people here read and change the workspace's files and reach what else you allow: commands ask you first.",
+    "never-asks": "Through the agents, people here can do anything you can on this computer: nothing asks you first, not commands, files outside the workspace or Mirador's own data.",
   } satisfies Record<PermissionPreset, string>,
   peopleReachBeyond:
     "Everyone in the room reads the agents' answers, so whatever an agent reads, they can read too. Some agents go further without asking: Claude Code reads its workspace, Codex reads any file on this computer, pi and opencode may ask nothing, and your own agent settings can allow commands.",

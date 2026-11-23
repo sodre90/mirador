@@ -102,10 +102,11 @@ export const rooms: Messages["rooms"] = {
     "ask-everything": "Mindenre engedélyt kérnek",
     "read-freely": "A munkaterületen olvasni szabad, minden másra engedélyt kérnek",
     "work-freely": "Szabadon dolgozhatnak a munkaterületen belül",
+    "never-asks": "Soha nem kérnek engedélyt, sehol ezen a számítógépen",
   },
   presetsAsideInSandbox: "A sandboxban lévő ágensek szabadon dolgoznak benne, bármit választasz itt.",
   permissionsHint:
-    "A munkaterületen kívüli olvasás, a fájlt nem megnevező olvasás vagy keresés, és a Mirador saját adatai mindig engedélyt kérnek. Az ágensek következő kérésétől érvényes, akkor is, ha egy profilban YOLO van beállítva. Arra az ágensre, amely kérdezés nélkül futtatja az eszközeit, ahogy a pi és alapból az opencode, vagy olvasáskor a Codex, nem vonatkozik.",
+    "Hacsak nem az van kiválasztva, hogy soha ne kérjenek, a munkaterületen kívüli olvasás, a fájlt nem megnevező olvasás vagy keresés, és a Mirador saját adatai mindig engedélyt kérnek. Az ágensek következő kérésétől érvényes, akkor is, ha egy profilban YOLO van beállítva. Arra az ágensre, amely kérdezés nélkül futtatja az eszközeit, ahogy a pi és alapból az opencode, vagy olvasáskor a Codex, nem vonatkozik.",
   approvalsWaiting: "Jóváhagyásra váró kérések",
   asks: (agent) => `${agent} kéri`,
   approvalTask: (person, role, text) => `${person} (${role}) feladata: „${text}”`,
@@ -133,6 +134,7 @@ export const rooms: Messages["rooms"] = {
     "ask-everything": "Az ágenseken át az itteni emberek azt érik el, amit engedélyezel: olvasás, szerkesztés és parancs előtt téged kérdeznek.",
     "read-freely": "Az ágenseken át az itteni emberek olvassák a munkaterület fájljait, és elérik, amit még engedélyezel: szerkesztés és parancs előtt téged kérdeznek.",
     "work-freely": "Az ágenseken át az itteni emberek olvassák és módosítják a munkaterület fájljait, és elérik, amit még engedélyezel: parancs előtt téged kérdeznek.",
+    "never-asks": "Az ágenseken át az itteni emberek bármit megtehetnek ezen a számítógépen, amit te: semmi nem kérdez téged előbb, a parancsok, a munkaterületen kívüli fájlok és a Mirador saját adatai sem.",
   },
   peopleReachBeyond:
     "A szobában mindenki olvassa az ágensek válaszait, így amit egy ágens elolvas, azt ők is elolvashatják. Egyes ágensek kérdezés nélkül tovább mennek: a Claude Code olvassa a munkaterületét, a Codex bármely fájlt ezen a számítógépen, a pi és az opencode talán semmit sem kérdez, a saját ágensbeállításaid pedig parancsokat engedhetnek meg.",

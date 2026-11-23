@@ -2,9 +2,9 @@ import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
 import type { HarnessId } from "./model.ts";
 
 /** What a room's agents may do without asking, as the room's owner chose it. */
-export type PermissionPreset = "ask-everything" | "read-freely" | "work-freely";
+export type PermissionPreset = "ask-everything" | "read-freely" | "work-freely" | "never-asks";
 
-export const PERMISSION_PRESETS: PermissionPreset[] = ["ask-everything", "read-freely", "work-freely"];
+export const PERMISSION_PRESETS: PermissionPreset[] = ["ask-everything", "read-freely", "work-freely", "never-asks"];
 
 export const DEFAULT_PERMISSION_PRESET: PermissionPreset = "read-freely";
 
@@ -17,12 +17,14 @@ export const isPermissionPreset = (value: unknown): value is PermissionPreset =>
  * Code's and Antigravity's default modes ask before edits and commands, and their accept-edits modes let edits inside
  * the folder through (Claude Code's its filesystem commands there too); Codex's read-only mode sandboxes commands to
  * reading and asks before edits, and its workspace mode lets edits and sandboxed commands inside the folder through. The
- * other agents have no mode for it: what they ask, the host answers by the tool's kind.
+ * other agents have no mode for it: what they ask, the host answers by the tool's kind. Never asking takes working
+ * freely's mode, and the host answers all the agent still asks; none of the modes that skip asking, so a brought agent's
+ * profile mode is judged by these alone.
  */
 const presetModes: Record<HarnessId, Record<PermissionPreset, string> | null> = {
-  claude: { "ask-everything": "default", "read-freely": "default", "work-freely": "acceptEdits" },
-  antigravity: { "ask-everything": "default", "read-freely": "default", "work-freely": "accept-edits" },
-  codex: { "ask-everything": "read-only", "read-freely": "read-only", "work-freely": "workspace-write" },
+  claude: { "ask-everything": "default", "read-freely": "default", "work-freely": "acceptEdits", "never-asks": "acceptEdits" },
+  antigravity: { "ask-everything": "default", "read-freely": "default", "work-freely": "accept-edits", "never-asks": "accept-edits" },
+  codex: { "ask-everything": "read-only", "read-freely": "read-only", "work-freely": "workspace-write", "never-asks": "workspace-write" },
   opencode: null,
   pi: null,
   copilot: null,
@@ -69,13 +71,18 @@ export const holdsClaudeSetup = (path: string) => {
 export const changesClaudeSetup = ({ toolKind, paths }: AskedPermission, placeOf: (path: string) => string | null) =>
   !READING.includes(toolKind) && paths.some((path) => holdsClaudeSetup(path) || holdsClaudeSetup(placeOf(path) ?? ""));
 
+/** The preset under which the room's agents ask for nothing at all, wherever it reaches, Mirador's own data included. */
+export const asksForNothing = (preset: PermissionPreset) => preset === "never-asks";
+
 /**
  * Whether the host lets a request of a room's agent through by itself: reading files that all lie inside the room's
  * workspace, unless everything asks; and in the workspace preset, changes to such files too. A read or search that names
  * no path asks, as it may reach anywhere; so do commands and everything else, since the host can't tell where a command
- * reaches. `freelyReachable` says whether a path lies where the room's agents may go unasked.
+ * reaches. `freelyReachable` says whether a path lies where the room's agents may go unasked. Under never asking, all
+ * goes through.
  */
 export function allowedByPreset(preset: PermissionPreset, { toolKind, paths }: AskedPermission, freelyReachable: (path: string) => boolean): boolean {
+  if (asksForNothing(preset)) return true;
   if (preset === "ask-everything") return false;
   const reachesOnlyFreely = paths.length > 0 && paths.every(freelyReachable);
   if (READING.includes(toolKind)) return reachesOnlyFreely;

@@ -103,10 +103,11 @@ export const rooms: Messages["rooms"] = {
     "ask-everything": "Preguntar por todo",
     "read-freely": "Leer el espacio de trabajo es libre, lo demás pregunta",
     "work-freely": "Trabajar libremente dentro del espacio de trabajo",
+    "never-asks": "No preguntar nunca, en ningún lugar de este equipo",
   },
   presetsAsideInSandbox: "Los agentes del sandbox trabajan libremente dentro, elijas lo que elijas aquí.",
   permissionsHint:
-    "Leer fuera del espacio de trabajo, una lectura o búsqueda que no nombra ningún archivo y los datos propios de Mirador siempre preguntan. Se aplica desde la siguiente solicitud de los agentes, aunque un perfil tenga YOLO activado. Un agente que ejecuta sus herramientas sin preguntar, como pi y opencode por defecto, o Codex al leer, no queda sujeto a ello.",
+    "Salvo que los agentes no pregunten nunca, leer fuera del espacio de trabajo, una lectura o búsqueda que no nombra ningún archivo y los datos propios de Mirador siempre preguntan. Se aplica desde la siguiente solicitud de los agentes, aunque un perfil tenga YOLO activado. Un agente que ejecuta sus herramientas sin preguntar, como pi y opencode por defecto, o Codex al leer, no queda sujeto a ello.",
   approvalsWaiting: "Solicitudes en espera de aprobación",
   asks: (agent) => `${agent} pide`,
   approvalTask: (person, role, text) => `Tarea de ${person} (${role}): “${text}”`,
@@ -134,6 +135,7 @@ export const rooms: Messages["rooms"] = {
     "ask-everything": "A través de los agentes, las personas de aquí llegan a lo que permitas: leer, editar y ejecutar comandos te preguntan antes.",
     "read-freely": "A través de los agentes, las personas de aquí leen los archivos del espacio de trabajo y llegan a lo demás que permitas: las ediciones y los comandos te preguntan antes.",
     "work-freely": "A través de los agentes, las personas de aquí leen y cambian los archivos del espacio de trabajo y llegan a lo demás que permitas: los comandos te preguntan antes.",
+    "never-asks": "A través de los agentes, las personas de aquí pueden hacer en este equipo todo lo que puedes hacer tú: nada te pregunta antes, ni los comandos, ni los archivos fuera del espacio de trabajo, ni los datos propios de Mirador.",
   },
   peopleReachBeyond:
     "Todos en la sala leen las respuestas de los agentes, así que lo que lee un agente, también lo pueden leer ellos. Algunos agentes llegan más lejos sin preguntar: Claude Code lee su espacio de trabajo, Codex lee cualquier archivo de este equipo, pi y opencode pueden no preguntar nada, y tu propia configuración de agentes puede permitir comandos.",

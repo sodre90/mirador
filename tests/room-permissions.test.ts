@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolKind } from "@agentclientprotocol/sdk/unstable";
 import { askedPermissionOf } from "../host/pending-requests.ts";
-import { allowedByPreset, presetModeOf, taskAllowanceOf, type AskedPermission, type PermissionPreset } from "../shared/room-permissions.ts";
+import { allowedByPreset, PERMISSION_PRESETS, presetModeOf, taskAllowanceOf, type AskedPermission, type PermissionPreset } from "../shared/room-permissions.ts";
 
 const asked = (toolKind: ToolKind | null, paths: string[] = [], command: string | null = null, title = "a tool"): AskedPermission => ({ toolKind, title, command, paths });
 const insideProject = (path: string) => path.startsWith("/project/");
@@ -10,9 +10,9 @@ const allowedUnder = (preset: PermissionPreset) => (request: AskedPermission) =>
 
 describe("a room's permission preset", () => {
   test("runs Claude Code, Antigravity and Codex in the mode of theirs that gives it", () => {
-    expect(["ask-everything", "read-freely", "work-freely"].map((preset) => presetModeOf("claude", preset as PermissionPreset))).toEqual(["default", "default", "acceptEdits"]);
-    expect(["ask-everything", "read-freely", "work-freely"].map((preset) => presetModeOf("antigravity", preset as PermissionPreset))).toEqual(["default", "default", "accept-edits"]);
-    expect(["ask-everything", "read-freely", "work-freely"].map((preset) => presetModeOf("codex", preset as PermissionPreset))).toEqual(["read-only", "read-only", "workspace-write"]);
+    expect(PERMISSION_PRESETS.map((preset) => presetModeOf("claude", preset))).toEqual(["default", "default", "acceptEdits", "acceptEdits"]);
+    expect(PERMISSION_PRESETS.map((preset) => presetModeOf("antigravity", preset))).toEqual(["default", "default", "accept-edits", "accept-edits"]);
+    expect(PERMISSION_PRESETS.map((preset) => presetModeOf("codex", preset))).toEqual(["read-only", "read-only", "workspace-write", "workspace-write"]);
   });
 
   test("leaves opencode, pi and Copilot in their profile's mode, as none of theirs gives it", () => {
@@ -53,6 +53,12 @@ describe("a room's permission preset", () => {
   test("working freely still asks before commands, fetches and tools of no known kind", () => {
     const allowed = allowedUnder("work-freely");
     expect([asked("execute", ["/project"], "rm -rf build"), asked("fetch"), asked("other"), asked("think"), asked(null)].map(allowed)).toEqual([false, false, false, false, false]);
+  });
+
+  test("never asking lets everything through: commands, fetches, tools of no known kind, and files anywhere or unnamed", () => {
+    const allowed = allowedUnder("never-asks");
+    const anything = [asked("execute", [], "git rebase origin/main"), asked("fetch"), asked("other"), asked(null), asked("read", ["/etc/hosts"]), asked("search"), asked("edit", ["/etc/hosts"]), asked("delete")];
+    expect(anything.map(allowed)).toEqual(anything.map(() => true));
   });
 });
 

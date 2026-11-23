@@ -20,6 +20,7 @@ import {
 import { AGENT_GONE, nameRefused, nameTaken, OWNER_WITHOUT_A_NAME, PERSON_WITHOUT_A_NAME, personGoesBy, personName, readsAsMiradorsWords } from "../shared/people.ts";
 import {
   allowedByPreset,
+  asksForNothing,
   changesClaudeSetup,
   isPermissionPreset,
   reachedByTaskAllowance,
@@ -625,10 +626,11 @@ export class RoomService implements RoomRules, TurnListener {
 
   /**
    * Whether the room's preset, or what an approver let through for the rest of the turn, lets the request through without
-   * asking; never one that may reach Mirador's own data.
+   * asking; never one that may reach Mirador's own data or change Claude Code's setup, unless the room asks for nothing.
    */
   allowsByItself(conversationId: string, asked: AskedPermission): boolean {
     const room = this.roomOf(conversationId);
+    if (room && asksForNothing(room.permissions)) return true;
     if (!room || this.mayReachMiradorsData(room, asked) || changesClaudeSetup(asked, (path) => this.placeInWorkspace(room, path))) return false;
     const freelyReachable = (path: string) => this.freelyReachable(room, path);
     const allowedForTheTask = this.allowedForTurn.get(conversationId)?.has(taskAllowanceOf(asked)) === true && reachedByTaskAllowance(asked, freelyReachable);

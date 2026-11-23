@@ -1450,7 +1450,7 @@ describe("what a room's agents read without asking", () => {
     const room = machine.rooms.create("Work", "w2", ["p1"], preset);
     machine.rooms.write(room.id, machine.ownerId, "@Builder go", ["p1"], null);
     const builder = machine.store.findRoom(room.id)!.agents[0]!.conversationId!;
-    return { ...machine, builder, folder, outside, dataDir, passes: (asked: AskedPermission) => machine.rooms.allowsByItself(builder, asked) };
+    return { ...machine, room, builder, folder, outside, dataDir, passes: (asked: AskedPermission) => machine.rooms.allowsByItself(builder, asked) };
   }
 
   const searches = (...paths: string[]): AskedPermission => ({ toolKind: "search", title: "Search", command: null, paths });
@@ -1537,6 +1537,30 @@ describe("what a room's agents read without asking", () => {
   test("working freely changes no file of Mirador's data, even inside the workspace", () => {
     const { folder, dataDir, passes } = roomReading("work-freely");
     expect([edits(join(folder, "src", "a.ts")), edits(join(dataDir, "state.sqlite")), edits(join(folder, "leads-to-data", "browser-token"))].map(passes)).toEqual([true, false, false]);
+  });
+
+  test("never asking lets every request through, Mirador's data, Claude Code's setup and paths outside the workspace included", () => {
+    const { folder, outside, dataDir, passes } = roomReading("never-asks");
+    const anything = [
+      runs("git rebase origin/main"),
+      reads(join(outside, "a.ts")),
+      reads(join(dataDir, "browser-token")),
+      readsNothingNamed,
+      searches(),
+      edits(join(outside, "a.ts")),
+      edits(join(folder, ".claude", "settings.json")),
+      edits(join(folder, "CLAUDE.md")),
+      edits(join(dataDir, "state.sqlite")),
+      edits(),
+    ];
+    expect(anything.map(passes)).toEqual(anything.map(() => true));
+  });
+
+  test("leaving never asking asks again from the next request on", () => {
+    const { rooms, room, dataDir, passes } = roomReading("never-asks");
+    expect([passes(runs("ls")), passes(reads(join(dataDir, "browser-token")))]).toEqual([true, true]);
+    rooms.setPermissions(room.id, "work-freely");
+    expect([passes(runs("ls")), passes(reads(join(dataDir, "browser-token")))]).toEqual([false, false]);
   });
 });
 

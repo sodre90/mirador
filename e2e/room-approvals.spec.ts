@@ -105,6 +105,19 @@ test("each permission preset lets through by itself what it names, and asks for 
     await answer(strip, "Allow");
     await expect(answerSaying(page, /^Read README\.md: allow$/)).toHaveCount(1);
   });
+
+  await test.step("never asking lets a command and an edit outside the workspace through without asking", async () => {
+    const dialog = await openRoomSettings(page, "Free", "Permissions");
+    await dialog.getByLabel("Never ask, anywhere on this computer").check();
+    const meaning = dialog.locator(".room-permissions-field + .what-it-means");
+    await meaning.getByText("What does this mean?").click();
+    await expect(meaning).toContainText("Through the agents, people here can do anything you can on this computer");
+    await dialog.getByRole("button", { name: "Done" }).click();
+    const outside = { kind: "edit", title: "Edit anywhere.md", path: join(host.root, "anywhere.md") };
+    await tag(page, "Free", "Builder", ask([read, run("git rebase origin/main"), outside]));
+    await expect(answerSaying(page, "Read README.md: allow; Run git rebase origin/main: allow; Edit anywhere.md: allow")).toHaveCount(1);
+    await expect(strip).toHaveCount(0);
+  });
 });
 
 test("the strip names the agent, its request and whose task it is, and allowing for the task lets the same command through until the turn ends", async ({ page }) => {
