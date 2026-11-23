@@ -281,6 +281,10 @@ export const problems: Messages["problems"] = {
   machineDidNotAnswer: (machine) => `${machine} hat nicht geantwortet. Läuft dort Mirador?`,
   machineUnreachableNow: (machine) =>
     `${machine} ist gerade nicht erreichbar. Vielleicht ist Mirador dort aus oder offline, oder die Einladung wurde schon benutzt oder ist abgelaufen. Versuch es später noch einmal oder bitte um eine neue Einladung.`,
+  peerToPeerDidNotStartHere:
+    "Peer-to-Peer ist auf diesem Computer nicht gestartet, daher wurde die Einladung nicht verwendet. Prüfe, ob dieser Computer online ist. Der Fehler steht im Host-Log.",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `Peer-to-Peer ist auf diesem Computer nicht gestartet, daher wurde die Einladung nicht verwendet. Prüfe, ob dieser Computer online ist und ob ${binary} aus MIRADOR_P2P_BINARY neu genug für dieses Mirador ist. Der Fehler steht im Host-Log.`,
   machineNeedsWholeInvite: (machine) => `${machine} wird per Peer-to-Peer erreicht, daher braucht der Beitritt den ganzen Einladungslink, nicht nur seinen Code.`,
   inviteFromAnotherMachine: (machine) => `Diese Einladung kommt von einem anderen Rechner als ${machine}. Füge sie unter Rechner ein, dort fügt sie ihren eigenen hinzu.`,
   dialFolderTooLong: (folder) =>

@@ -280,6 +280,10 @@ export const problems = {
   machineDidNotAnswer: (machine: string) => `${machine} did not answer. Is its Mirador running?`,
   machineUnreachableNow: (machine: string) =>
     `${machine} can't be reached right now. Its Mirador may be off or offline, or the invite was used or has expired. Try again later, or ask for a new invite.`,
+  peerToPeerDidNotStartHere:
+    "Peer to peer didn't start on this computer, so the invite wasn't used. Check that this computer is online. The host log says what went wrong.",
+  environmentPeerToPeerDidNotStart: (binary: string) =>
+    `Peer to peer didn't start on this computer, so the invite wasn't used. Check that this computer is online, and that ${binary}, which MIRADOR_P2P_BINARY names, is new enough for this Mirador. The host log says what went wrong.`,
   machineNeedsWholeInvite: (machine: string) => `${machine} is reached peer to peer, so joining it takes the whole invite link, not just its code.`,
   inviteFromAnotherMachine: (machine: string) => `That invite is from another machine than ${machine}. Paste it under Machines, where it adds its own.`,
   dialFolderTooLong: (folder: string) =>

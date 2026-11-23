@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -14,9 +15,11 @@ import {
   stopLeftOverDials,
   tunnelOriginsOf,
   webSocketTo,
+  type DialProgram,
   type ForwardsFrom,
 } from "../host/p2p/dial.ts";
 import { Store } from "../host/store.ts";
+import type { HostProblemError } from "../shared/host-problems.ts";
 import type { TunnelPlaces } from "../shared/tunnel.ts";
 
 const places: TunnelPlaces = {
@@ -472,6 +475,24 @@ describe.skipIf(onWindows)("MachineTunnels", () => {
     expect(await tunnels.whyNotDialing()).toEqual({ code: "dial-folder-too-long", folder: dials });
     expect(tunnels.dialToJoin({ ...places, joinKey: PRIVATE_KEY, joinAddress: "fd12::9" })).rejects.toThrow("Peer to peer can't work from this computer's Mirador data folder, as its path is too long");
     expect(await tunnels.reached(store.findMachine("m1")!)).toBeNull();
+  });
+
+  test("a join whose mirador-p2p ends before it listens says peer to peer didn't start here, and names the program only where the environment chose it", async () => {
+    const path = join(folder(), "mirador-p2p-that-ends");
+    const program = "#!/bin/sh\necho 'LISTEN is host:port' >&2\nexit 2\n";
+    writeFileSync(path, program);
+    chmodSync(path, 0o755);
+    const problemJoiningWith = async (chosen: DialProgram) => {
+      const dials = join(folder(), "dials");
+      const joining = await new MachineTunnels(new Store(":memory:"), dials, chosen, []).dialToJoin({ ...places, joinKey: PRIVATE_KEY, joinAddress: "fd12::9" });
+      const problem = await joining.forward.then(() => null).catch((error) => (error as HostProblemError).problem);
+      joining.stop();
+      expect(readdirSync(dials)).toEqual([]);
+      return problem;
+    };
+    expect(await problemJoiningWith({ path })).toEqual({ code: "peer-to-peer-did-not-start-here", environmentBinary: path });
+    const download = { url: "http://127.0.0.1:9/never-asked", sha256: createHash("sha256").update(program).digest("hex") };
+    expect(await problemJoiningWith({ path, download })).toEqual({ code: "peer-to-peer-did-not-start-here", environmentBinary: null });
   });
 
   test("an address is reached as it is, and a host without tunnels reaches no machine joined peer to peer", async () => {

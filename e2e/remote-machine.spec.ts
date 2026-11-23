@@ -1,6 +1,7 @@
 import { connect, createServer, type Server } from "node:net";
 import { expect, test, type Page } from "@playwright/test";
-import { cpSync, mkdirSync, rmSync } from "node:fs";
+import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   addWorkspace,
@@ -8,6 +9,7 @@ import {
   allowNotifications,
   callCanvasTool,
   clickNotification,
+  joinRoom,
   notificationsShown,
   openSettings,
   signIn,
@@ -15,11 +17,11 @@ import {
   workspaceCard,
 } from "./helpers.ts";
 import { CANVAS_SHELL_PATH } from "../shared/canvas-document.ts";
-import { roomInviteLink } from "../shared/machines.ts";
+import { roomInviteText } from "../shared/machines.ts";
 import { SIDECAR_SHA256 } from "../host/p2p/sidecar-download.ts";
-import { tunnelOrigin, type InviteTunnel } from "../shared/tunnel.ts";
+import type { InviteTunnel } from "../shared/tunnel.ts";
 import { freePorts } from "./free-ports.ts";
-import { TestHost } from "./test-host.ts";
+import { bunProgramPath, TestHost, writeBunProgram } from "./test-host.ts";
 
 /** Where the stand-in for tailscale serve listens, in front of the host's own port and its canvas port after it. */
 let publicPort = 0;
@@ -390,25 +392,28 @@ class HostWithASpaceInItsDataFolder extends TestHost {
   override readonly dataDir = join("/tmp", `mirador e2e ${crypto.randomUUID().slice(0, 8)}`);
 }
 
+const studioTunnel: InviteTunnel = {
+  hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=",
+  hostAddress: "fd12:3456:789a:1::1",
+  port: 4600,
+  broker: { address: "203.0.113.7:47800", key: "3Q85Sl/Vr65bJz+OyEhIQtyAeBRDJQqqkVWJgryS2WE=" },
+  joinKey: "tne9fR0CU9toO26+5x2ggHdtuq+Z0kfmk/nqAnFmkyg=",
+  joinAddress: "fd12:3456:789a:1:8f1e:22c4:aa01:93b7",
+  name: "Studio",
+};
+
+const studioRoomInvite = roomInviteText("ROOM-ABCD-EFGH-JKLM", { tunnel: studioTunnel });
+
 test("a computer whose data folder can't hold a dial's sockets says so when a machine's link reaches it peer to peer alone", async ({ page }) => {
   test.skip(process.platform === "win32", "Windows dials from ports, not sockets");
   test.skip(!SIDECAR_SHA256[`${process.platform}-${process.arch}`], "no mirador-p2p release to dial with on this platform");
   const spaced = new HostWithASpaceInItsDataFolder();
-  const tunnel: InviteTunnel = {
-    hostKey: "TfdU+RVSAYU/VwqNJh5dDtXFyyZCkHgiPG8knt29NU0=",
-    hostAddress: "fd12:3456:789a:1::1",
-    port: 4600,
-    broker: { address: "203.0.113.7:47800", key: "3Q85Sl/Vr65bJz+OyEhIQtyAeBRDJQqqkVWJgryS2WE=" },
-    joinKey: "tne9fR0CU9toO26+5x2ggHdtuq+Z0kfmk/nqAnFmkyg=",
-    joinAddress: "fd12:3456:789a:1:8f1e:22c4:aa01:93b7",
-    name: "Studio",
-  };
   try {
     await spaced.start();
     await signIn(page, spaced);
     await page.getByRole("button", { name: "Machines…" }).click();
     const machines = page.getByRole("dialog", { name: "Machines" });
-    await machines.getByLabel("Address or invite link").fill(roomInviteLink(tunnelOrigin(tunnel), "ROOM-ABCD-EFGH-JKLM", null, tunnel));
+    await machines.getByLabel("Address or invite link").fill(studioRoomInvite);
     await machines.getByRole("button", { name: "Add and join" }).click();
     await expect(page.locator(".notice")).toHaveText(
       `Peer to peer can't work from this computer's Mirador data folder, as its path has a character the sockets it needs can't be named with, such as a colon, a space or a letter outside ASCII: ${join(spaced.dataDir, "machine-tunnels")}. Start Mirador with a data folder of plain letters, set in MIRADOR_DATA_DIR.`,
@@ -418,5 +423,29 @@ test("a computer whose data folder can't hold a dial's sockets says so when a ma
     await spaced.stop();
     await spaced.cleanUp();
     rmSync(spaced.dataDir, { recursive: true, force: true });
+  }
+});
+
+test("an invite whose mirador-p2p ends as it starts says peer to peer didn't start on this computer, naming the program the environment chose, and adds nothing", async ({ page }) => {
+  const folder = mkdtempSync(join(tmpdir(), "mirador-e2e-old-p2p-"));
+  const script = join(folder, "refuses-its-arguments.ts");
+  writeFileSync(script, 'console.error("LISTEN is host:port");\nprocess.exit(2);\n');
+  writeBunProgram(folder, "mirador-p2p", script);
+  const binary = bunProgramPath(folder, "mirador-p2p");
+  const outdated = new TestHost({ environment: { MIRADOR_P2P_BINARY: binary, MIRADOR_P2P_BROKER: studioTunnel.broker.address, MIRADOR_P2P_BROKER_KEY: studioTunnel.broker.key } });
+  try {
+    await outdated.start();
+    await signIn(page, outdated);
+    const dialog = await joinRoom(page, studioRoomInvite);
+    await expect(dialog.locator(".join-room-problem")).toHaveText(
+      `Peer to peer didn't start on this computer, so the invite wasn't used. Check that this computer is online, and that ${binary}, which MIRADOR_P2P_BINARY names, is new enough for this Mirador. The host log says what went wrong.`,
+    );
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await page.getByRole("button", { name: "Machines…" }).click();
+    await expect(page.getByRole("dialog", { name: "Machines" }).locator(".machine-list li")).toHaveText(["No machines yet."]);
+  } finally {
+    await outdated.stop();
+    await outdated.cleanUp();
+    rmSync(folder, { recursive: true, force: true });
   }
 });

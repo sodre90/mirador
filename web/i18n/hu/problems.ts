@@ -280,6 +280,10 @@ export const problems: Messages["problems"] = {
   machineDidNotAnswer: (machine) => `Nem válaszolt: ${machine}. Fut rajta a Mirador?`,
   machineUnreachableNow: (machine) =>
     `A gép (${machine}) most nem érhető el. Lehet, hogy a Miradora nem fut vagy nincs hálózaton, vagy a meghívót már felhasználták, illetve lejárt. Próbáld újra később, vagy kérj új meghívót.`,
+  peerToPeerDidNotStartHere:
+    "A peer to peer kapcsolat nem indult el ezen a számítógépen, így a meghívót nem használta fel. Nézd meg, hogy a számítógép csatlakozik-e az internethez. A hiba a host naplójában van.",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `A peer to peer kapcsolat nem indult el ezen a számítógépen, így a meghívót nem használta fel. Nézd meg, hogy a számítógép csatlakozik-e az internethez, és hogy a MIRADOR_P2P_BINARY által megadott program (${binary}) elég új-e ehhez a Miradorhoz. A hiba a host naplójában van.`,
   machineNeedsWholeInvite: (machine) => `A gépet (${machine}) peer to peer kapcsolattal éred el, így a csatlakozáshoz a teljes meghívólink kell, nem csak a kódja.`,
   inviteFromAnotherMachine: (machine) => `Ez a meghívó nem a géptől (${machine}) jött, hanem egy másiktól. Illeszd be a Gépek alatt, ott hozzáadja a saját gépét.`,
   dialFolderTooLong: (folder) =>

@@ -368,7 +368,7 @@ export class MachineRelays {
     const joining = await this.tunnels.dialToJoin(invite);
     try {
       const forward = await joining.forward;
-      if (!forward || !(await answersWithin(forward.web, ANSWER_WAIT_MS))) throw unreachable;
+      if (!(await answersWithin(forward.web, ANSWER_WAIT_MS))) throw unreachable;
       const post = async (path: string, body: object) => {
         if (!forward.running) return null;
         const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) };

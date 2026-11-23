@@ -271,6 +271,9 @@ export const problems: Messages["problems"] = {
   machineCertificateNotItsOwn: (machine, hostname) => `${machine} 的证书不是由它自己的证书颁发机构签发的，或者没有包含 ${hostname}。`,
   machineDidNotAnswer: (machine) => `${machine} 没有响应。它的 Mirador 在运行吗？`,
   machineUnreachableNow: (machine) => `现在连不上 ${machine}。它的 Mirador 可能没有运行或已离线，也可能邀请已被使用或已过期。请稍后再试，或再要一个新邀请。`,
+  peerToPeerDidNotStartHere: "这台电脑上的点对点连接没有启动，所以邀请没有被使用。请确认这台电脑已联网。错误已记录在 host 日志中。",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `这台电脑上的点对点连接没有启动，所以邀请没有被使用。请确认这台电脑已联网，并且 MIRADOR_P2P_BINARY 指定的 ${binary} 对这个 Mirador 来说足够新。错误已记录在 host 日志中。`,
   machineNeedsWholeInvite: (machine) => `${machine} 通过点对点连接，所以加入时需要完整的邀请链接，而不只是邀请码。`,
   inviteFromAnotherMachine: (machine) => `这个邀请来自另一台机器，而不是 ${machine}。请把它粘贴到“机器”里，它会添加自己的机器。`,
   dialFolderTooLong: (folder) => `这台电脑无法从它的 Mirador 数据文件夹使用点对点连接，因为它的路径对所需的套接字来说太长：${folder}。请用更短的数据文件夹启动 Mirador，在 MIRADOR_DATA_DIR 中设置。`,

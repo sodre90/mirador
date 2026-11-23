@@ -109,6 +109,7 @@ export type HostProblem =
   | { code: "machine-certificate-not-its-own"; machine: string; hostname: string }
   | { code: "machine-did-not-answer"; machine: string }
   | { code: "machine-unreachable-now"; machine: string }
+  | { code: "peer-to-peer-did-not-start-here"; environmentBinary: string | null }
   | { code: "machine-needs-whole-invite"; machine: string }
   | { code: "invite-from-another-machine"; machine: string }
   | { code: "dial-folder-too-long"; folder: string }

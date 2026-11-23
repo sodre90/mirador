@@ -259,6 +259,8 @@ export function problemText(problem: HostProblem, words: ProblemWords): string {
       return words.machineDidNotAnswer(problem.machine);
     case "machine-unreachable-now":
       return words.machineUnreachableNow(problem.machine);
+    case "peer-to-peer-did-not-start-here":
+      return problem.environmentBinary === null ? words.peerToPeerDidNotStartHere : words.environmentPeerToPeerDidNotStart(problem.environmentBinary);
     case "machine-needs-whole-invite":
       return words.machineNeedsWholeInvite(problem.machine);
     case "invite-from-another-machine":

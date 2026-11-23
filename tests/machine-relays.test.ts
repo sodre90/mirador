@@ -450,6 +450,7 @@ describe("a machine reached through a dial's forward", () => {
     store.setMachineTunnelPlaces("theirs", places);
     store.setMachineJoinedAs("theirs", { asPerson: true, relayKey: null });
     let dialed = 0;
+    let stopped = 0;
     const reach: MachineReach = {
       reached: async () => null,
       stillReaches: () => false,
@@ -457,7 +458,7 @@ describe("a machine reached through a dial's forward", () => {
       canvasWayTo: () => null,
       dialToJoin: async () => {
         dialed += 1;
-        return { forward: Promise.resolve(null), stop: () => {} };
+        return { forward: Promise.reject(new HostProblemError({ code: "peer-to-peer-did-not-start-here", environmentBinary: "/opt/mirador-p2p" })), stop: () => (stopped += 1) };
       },
       start: () => {},
     };
@@ -469,8 +470,8 @@ describe("a machine reached through a dial's forward", () => {
     expect(store.machineDeviceToken("theirs")).toBeNull();
 
     store.setMachineJoinedAs("theirs", { asPerson: false });
-    expect(await relays.join("theirs", "ABCD-EFGH-JKLM", null, invite).catch((error) => (error as HostProblemError).problem)).toEqual({ code: "machine-unreachable-now", machine: "Theirs" });
-    expect(dialed).toBe(1);
+    expect(await relays.join("theirs", "ABCD-EFGH-JKLM", null, invite).catch((error) => (error as HostProblemError).problem)).toEqual({ code: "peer-to-peer-did-not-start-here", environmentBinary: "/opt/mirador-p2p" });
+    expect({ dialed, stopped }).toEqual({ dialed: 1, stopped: 1 });
   });
 
   test("loads canvas pages through the canvas socket of the forward the machine is reached through now, which moves each time its dial starts again", async () => {

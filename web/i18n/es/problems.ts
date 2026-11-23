@@ -279,6 +279,10 @@ export const problems: Messages["problems"] = {
   machineDidNotAnswer: (machine) => `${machine} no respondió. ¿Está en marcha su Mirador?`,
   machineUnreachableNow: (machine) =>
     `Ahora no se puede llegar a ${machine}. Puede que su Mirador esté apagado o sin conexión, o que la invitación ya se haya usado o haya caducado. Inténtalo más tarde, o pide una invitación nueva.`,
+  peerToPeerDidNotStartHere:
+    "La conexión peer to peer no se inició en este equipo, así que la invitación no se usó. Comprueba que este equipo tenga conexión a internet. El error está en el registro del host.",
+  environmentPeerToPeerDidNotStart: (binary) =>
+    `La conexión peer to peer no se inició en este equipo, así que la invitación no se usó. Comprueba que este equipo tenga conexión a internet y que ${binary}, que indica MIRADOR_P2P_BINARY, sea lo bastante reciente para este Mirador. El error está en el registro del host.`,
   machineNeedsWholeInvite: (machine) => `A ${machine} se llega peer to peer, así que para unirse hace falta el enlace de invitación completo, no solo su código.`,
   inviteFromAnotherMachine: (machine) => `Esa invitación es de otra máquina, no de ${machine}. Pégala en Máquinas, donde añade la suya.`,
   dialFolderTooLong: (folder) =>

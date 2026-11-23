@@ -47,9 +47,13 @@ interface MachineDial {
   stopped: boolean;
 }
 
-/** A dial with an invite's one-time key, for joining through the machine's tunnel; it is tried once, never started again. */
+/**
+ * A dial with an invite's one-time key, for joining through the machine's tunnel; it is tried once, never started again.
+ * Its forward fails where its process ended before it listened there, which says nothing of the machine: it is too old
+ * for this host, say, or this computer is offline and can't look the broker up.
+ */
 export interface JoiningDial {
-  forward: Promise<Forward | null>;
+  forward: Promise<Forward>;
   stop: () => void;
 }
 
@@ -180,13 +184,18 @@ export class MachineTunnels {
     this.joining.add(dial);
     dial.start();
     return {
-      forward: dial.current(),
+      forward: dial.current().then((forward) => forward ?? Promise.reject(this.didNotStart())),
       stop: () => {
         dial.stop();
         this.joining.delete(dial);
         rmSync(keyFile, { force: true });
       },
     };
+  }
+
+  private didNotStart() {
+    const environmentBinary = this.program && !this.program.download ? this.program.path : null;
+    return new HostProblemError({ code: "peer-to-peer-did-not-start-here", environmentBinary });
   }
 
   /** Asked once for each process of the dial, and again after it did not answer. */
