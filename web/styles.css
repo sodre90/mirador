@@ -10697,6 +10697,16 @@ select.room-agent-choice-select:focus-visible {
   color: var(--muted);
 }
 
+/* The title names the file; every line shows whole, so nothing of a change hides past the card's edge. */
+.room-held .diff-path {
+  display: none;
+}
+
+.room-held .diff pre > div {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .agent-search {
   position: relative;
   display: flex;

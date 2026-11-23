@@ -217,7 +217,7 @@ export const rooms: Messages["rooms"] = {
     wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)}更改 ${path}`,
     wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)}添加 ${path}`,
     wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)}删除 ${path}`,
-    keptAsItWas: "在你批准之前，文件保持原样。",
+    keptAsItWas: "这个文件可能改变 Agent 或你自己的工具运行的内容，所以在你批准之前，它保持原样。",
     unshown: "内容太长或不是文本，无法在这里显示。",
     loading: "正在加载更改…",
     tooMany: (most: number) => `沙箱已停止：它的 Agent 改动了超过 ${most} 个暂扣的文件。请允许或丢弃其中一些，它们才能继续工作。`,

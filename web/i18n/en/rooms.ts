@@ -234,7 +234,7 @@ export const rooms = {
     wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} to change ${path}`,
     wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} to add ${path}`,
     wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} to delete ${path}`,
-    keptAsItWas: "The file is as it was until you allow the change.",
+    keptAsItWas: "This file can change what the agents or your own tools run, so it stays as it was until you allow the change.",
     unshown: "It is too long, or not text, to show here.",
     loading: "Loading the change…",
     tooMany: (most: number) => `The sandbox stopped: its agents changed more than ${most} held files. Allow or discard some for them to work again.`,

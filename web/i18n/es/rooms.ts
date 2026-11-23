@@ -225,7 +225,7 @@ export const rooms: Messages["rooms"] = {
     wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} cambiar ${path}`,
     wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} agregar ${path}`,
     wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} eliminar ${path}`,
-    keptAsItWas: "El archivo sigue como estaba hasta que apruebes el cambio.",
+    keptAsItWas: "Este archivo puede cambiar lo que ejecutan los agentes o tus propias herramientas, así que sigue como estaba hasta que apruebes el cambio.",
     unshown: "Es demasiado largo, o no es texto, para mostrarlo aquí.",
     loading: "Cargando el cambio…",
     tooMany: (most: number) => `El sandbox se detuvo: sus agentes cambiaron más de ${most} archivos retenidos. Aprueba o descarta algunos para que vuelvan a trabajar.`,

@@ -224,7 +224,7 @@ export const rooms: Messages["rooms"] = {
     wantsToChange: (agents: string[], path: string) => `${agentsWant(agents)} módosítani ezt: ${path}`,
     wantsToAdd: (agents: string[], path: string) => `${agentsWant(agents)} hozzáadni ezt: ${path}`,
     wantsToDelete: (agents: string[], path: string) => `${agentsWant(agents)} törölni ezt: ${path}`,
-    keptAsItWas: "A fájl olyan marad, amilyen volt, amíg nem engedélyezed a változást.",
+    keptAsItWas: "Ez a fájl megváltoztathatja, mit futtatnak az ágensek vagy a saját eszközeid, ezért olyan marad, amilyen volt, amíg nem engedélyezed a változást.",
     unshown: "Túl hosszú, vagy nem szöveg, ezért itt nem látszik.",
     loading: "A változás betöltése…",
     tooMany: (most: number) => `A sandbox leállt: az ágensei több mint ${most} visszatartott fájlt módosítottak. Engedélyezz vagy vess el néhányat, hogy újra dolgozhassanak.`,
