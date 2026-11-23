@@ -1,5 +1,5 @@
 import { flushSync } from "react-dom";
-import { useContext, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
+import { useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent, type ReactNode } from "react";
 import type { AskItem, CanvasItem, Conversation, HarnessId, Person, Profile } from "../shared/model.ts";
 import { personGoesBy } from "../shared/people.ts";
 import { categoryChoices, chosenModel } from "../shared/config-options.ts";
@@ -57,7 +57,7 @@ import type { AppAction, OpenConversation, RoomTimelineWithCanvas } from "./stat
 import { SuggestionList, suggestionAttributes, suggestionKey, usePickedSuggestion } from "./SuggestionList.tsx";
 import { ModelChoice, offeredAlready } from "./RoomAgents.tsx";
 import { HeldChangeCard } from "./RoomSandbox.tsx";
-import { WaitingToJoin } from "./RoomSettings.tsx";
+import { JoinerAtTheDoor, WaitingToJoin } from "./RoomSettings.tsx";
 import { RoomVote } from "./RoomVote.tsx";
 import { useTypingAidAttributes } from "./typing-aids.ts";
 import type { WorkspacePluginTab } from "./WorkspaceTabView.tsx";
@@ -624,12 +624,61 @@ function BroughtMark({ brought }: { brought: BroughtAgent & { bringer: string } 
   return <span className={`room-agent-brought${brought.here ? "" : " away"}`}>{brought.here ? words.onComputerOf(brought.bringer) : words.awayFrom(brought.bringer)}</span>;
 }
 
-/** "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which model for the owner, who changes it there. */
-function RoomPeople({ room, agents, here, joiners, ownerId, owns }: { room: Room; agents: RoomAgentShown[]; here: string[]; joiners: RoomJoiner[]; ownerId: string | null; owns: boolean }) {
+/** The most people waiting at the door the room's banner names; the room's list of people has them all. */
+const DOOR_BANNER_MOST = 3;
+
+/**
+ * Above the room's messages while people wait at its door, for its owner: the first few, each to let in or turn away,
+ * and how many more wait, which opens the room's list of people once the page knows who is here.
+ */
+function DoorBanner({ joiners, onShowAll }: { joiners: RoomJoiner[]; onShowAll: (() => void) | null }) {
+  if (joiners.length === 0) return null;
+  const more = joiners.length - DOOR_BANNER_MOST;
+  return (
+    <section className="room-door-banner" aria-label={words.peopleWaitingToJoin}>
+      <div className="room-door-banner-head">{words.waitingAtTheDoor(joiners.length)}</div>
+      <ul className="room-joiners">
+        {joiners.slice(0, DOOR_BANNER_MOST).map((joiner) => (
+          <JoinerAtTheDoor key={joiner.personId} joiner={joiner} />
+        ))}
+      </ul>
+      {more > 0 && onShowAll && (
+        <button type="button" className="link room-door-banner-more" aria-haspopup="dialog" onClick={onShowAll}>
+          {words.andMoreWaiting(more)}
+        </button>
+      )}
+    </section>
+  );
+}
+
+/**
+ * "3 here" in the room's bar, which opens who is in the room, who of them is here now, and which agents work, on which
+ * model for the owner, who changes it there; the room's door banner opens it too.
+ */
+function RoomPeople({
+  room,
+  agents,
+  here,
+  joiners,
+  ownerId,
+  owns,
+  shown,
+  onShownChange,
+}: {
+  room: Room;
+  agents: RoomAgentShown[];
+  here: string[];
+  joiners: RoomJoiner[];
+  ownerId: string | null;
+  owns: boolean;
+  shown: boolean;
+  onShownChange: (shown: boolean) => void;
+}) {
   const opener = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const [placement, setPlacement] = useState<CSSProperties | null>(null);
-  useClosing(placement !== null, [opener, popover], () => setPlacement(null));
+  useLayoutEffect(() => setPlacement(shown && opener.current ? placedBelowOnItsSide(opener.current) : null), [shown]);
+  useClosing(placement !== null, [opener, popover], () => onShownChange(false));
   useKeptInWindow(popover, placement);
   const hereNow = new Set(here);
   return (
@@ -641,7 +690,7 @@ function RoomPeople({ room, agents, here, joiners, ownerId, owns }: { room: Room
         data-hint={words.peopleOfRoom}
         aria-haspopup="dialog"
         aria-expanded={placement !== null}
-        onClick={() => setPlacement(placement || !opener.current ? null : placedBelowOnItsSide(opener.current))}
+        onClick={() => onShownChange(!shown)}
       >
         {words.hereCount(here.length)}
         {owns && joiners.length > 0 && (
@@ -748,6 +797,7 @@ export function RoomView({
   onOpenOnCanvas: (itemId: string) => void;
 }) {
   const [threadId, setThreadId] = useState<string | null>(null);
+  const [peopleShown, setPeopleShown] = useState(false);
   const agents = room.agents.map(({ profileId, conversationId, answering, model, effort, brought }): RoomAgentShown => {
     const conversation = roomConversations.find(({ id }) => id === conversationId);
     if (brought) {
@@ -802,7 +852,9 @@ export function RoomView({
               {words.sandboxed}
             </button>
           )}
-          {presence && <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} />}
+          {presence && (
+            <RoomPeople room={room} agents={agents} here={presence.here} joiners={joiners} ownerId={ownerId} owns={owns} shown={peopleShown} onShownChange={setPeopleShown} />
+          )}
           <MuteToggle roomId={room.id} muted={muted} />
           {owns && (
             <button type="button" className="room-invite-button" onClick={() => dispatch({ type: "open-overlay", overlay: { kind: "room-invite", roomId: room.id } })}>
@@ -816,6 +868,7 @@ export function RoomView({
           )}
         </div>
       </header>
+      {owns && <DoorBanner joiners={joiners} onShowAll={presence ? () => setPeopleShown(true) : null} />}
       <div className="timeline room-timeline">
         {!timeline && <div className="notice-line">{words.loading}</div>}
         {timeline && shown.length === 0 && <div className="notice-line">{tagsAgents ? words.empty : words.emptyForGuest}</div>}

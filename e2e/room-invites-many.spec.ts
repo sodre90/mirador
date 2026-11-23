@@ -6,9 +6,11 @@ import { TestHost, writeBunProgram } from "./test-host.ts";
 
 /** The owner's machine, with the room, which other machines reach at its address. */
 const owners = new TestHost({ fakePrograms: true, environment: reachedAtOwnPort });
-/** Three people's own Miradors, which come with the same invite. */
+/** Five people's own Miradors, which come with the same invite. */
 const doras = new TestHost();
 const elis = new TestHost();
+const guses = new TestHost();
+const hals = new TestHost();
 const fays = new TestHost();
 const builderPrompts = () => join(owners.root, "builder-prompts");
 
@@ -17,11 +19,11 @@ test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   writeBunProgram(owners.fakeProgramsDir, "opencode", join(import.meta.dirname, "fake-acp-agent.ts"));
   writeFileSync(builderPrompts(), "");
-  await Promise.all([owners.start(), doras.start(), elis.start(), fays.start()]);
+  await Promise.all([owners.start(), doras.start(), elis.start(), guses.start(), hals.start(), fays.start()]);
 });
 test.afterAll(async () => {
-  await Promise.all([owners.stop(), doras.stop(), elis.stop(), fays.stop()]);
-  await Promise.all([owners.cleanUp(), doras.cleanUp(), elis.cleanUp(), fays.cleanUp()]);
+  await Promise.all([owners.stop(), doras.stop(), elis.stop(), guses.stop(), hals.stop(), fays.stop()]);
+  await Promise.all([owners.cleanUp(), doras.cleanUp(), elis.cleanUp(), guses.cleanUp(), hals.cleanUp(), fays.cleanUp()]);
 });
 
 async function nameOwnProfile(page: Page, name: string) {
@@ -61,11 +63,15 @@ test("one invite brings several people to a room's door, where the owner lets ea
 
   const dora = await browser.newPage();
   const eli = await browser.newPage();
+  const gus = await browser.newPage();
+  const hal = await browser.newPage();
 
   await test.step("each person who comes with it waits at the door, told whose OK they wait for, with nothing of the room opened", async () => {
     for (const [visitor, host, name] of [
       [dora, doras, "Dora"],
       [eli, elis, "Eli"],
+      [gus, guses, "Gus"],
+      [hal, hals, "Hal"],
     ] as const) {
       await signIn(visitor, host);
       await nameOwnProfile(visitor, name);
@@ -84,23 +90,46 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await expect(needsYou).toHaveAttribute("data-hint", "Needs you: someone is waiting to join, for you to let them in or turn them away.");
   });
 
+  await test.step("the owner's room names the first three at its door in a banner, with the rest in its list of people", async () => {
+    await roomCard(page, "Garden").click();
+    const banner = page.getByRole("region", { name: "People waiting to join" });
+    await expect(banner.locator(".room-door-banner-head")).toHaveText("4 people are waiting to join");
+    await expect(banner.locator(".room-joiner-name")).toHaveText(["Dora", "Eli", "Gus"]);
+    await expect(banner.locator(".room-joiner-role")).toHaveText(["Member", "Member", "Member"]);
+    await banner.getByRole("button", { name: "and 1 more" }).click();
+    const people = page.getByRole("dialog", { name: "People in the room" });
+    await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Dora", "Eli", "Gus", "Hal"]);
+    await page.keyboard.press("Escape");
+    await expect(people).toHaveCount(0);
+  });
+
+  await test.step("the owner lets someone in from the banner", async () => {
+    const banner = page.getByRole("region", { name: "People waiting to join" });
+    await banner.getByRole("button", { name: "Let Gus in" }).click();
+    await expect(banner.locator(".room-door-banner-head")).toHaveText("3 people are waiting to join");
+    await expect(banner.locator(".room-joiner-name")).toHaveText(["Dora", "Eli", "Hal"]);
+    await expect(banner.getByRole("button", { name: /more$/ })).toHaveCount(0);
+    await expect(knockCard(gus)).toHaveCount(0);
+  });
+
   await test.step("the owner sees how many came, and who waits at the door, by name, role and device", async () => {
     const settings = await openRoomSettings(page, "Garden");
-    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · 2 of 5 joined · expires in /]);
+    await expect(settings.getByRole("list", { name: "Waiting invites" }).getByRole("listitem")).toHaveText([/^Member · 4 of 5 joined · expires in /]);
     const waiting = settings.getByRole("list", { name: "Waiting to join" }).getByRole("listitem");
-    await expect(waiting.locator(".room-joiner-name")).toHaveText(["Dora", "Eli"]);
-    await expect(waiting.locator(".room-joiner-role")).toHaveText(["Member", "Member"]);
-    await expect(waiting.locator(".room-joiner-device")).toHaveText([/^from “Mirador on .+”$/, /^from “Mirador on .+”$/]);
+    await expect(waiting.locator(".room-joiner-name")).toHaveText(["Dora", "Eli", "Hal"]);
+    await expect(waiting.locator(".room-joiner-role")).toHaveText(["Member", "Member", "Member"]);
+    await expect(waiting.locator(".room-joiner-device")).toHaveText([/^from “Mirador on .+”$/, /^from “Mirador on .+”$/, /^from “Mirador on .+”$/]);
     await expect(settings.getByRole("combobox", { name: "Add someone you let in before" })).toHaveCount(0);
     await settings.getByRole("button", { name: "Let Dora in" }).click();
-    await expect(waiting.locator(".room-joiner-name")).toHaveText(["Eli"]);
-    await expect(settings.getByRole("list", { name: "People" }).locator(".room-settings-row-name")).toHaveText(["Dora"]);
+    await expect(waiting.locator(".room-joiner-name")).toHaveText(["Eli", "Hal"]);
+    await expect(settings.getByRole("list", { name: "People" }).locator(".room-settings-row-name")).toHaveText(["Gus", "Dora"]);
     await settings.getByRole("button", { name: "Done" }).click();
   });
 
   await test.step("the one let in has their Mirador open the room on the owner's machine, in the theme they chose", async () => {
     const frame = dora.frameLocator('iframe[title="Ann\'s machine"]');
     await expect(frame.getByRole("heading", { name: "# Garden" })).toBeVisible();
+    await expect(frame.locator(".room-door-banner"), "only the owner is told who waits at the door").toHaveCount(0);
     const rail = dora.getByRole("navigation", { name: "Machines" });
     await rail.getByRole("button", { name: "This computer" }).click();
     await chooseInSettings(dora, "Theme", "Dark");
@@ -111,19 +140,26 @@ test("one invite brings several people to a room's door, where the owner lets ea
     await expect(roomCard(dora, "Garden")).toHaveClass(/joined-room/);
   });
 
-  await test.step("the owner turns the other away from the room's list of people, after a second click", async () => {
+  await test.step("the owner turns the others away from the room's list of people and from the banner, each after a second click", async () => {
     await roomCard(page, "Garden").click();
     const count = page.locator(".room-header .room-here-count");
-    await expect(count.locator(".room-door-waiting")).toHaveText("1 waiting");
-    await expect(count).toHaveAccessibleName(/^\d+ here 1 waiting$/);
+    await expect(count.locator(".room-door-waiting")).toHaveText("2 waiting");
+    await expect(count).toHaveAccessibleName(/^\d+ here 2 waiting$/);
     await count.click();
     const people = page.getByRole("dialog", { name: "People in the room" });
-    await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Eli"]);
+    await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Eli", "Hal"]);
     await people.getByRole("button", { name: "Turn Eli away" }).click();
     await people.getByRole("button", { name: "Confirm: Turn Eli away" }).click();
-    await expect(people.getByRole("list", { name: "Waiting to join" })).toHaveCount(0);
+    await expect(people.getByRole("list", { name: "Waiting to join" }).locator(".room-joiner-name")).toHaveText(["Hal"]);
+    await page.keyboard.press("Escape");
+    const banner = page.getByRole("region", { name: "People waiting to join" });
+    await expect(banner.locator(".room-door-banner-head")).toHaveText("1 person is waiting to join");
+    await banner.getByRole("button", { name: "Turn Hal away" }).click();
+    await banner.getByRole("button", { name: "Confirm: Turn Hal away" }).click();
+    await expect(banner).toHaveCount(0);
     await expect(count).not.toContainText("waiting");
     await expect(roomCard(page, "Garden").locator(".waiting-pill")).toHaveCount(0);
+    await expect(knockCard(hal).locator(".room-card-name")).toHaveText("Ann turned you away");
   });
 
   await test.step("the one turned away is told so, and puts it away", async () => {
@@ -150,4 +186,6 @@ test("one invite brings several people to a room's door, where the owner lets ea
 
   await dora.close();
   await eli.close();
+  await gus.close();
+  await hal.close();
 });

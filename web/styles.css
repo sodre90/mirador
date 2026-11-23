@@ -10026,6 +10026,27 @@ button.link.more-rows {
   font-size: calc(13px * var(--font-scale));
 }
 
+.room-door-banner {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 16px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--warn) 55%, transparent);
+  border-radius: 8px;
+  background: var(--warn-soft);
+  font-size: calc(13px * var(--font-scale));
+}
+
+.room-door-banner-head {
+  font-weight: 600;
+}
+
+.room-door-banner-more {
+  align-self: flex-start;
+}
+
 .room-approval-head {
   display: flex;
   flex-wrap: wrap;
