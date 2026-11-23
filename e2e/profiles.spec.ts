@@ -50,6 +50,8 @@ test("a profile's environment and pre-launch command reach Claude Code, and its 
   await dialog.locator(".profile-list li", { hasText: "+ New profile" }).click();
   await dialog.getByLabel("Environment", { exact: true }).fill('ANTHROPIC_MODEL="$model"');
   await expect(dialog.locator(".form-errors")).toContainText("values are not expanded");
+  await dialog.getByLabel("Environment", { exact: true }).fill('OPENCODE_FAKE_ACP_COMMANDS=[{"name":"owners-command"}]');
+  await expect(dialog.locator(".form-errors")).toContainText("needs quotes around the whole value");
   await expect(dialog.getByRole("button", { name: "Create profile" })).toBeDisabled();
   await dialog.getByRole("button", { name: "Close" }).click();
   await dialog.getByRole("button", { name: "Discard and close" }).click();

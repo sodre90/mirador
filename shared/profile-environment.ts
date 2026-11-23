@@ -5,8 +5,17 @@ export interface ProfileEnvironment {
 }
 
 const assignment = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|'([^']*)'|([^\s"']*))(?:\s+#.*)?$/;
+const assignmentStart = /^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=/;
 const unsetting = /^-u\s+([A-Za-z_][A-Za-z0-9_]*)(?:\s+#.*)?$/;
 const secretName = /TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL/i;
+
+const whyTheLineDidNotParse = (line: string, index: number) => {
+  const named = line.match(assignmentStart);
+  if (!named) return `Line ${index + 1} is not KEY=value, -u KEY or a # comment: ${line}`;
+  const name = named[1]!;
+  const quote = line.includes("'") && !line.includes('"') ? '"' : "'";
+  return `Line ${index + 1}: the value of ${name} has spaces or quotes, so it needs quotes around the whole value, as in ${name}=${quote}the value${quote}`;
+};
 
 /**
  * Reads `KEY=value`, `-u KEY` and `# comment` lines: the lines of a shell `env` argument
@@ -24,7 +33,7 @@ export function parseEnvironment(text: string): ProfileEnvironment {
     }
     const assigned = line.match(assignment);
     if (!assigned) {
-      environment.errors.push(`Line ${index + 1} is not KEY=value, -u KEY or a # comment: ${line}`);
+      environment.errors.push(whyTheLineDidNotParse(line, index));
       return;
     }
     const [, name, doubleQuoted, singleQuoted, bare] = assigned;

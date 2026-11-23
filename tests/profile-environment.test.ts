@@ -44,6 +44,26 @@ describe("parseEnvironment", () => {
     expect(errors[0]).toStartWith("Line 1 ");
     expect(errors[1]).toContain("ANTHROPIC_MODEL uses $");
   });
+
+  test("a JSON value is told it needs quotes, and parses once it has them", () => {
+    const value = '[{"name":"owners-command","description":"Owned"}]';
+    expect(parseEnvironment(`OPENCODE_FAKE_ACP_COMMANDS=${value}`)).toEqual({
+      set: {},
+      unset: [],
+      errors: ["Line 1: the value of OPENCODE_FAKE_ACP_COMMANDS has spaces or quotes, so it needs quotes around the whole value, as in OPENCODE_FAKE_ACP_COMMANDS='the value'"],
+    });
+    expect(parseEnvironment(`OPENCODE_FAKE_ACP_COMMANDS='${value}'`)).toEqual({
+      set: { OPENCODE_FAKE_ACP_COMMANDS: value },
+      unset: [],
+      errors: [],
+    });
+  });
+
+  test("a value with a single quote of its own is shown wrapped in double quotes", () => {
+    expect(parseEnvironment("NOTE=Owner's note").errors).toEqual([
+      'Line 1: the value of NOTE has spaces or quotes, so it needs quotes around the whole value, as in NOTE="the value"',
+    ]);
+  });
 });
 
 test("applyEnvironment unsets before it sets", () => {
